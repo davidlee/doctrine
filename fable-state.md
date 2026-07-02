@@ -44,13 +44,25 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Process scout #3's queue (agent a8f178c7d11b98d69, launched ~05:30)
-— fresh isolated fixes in entity/meta round-trip, CLI parse/validation, id/ref
-parsing, listing render. Re-verify each, TDD, commit clean. If scout #3 returns
-thin (backlog is well-picked now — 3 scouts in), WIND DOWN: the session is
-already strong (11 fixes + capstone). A clean state/log for the User beats
-scraping low-value items. IMP-135 (help-text) is low-value/snapshot-only — skip
-unless nothing better. IMP-137 (needs --remove) adds a flag = capability, skip.
+NEXT-ACTION (WIND-DOWN): full bin test suite running (bg b5h1hxzlo) to verify all
+11 fixes collectively green pre-handover. On green: session is complete — hold at
+low cadence (window open till 08:45) unless a genuinely safe+valuable item appears.
+Do NOT force the scout #3 items (all brush design/zone lines — see below). On any
+red: investigate + fix before anything else.
+
+SCOUT #3 FINDINGS (real issues, but NOT autonomous-safe — surfaced for the User):
+  - IMP-235 (vtgate): line-anchored `patterns` false-Fail a formatter-wrapped
+    multi-line assert (src/vtgate.rs:139). Real, but the card lists options
+    "not yet chosen" → a DESIGN CHOICE on a governance gate. Needs a decision.
+  - IMP-107 (review engine): ReviewError::DanglingRef / LockContention declared
+    but never constructed (#[expect(dead_code)] at review.rs:908 reason="PHASE-02
+    verb handlers"); run_new (1246) leaks a generic anyhow so MCP returns -32603
+    Internal not -32000 DANGLING_REF. Real + fully-specified (5 steps), HIGH conf
+    — but it's COMPLETING PLANNED PHASE-02 WIRING in the review avoid-zone. Best
+    candidate if the User wants it done; not autonomous-clean (planned work + zone).
+  - IMP-192 (state.rs:563/577): spurious `phase-binding capture skipped` warning
+    on a legitimate solo no-binding → completed flip (stderr noise). Real, but
+    suppress-vs-downgrade is a judgement call + the full card is a /close recipe.
 
 ISS-059 DEFERRED (design choice, not autonomous): contentset::compute (src/
 contentset.rs:129) fs::read aborts IsADirectory on a directory/symlink-to-dir
