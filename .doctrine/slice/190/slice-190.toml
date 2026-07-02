@@ -1,0 +1,101 @@
+id = 190
+slug = "dispatch-orchestrator-state-visibility"
+title = "Dispatch orchestrator state-visibility verbs"
+status = "design"
+created = "2026-07-02"
+updated = "2026-07-02"
+tags = ["area:dispatch", "area:slice", "area:worktree", "token-efficiency"]
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/state.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/conformance.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/inventory.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/gc.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IDE-027"
+
+[[relation]]
+label = "related"
+target = "IMP-174"
+
+[[relation]]
+label = "related"
+target = "SL-180"
+
+[[relation]]
+label = "related"
+target = "IDE-017"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-006"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-012"
+
+[[relation]]
+label = "related"
+target = "IMP-191"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
