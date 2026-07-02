@@ -156,3 +156,6 @@ publish: web-build release-check
 fake-darwin:
   cargo check --target aarch64-apple-darwin
 
+clean:
+  touch crates/cordage/src/lib.rs
+
