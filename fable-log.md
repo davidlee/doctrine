@@ -112,3 +112,23 @@ next: TDD IMP-211 in src/priority/render.rs value_cell (verify defect first).
   Foreign node, no roots —
   the cone that lied like a root
   now honestly empty.
+
+## 04:45 — turn 7: shipped IMP-211 (next value cell effective default)
+observed: verified IMP-211 real — effective_raw_value defaults value-bearing kinds
+  to DEFAULT_VALUE=1.0 for scoring, but value_cell rendered ABSENT_CELL → shown
+  value contradicts the score. Fixed value_cell to render the marked default (1.0*)
+  for value-bearing kinds, ABSENT for valueless (REV/gov/records). Made DEFAULT_VALUE
+  pub(crate) (single source, STD-001); marker a named const. The e2e golden had
+  itself ENCODED the bug (RSK-001/ISS-002 scored 1.5/1.0 yet shown ·) — updated to
+  1.0*, RV-001 stays ·. 2 unit tests + golden. render 21/graph 43/e2e 3+21 green,
+  clippy+fmt clean. Commit e30e482e. 8th fix.
+next: TDD IMP-183 (estimate/value rows in backlog show; reuse slice.rs formatters).
+
+  The score said one point—
+  the cell showed a dot. Now both
+  speak the same value.
+
+DECISIONS-LOG:
+  - D4 [IMP-211 default marker]: {1.0* asterisk} vs {(1.0) parens} vs {dim colour}.
+    Chose `*` suffix — compact, minimal column-width impact, and the cell fn returns
+    a String (colour is applied downstream by listing, harder to thread). Reversible.

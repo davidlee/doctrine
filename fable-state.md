@@ -44,18 +44,23 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Continue the vetted fix QUEUE (scout a7e3ab8d, verified-still-real).
-Take IMP-211 next. Re-verify defect, TDD red→green→refactor, lint+fmt, commit.
+NEXT-ACTION: Continue the vetted fix QUEUE. Take IMP-183 next. Re-verify defect
+(estimate/value facets writable to any kind but only slice show renders them;
+backlog show renders none → write-only metadata that still feeds base_score).
+Fix: add estimate/value rows to backlog show render, reusing
+estimate::display::format_estimate_confidence + value::format_value_normal
+(mirror src/slice.rs:1945/1958). Keep to src/backlog.rs (≤2 files); knowledge
+inspect = follow-up. TDD: backlog show render test asserting the rows appear.
 
 FIX QUEUE (re-verify each before building — OBE risk real):
   - [DONE 1dacc7a8] ISS-003 cordage explain() foreign-node empty cone.
-  - IMP-211 (S, MED-HIGH) `next` value column shows ABSENT for value-bearing
-    kinds while base_score silently used DEFAULT_VALUE=1.0 → displayed value
-    contradicts effective value. Fix in src/priority/render.rs `value_cell`
-    (~:163): when r.value None, branch on crate::kinds::is_value_bearing(&r.kind)
-    — render a default marker (e.g. `1.0*`) for value-bearing, keep ABSENT_CELL
-    for valueless (records/gov/REV). Test: extend render.rs unit tests
-    (bare_row/faceted_row ~:496/:514). next-only (survey has no value column).
+  - [DONE e30e482e] IMP-211 next value cell shows effective default (1.0*) not
+    ABSENT for value-bearing kinds; DEFAULT_VALUE now pub(crate) single-source;
+    marker named const; golden updated (it had encoded the bug).
+  - IMP-183 (M, MED) estimate/value write-only on non-slice kinds → NEXT-ACTION.
+  - IMP-019 (M) cordage golden_net value oracle — test hardening only, no runtime
+    bug. Lower urgency; do if code fixes dry up.
+  - ISS-205 defer (no clean local red).
   - IMP-183 (M, MED) estimate/value facets writable to any kind but only
     slice show renders them (write-only metadata). Add rows to backlog show via
     existing estimate::display::format_estimate_confidence / value::format_value_normal
