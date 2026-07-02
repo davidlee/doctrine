@@ -730,7 +730,27 @@ pub(crate) fn run_verify_vt(path: Option<PathBuf>, id: u32) -> anyhow::Result<()
     // The injected reader resolves each mandated `test_file` against the project
     // root; a missing file reads as `None` → the pure core renders it a `Fail`.
     let read_file = |rel: &str| fs::read_to_string(root.join(rel)).ok();
-    let reports = crate::vtgate::check_phases(&plan, &read_file);
+    // Build the modified-files set from the slice's source-delta registry
+    // (IMP-228). If no source-deltas are recorded, the set is empty and every VT
+    // reports `Unattributable` — correct: the gate can't attribute the keywords
+    // to slice work.
+    let mut modified_files: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    if let Ok(rows) = crate::state::read_source_deltas(&root, id) {
+        for row in &rows {
+            let names = crate::git::git_text(
+                &root,
+                &[
+                    "diff",
+                    "--name-only",
+                    &format!("{}..{}", row.code_start_oid, row.code_end_oid),
+                ],
+            )?;
+            for line in names.lines().filter(|l| !l.trim().is_empty()) {
+                modified_files.insert(line.to_string());
+            }
+        }
+    }
+    let reports = crate::vtgate::check_phases(&plan, &read_file, &modified_files);
     write!(io::stdout(), "{}", crate::vtgate::render_summary(&reports))?;
     if crate::vtgate::has_failure(&reports) {
         #[expect(
