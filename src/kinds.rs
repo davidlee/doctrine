@@ -31,6 +31,20 @@ pub(crate) const CON: &str = "CON";
 pub(crate) const EVD: &str = "EVD";
 pub(crate) const HYP: &str = "HYP";
 
+// --- dispatch ref-name prefixes (STD-001) ----------------------------------
+
+/// Coordination ref prefix: `refs/heads/dispatch/<slice>`.
+pub(crate) const DISPATCH_REF_PREFIX: &str = "refs/heads/dispatch/";
+
+/// Per-phase evidence ref prefix: `refs/heads/phase/<slice>-NN`.
+pub(crate) const PHASE_REF_PREFIX: &str = "refs/heads/phase/";
+
+/// Review-bundle ref prefix: `refs/heads/review/<slice>`.
+pub(crate) const REVIEW_REF_PREFIX: &str = "refs/heads/review/";
+
+/// Candidate ref prefix: `refs/heads/candidate/<slice>/<label>`.
+pub(crate) const CANDIDATE_REF_PREFIX: &str = "refs/heads/candidate/";
+
 /// Every governance kind — `supersedes`/`related` source-set + `governed_by` targets.
 pub(crate) const GOV: &[&str] = &[ADR, POL, STD];
 /// Every backlog item kind — they share one `relation_edges` accessor.
