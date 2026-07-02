@@ -29,11 +29,14 @@ audit time (`slice conformance`). This slice wires it into two new surfaces.
 ## Scope & Objectives
 
 1. **PHASE-01 (IMP-204):** Design-time conformance dry-run.
-   - New subcommand or flag on `slice conformance` that diffs design's
-     Code-impact table against the committed/planned file set.
+   - Flag on `slice conformance` — `--against <range> [--strict]` — that diffs the
+     slice's **`design-target` selectors** (the machine-readable projection of the
+     design's Code-impact table — the selectors ARE that table, per `/design`)
+     against a committed git rev-range.
    - Warns (or fails, under `--strict`) when the declared selectors miss
-     compile-necessary fallout files.
-   - Pure: the conformance compute exists; the dry-run is a thin shell over it.
+     compile-necessary fallout files (i.e. the range touches undeclared paths).
+   - Pure: the conformance compute exists; the dry-run is a thin shell swapping
+     the registry `actual`-source for a git-range fold (design §4).
 
 2. **PHASE-02 (IMP-199):** Import-belt scope-creep refusal.
    - Extend `classify_import` with a new `UndeclaredScope` refusal variant.
