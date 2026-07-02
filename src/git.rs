@@ -2158,6 +2158,8 @@ mod tests {
         sha256, worktree_for_ref,
     };
 
+    use crate::kinds::DISPATCH_REF_PREFIX;
+
     /// Render canonical bytes as a `String` for readable assertions (canonical
     /// output is always valid UTF-8).
     fn canon(v: &Value) -> String {
@@ -3943,7 +3945,7 @@ HEAD bbbb
 branch refs/heads/dispatch/121
 ";
         assert_eq!(
-            parse_worktree_for_ref(listing, "refs/heads/dispatch/121").map(|e| e.path),
+            parse_worktree_for_ref(listing, &format!("{DISPATCH_REF_PREFIX}121")).map(|e| e.path),
             Some(PathBuf::from("/repos/feature")),
         );
         assert_eq!(
@@ -4061,7 +4063,7 @@ worktree /repos/live
 HEAD bbbb
 branch refs/heads/main
 ";
-        let stale = parse_worktree_for_ref(listing, "refs/heads/dispatch/154")
+        let stale = parse_worktree_for_ref(listing, &format!("{DISPATCH_REF_PREFIX}154"))
             .expect("the stale block is present");
         assert_eq!(stale.path, PathBuf::from("/repos/stale"));
         assert!(

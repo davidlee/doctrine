@@ -13,6 +13,7 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
+use crate::kinds::DISPATCH_REF_PREFIX;
 use anyhow::Context;
 use clap::ValueEnum;
 use serde::Deserialize;
@@ -513,7 +514,7 @@ fn capture_phase_boundary(
     // so capture is never suppressed forever. A probe error warns + stands down.
     match crate::git::live_worktree_for_ref(
         project_root,
-        &format!("refs/heads/dispatch/{slice_id:03}"),
+        &format!("{DISPATCH_REF_PREFIX}{slice_id:03}"),
     ) {
         Ok(Some(_)) => return None,
         Ok(None) => {}

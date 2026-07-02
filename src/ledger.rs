@@ -28,6 +28,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::boundary::BoundaryRow;
+use crate::kinds::DISPATCH_REF_PREFIX;
 
 // --- pure read model ---------------------------------------------------------
 
@@ -412,7 +413,7 @@ pub(crate) fn read_journal(root: &Path, slice: u32) -> anyhow::Result<Journal> {
 /// coordination worktree is GC'd at conclude, so the trunk-integration query
 /// (EX-2) must source the ref tree, never disk.
 pub(crate) fn read_journal_at_ref(root: &Path, slice: u32) -> anyhow::Result<Option<Journal>> {
-    let refish = format!("refs/heads/dispatch/{slice:03}");
+    let refish = format!("{DISPATCH_REF_PREFIX}{slice:03}");
     let path = format!(".doctrine/dispatch/{slice:03}/journal.toml");
     match crate::git::read_path_at(root, &refish, &path)? {
         Some(text) => Ok(Some(toml::from_str(&text)?)),
@@ -448,7 +449,7 @@ pub(crate) fn trunk_integration(
     // 1. Probe dispatch-ref existence explicitly — read_path_at can't tell an
     //    absent ref from an absent path, so the "never dispatched" terminus
     //    needs its own rev-parse probe.
-    let dispatch_ref = format!("refs/heads/dispatch/{slice:03}");
+    let dispatch_ref = format!("{DISPATCH_REF_PREFIX}{slice:03}");
     if crate::git::resolve_ref(root, &dispatch_ref)?.is_none() {
         return Ok(TrunkIntegration::NotDispatched);
     }

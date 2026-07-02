@@ -29,6 +29,9 @@ use crate::worktree::JailPolicy;
 use crate::boundary::{BoundaryRow, Provenance};
 use crate::corpus_guard;
 use crate::git::{self, MergeTree, RefCas, ZERO_OID};
+use crate::kinds::{
+    CANDIDATE_REF_PREFIX, DISPATCH_REF_PREFIX, PHASE_REF_PREFIX, REVIEW_REF_PREFIX,
+};
 use crate::ledger::{
     Admission, Boundaries, CandidateKind, CandidatePayload, CandidateRole, CandidateRow,
     CandidateStatus, Candidates, Journal, JournalRow, LedgerStatus, Orthogonal, read_candidates,
@@ -580,7 +583,7 @@ pub(crate) fn run_setup(
     let outcome = crate::worktree::coordinate(&root, slice, dir, authoring.as_deref())?;
 
     // Emit the dispatch env contract on stdout (4 KEY=value lines).
-    let dispatch_ref = format!("refs/heads/dispatch/{slice:03}");
+    let dispatch_ref = format!("{DISPATCH_REF_PREFIX}{slice:03}");
     writeln!(io::stdout(), "coordination_dir={}", dir.display())?;
     writeln!(io::stdout(), "base={}", outcome.dispatch_tip)?;
     writeln!(io::stdout(), "slice={slice}")?;
@@ -755,7 +758,7 @@ pub(crate) fn run_record_boundary(
 pub(crate) fn run_refresh_base(path: Option<PathBuf>, slice: u32) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let slice3 = format!("{slice:03}");
-    let dispatch_ref = format!("refs/heads/dispatch/{slice3}");
+    let dispatch_ref = format!("{DISPATCH_REF_PREFIX}{slice3}");
 
     let trunk_tip = git::trunk_commit(&root)?.with_context(|| "trunk ref not found")?;
 
@@ -900,7 +903,7 @@ fn resolve_source_ref(req: &CreateRequest, slice3: &str) -> anyhow::Result<Strin
         return Ok(src.clone());
     }
     match req.role {
-        CandidateRole::ReviewSurface => Ok(format!("refs/heads/review/{slice3}")),
+        CandidateRole::ReviewSurface => Ok(format!("{REVIEW_REF_PREFIX}{slice3}")),
         CandidateRole::CloseTarget | CandidateRole::Scratch => bail!(
             "candidate create: --source is required for a {} candidate",
             role_token(req.role)
@@ -923,9 +926,9 @@ fn role_token(role: CandidateRole) -> &'static str {
 /// evidence ref", so the provenance base-case (and, later, the recursion step)
 /// agree — no inline ref-shape duplication.
 fn is_journaled_evidence_ref(source_ref: &str, slice3: &str) -> bool {
-    source_ref == format!("refs/heads/review/{slice3}")
+    source_ref == format!("{REVIEW_REF_PREFIX}{slice3}")
         || source_ref
-            .strip_prefix(&format!("refs/heads/phase/{slice3}-"))
+            .strip_prefix(&format!("{PHASE_REF_PREFIX}{slice3}-"))
             .and_then(|nn| nn.parse::<u32>().ok())
             .is_some()
 }
@@ -936,7 +939,7 @@ const CANDIDATE_PROVENANCE_DEPTH_BUDGET: u32 = 16;
 
 /// Single classifier for a candidate ref: `refs/heads/candidate/<N>/<label>`.
 fn is_candidate_ref(source_ref: &str) -> bool {
-    source_ref.starts_with("refs/heads/candidate/")
+    source_ref.starts_with(CANDIDATE_REF_PREFIX)
 }
 
 /// Walk the recorded-candidate chain from `ref_name` to a Verified journaled
@@ -1008,7 +1011,7 @@ fn trace_candidate_provenance<'a>(
         );
         // Phase-chain integrity: a close target built off phase/<slice>-NN must
         // have no earlier failed phase row.
-        let prefix = format!("refs/heads/phase/{slice3}-");
+        let prefix = format!("{PHASE_REF_PREFIX}{slice3}-");
         if let Some(nn) = next
             .strip_prefix(&prefix)
             .and_then(|nn| nn.parse::<u32>().ok())
@@ -1074,7 +1077,7 @@ fn check_provenance<'a>(
 
         // Phase-chain integrity: a close target built off phase/<slice>-NN must have
         // no earlier failed phase row (an unresolved hole below the selected phase).
-        let prefix = format!("refs/heads/phase/{slice3}-");
+        let prefix = format!("{PHASE_REF_PREFIX}{slice3}-");
         if let Some(nn) = source_ref
             .strip_prefix(&prefix)
             .and_then(|nn| nn.parse::<u32>().ok())
@@ -1144,8 +1147,8 @@ fn candidate_conflict_message(source_ref: &str, base: &str, ahead: u32) -> Strin
 /// durable state.
 fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
     let slice3 = format!("{:03}", req.slice);
-    let coord_ref = format!("refs/heads/dispatch/{slice3}");
-    let target_ref = format!("refs/heads/candidate/{slice3}/{}", req.label);
+    let coord_ref = format!("{DISPATCH_REF_PREFIX}{slice3}");
+    let target_ref = format!("{CANDIDATE_REF_PREFIX}{slice3}/{}", req.label);
     let id = format!("cand-{slice3}-{}", req.label);
 
     // --- EX-2: raw-evidence-ref write guard FIRST (invariant I9) — refuse a
@@ -1695,8 +1698,8 @@ fn admission_for<'a>(ledger: &'a Candidates, id: &str) -> Option<&'a Admission> 
 fn collect_evidence(root: &Path, slice3: &str) -> anyhow::Result<Vec<EvidenceRow>> {
     let mut rows: Vec<EvidenceRow> = Vec::new();
     for (refname, group) in [
-        (format!("refs/heads/dispatch/{slice3}"), "coordination"),
-        (format!("refs/heads/review/{slice3}"), "impl-bundle"),
+        (format!("{DISPATCH_REF_PREFIX}{slice3}"), "coordination"),
+        (format!("{REVIEW_REF_PREFIX}{slice3}"), "impl-bundle"),
     ] {
         let tip = resolve_commit(root, &refname)?.unwrap_or_else(|| "—".to_owned());
         rows.push(EvidenceRow {
@@ -1705,7 +1708,7 @@ fn collect_evidence(root: &Path, slice3: &str) -> anyhow::Result<Vec<EvidenceRow
             tip,
         });
     }
-    for refname in for_each_ref(root, &format!("refs/heads/phase/{slice3}-*"))? {
+    for refname in for_each_ref(root, &format!("{PHASE_REF_PREFIX}{slice3}-*"))? {
         let tip = resolve_commit(root, &refname)?.unwrap_or_else(|| "—".to_owned());
         rows.push(EvidenceRow {
             refname,
@@ -1822,7 +1825,7 @@ fn missing_committed_funnel_phases<'a>(
 /// Stage-1 prepare-review (design §4.2 B + §4.3 C).
 fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
     let slice3 = format!("{slice:03}");
-    let coord_ref = format!("refs/heads/dispatch/{slice3}");
+    let coord_ref = format!("{DISPATCH_REF_PREFIX}{slice3}");
     let journal_path = format!(".doctrine/dispatch/{slice3}/journal.toml");
 
     let tip0 = resolve_commit(root, &coord_ref)?
@@ -1997,7 +2000,7 @@ fn integrate(
     allow: &BTreeSet<String>,
 ) -> anyhow::Result<()> {
     let slice3 = format!("{slice:03}");
-    let coord_ref = format!("refs/heads/dispatch/{slice3}");
+    let coord_ref = format!("{DISPATCH_REF_PREFIX}{slice3}");
     let journal_path = format!(".doctrine/dispatch/{slice3}/journal.toml");
 
     let tip = resolve_commit(root, &coord_ref)?
@@ -2307,7 +2310,7 @@ fn report_integrate(journal: &Journal, outcomes: &[RowOutcome]) -> anyhow::Resul
 /// would parent the trunk advance on an unresolved ref. `None` when no verified
 /// phase row was projected.
 fn phase_chain_tip(journal: &Journal, slice3: &str) -> Option<String> {
-    let prefix = format!("refs/heads/phase/{slice3}-");
+    let prefix = format!("{PHASE_REF_PREFIX}{slice3}-");
     journal
         .rows
         .iter()
@@ -2352,7 +2355,7 @@ fn plan_trunk_row(
 /// the standing `edge_ref`. Not ff-gated (a standing aggregate of local work); the
 /// CAS still refuses a concurrently-moved edge — isolated to this sync point.
 fn plan_edge_row(root: &Path, slice3: &str, edge_ref: &str) -> anyhow::Result<JournalRow> {
-    let review_ref = format!("refs/heads/review/{slice3}");
+    let review_ref = format!("{REVIEW_REF_PREFIX}{slice3}");
     let planned = resolve_commit(root, &review_ref)?
         .with_context(|| format!("integrate --edge: {review_ref} does not resolve"))?;
     let expected_old = resolve_commit(root, edge_ref)?;
@@ -2471,7 +2474,7 @@ fn plan_review(
         &format!("review({slice3}): impl bundle"),
     )?;
     planned.push(Planned {
-        target_ref: format!("refs/heads/review/{slice3}"),
+        target_ref: format!("{REVIEW_REF_PREFIX}{slice3}"),
         source_oid: tip.to_owned(),
         commit_oid: review_commit,
     });
@@ -2504,7 +2507,7 @@ fn plan_phases(
         let phase_commit =
             git::commit_tree(root, &phase_tree, &parent, &format!("phase({slice3}-{nn})"))?;
         planned.push(Planned {
-            target_ref: format!("refs/heads/phase/{slice3}-{nn}"),
+            target_ref: format!("{PHASE_REF_PREFIX}{slice3}-{nn}"),
             source_oid: boundary.code_end_oid.clone(),
             commit_oid: phase_commit.clone(),
         });
@@ -2876,7 +2879,7 @@ fn trunk_drift(root: &Path, tip: &str) -> anyhow::Result<Option<Drift>> {
 pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice3 = format!("{slice:03}");
-    let dispatch_ref = format!("refs/heads/dispatch/{slice3}");
+    let dispatch_ref = format!("{DISPATCH_REF_PREFIX}{slice3}");
 
     // --- Coordination state ---------------------------------------------------
     let dispatch_tip = resolve_commit(&root, &dispatch_ref)?.with_context(|| {
@@ -2911,7 +2914,7 @@ pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyho
     }
 
     // --- Sync state ------------------------------------------------------------
-    let review_ref = format!("refs/heads/review/{slice3}");
+    let review_ref = format!("{REVIEW_REF_PREFIX}{slice3}");
     let review_exists = resolve_commit(&root, &review_ref)?.is_some();
     let phase_ref_count = count_phase_refs(&root, &slice3);
 
@@ -3091,7 +3094,7 @@ pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyho
 /// `Ok(None)`), so this wrapper folds both legs back to the sentinel to preserve
 /// behaviour (F4).
 fn find_coordination_worktree(root: &Path, slice3: &str) -> String {
-    let target_branch = format!("refs/heads/dispatch/{slice3}");
+    let target_branch = format!("{DISPATCH_REF_PREFIX}{slice3}");
     match git::worktree_for_ref(root, &target_branch) {
         Ok(Some(path)) => path.to_string_lossy().into_owned(),
         Ok(None) | Err(_) => "(removed)".to_string(),
@@ -3100,7 +3103,7 @@ fn find_coordination_worktree(root: &Path, slice3: &str) -> String {
 
 /// Count `refs/heads/phase/{slice3}-*` refs via `git for-each-ref`.
 fn count_phase_refs(root: &Path, slice3: &str) -> usize {
-    let pattern = format!("refs/heads/phase/{slice3}-*");
+    let pattern = format!("{PHASE_REF_PREFIX}{slice3}-*");
     let Ok(out) = git::git_text(root, &["for-each-ref", "--format=%(refname)", &pattern]) else {
         return 0;
     };
@@ -3737,7 +3740,7 @@ mod tests {
             dir,
             &[
                 "update-ref",
-                &format!("refs/heads/dispatch/{slice:03}"),
+                &format!("{DISPATCH_REF_PREFIX}{slice:03}"),
                 &head,
             ],
         );
@@ -3750,7 +3753,7 @@ mod tests {
             dir,
             &[
                 "update-ref",
-                &format!("refs/heads/review/{slice:03}"),
+                &format!("{REVIEW_REF_PREFIX}{slice:03}"),
                 &head,
             ],
         );

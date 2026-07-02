@@ -5629,7 +5629,7 @@ mod tests {
     // integrated to trunk. Composes with the blocker + drift gates above.
     //
     // Fixtures mirror `ledger::tests::JournalRepo` — a `journal.toml` committed on
-    // an orphan `refs/heads/dispatch/<slice:03>` branch (the coordination ref tree
+    // an orphan dispatch ref (`DISPATCH_REF_PREFIX` + `<slice:03>`) branch (the coordination ref tree
     // the query reads, never the working filesystem), built BEFORE the slice
     // entity so the slice's untracked working-tree files are never disturbed.
     // -----------------------------------------------------------------------
