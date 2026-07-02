@@ -1368,7 +1368,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Supersede { new, old, path } => {
             crate::commands::supersede::run_supersede(path, &new, &old)
         }
-        Command::Prompt { command } => crate::commands::prompt::dispatch(command),
+        Command::Prompt { command } => crate::commands::prompt::dispatch(command, render_boot_map),
         Command::Map { command } => crate::commands::map::dispatch(command),
     }
 }

@@ -48,6 +48,37 @@ VT keyword false-positive risk: the VT gate's keyword-grep mechanism over entire
 * Clippy `unwrap_used` + `expect_used` both denied required switching from index-based collection to `array.iter().cloned()`. Minor but worth noting.
 * Test label selection: `References` for SLICE_KIND requires a `Role`; had to switch to `Related` (label-only, writable for SLICE). This was discoverable but not immediately obvious from the issue sketch.
 
+[dispatch; sess-restart-2026-07-03]
+Session RESTART did NOT fix the claude-arm isolation:worktree failure. Post-restart
+re-dispatch of SL-187 PHASE-04: worker landed in the coord tree (toplevel
+`.dispatch/SL-187`, no `.worktrees/agent-` segment), hard base-guard aborted cheap
+(~18.7k tok). Confirmed persistent, restart-surviving harness limitation: the Agent
+tool's `isolation: worktree` is a no-op in this build — `.claude/worktrees/` exists
+but stays empty, no WorktreeCreate hook fires, no `dispatch/agent-*` branch created.
+Hook config verified correct (plugin doctrine@0.1.0 hooks.json: `WorktreeCreate:* ->
+doctrine worktree create-fork`); `create-fork` + `worktree fork --base` both work when
+invoked directly. So the break is squarely the harness not emitting WorktreeCreate for
+isolation:worktree spawns — not doctrine. Token cost of the whole diagnosis-through-
+restart-through-re-confirm loop is the RFC-011 signal here: a harness capability that
+silently degrades to no-op (rather than erroring) burns a full spawn + guard + restart
+before it's provable. The base-guard-in-worker-prompt pattern is what keeps each failed
+attempt cheap (~15-19k) instead of a full wasted worker.
+
+[audit; sess-restart-2026-07-03]
+Dispatch coord tree carries a STALE review corpus: `.dispatch/SL-187` (dispatch/187,
+forked at 757b71db) sees RVs only through RV-216, while trunk (edge) has RV-232
+committed + RV-233 in-flight (SL-180). `dispatch status` confirms trunk moved 82
+commits past the fork-point. Consequence: an audit RV minted from the coord tree
+would allocate RV-217 and COLLIDE with 16+ already-allocated RVs (217..233). The
+review-ledger parent-tree caveat ("review verbs refuse a worktree/fork-resolved
+root; run from the main tree or merge the fork first") is not just a root-resolution
+nicety — it is what keeps RV allocation coherent against the trunk corpus. RFC-011
+signal: a self-applied (non-dispatch) phase still incurs the FULL dispatch-integration
+tax at conclude — refresh-base (82-commit merge) → prepare-review → candidate →
+integrate — before the audit can even allocate an id. The code delivery (PHASE-04)
+was cheap; the integration ceremony is where the coordination cost lives, and it is
+unavoidable because the RV namespace is trunk-global.
+
 [IMP-103; preflight→execute] IMP-103 was 2 doc-comment edits. The preflight
 surfaced the dependency chain (IMP-103 after IMP-101 after ISS-024) and
 confirmed the `after` is advisory (no `needs`). Body files for both IMP-101
