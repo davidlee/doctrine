@@ -29,6 +29,29 @@ use std::process::{Command, Output};
 
 mod common;
 
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
+
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .expect("spawn git");
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn head_sha(dir: &Path) -> String {
+    git(dir, &["rev-parse", "HEAD"])
+}
+
 /// A CLEAN conclude plan: a satisfied VT, a non-gated VA, an Uncheckable (no
 /// `test_file`), and a Waived row. No Fail → the conclude gate passes (exit 0)
 /// and handover proceeds, with the block still shown.
@@ -63,16 +86,55 @@ verification = [
 ]
 "#;
 
-/// Build a temp coord-tree root with `plan` at `.doctrine/slice/001/plan.toml`
-/// and a `tests/good.rs` carrying the `census` token (satisfies the clean VT-1).
+/// Build a temp coord-tree root as a git repo with one phase's source-delta
+/// recorded so the VT gate can attribute keyword matches to slice work
+/// (IMP-228). `plan` is written to `.doctrine/slice/001/plan.toml`; a
+/// `tests/good.rs` carrying the `census` token is committed in the delta.
 fn coord_tree(plan: &str) -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = dir.path();
+
+    // Set up a git repo with an initial empty commit as the baseline.
+    git(root, &["init", "-q", "-b", "main"]);
+    git(root, &["config", "user.email", "t@example.com"]);
+    git(root, &["config", "user.name", "Test"]);
+    std::fs::write(root.join("empty"), "").expect("base file");
+    git(root, &["add", "empty"]);
+    git(root, &["commit", "-q", "-m", "base"]);
+    let base_sha = head_sha(root);
+
+    // Write the slice plan and test file, then commit as the delta.
     let slice = root.join(".doctrine/slice/001");
     std::fs::create_dir_all(&slice).expect("mkdir slice");
     std::fs::write(slice.join("plan.toml"), plan).expect("write plan.toml");
     std::fs::create_dir_all(root.join("tests")).expect("mkdir tests");
     std::fs::write(root.join("tests/good.rs"), "fn t() { let census = 1; }").expect("good.rs");
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-q", "-m", "delta"]);
+    let end_sha = head_sha(root);
+
+    // Record the source delta so verify-vt can attribute the test file.
+    let rec = Command::new(bin())
+        .args([
+            "slice",
+            "record-delta",
+            "1",
+            "PHASE-01",
+            "--start",
+            &base_sha,
+            "--end",
+            &end_sha,
+            "-p",
+        ])
+        .arg(root)
+        .output()
+        .expect("record-delta");
+    assert!(
+        rec.status.success(),
+        "record-delta failed: {}",
+        String::from_utf8_lossy(&rec.stderr)
+    );
+
     dir
 }
 

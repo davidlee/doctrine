@@ -26,6 +26,29 @@ use std::process::{Command, Output};
 
 mod common;
 
+fn bin() -> std::path::PathBuf {
+    common::doctrine_bin()
+}
+
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .expect("spawn git");
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn head_sha(dir: &Path) -> String {
+    git(dir, &["rev-parse", "HEAD"])
+}
+
 /// A fixture plan exercising every verdict. PHASE-01 mixes Pass / Fail (missing
 /// file) / Uncheckable (keywords, no `test_file`) / Waived, plus a non-gated VA
 /// row. PHASE-02 is the SL-169 (b) replay: a mandated `relation` matrix whose
@@ -54,13 +77,22 @@ verification = [
 ]
 "#;
 
-/// Build a temp root with the fixture plan at `.doctrine/slice/001/plan.toml`
-/// and the mandated source files: `tests/good.rs` carries `census`;
-/// `tests/relation.rs` carries `relation` but OMITS `census` (the SL-169 hole);
-/// `tests/missing.rs` is deliberately absent.
+/// Build a temp root as a git repo with source-deltas recorded so the VT gate
+/// can attribute keyword matches to slice work (IMP-228).
 fn fixture_root() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = dir.path();
+
+    // Set up a git repo with an initial empty commit as the baseline.
+    git(root, &["init", "-q", "-b", "main"]);
+    git(root, &["config", "user.email", "t@example.com"]);
+    git(root, &["config", "user.name", "Test"]);
+    std::fs::write(root.join("empty"), "").expect("base file");
+    git(root, &["add", "empty"]);
+    git(root, &["commit", "-q", "-m", "base"]);
+    let base_sha = head_sha(root);
+
+    // Write the slice plan and test files, then commit as the delta.
     let slice = root.join(".doctrine/slice/001");
     std::fs::create_dir_all(&slice).expect("mkdir slice");
     std::fs::write(slice.join("plan.toml"), PLAN).expect("write plan.toml");
@@ -74,6 +106,34 @@ fn fixture_root() -> tempfile::TempDir {
         "fn matrix() { check(\"relation\"); }",
     )
     .expect("relation.rs");
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-q", "-m", "delta"]);
+    let end_sha = head_sha(root);
+
+    // Record source deltas for both phases so verify-vt can attribute the files.
+    for phase in ["PHASE-01", "PHASE-02"] {
+        let rec = Command::new(bin())
+            .args([
+                "slice",
+                "record-delta",
+                "1",
+                phase,
+                "--start",
+                &base_sha,
+                "--end",
+                &end_sha,
+                "-p",
+            ])
+            .arg(root)
+            .output()
+            .expect("record-delta");
+        assert!(
+            rec.status.success(),
+            "record-delta {phase} failed: {}",
+            String::from_utf8_lossy(&rec.stderr)
+        );
+    }
+
     dir
 }
 
