@@ -222,14 +222,15 @@ pub(crate) enum SliceCommand {
     /// Classify and write a slice lifecycle transition; prints the move's
     /// classification (advance / back-edge / skip / abandon). Refuses the closure
     /// seam (→ reconcile only from audit, → done only from reconcile) and leaving
-    /// a terminal status (done / abandoned).
+    /// a terminal status (done / abandoned). Omit STATE to print current lifecycle
+    /// and phase rollup read-only.
     Status {
         /// Slice id to transition.
         #[arg(value_parser = parse_cli_id)]
         id: u32,
 
-        /// Target lifecycle state.
-        state: SliceStatus,
+        /// Target lifecycle state. Omit to print current state read-only.
+        state: Option<SliceStatus>,
 
         /// Optional note — surfaced in the transition output, not stored.
         #[arg(long)]
@@ -783,22 +784,41 @@ pub(crate) fn run_phase(
     Ok(())
 }
 
-/// `doctrine slice status <id> <state> [--note …]` — classify and write a slice
-/// lifecycle transition (SL-028, design §5.2). Reads the current authored status,
-/// classifies the move via [`classify`], writes it edit-preservingly, and prints
-/// the classification (e.g. `started → audit [advance]`). The `--note` is
-/// *surfaced only*, never stored: `slice-NNN.toml` has no progress-log field
-/// (storage rule — runtime progress lives under `.doctrine/state/`); a stored
-/// rationale would be a new authored field, out of scope (plan Decisions).
+/// `doctrine slice status <id> [<state>] [--note …]` — with STATE: classify and
+/// write a slice lifecycle transition (SL-028, design §5.2). Without STATE:
+/// print current lifecycle, phase rollup, and legal transitions read-only (IMP-191).
 pub(crate) fn run_status(
     path: Option<PathBuf>,
     id: u32,
-    state: SliceStatus,
+    state: Option<SliceStatus>,
     note: Option<&str>,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let slice_root = root.join(SLICE_DIR);
     let from = read_status(&slice_root, id)?;
+
+    // Read-only path (IMP-191): no STATE → print current status + rollup.
+    let Some(state) = state else {
+        let rollup = crate::state::phase_rollup(&root, id)?;
+        let phase_line = phases_cell(rollup.as_ref());
+        let decorated = decorated_status(&from, rollup.as_ref());
+        let legal = legal_moves(&from);
+        writeln!(
+            io::stdout(),
+            "{}  {}  phases: {}",
+            canonical_id(id),
+            decorated,
+            phase_line
+        )?;
+        if !legal.is_empty() {
+            writeln!(io::stdout(), "  → {}", legal.join(", "))?;
+        }
+        if is_divergent(&from, rollup.as_ref()) {
+            writeln!(io::stdout(), "  ⚠ divergent: phases complete but lifecycle not terminal")?;
+        }
+        return Ok(());
+    };
+
     let to = state.as_str();
     let kind = classify(&from, to);
     // Reverse close-gate (design §7, D8/D-C9b): the gate lives in this close
@@ -1113,6 +1133,28 @@ fn decorated_status(status: &str, rollup: Option<&crate::state::PhaseRollup>) ->
         ""
     };
     format!("{status}{drift}{divergence}")
+}
+
+/// Legal next statuses from `current`, derived from [`classify`]. Excludes
+/// `Noop`, `FromTerminal`, and `SeamBreach`. Pure — no IO (IMP-191).
+fn legal_moves(current: &str) -> Vec<String> {
+    let all = [
+        "proposed", "design", "plan", "ready", "started",
+        "audit", "reconcile", "done", "abandoned",
+    ];
+    all.iter()
+        .filter(|to| {
+            let t = classify(current, to);
+            matches!(
+                t,
+                crate::lifecycle::Transition::Advance
+                    | crate::lifecycle::Transition::BackEdge
+                    | crate::lifecycle::Transition::Skip
+                    | crate::lifecycle::Transition::Abandon
+            )
+        })
+        .map(|s| (*s).to_string())
+        .collect()
 }
 
 /// The table columns `slice list` can show (`--columns` tokens over the existing
@@ -4452,7 +4494,7 @@ mod tests {
         run_status(
             Some(root.to_path_buf()),
             1,
-            SliceStatus::Audit,
+            Some(SliceStatus::Audit),
             Some("done impl"),
         )
         .unwrap();
@@ -4565,7 +4607,7 @@ mod tests {
         set_status_raw(root, 1, "audit");
         raise_blocker_rv(root, 1);
 
-        let err = run_status(Some(root.to_path_buf()), 1, SliceStatus::Reconcile, None)
+        let err = run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Reconcile), None)
             .unwrap_err()
             .to_string();
         assert!(err.contains("RV-001/F-1"), "names the blocker: {err}");
@@ -4605,7 +4647,7 @@ mod tests {
         )
         .unwrap();
 
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Reconcile, None).unwrap();
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Reconcile), None).unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
     }
 
@@ -4625,7 +4667,7 @@ mod tests {
             crate::review::Role::Raiser,
         )
         .unwrap();
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Reconcile, None).unwrap();
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Reconcile), None).unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
     }
 
@@ -4640,7 +4682,7 @@ mod tests {
         raise_blocker_rv(root, 1);
 
         // started → audit is a forward Advance but NOT the closure seam — passes.
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Audit, None).unwrap();
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Audit), None).unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "audit");
     }
 
@@ -4805,7 +4847,7 @@ mod tests {
     /// Attempt the `reconcile → done` crossing; return the error string (the gate
     /// refusal) — panics if it unexpectedly SUCCEEDS.
     fn expect_close_refused(root: &Path) -> String {
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None)
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None)
             .expect_err("reconcile → done should be refused")
             .to_string()
     }
@@ -4849,7 +4891,7 @@ mod tests {
         // refused structurally — no coverage/REC in sight, the drift gate never runs.
         make_slice(root, "s", "S", "2026-06-12");
         set_status_raw(root, 1, "started");
-        let err = run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None)
+        let err = run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None)
             .unwrap_err()
             .to_string();
         assert!(
@@ -5050,7 +5092,7 @@ mod tests {
             vec![cov_key("SL-001", &req)],
         );
 
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None).unwrap();
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None).unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -5226,7 +5268,7 @@ mod tests {
             ReqStatus::Pending,
             vec![blocked, vh],
         );
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None).unwrap();
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None).unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -5309,7 +5351,7 @@ mod tests {
             ReqStatus::Retired,
             vec![key],
         );
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None).unwrap();
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None).unwrap();
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
 
@@ -5447,7 +5489,7 @@ mod tests {
 
     /// Drive `reconcile → done` to SUCCESS; panic if the gate refuses.
     fn expect_close_succeeds(root: &Path) {
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Done, None)
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Done), None)
             .expect("reconcile → done should succeed");
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "done");
     }
@@ -5562,7 +5604,7 @@ mod tests {
         make_slice(root, "s", "S", "2026-06-12");
         set_status_raw(root, 1, "audit");
 
-        run_status(Some(root.to_path_buf()), 1, SliceStatus::Reconcile, None)
+        run_status(Some(root.to_path_buf()), 1, Some(SliceStatus::Reconcile), None)
             .expect("audit → reconcile is not gated by the integration check");
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");
     }
