@@ -87,29 +87,45 @@ turn (INV-D1/D2 guarantee this — it only changes when a committed input change
 **`prompt resolve` (consumed from SL-186) — delivery behaviour added here:**
 
 ```
-doctrine prompt resolve --role <orchestrator|worker> [--harness --model --arm --stage --band]
+doctrine prompt resolve --role <orchestrator|worker>
+                        [--harness <name>] [--model <id>] [--arm <subagent|subprocess>]
+                        [--stage <skill/verb>] [--band <name>]...   (--band repeatable)
   → disk:   regenerate the UNIVERSAL boot.md (reuse boot generator, write_if_changed);
-            AXIS-INVARIANT — --role/--harness never alter the on-disk artifact (INV-D1).
+            AXIS-INVARIANT — no axis flag alters the on-disk artifact (SL-186 §5.2 INV-7:
+            "flags never alter the on-disk artifact"); INV-D1 restates it for this slice.
     stdout: <universal snapshot> ++ <role/harness hymns>.  Idempotent.
+(also consumed: `prompt model-keys [--harness <name>]` — the exact `--model` key strings.)
 ```
 
 **Boot generator (`src/boot.rs`):**
 - **Expose** the universal-snapshot generator so `resolve` reuses it (no second projector).
 - **Add** a `universal`-band hymns section to the disk snapshot (harness-agnostic authored
-  prose, incl. the model-band floor directive). One additive `Section` — the entity-derived
-  sections + assembly logic are **untouched** (behaviour gate).
-- **Inline** `onboarding`-tagged memory bodies (via `collect_all` + tag filter) into the
-  snapshot, replacing the footer's signpost instruction. Deterministic order by memory key.
+  prose, incl. the model-band floor directive). The **entity-derived** producer sections and
+  their ordering are untouched; this is a *purely additive* section for those.
+- **Change the Onboarding section (not additive — a contract change).** Today
+  `("Onboarding", SourceKind::Footer)` sits in the core section table (`boot.rs:104-132`),
+  rendered by the `Footer` arm from `.doctrine/boot-footer.md` (`boot.rs:292-297`). This slice
+  **replaces** that footer's signpost instruction with the memory bodies inlined in place —
+  mutating that one section's producer, not the entity-derived sections. The boot golden for
+  the Onboarding section therefore changes **by intent** (see §9); "assembly logic untouched"
+  applies only to the entity-derived sections above, not to this substitution.
+- **Inline** `onboarding`-tagged memory bodies (via `collect_all` + tag filter). Order:
+  **key-ascending with a uid fallback for keyless memories** — reuse the existing `boot_keys`
+  sort pattern (`memory.rs:2830`), don't mint a second ordering rule.
 - Harness/model/role/stage bands are **never** added to the disk snapshot — stdout-only.
 
 **pi extension (`generate_pi_extension()`) + Claude/Codex `SessionStart` hook:**
 - One-line command swap: `doctrine boot --emit` → `doctrine prompt resolve --role
   orchestrator [--harness <h>]` (CHR-033 seam). Byte-identical per turn preserved.
 
-**`doctrine_onboard` (MCP):**
-- Emits the **model band**: identify the model (offer `prompt model-keys`, or read the
-  client's model) → `prompt resolve --band model --model <id>`.
-- **Drops** the two-memory load (moved into the cached sector).
+**`doctrine_onboard` (MCP) — a deliberate contract change (not additive):**
+- **Mechanism (F-5).** The tool takes no arguments and receives no model id (`tools.rs:327-333`),
+  so it cannot *read* the client's model. It instead **teaches self-identification**: emits the
+  `prompt model-keys` set + the standing directive for the agent to resolve `prompt resolve
+  --band model --model <id>` itself. Doctrine never resolves the model band on the agent's behalf.
+- **Drops** the two-memory load (moved into the cached sector). This **removes** the current
+  `Onboarding Memories` section — a contract subtraction, not an extension. The onboard e2e
+  assertion on that section (`tests/e2e_mcp_server.rs:1083`) changes **by intent** (§9).
 
 ### 5.3 Data, State & Ownership
 
@@ -141,11 +157,20 @@ re-derives from current inputs). `boot.md` is a **convenience projection, not au
 correctness defect. A lock would over-engineer a self-healing cache. (Optional paranoid guard:
 skip the write when disk mtime is newer — deferred, YAGNI.)
 
+**Tier-2 tolerance is explicit, not accidental (F-3).** A *non-injecting* harness reading the
+disk `boot.md` during the ≤1-cycle stale window gets governance at most one resolve-cycle old.
+This is a **consciously accepted tolerance** (D8), not a supported-path guarantee: tier-2 is
+best-effort universal-only fallback for harnesses that cannot inject; the stale window is
+bounded, self-heals on the next session, and no correctness invariant rests on tier-2 freshness
+(entity files are authority). Injecting harnesses (tier-1) never read the disk artifact for
+delivery, so they are unaffected.
+
 **Model band — floor + supplement, no true ceiling (F14).**
 - **Floor (both tiers):** the universal-band standing directive — self-identify, `prompt
   resolve --band model --model <id>`, re-resolve on change. Best-effort, degrades gracefully.
-- **Supplement (better floor, NOT a ceiling):** `doctrine_onboard` does the identification +
-  emits the model band. Honest correction to the earlier "ceiling" label — a tool the agent
+- **Supplement (better floor, NOT a ceiling):** `doctrine_onboard` hands the agent the
+  `model-keys` set and the resolve directive so the agent self-identifies (the tool has no
+  model id to read — F-5). Honest correction to the earlier "ceiling" label — a tool the agent
   *may* invoke is not a guaranteed mechanism; it is a nicer-UX floor. A **true** ceiling
   requires the harness to *mechanically* inject the model band, and even a session-start hook
   is not a *mid-session* ceiling (model is mutable, hook fires once/session). No correctness
@@ -153,10 +178,14 @@ skip the write when disk mtime is newer — deferred, YAGNI.)
   degradation.
 
 **Onboarding inline (INV-D3).** Boot selects `onboarding`-tagged memories via `collect_all`
-(items ∪ shipped, local-wins) and inlines their bodies into the cached sector in deterministic
-memory-key order. Collision (a local memory sharing a shipped uid) resolves local-wins **by
-design** (documented, not silent). The set is small-by-construction (human-tagged); an explicit
-byte/count budget is optional (R3). `doctrine_onboard` correspondingly sheds the memory load.
+(items ∪ shipped, local-wins) and inlines their bodies into the cached sector, ordered
+key-ascending with a uid fallback for keyless memories (the `boot_keys` pattern). Collision (a
+local memory sharing a shipped uid) resolves local-wins **by design** — but note `collect_all`
+skips the shipped twin **silently** (`memory.rs:2736`: no debug-log facility, print is denied),
+so this is not observable at runtime. Observability, if wanted, is a `doctrine check` collision
+diagnostic (D7); this design documents the behaviour rather than claiming runtime visibility.
+The set is small-by-construction (human-tagged), with a soft warning budget (D6).
+`doctrine_onboard` correspondingly sheds the memory load.
 
 ### 5.5 Invariants & Edge Cases
 
@@ -170,8 +199,9 @@ byte/count budget is optional (R3). `doctrine_onboard` correspondingly sheds the
   stale-by-at-most-one-cycle under concurrency, self-healing; `boot.md` is projection, not
   authority.
 - **INV-D3** `onboarding`-tag selection unions shipped + local (`collect_all`, local-wins),
-  deterministic key order; collision is intended local-wins; model-agnostic (no model content
-  ever inlines).
+  ordered key-ascending with uid fallback for keyless (the `boot_keys` pattern); collision is
+  intended local-wins (skipped silently at the `collect_all` layer, documented here, not
+  runtime-observable — D7); model-agnostic (no model content ever inlines).
 - **INV-D4** Session-start injection is byte-identical per turn (CHR-033 cache-hold posture);
   it changes only when a committed input changes.
 - **Edge — non-injecting harness:** tier-2 `@`-import gets universal governance + universal
@@ -180,10 +210,11 @@ byte/count budget is optional (R3). `doctrine_onboard` correspondingly sheds the
 
 ## 6. Open Questions
 
-- **OQ-1 — Byte/count budget on inlined onboarding memories.** Enforce a hard budget, or rely
-  on small-by-construction + review? Leaning the latter (+ a `doctrine check` warning at N).
 - **OQ-2 — Claude/Codex hook: single combined emit vs two.** One `prompt resolve` call (base
-  from the reused generator) vs chaining. Leaning single (matches the pi one-liner).
+  from the reused generator) vs chaining. Leaning single (matches the pi one-liner). Safe to
+  settle in `/plan` — both shapes hit the same seam; no design fork.
+
+(OQ-1 resolved → D6. The remaining OQ is a plan-level shaping detail, not a design fork.)
 
 ## 7. Decisions
 
@@ -204,29 +235,52 @@ byte/count budget is optional (R3). `doctrine_onboard` correspondingly sheds the
   (needs an on-model-change seam).
 - **D5 — pi/hook delivery is a one-line command swap (CHR-033 seam).** Reuse the existing
   stdout-inject extension; don't author a new mechanism.
+- **D6 — Onboarding-inline budget: soft warning, no hard cap (was OQ-1, F-7).** The set is
+  small-by-construction (human-tagged); a hard byte/count refusal would over-engineer. A
+  `doctrine check` warning at a threshold N is the ceiling. `/plan` inherits this stance, not
+  an open question.
+- **D7 — Collision visibility is documentation + an optional `doctrine check` diagnostic, not
+  runtime (F-6).** `collect_all` skips shipped uid-twins silently and the repo denies print;
+  local-wins is documented here and, if surfaced, via a `doctrine check` collision warning —
+  the design does not claim runtime observability it cannot deliver.
+- **D8 — Tier-2 disk fallback is best-effort, stale-window tolerated (F-3).** A non-injecting
+  harness may read ≤1-cycle-old governance from disk `boot.md`; bounded, self-healing, no
+  invariant rests on it. Consciously accepted, not a freshness guarantee. Rejected: a lock or
+  version guard (over-engineering a self-healing convenience projection).
 
 ## 8. Risks & Mitigations
 
 - **R1 — Boot regression** (live surface). *Mit:* boot's generator is *reused, not rewritten*;
-  entity-derived sections + logic untouched (suites green); only one additive universal-hymns
-  section + the memory-inline; goldens churn once.
+  the **entity-derived** sections + their ordering are untouched (those goldens stay green). Two
+  intentional deltas: an additive universal-hymns section, and the Onboarding footer→inline
+  substitution (§5.2). The Onboarding + universal-hymns goldens churn **once, by intent** — this
+  is not "suites green unchanged" for boot; it is scoped, reviewed golden churn (§9).
 - **R2 — Cache-hold broken** by non-deterministic injection. *Mit:* INV-D2/D4 keep the stream
   byte-identical per turn; CHR-033 already validates the posture; a golden asserts stability.
 - **R3 — Onboarding-inline bloat / surprise.** *Mit:* deterministic order, documented
   local-wins, small-by-construction; optional budget (OQ-1). A user tagging a huge memory is a
   `doctrine check` warning candidate.
-- **R4 — Onboard contract regression** for existing MCP agents. *Mit:* additive (adds model
-  band, drops a memory load that moved to the sector); onboard suite stays green.
+- **R4 — Onboard contract change** for existing MCP agents. This is a **deliberate contract
+  change, not additive**: it adds the model-band self-ID guidance and **removes** the
+  `Onboarding Memories` section (moved to the cached sector). *Mit:* the removed payload is not
+  lost — it relocates to the always-present cached sector; the onboard e2e assertion on that
+  section (`tests/e2e_mcp_server.rs:1083`) is **updated by intent** (§9), not preserved.
 
 ## 9. Quality Engineering & Validation
 
-- **Behaviour-preservation (the gate):** existing boot + dispatch + onboard suites green
-  unchanged; one new boot golden (universal-hymns section); model band demonstrably absent
-  from `boot.md`.
+- **Behaviour-preservation gate — scoped honestly.** *Stays green unchanged:* the **dispatch**
+  suite, and boot's **entity-derived** section goldens (governance projection + ordering). *Changes
+  by intent (reviewed golden/assertion churn, not regression):* (a) boot's **Onboarding** golden
+  (footer instruction → inlined memory bodies) and a new **universal-hymns** golden; (b) the
+  **onboard** e2e assertion `tests/e2e_mcp_server.rs:1083` (the `Onboarding Memories` section is
+  removed). The gate is: no *unintended* delta beyond these three enumerated changes; model band
+  demonstrably absent from `boot.md`.
 - **Onboarding inline (INV-D3):** golden with a **shipped** + a **local** `onboarding`-tagged
-  memory — both bodies inline, deterministic key order; a local memory sharing a shipped uid
-  inlines the local body; no model content.
-- **Onboard:** `doctrine_onboard` emits the model band, no longer the memory bodies.
+  memory — both bodies inline, key-ascending order with uid fallback; a local memory sharing a
+  shipped uid inlines the local body; no model content.
+- **Onboard:** `doctrine_onboard` emits the model-band self-identification guidance (offers
+  `model-keys` + resolve directive), no longer the memory bodies; its e2e assertion is updated
+  to the new contract.
 - **Cache-hold (INV-D4):** the injected sector is byte-identical across two turns on unchanged
   inputs.
 - **pi/hook swap:** the emitted extension/hook command is `prompt resolve --role orchestrator`;
@@ -249,6 +303,23 @@ findings (F10–F16):
 - **F16 (scope creep)** — **accepted**: this slice *is* the split — the live-surface delivery
   half, separated from SL-186's inert engine on a blast-radius boundary.
 
+**Codex inquisition on this (delivery) design — RV-210, 2026-07-02.** 7 charges, all disposed
+`design-wrong` and reconciled into this artifact (no code defect — the design *prose* was the
+heresy):
+- **F-1** (contract quote narrowed axis-invariance) → §5.2 quotes SL-186's full flag list +
+  "flags never alter the on-disk artifact" verbatim; `model-keys` added.
+- **F-2** (footer→inline mislabelled "additive/untouched") → §5.2, R1: reframed as an
+  intentional Onboarding-section contract change; "untouched" scoped to entity-derived sections.
+- **F-3** (tier-2 stale-window implicit) → D8 + §5.4: explicit accepted best-effort tolerance.
+- **F-4** (onboard memory-drop breaks e2e; "green unchanged" false) → §9, R4: reframed as a
+  deliberate contract change; the e2e assertion is updated by intent, not preserved.
+- **F-5** (onboard model-id mechanism fictional) → §5.2, §5.4: tool has no model id; it teaches
+  self-identification (emits `model-keys` + directive), never resolves the band itself.
+- **F-6** (silent collision + unsorted scan vs deterministic/observable claims) → §5.2/§5.4/
+  INV-D3/D7: order = key-else-uid (`boot_keys` pattern); collision documented, not claimed
+  runtime-observable.
+- **F-7** (byte budget a bare OQ) → D6: soft `doctrine check` warning, no hard cap.
+
 ## Code Impact (design-target)
 
 - **`src/boot.rs`** — expose universal-snapshot generator; add universal-hymns section; inline
@@ -256,5 +327,7 @@ findings (F10–F16):
   hook command swap to `prompt resolve`.
 - **`doctrine_onboard` MCP handler** — emit model band; drop memory load.
 - **Memory data** — tag shipped `overview` + `orientation` `onboarding` (`install/memory/**`).
-- **Tests** — boot goldens (universal-hymns section, model-band absent), onboarding-inline
-  golden (shipped+local), onboard contract, cache-hold stability, pi/hook command.
+- **Tests** — boot goldens (universal-hymns section, Onboarding footer→inline, model-band
+  absent), onboarding-inline golden (shipped+local, key-else-uid order), **updated** onboard
+  e2e (`tests/e2e_mcp_server.rs:1083`: `Onboarding Memories` removed, model-band guidance
+  present), cache-hold stability, pi/hook command.
