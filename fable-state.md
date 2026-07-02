@@ -44,12 +44,26 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Process the isolated-fix QUEUE from scout agent a7e3ab8d02ae8942c
-(launched ~04:25). It returns a ranked, verified-still-real list of small,
-low-collision, TDD-able backlog items (ISS/IMP/CHR) with file:line evidence +
-red-test sketch. Take the top item: re-verify the defect yourself, TDD red→green
-→refactor, lint+fmt, commit clean. Then next item. One item per increment; keep
-each cherry-pickable. Verify-before-build EVERY time (OBE risk is real).
+NEXT-ACTION: Continue the vetted fix QUEUE (scout a7e3ab8d, verified-still-real).
+Take IMP-211 next. Re-verify defect, TDD red→green→refactor, lint+fmt, commit.
+
+FIX QUEUE (re-verify each before building — OBE risk real):
+  - [DONE 1dacc7a8] ISS-003 cordage explain() foreign-node empty cone.
+  - IMP-211 (S, MED-HIGH) `next` value column shows ABSENT for value-bearing
+    kinds while base_score silently used DEFAULT_VALUE=1.0 → displayed value
+    contradicts effective value. Fix in src/priority/render.rs `value_cell`
+    (~:163): when r.value None, branch on crate::kinds::is_value_bearing(&r.kind)
+    — render a default marker (e.g. `1.0*`) for value-bearing, keep ABSENT_CELL
+    for valueless (records/gov/REV). Test: extend render.rs unit tests
+    (bare_row/faceted_row ~:496/:514). next-only (survey has no value column).
+  - IMP-183 (M, MED) estimate/value facets writable to any kind but only
+    slice show renders them (write-only metadata). Add rows to backlog show via
+    existing estimate::display::format_estimate_confidence / value::format_value_normal
+    (mirror slice.rs:1945/1958). Keep to backlog show (≤2 files); knowledge = FU.
+  - IMP-019 (M) cordage golden_net has no independent value oracle (proof gap,
+    test hardening only — no runtime bug). Lower urgency.
+  - ISS-205 (S, MED-LOW) cordage denylist.rs env!(CARGO_MANIFEST_DIR) baked path
+    — but passes locally (compiled in place); no clean red. Defensive; defer/skip.
 
 [DONE 07f9a4a2] IMP-056 — CoverageStatus rendered via as_kebab (single source,
 = parse_status vocab) instead of `{:?}` Debug; round-trip test locks the pair;

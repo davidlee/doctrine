@@ -96,3 +96,19 @@ next: process the scout queue; TDD the top verified item.
   Debug name gives way —
   one kebab token, in and out;
   parse and render kiss.
+
+## 04:35 — turn 6: shipped ISS-003 (cordage explain foreign-node), queued more fixes
+observed: scout a7e3ab8d returned a vetted queue (and found the recent IMP block
+  heavily OBE — 5 "candidates" already shipped; verify-before-trust paid off).
+  Top pick ISS-003 verified + TDD'd: Graph::explain returned {overlay:{foreign:{}}}
+  per overlay for a foreign id (== a real root), violating the F14 "empty cone"
+  rustdoc. predecessor_cone can't distinguish foreign from root (both lack
+  in-edges); guarded in explain via node.0 >= self.node_count → empty map. Red
+  showed {OverlayId(0):{NodeId(2):{}}}; full cordage suite green, clippy+fmt clean.
+  Commit 1dacc7a8. 7th fix. Queue continues with IMP-211 (next value-cell ABSENT
+  vs effective default 1.0).
+next: TDD IMP-211 in src/priority/render.rs value_cell (verify defect first).
+
+  Foreign node, no roots —
+  the cone that lied like a root
+  now honestly empty.
