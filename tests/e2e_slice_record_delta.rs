@@ -73,6 +73,20 @@ fn record_delta(cwd: &Path, root: &Path, id: &str, phase: &str, start: &str, end
         .expect("spawn doctrine")
 }
 
+/// Run `doctrine slice record-delta <id> <phase> <extra...> -p <root>` from `cwd`
+/// with an arbitrary tail of mode flags — the SL-189 arg-diagnostic surface.
+fn record_delta_raw(cwd: &Path, root: &Path, id: &str, phase: &str, extra: &[&str]) -> Output {
+    let mut args = vec!["slice", "record-delta", id, phase];
+    args.extend_from_slice(extra);
+    let root = root.to_str().unwrap();
+    args.extend_from_slice(&["-p", root]);
+    Command::new(bin())
+        .current_dir(cwd)
+        .args(&args)
+        .output()
+        .expect("spawn doctrine")
+}
+
 fn deltas_path(root: &Path) -> std::path::PathBuf {
     root.join(".doctrine/state/slice/147/boundaries.toml")
 }
@@ -265,4 +279,81 @@ fn record_delta_preserves_existing_funnel_and_legacy_unknown() {
         body.contains(&end),
         "range corrected to the resolved end: {body}"
     );
+}
+
+/// SL-189 — the SAFE DEFAULT `--commit <S>` records exactly `S`'s own patch
+/// `[S^, S]` over the built binary: `code_end == S`, `code_start == S^`.
+#[test]
+fn commit_mode_records_single_commit_boundary() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = init_repo(&tmp.path().join("repo"));
+    let parent = git(&repo, &["rev-parse", "HEAD"]);
+    git(&repo, &["commit", "-q", "--allow-empty", "-m", "S"]);
+    let s = git(&repo, &["rev-parse", "HEAD"]);
+
+    let out = record_delta_raw(&repo, &repo, "147", "PHASE-01", &["--commit", &s]);
+    assert!(
+        out.status.success(),
+        "commit mode ok; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let body = std::fs::read_to_string(deltas_path(&repo)).expect("registry written");
+    assert!(body.contains(&s), "code_end = S: {body}");
+    assert!(body.contains(&parent), "code_start = S^: {body}");
+}
+
+/// VT-3 (SL-189) — `--commit` together with `--start` is a clap error naming the
+/// conflict, not merely a non-zero exit.
+#[test]
+fn commit_and_start_together_are_a_clap_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = init_repo(&tmp.path().join("repo"));
+    let head = git(&repo, &["rev-parse", "HEAD"]);
+
+    let out = record_delta_raw(
+        &repo,
+        &repo,
+        "147",
+        "PHASE-01",
+        &["--commit", &head, "--start", &head],
+    );
+    assert!(!out.status.success(), "commit+start refused");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("cannot be used with"),
+        "names the conflict: {err}"
+    );
+    assert!(!deltas_path(&repo).exists(), "refused run records nothing");
+}
+
+/// VT-3 (SL-189) — `--start` without `--end` is a clap error naming the missing
+/// `--end` (the range mode is jointly required).
+#[test]
+fn start_without_end_is_a_clap_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = init_repo(&tmp.path().join("repo"));
+    let head = git(&repo, &["rev-parse", "HEAD"]);
+
+    let out = record_delta_raw(&repo, &repo, "147", "PHASE-01", &["--start", &head]);
+    assert!(!out.status.success(), "start alone refused");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("--end"), "names the missing --end: {err}");
+    assert!(!deltas_path(&repo).exists(), "refused run records nothing");
+}
+
+/// VT-3 (SL-189) — neither mode given is a clap error naming a required mode flag
+/// (the arg-group is required).
+#[test]
+fn neither_mode_is_a_clap_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = init_repo(&tmp.path().join("repo"));
+
+    let out = record_delta_raw(&repo, &repo, "147", "PHASE-01", &[]);
+    assert!(!out.status.success(), "no mode refused");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("--commit") || err.contains("--start"),
+        "names a required mode flag: {err}"
+    );
+    assert!(!deltas_path(&repo).exists(), "refused run records nothing");
 }
