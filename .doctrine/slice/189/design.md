@@ -26,10 +26,13 @@ and `slice conformance` reads it two-dot:
 - **Recorders** (funnel step 8, `plugins/doctrine/skills/dispatch/SKILL.md`):
   - claude — `dispatch record-boundary --code-start B --code-end B+1`
     (`run_record_boundary`, `src/dispatch.rs:712`) dual-writes the committed
-    ledger `boundaries.toml` **and** the arm-neutral registry.
+    ledger `boundaries.toml` **and** the arm-neutral registry, **pinning
+    `code_end` to the batch commit `S`, recorded _before_ the knowledge trail**
+    (`plugins/doctrine/skills/dispatch-agent/SKILL.md:107-109`).
   - pi/codex — `slice record-delta <SL> PHASE-NN --start B --end B+1`
     (`run_record_delta`, `src/slice.rs:2291`) writes the arm-neutral registry only
-    (symmetric ledger derive deferred, D6 / IMP-171).
+    (symmetric ledger derive deferred, D6 / IMP-171). Recorded at router step 8
+    alongside the knowledge trail, `--end` resolving to a tip **past `S`**.
   - both build a `BoundaryRow{code_start_oid, code_end_oid}` and call
     `record_source_delta` (`src/state.rs:668`) — F-6 guard + upsert, resolved
     against the PRIMARY tree so a coord worktree still writes what the integrator
@@ -38,19 +41,29 @@ and `slice conformance` reads it two-dot:
   `git diff --name-status <code_start>..<code_end>` (line 2245), folds the events,
   runs the pure three-cell algebra. **No `.doctrine/` filter, no pathspec.**
 
-The two-dot diff `B..B+1` is the tree delta between the two endpoints — it includes
-*everything* that differs: the code commit **plus** any trailed-knowledge commit's
-paths **plus** foreign `src/` files a `refresh-base` merge incorporated. The read
-is clean **iff `code_end` == the phase's one import commit `S`**, because the funnel
-Delta-check guarantees each phase lands as exactly one non-merge commit with
-`S^ == B` (`plugins/doctrine/skills/dispatch/SKILL.md` step 2). The pollution is
-precisely: the stored range brackets more than `S`.
+The two-dot diff is the tree delta between the two endpoints. It is clean **iff
+`code_end` == the phase's one import commit `S`** (with `code_start == S^`), because
+the funnel Delta-check guarantees each batch lands as exactly one non-merge commit
+with `S^ == B`, and the branch-point guard confirms `HEAD == B` at commit time
+(`plugins/doctrine/skills/dispatch/SKILL.md` steps 2, 6-7). The pollution is
+precisely: the stored range brackets **more than `S`** — trailed-knowledge paths
+and any foreign `src/` a `refresh-base` merge incorporated.
 
-This is **arm-independent** — same registry, same read. The claude arm escapes
-*review-side* only because it has a second, cleaner consumer: the `phase/<N>`
-projection (`plan_phases`, `src/dispatch.rs:2481`) does a chained single-commit
-code-only tree cut (`tree_of(code_end)` minus first-parent, `.doctrine/` stripped).
-The pi arm lacks that projection, so its only consumer is the polluted registry.
+**This is an arm _asymmetry_, not a shared bug** (correcting an earlier draft claim
+— RV / Codex F-4). The **claude** arm records `[B, S]` = `[S^, S]` (code_end pinned
+to `S`, before knowledge) → **its conformance read is already clean.** The **pi**
+arm records past `S` (step-8 `--end` resolving to a post-knowledge / post-merge
+tip) → **polluted.** IMP-231 named this asymmetry correctly; SL-189 brings the pi
+arm to parity with the claude arm — it does **not** touch the already-tight claude
+writer.
+
+*(Aside, Codex F-1 — the claude `phase/<N>` **projection** `plan_phases`
+(`src/dispatch.rs:2481`) strips only `.doctrine/`, so a `refresh-base` foreign
+`src/` file in `tree_of(S)` can still surface in the projected review ref. That is a
+**review-surface** concern (ADR-012), independent of conformance; the claude
+conformance registry is clean via the tight `[S^, S]` write, not via the
+projection. Out of scope here — noted so the earlier "clean projection" framing is
+not trusted.)*
 
 The **solo** path is the same disease: `capture_phase_boundary` (`src/state.rs:495`,
 triggered by `set_phase_status`) stamps `code_start` = HEAD at `in_progress` and
@@ -112,9 +125,11 @@ knowledge commits.
 Introduce a **single-commit boundary primitive**: given the phase's one import
 commit `S`, derive and record `[S^, S]`. `git diff S^..S` is exactly `S`'s own
 patch — trailed knowledge, refresh-base merges, and foreign source are excluded
-because they are simply not in commit `S`. Wire the pi arm's funnel Record beat to
-it. The claude funnel, `record-boundary`, and solo `capture_phase_boundary` are
-follow-up adopters of the same helper (out of scope here).
+because they are simply not in commit `S`. Wire the **pi arm's** funnel Record beat
+to it — this brings pi to parity with the claude arm, which already records `[S^, S]`
+by pinning `code_end` to `S` before the knowledge trail (§2). The claude writer
+needs no change; the solo `capture_phase_boundary` (IMP-175) is a follow-up adopter
+of the same helper (out of scope here).
 
 ### 5.2 Interfaces & Contracts
 
@@ -148,12 +163,18 @@ doctrine slice record-delta <SL> PHASE-NN --start <a> --end <b>   # retained: ra
 ```
 
 - `start`/`end` become `Option<String>`; add `commit: Option<String>`.
-- Mutual exclusion: `--commit` conflicts with `--start`/`--end`; exactly one mode
-  required (clap `conflicts_with` + a validated "exactly one" check → a clear error,
-  never a silent default).
+- **clap contract (precise, per Codex F-5):** two modes, exactly one required.
+  - `--commit` in a required `ArgGroup` (`multiple = false`) with the range mode.
+  - `--start`/`--end` remain **jointly** required *when in range mode* — modelled as
+    `--start requires("end")` + `--end requires("start")`, and both
+    `conflicts_with("commit")`. So `--start` alone, or `--commit --start`, are
+    clap-level errors with a clear diagnostic (not a silent default).
+  - Post-parse, `run_record_delta` matches `(commit, start, end)`:
+    `(Some, None, None)` → commit mode; `(None, Some, Some)` → range mode;
+    anything else → an explicit `bail!` (defence in depth behind the clap group).
 - `--commit` → `single_commit_boundary(.., Provenance::Manual, phase)` →
   `record_source_delta`. Legacy range path unchanged (`Provenance::Manual`, F-6
-  guard).
+  guard). Update the doc-comment + `--end` help text ("cumulative code tip").
 
 ### 5.3 Data, State & Ownership
 
@@ -251,10 +272,14 @@ boundaries and is a pre-existing property, unchanged here.
   (in `S^`) and `K`'s `.doctrine/` paths (after `S`) both excluded. Contrast: the
   legacy `--start B --end K` on the same repo would list all three (the regression
   this replaces).
-- **VT (arg)** — `--commit` + `--start` → error; neither → error.
-- **Behaviour-preservation** — legacy `--start/--end` tests, F-6 guard (trivially
-  holds for `S^..S`), D12 Manual non-clobber, and the existing conformance suite
-  (`src/slice.rs:6181`) stay green unchanged.
+- **VT (arg, per F-5)** — `--commit` + `--start` → clap error; `--start` alone →
+  clap error (missing `--end`); neither mode → error. Assert the *diagnostic*, not
+  just the exit code.
+- **Behaviour-preservation** — the existing `--start/--end` e2e coverage
+  (`tests/e2e_slice_record_delta.rs`, hard-codes the range shape — must keep passing
+  after `Option<String>` migration), F-6 guard (trivially holds for `S^..S`), D12
+  Manual non-clobber, and the conformance suite (`src/slice.rs:6181`) stay green
+  unchanged.
 
 ## 10. Review Notes
 
@@ -277,5 +302,33 @@ boundaries and is a pre-existing property, unchanged here.
   host-project coupling) unaffected; STD-001 — no new magic strings beyond the
   `--commit` flag attribute (plan to keep any new literal named).
 
-Open for external challenge: whether the multi-commit-phase limitation (A2/R4)
-should instead be solved now by a commit-list primitive rather than deferred.
+### External adversarial pass (Codex / GPT, inquisition)
+
+- **F-4 (BLOCKER, claimed) — REJECTED on evidence.** Codex asserted the claude arm
+  also writes a polluting `B..B+1`, so a pi-only fix leaves conformance inconsistent.
+  Verification (`dispatch-agent/SKILL.md:107-109` + Delta-check/branch-point guard,
+  `dispatch/SKILL.md:54-67`) shows the claude arm pins `code_end = S` *before*
+  knowledge with `code_start = S^`, i.e. already records `[S^, S]` → **claude
+  conformance is already clean.** The bug is a pi-arm asymmetry, not shared. Codex
+  did not check the claude record *timing*. Also corrected the author's own earlier
+  §2 "arm-independent, both polluted" overclaim. **Scope held to pi-only.**
+- **F-1 (BLOCKER, claimed) — RECLASSIFIED.** True that `plan_phases` strips only
+  `.doctrine/`, so refresh-base foreign `src/` can surface in the claude `phase/<N>`
+  **projection** — but that is the review surface (ADR-012), not conformance.
+  Conformance is clean via the tight registry write. §2 aside added; not a fix for
+  this slice.
+- **F-2 (MAJOR) — INTEGRATED.** Parallel-batch rows are batch-scoped, not truly
+  per-phase (all phases in a batch share `S`). Pre-existing, and *slice*-level
+  conformance unions rows so it is unaffected; but the design no longer claims
+  per-phase precision it does not deliver (§2 cardinality note, §5.4).
+- **F-3 (MAJOR) — INTEGRATED (downgraded).** Reopen/re-dispatch → `--commit S2`
+  upsert silently keeps only the last commit; the completeness gate checks presence,
+  not span truth. This is a **pre-existing** upsert-by-phase gap (the old range path
+  is equally last-write-wins), shared with the solo path, not introduced here and not
+  fixed here — see A2 / R4. A commit-list-per-phase primitive is the honest long-term
+  fix; deferred.
+- **F-5 (MINOR) — INTEGRATED.** clap contract specified precisely (§5.2) with
+  arg-diagnostic regression VTs (§9).
+
+Residual open question for `/plan`: none blocking. The multi-commit-phase gap
+(A2/R4/F-3) is consciously deferred, not resolved.
