@@ -35,15 +35,16 @@ the section table. PHASE-03 can only shed the two-memory load *after* PHASE-02
 has moved those bodies into the always-present cached sector (EN-1), else onboard
 agents lose the memories outright.
 
-**PHASE-04 is last by external necessity, not preference.** SL-186 is `started`,
-not done: `doctrine prompt` is not yet a subcommand and `src/commands/prompt.rs`
-does not exist (only the `src/hymns.rs` engine has landed). PHASE-04 *extends*
-that verb (adds disk-regen + stdout delivery) and *targets* it (the hook/pi
-swap), so it cannot begin until SL-186 lands the verb — encoded as PHASE-04 EN-1,
-a hard external gate. This is the `after: SL-186` sequence relation made
-executable. Design §3 calls this a *contract* dependency, not a *build*
-dependency: PHASES 01–03 build in full against the locked contract while SL-186
-is still in flight; only PHASE-04's green depends on SL-186 landing.
+**PHASE-04 is last by external necessity, not preference.** At plan-time SL-186
+was `started`; it has since **closed and merged to edge** — `doctrine prompt` is
+now a subcommand (`src/commands/prompt.rs`, `src/hymns.rs`) and `prompt resolve
+--role <ROLE> [--harness --model --arm --stage --band]` is live, with the loader
+at `install::load_full_corpus`. PHASE-04 *extends* that verb (adds disk-regen +
+stdout delivery) and *targets* it (the hook/pi swap), so its EN-1 hard external
+gate — the `after: SL-186` sequence relation made executable — **is now
+satisfied**. Design §3 frames this as a *contract* dependency, not a *build*
+dependency: PHASES 01–03 built in full against the locked contract; only
+PHASE-04's green depended on SL-186 landing, which it now has.
 
 **The behaviour-preservation gate is scoped, not blanket** (RV-210 F-2/F-4).
 Boot's *entity-derived* section goldens and the dispatch suite stay green
