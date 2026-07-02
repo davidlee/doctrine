@@ -203,13 +203,17 @@ fn specificity(band: Band, sel: &Selector) -> (u32, u32)   // (band_axis_depth, 
 `resolve` takes the `SealSet` (embedded, passed in — keeps the engine pure) and drops
 disk-provenance snippets whose slot is sealed before ordering (finding 1).
 
-**Loader (impure shell, command edge):** walk embedded `install/hymns/**` +
+**Loader (impure shell, in `src/install.rs`):** walk embedded `install/hymns/**` +
 disk `.doctrine/hymns/**`; derive `Slot`+`Selector` from path; overlay sidecar
 `<file>.toml` (supersede per-axis, carries `replaces`); tag `provenance` by source
 root. Reuses `fsutil`, `globmatch`, `dtoml`. **NOT `corpus::sync_corpus`** — that is
 memory-specific (`MEMORY_SHIPPED_DIR`, `memory.{toml,md}` uids), not a general
 projector (finding 7); the hymns walk/overlay is its own code (a generic embedded⊕disk
-projector may be extracted later, but is not assumed to exist).
+projector may be extracted later, but is not assumed to exist). The loader lives in
+`src/install.rs` (not `src/commands/prompt.rs`) — PHASE-04 D-B relocated it so the
+install-time def↔hymn seam can call it without an `install→commands` layering
+back-edge (ADR-001; the layering gate confirms no cycle); the `prompt` verbs call
+`crate::install::load_full_corpus`.
 
 **Output = stdout only.** `prompt resolve` emits assembled markdown to stdout; it is
 read-only and does not itself write disk. **How that output reaches live agents** — the
@@ -337,9 +341,9 @@ mechanics + floor/supplement live in SL-187).
   hot-loads far larger entity sets per page view without caching.)
 - **D7 — Minimal def↔hymn seam is install-time, role-band-only (OQ-3, user).** The
   shipped `dispatch-worker.md` defs carry a `{{ prompt resolve --role worker }}`
-  injection hole; `skills::install_agents_for` expands it when it refreshes the
-  canonical def from the embed (the existing "always overwrite — derived" write path,
-  `src/skills.rs`). Only the **role** axis is bound — model/arm/stage are unknown at
+  injection hole; `install::install_agent_def` expands it (via `expand_worker_marker`)
+  when it refreshes the canonical def from the embed (the existing "always overwrite —
+  derived" write path in `src/install.rs`). Only the **role** axis is bound — model/arm/stage are unknown at
   install and reach the worker via SL-187's spawn envelope (which excludes `role`, so
   the two surfaces don't duplicate). Rejected: **spawn-time expansion** (resolve at
   `arm-spawn` with full axes) — that is SL-187's spawn-envelope surface, and pulling
@@ -421,21 +425,27 @@ split** — SL-186 = the inert resolver engine; SL-187 = the live-surface delive
 - **`src/hymns.rs`** — NEW pure engine (`resolve`, `matches`, `specificity`,
   `SealSet`, types).
 - **`src/commands/prompt.rs`** — NEW command (`resolve`, `model-keys`, `explain`,
-  `check`) + the impure loader (embedded⊕disk walk, sidecar overlay, seal-twin drop).
-  Emits assembled markdown to stdout; read-only.
+  `check`). Emits assembled markdown to stdout; read-only. Calls the loader in
+  `src/install.rs` (`crate::install::load_full_corpus`).
 - **`src/install.rs` / `install/manifest.toml`** — seal/expose projection section +
   embedded SealSet accessor; a hymns-specific embedded→disk projector (NOT
-  `sync_corpus`, which is memory-only).
+  `sync_corpus`, which is memory-only); **the impure corpus loader** (embedded⊕disk
+  walk, sidecar overlay, seal-twin drop) — PHASE-04 D-B relocated it here (from
+  `prompt.rs`) so the install-time seam can call it without an `install→commands`
+  layering back-edge; and the **canonical-def refresh path** (`install_agent_def`,
+  the "always overwrite — derived" write) which expands the def's injection hole via
+  `expand_worker_marker` + the resolver (role band) — the one install-time consumer
+  of the resolver in SL-186. (There is no `src/skills.rs`.)
+- **`src/commands/cli.rs`**, **`src/commands/mod.rs`**, **`src/commands/guard.rs`** —
+  wire the `prompt` command and its `check` contribution.
 - **`install/hymns/**`** — NEW seed corpus (universal/harness/model/role/stage
   examples) + convention doc. **`install/agents/` stays** a separate surface; the
-  shipped `dispatch-worker.md` defs gain the `{{ prompt resolve --role worker }}`
-  injection hole (D7/OQ-3).
-- **`src/skills.rs`** — the canonical-def refresh path (`install_agents_for`, the
-  "always overwrite — derived" `fs::write`) expands the def's injection hole via the
-  resolver (role band). The one install-time consumer of `prompt resolve` in SL-186.
+  shipped **`install/agents/claude/dispatch-worker.md`** and
+  **`install/agents/pi/dispatch-worker.md`** defs gain the
+  `{{ prompt resolve --role worker }}` injection hole (D7/OQ-3).
 - **`src/main.rs`** — wire the `prompt` command.
-- **Tests** — `src/hymns.rs` unit + goldens; e2e prompt-resolve golden; def-expansion
-  test (marker → role hymns in the written def).
+- **Tests** — `src/hymns.rs` unit + goldens; **`tests/e2e_prompt_resolve_golden.rs`**;
+  **`tests/e2e_prompt_def_expansion.rs`** (marker → role hymns in the written def).
 
 *(Delivery-side code impact — `src/boot.rs` generator/inline, `doctrine_onboard`, memory
 tagging, pi/hook wiring — is **SL-187**.)*

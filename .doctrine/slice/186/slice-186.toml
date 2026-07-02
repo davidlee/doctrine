@@ -55,6 +55,41 @@ intent = "design-target"
 selector = "install/hymns/**"
 intent = "design-target"
 
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "SL-186 delivered surface; added at reconcile (RV-213 F-4)"
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+note = "SL-186 delivered surface; added at reconcile (RV-213 F-4)"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "SL-186 delivered surface; added at reconcile (RV-213 F-4)"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-worker.md"
+intent = "design-target"
+note = "SL-186 delivered surface; added at reconcile (RV-213 F-4)"
+
+[[selector]]
+selector = "install/agents/pi/dispatch-worker.md"
+intent = "design-target"
+note = "SL-186 delivered surface; added at reconcile (RV-213 F-4)"
+
+[[selector]]
+selector = "tests/e2e_prompt_def_expansion.rs"
+intent = "design-target"
+note = "SL-186 delivered surface; added at reconcile (RV-213 F-4)"
+
+[[selector]]
+selector = "tests/e2e_prompt_resolve_golden.rs"
+intent = "design-target"
+note = "SL-186 delivered surface; added at reconcile (RV-213 F-4)"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload

@@ -84,3 +84,35 @@ code, which the candidate diff proves clean.
 ### Governance/spec (REV)
 - None. No ADR/policy/spec/requirement change is implied; ADR-001 is upheld (gate
   green), and the D-B relocation is consistent with the accepted layering.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §5.2** (loader paragraph) [F-1]: retitled "impure shell, in
+  `src/install.rs`" and appended the D-B rationale (relocated from `prompt.rs` to
+  avoid an `install→commands` layering back-edge; `prompt` verbs call
+  `crate::install::load_full_corpus`).
+- **design.md Code Impact (design-target)** [F-1, F-2]: dropped the loader clause
+  from the `prompt.rs` bullet; folded the impure loader + the canonical-def refresh
+  path (`install_agent_def` / `expand_worker_marker`) into the `src/install.rs`
+  bullet; removed the phantom `src/skills.rs` bullet ("There is no `src/skills.rs`").
+- **design.md §D7** [F-2]: `skills::install_agents_for` (`src/skills.rs`) →
+  `install::install_agent_def` (via `expand_worker_marker`, in `src/install.rs`).
+- **slice-186.toml `[[selector]]`** [F-4]: added 7 `design-target` selectors —
+  `src/commands/{cli,mod,guard}.rs`, `install/agents/{claude,pi}/dispatch-worker.md`,
+  `tests/e2e_prompt_{def_expansion,resolve_golden}.rs`. Conformance undeclared
+  17→10, conformant 13→20; the 7 designed files now match.
+
+### REVs completed
+- None. No governance/spec surface implicated (ADR-001 upheld, gate green).
+
+### Withdrawn / tolerated
+- **F-3** (tolerated): pi-arm `record-delta` over-attribution. The 10 residual
+  `undeclared` paths (layering.toml, backlog/227 + its cli-id-form-split memories,
+  case-notes.md, slice-186.toml, AGENTS.md) are authored/knowledge/instrumentation
+  noise absent from the delivered candidate — captured as **IMP-231** for range
+  hygiene. No slice-level write.
+- **F-5** (aligned): the P02 VT-1..4 revision was already landed under `/consult`;
+  no further action.
+
+Reconcile pass complete — handoff to /close.
