@@ -72,3 +72,9 @@ dispatched, the natural batches are {01}, {02}, {03}, {04}, {05}, {06} in order.
   topology (RV-214 cleared it).
 - **Follow-up IDE-028** (auto primary-sheet-push in the Record beat) is out of scope
   — this slice ships the manual `reconcile-phases` it would later automate.
+- **Critical-pass refinements (pinned into criteria).** (A) PHASE-03 EX-4 fixes the
+  `PhaseTruth → written-status` mapping so reconcile is unambiguous. (B) PHASE-04 EX-1
+  keeps the lifted oracle a clean `bool`; the missing-target→`unknown` tri-state lives
+  in the PHASE-05 inventory caller, not in shared machinery. (C) PHASE-03 EX-1 requires
+  the status-only writer to SHARE set_phase_status's toml_edit skeleton (extract or
+  suppression-mode) — no parallel implementation.
