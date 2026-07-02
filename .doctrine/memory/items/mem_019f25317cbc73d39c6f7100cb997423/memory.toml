@@ -1,0 +1,42 @@
+memory_uid = "mem_019f25317cbc73d39c6f7100cb997423"
+memory_key = "mem.pattern.doctrine.neutralize-lifecycle-status-before-close-target"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Neutralize lifecycle status on the dispatch code branch before building a close_target"
+summary = "Lifecycle status committed on a dispatch/code branch conflicts the close_target 3-way merge; neutralize it to the merge ancestor before prepare-review."
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch candidate create", "dispatch refresh-base", "dispatch sync"]
+tags = ["dispatch", "close", "candidate", "integrate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "de7e482a8a84f9309446cef02387baea5b462fa6"
+tree = "1f8e85b2e976630a412b3fccd62158afd87d7e42"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "de7e482a8a84f9309446cef02387baea5b462fa6"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
