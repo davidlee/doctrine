@@ -19,3 +19,18 @@
   needs orchestrator adjudication; a worker running the full suite can't self-clear
   the marker. Costs a reasoning step to separate env-artifact from real failure.
 - `slice phase` takes `--status <S>` (not positional) — minor CLI-shape guess-miss.
+
+[design; SL-180-sess1]
+Design-surface friction, token cost:
+- ADR-001 layering: had to read layering.toml A->submodule tiers A->
+  tests/architecture_layering.rs to learn edges are extracted at TOP-LEVEL
+  module granularity + set-deduplicated. Nowhere in boot/reference-docs states
+  the gate's edge granularity, so I initially asserted a WRONG tangle-safety
+  proof ("slice imports no worktree") that a transitive slice->review->worktree
+  path falsified. External (GPT) inquisition caught it; verifying required
+  reading the test internals. A one-line note in ADR-001 body ("edges = first
+  path segment, deduped; sub-tier map governs upward-edge check only, not
+  tangle") would have saved ~2 tool round-trips + a wrong claim.
+- `doctrine memory retrieve <key>` positional arg rejected (needs --query or
+  scope probes); boot Onboarding says "/retrieving-memory `mem.key`" which reads
+  like a positional. Cost one failed call.
