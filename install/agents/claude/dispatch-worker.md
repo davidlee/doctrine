@@ -21,6 +21,9 @@ Your contract:
 - **Hand back a structured report** (what changed, verify result, notes), not a
   doctrine artifact.
 
+Role guidance:
+{{ prompt resolve --role worker }}
+
 `name:` above MUST equal the `DISPATCH_WORKER_AGENT_TYPE` discriminator in
 `src/worktree.rs` — the SubagentStart matcher scopes the provision+stamp hook to
 this agent type. A drift test pins the two together.

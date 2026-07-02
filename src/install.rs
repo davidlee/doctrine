@@ -37,6 +37,12 @@ const DISPATCH_WORKER_AGENT_FILE: &str = "dispatch-worker.md";
 const DISPATCH_WORKER_AGENT_ASSET: &str = "agents/claude/dispatch-worker.md";
 const DISPATCH_WORKER_AGENT_ASSET_PI: &str = "agents/pi/dispatch-worker.md";
 
+/// Marker token injected into the dispatch-worker agent defs (SL-186 PHASE-04).
+/// When `install_agent_def` sees this literal in a def, it resolves the role
+/// band (`Role::Worker`) through the prompt engine and replaces the marker with
+/// the assembled text.
+pub(crate) const WORKER_RESOLVE_MARKER: &str = "{{ prompt resolve --role worker }}";
+
 /// Read one embedded `install/`-relative asset's bytes (`None` if absent). The
 /// single accessor over the embed for callers outside this module (the agents
 /// leg of `claude install`, src/skills.rs) — no parallel embed.
@@ -62,6 +68,9 @@ struct Manifest {
 
     #[serde(default)]
     memory: MemorySection,
+
+    #[serde(default)]
+    hymns: HymnsSection,
 }
 
 fn default_target() -> String {
@@ -98,6 +107,15 @@ impl Default for RootMarkersSection {
 struct MemorySection {
     #[serde(default)]
     seed_items: Vec<SeedItem>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct HymnsSection {
+    #[serde(default)]
+    seal: Vec<String>,
+    #[serde(default)]
+    #[expect(dead_code, reason = "consumed in src/commands/prompt.rs (PHASE-02)")]
+    expose: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -530,6 +548,428 @@ pub(crate) fn asset_text(name: &str) -> anyhow::Result<String> {
     let text = std::str::from_utf8(&file.data)
         .with_context(|| format!("Embedded asset '{name}' is not valid UTF-8"))?;
     Ok(text.to_string())
+}
+
+/// Build a `SealSet` from the `[hymns] seal` entries in the embedded manifest.
+/// Each entry is a `"band/label"` string parsed into a `hymns::Slot`.
+pub(crate) fn embedded_seal_set() -> anyhow::Result<crate::hymns::SealSet> {
+    let manifest = load_manifest()?;
+    let mut slots = std::collections::BTreeSet::new();
+    for s in &manifest.hymns.seal {
+        let slot = parse_seal_slot(s)?;
+        slots.insert(slot);
+    }
+    Ok(crate::hymns::SealSet(slots))
+}
+
+/// Return every embedded file whose name starts with `"hymns/"`,
+/// as `(relative-path-under-"hymns/", bytes)` pairs. The "hymns/" prefix is
+/// stripped so callers work with slot-relative paths.
+pub(crate) fn embedded_hymns() -> Vec<(String, Vec<u8>)> {
+    let prefix = "hymns/";
+    Assets::iter()
+        .filter_map(|name| {
+            let name = name.as_ref();
+            name.strip_prefix(prefix)
+                .map(|rel| (rel.to_string(), Assets::get(name).map(|f| f.data.to_vec())))
+        })
+        .filter_map(|(rel, opt)| opt.map(|bytes| (rel, bytes)))
+        .collect()
+}
+
+/// Return every embedded agent-def file (under `"agents/"`) as
+/// `(relative-path, bytes)` pairs. Used by `check_corpus` for
+/// def-marker integrity (SL-186 PHASE-04 / T6).
+pub(crate) fn embedded_agent_defs() -> Vec<(String, Vec<u8>)> {
+    let prefix = "agents/";
+    Assets::iter()
+        .filter_map(|name| {
+            let name = name.as_ref();
+            name.strip_prefix(prefix)
+                .map(|rel| (rel.to_string(), Assets::get(name).map(|f| f.data.to_vec())))
+        })
+        .filter_map(|(rel, opt)| opt.map(|bytes| (rel, bytes)))
+        .collect()
+}
+
+// ── Prompt-cascade corpus loader (SL-186 PHASE-04, relocated from prompt.rs) ─
+
+/// The single path-segment name shared by both the embedded corpus root and the
+/// disk root. `"hymns/"` is the `rust_embed` prefix; `"hymns"` is the subdirectory
+/// name inside the `.doctrine` target.
+pub(crate) const HYMNS_DIRNAME: &str = "hymns";
+
+/// Provisional SL-186 stage set (STD-001 single source). `check` flags any
+/// `stage`-band label not in this list.
+pub(crate) const KNOWN_STAGE_LABELS: &[&str] = &[
+    "route",
+    "canon",
+    "preflight",
+    "slice",
+    "design",
+    "inquisition",
+    "plan",
+    "phase-plan",
+    "execute",
+    "audit",
+    "reconcile",
+    "close",
+    "consult",
+    "walkthrough",
+    "notes",
+    "next",
+    "record-memory",
+    "retrieve-memory",
+];
+
+// TOML sidecar schema
+#[derive(Debug, serde::Deserialize, Default)]
+struct Sidecar {
+    #[serde(default)]
+    harness: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    arm: Option<String>,
+    #[serde(default)]
+    stage: Option<String>,
+    #[serde(default)]
+    replaces: Option<String>,
+}
+
+pub(crate) fn parse_role(s: &str) -> anyhow::Result<crate::hymns::Role> {
+    match s {
+        "worker" => Ok(crate::hymns::Role::Worker),
+        "orchestrator" => Ok(crate::hymns::Role::Orchestrator),
+        other => bail!("unknown role {other:?}; expected 'worker' or 'orchestrator'"),
+    }
+}
+
+pub(crate) fn parse_arm(s: &str) -> anyhow::Result<crate::hymns::Arm> {
+    match s {
+        "subagent" => Ok(crate::hymns::Arm::Subagent),
+        "subprocess" => Ok(crate::hymns::Arm::Subprocess),
+        other => bail!("unknown arm {other:?}; expected 'subagent' or 'subprocess'"),
+    }
+}
+
+fn parse_slot_ref(s: &str) -> anyhow::Result<crate::hymns::Slot> {
+    let (band_seg, label) = s
+        .split_once('/')
+        .with_context(|| format!("slot ref {s:?}: expected 'band/label'"))?;
+    let band = crate::hymns::Band::from_segment(band_seg)
+        .with_context(|| format!("unknown band {band_seg:?}"))?;
+    Ok(crate::hymns::Slot::new(band, label))
+}
+
+fn path_to_slot(rel: &Path) -> anyhow::Result<crate::hymns::Slot> {
+    let first = rel
+        .components()
+        .next()
+        .and_then(|c| c.as_os_str().to_str())
+        .context("snippet path has no band segment")?;
+
+    let band = crate::hymns::Band::from_segment(first)
+        .with_context(|| format!("unknown band {first:?} in {:?}", rel.display()))?;
+
+    let label = {
+        let rest: PathBuf = rel.components().skip(1).collect();
+        let mut label = rest.to_string_lossy().into_owned();
+        if let Some(stripped) = label.strip_suffix(".md") {
+            label = stripped.to_string();
+        }
+        label
+    };
+
+    Ok(crate::hymns::Slot::new(band, label))
+}
+
+fn default_selector(slot: &crate::hymns::Slot) -> crate::hymns::Selector {
+    match slot.band {
+        crate::hymns::Band::Harness => crate::hymns::Selector {
+            harness: Some(slot.label.clone()),
+            ..Default::default()
+        },
+        crate::hymns::Band::Role => {
+            let role = match slot.label.as_str() {
+                "worker" => crate::hymns::Role::Worker,
+                "orchestrator" => crate::hymns::Role::Orchestrator,
+                _ => return crate::hymns::Selector::default(),
+            };
+            crate::hymns::Selector {
+                role: Some(role),
+                ..Default::default()
+            }
+        }
+        crate::hymns::Band::Model => crate::hymns::Selector {
+            model: Some(slot.label.clone()),
+            ..Default::default()
+        },
+        crate::hymns::Band::Stage => crate::hymns::Selector {
+            stage: Some(slot.label.clone()),
+            ..Default::default()
+        },
+        crate::hymns::Band::Preamble | crate::hymns::Band::Project => {
+            crate::hymns::Selector::default()
+        }
+    }
+}
+
+fn overlay_selector(
+    base: &crate::hymns::Selector,
+    sidecar: &Sidecar,
+) -> anyhow::Result<crate::hymns::Selector> {
+    let mut sel = base.clone();
+    if let Some(ref h) = sidecar.harness {
+        sel.harness = Some(h.clone());
+    }
+    if let Some(ref m) = sidecar.model {
+        sel.model = Some(m.clone());
+    }
+    if let Some(ref r) = sidecar.role {
+        sel.role = Some(parse_role(r)?);
+    }
+    if let Some(ref a) = sidecar.arm {
+        sel.arm = Some(parse_arm(a)?);
+    }
+    if let Some(ref s) = sidecar.stage {
+        sel.stage = Some(s.clone());
+    }
+    if let Some(ref replaces) = sidecar.replaces {
+        sel.replaces = Some(parse_slot_ref(replaces)?);
+    }
+    Ok(sel)
+}
+
+fn has_ext(rel_path: &str, ext: &str) -> bool {
+    Path::new(rel_path).extension().is_some_and(|e| e == ext)
+}
+
+fn collect_snippet_paths(root: &Path, current: &Path, paths: &mut BTreeSet<PathBuf>) {
+    let Ok(entries) = fs::read_dir(current) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Ok(ft) = entry.file_type() else {
+            continue;
+        };
+        let path = entry.path();
+        if ft.is_dir() {
+            collect_snippet_paths(root, &path, paths);
+        } else {
+            let ext_ok = path
+                .extension()
+                .is_some_and(|ext| ext == "md" || ext == "toml");
+            if ext_ok && let Ok(rel) = path.strip_prefix(root) {
+                paths.insert(rel.to_path_buf());
+            }
+        }
+    }
+}
+
+fn load_embedded_corpus(
+    embedded: &[(String, Vec<u8>)],
+) -> anyhow::Result<Vec<crate::hymns::Snippet>> {
+    let mut sidecars: std::collections::BTreeMap<String, Sidecar> =
+        std::collections::BTreeMap::new();
+    for (rel_path, bytes) in embedded {
+        if has_ext(rel_path, "toml") {
+            let stem = rel_path
+                .strip_suffix(".toml")
+                .context("strip_suffix for .toml checked above")?
+                .to_string();
+            let text = String::from_utf8(bytes.clone())
+                .map_err(|e| anyhow::anyhow!("embedded sidecar not UTF-8: {e}"))?;
+            let sc: Sidecar =
+                toml::from_str(&text).with_context(|| format!("invalid sidecar: {rel_path}"))?;
+            sidecars.insert(stem, sc);
+        }
+    }
+
+    let mut snippets = Vec::new();
+    for (rel_path, bytes) in embedded {
+        if has_ext(rel_path, "toml") {
+            continue;
+        }
+        if !has_ext(rel_path, "md") {
+            continue;
+        }
+        // Skip files at the hymns root (no band directory).
+        let rel = Path::new(rel_path);
+        if rel.components().count() < 2 {
+            continue;
+        }
+        let body = String::from_utf8(bytes.clone())
+            .map_err(|e| anyhow::anyhow!("{rel_path:?}: not valid UTF-8: {e}"))?;
+        let slot = path_to_slot(rel).with_context(|| format!("embedded snippet {rel_path:?}"))?;
+        let base_sel = default_selector(&slot);
+
+        let stem = rel_path
+            .strip_suffix(".md")
+            .context(".md suffix verified above")?;
+        let selector = if let Some(sc) = sidecars.get(stem) {
+            overlay_selector(&base_sel, sc)
+                .with_context(|| format!("embedded sidecar for {rel_path:?}"))?
+        } else {
+            base_sel
+        };
+
+        snippets.push(crate::hymns::Snippet {
+            slot,
+            selector,
+            provenance: crate::hymns::Provenance::Framework,
+            body,
+        });
+    }
+    Ok(snippets)
+}
+
+fn load_disk_corpus(
+    disk_root: &Path,
+    sealed: &crate::hymns::SealSet,
+) -> anyhow::Result<Vec<crate::hymns::Snippet>> {
+    if !disk_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut snippets = Vec::new();
+    let mut paths: BTreeSet<PathBuf> = BTreeSet::new();
+    collect_snippet_paths(disk_root, disk_root, &mut paths);
+
+    for rel in &paths {
+        if rel.extension() != Some("md".as_ref()) {
+            continue;
+        }
+        if rel.components().count() < 2 {
+            continue;
+        }
+        let md_path = disk_root.join(rel);
+        let body = fs::read_to_string(&md_path)
+            .with_context(|| format!("Failed to read {}", md_path.display()))?;
+
+        let slot =
+            path_to_slot(rel).with_context(|| format!("disk snippet {:?}", rel.display()))?;
+
+        if sealed.0.contains(&slot) {
+            continue;
+        }
+
+        let mut selector = default_selector(&slot);
+
+        let toml_rel = rel.with_extension("toml");
+        let toml_path = disk_root.join(&toml_rel);
+        if toml_path.is_file() {
+            let toml_text = fs::read_to_string(&toml_path)
+                .with_context(|| format!("Failed to read {}", toml_path.display()))?;
+            let sc: Sidecar = toml::from_str(&toml_text)
+                .with_context(|| format!("invalid sidecar: {}", toml_path.display()))?;
+            selector = overlay_selector(&selector, &sc)
+                .with_context(|| format!("disk sidecar {:?}", toml_path.display()))?;
+        }
+
+        snippets.push(crate::hymns::Snippet {
+            slot,
+            selector,
+            provenance: crate::hymns::Provenance::User,
+            body,
+        });
+    }
+    Ok(snippets)
+}
+
+pub(crate) fn load_full_corpus(
+    disk_root: &Path,
+    embedded: &[(String, Vec<u8>)],
+    sealed: &crate::hymns::SealSet,
+) -> anyhow::Result<Vec<crate::hymns::Snippet>> {
+    let mut corpus = load_embedded_corpus(embedded)?;
+    let mut disk = load_disk_corpus(disk_root, sealed)?;
+    corpus.append(&mut disk);
+    Ok(corpus)
+}
+
+pub(crate) fn resolve_worker_role_body(
+    corpus: &[crate::hymns::Snippet],
+    sealed: &crate::hymns::SealSet,
+) -> Result<String, crate::hymns::ResolveError> {
+    crate::hymns::resolve(
+        &crate::hymns::ContextVector {
+            role: crate::hymns::Role::Worker,
+            harness: None,
+            model: None,
+            arm: None,
+            stage: None,
+            bands: crate::hymns::BandFilter::Only(BTreeSet::from([crate::hymns::Band::Role])),
+        },
+        corpus,
+        sealed,
+    )
+}
+
+pub(crate) fn expand_worker_marker(def: &str, body: &str) -> String {
+    def.replace(WORKER_RESOLVE_MARKER, body)
+}
+
+#[expect(dead_code, reason = "reserved: SL-187 expose/disk-projection consumer")]
+pub(crate) fn project_starters(
+    disk_root: &Path,
+    embedded: &[(String, Vec<u8>)],
+    sealed: &crate::hymns::SealSet,
+    exposed_slots: &BTreeSet<crate::hymns::Slot>,
+    dry_run: bool,
+) -> anyhow::Result<Vec<PathBuf>> {
+    let mut embedded_by_slot: std::collections::BTreeMap<crate::hymns::Slot, String> =
+        std::collections::BTreeMap::new();
+    for (rel_path, bytes) in embedded {
+        if !has_ext(rel_path, "md") {
+            continue;
+        }
+        let rel = Path::new(rel_path);
+        let Ok(slot) = path_to_slot(rel) else {
+            continue;
+        };
+        let Ok(body) = String::from_utf8(bytes.clone()) else {
+            continue;
+        };
+        embedded_by_slot.entry(slot).or_insert(body);
+    }
+
+    let mut written = Vec::new();
+    for slot in exposed_slots {
+        if sealed.0.contains(slot) {
+            continue;
+        }
+        let Some(body) = embedded_by_slot.get(slot) else {
+            continue;
+        };
+
+        let dest = disk_root
+            .join(slot.band.as_str())
+            .join(format!("{}.md", slot.label));
+
+        if dest.exists() {
+            continue;
+        }
+
+        if !dry_run {
+            crate::fsutil::write_atomic(&dest, body.as_bytes())
+                .with_context(|| format!("project {}", dest.display()))?;
+        }
+        written.push(dest);
+    }
+    Ok(written)
+}
+
+/// Parse a `"band/label"` seal entry into a `Slot`. Rejects unrecognized bands
+/// and entries missing the slash.
+fn parse_seal_slot(s: &str) -> anyhow::Result<crate::hymns::Slot> {
+    let (band_seg, label) = s
+        .split_once('/')
+        .with_context(|| format!("seal entry {s:?}: expected 'band/label'"))?;
+    let band = crate::hymns::Band::from_segment(band_seg)
+        .with_context(|| format!("seal entry {s:?}: unknown band {band_seg:?}"))?;
+    Ok(crate::hymns::Slot::new(band, label))
 }
 
 fn load_manifest() -> anyhow::Result<Manifest> {
@@ -1270,7 +1710,19 @@ pub(crate) fn install_agent_def(
         .with_context(|| format!("Embedded agent def '{embed_asset}' not found"))?;
     fs::create_dir_all(&canon_dir)
         .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
-    crate::fsutil::write_atomic(&canon, &data)?;
+    if let Ok(def_str) = std::str::from_utf8(&data)
+        && def_str.contains(WORKER_RESOLVE_MARKER)
+    {
+        let disk = root.join(".doctrine").join(HYMNS_DIRNAME);
+        let embedded = embedded_hymns();
+        let sealed = embedded_seal_set()?;
+        let corpus = load_full_corpus(&disk, &embedded, &sealed)?;
+        let body = resolve_worker_role_body(&corpus, &sealed)?;
+        let expanded = expand_worker_marker(def_str, &body);
+        crate::fsutil::write_atomic(&canon, expanded.as_bytes())?;
+    } else {
+        crate::fsutil::write_atomic(&canon, &data)?;
+    }
 
     // 2. Reconcile the agent link by proven ownership (re-classify at mutation
     //    time, like `execute`'s skill links).
@@ -1300,6 +1752,63 @@ pub(crate) fn install_agent_def(
 // marketplace install step. The per-skill symlinks are untouched; the plugin
 // dir carries only the manifest + hooks.
 // ---------------------------------------------------------------------------
+// ── Tests: hymns manifest accessors (PHASE-02) ────────────────
+
+#[cfg(test)]
+mod tests_hymns {
+    use super::*;
+
+    #[test]
+    fn parse_seal_slot_valid() {
+        let slot = parse_seal_slot("harness/claude").unwrap();
+        assert_eq!(slot.band, crate::hymns::Band::Harness);
+        assert_eq!(slot.label, "claude");
+    }
+
+    #[test]
+    fn parse_seal_slot_model_with_slash_in_label() {
+        let slot = parse_seal_slot("model/anthropic/claude-sonnet-4").unwrap();
+        assert_eq!(slot.band, crate::hymns::Band::Model);
+        assert_eq!(slot.label, "anthropic/claude-sonnet-4");
+    }
+
+    #[test]
+    fn parse_seal_slot_rejects_unknown_band() {
+        let err = parse_seal_slot("nope/something").unwrap_err();
+        assert!(err.to_string().contains("unknown band"), "{err}");
+    }
+
+    #[test]
+    fn parse_seal_slot_rejects_missing_slash() {
+        let err = parse_seal_slot("noslash").unwrap_err();
+        assert!(err.to_string().contains("band/label"), "{err}");
+    }
+
+    #[test]
+    fn embedded_seal_set_from_live_manifest() {
+        // The live [hymns] seal = ["preamble/core"].
+        let sealed = embedded_seal_set().unwrap();
+        assert_eq!(sealed.0.len(), 1);
+        let slot = sealed.0.first().unwrap();
+        assert_eq!(slot.band, crate::hymns::Band::Preamble);
+        assert_eq!(slot.label, "core");
+    }
+
+    #[test]
+    fn embedded_hymns_from_live_dir() {
+        // install/hymns/ now contains real seed files.
+        let hymns = embedded_hymns();
+        assert!(
+            hymns.iter().any(|(name, _)| name == "preamble/core.md"),
+            "expected preamble/core.md, got: {hymns:?}"
+        );
+        assert!(
+            hymns.iter().any(|(name, _)| name == "harness/claude.md"),
+            "expected harness/claude.md, got: {hymns:?}"
+        );
+    }
+}
+
 // Tests (skills — moved from skills.rs, IMP-226)
 // ---------------------------------------------------------------------------
 
@@ -2056,6 +2565,69 @@ mod tests {
         assert_eq!(content, original);
     }
 
+    #[test]
+    fn expand_worker_marker_replaces_literal_marker() {
+        let def = format!("before\n{WORKER_RESOLVE_MARKER}\nafter\n");
+        let expanded = expand_worker_marker(&def, "resolved");
+        assert_eq!(expanded, "before\nresolved\nafter\n");
+    }
+
+    #[test]
+    fn expand_worker_marker_without_marker_is_unchanged() {
+        let def = "dispatch-worker resolve --role worker".to_string();
+        let expanded = expand_worker_marker(&def, "ignored");
+        assert_eq!(expanded, def);
+    }
+
+    #[test]
+    fn install_agent_def_expands_worker_marker_before_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let hymns_dir = dir
+            .path()
+            .join(".doctrine")
+            .join(HYMNS_DIRNAME)
+            .join("role");
+        fs::create_dir_all(&hymns_dir).unwrap();
+        fs::write(hymns_dir.join("worker.md"), "RESOLVED WORKER BODY").unwrap();
+
+        let mut out = Vec::new();
+        install_agent_def(
+            dir.path(),
+            "claude",
+            None,
+            DISPATCH_WORKER_AGENT_ASSET,
+            false,
+            false,
+            &mut out,
+        )
+        .unwrap();
+
+        let written =
+            fs::read_to_string(dir.path().join(".doctrine/agents/dispatch-worker.md")).unwrap();
+        assert!(written.contains("RESOLVED WORKER BODY"), "{written}");
+        assert!(!written.contains(WORKER_RESOLVE_MARKER), "{written}");
+    }
+
+    #[test]
+    fn install_agent_def_without_marker_writes_bytes_identically() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut out = Vec::new();
+        install_agent_def(
+            dir.path(),
+            "claude",
+            None,
+            "glossary.md",
+            false,
+            false,
+            &mut out,
+        )
+        .unwrap();
+
+        let expected = embedded_asset("glossary.md").unwrap();
+        let written = fs::read(dir.path().join(".doctrine/agents/dispatch-worker.md")).unwrap();
+        assert_eq!(written, expected.as_ref());
+    }
+
     // SL-011 VT-1: the boot governance layer rides the existing seed path —
     // created create-if-missing, left untouched when already present.
     #[test]
@@ -2254,6 +2826,7 @@ mod tests {
                 gitignore: GitignoreSection::default(),
                 root_markers: RootMarkersSection::default(),
                 memory: MemorySection::default(),
+                hymns: HymnsSection::default(),
             }
         }
     }
