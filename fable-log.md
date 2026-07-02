@@ -245,3 +245,9 @@ observed: read IMP-107 fully — implementation-ready-looking (5 steps) so I pro
   dead after wiring DanglingRef+LockContention. Full ReviewError wiring is a design
   call for the User. No code touched (reads only). Veto stands.
 next: hold; final wrap after 08:45.
+
+## 07:43 — hold (final: IMP-107 deferred to User; no clean autonomous work left)
+observed: firm decision — IMP-107 is one coherent User-owned piece (4-variant error
+  typing + NotFound/Internal construction design), not a partial nibble. Documented.
+  Session stands: 12 fixes + capstone, tree clean, suite green.
+next: hold; final wrap after 08:45.
