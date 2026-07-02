@@ -1,7 +1,7 @@
 id = 188
 slug = "cli-id-form-normalisation"
 title = "CLI id-form normalisation: accept both prefixed and bare canonical ids uniformly"
-status = "abandoned"
+status = "done"
 created = "2026-07-02"
 updated = "2026-07-02"
 tags = []
