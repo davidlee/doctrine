@@ -33,11 +33,23 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/memory.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/prompt.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "memory/**"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
