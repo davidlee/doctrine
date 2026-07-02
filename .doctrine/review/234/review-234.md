@@ -106,3 +106,27 @@ in-flight phases `unknown` — the narrower, honest precondition RV-214 F-1 inst
 ### Governance/spec (REV)
 - **None.** No ADR, policy, standard, spec, or requirement finding. All four findings
   are per-slice or resolved-in-candidate. No REV required.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md §"Layering & code impact" table (RV-234 F-1): dropped the stale
+  `src/commands/cli.rs | route new subcommands` row (cli.rs was undelivered — new
+  verbs are variants of existing `SliceCommand`/`WorktreeCommand`/`SelectorCommand`
+  enums, clap routes without a cli.rs edit); added the two real (undeclared,
+  legitimate) touches — `src/commands/guard.rs` (worker-mode read/write
+  classification for the three new verbs) and `src/reconcile.rs` (call-site ripple:
+  `run_status` gained the `--across-trees`/`--assert` bool params). Implementation
+  unchanged — a design-artifact truth correction, not a code fix.
+
+### REVs completed
+- None. No governance/spec finding in the brief — no REV required.
+
+### Withdrawn / tolerated
+- RV-234 F-4: aligned — undeclared e2e suites are conformance-cell noise (no
+  `tests/**` selector by construction); presence is correct, no action.
+- RV-234 F-2 / F-3: resolved in the candidate surface (base-staleness merge +
+  rustfmt drift, tip `0eca671a`); dispatch-funnel process, no SL-190 authorship —
+  harvested as CHR-034.
+
+Reconcile pass complete — every brief item resolved. Handoff to /close.

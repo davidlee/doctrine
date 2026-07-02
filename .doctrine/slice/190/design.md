@@ -299,7 +299,8 @@ umbrella entry or the gate fails (`mem.pattern.lint.module-split-needs-layering-
 | `src/worktree/gc.rs` | lift landed-oracle to shared fn — **extraction** behaviour-preserving (F-6.1); the generalized target path is new-contract-tested (F-6.2) |
 | `src/git.rs` | `list_worktrees()` list-all primitive; the shell also reads `phase/*` refs via the existing `for-each-ref` idiom (`count_phase_refs`) for the landed signal |
 | `src/worktree/mod.rs` | `WorktreeCommand::List` |
-| `src/commands/cli.rs` | route new subcommands |
+| `src/commands/guard.rs` | worker-mode read/write classification for the three new verbs (reconcile-phases Write; selector doctor, worktree list Read) |
+| `src/reconcile.rs` | call-site ripple: `run_status` gained the `--across-trees`/`--assert` bool params (passes `false,false`) |
 | `.doctrine/adr/001/layering.toml` | sub-classification entry for `worktree/inventory.rs` (mirror the `gc.rs` tier; a new module differing from its umbrella tier reds `MixedUmbrella` in `tests/architecture_layering.rs`) |
 
 Clippy: `print_stdout` denied → `writeln!(io::stdout())`; `#[expect(dead_code,
