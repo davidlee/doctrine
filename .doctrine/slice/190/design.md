@@ -90,20 +90,45 @@ reader/writer overload; not reintroducing one behind a `status --reconcile` flag
 | Verb | Mode | Behaviour |
 |---|---|---|
 | `slice status <ID>` (bare) | read | unchanged — local per-tree rollup (IMP-191) |
-| `slice status <ID> --across-trees [--assert]` | read | composite truth + per-tree divergence table; `--assert` → non-zero exit on divergence (the cascade gate skills/handover gate on) |
-| `slice reconcile-phases <ID>` | write | rewrite **primary** runtime sheets from composite truth |
+| `slice status <ID> --across-trees [--assert]` | read | composite truth + per-tree divergence table; `--assert` → non-zero exit **on CONFLICT / opinionated-disagreement only** (F-2) |
+| `slice reconcile-phases <ID>` | write | rewrite the **primary** tree's runtime sheets from composite truth (deliberate cross-tree write, F-5) |
 
 **Pure core** (engine, beside `phase_rollup`):
 `resolve_phase_truth(registry_rows, coord_rollup, local_rollup) -> {truth, divergence}`
 — total, testable; shell gathers the three inputs (`primary_worktree` registry,
-`live_worktree_for_ref("dispatch/<slice>")` coord with strip-`.worktrees/<name>`
-fallback, local `phase_rollup`).
+live coord via `live_worktree_for_ref("dispatch/<slice>")`, local `phase_rollup`).
+
+**`--assert` scope (F-2).** Fires **only** on `CONFLICT` or an opinionated
+disagreement (two sources hold differing non-`unknown` statuses). It does **not**
+fire on `unknown`/silent — otherwise a fresh handoff machine (all in-flight →
+`unknown`, no coord) is permanently red. Exit code aligns with `worktree status
+--assert`'s convention (F-7).
+
+**Tree-root resolution (F-3).** Each `git worktree list --porcelain` entry path
+**is** that tree's root — use it directly for the coord/primary state read. Do
+**not** strip `.worktrees/<name>`: coord dirs are also `.dispatch/SL-<n>`, so a
+fixed-prefix strip is convention-fragile. `live_worktree_for_ref` *locates* the
+coord tree; its porcelain path *is* the root.
+
+**Cross-tree write justification (F-5).** `reconcile-phases` resolves the primary
+tree (`primary_worktree`) and writes *its* `.doctrine/state/` from wherever the
+verb is invoked (coord tree during drive, session root, or a handoff machine).
+Writing another tree's runtime state is within remit: the orchestrator is the
+**sole writer** (ADR-006 D2); this is an explicit operator-invoked verb, not
+implicit background sync.
 
 **Reconcile conflict rule:** *composite wins where it has an opinion; local
-survives where composite is silent.* Never regress a locally-`completed` inline
-phase because the (dispatched-phases-only) registry has no row for it. Load-bearing
-for mixed inline+dispatch slices (the SL-156 / IMP-174 shape). Write via the
-edit-preserving `set_phase_status` (`toml_edit`). Idempotent.
+survives where composite is silent; `CONFLICT` phases are **skipped and reported**,
+never auto-written* (a rework disagreement is not the verb's to resolve). Never
+regress a locally-`completed` inline phase because the (dispatched-phases-only)
+registry has no row for it. Load-bearing for mixed inline+dispatch slices (the
+SL-156 / IMP-174 shape). Write via the edit-preserving `set_phase_status`
+(`toml_edit`). Idempotent.
+
+**Degradation for non-dispatch slices (F-6).** A pure solo/inline slice has no
+`dispatch/<slice>` coord tree and (typically) no registry boundaries → composite
+== local → `--across-trees` shows no divergence and `reconcile-phases` is a no-op.
+Single-tree slices are unaffected; no harm.
 
 **Value:** the `--assert` read is the primary mid-drive fuckup-prevention lever
 (gate before acting on a stale view); the reconcile keeps `slice list` honest and
@@ -137,6 +162,10 @@ ref → `unknown`, never a hard error. The verdict **reuses gc's existing landed
 oracle** (`gather_landed`/`classify_gc`, ancestry + patch-id); lifting it to a
 shared engine fn is a **behaviour-preserving** refactor of `worktree/gc.rs` — the
 gc suite stays green unchanged (shared-machinery gate). No second oracle.
+**F-4:** the lift also **parameterizes the target ref** (gc currently implies the
+coordination target; coord-rows need `deliver-to`). Behaviour-preservation holds
+because gc keeps passing its existing coordination target — only the new
+inventory caller supplies a different one.
 
 **Value:** kills the audit "nothing to audit" blindspot; `--slice` answers "where
 does SL-X's implementation live, and is it already imported?"
@@ -192,8 +221,9 @@ reason)]` for predicates staged ahead of a consumer.
 ## Verification alignment
 
 Pure cores are the primary evidence (total functions, exhaustive case tables):
-- `resolve_phase_truth` — landed / in-flight / silent / divergent / mixed
-  inline+dispatch; non-regression rule.
+- `resolve_phase_truth` — landed / in-flight / silent / divergent / **CONFLICT
+  (registry-landed ∧ coord-in_progress)** / mixed inline+dispatch; non-regression
+  rule; `--assert` fires on conflict-not-unknown (F-1, F-2).
 - `classify_worktree` — each role from (is_primary, branch, marker) combos; landed
   reuse (landed / not / unknown-target).
 - `diagnose_selector` — uncompilable / unmatched / redundant / broad, per intent.
