@@ -1,0 +1,52 @@
+id    = 234
+slug  = "sl-190-reconciliation-dispatch-state-visibility-verbs-vs-designadr-001pol-002"
+title = "SL-190 reconciliation: dispatch state-visibility verbs vs design/ADR-001/POL-002"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-190"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design §Layering table mis-attributes new-verb routing to cli.rs (undelivered); real touches are guard.rs + reconcile.rs"
+detail = """Expected (design §"Layering & code impact"): `src/commands/cli.rs | route new subcommands` is a design-target. Observed: `slice conformance 190` reports cli.rs **undelivered** (no edit matched) and guard.rs + reconcile.rs **undeclared**. Root cause: the new verbs are variants of existing enums (`SliceCommand::ReconcilePhases`, `SelectorCommand::Doctor`, `WorktreeCommand::List` in slice.rs / worktree/mod.rs), so clap routing needs no cli.rs edit — the design's file attribution was wrong. The actual undeclared touches are legitimate: guard.rs adds worker-mode read/write classification for the three new verbs; reconcile.rs is a pure call-site ripple (`run_status` gained two bool params for --across-trees/--assert, reconcile.rs passes `false,false`). No misplaced logic — the status-only writer + `resolve_phase_truth`/`PhaseTruth` core are in state.rs as designed. Net: design attribution error, not an implementation defect."""
+disposition = "verified"
+response = 'Observation confirmed. This is a design-artifact truth correction, delegated to /reconcile as a per-slice direct edit (not a code fix). Reconciliation brief: design.md §"Layering & code impact" table — drop the `src/commands/cli.rs | route new subcommands` row (cli.rs was never needed; new verbs are variants of existing SliceCommand/WorktreeCommand enums), and add the real touches: `src/commands/guard.rs | worker-mode read/write classification for the three new verbs` and `src/reconcile.rs | run_status signature ripple (--across-trees/--assert bool params)`. No code change — implementation is correct; the design table is stale.'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "base staleness: review/190 forked from a main predating SL-180 close → conformance.rs integration conflict"
+detail = "Expected: candidate creation (`dispatch candidate create`) is a clean 3-way merge. Observed: it conflicted on src/conformance.rs and .doctrine/rfc/011/case-notes.md. Root cause: dispatch/190 forked at merge-base 59298543, which predates SL-180's close (09b978c9, which refactored conformance.rs to share a match impl). Both SL-180 (main) and SL-190 (review) added functions in the same conformance.rs region → textual conflict. This is the known dispatch-base-staleness class (mem.signpost.doctrine.dispatch-claude-arm-wrong-base; the pre-dispatch `git fetch . edge:main` ritual). Resolution: union merge — SL-180's undeclared_paths/compile/matched_selector and SL-190's diagnose_selector/SelectorScope/SelectorFinding/matches_in are disjoint symbols, both consuming the shared compute/glob_matches machinery. Resolved in candidate tip 0eca671a; builds clean, gate green, all suites pass."
+disposition = "fix-now"
+response = "Resolved within audit scope. The integration conflict is a mechanical union of two disjoint, already-reviewed symbol sets; resolved in candidate tip 0eca671a with builds clean, gate green, all suites (incl. 4 SL-190 e2e + gc behaviour-preservation) passing. No SL-190 code defect — the code the workers wrote is unchanged; only the integration seam was stitched. Durable lesson (base-staleness / pre-dispatch `git fetch . edge:main`) is already captured in mem.signpost.doctrine.dispatch-claude-arm-wrong-base; no new memory needed."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "impl bundle carried rustfmt drift across SL-190-touched files"
+detail = 'Expected: dispatched phases land gate-clean (rustfmt canonical). Observed: after resolving the merge, `doctrine check gate` (which runs cargo fmt) reformatted 9 files (git.rs, slice.rs, state.rs, inventory.rs, conformance.rs, worktree/mod.rs, 3 e2e tests) — pure whitespace/line-reflow, no semantic change (confirmed: only source mutation between the merge tree and post-gate was cargo fmt). Implies the dispatch funnel/verify-worker did not enforce `cargo fmt --check` before committing phase cuts. Normalized in candidate tip 0eca671a (commit "style(SL-190): rustfmt normalize"). Low-severity hygiene; the durable lesson is a funnel gate concern, not an SL-190 code defect.'
+disposition = "fix-now"
+response = """Resolved within audit scope — candidate tip normalized via `cargo fmt` (commit "style(SL-190): rustfmt normalize", 0eca671a); whitespace-only, zero semantic change. The durable signal — the dispatch funnel/verify-worker does not run `cargo fmt --check` before committing phase cuts — is a funnel-hardening concern, not an SL-190 defect. Harvested as backlog CHR (see synthesis) so it isn't lost."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "4 e2e test files show as conformance-undeclared (no test-scoped selector)"
+detail = "Observed: tests/e2e_slice_phase_status.rs, e2e_slice_reconcile_phases.rs, e2e_slice_selector_doctor.rs, e2e_worktree_list.rs are undeclared in `slice conformance 190`. Expected and benign: the slice's selectors fence src/ (design-target) + src/dispatch.rs/worktree/**/main.rs (scope-relevant); no `tests/**` selector exists, so every new test file is undeclared by construction. These are exactly the VT-backing e2e suites the design's Verification section requires — presence is correct, only the conformance cell is noisy. No action required; a `tests/** scope-relevant` fence would silence it if desired."
+disposition = "aligned"
+response = "No change needed. The four undeclared entries are the VT-backing e2e suites the design's Verification section mandates; they are undeclared only because the slice fences src/ and carries no `tests/**` selector — undeclared by construction, not scope creep. Conformance-cell noise, not a defect."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
