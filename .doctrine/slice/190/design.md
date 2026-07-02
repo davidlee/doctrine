@@ -46,10 +46,18 @@ Two representations of phase progress coexist:
 phase, truth resolves as:
 
 ```
-registry boundary present            → LANDED   (authoritative, durable)
-else live dispatch/<slice> worktree  → IN-FLIGHT (that tree's runtime status)
-else                                 → LOCAL / UNKNOWN
+registry LANDED ∧ live coord disagrees (in_progress/blocked) → CONFLICT (surface, never auto-resolve)
+registry boundary present                                    → LANDED   (authoritative, durable)
+else live dispatch/<slice> worktree                          → IN-FLIGHT (that tree's runtime status)
+else                                                         → LOCAL / UNKNOWN
 ```
+
+**CONFLICT (F-1, rework masking).** `record-boundary` upserts, so a *re-dispatched*
+phase shows LANDED in the registry while the live coord tree shows `in_progress`
+again. Resolving that to LANDED masks active rework. So when the registry says
+landed but a **live** coord runtime disagrees, the phase resolves to `CONFLICT` —
+surfaced in the divergence table and treated as divergence, never silently
+collapsed. (No live coord tree ⇒ no disagreement possible ⇒ registry LANDED stands.)
 
 Rationale:
 - **Registry-only** is durable and grain-aligned but blind to `in_progress` —
