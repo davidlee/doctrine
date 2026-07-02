@@ -9,6 +9,7 @@
 //! and stamps the [`PRIORITY_POLICY_VERSION`] (D6 / REQ-094). NO trailing newline on
 //! either surface — the black-box golden contract (`write!`, not `writeln!`).
 
+use super::graph::DEFAULT_VALUE;
 use crate::estimate::display::format_bound;
 use crate::listing::{self, Column, ColumnPaint, RenderOpts, TITLE_EVEN, TITLE_ODD, status_hue};
 use owo_colors::{
@@ -158,11 +159,24 @@ fn estimate_cell(r: &NextRow) -> String {
     }
 }
 
-/// Render the value column cell: `format_bound(v.value)`, or
-/// [`listing::ABSENT_CELL`] when no value is authored.
+/// Marker suffix on a value cell showing the effective *default* value (a
+/// value-bearing kind that authored no `[value]`), distinguishing it from an
+/// authored value of the same magnitude (IMP-211).
+const DEFAULT_VALUE_MARKER: &str = "*";
+
+/// Render the value column cell. An authored value renders bare
+/// (`format_bound(v.value)`). With no authored value the cell must still reflect
+/// what the score used (`graph::effective_raw_value`): a value-bearing kind is
+/// scored as [`DEFAULT_VALUE`], so render that default with [`DEFAULT_VALUE_MARKER`]
+/// — never [`listing::ABSENT_CELL`], which would contradict the ranking (IMP-211).
+/// A genuinely valueless kind (records/governance/REV) has no value in the score
+/// either, so it stays `ABSENT_CELL`.
 fn value_cell(r: &NextRow) -> String {
     match &r.value {
         Some(v) => format_bound(v.value),
+        None if crate::kinds::is_value_bearing(&r.kind) => {
+            format!("{}{DEFAULT_VALUE_MARKER}", format_bound(DEFAULT_VALUE))
+        }
         None => listing::ABSENT_CELL.to_string(),
     }
 }
@@ -686,6 +700,33 @@ mod tests {
         let rows = vec![bare_row("ISS-001")];
         let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
         assert!(out.contains(ABSENT_CELL), "bare row has ABSENT_CELL: {out}");
+    }
+
+    #[test]
+    fn value_cell_shows_marked_default_for_value_bearing_kind_without_facet() {
+        // IMP-211: a value-bearing kind with no authored [value] is SCORED as
+        // graph::DEFAULT_VALUE (effective_raw_value), so the value cell must show
+        // that default (marked), never ABSENT_CELL — else the displayed value
+        // contradicts the score driving the ranking.
+        let mut r = bare_row("ISS-001"); // kind ISS is value-bearing, value None
+        assert_eq!(
+            value_cell(&r),
+            format!("{}{DEFAULT_VALUE_MARKER}", format_bound(DEFAULT_VALUE))
+        );
+        // An authored value still renders bare — no marker.
+        r.value = Some(ValueFacet { value: 2.0 });
+        assert_eq!(value_cell(&r), format_bound(2.0));
+    }
+
+    #[test]
+    fn value_cell_is_absent_for_valueless_kind_without_facet() {
+        // A valueless kind (governance/REV/records) contributes no value to the
+        // score, so an absent value stays ABSENT_CELL — the default marker would
+        // misrepresent it.
+        let mut r = bare_row("REV-001");
+        r.kind = "REV".to_string();
+        r.value = None;
+        assert_eq!(value_cell(&r), ABSENT_CELL);
     }
 
     // ── PHASE-02 pagination (next_human limit/offset slice + footer) ─────
