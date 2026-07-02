@@ -44,6 +44,21 @@ legible path list; the sanctioned unblock is `slice selector add … --intent
 design-target --note "<why>"` then re-import. The selector upsert (with a
 mandatory justification note) is the durable ledger.
 
+## Accepted Risks
+
+- **Double root resolve (design §8).** The belt shell (`worktree::mod::run`)
+  resolves root once for `slice::selectors`, and each import arm
+  (`run_import_fork` / `run_import_from_worktree`) resolves root again for git
+  work. Accepted as benign: `root::find` with the same default markers is
+  idempotent, and the split keeps the slice read out of engine (ADR-001 gate).
+
+- **PHASE-02 file count (5 files).** The phase touches `conformance.rs`,
+  `import.rs`, `mod.rs`, and two SKILL.md files — larger than PHASE-01's single
+  file. Accepted because `undeclared_paths` IS the belt's pure need: splitting
+  the conformance refactor from the belt would create an artificial handoff. The
+  5 files span 3 distinct module boundaries with disjoint ownership surfaces,
+  keeping merge-conflict risk low during parallel dispatch.
+
 ## Notes
 
 - **Token constant (STD-001 / POL-002).** `"undeclared-scope"` is added to

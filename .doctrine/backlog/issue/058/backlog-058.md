@@ -13,9 +13,7 @@ The write seam appears to **append-at-end** rather than insert-into / regroup th
 same-label run. When the label being added already exists but is not the last label in the
 block, the result is non-contiguous and the gate rejects it.
 
-- **Observed on the 0.8.1 PATH binary.** Whether 0.9.0 (the SL-176 build) regroups on append
-  is **unverified** — if it also appends-at-end, this is a latent defect on trunk, not just a
-  stale-binary artifact. **First step: reproduce against a fresh build.**
+- **Observed on the 0.8.1 PATH binary.** Confirmed on 0.9.0/trunk (2026-07-02): the defect is latent on trunk, not a stale-binary artifact. The root cause is `append_relation_row` (`src/relation.rs:1126-1192`) which always appends at the END of the `[[relation]]` array via `array.push(row)` — it makes zero effort to insert adjacent to existing same-label rows. Primary vector: `doctrine link` → `run_link` → `append_edge` → `append_relation_row`. Secondary vector: `doctrine supersede` (same path). Observed secondary victim: `.doctrine/slice/190/slice-190.toml` — `related`(IMP-191) appended after `governed_by` rows, breaking contiguity (SL-180 RV-216 audit).
 - If the writer does not maintain contiguity, either (a) make `append_edge`/`link` insert the
   new row adjacent to the existing same-label run, or (b) canonically re-sort rows on write.
   Option (b) also fixes hand-authored disorder.
