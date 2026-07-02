@@ -236,3 +236,12 @@ next: HOLD at 30-min cadence; confirm green each wake; final wrap after 08:45.
 ## 06:38 — hold (session complete: 12 fixes + capstone, tree clean, suite green)
 observed: no new clean+safe autonomous item; remaining backlog needs design/User/zone.
 next: hold; final wrap after 08:45.
+
+## 07:09 — hold; investigated IMP-107, veto confirmed by a real wrinkle
+observed: read IMP-107 fully — implementation-ready-looking (5 steps) so I probed it.
+  Found a wrinkle: card step 3 (remove ReviewError #[expect(dead_code)]) cannot
+  compile in isolation — NotFound + Internal are ALSO constructed only in cfg(test)
+  (the tools.rs mapper hits are match-arms=reads, not construction), so they stay
+  dead after wiring DanglingRef+LockContention. Full ReviewError wiring is a design
+  call for the User. No code touched (reads only). Veto stands.
+next: hold; final wrap after 08:45.

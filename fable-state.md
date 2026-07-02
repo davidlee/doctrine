@@ -57,11 +57,19 @@ SCOUT #3 FINDINGS (real issues, but NOT autonomous-safe — surfaced for the Use
     multi-line assert (src/vtgate.rs:139). Real, but the card lists options
     "not yet chosen" → a DESIGN CHOICE on a governance gate. Needs a decision.
   - IMP-107 (review engine): ReviewError::DanglingRef / LockContention declared
-    but never constructed (#[expect(dead_code)] at review.rs:908 reason="PHASE-02
-    verb handlers"); run_new (1246) leaks a generic anyhow so MCP returns -32603
-    Internal not -32000 DANGLING_REF. Real + fully-specified (5 steps), HIGH conf
-    — but it's COMPLETING PLANNED PHASE-02 WIRING in the review avoid-zone. Best
-    candidate if the User wants it done; not autonomous-clean (planned work + zone).
+    but never constructed; run_new (review.rs:1246) leaks a generic anyhow so MCP
+    returns -32603 Internal not -32000 DANGLING_REF; LockGuard::acquire (1893)
+    bails a "busy" string not LockContention. VETOED after investigation — a real
+    WRINKLE: the card's step 3 ("remove #[expect(dead_code)] on ReviewError",
+    review.rs:908) CANNOT compile in isolation. FOUR variants are constructed only
+    in #[cfg(test)] — DanglingRef, LockContention, AND NotFound + Internal (the
+    tools.rs:1096/1163 hits are the mapper's match arms = reads, not construction).
+    Wiring DanglingRef+LockContention still leaves NotFound+Internal dead, so the
+    expect stays needed → step 3 errors. The full ReviewError wiring (incl. how
+    NotFound "review not found" and Internal should be constructed, and whether to
+    narrow vs remove the expect) is a design call the User should sequence. Steps
+    1,2,4,5 alone (wire the 2, keep the expect) are doable but the card's own step
+    3 makes it non-self-consistent for autonomous work. Left for the User.
   - IMP-192 (state.rs:563/577): spurious `phase-binding capture skipped` warning
     on a legitimate solo no-binding → completed flip (stderr noise). Real, but
     suppress-vs-downgrade is a judgement call + the full card is a /close recipe.
