@@ -105,35 +105,81 @@ fn vt1_resolve_sealed_twin_is_dropped_and_exposed_user_wins() {
     );
 }
 
+/// SL-187 PHASE-04 VT-2 (end-to-end) — supersedes SL-186's stdout-only/no-disk
+/// contract. `prompt resolve` now unstales the UNIVERSAL on-disk `boot.md` (reuse
+/// the boot generator, `write_if_changed`) and emits `universal ++ role/harness
+/// hymns` to stdout. This seals the three PHASE-04 delivery invariants over the
+/// built binary:
+///  - the ONLY disk artifact resolve writes is `.doctrine/state/boot.md`;
+///  - that file is BYTE-IDENTICAL across runs differing only in `--role`/`--harness`
+///    (axis-invariance INV-D1; unchanged-input cache-hold INV-D4);
+///  - stdout DIFFERS by role/harness (the axis-specific cascade rides stdout only).
 #[test]
-fn vt1_resolve_stdout_only_writes_no_disk() {
+fn resolve_regenerates_only_boot_md_axis_invariant_stdout_varies() {
     let dir = tmp();
     let hymns = dir.path().join(".doctrine/hymns");
-
     fs::create_dir_all(hymns.join("harness")).unwrap();
     fs::write(hymns.join("harness/claude.md"), "USER-CLAUDE").unwrap();
 
-    // Snapshot the dir before resolve.
-    let snapshot = dir_contents(dir.path());
+    let before = dir_contents(dir.path());
 
-    let out = run(
+    // Run A — orchestrator/claude.
+    let out_a = run(
         dir.path(),
         &[
             "prompt",
             "resolve",
             "--role",
-            "worker",
+            "orchestrator",
             "--harness",
             "claude",
         ],
     );
-    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    assert!(out_a.status.success(), "stderr: {}", stderr(&out_a));
 
-    // After resolve, the disk state must be IDENTICAL.
+    let boot_md = dir.path().join(".doctrine/state/boot.md");
+    assert!(
+        boot_md.exists(),
+        "resolve must regenerate the universal boot.md"
+    );
+    let disk_a = fs::read_to_string(&boot_md).unwrap();
+
+    // The ONLY new file on disk is `.doctrine/state/boot.md`.
     let after = dir_contents(dir.path());
+    let new_files: Vec<String> = after
+        .iter()
+        .filter(|e| !before.contains(e))
+        .map(|(p, _)| p.clone())
+        .collect();
     assert_eq!(
-        snapshot, after,
-        "resolve wrote to disk! before={snapshot:?} after={after:?}"
+        new_files,
+        vec![".doctrine/state/boot.md".to_string()],
+        "resolve wrote unexpected files: {new_files:?}"
+    );
+
+    // Run B — differs ONLY in the role/harness axes.
+    let out_b = run(
+        dir.path(),
+        &["prompt", "resolve", "--role", "worker", "--harness", "pi"],
+    );
+    assert!(out_b.status.success(), "stderr: {}", stderr(&out_b));
+    let disk_b = fs::read_to_string(&boot_md).unwrap();
+
+    // Disk artifact axis-invariant (INV-D1); stdout varies by axis.
+    assert_eq!(
+        disk_a, disk_b,
+        "on-disk boot.md must be axis-invariant (INV-D1)"
+    );
+    assert_ne!(
+        stdout(&out_a),
+        stdout(&out_b),
+        "stdout must vary by role/harness"
+    );
+
+    // The universal snapshot is PREPENDED to stdout — its content is a prefix.
+    assert!(
+        stdout(&out_a).contains(disk_a.trim_end()),
+        "stdout must carry the universal snapshot ++ hymns"
     );
 }
 

@@ -6,13 +6,13 @@ status = "active"
 title = "Project Orientation"
 summary = ""
 created = "2026-06-22"
-updated = "2026-07-01"
+updated = "2026-07-02"
 
 [scope]
 paths = []
 globs = []
 commands = []
-tags = []
+tags = ["onboarding"]
 workspace = "default"
 repo = ""
 repo_id_kind = "local_root"

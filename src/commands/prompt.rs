@@ -5,7 +5,7 @@
 //! the embed it reads). This module houses CLI parsing, dispatch, `build_ctx`,
 //! and `check_corpus`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 
@@ -95,7 +95,7 @@ pub(crate) enum PromptCommand {
     },
 }
 
-pub(crate) fn dispatch(cmd: PromptCommand) -> anyhow::Result<()> {
+pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyhow::Result<()> {
     use std::io::Write;
     match cmd {
         PromptCommand::Resolve {
@@ -113,33 +113,20 @@ pub(crate) fn dispatch(cmd: PromptCommand) -> anyhow::Result<()> {
             let sealed = crate::install::embedded_seal_set()?;
             let corpus = crate::install::load_full_corpus(&disk_root, &embedded, &sealed)?;
 
+            // Delivery (SL-187 PHASE-04): unstale the UNIVERSAL on-disk boot.md via
+            // the shared boot generator (axis-invariant, INV-D1), then emit the
+            // universal snapshot ++ the role/harness hymns to stdout. The disk write
+            // is idempotent; stdout carries the axis-specific cascade.
+            let exec = crate::boot::resolve_exec()?;
+            let universal = crate::boot::resolve_universal_snapshot(&root, &exec, command_map)?;
             let ctx = build_ctx(&role, harness, model, arm.as_deref(), stage, &band)?;
-            let result = crate::hymns::resolve(&ctx, &corpus, &sealed)?;
-            writeln!(std::io::stdout(), "{result}")?;
+            let hymns = crate::hymns::resolve(&ctx, &corpus, &sealed)?;
+            writeln!(std::io::stdout(), "{}\n{hymns}", universal.trim_end())?;
             Ok(())
         }
         PromptCommand::ModelKeys { harness, path } => {
             let root = crate::root::find(path, &crate::root::default_markers())?;
-            let disk_root = root.join(".doctrine").join(crate::install::HYMNS_DIRNAME);
-            let embedded = crate::install::embedded_hymns();
-            let sealed = crate::install::embedded_seal_set()?;
-            let corpus = crate::install::load_full_corpus(&disk_root, &embedded, &sealed)?;
-
-            let mut labels: Vec<&str> = corpus
-                .iter()
-                .filter(|s| s.slot.band == Band::Model)
-                .filter(|s| {
-                    if let Some(ref h) = harness {
-                        s.selector.harness.is_none()
-                            || s.selector.harness.as_deref() == Some(h.as_str())
-                    } else {
-                        true
-                    }
-                })
-                .map(|s| s.slot.label.as_str())
-                .collect();
-            labels.sort_unstable();
-            labels.dedup();
+            let labels = model_keys(&root, harness.as_deref())?;
             let mut stdout = std::io::stdout();
             for label in labels {
                 writeln!(stdout, "{label}")?;
@@ -242,6 +229,30 @@ fn build_ctx(
         stage,
         bands,
     })
+}
+
+/// The sorted, de-duplicated set of model-band snippet labels (the `--model`
+/// key strings) in the corpus, optionally filtered to a harness (universal
+/// model snippets always pass the filter). Shared by the `prompt model-keys`
+/// verb and the `doctrine_onboard` MCP tool.
+pub(crate) fn model_keys(root: &Path, harness: Option<&str>) -> anyhow::Result<Vec<String>> {
+    let disk_root = root.join(".doctrine").join(crate::install::HYMNS_DIRNAME);
+    let embedded = crate::install::embedded_hymns();
+    let sealed = crate::install::embedded_seal_set()?;
+    let corpus = crate::install::load_full_corpus(&disk_root, &embedded, &sealed)?;
+
+    let mut labels: Vec<String> = corpus
+        .iter()
+        .filter(|s| s.slot.band == Band::Model)
+        .filter(|s| match harness {
+            Some(h) => s.selector.harness.is_none() || s.selector.harness.as_deref() == Some(h),
+            None => true,
+        })
+        .map(|s| s.slot.label.clone())
+        .collect();
+    labels.sort_unstable();
+    labels.dedup();
+    Ok(labels)
 }
 
 /// Collect all problems in the corpus: replaces graph errors, unknown stage

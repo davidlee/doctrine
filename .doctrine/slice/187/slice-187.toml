@@ -52,6 +52,16 @@ selector = "memory/**"
 intent = "design-target"
 
 [[selector]]
+selector = "tests/e2e_prompt_resolve_golden.rs"
+intent = "design-target"
+note = "PHASE-04 VT-2 e2e: resolve delivery axis-invariance + stdout variance"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "PHASE-04 wiring: thread render_boot_map into prompt dispatch (delivery path, EX-2)"
+
+[[selector]]
 selector = "install/model-band.md"
 intent = "design-target"
 note = "PHASE-01 model-band floor asset — Static embed wired in boot.rs (RV-235 F-1)"

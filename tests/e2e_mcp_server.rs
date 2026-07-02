@@ -1079,9 +1079,24 @@ fn e2e_onboard_returns_non_empty() {
         text.contains("CLI → MCP Tool Mapping"),
         "should contain mapping table: {text}"
     );
+    // Contract change (SL-187 PHASE-03): the two-memory "Onboarding Memories"
+    // load is gone (now carried by the cached boot sector); doctrine_onboard
+    // instead teaches model-band self-identification.
     assert!(
-        text.contains("Onboarding Memories"),
-        "should contain onboarding memories section: {text}"
+        !text.contains("Onboarding Memories"),
+        "onboarding memories section should be dropped: {text}"
+    );
+    assert!(
+        text.contains("model-keys"),
+        "should name the `prompt model-keys` command: {text}"
+    );
+    assert!(
+        text.contains("--band model"),
+        "should give the model self-resolve directive: {text}"
+    );
+    assert!(
+        text.contains("anthropic/claude-sonnet-4"),
+        "should list at least one emitted model key: {text}"
     );
 
     kill(child);

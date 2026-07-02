@@ -1214,25 +1214,43 @@ When MCP tools are available, use these tools instead of CLI commands:
 | `doctrine memory edit` | `memory_edit` | |
 ";
 
-/// Render the `doctrine_onboard` markdown: mapping table + 2 bundled onboarding memories.
+/// Header for the `doctrine_onboard` model-band self-identification section.
+const ONBOARD_MODEL_SECTION_HEADER: &str = "## Model-Band Self-Identification";
+/// CLI verb that lists the available `--model` key strings.
+const PROMPT_MODEL_KEYS_CMD: &str = "doctrine prompt model-keys";
+/// CLI verb the agent runs itself to resolve its own model band.
+const PROMPT_RESOLVE_MODEL_CMD: &str = "doctrine prompt resolve --band model --model <id>";
+
+/// Render the `doctrine_onboard` markdown: mapping table + model-band self-ID
+/// guidance (SL-187). The two-memory onboarding load now rides the cached boot
+/// sector, so it is intentionally absent here.
 fn render_onboard(root: &Path) -> anyhow::Result<String> {
-    let mut parts: Vec<String> = Vec::new();
-    parts.push(ONBOARD_MAPPING_TABLE.to_owned());
-    parts.push("\n## Onboarding Memories\n".to_owned());
-    for key in &[
-        "mem.signpost.doctrine.overview",
-        "mem.signpost.project.orientation",
-    ] {
-        let mut buf = Vec::new();
-        // Use retrieve_reference — if a memory isn't found, just skip it silently
-        match crate::retrieve::retrieve_reference(&mut buf, root, key, false, None) {
-            Ok(()) => parts.push(String::from_utf8(buf)?),
-            Err(_) => parts.push(format!(
-                "\n(memory {key} not found — use /retrieving-memory)\n"
-            )),
-        }
-    }
-    Ok(parts.concat())
+    Ok(format!(
+        "{ONBOARD_MAPPING_TABLE}{}",
+        render_model_band_guidance(root)?
+    ))
+}
+
+/// Model-band self-identification guidance: the tool cannot read the agent's
+/// model, so it teaches the agent to identify itself and resolve its own band.
+fn render_model_band_guidance(root: &Path) -> anyhow::Result<String> {
+    let keys = crate::commands::prompt::model_keys(root, None)?;
+    let key_lines = if keys.is_empty() {
+        "  (no model keys in corpus)".to_owned()
+    } else {
+        keys.iter()
+            .map(|k| format!("- `{k}`"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    Ok(format!(
+        "\n{ONBOARD_MODEL_SECTION_HEADER}\n\n\
+         `doctrine_onboard` cannot read your model — identify yourself.\n\n\
+         Available `--model` keys (`{PROMPT_MODEL_KEYS_CMD}`):\n{key_lines}\n\n\
+         Then resolve your model band yourself:\n\n    {PROMPT_RESOLVE_MODEL_CMD}\n\n\
+         Re-run this whenever your model changes (e.g. after a `/model` swap); \
+         the tool never resolves the band for you.\n"
+    ))
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────

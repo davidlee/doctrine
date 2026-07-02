@@ -2856,6 +2856,23 @@ pub(crate) fn boot_keys(root: &Path) -> Result<Vec<String>> {
     Ok(keys)
 }
 
+/// The `.md` bodies of onboarding-tagged memories, key-ascending with uid
+/// fallback for the keyless — the SL-187 boot-inlined onboarding block. Reuses
+/// `collect_all` (the items-win union) and `read_body` (the body tier); the
+/// ordering is `boot_keys`' key-else-uid rule, never a second sort law.
+pub(crate) fn onboarding_bodies(root: &Path) -> Result<Vec<String>> {
+    let mut selected: Vec<Memory> = collect_all(root)?
+        .into_iter()
+        .filter(|m| m.scope.tags.iter().any(|t| t == "onboarding"))
+        .collect();
+    selected.sort_by(|a, b| {
+        let ka = a.key.clone().unwrap_or_else(|| a.uid.clone());
+        let kb = b.key.clone().unwrap_or_else(|| b.uid.clone());
+        ka.cmp(&kb)
+    });
+    Ok(selected.iter().map(|m| read_body(root, &m.uid)).collect())
+}
+
 /// Orphan-filtering variant of `doctrine memory list`. When `--orphans` is
 /// set, the dispatch arm calls this instead of [`run_list`]: it delegates to
 /// [`collect_list_rows`], builds the backlinks index + outbound set in one
@@ -4894,6 +4911,107 @@ to = "mem_018e000000000000000000000000000b"
         assert_eq!(read_body(root, uid_both), "items-body");
         // an unknown uid degrades to empty (the show contract, unchanged)
         assert_eq!(read_body(root, "mem_0000000000000000000000000000ffff"), "");
+    }
+
+    // --- SL-187 PHASE-02 VT-1: onboarding_bodies selects onboarding-tagged
+    // memories, key-ascending (uid fallback), items winning a uid collision ---
+
+    #[test]
+    fn onboarding_bodies_selects_tagged_key_ordered_with_items_body_winning() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let items = root.join(MEMORY_ITEMS_DIR);
+        let shipped = root.join(MEMORY_SHIPPED_DIR);
+
+        // full_toml with the onboarding tag + a chosen uid and optional key.
+        let onboarding = |uid: &str, key: Option<&str>| {
+            let tagged = full_toml().replace(UID, uid).replace(
+                "tags = [\"cli\", \"architecture\"]",
+                "tags = [\"onboarding\"]",
+            );
+            match key {
+                Some(k) => tagged.replace("mem.pattern.cli.skinny", k),
+                None => tagged.replace("memory_key = \"mem.pattern.cli.skinny\"\n", ""),
+            }
+        };
+
+        let uid_alpha = "mem_018f3a1b2c3d4e5f60718293a4b5c6a0"; // local, lowest key
+        let uid_beta = "mem_018f3a1b2c3d4e5f60718293a4b5c6b0"; // shipped
+        let uid_gamma = "mem_018f3a1b2c3d4e5f60718293a4b5c6c0"; // uid collision
+        let uid_keyless = "mem_018f3a1b2c3d4e5f60718293a4b5cff0"; // keyless → uid fallback (sorts last)
+
+        // shipped corpus
+        write_memory_full(
+            &shipped,
+            uid_beta,
+            &onboarding(uid_beta, Some("mem.onboard.beta")),
+            "SHIPPED-BETA",
+        );
+        write_memory_full(
+            &shipped,
+            uid_gamma,
+            &onboarding(uid_gamma, Some("mem.onboard.gamma")),
+            "SHIPPED-GAMMA",
+        );
+        // local (items) corpus — a distinguishable body for the gamma collision.
+        write_memory_full(
+            &items,
+            uid_alpha,
+            &onboarding(uid_alpha, Some("mem.onboard.alpha")),
+            "LOCAL-ALPHA",
+        );
+        write_memory_full(
+            &items,
+            uid_gamma,
+            &onboarding(uid_gamma, Some("mem.onboard.gamma")),
+            "LOCAL-GAMMA",
+        );
+        write_memory_full(
+            &items,
+            uid_keyless,
+            &onboarding(uid_keyless, None),
+            "LOCAL-KEYLESS",
+        );
+        // a non-onboarding memory (full_toml's cli/architecture tags) must NOT surface.
+        write_memory_dir(&items, UID);
+
+        let bodies = onboarding_bodies(root).unwrap();
+
+        // both a shipped and a local onboarding memory surface; untagged excluded.
+        assert!(
+            bodies.iter().any(|b| b == "SHIPPED-BETA"),
+            "shipped onboarding surfaces: {bodies:?}"
+        );
+        assert!(
+            bodies.iter().any(|b| b == "LOCAL-ALPHA"),
+            "local onboarding surfaces: {bodies:?}"
+        );
+        assert!(
+            !bodies.iter().any(|b| b == "body"),
+            "untagged memory excluded: {bodies:?}"
+        );
+        // items wins the gamma uid collision — the local body, never the shipped dup.
+        assert!(
+            bodies.iter().any(|b| b == "LOCAL-GAMMA"),
+            "local body wins the collision: {bodies:?}"
+        );
+        assert!(
+            !bodies.iter().any(|b| b == "SHIPPED-GAMMA"),
+            "shipped dup dropped: {bodies:?}"
+        );
+
+        // key-ascending, uid fallback for the keyless one (a `mem_…` uid sorts
+        // after every `mem.onboard.*` key: '.' (0x2E) < '_' (0x5F)).
+        assert_eq!(
+            bodies,
+            vec![
+                "LOCAL-ALPHA",
+                "SHIPPED-BETA",
+                "LOCAL-GAMMA",
+                "LOCAL-KEYLESS"
+            ],
+            "key-ascending with uid fallback last"
+        );
     }
 
     // --- SL-011: list_rows is the additive string sibling of run_list ---
