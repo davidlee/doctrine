@@ -903,3 +903,24 @@ self-contained (its own current_dir+env_remove) and the FUNNEL verifies in the c
 worktree is a persistent dispatch friction that tempts workers into harness rewrites —
 worth solving centrally (e.g. the funnel owns verification; tell workers to verify only
 their own new tests + build, not the whole marker-sensitive suite).
+
+[conclude; SL-186-P04-conclude]
+Dispatch conclude (pi/subprocess arm) cost ~6 diagnostic round-trips to unblock:
+- verify-vt HALT was a legit /consult (D-B loader relocation vs P02 VT test_file
+  mandates) — resolved by plan revision. Fine.
+- RUNTIME SPLIT-BRAIN: phase-completion status is per-tree gitignored runtime
+  (.doctrine/state/slice/NNN/phases/*.toml). P01-03 were flipped completed in the
+  PRIMARY tree (earlier sessions); P04 was flipped only in the COORD tree (this
+  session's dispatch). `slice status`/`conformance` in the coord tree read coord
+  runtime (showed 1/4 then 4/4 after I flipped 01-03 there — WASTED, coord is
+  disposable); `dispatch sync --prepare-review` reads the PRIMARY tree (showed P04
+  not-completed). Two inverse views of the same slice. Fix was one flip: P04 ->
+  completed in the primary tree. Nothing signposts which tree's runtime a given verb
+  reads; the operator discovers it only by a gate rejection naming the "wrong" phase.
+  Candidate: prepare-review's completeness error could name the tree/path it read
+  phase status from, or dispatch could reconcile coord->primary phase status at
+  prepare-review. Ref backlog/041 (fork cleanup ownership unstated) — adjacent.
+- refresh-base merge conflicted on a memory.toml recorded on BOTH dispatch/186 and
+  trunk (same uid, divergent review-metadata: trunk had it verified vs the dispatch
+  sha). Orchestrator-trailed knowledge that also promotes via edge->main will collide
+  at refresh-base. Non-obvious; resolved take-trunk (strictly newer verified state).
