@@ -1,0 +1,42 @@
+memory_uid = "mem_019f239c569b75239987428d47b11f8f"
+memory_key = "mem.fact.conformance.rev-only-slice-undeclared"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "REV-only / governance-output slice reads as undeclared in slice conformance"
+summary = "slice conformance flags a REV-only slice's authored deliverable (.doctrine/revision/NNN) as undeclared; the code-delta algebra has no design-target selector for governance output — not drift."
+created = "2026-07-02"
+updated = "2026-07-02"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine slice conformance"]
+tags = ["conformance", "revision", "audit", "rev-only"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d06b9b2abbe739973ba9864f1f83996b0e2a3aa0"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ae70cf7ed1f36becf5fc0193cce55fa943a7221e596033c7270d323cbc100d06"
+base_commit = "3a1ce3e40d87e61d63bdaebe5b9101875c824b87"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

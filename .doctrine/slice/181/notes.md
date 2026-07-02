@@ -205,3 +205,31 @@ second pass is useful for variety afterward.
   is (codex `agent-*`, claude **detached-HEAD** per probe-h1 finding 5) — *during
   execution*." — record only once OQ-A is confirmed by the inquisition against the
   real dispatch-agent spawn path (it's the fragile bit).
+
+---
+
+## ▶ EXECUTE + AUDIT (2026-07-03) — REV-018 authored+approved; RV-232 audit resolved
+
+**PHASE-01 completed.** Authored + approved **REV-018** — the corpus's first
+Revision — "OQ-D close is shipped confinement, not the positive marker".
+- 2 `modify` rows: ADR-012 (headline) + ADR-006 (D2a/D2b notes).
+- Rationale carries design §2 (a)–(d) with mechanical before/after excerpts
+  (edits 1.1–1.4 ADR-012, 2.1–2.3 ADR-006) for reconcile to apply.
+- Approved, **unapplied** (`approval=approved · status=proposed`) — apply is
+  reconcile's job (design D3/D4). VH-1 (framing honesty) accepted by user pre-approve.
+- Commit `cca1538a`. Zero `src/` delta (design §3 honoured).
+
+**Audit RV-232 (reconciliation facet) — done, no blockers.** 3 findings, all verified:
+- **F-4** (minor, aligned): conformance `undeclared(2)` = the REV-018 entity files,
+  the sanctioned deliverable of a REV-only slice, not drift. → memory
+  `mem.fact.conformance.rev-only-slice-undeclared`.
+- **F-5** (minor, aligned): REV-018 is a faithful+complete encoding of design §2;
+  load-bearing confinement claim re-pinned (SL-182/183/185 all `done`).
+- **F-6** (major, verified→reconcile): governance truth unchanged on disk (ADR-012/006
+  overclaim, IMP-065 open, RSK-014 undowngraded) — the REV's *pending effect*, routed
+  to the reconciliation brief.
+
+**Reconcile handoff (RV-232 `## Reconciliation Brief`):** apply REV-018 (surfaced
+edits to ADR-012 + ADR-006); then close IMP-065 (reframed/superseded) and downgrade
+RSK-014 (enforcement-closed on confined arms; bounded residual). No per-slice direct
+edit — design/plan already match the REV-only outcome.
