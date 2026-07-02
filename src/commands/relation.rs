@@ -27,7 +27,7 @@ fn resolve_link_path(
     role: Option<crate::relation::Role>,
     degree: Option<crate::relation::Degree>,
 ) -> anyhow::Result<(PathBuf, &'static crate::relation::RelationRule)> {
-    let (kref, id) = crate::integrity::parse_canonical_ref(source)?;
+    let (kref, id) = crate::integrity::parse_resolvable_ref(root, source)?;
     // SL-149 PHASE-04c: the parsed `--role` flows into the legality gate. `validate_link`
     // yields `MissingRole` (a roleful `references` with no role), `RoleNotApplicable`
     // (a role on a label-only label), or `IllegalRole` (a role outside the source's
@@ -94,9 +94,11 @@ pub(crate) fn run_link(
             "memory relations do not take a role; remove `--role`"
         );
         let toml_path = crate::memory::resolve_memory_toml_path(&root, &mref)?;
-        // Best-effort target validation: if target looks like a canonical ref,
+        // Best-effort target validation: if target looks like an entity ref,
         // validate it resolves. Free-text and mem_* targets pass through.
-        if crate::integrity::parse_canonical_ref(target).is_ok() {
+        if crate::integrity::parse_canonical_ref(target).is_ok()
+            || target.parse::<u32>().is_ok()
+        {
             crate::integrity::ensure_ref_resolves(&root, target).with_context(|| {
                 format!("target `{target}` does not resolve to an existing entity")
             })?;
@@ -120,9 +122,8 @@ pub(crate) fn run_link(
     // Forward-edge validation (§5.5): free-text labels skip both gates; validated
     // labels must resolve AND be of a legal target kind.
     if !matches!(rule.target, crate::relation::TargetSpec::Unvalidated) {
-        crate::integrity::ensure_ref_resolves(&root, target)?;
-        let (tkref, _tid) = crate::integrity::parse_canonical_ref(target)?;
-        let (skref, _sid) = crate::integrity::parse_canonical_ref(source)?;
+        let (tkref, _tid) = crate::integrity::parse_resolvable_ref(&root, target)?;
+        let (skref, _sid) = crate::integrity::parse_resolvable_ref(&root, source)?;
         crate::relation::check_target_kind(rule, skref.kind, tkref.kind.prefix)?;
     }
     let outcome = crate::relation::append_edge(&toml_path, rule.label, rule.role, degree, target)?;

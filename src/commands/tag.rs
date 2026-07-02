@@ -83,19 +83,19 @@ fn run_set(
 
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (kref, id) = {
-        let (k, i) = crate::integrity::parse_canonical_ref(reference).map_err(|e| {
+        let (k, i) = crate::integrity::parse_resolvable_ref(&root, reference).map_err(|e| {
             anyhow::anyhow!(
                 "{e}\n  hint: `doctrine tag` works on numbered entity refs (e.g. SL-136, ADR-004). \
                  Use `doctrine memory tag` for memories."
             )
         })?;
+        // parse_resolvable_ref already confirmed the entity exists.
         // Taggability gate.
         anyhow::ensure!(
             tag::TAGGABLE.contains(&k.kind.prefix),
             "{} is not taggable yet (see IMP-144)",
             k.kind.prefix
         );
-        crate::integrity::ensure_ref_resolves(&root, reference)?;
         (k, i)
     };
     let item_path = crate::entity::id_path(&root, kref.kind, id, crate::entity::Ext::Toml);
@@ -119,13 +119,12 @@ fn run_set(
 fn run_clear(path: Option<std::path::PathBuf>, reference: &str) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (kref, id) = {
-        let (k, i) = crate::integrity::parse_canonical_ref(reference)?;
+        let (k, i) = crate::integrity::parse_resolvable_ref(&root, reference)?;
         anyhow::ensure!(
             tag::TAGGABLE.contains(&k.kind.prefix),
             "{} is not taggable yet (see IMP-144)",
             k.kind.prefix
         );
-        crate::integrity::ensure_ref_resolves(&root, reference)?;
         (k, i)
     };
     let item_path = crate::entity::id_path(&root, kref.kind, id, crate::entity::Ext::Toml);

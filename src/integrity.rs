@@ -430,8 +430,10 @@ pub(crate) fn kind_by_prefix(prefix: &str) -> Option<&'static KindRef> {
 /// unknown prefix / non-canonical shape, and a well-formed ref to an id with no
 /// entity directory (dangling). Read-only.
 pub(crate) fn ensure_ref_resolves(root: &Path, reference: &str) -> anyhow::Result<()> {
-    let (kind, id) = parse_canonical_ref(reference)?;
+    let (kind, id) = parse_resolvable_ref(root, reference)?;
     let name = format!("{id:03}");
+    // parse_resolvable_ref already confirmed the entity exists (it scanned the
+    // directory), but double-check consistency here for the error message.
     let dir = root.join(kind.kind.dir).join(&name);
     anyhow::ensure!(
         fsutil::is_real_dir(&dir),
@@ -455,6 +457,42 @@ pub(crate) fn parse_canonical_ref(reference: &str) -> anyhow::Result<(&'static K
         .parse::<u32>()
         .with_context(|| format!("`{num}` is not a numeric id in `{reference}`"))?;
     Ok((kind, id))
+}
+
+/// Parse an entity reference, accepting both canonical (`SL-031`) and bare (`31`)
+/// forms. For bare numbers, scans all entity kinds to find the matching entity
+/// directory. Returns the resolved kind and numeric id.
+pub(crate) fn parse_resolvable_ref(
+    root: &Path,
+    reference: &str,
+) -> anyhow::Result<(&'static KindRef, u32)> {
+    // Canonical form (has a hyphen) — parse, then verify the entity exists.
+    if reference.contains('-') {
+        let (kref, id) = parse_canonical_ref(reference)?;
+        let name = format!("{id:03}");
+        let dir = root.join(kref.kind.dir).join(&name);
+        anyhow::ensure!(
+            fsutil::is_real_dir(&dir),
+            "`{reference}` does not resolve to an entity (no {} at {})",
+            listing::canonical_id(kref.kind.prefix, id),
+            dir.display()
+        );
+        return Ok((kref, id));
+    }
+    // Bare number — scan all kinds for a matching entity directory.
+    let id: u32 = reference.parse().with_context(|| {
+        format!("`{reference}` is not a valid entity reference (expected e.g. SL-031 or 31)")
+    })?;
+    let name = format!("{id:03}");
+    for kref in KINDS {
+        let dir = root.join(kref.kind.dir).join(&name);
+        if fsutil::is_real_dir(&dir) {
+            return Ok((kref, id));
+        }
+    }
+    anyhow::bail!(
+        "no entity found for bare id `{reference}` — try the prefixed form (e.g. SL-{name})"
+    )
 }
 
 /// `doctrine reseat <CANONICAL_REF> [--to <NNN>]` — renumber an entity's
