@@ -111,3 +111,31 @@ is UN-CLOSEABLE by any verb once its phase rows are journaled — the direct-lan
 escape must also hand-write a trunk row, or IMP-127's fix must add a
 "record-completed-integration" path. Cost: full topology re-derivation + code read to
 prove no verb suffices. Recommend IMP-127 scope note + a memory correction.
+
+[audit; sess-clear-187-integrate]
+Post-session-clear resumption of a dispatched slice's audit paid a recurring
+runtime-state tax. Three distinct frictions, each a re-derivation step:
+1. STRAY UNCOMMITTED LIFECYCLE EDIT. The coord worktree (.dispatch/SL-187) held an
+   uncommitted `status = "audit"` flip on slice-187.toml (prior session halted mid-
+   transition). refresh-base HARD-REFUSES over a dirty coord tree. Resolution: commit
+   the flip (never discard). Cost: one diff + one commit to unblock.
+2. RUNTIME PHASE FLAGS LOST. All four phase-NN.toml runtime flags read `planned` after
+   the clear (disposable state didn't survive), so `sync --prepare-review` AND
+   `slice conformance` both refuse with "recorded row for PHASE-NN, which is not a
+   completed phase". The delivery was genuine (commits + registry end-oids matched);
+   only the flags were gone. Restoring = re-flip all four `completed` from the verified
+   registry+commit evidence. RFC-011 signal: the disposable runtime tier and the
+   committed evidence tier disagree after a clear, and the refuse-message points at the
+   flag, not the root cause (state loss), costing a registry+git cross-check to trust
+   the re-flip.
+3. CONFORMANCE EDGE-MIRROR SPLIT-BRAIN. `slice conformance` read from the edge tree
+   flagged cli.rs + e2e_prompt_resolve_golden.rs `undeclared`, but those selectors ARE
+   declared design-target on the delivery (a299cf27) — invisible on edge only because
+   the authored slice-187.toml hasn't integrated to trunk. Distinguishing real drift
+   from this pre-integration artifact required reading the selector list from the
+   candidate surface AND git-showing the declaration commit. A conformance read is only
+   trustworthy from a tree whose authored slice state matches the delivery.
+Also: `doctrine check gate` (→ just gate proxy) emitted a thin captured output (2 test
+binaries) that was easy to misread as the full suite; had to run `just gate` explicitly
+to confirm the real 3703/0. The proxy's cadence vs the full-suite command is not
+self-evident from the output.

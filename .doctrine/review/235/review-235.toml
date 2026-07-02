@@ -1,0 +1,34 @@
+id    = 235
+slug  = "reconciliation-review-of-sl-187"
+title = "reconciliation review of SL-187"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-187"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "install/model-band.md delivered+wired+tested (PHASE-01 EX-2) but carries no design-target selector → conformance undeclared"
+detail = 'PHASE-01 (574afd7f) adds install/model-band.md and wires it as SourceKind::Static("model-band.md") in src/boot.rs (universal model-band floor directive, design §4 / PHASE-01 EX-2); covered by boot.rs tests model_band_section_renders_* and _body_is_exactly_the_pristine_embed. It rides the proven install/ embed path (routing-process.md precedent; flake srcWithDist does cp -R ${./install}/. wholesale — no nix-strip risk). But no [[selector]] names it, so slice conformance reports it undeclared even on the candidate surface. Genuine authored-state gap: a delivered asset with no design-target selector. Expected: a design-target selector covers every intended deliverable; observed: install/model-band.md has none.'
+disposition = "verified"
+response = "Observation confirmed: install/model-band.md is a real, wired, tested PHASE-01 deliverable with no design-target selector. Not a code defect and not governance — a per-slice authored-state gap. Delegated to /reconcile (per-slice direct edit): add a design-target [[selector]] for install/model-band.md (intent design-target, note: PHASE-01 model-band floor asset). See Reconciliation Brief."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "cli.rs + e2e_prompt_resolve_golden.rs read as undeclared on the edge mirror but ARE declared design-target on the delivery (a299cf27) — un-integrated-selector split-brain"
+detail = "Commit a299cf27 'declare PHASE-04 delivery selectors' adds design-target [[selector]] entries for src/commands/cli.rs (PHASE-04 wiring: thread render_boot_map into prompt dispatch, EX-2) and tests/e2e_prompt_resolve_golden.rs (VT-2 e2e). The candidate authored surface (slice selector list 187) shows both present; the edge-tree mirror does not, because a299cf27 lives on dispatch/187 and has not been integrated to trunk. So the edge-read conformance false-positives these two as undeclared. Not delivery drift — a storage-tier split-brain that resolves when integrate lands slice-187.toml on main. Recorded to document the reviewed surface and pre-empt a spurious re-finding at integrate."
+disposition = "aligned"
+response = "The selectors ARE declared design-target on the delivery (a299cf27, confirmed on the candidate surface). The edge-mirror undeclared reading is a pre-integration storage-tier artifact, not delivery drift, and self-resolves when integrate lands slice-187.toml on trunk. No remediation beyond the already-planned integration; recorded to pre-empt a spurious re-finding."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
