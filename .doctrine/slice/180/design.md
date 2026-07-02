@@ -173,9 +173,17 @@ belt shell).
 | VT | `import.rs` (pure) | `classify_import` w/ selectors: undeclared ⇒ `UndeclaredScope`; `.doctrine/` refuses *before* the scope leg (precedence); empty selectors ⇒ no-op `Ok`; conformant ⇒ `Ok` |
 | VT | `import.rs` (integ) | `run_import_from_worktree --slice`: undeclared path ⇒ `import-refused: undeclared-scope` + path list; conformant ⇒ applies (reuses `init_repo` helpers) |
 | VT | `slice.rs` | `--against` folds a range & flags undeclared; `--strict` ⇒ nonzero |
-| VA | both suites | existing import belt tests + 6 `compute` tests **green unchanged** (behaviour-preservation gate: empty-selectors == old belt; `compute` refactor is pure-preserving) |
+| VA | `compute` suite | the 6 `compute` tests stay **green unchanged** — the `compile` extract is pure-preserving (textually untouched) |
+| VA | belt suite | existing `classify_import` / `run_import` tests keep their **verdicts** (empty-selectors == old belt); call sites gain a mechanical `&[]` / `&selectors` arg. Behaviour-preserving, not text-frozen — `classify_import` is worktree-local, not the entity engine, so the signature change is sanctioned |
 
-Maps 1:1 onto the slice's stated 3×VT + 1×VA.
+Maps onto the slice's stated 3×VT + 1×VA (VA split here into the two suites it
+touches, to be honest about which is text-frozen vs verdict-frozen).
+
+**Verification obligation (layering):** PHASE-02 must run `just gate` after the
+`worktree::mod → slice` edge lands. The edge is reasoned safe (slice imports no
+worktree ⇒ the edge is in no SCC ⇒ command `tangle_baseline` cannot grow, and
+command→command needs no `accepted_violation` entry), but the fitness gate is
+the proof, not this argument.
 
 ## 6. Code-impact (design-target selectors)
 
@@ -224,6 +232,15 @@ by construction — creep is never one keystroke away.
   `just reinstall` to propagate to `.agents/skills/`; an un-reinstalled dev tree
   runs the old skill and never passes `--slice`. Acceptable — install hygiene,
   not a code defect.
+- **`--against` single-ref footgun.** `--against` takes a raw git rev string;
+  passing a single ref (`main`) rather than a range (`main..HEAD`) makes
+  `git diff --name-status` compare against the *working tree*, silently folding
+  uncommitted changes into `actual`. Operator expectation: pass a rev-*range*.
+  The `--strict` help text should say so; no code guard (over-constraining a
+  valid `git diff` argument surface).
+- **Layering claim is reasoned, not proven.** See §5's verification obligation —
+  `just gate` in PHASE-02 is the proof that the `worktree::mod → slice` edge grows
+  no tangle-baseline and needs no `accepted_violation`.
 
 ## 9. Open questions
 
