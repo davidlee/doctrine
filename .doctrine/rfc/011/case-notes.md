@@ -848,3 +848,18 @@ Implemented RV-212 fixes. The slice-pattern `match matches.as_slice()` avoided b
 `indexing_slicing` and `expect_used` clippy lints. The ambiguity gate now correctly
 rejects bare `1` with 21 matches listed. Token cost of the fix was low — the scan
 loop already iterated all KINDS; the change was collecting instead of early-returning.
+
+[dispatch; SL-186-P03-resume]
+Resume-to-dispatch overhead on PHASE-03: had to re-derive the entire wiring
+surface (cli.rs Command enum + dispatch match location, guard.rs write-class arm,
+loader/install accessor exact signatures, engine pub(crate) surface) by grep
+before I could distill a worker prompt — none of this is queryable from doctrine;
+it's all code-archaeology re-done each phase because the phase sheet is the only
+carrier and it starts as a bare template. A "wiring map" memory (where new CLI
+verbs plug in: Command enum @cli.rs:77, dispatch match @~1234, guard Read-class
+@~309) would have saved ~6 exploratory Bash calls. Also: `dispatch status` trunk
+drift jumped 8→34 commits between my prior turn and this one (concurrent agents);
+refresh-base was mandatory and clean, but the baseline capture then surfaced 4
+flaky verify-vt e2e tests (pass under `just check`, fail under regression harness)
+— distinguishing "flaky pre-existing" from "real regression" cost a diff + a
+just-check cross-check the funnel doesn't automate.
