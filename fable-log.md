@@ -61,3 +61,22 @@ next: process the audit agent's confirmed mismatches; apply verified fixes.
   One helper, one hint —
   the phantom fork now speaks its
   name: branch, not path.
+
+## 04:15 — turn 4: applied skill CLI-shape audit fixes (4 mismatches)
+observed: audit agent (ae7ce25) verified all 22 core skills' `doctrine` command
+  citations vs --help; skills mostly CLEAN (good). 4 real positional-vs-flag traps
+  fixed, same class as the RFC-011 case notes:
+  - backlog/SKILL.md (high): `backlog edit <ID> (prompts)` was a copy-paste trap —
+    verb requires --status <STATUS> (+ --resolution for terminal); nothing prompts.
+    Fixed table + 2 prose claims. Re-verified myself (bare edit errors on --status).
+  - handover/SKILL.md (low): `slice phase … in_progress` positional → --status flag.
+  Commit 305c8638. Everything else confirmed correct; memory find = hidden alias
+  of memory search.
+  Session tally: 5 substantive cherry-pickable fixes (ADR-001, audit+reconcile,
+  close, worktree land TDD, skill CLI shapes).
+next: verify+TDD a fresh isolated backlog code fix (IMP-056 coverage Debug-format);
+  OBE-check first.
+
+  Skills speak true now —
+  no phantom prompt, no lost flag;
+  the copied line runs.

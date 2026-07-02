@@ -44,13 +44,25 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Process the SKILL CLI-shape audit agent (ae7ce25147e69f8c5). For
-each CONFIRMED high/med mismatch it returns: re-verify against `--help` yourself
-(agents can err), edit the skill line, commit clean (one commit per skill or a
-tight batch). Skip low/cosmetic. If it reports NONE, that's a clean result —
-record it and pick the next thread (options: reference-doc drift audit of
-glossary.md / using-doctrine.md vs CLI; or a fresh isolated backlog code fix like
-IMP-056 coverage Debug-format rendering).
+NEXT-ACTION: Fresh isolated TDD code fix. Candidate = IMP-056 (coverage CLI
+status rendering uses `{:?}` Debug, not a stable kebab-case formatter). FIRST
+verify it's still open on edge (OBE risk — several case-notes were already
+fixed): `doctrine coverage --help`, grep coverage status rendering in src/ for a
+`{:?}`/`Debug` leak in user-facing output. If real: TDD (red test on the
+formatter, green, refactor), commit. If OBE/not-real, pick another isolated
+leaf-ish item (ISS-003 cordage explain singleton-vs-empty; IMP-125 parse_ref
+consolidation is higher-collision — avoid). Keep each a clean cherry-pickable
+commit. Verify-before-build every time.
+
+CAPSTONE (reserve for ~08:00+): RFC-011 friction taxonomy synthesis — a durable
+artifact categorizing the friction classes + this session's remediation status
+(fixed / OBE / by-design / open) as input for the User's RFC-011 writeup. Only
+if code threads dry up or window is closing.
+
+[DONE 305c8638] Skill CLI-shape audit applied: backlog edit (prompts→--status
+required; high-sev trap) + handover slice-phase positional→--status flag. Audit
+verified all other slice/worktree/dispatch/revision/rec/spec verb shapes correct;
+`memory find` is a live hidden alias of `memory search`.
 
 TRIAGE WORKLIST (agentId a608c2f9a5f7f8337, done ~03:59) — full table saved in
 this turn's reasoning. Top-3 doc-fixes ALL SHIPPED. Remaining actionable:
