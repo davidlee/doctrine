@@ -140,6 +140,22 @@ not mutate a finding to `fixed`/`remediated`.
    design or governance. Group by write surface (per-slice direct edit vs.
    governance/spec REV). Each entry cites the finding id and describes the exact
    change needed.
+
+   **Brief-surface guardrails (D3).** `/reconcile` writes exactly two surfaces —
+   per-slice artefacts (`design.md`, `slice-NNN.md`) by direct edit, and
+   governance/spec by REV. Name a surface the writer skill will actually touch, or
+   the brief stalls at reconcile:
+   - **Plan criteria are off-surface.** `plan.toml` `EN-/EX-/VT-` (and `PHASE-NN`)
+     ids are immutable-append (boot rule) — never a reconcile direct-edit surface.
+     A divergence that would require *changing* a plan criterion is a design/plan
+     escalation, not a "Per-slice (direct edit)" brief item. Do not write a brief
+     item that edits `plan.toml`.
+   - **Conformance findings name the registry verb, not the prose.** A "spurious
+     undelivered / scope-creep" conformance finding is fixed by the **selector
+     registry** (`doctrine slice selector rm`/`add`), which is what `slice
+     conformance` reads (`slice-NNN.toml`). `design.md §6` is only the human
+     mirror — a prose-only brief item leaves conformance red. Name the `slice
+     selector` verb as the load-bearing change; cite the §6 edit as its mirror.
 6. **Harvest (audit tail).** Harvest durable risks, decisions, and gotchas from the
    disposable runtime phase sheets into `notes.md`; promote reusable facts via
    `/record-memory`; capture durable follow-up **work** the audit surfaced — risks,

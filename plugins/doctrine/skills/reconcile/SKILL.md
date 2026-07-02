@@ -24,6 +24,15 @@ A single reconcile pass may use both surfaces — e.g. update `design.md` direct
 *and* author a REV for an ADR amendment. Where each change lands is driven by the
 reconciliation brief, not guessed.
 
+> **A brief item can name a surface you don't write.** `plan.toml` criteria
+> (`EN-/EX-/VT-`, `PHASE-NN`) are immutable-append (boot rule) — not a reconcile
+> surface. If a brief item asks you to edit a plan criterion, do not; hand it back
+> to `/audit` or `/consult` as a design/plan escalation. And a conformance /
+> "spurious undelivered" item is fixed by the **selector registry** (`doctrine
+> slice selector rm`/`add`) — the load-bearing verb — not by a `design.md §6`
+> prose edit alone (§6 is only the mirror; `slice conformance` reads the registry
+> in `slice-NNN.toml`). Edit prose only, and conformance stays red.
+
 > **No CLI verb surface.** `doctrine slice reconcile` is not built yet (deferred,
 > ADR-003 §11). You drive existing verbs (`doctrine revision *`, direct file edits)
 > as manual discipline — same posture as `/audit` today.
