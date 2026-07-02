@@ -99,9 +99,18 @@ doctrine prompt resolve --role <orchestrator|worker>
 
 **Boot generator (`src/boot.rs`):**
 - **Expose** the universal-snapshot generator so `resolve` reuses it (no second projector).
-- **Add** a `universal`-band hymns section to the disk snapshot (harness-agnostic authored
-  prose, incl. the model-band floor directive). The **entity-derived** producer sections and
-  their ordering are untouched; this is a *purely additive* section for those.
+- **Add** a universal authored-prose section to the disk snapshot carrying the **model-band
+  floor directive** (self-identify → `prompt resolve --band model --model <id>` → re-resolve on
+  change). *Mechanism — aligned to delivered SL-186 (RV-213 carry-over):* a `SourceKind::Static`
+  embed section (the `routing-process.md` pattern), **not** a hymns-corpus band. SL-186's closed
+  band registry (`hymns.rs`: `preamble·harness·model·role·stage·project`, INV-1) has **no
+  `universal` band**, and `preamble`/`project` carry worker-preamble/project prose — so
+  "`universal`-band hymns" was loose wording; the delivered vehicle is one authored Static
+  section. *Placement:* the onboarding **action-tail**, adjacent to PHASE-02's inlined memories
+  (both are immediately-actioned onboarding content), but **before** the build-volatile
+  `ExecPath` "Invoking doctrine" section — which stays last by the cache invariant
+  (`boot.rs:100-103`: volatile tail, governance prefix stays warm). The **entity-derived**
+  producer sections and their ordering are untouched; this is a *purely additive* section for them.
 - **Change the Onboarding section (not additive — a contract change).** Today
   `("Onboarding", SourceKind::Footer)` sits in the core section table (`boot.rs:104-132`),
   rendered by the `Footer` arm from `.doctrine/boot-footer.md` (`boot.rs:292-297`). This slice
