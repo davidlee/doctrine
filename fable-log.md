@@ -80,3 +80,19 @@ next: verify+TDD a fresh isolated backlog code fix (IMP-056 coverage Debug-forma
   Skills speak true now —
   no phantom prompt, no lost flag;
   the copied line runs.
+
+## 04:25 — turn 5: shipped IMP-056 (coverage kebab render), launched fix-queue scout
+observed: verified IMP-056 still real (coverage_verify.rs:261 `format!("{status:?}")`).
+  TDD'd a single-source `CoverageStatus::as_kebab` (requirement.rs, = parse_status
+  kebab vocab), routed status_label + withdrawal_line through it, killed the
+  Debug-spelling leak (InProgress→in-progress). Round-trip test asserts
+  parse_status(st.as_kebab())==st for all 5 variants — locks render/parse against
+  drift. Updated unit + e2e record goldens to kebab register. All green
+  (store 17 / verify 19 / e2e 13,1,15), clippy+fmt clean. Commit 07f9a4a2.
+  To keep the pipeline full, launched scout a7e3ab8d for a vetted queue of more
+  small isolated TDD-able backlog fixes (verify-still-real, low-collision).
+next: process the scout queue; TDD the top verified item.
+
+  Debug name gives way —
+  one kebab token, in and out;
+  parse and render kiss.

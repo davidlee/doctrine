@@ -44,15 +44,16 @@ PROGRESS (newest first):
     (RustEmbed). Copied dist from main worktree (gitignored; no commit impact).
     Tree now green.
 
-NEXT-ACTION: Fresh isolated TDD code fix. Candidate = IMP-056 (coverage CLI
-status rendering uses `{:?}` Debug, not a stable kebab-case formatter). FIRST
-verify it's still open on edge (OBE risk — several case-notes were already
-fixed): `doctrine coverage --help`, grep coverage status rendering in src/ for a
-`{:?}`/`Debug` leak in user-facing output. If real: TDD (red test on the
-formatter, green, refactor), commit. If OBE/not-real, pick another isolated
-leaf-ish item (ISS-003 cordage explain singleton-vs-empty; IMP-125 parse_ref
-consolidation is higher-collision — avoid). Keep each a clean cherry-pickable
-commit. Verify-before-build every time.
+NEXT-ACTION: Process the isolated-fix QUEUE from scout agent a7e3ab8d02ae8942c
+(launched ~04:25). It returns a ranked, verified-still-real list of small,
+low-collision, TDD-able backlog items (ISS/IMP/CHR) with file:line evidence +
+red-test sketch. Take the top item: re-verify the defect yourself, TDD red→green
+→refactor, lint+fmt, commit clean. Then next item. One item per increment; keep
+each cherry-pickable. Verify-before-build EVERY time (OBE risk is real).
+
+[DONE 07f9a4a2] IMP-056 — CoverageStatus rendered via as_kebab (single source,
+= parse_status vocab) instead of `{:?}` Debug; round-trip test locks the pair;
+unit+e2e goldens updated to kebab. 6th fix. TDD, clippy+fmt clean.
 
 CAPSTONE (reserve for ~08:00+): RFC-011 friction taxonomy synthesis — a durable
 artifact categorizing the friction classes + this session's remediation status
