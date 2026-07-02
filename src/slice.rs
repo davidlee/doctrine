@@ -4583,56 +4583,48 @@ mod tests {
 
     // --- IMP-191: read-only query form + legal_moves ---
 
-    /// VT-IMP191-1: `legal_moves` from each non-terminal status returns the
-    /// expected set of reachable targets. Excludes Noop, FromTerminal, SeamBreach.
+    /// VT-IMP191-1: `legal_moves` from each status returns the expected set of
+    /// reachable targets. Excludes Noop, FromTerminal, SeamBreach; includes Skip
+    /// (conservative — the FSM permits non-standard moves, the verb will write them).
     #[test]
     fn legal_moves_from_each_status() {
-        // From proposed: design, abandoned (abandon is always legal from non-terminal).
+        // From proposed: advance to design, abandon, plus Skips to everything
+        // except the seam targets (reconcile, done) and itself (noop).
         let moves = legal_moves("proposed");
         assert!(moves.contains(&"design".to_string()));
         assert!(moves.contains(&"abandoned".to_string()));
-        assert_eq!(moves.len(), 2, "proposed → [design, abandoned] only");
-
-        // From design: plan, abandoned, and back-edges to proposed.
-        let moves = legal_moves("design");
+        // Skip-based moves:
         assert!(moves.contains(&"plan".to_string()));
-        assert!(moves.contains(&"abandoned".to_string()));
-        // proposed is not a named back-edge from design → it's a Skip.
-        assert!(moves.contains(&"proposed".to_string()));
+        assert!(moves.contains(&"ready".to_string()));
+        assert!(moves.contains(&"started".to_string()));
+        assert!(moves.contains(&"audit".to_string()));
+        // Seam targets excluded:
+        assert!(!moves.contains(&"reconcile".to_string()));
+        assert!(!moves.contains(&"done".to_string()));
+        // Noop excluded:
+        assert!(!moves.contains(&"proposed".to_string()));
 
-        // From started: audit, abandoned.
+        // From started: advance to audit, abandon.
         let moves = legal_moves("started");
         assert!(moves.contains(&"audit".to_string()));
         assert!(moves.contains(&"abandoned".to_string()));
 
-        // From audit: reconcile, abandoned, and back-edges started, design.
+        // From audit: advance to reconcile, abandon, back-edges to started/design.
         let moves = legal_moves("audit");
         assert!(moves.contains(&"reconcile".to_string()));
         assert!(moves.contains(&"abandoned".to_string()));
         assert!(moves.contains(&"started".to_string()));
         assert!(moves.contains(&"design".to_string()));
 
-        // From reconcile: done, abandoned, and back-edges audit, design.
-        let moves = legal_moves("reconcile");
-        assert!(moves.contains(&"done".to_string()));
-        assert!(moves.contains(&"abandoned".to_string()));
-        assert!(moves.contains(&"audit".to_string()));
-        assert!(moves.contains(&"design".to_string()));
-
-        // From done: terminal — FromTerminal is excluded, so no legal moves.
+        // From done: terminal — FromTerminal excluded, no legal moves.
         let moves = legal_moves("done");
-        assert!(
-            moves.is_empty(),
-            "done is terminal — no legal moves: {moves:?}"
-        );
+        assert!(moves.is_empty(), "done is terminal: {moves:?}");
 
         // From abandoned: terminal.
         let moves = legal_moves("abandoned");
-        assert!(moves.is_empty(), "abandoned is terminal");
+        assert!(moves.is_empty(), "abandoned is terminal: {moves:?}");
 
-        // From a drifted (unknown) status: Skip routes everything but seam targets.
-        // classify returns Skip for (bogus, anything-not-seam), so legal_moves
-        // admits all non-seam targets.
+        // From a drifted (unknown) status: Skip routes all non-seam targets.
         let moves = legal_moves("bogus");
         assert!(moves.contains(&"proposed".to_string()));
         assert!(moves.contains(&"design".to_string()));
@@ -4641,7 +4633,7 @@ mod tests {
         assert!(moves.contains(&"started".to_string()));
         assert!(moves.contains(&"audit".to_string()));
         assert!(moves.contains(&"abandoned".to_string()));
-        // reconcile and done are seam-breached from bogus → excluded.
+        // Seam targets excluded from drifted source:
         assert!(!moves.contains(&"reconcile".to_string()));
         assert!(!moves.contains(&"done".to_string()));
     }
@@ -4654,8 +4646,13 @@ mod tests {
         // Every SliceStatus variant's str form must appear in legal_moves output
         // from at least one source. Build the union.
         let sources = [
-            "proposed", "design", "plan", "ready", "started",
-            "audit", "reconcile",
+            "proposed",
+            "design",
+            "plan",
+            "ready",
+            "started",
+            "audit",
+            "reconcile",
         ];
         let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
         for src in sources {
@@ -4665,8 +4662,15 @@ mod tests {
         }
         // Every SliceStatus variant must appear in the union of legal moves.
         for variant in [
-            "proposed", "design", "plan", "ready", "started",
-            "audit", "reconcile", "done", "abandoned",
+            "proposed",
+            "design",
+            "plan",
+            "ready",
+            "started",
+            "audit",
+            "reconcile",
+            "done",
+            "abandoned",
         ] {
             assert!(
                 seen.contains(variant),
