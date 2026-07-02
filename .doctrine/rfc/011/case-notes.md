@@ -805,3 +805,6 @@ One harness-level annoyance: rg regex patterns with pipe chars and regex
 metacharacters (`rg -rn "parse::<u32>|parse_ref"`) consistently returned zero
 results in this repo until simplified to separate grep passes. Not
 doctrine-specific, likely a rg + nix interaction.
+
+[backlog; IMP-228-vtgate-srcdelta]
+No incidental complexity. Backlog tooling was smooth — `backlog new`, `backlog tag`, `backlog show` all worked first try. One minor: `backlog tag --add` exists in mental-model but the actual CLI takes positional tags (not a flag) — `--help` clarified.

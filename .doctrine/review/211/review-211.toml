@@ -1,0 +1,56 @@
+id    = 211
+slug  = "imp-191-slice-status-read-only-query-form"
+title = "IMP-191: slice status read-only query form"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "IMP-191"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "No tests for the read-only code path — `run_status` with `None` state is untested"
+detail = """
+The new `let Some(state) = state else { … }` branch in `run_status` (src/slice.rs:801-820) — the entire read-only query form — has zero direct tests. All existing `run_status` tests pass `Some(SliceStatus::...)`. The `legal_moves` helper is likewise untested in isolation. The `phases_cell`, `decorated_status`, and `is_divergent` helpers do have existing coverage, but their composition in the read-only branch and the output format (`canonical_id + decorated + phases:` and the `→` legal-moves line) are asserted nowhere.
+
+Expected: At minimum, a test that calls `run_status(path, id, None, None)` and asserts the stdout contains the expected status line, phase rollup, and legal transitions line. A unit test for `legal_moves` covering each source state's output set. A test that the divergence `⚠` and drift `?` markers appear in the read-only output when applicable.
+
+Risk: The read-only query form could silently produce garbled or empty output after a refactor of the helpers it composes, and nothing would catch it."""
+disposition = "fix-now"
+response = "Agreed. The read-only branch is the entire value of IMP-191 and must be tested. Will add: (1) a test for `run_status(path, id, None, None)` asserting the stdout format, (2) a unit test for `legal_moves` covering each source state, and (3) tests for the divergence/drift marker composition in the read-only output."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "`legal_moves` duplicates the status-variant vocabulary — diverges from `SliceStatus` enum silently"
+detail = """
+`legal_moves` (src/slice.rs:1143-1168) hardcodes the 9 status string literals in a local `let all = […]` array. If a new lifecycle state is added to the `SliceStatus` enum (e.g. a future `archived`), this array must be manually synchronised. The function will silently omit the new variant from legal-move computation — it won't compile-fail, and it won't test-fail (no test exists). The `classify` call inside will return `Skip` (since `(current, new_variant)` won't match any edge), but `legal_moves` never gets to call `classify` because the variant is not in the `all` array.
+
+The cleaner pattern would be to derive the status list from `SliceStatus` (which already has `as_str()`) rather than maintaining a parallel string array. However, I recognize `SliceStatus` is a clap `ValueEnum` and iterating its variants at runtime may require a manual `all_variants()` method or macro — not free. A simpler guard: add a compile-time check (e.g. a `const _: () = assert!(…);` or a test that counts `SliceStatus` variants) to detect divergence.
+
+The user's own task notes flagged this: "will a new variant silently appear as a legal move? (Good: that's conservative. Bad: could show an illegal move before the classify table is updated.)" — but the reverse is worse: a new variant silently *absent* from the list means it's never shown even if it IS a legal move."""
+disposition = "fix-now"
+response = "Fair. The parallel string array is a maintenance hazard. Will add a test that asserts `legal_moves` returns results for every `SliceStatus` variant (count check), so any new variant that's not in the array fails the test. A static compile-time assert would be better but `SliceStatus` is a clap `ValueEnum` without a const-variant-count method; a runtime test at suite time is the practical guard. If clap exposes variant iteration in the future, the test can be upgraded."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "minor"
+title = "`--note` silently ignored in read-only mode — should warn or error"
+detail = """
+When `state` is `None` (read-only path), the `note` parameter is never read — it falls into the `let Some(state) = state else { … }` branch and returns before `note` is used. If a user types `doctrine slice status SL-042 --note "closing after audit"` (forgetting the STATE argument), the note is silently discarded with no feedback. The user gets a read-only output and may not realize their transition was never applied.
+
+Expected: either (a) emit a warning to stderr that `--note` is ignored without STATE, or (b) error if `--note` is passed without STATE (`anyhow::bail!("--note requires a target STATE")`). Option (b) is stricter and more user-friendly — it catches the "should have been a write" case. Option (a) is more permissive but at least doesn't silently swallow user intent."""
+disposition = "fix-now"
+response = 'Yes — silently swallowing `--note` is a UX trap. Will error: `anyhow::bail!("--note requires a target STATE")` when `--note` is passed without STATE. This catches the "forgot the STATE argument" case cleanly.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

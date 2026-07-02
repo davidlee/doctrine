@@ -4,11 +4,11 @@ title = "CLI id-form normalisation: accept both prefixed and bare canonical ids 
 status = "proposed"
 created = "2026-07-02"
 updated = "2026-07-02"
-tags = ["cli", "tech-debt", "ux"]
+tags = []
 
 [relationships]
-needs = []                      # slice→work hard prerequisite
-after = []                      # slice→work soft sequence: { to, rank }
+needs = ["SL-184"]                      # slice→work hard prerequisite
+after = [{ to = "SL-185", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/governance.rs"
