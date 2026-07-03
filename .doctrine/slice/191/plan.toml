@@ -87,7 +87,7 @@ exit_criteria = [
   { id = "EX-4", text = "MODEL band live-observable: `prompt explain --model adherence/low` traces the adherence/low composition in-repo. ROLE band verified via a hermetic fixture / embedded corpus (overlay suppresses it live until PHASE-07)." },
 ]
 verification = [
-  { id = "VT-1", expects = "POL-002 content-gate test (unique fn, e.g. install_hymns_authored_set_has_no_host_literals) enumerates install/hymns/role/worker.md + install/hymns/model/** and asserts absence of the forbidden host-literal list", test_file = "src/install.rs", keywords = ["install_hymns", "no_host_literals", "adherence"], patterns = ["fn .*no_host_literals", "assert.*(cargo|target)"] },
+  { id = "VT-1", expects = "POL-002 content-gate test with a unique fn name (e.g. install_hymns_authored_set_has_no_host_literals) that enumerates install/hymns/role/worker.md + install/hymns/model/** and asserts absence of a named FORBIDDEN_HOST_LITERALS-style list. Keyword the fn name + the forbidden-list constant (whole-file substring), not a line-anchored assert regex (codex F7: verify-vt patterns match per-line; a loop-over-list test asserts on a different line than the literals appear)", test_file = "src/install.rs", keywords = ["no_host_literals", "FORBIDDEN_HOST_LITERALS", "adherence"] },
   { id = "VA-1", expects = "Agent review: role/worker + adherence/low hymns adequately encode the SL-168 defect-class contract and read host-agnostic" },
 ]
 specs        = []
@@ -139,10 +139,11 @@ exit_criteria = [
   { id = "EX-6", text = "A pure `worker_context(traits) -> ContextVector` builder exists, used by both the bake and PHASE-04's prompt check (codex F5 — the structural seam for band-filter assertion)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Frontmatter parser negative tests: malformed / absent traits / unknown keys", test_file = "src/install.rs", keywords = ["fn parse", "traits"], patterns = ["fn .*frontmatter.*(malformed|absent|unknown)"] },
+  { id = "VT-1", expects = "Frontmatter parser negative tests: malformed / absent traits / unknown keys", test_file = "src/install.rs", keywords = ["fn parse", "frontmatter", "traits"] },
   { id = "VT-2", expects = "Trait-less resolve is byte-identical to today (behaviour-preservation of the role-only path)", test_file = "src/install.rs", keywords = ["worker_context", "Band::Role"] },
-  { id = "VT-3", expects = "Covered-trait bake inlines adherence content; uncovered-trait bake is an install-time hard error", test_file = "src/install.rs", keywords = ["adherence/low", "Band::Model"], patterns = ["assert.*(err|panic|hard)"] },
+  { id = "VT-3", expects = "Covered-trait bake inlines adherence content; an uncovered-trait bake is an install-time hard error", test_file = "src/install.rs", keywords = ["worker_context", "adherence/low", "Band::Model"] },
   { id = "VT-4", expects = "Behaviour-preservation: expand_worker_marker + subagent-def drift tests green", test_file = "src/install.rs", keywords = ["expand_worker_marker", "WORKER_RESOLVE_MARKER"] },
+  { id = "VT-5", expects = "Def-declaration test (codex F4): reads the embedded agent defs and asserts the pi/universal dispatch-worker def declares traits = [\"adherence/low\"] and the claude def declares none — so a shipped def that loses its declaration fails, not just a fixture", test_file = "src/install.rs", keywords = ["embedded_agent_defs", "dispatch-worker", "adherence/low"] },
 ]
 specs        = []
 requirements = []
@@ -173,8 +174,8 @@ exit_criteria = [
   { id = "EX-3", text = "New tests ride the check_def_marker_present_role_unresolvable precedent: uncovered-trait finding + missing-Model-band finding." },
 ]
 verification = [
-  { id = "VT-1", expects = "prompt check coverage test: a def declaring an uncovered/typo'd trait yields a finding", test_file = "src/commands/prompt.rs", keywords = ["traits_covered", "check_corpus"], patterns = ["fn .*(uncovered|coverage).*trait"] },
-  { id = "VT-2", expects = "Delivered-band test: a worker def with non-empty traits whose bake drops Band::Model yields a finding (via the shared worker_context builder, not body-substring)", test_file = "src/commands/prompt.rs", keywords = ["worker_context", "Band::Model"], patterns = ["fn .*(model|band).*missing|missing.*(model|band)"] },
+  { id = "VT-1", expects = "prompt check coverage test: a def declaring an uncovered/typo'd trait yields a finding", test_file = "src/commands/prompt.rs", keywords = ["traits_covered", "check_corpus"] },
+  { id = "VT-2", expects = "Delivered-band test: a worker def with non-empty traits whose bake drops Band::Model yields a finding (via the shared worker_context builder, not body-substring)", test_file = "src/commands/prompt.rs", keywords = ["worker_context", "Band::Model"] },
 ]
 specs        = []
 requirements = []
@@ -220,7 +221,7 @@ exit_criteria = [
   { id = "EX-4", text = "Subprocess-arm base-clean coverage decided and recorded (its own beat vs shared funnel)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Reject-and-halt import-gate test in the real import belt: a red imported delta halts and does not land", test_file = "src/worktree/import.rs", keywords = ["classify_import", "check"], patterns = ["fn .*(reject|halt|red|unformatted).*import|import.*(reject|halt)"] },
+  { id = "VT-1", expects = "Reject-and-halt import-gate test in the real import belt: a red (unformatted or lint-fail) imported delta halts and does not land", test_file = "src/worktree/import.rs", keywords = ["classify_import", "check"] },
   { id = "VA-1", expects = "Agent review: base-clean beat is non-mutating in both dispatch skills, invokes the established non-mutating cadence, and does not double-run on the hot path" },
 ]
 specs        = []
@@ -251,7 +252,7 @@ exit_criteria = [
   { id = "EX-2", text = "mem.concept.doctrine.hymn-cascade authored under memory/, embeds via RustEmbed, and validates (`doctrine memory validate`)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Embedded-corpus test (unique fn) asserts embedded_assets() / the shipped memory corpus contains a valid memory keyed mem.concept.doctrine.hymn-cascade", test_file = "src/corpus.rs", keywords = ["hymn-cascade", "embedded"], patterns = ["fn .*hymn_cascade.*(ship|embed)", "assert.*hymn-cascade"] },
+  { id = "VT-1", expects = "Embedded-corpus test (unique fn) enumerates the embedded memory corpus and asserts a valid shipped memory keyed mem.concept.doctrine.hymn-cascade is present. Keyword the enumerator + the slug (whole-file substrings), no line-anchored assert pattern (codex F8)", test_file = "src/corpus.rs", keywords = ["hymn-cascade", "embedded_assets"] },
   { id = "VA-1", expects = "Agent review: READMEs + shipped memory teach the trait-space / self-replaces model with no obsolete rules" },
 ]
 specs        = []
@@ -287,7 +288,7 @@ exit_criteria = [
   { id = "EX-3", text = "`prompt explain --role worker` in-repo shows a single winner composing Framework contract + overlay habits (no ISS-206 doubling, and the Framework enrichment is present not suppressed)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Hermetic composition test (codex F6): with the Framework role/worker enrichment + a re-homed (non-fully-replacing) client overlay, resolve composes BOTH — the Framework contract and the client habits both appear, exactly once", test_file = "src/hymns.rs", keywords = ["compose", "role/worker"], patterns = ["fn .*(compose|overlay).*worker|worker.*(compose|overlay)"] },
+  { id = "VT-1", expects = "Embedded+disk composition test (codex F6): drives load_full_corpus with the embedded Framework role/worker enrichment + a temp-dir disk overlay carrying re-homed (non-fully-replacing) client habits, and asserts resolve composes BOTH — Framework contract and client habits present, exactly once. Must exercise the real embedded+disk loader, not a pure in-memory snippet fixture (src/hymns.rs can't catch disk-overlay/sidecar-shape/loader-composition defects)", test_file = "src/install.rs", keywords = ["load_full_corpus", "role/worker"] },
   { id = "VH-1", expects = "Human acceptance: overlay content split honours POL-002 (client habits only) and live role-resolve composes correctly" },
   { id = "VA-1", expects = "Agent check: `prompt explain --role worker` trace shows no duplicate role/worker slot and the enriched Framework contract is present (not suppressed)" },
 ]

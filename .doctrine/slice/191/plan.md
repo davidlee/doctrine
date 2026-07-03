@@ -20,7 +20,7 @@ knowledge **refresh** (READMEs + shipped memory). The one hard external gate
 - **PHASE-04** — `prompt check`: coverage finding + delivered-`Model`-band assertion.
 - **PHASE-05** — funnel check-cadence wiring (non-mutating base-clean + reject-and-halt import gate).
 - **PHASE-06** — corpus knowledge refresh (README rewrites + shipped concept memory).
-- **PHASE-07** — overlay reconciliation + live role-resolve verification (**SL-193-close-gated**).
+- **PHASE-07** — overlay reconciliation + live role-resolve verification (SL-193 gate **now cleared** — 193 done+merged; runs in-order).
 
 ## Sequencing & Rationale
 
@@ -103,8 +103,10 @@ live/dry dispatch, never as the correctness oracle.
   path needs its own base-clean beat or the shared funnel covers it is decided
   inside PHASE-05 (EX-3), not left open past it.
 - **POL-002 content gate** — PHASE-02 asserts no host literal (`cargo`/`target/`/
-  `just`/`node_modules`) under `install/hymns`; those live only in the
-  `.doctrine/hymns` overlay (PHASE-07).
+  `just`/`node_modules`) in the **SL-191-authored** hymns (`install/hymns/role/
+  worker.md` + `install/hymns/model/**`), NOT the whole `install/hymns` tree: the
+  `harness` band legitimately names host tooling (codex F1) and is out of scope.
+  Host literals live in the `.doctrine/hymns` overlay (PHASE-07).
 - **crane embed-strip** — the new `install/hymns/model/adherence/low.md` and the
   new `memory/mem.concept.doctrine.hymn-cascade/` ride the existing `install/`
   and `memory/` RustEmbed roots (already grafted); validate `just nix-build`
