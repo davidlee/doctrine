@@ -56,7 +56,18 @@ and shipped `mem.concept.doctrine.hymn-cascade` memory teach the trait-space +
 self-`replaces` authoring model — so they land after PHASE-02/03 make that model
 the actual shipped behaviour, avoiding documenting an intent that could still shift.
 
-**The one hard gate — SL-193 close — is isolated to PHASE-07 (F2).** SL-191
+**GATE CLEARED (2026-07-03): SL-193 is `done` and merged to main+edge.** The
+stray hand-authored twin is now a git-tracked authored overlay carrying a
+projected `replaces = "role/worker"` sidecar. PHASE-07 EN-1 is satisfied; the F2
+sequencing constraint is fully lifted and PHASE-07 runs in-order after PHASE-06
+with no external wait. The reconciliation work itself remains substantive — the
+overlay currently *fully* replaces `role/worker` (its thin generic content wins
+over Framework), so PHASE-07 must re-home the client habits (likely to the
+`project` band / a non-replacing slot) so the enriched Framework contract
+actually composes rather than being suppressed. The paragraph below records the
+original gate rationale for provenance.
+
+**The (now-cleared) hard gate — SL-193 close — is isolated to PHASE-07 (F2).** SL-191
 enriches the **Framework** `install/hymns/role/worker.md`. In *this* repo the
 overlay `.doctrine/hymns/role/worker.md` currently `replaces` that slot (a stray
 hand-authored twin, `replaces = "role/worker"`), so a live-repo
