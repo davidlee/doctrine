@@ -1,0 +1,119 @@
+# Implementation plan for SL-195 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-195"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ---------------------------------------------------------------------------
+# PHASE-01 — MCP command portability (POL-002). boot.rs only; file-disjoint from
+# PHASE-02/03 (install.rs + cli.rs), so parallelisable if dispatched.
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "MCP command portability — .mcp.json ${DOCTRINE_BIN:-doctrine}"
+objective = """
+Fix the sole committed POL-002 breach: `desired_mcp_entry` writes the abs exec
+into committed `.mcp.json`. Emit `${DOCTRINE_BIN:-doctrine}` instead. Widen
+`is_doctrine_mcp_entry` to own BOTH the new env form and the legacy abs form, so
+`plan_mcp` refreshes an old absolute entry to the env form without treating it as
+foreign or double-registering. Gitignored baked surfaces (pi `mcp.ts`, hooks)
+are NOT touched — `generate_mcp_extension` and its tests stay green unchanged
+(invariant: baked ⟺ gitignored; design D2/F1).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; boot.rs desired_mcp_entry (:1468), is_doctrine_mcp_entry (:1479), plan_mcp (:1497) present at cited shapes." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "desired_mcp_entry returns command \"${DOCTRINE_BIN:-doctrine}\" with args [\"serve\",\"--mcp\"] — no abs path." },
+  { id = "EX-2", text = "is_doctrine_mcp_entry returns true for BOTH the env-form command and a legacy abs \".../doctrine\" command (args == [serve, --mcp]); still false for foreign command/args." },
+  { id = "EX-3", text = "plan_mcp refreshes a stale abs entry to the env form; foreign sibling servers preserved; malformed input untouched." },
+  { id = "EX-4", text = "generate_mcp_extension unchanged; its bake test (generate_mcp_extension_bakes_exec_path) still passes verbatim." },
+]
+verification = [
+  { id = "VT-1", expects = "boot.rs unit: desired_mcp_entry emits the env-expansion command, no abs path.", test_file = "src/boot.rs", keywords = ["${DOCTRINE_BIN:-doctrine}", "desired_mcp_entry", "serve"] },
+  { id = "VT-2", expects = "boot.rs unit: is_doctrine_mcp_entry recognises the env form AND a legacy abs doctrine command; rejects foreign.", test_file = "src/boot.rs", keywords = ["is_doctrine_mcp_entry", "${DOCTRINE_BIN:-doctrine}"] },
+  { id = "VT-3", expects = "boot.rs unit: plan_mcp migrates a stale abs entry to the env form and preserves foreign servers.", test_file = "src/boot.rs", keywords = ["plan_mcp", "${DOCTRINE_BIN:-doctrine}"] },
+  { id = "VH-1", expects = "OQ-4 live smoke: a .mcp.json whose command is ${DOCTRINE_BIN:-doctrine} connects under /mcp (env-expansion at load, mcp.md:384). Confirmed on CC ≥2.1.198." },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-02 — --dev flag + marketplace source selection. cli.rs + install.rs.
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "--dev flag + marketplace source selection"
+objective = """
+Add a bare `--dev` boolean (cli.rs Install clap struct → InstallArgs.dev,
+following the dry_run pattern). Under `--dev` the claude-arm marketplace source
+is the detected ABSOLUTE project root; default is the github `install.repo` slug.
+`--dev` requires `.claude-plugin/marketplace.json` at that root — absent ⇒ hard
+error (never a silent github fallback). Read plugin + marketplace names from that
+manifest and qualify the install to `doctrine@doctrine` (current code installs
+bare `doctrine`); update the marketplace/plugin presence checks to the qualified
+key. Both modes: `claude plugin marketplace add <source>` + `claude plugin
+install doctrine@doctrine --scope project`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "InstallArgs (install.rs:155), the claude-arm marketplace block (install.rs:410-460), cli.rs Install struct (:79) + InstallArgs build (:1058) present." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "InstallArgs carries `dev: bool`; `doctrine install --dev` parses (cli.rs)." },
+  { id = "EX-2", text = "source selector returns the abs project root under --dev, the github slug otherwise." },
+  { id = "EX-3", text = "--dev with no .claude-plugin/marketplace.json at root returns a clear error; no marketplace add attempted." },
+  { id = "EX-4", text = "install command qualified to doctrine@doctrine; plugin/marketplace presence checks match the qualified key; --scope project retained." },
+]
+verification = [
+  { id = "VT-1", expects = "install.rs unit: source selection returns abs root for dev=true, github slug for dev=false.", test_file = "src/install.rs", keywords = ["dev", "marketplace"] },
+  { id = "VT-2", expects = "install.rs unit: --dev precondition errors when .claude-plugin/marketplace.json is absent at the root.", test_file = "src/install.rs", keywords = ["marketplace.json", "dev"] },
+  { id = "VT-3", expects = "install.rs unit: plugin + marketplace names read from marketplace.json compose the doctrine@doctrine enable key.", test_file = "src/install.rs", keywords = ["doctrine@doctrine"] },
+  { id = "VH-1", expects = "Live: `doctrine install --dev` on this repo → live plugin load, zero network; `git status` clean of any abspath; `claude plugin marketplace list` shows Source: Directory (<abs root>)." },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-03 — reinstall source-refresh (INV-2/3, R4). install.rs; depends on
+# PHASE-02's source selection + an impl-time live probe of the refresh verb.
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "reinstall marketplace source-refresh"
+objective = """
+Close the stale-source gap: the current `if !has_marketplace { add }` skips when
+a `doctrine` marketplace exists by name, retaining a stale source after a repo
+move or a changed `install.repo` slug. Parse the registered source from `claude
+plugin marketplace list` (prints `Source: Directory (/abs)` or the git slug),
+compare against the intended source, and refresh on mismatch. Resolve the refresh
+verb by live probe first (R4): whether `marketplace add <newsrc>` overwrites an
+existing name's source, else `remove`+`add` (remove uninstalls plugins,
+plugin-marketplaces.md:988 → re-install after). `marketplace update` only
+refreshes content at the same path — not a relocation.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete (source selection exists); R4 refresh verb decided by live probe and recorded in the phase sheet." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A pure comparator parses `marketplace list` output and reports registered-vs-intended source match/mismatch (Directory abspath and github slug)." },
+  { id = "EX-2", text = "On mismatch the installer refreshes the registration via the probed verb; on match it is a no-op." },
+  { id = "EX-3", text = "Reinstall after a simulated source change updates the registration with no duplicate marketplace entry (INV-2/INV-3)." },
+]
+verification = [
+  { id = "VT-1", expects = "install.rs unit: source comparator over a `marketplace list` fixture — stale Directory abspath ⇒ mismatch(refresh); matching source ⇒ match(skip).", test_file = "src/install.rs", keywords = ["Directory", "marketplace"] },
+  { id = "VH-1", expects = "Live R4 probe + acceptance: determine the refresh verb, then `--dev`, move the repo, reinstall, and confirm the registered source updates to the new abspath with no duplicate." },
+]
+specs        = []
+requirements = []

@@ -19,12 +19,12 @@ selector = "src/boot.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/main.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "templates/mcp.ts"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"

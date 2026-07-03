@@ -40,7 +40,7 @@ A long clarifying loop collapsed a two-axis slice to one real axis + a POL-002 f
 - `src/boot.rs` — `desired_mcp_entry` (env-expansion command);
   `is_doctrine_mcp_entry` (own the new form + legacy abs — migration); ripples to
   `plan_mcp*` tests. **`generate_mcp_extension` NOT touched.**
-- `src/main.rs` — CLI `--dev` wiring.
+- `src/commands/cli.rs` — CLI `--dev` wiring.
 - `templates/mcp.ts` — **no edit** (runtime `DOCTRINE_BIN || 'doctrine'` already at
   line 341); scope-relevant only. Correct as-is.
 

@@ -84,7 +84,8 @@ axes to one:
 - `src/boot.rs` — `desired_mcp_entry` (env-expansion command),
   `is_doctrine_mcp_entry` (own the new form), `generate_mcp_extension` (drop the
   bake); ripples to `plan_mcp*` tests.
-- `src/main.rs` — CLI `--dev` wiring.
+- `src/commands/cli.rs` — CLI `--dev` wiring (Install clap struct + InstallArgs
+  build; **not** main.rs — design premise corrected at plan-time).
 - `templates/mcp.ts` — **no edit** (runtime `DOCTRINE_BIN || 'doctrine'` fallback
   already present); scope-relevant only.
 
