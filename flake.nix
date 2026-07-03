@@ -84,15 +84,20 @@
           # was always on default `target/` and is unchanged. Do not re-add a
           # shared redirect: it reintroduces the cross-worktree fingerprint thrash
           # this removal fixes.
-          # Share the HOST doctrine binary into the jail. persist-home already
-          # mounts an isolated, writable ~/.cargo; this ro-binds the host's real
-          # install on top (extraOptions applies after persist-home, so it wins)
-          # so host + jail execute ONE physical binary at one path string. Kills
-          # the boot-snapshot version-skew thrash — single source of truth is the
-          # host `cargo install --path .`. ro-bind-try: jail still launches if the
-          # binary isn't installed yet. Tilde expands in the host launcher shell;
-          # in-jail $HOME is also /home/david, so src == dst.
-          (try-readonly (noescape "~/.cargo/bin/doctrine"))
+          # Share the crane-built doctrine into the jail at the cargo path.
+          # persist-home mounts an isolated, writable ~/.cargo; this ro-binds the
+          # IMMUTABLE nix store output over ~/.cargo/bin/doctrine (extraOptions
+          # applies after persist-home, so it wins). src != dst: the dst is the
+          # path every PATH + absolute-path caller already resolves; the src is a
+          # content-addressed store path that `cargo install`'s atomic-rename can
+          # never invalidate. Converts the mid-session stale-bind HARD BREAK
+          # (rename → unlinked inode → hooks/MCP ENOENT) into benign staleness —
+          # the bound store path stays valid for the jail's whole life; a rebuild
+          # produces a NEW store path, picked up only on the next jail cycle. See
+          # IMP-249. dst tilde expands in the host launcher shell (in-jail $HOME is
+          # also /home/david). Dev-iteration binary is ./target/debug/doctrine,
+          # never bound — unaffected.
+          (ro-bind "${doctrine}/bin/doctrine" (noescape "~/.cargo/bin/doctrine"))
           # Put cargo-bin on the jail PATH so the SessionStart hook's bare
           # `doctrine boot` resolves to the shared binary above.
           (add-path "/home/david/.cargo/bin")
