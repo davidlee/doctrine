@@ -4,18 +4,24 @@ default: lint test install
 
 setup: web-build build
 
-quick: fmt lint test
+quick: fmt lint validate
+
+# Fast inner-loop gate — root package only.
+check: fmt lint lint-js validate test build
+
+# Full gate for end-of-phase / CI — includes the cordage workspace crate.
+gate: fmt lint lint-js validate test-all build
+
+validate:
+  doctrine prompt check
+  doctrine doctor
+
+validate-full: validate
 
 # doctrine + skills reinstall; idempotent
 reinstall:
   doctrine install -y
   npx skills add . --agent universal -y
-
-# Fast inner-loop gate — root package only.
-check: fmt lint lint-js test build
-
-# Full gate for end-of-phase / CI — includes the cordage workspace crate.
-gate: fmt lint lint-js test-all build
 
 # # list memories
 # list-memories:
