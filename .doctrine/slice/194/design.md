@@ -65,7 +65,7 @@ src/commands/cli.rs        edit command        — `findings` verb wiring (match
 ```
 
 `findings.rs` imports `graph` (PriorityGraph), `channels`
-(`score`/`blocked_by`/`blocking`/`dep_cycles`/`evicted_seq_edges`/`class_of`),
+(`score`/`base`/`blocked_by`/`blocking`/`dep_cycles`/`evicted_seq_edges`/`class_of`),
 `order` (the extracted ordering primitives), `config` (PriorityConfig).
 `render.rs` imports `findings`. Both engine, acyclic.
 
@@ -91,6 +91,13 @@ pub(crate) fn build_from(scanned, root)                       // delegates:
 Existing callers unchanged ⇒ byte-identical output. **Behaviour-preservation
 gate:** the `graph` + `surface` suites stay green *unmodified*, plus an
 equivalence test (`build_from == build_from_with_cfg(…, load(root))`).
+
+**cfg threads the WHOLE build.** `build_from` loads config **once** (`graph.rs`) and
+uses it for `base_score` *and* passes it to `consequence_post_pass` (leverage/
+optionality coeffs). The extraction must route the **injected** `cfg` to *both* — else
+the β sweep would perturb `base_score` while silently using default consequence coeffs.
+The one-load-threaded-everywhere shape already holds; `build_from_with_cfg` just lifts
+that single load to a parameter. (External review found no second config read.)
 
 ### Purity boundary — pre-built sweep, not an injected closure
 
@@ -120,6 +127,18 @@ pub(crate) struct BetaEndpoints { lo: PriorityGraph /* skew=0 */, hi: PriorityGr
 non-terminal estimate exists (no wasted builds; β-family findings simply do not
 fire — the "starved until estimates set" behaviour, made explicit).
 
+**"Same scan" is `scanned`-only — dep/seq is re-read (external-review F-ext-4).**
+`needs`/`after` are NOT carried on `scanned`; `build_from` re-reads them per entity
+via `dep_seq_for(root, …)` *inside* each build (`graph.rs`). So `base`/`lo`/`hi` share
+the entity set + facets but each re-reads dep/seq topology from disk. `dep_seq_for` is
+a pure function of disk state, so under a **quiescent tree** the three reads are
+byte-identical and the sweep isolates β cleanly. The only divergence trigger is a
+concurrent commit mutating a work item's `needs`/`after` in the sub-second window
+between two of the three sequential reads → a spurious OrderInstability/ArmResequencing
+line (self-correcting next run). **Precondition (R4): quiescent tree during the sweep.**
+Scoped to the β-family (PHASE-02); the single-build core (PHASE-01) cannot exhibit it.
+IMP-243 (fold dep/seq into the scan) would retire R4 by construction.
+
 `detect` stays **graph-only** — it takes the base graph + `Option<&BetaEndpoints>`
 (raw `lo`/`hi` graphs) and derives every order it needs internally via the pure
 `order.rs` primitives. The shell owns disk (scan + the three builds); the
@@ -140,7 +159,7 @@ pub(crate) enum Finding {
     Provenance(ReasonKind),   // wraps EvictedEdge | CycleDegraded — reuses type + render
 }
 impl Finding {
-    fn magnitude(&self) -> f64;            // ranks/caps output — catalogue self-prioritises
+    fn magnitude(&self) -> f64;            // ranks WITHIN a kind group (not global) — see Output ordering
     fn kind_label(&self) -> &'static str;  // group header + json tag
 }
 ```
@@ -154,10 +173,10 @@ overlay edges per node):
 | Fork | `blocking` (out), `class_of` | non-terminal out-deg ≥2 ∧ hub NOT gating-class | arm count | `FORK_MIN_ARMS=2` |
 | Join | `blocked_by` (in) | in-deg ≥2 | prereq count | `JOIN_MIN_PREREQS=2` |
 | GatingFanOut | `blocking` (out), `class_of` | hub gating-class (ADR-017) ∧ non-terminal out-deg ≥2 | block count | `GATING_MIN_BLOCKS=2` |
-| ValueInversion | `score` + dep edges | `score(blocked) − score(blocker) > ε` | gap | `INVERSION_MIN_GAP` |
+| ValueInversion | **`base`** + dep edges | `base(blocked) − base(blocker) > ε` | gap | `INVERSION_MIN_GAP` |
 | Displacement | survey-order vs pure-score-order | `|score_pos − constrained_pos| ≥ ε` | delta | `DISPLACEMENT_MIN_DELTA` |
 | Plateau | `score` over `next` order (`order.rs`) | maximal adjacent run within ε | run length | `PLATEAU_EPS` |
-| OrderInstability | `BetaEndpoints` orders | **adjacent** pair in base order that inverts lo↔hi | positions moved | — |
+| OrderInstability | `BetaEndpoints` orders | **adjacent** pair in base order that inverts β0↔β1 (**endpoint-contested**) | positions moved | — |
 | ArmResequencing | base Fork ∩ `BetaEndpoints` orders | fork whose arm order differs lo↔hi | arms moved | — |
 | Provenance | `dep_cycles` + `evicted_seq_edges` | any eviction / SCC | nodes/edges | — |
 
@@ -174,6 +193,21 @@ edge logic.
   Terminal`) — settling a hub opens *unsettled* work, not already-done arms.
 - **Fork ↔ GatingFanOut precedence:** a gating-class hub with fan-out is reported
   as **GatingFanOut only** (Fork excludes gating-class hubs) — no double report.
+- **ValueInversion compares `base`, NOT `score` (external-review F-ext-2).**
+  `score(blocker)` already folds `leverage = dep_coeff·Σ(base(dependent)+…)` — it is
+  *inflated by the very dependent it gates* (`consequence_post_pass`, `graph.rs`).
+  With `dep_coeff=1` a base-1 blocker gating a base-100 dependent scores ≈101 > 100,
+  so a score-based test would **never fire** — the detector would be dead. Comparing
+  intrinsic `base` (value+risk, pre-consequence) surfaces the real "low-worth item
+  gating high-worth item"; `base` (not `value_dim`) is deliberate — a low-value but
+  high-**risk** blocker has a legitimate reason to be prioritised and must NOT read
+  as an inversion.
+- **Provenance evicted-edge dedupe (external-review F-ext-3).**
+  `channels::evicted_seq_edges(g, node)` is **node-local** — it returns each eviction
+  for *both* endpoints (`src == n || dst == n`, `channels.rs`). The Provenance detector
+  MUST dedupe globally over `(from, to, reason)` (or enumerate evictions once at the
+  graph level) or every evicted seq edge double-reports. Cycle SCCs via `dep_cycles`
+  are already component-deduped — only the edge path needs this.
 - **Order basis differs per finding, all derived via `order.rs`:**
   *Displacement* = position in the **survey order** (actionability→score, the
   constraint-bearing order) vs position in the **pure-score order** (score desc,
@@ -183,7 +217,18 @@ edge logic.
   = the **frontier order** recomputed at β=0 vs β=1.
 - **OrderInstability is bounded to adjacent transpositions** — pairs *adjacent*
   in the base order whose relative order inverts between lo and hi. O(N), not the
-  O(N²) all-pairs flood; captures "the order right *here* is contested".
+  O(N²) all-pairs flood; captures "the order right *here* is contested". Sound for
+  **detection**: any change to the total order forces ≥1 inverted adjacent base pair
+  (external review confirmed), so adjacency never misses that instability *exists* —
+  it only under-describes the magnitude of a multi-position jump.
+- **OrderInstability detects ENDPOINT-contested orderings only (external-review
+  F-ext-1).** Each node's `score(β)` is monotone in β (a positive sum of
+  `1/est_cost(β)` terms), but a *pairwise* score difference of two such sums can cross
+  zero an even number of times inside `(0,1)` while sharing the same sign at β=0 and
+  β=1. So the `{0,1}` sweep can miss an interior order flip and emit "stable" — a
+  **known false-negative class** (R5), accepted at probe grade (D4). The precise
+  flip-β via a finer sweep grid is the deferred refinement, not this slice; the
+  finding's claim is narrowed to endpoint sensitivity accordingly.
 
 **Overlay split:** fork / join / gating / inversion read the **dep** overlay
 (`needs`, hard, Reject — never evicted). Provenance findings read the **seq**
@@ -196,7 +241,12 @@ literals): the six thresholds + `BETA_LO=0.0` / `BETA_HI=1.0`. `PLATEAU_EPS`,
 defaults, calibrated from the first live output.
 
 **Output ordering:** `detect` returns all findings sorted `(kind_label,
-magnitude desc)`; renderer groups by kind. No hard cap (probe wants the field).
+magnitude desc)`; renderer groups by kind. **Kind grouping outranks magnitude by
+design (external-review F-ext-5):** `magnitude()` ranks findings *within* their kind
+section (and caps per-kind if a cap is later added), NOT across the whole output — a
+small fork can precede a large inversion because they sit in different sections. This
+is deliberate: the render is section-per-kind (see the mock-up above), matching the
+"group by `kind_label`" surface. No hard cap (probe wants the field).
 
 ## Surface & render
 
@@ -267,6 +317,16 @@ constants), SL-172 (β-skew cost model), render-source-of-truth discipline
   touches the shared path, watch for it. Out of scope to fix here.
 - **R3 — ε defaults are guesses** until the first live run. The probe itself is
   the calibration instrument (D5).
+- **R4 — β-sweep assumes a quiescent tree (external-review F-ext-4).** `base`/`lo`/
+  `hi` re-read dep/seq from disk per build; a concurrent `needs`/`after` commit
+  mid-sweep can misattribute topology churn as β instability (one spurious line,
+  self-correcting). β-family (PHASE-02) only. Accepted at probe grade; IMP-243 (fold
+  dep/seq into the scan) retires it by construction.
+- **R5 — OrderInstability endpoint-contested only (external-review F-ext-1).** The
+  `{0,1}` sweep misses interior order flips that share the same sign at both endpoints
+  (pairwise score differences are non-monotone in β even though per-node score is
+  monotone). Known false-negative class; precise flip-β via a finer grid is the
+  deferred refinement (D4). Accepted at probe grade.
 
 ## Adversarial review (internal pass — integrated)
 
@@ -297,6 +357,34 @@ Hostile self-review against code; all findings resolved into the design above:
 
 Residual (accepted, tracked as risks): gating/β-family may ship starved (R1);
 ISS-003 adjacency (R2); ε defaults are guesses until first live run (R3).
+
+## Adversarial review (external pass — codex/GPT-5.5, integrated)
+
+Independent hostile pass against the design + substrate. Verdict was "not safe to
+lock; F-ext-1..4 resolve first" — all five integrated above:
+
+- **F-ext-2 (major) — ValueInversion inflated by leverage.** `score(blocker)` folds
+  `leverage` from the very dependent it gates, so a score-based test never fires.
+  **Fixed:** compare intrinsic `base(blocked) − base(blocker)` (catalogue table +
+  detector subtleties). `base` over `value_dim` chosen so a high-risk low-value blocker
+  isn't a false inversion. *(User decision.)*
+- **F-ext-3 (major) — evicted-edge double-report.** `channels::evicted_seq_edges` is
+  node-local (returns each edge for both endpoints). **Fixed:** Provenance detector
+  dedupes globally over `(from, to, reason)` (detector subtleties).
+- **F-ext-4 (major) — "same scan" imprecise; dep/seq re-read per build.** **Resolved
+  by documenting** the quiescent-tree precondition (R4), scoped to β-family; the
+  structural fix is deferred to **IMP-243** (fold dep/seq into the scan), which retires
+  R4. *(User decision: document, not hoist — keeps the `build_from` byte-identical
+  gate intact.)*
+- **F-ext-1 (blocker→resolved) — `{0,1}` sweep misses interior flips.** **Resolved by
+  narrowing the claim** to endpoint-contested (R5, D4); precise flip-β deferred.
+- **F-ext-5 (minor) — magnitude vs kind-group sort.** **Clarified:** magnitude ranks
+  within a kind group; kind grouping outranks magnitude by design (Output ordering).
+
+Confirmed clean by the external pass: `order.rs` extraction, Fork/Join/GatingFanOut
+direction mapping (no inversion), terminal-arm filter + Fork/GatingFanOut precedence
+(F5/F6), the adjacency bound (sound for detection), and cfg-threading through the
+build (no second config read).
 
 ## Follow-ups (out of scope)
 
