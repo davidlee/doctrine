@@ -195,8 +195,8 @@ whether the offending axis can be made classifiable.
 - `prompt check` — corpus integrity: sealed slots present and unshadowed,
   selectors parse, sidecars name real bands, `replaces` unique-most-specific.
   The verb is delivered; its *integration into the `doctrine check` cadence*
-  (a `[verification]` entry, so `check quick/commit/gate` runs it) is
-  forward-intent, not yet wired.
+  is forward-intent — the project's `[verification]` argvs delegate to
+  `just quick/check/gate`, none of which invoke `prompt check`.
 
 The engine (`src/hymns.rs`) is pure — no disk, clock, or env; the seal set is
 passed in — and deterministic: the same `(corpus, context, seal)` yields
@@ -288,7 +288,8 @@ Forward-intent (this spec's target, from RFC-013 positions 4 + F-A/F-B):
 set-valued context model axis with membership matching; conjunctive selector
 pattern-set (intersection targeting); root-wise normalized model specificity;
 repeatable `--model`; and wiring `prompt check` into the `doctrine check`
-cadence (the verb runs today, but no `[verification]` entry feeds it into
-`check quick/commit/gate`). Framed as SL-186 under-delivering its own
+cadence (the verb runs today, but the configured `[verification]` argvs
+resolve to `just quick/check/gate`, none of which invoke it). Framed as
+SL-186 under-delivering its own
 composable-category design; the change lands via a conformance Revision or
 precursor slice (sequencing open at SL-191).
