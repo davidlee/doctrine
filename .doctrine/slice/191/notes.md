@@ -101,6 +101,24 @@ New deliverables: agent-def frontmatter parser, both hymn README rewrites, shipp
 concept memory `mem.concept.doctrine.hymn-cascade`. Selectors +README/+memory
 (design-target); IMP-242 filed (`originates_from SL-191`).
 
+## Plan stage complete (2026-07-03) — see plan.md
+
+7-phase plan locked, `ready`. Hardened over 2 codex/GPT-5.5 passes (all findings in
+plan.md § Codex inquisition). Durable plan-stage gotchas:
+- **verify-vt `patterns` are line-anchored** — a loop-over-forbidden-list test asserts
+  on a different line than the literals, so `assert.*(cargo|target)`-style regex
+  false-fails. Use whole-file keyword + unique fn-name mandates, not shape regex.
+- **Import belt home = `src/worktree/import.rs`** (`classify_import`/`run_import_from_worktree`),
+  NOT `src/dispatch.rs` (design/scope anchors corrected in de65523b).
+- **`doctrine check` is a mutating config-cadence proxy** — no non-mutating variant
+  exists; PHASE-05 must BUILD the fmt-`--check`+lint base-clean cadence.
+- **`resolve_worker_role_body` returns `String`** → PHASE-03 must extract a pure
+  `worker_context(traits) -> ContextVector` so PHASE-04 asserts `Band::Model`
+  structurally (EX-6), not by body-substring.
+- **F1 instance**: `install/hymns/harness/cursor.md` shipped host literals (IMP-245,
+  over-eager cursor); user moving it to overlay. PHASE-02 POL-002 gate scoped to the
+  SL-191-authored set (role/worker + model/**), NOT the whole tree.
+
 ## Content ownership cut (POL-002) — the audit table
 
 Ships in `install/hymns` (doctrine-owned, host-agnostic) vs `.doctrine/hymns`
