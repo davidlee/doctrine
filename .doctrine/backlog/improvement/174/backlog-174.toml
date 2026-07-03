@@ -33,5 +33,8 @@ label = "related"
 target = "IDE-017"
 
 [estimate]
-lower = 3.0
-upper = 13.0
+lower = 4.0
+upper = 10.0
+
+[value]
+value = 3.5

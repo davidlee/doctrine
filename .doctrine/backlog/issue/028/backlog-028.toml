@@ -21,8 +21,8 @@ after    = [{ to = "SL-182", rank = 0 }]                   # item→item soft se
 triggers = []                   # watched source globs: { globs, note? }
 
 [value]
-value = 2.2
+value = 1.5
 
 [estimate]
-lower = 1.5
-upper = 3.0
+lower = 1.0
+upper = 2.0

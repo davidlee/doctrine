@@ -17,8 +17,8 @@ after    = [{ to = "IMP-025", rank = 0 }]                   # item→item soft s
 triggers = []                   # watched source globs: { globs, note? }
 
 [value]
-value = 3.0
+value = 2.0
 
 [estimate]
 lower = 1.0
-upper = 3.0
+upper = 2.5

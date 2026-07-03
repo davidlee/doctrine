@@ -33,7 +33,7 @@ label = "governed_by"
 target = "ADR-012"
 
 [value]
-value = 1.9
+value = 2.5
 
 [estimate]
 lower = 2.0

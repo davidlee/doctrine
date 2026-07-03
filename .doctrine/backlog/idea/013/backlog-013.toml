@@ -19,3 +19,10 @@ tags = ["area:priority"]
 needs    = []                   # item→item hard prerequisite
 after    = [{ to = "IMP-112", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[value]
+value = 1.5
+
+[estimate]
+lower = 2.0
+upper = 6.0

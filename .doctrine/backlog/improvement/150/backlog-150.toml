@@ -25,8 +25,8 @@ label = "drift"
 target = "install/review-ledger.md: the shipped ledger protocol whose invariants should be inlined or linked from MCP tool descriptions"
 
 [value]
-value = 1.5
+value = 2.8
 
 [estimate]
-lower = 0.5
-upper = 2.0
+lower = 3.0
+upper = 6.0

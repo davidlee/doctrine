@@ -24,3 +24,10 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "SL-105"
+
+[value]
+value = 2.8
+
+[estimate]
+lower = 2.5
+upper = 5.0

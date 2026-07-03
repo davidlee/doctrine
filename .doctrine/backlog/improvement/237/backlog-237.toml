@@ -25,3 +25,10 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "concerns"
 target = "SPEC-003"
+
+[value]
+value = 2.0
+
+[estimate]
+lower = 1.0
+upper = 1.5

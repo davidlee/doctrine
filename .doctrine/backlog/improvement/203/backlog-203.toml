@@ -29,7 +29,7 @@ label = "related"
 target = "IMP-169"
 
 [value]
-value = 1.5
+value = 2.0
 
 [estimate]
 lower = 1.5

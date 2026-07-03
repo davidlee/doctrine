@@ -22,7 +22,7 @@ triggers = []                   # watched source globs: { globs, note? }
 
 [estimate]
 lower = 1.0
-upper = 3.0
+upper = 1.5
 
 [value]
-value = 1.5
+value = 1.2

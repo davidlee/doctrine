@@ -26,7 +26,7 @@ target = "RFC-005"
 
 [estimate]
 lower = 2.0
-upper = 4.0
+upper = 5.0
 
 [value]
-value = 2.0
+value = 1.5

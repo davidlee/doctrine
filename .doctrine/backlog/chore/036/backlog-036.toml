@@ -20,3 +20,10 @@ tags = []
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[value]
+value = 2.5
+
+[estimate]
+lower = 3.5
+upper = 10.0

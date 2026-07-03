@@ -27,8 +27,8 @@ role = "concerns"
 target = "PRD-009"
 
 [value]
-value = 5.0
+value = 3.0
 
 [estimate]
 lower = 3.0
-upper = 8.0
+upper = 6.0

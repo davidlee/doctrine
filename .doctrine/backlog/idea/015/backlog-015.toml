@@ -21,4 +21,8 @@ after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [value]
-value = 0.7
+value = 1.0
+
+[estimate]
+lower = 1.5
+upper = 5.0

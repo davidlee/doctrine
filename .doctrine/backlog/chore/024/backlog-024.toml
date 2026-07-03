@@ -21,5 +21,12 @@ after    = [{ to = "ISS-041", rank = 0 }, { to = "IMP-141", rank = 0 }, { to = "
 triggers = []                   # watched source globs: { globs, note? }
 
 [after]
+
+[value]
+value = 3.8
+
+[estimate]
+lower = 6.0
+upper = 18.0
 # ordered after the existing relation-surface backlog items that this review
 # subsumes or touches (sequencing, not hard deps)
