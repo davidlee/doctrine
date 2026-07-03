@@ -12,19 +12,23 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/hymns.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/prompt.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_prompt_*.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_prompt_resolve_golden.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
