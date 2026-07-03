@@ -86,19 +86,43 @@ A long clarifying loop collapsed a two-axis slice to one real axis + a POL-002 f
 - **Behaviour-preservation:** existing `plan_mcp_extension` bake tests + hook tests
   must stay green **unchanged** (we don't touch those paths).
 
-## Open questions for the inquisition / plan
+## Inquisition RV-241 (codex/GPT-5.5) — DONE, 8/8 terminal, all folded in-slice
 
-- **OQ-4 (impl smoke):** confirm `${DOCTRINE_BIN:-doctrine}` in `.mcp.json`
+Design-facet adversarial pass on the locked design + plan. **1 blocker + 4 majors
++ 3 minors confirmed; F3 flag-surface + committed-leak fear ACQUITTED.** Design
+§5.1/§8-R1 corrected, R5/R6/R7 added, §10 external pass filled; plan criteria
+appended. Verdict prose: `review-241.md` §Synthesis.
+
+- **F-1 (blocker, SPEC-009):** `plan_mcp` no-op comparator compared existing cmd
+  vs `exec.display()` (abspath) — env-form entry never hits no-op ⇒ thrash + breaks
+  `plan_mcp_idempotent_when_current`. → PHASE-01 EX-5/EX-6/EX-7, VT-4. **The R1
+  design named the predicate but MISSED the comparator — this is the PHASE-01 crux
+  now, not just the predicate widening.**
+- **F-2 (major):** abs-root assumed not enforced (`root::find` returns `--path`
+  verbatim, root.rs:23) → relative path poisons R4 comparator. → canonicalize once;
+  PHASE-02 EX-5, VT-4.
+- **F-3 (major):** §5.1 misread the 3-plugin manifest. Selection rule pinned:
+  plugin whose `name == marketplace name` (doctrine), never `[0]`. → PHASE-02 EX-6,
+  VT-5 (reordered fixture).
+- **F-4 (major):** substring presence greps false-match `doctrine-memory`/`-partner`
+  (install.rs:527-533). → exact parsed match; PHASE-02 EX-7, VT-6.
+- **F-5 (major):** PHASE-03 deferred verb × swallowed failures ⇒ remove+add failure
+  reports success with doctrine uninstalled. → PHASE-03 EX-4, VT-2 (abort, no swallow).
+- **F-6/F-7/F-8 (minor):** const for env literal (STD-001); outcome carries env-form
+  cmd not abspath; `--dev` prompts/reminders render selected source + qualified key.
+
+## Live probes still carried into execution (NOT blockers)
+
+- **OQ-4 (PHASE-01 VH-1):** confirm `${DOCTRINE_BIN:-doctrine}` in `.mcp.json`
   `command` connects under `/mcp` (docs say yes, mcp.md:384). Live probe.
-- **R4 verb (impl empirical):** does `claude plugin marketplace add <newsrc>`
+- **R4 verb (PHASE-03 EN-1/VH-1):** does `claude plugin marketplace add <newsrc>`
   overwrite an existing name's source, or is `remove`+`add` required (remove
   uninstalls plugins, plugin-marketplaces.md:988 → re-install after)?
   `marketplace update` only refreshes content at the same path, not a relocation.
-  **Probe live before choosing the refresh mechanism.**
-- **F3 (design, provisionally locked):** flag surface = bare `--dev` boolean
-  (author's rec; user said "lock and plan" without countermanding → taken as
-  accepted). The inquisition may reopen: explicit `--marketplace-source
-  directory|github` vs bare `--dev`.
+  **Probe live before choosing the refresh mechanism** — now coupled to F-5's
+  failure-handling requirement (destructive branch must abort, not swallow).
+- **F3 — RESOLVED (acquitted):** bare `--dev` boolean stands; codex concurred with
+  D1 (no extensibility trap; a source enum grafts later without breaking the bool).
 
 ## Cross-refs
 

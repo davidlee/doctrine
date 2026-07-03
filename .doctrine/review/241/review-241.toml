@@ -12,5 +12,117 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-195"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "plan_mcp idempotency comparator left baking the abs path — env-form entry never reaches the no-op branch (SPEC-009)"
+detail = """
+EXPECTED: after `desired_mcp_entry` emits the constant `${DOCTRINE_BIN:-doctrine}`, a re-run over an already-env-form `.mcp.json` converges to `RefreshOutcome::None` — a true no-op (SPEC-009 idempotency; INV-2 "refresh, not skip; already-current ⇒ no write").
+
+OBSERVED: `plan_mcp` decides "current" by `entry.command == command` where `command = exec.display().to_string()` — the ABSOLUTE path (src/boot.rs:1498, compared at :1519). The desired command is now the fixed env literal, so the equality can NEVER hold against an env-form entry: every reinstall is judged stale and rewrites the file as a bogus `Refreshed`. The existing guard `plan_mcp_idempotent_when_current` (src/boot.rs:4046) is written against the old absolute form and will BREAK. Design §8 R1 and PHASE-01 widen the ownership predicate (EX-2) and cover stale→env refresh (EX-3), but NO criterion (EX-1..EX-4) requires the comparator itself to compare against the desired env-form command. The heresy hides between the two arms the plan does name.
+
+FIX: `plan_mcp` must compare the existing command against the *desired* command (a single named const, see the STD-001 finding), not `exec.display()`. Add EX + VT: "an already env-form entry yields RefreshOutcome::None — no write." Confess the comparator, or the installer thrashes the committed file on every boot."""
+disposition = "design-wrong"
+response = "Confessed. The design (§8 R1) named only the predicate arm and the plan omitted the comparator entirely. Reconciled: design §8 R1 rewritten to R1(a) predicate + R1(b) comparator-must-compare-desired-const; PHASE-01 EX-5 (idempotency ⇒ RefreshOutcome::None, no write; comparator against desired command not exec.display()) + VT-4 (already-env-form ⇒ None). plan_mcp_idempotent_when_current to be updated to env form and kept green. Fixed in PHASE-01 before/with the command-form switch."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = '--dev "absolute project root" is not guaranteed at the seam — explicit --path is returned verbatim, poisoning the PHASE-03 source comparator'
+detail = """
+EXPECTED: design §5.2 / §7 D3 / PHASE-02 EX-2 promise the `--dev` marketplace source is the "detected ABSOLUTE project root", and PHASE-03 EX-1 compares that intended source against Claude's registered `Source: Directory (/abs)`.
+
+OBSERVED: `root::find` returns an explicit `--path` UNCHANGED, with no canonicalization (src/root.rs:22-25: `if let Some(path) = explicit { return Ok(path); }`). Only the CWD-walk branch is inherently absolute. So `doctrine install --dev --path .` (or any relative path) feeds a RELATIVE source to `claude plugin marketplace add`, which Claude then absolutizes on its side — while PHASE-03's comparator holds the relative intended source. Registered `/abs` vs intended `rel` never match ⇒ the stale-source guard fires on EVERY reinstall (a second idempotency breach, INV-2/INV-3), or worse, a doubled registration.
+
+FIX: canonicalize/absolutize the resolved root ONCE before `--dev` source selection, and reuse that normalized path for the precondition check, `marketplace add`, and the PHASE-03 comparison. Add a unit with a relative `--path`. The design must state the abs guarantee is enforced, not assumed."""
+disposition = "design-wrong"
+response = 'Confessed. The "absolute project root" was assumed, not enforced (root::find returns explicit --path verbatim). Reconciled: design R5 added (canonicalize once before --dev source selection; reuse for precondition, marketplace add, R4 comparator); PHASE-02 EX-5 + VT-4 (relative --path ⇒ absolute source). Closes the second idempotency wound in PHASE-03.'
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = 'Design misreads the manifest — "read plugins[].name, both resolve to doctrine" but marketplace.json holds THREE plugins; selection rule unstated'
+detail = """
+EXPECTED: design §5.1 claims `<plugin>` and `<marketplace>` are "read from `.claude-plugin/marketplace.json` (`plugins[].name` and top-level `name`) … both resolve to `doctrine`", yielding an unambiguous `doctrine@doctrine` enable key.
+
+OBSERVED: the manifest's `plugins[]` array carries THREE entries — `doctrine`, `doctrine-memory`, `doctrine-partner` (.claude-plugin/marketplace.json:13-29; descriptions warn "install one or the other, not both"). "Read `plugins[].name`" is therefore under-specified: a literal reading selects an array of three, and a naive `plugins[0]` implementation could legally install `doctrine-memory` and still satisfy the vague prose. PHASE-02 VT-3 only asserts the string `doctrine@doctrine` (plan.toml:82) — it hardcodes today's expected answer and would NOT catch a wrong-plugin selection against a reordered manifest.
+
+FIX: pin the selection rule in the design — select the plugin whose `name` equals the top-level marketplace `name` (i.e. exact `doctrine`), not `[0]`. Test against a fixture with the doctrine entry NOT first, so first-entry logic cannot pass. Correct §5.1's "both resolve to doctrine" to reflect the multi-plugin shape."""
+disposition = "design-wrong"
+response = 'Confessed. §5.1 misread the manifest ("both resolve to doctrine" — but plugins[] holds three). Reconciled: §5.1 rewritten with the selection rule — target plugin = entry whose name == top-level marketplace name (doctrine), never plugins[0]; PHASE-02 EX-6 + VT-5 (reordered-manifest fixture, doctrine not first, siblings present). Enable key doctrine@doctrine unchanged.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = 'Presence checks are bare substring greps — claude_plugin_installed("doctrine") false-matches doctrine-memory/doctrine-partner'
+detail = """
+EXPECTED: design R2/R3 and PHASE-02 EX-4 require the marketplace/plugin presence checks to be "updated to the qualified key" — an EXACT identity of doctrine's own marketplace and plugin.
+
+OBSERVED: both guards are raw substring searches on CLI stdout. `claude_plugin_installed("doctrine")` returns `claude plugin list` stdout `.contains("doctrine")` (src/install.rs:532-533, 537-541); `claude_marketplace_has_doctrine()` likewise (:527-528). The marketplace now exposes `doctrine-memory` and `doctrine-partner` (marketplace.json:20,25), each of which contains the substring `doctrine`. So if a teammate has installed `doctrine-partner` but NOT `doctrine`, the presence check reports the doctrine plugin present ⇒ the install step is skipped ⇒ doctrine never installs. The slice edits this exact seam (EX-4), so hardening it is in-scope, not a pre-existing excuse.
+
+FIX: replace the boolean `contains` helpers with exact parsed matches on the qualified key (`doctrine@doctrine` for the plugin; marketplace name `doctrine`) and test with fixtures containing the sibling `doctrine-memory`/`doctrine-partner` lines so a substring cannot false-satisfy."""
+disposition = "fix-now"
+response = 'Folded in-slice (User ruling: "address F4"). Substring presence greps false-match doctrine-memory/doctrine-partner; the slice already edits this seam (R2/EX-4). Reconciled: design R6 added; PHASE-02 EX-7 (exact parsed match on qualified key) + VT-6 (plugin list showing only doctrine-partner ⇒ doctrine ABSENT). Replaces claude_plugin_installed / claude_marketplace_has_doctrine substring logic.'
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "PHASE-03 defers the refresh verb to a live probe while the shell-out failure policy swallows errors — remove+add path can leave doctrine uninstalled yet report success"
+detail = """
+EXPECTED: PHASE-03 is a sound refresh plan whose re-run is safe (INV-2/INV-3 convergence), not a placeholder for a mechanism discovered later.
+
+OBSERVED: the core mutation verb is UNKNOWN at plan-lock — deferred to an impl-time probe (design §8 R4 / plan.toml:95-117: "does `marketplace add` overwrite, else `remove`+`add`"). Meanwhile the forward-step policy is non-fatal and SWALLOWS shell-out failures into `skipped_*` flags while `run_forward_steps` returns `Ok` overall (src/install.rs:315, 430-436, 450-456). If the probe reveals refresh requires the destructive `remove`+`add` (and `remove` uninstalls plugins, plugin-marketplaces.md:988), a failure between `remove` and the re-`add`/re-install leaves the marketplace or plugin GONE while the installer reports success — silent degradation masquerading as idempotency.
+
+FIX: this is not a refutation of deferring the probe — the expected answer is documented — but the plan must (a) commit to handling BOTH branches and their failure modes, and (b) if the destructive branch is taken, abort the Claude forward steps on a mid-refresh failure with a clear remediation message rather than swallowing into `skipped_*`. State this in PHASE-03 exit criteria before code locks."""
+disposition = "design-wrong"
+response = "Confessed. PHASE-03 deferred the refresh verb while the shell-out policy swallows failures into skipped_* — a destructive remove+add failure would report success with doctrine uninstalled. The deferral itself stands (documented expected answer); the failure interaction does not. Reconciled: design R7 added; PHASE-03 EX-4 (handle both probed branches; destructive branch aborts forward steps on mid-refresh failure with remediation msg, never swallow) + VT-2 (simulated refresh failure surfaces error, not silent skip)."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "STD-001 — the env-form command literal ${DOCTRINE_BIN:-doctrine} (and the qualified key doctrine@doctrine) baked inline in code and test keywords, no named constant"
+detail = """
+EXPECTED: STD-001 — magic strings are single-source named constants. The codebase already models this with `MCP_SERVER_KEY` (src/boot.rs:543).
+
+OBSERVED: the design and plan steer `${DOCTRINE_BIN:-doctrine}` directly into `desired_mcp_entry` AND repeat it verbatim across PHASE-01 VT-1/VT-2/VT-3 keyword lists (plan.toml:45-47), with no const named. The qualified plugin/enable key `doctrine@doctrine` is likewise slated to be an inline literal. The MCP arg pair `["serve","--mcp"]` is already duplicated across :1471/:1487/:4040/:4128 — a standing minor breach the fix would compound.
+
+FIX: name the env-form command literal (e.g. `MCP_COMMAND_PORTABLE`) and the qualified key beside `MCP_SERVER_KEY`; have `plan_mcp`'s comparator (see the blocker), `desired_mcp_entry`, and the tests consume the named const rather than retyping the string. Cheap; prevents the comparator/tests drifting from the emitted value."""
+disposition = "fix-now"
+response = "Folded into PHASE-01. The env-form command becomes a single named const beside MCP_SERVER_KEY (STD-001); desired_mcp_entry, the plan_mcp comparator (F-1), and the tests consume it — literal typed once. PHASE-01 EX-6. Prevents the comparator/tests drifting from the emitted value."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "RefreshOutcome::Wired/Refreshed carries the abs exec string — the install report prints the abspath after the file was written env-form (misleading + abspath in logs)"
+detail = """
+EXPECTED: the "registered/refreshed MCP server" report describes what was actually written to `.mcp.json`.
+
+OBSERVED: `plan_mcp` stuffs the abs `command` string into `RefreshOutcome::Wired(command)` / `Refreshed(command)` (src/boot.rs:1517, 1525), and the reporter prints `"{cmd} serve --mcp"` (src/boot.rs:2046-2058). After the env-form switch the file contains `${DOCTRINE_BIN:-doctrine}` but the console still announces the absolute path — a lie, and it re-leaks a host abspath into install logs for no gain (POL-002 in spirit, though not a tracked file).
+
+FIX: have the outcome carry/print the written command form (the env literal), or drop the command string from the outcome entirely. Falls out naturally once the blocker's comparator switches to the desired-command const."""
+disposition = "fix-now"
+response = "Folded into PHASE-01 (falls out of F-1). RefreshOutcome::Wired/Refreshed carries the written env-form command, not the abspath; install report prints no host abspath for the MCP leg. PHASE-01 EX-7."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = '--dev leaves the prompt/reminder text baked to github-source + bare "install doctrine" — the manual-recovery instructions tell a --dev user the wrong commands'
+detail = """
+EXPECTED: "`--dev` is a thin sugar: exactly one argument differs" (design §4) — including the user-facing prompts and the manual-recovery reminder the installer prints on a skipped step.
+
+OBSERVED: the prompt/reminder strings are hardwired to the github posture and the UNQUALIFIED plugin name: `"claude plugin marketplace add {repo}?"` (src/install.rs:426), `"claude plugin install doctrine --scope project?"` (:446), and the skipped-step reminders (:509, :514) echo the same. PHASE-02 EX-1..EX-4 (plan.toml:73-78) qualify the ACTUAL install to `doctrine@doctrine` and swap the source, but say NOTHING about the printed text. Result: a `--dev` user who declines/fails a step is told to run `claude plugin install doctrine` (bare) — which, against the three-plugin marketplace, is ambiguous/wrong — and to add the github `{repo}` rather than their local root.
+
+FIX: add a PHASE-02 exit criterion + test that the prompts and reminders render the SELECTED source and the qualified `doctrine@doctrine` key in both modes."""
+disposition = "fix-now"
+response = "Folded into PHASE-02. The --dev prompts + skipped-step reminders (install.rs:426,446,509,514) render the selected source and the qualified doctrine@doctrine key, not github repo + bare install doctrine. PHASE-02 EX-8."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

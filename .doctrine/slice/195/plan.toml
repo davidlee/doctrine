@@ -30,7 +30,11 @@ into committed `.mcp.json`. Emit `${DOCTRINE_BIN:-doctrine}` instead. Widen
 `plan_mcp` refreshes an old absolute entry to the env form without treating it as
 foreign or double-registering. Gitignored baked surfaces (pi `mcp.ts`, hooks)
 are NOT touched — `generate_mcp_extension` and its tests stay green unchanged
-(invariant: baked ⟺ gitignored; design D2/F1).
+(invariant: baked ⟺ gitignored; design D2/F1). ALSO fix `plan_mcp`'s no-op
+comparator (boot.rs:1519) to compare against the desired env-form command (a
+named const, F-6), not `exec.display()` — else an already-env-form entry never
+hits the no-op branch and every reinstall thrashes the committed file (F-1,
+SPEC-009). Carry the written env-form command in RefreshOutcome (F-7).
 """
 entrance_criteria = [
   { id = "EN-1", text = "design.md locked; boot.rs desired_mcp_entry (:1468), is_doctrine_mcp_entry (:1479), plan_mcp (:1497) present at cited shapes." },
@@ -40,11 +44,15 @@ exit_criteria = [
   { id = "EX-2", text = "is_doctrine_mcp_entry returns true for BOTH the env-form command and a legacy abs \".../doctrine\" command (args == [serve, --mcp]); still false for foreign command/args." },
   { id = "EX-3", text = "plan_mcp refreshes a stale abs entry to the env form; foreign sibling servers preserved; malformed input untouched." },
   { id = "EX-4", text = "generate_mcp_extension unchanged; its bake test (generate_mcp_extension_bakes_exec_path) still passes verbatim." },
+  { id = "EX-5", text = "IDEMPOTENCY (F-1, SPEC-009): plan_mcp over an already-env-form entry returns RefreshOutcome::None — NO write. The no-op comparator compares against the desired env-form command, NOT exec.display(). plan_mcp_idempotent_when_current updated to the env form and passes." },
+  { id = "EX-6", text = "STD-001 (F-6): the env-form command is a single named const (beside MCP_SERVER_KEY); desired_mcp_entry, the plan_mcp comparator, and the tests consume the const — the literal is typed once in src." },
+  { id = "EX-7", text = "REPORTING (F-7): RefreshOutcome::Wired/Refreshed carries the written env-form command; the install report prints no host abspath for the MCP leg." },
 ]
 verification = [
   { id = "VT-1", expects = "boot.rs unit: desired_mcp_entry emits the env-expansion command, no abs path.", test_file = "src/boot.rs", keywords = ["${DOCTRINE_BIN:-doctrine}", "desired_mcp_entry", "serve"] },
   { id = "VT-2", expects = "boot.rs unit: is_doctrine_mcp_entry recognises the env form AND a legacy abs doctrine command; rejects foreign.", test_file = "src/boot.rs", keywords = ["is_doctrine_mcp_entry", "${DOCTRINE_BIN:-doctrine}"] },
   { id = "VT-3", expects = "boot.rs unit: plan_mcp migrates a stale abs entry to the env form and preserves foreign servers.", test_file = "src/boot.rs", keywords = ["plan_mcp", "${DOCTRINE_BIN:-doctrine}"] },
+  { id = "VT-4", expects = "boot.rs unit (F-1): plan_mcp over an already env-form entry ⇒ RefreshOutcome::None, new_json None (no write). The idempotency guard proves the comparator uses the desired command, not the abspath.", test_file = "src/boot.rs", keywords = ["plan_mcp", "idempotent", "None"] },
   { id = "VH-1", expects = "OQ-4 live smoke: a .mcp.json whose command is ${DOCTRINE_BIN:-doctrine} connects under /mcp (env-expansion at load, mcp.md:384). Confirmed on CC ≥2.1.198." },
 ]
 specs        = []
@@ -75,11 +83,18 @@ exit_criteria = [
   { id = "EX-2", text = "source selector returns the abs project root under --dev, the github slug otherwise." },
   { id = "EX-3", text = "--dev with no .claude-plugin/marketplace.json at root returns a clear error; no marketplace add attempted." },
   { id = "EX-4", text = "install command qualified to doctrine@doctrine; plugin/marketplace presence checks match the qualified key; --scope project retained." },
+  { id = "EX-5", text = "ABS-ROOT (F-2): the resolved project root is canonicalized/absolutized ONCE before --dev source selection; the same normalized path feeds the precondition check, marketplace add, and the PHASE-03 comparator. A relative --path yields an absolute source." },
+  { id = "EX-6", text = "SELECTION (F-3): the target plugin is the manifest entry whose `name` equals the top-level marketplace `name` (== doctrine), never plugins[0]. §5.1 selection rule honoured." },
+  { id = "EX-7", text = "PRESENCE (F-4): plugin/marketplace presence checks are exact parsed matches on the qualified key, NOT bare substring — `doctrine-memory`/`doctrine-partner` do not false-satisfy the `doctrine` check." },
+  { id = "EX-8", text = "PROMPTS (F-8): the --dev prompts and skipped-step reminders render the SELECTED source and the qualified `doctrine@doctrine` key, not github repo + bare `install doctrine`." },
 ]
 verification = [
   { id = "VT-1", expects = "install.rs unit: source selection returns abs root for dev=true, github slug for dev=false.", test_file = "src/install.rs", keywords = ["dev", "marketplace"] },
   { id = "VT-2", expects = "install.rs unit: --dev precondition errors when .claude-plugin/marketplace.json is absent at the root.", test_file = "src/install.rs", keywords = ["marketplace.json", "dev"] },
   { id = "VT-3", expects = "install.rs unit: plugin + marketplace names read from marketplace.json compose the doctrine@doctrine enable key.", test_file = "src/install.rs", keywords = ["doctrine@doctrine"] },
+  { id = "VT-4", expects = "install.rs unit (F-2): --dev source selection over a RELATIVE --path returns an absolute source (canonicalized).", test_file = "src/install.rs", keywords = ["dev", "canonical", "relative"] },
+  { id = "VT-5", expects = "install.rs unit (F-3): plugin selection over a reordered-manifest fixture (doctrine NOT first, siblings present) selects `doctrine` by name==marketplace-name, not [0].", test_file = "src/install.rs", keywords = ["doctrine-memory", "doctrine-partner", "name"] },
+  { id = "VT-6", expects = "install.rs unit (F-4): exact presence match — a `plugin list` fixture showing only `doctrine-partner` reports the doctrine plugin ABSENT (substring would false-match).", test_file = "src/install.rs", keywords = ["doctrine-partner", "installed"] },
   { id = "VH-1", expects = "Live: `doctrine install --dev` on this repo → live plugin load, zero network; `git status` clean of any abspath; `claude plugin marketplace list` shows Source: Directory (<abs root>)." },
 ]
 specs        = []
@@ -110,9 +125,11 @@ exit_criteria = [
   { id = "EX-1", text = "A pure comparator parses `marketplace list` output and reports registered-vs-intended source match/mismatch (Directory abspath and github slug)." },
   { id = "EX-2", text = "On mismatch the installer refreshes the registration via the probed verb; on match it is a no-op." },
   { id = "EX-3", text = "Reinstall after a simulated source change updates the registration with no duplicate marketplace entry (INV-2/INV-3)." },
+  { id = "EX-4", text = "FAILURE HANDLING (F-5): the refresh handles BOTH probed branches (add-overwrites and remove+add). If the destructive remove+add branch is taken, a mid-refresh failure ABORTS the Claude forward steps with a clear remediation message — it is NOT swallowed into skipped_* to report overall success with doctrine left uninstalled." },
 ]
 verification = [
   { id = "VT-1", expects = "install.rs unit: source comparator over a `marketplace list` fixture — stale Directory abspath ⇒ mismatch(refresh); matching source ⇒ match(skip).", test_file = "src/install.rs", keywords = ["Directory", "marketplace"] },
+  { id = "VT-2", expects = "install.rs unit (F-5): a simulated refresh-step failure on the destructive branch surfaces an error / abort, not a silent skipped_* success.", test_file = "src/install.rs", keywords = ["refresh", "remove", "error"] },
   { id = "VH-1", expects = "Live R4 probe + acceptance: determine the refresh verb, then `--dev`, move the repo, reinstall, and confirm the registered source updates to the new abspath with no duplicate." },
 ]
 specs        = []

@@ -76,10 +76,15 @@ default:  claude plugin marketplace add <github-slug>          # install.repo
 both:      claude plugin install <plugin>@<marketplace> --scope project
 ```
 
-`<plugin>` and `<marketplace>` are **read from `.claude-plugin/marketplace.json`**
-(`plugins[].name` and top-level `name`), not hardcoded — both resolve to
-`doctrine`, so the enable key `doctrine@doctrine` is **source-agnostic** and
-identical across modes.
+`<plugin>` and `<marketplace>` are **read from `.claude-plugin/marketplace.json`**,
+not hardcoded. The manifest's `plugins[]` array holds **three** entries —
+`doctrine`, `doctrine-memory`, `doctrine-partner` (the last two are standalone
+subsets: "install one or the other, not both"). **Selection rule (F-3):** the
+target plugin is the entry whose `name` equals the top-level marketplace `name`
+(both `doctrine`) — never `plugins[0]`. The marketplace is the top-level `name`.
+So the enable key resolves to `doctrine@doctrine`, **source-agnostic** and
+identical across modes. A test must fix a reordered-manifest fixture (doctrine
+NOT first) so first-entry logic cannot pass.
 
 ### 5.2 Interfaces & Contracts
 
@@ -185,14 +190,22 @@ transcript pointers):
 
 ## 8. Risks & Mitigations
 
-- **R1 — Ownership check breaks on the new command form.**
-  `is_doctrine_mcp_entry` matches `command.file_name() == "doctrine"`;
-  `${DOCTRINE_BIN:-doctrine}` file-names to `doctrine}` (or the literal),
-  so an existing entry would read as *foreign* and never refresh — and a
-  half-migrated `.mcp.json` could double-register. **Mitigation:** widen the
-  ownership predicate to also match the env-expansion command literal; keep the
-  `args == ["serve","--mcp"]` arm. Cover with a migration test (old abs entry →
-  refreshed to env form).
+- **R1 — Ownership check AND idempotency comparator break on the new command
+  form.** Two coupled seams, not one (the inquisition, F-1, caught the second).
+  (a) `is_doctrine_mcp_entry` matches `command.file_name() == "doctrine"`;
+  `${DOCTRINE_BIN:-doctrine}` file-names to itself (no `/`), so an existing
+  env-form entry reads as *foreign* and never refreshes — a half-migrated
+  `.mcp.json` could double-register. (b) **`plan_mcp`'s no-op comparator**
+  (boot.rs:1519) tests the existing command against `exec.display()` — the
+  abspath. Once `desired_mcp_entry` emits the constant env literal, that equality
+  can **never** hold against an env-form entry ⇒ every reinstall is judged stale
+  and rewrites the committed file (a bogus `Refreshed`), and
+  `plan_mcp_idempotent_when_current` (boot.rs:4046) breaks. **SPEC-009
+  idempotency breach.** **Mitigation:** (a) widen the ownership predicate to also
+  match the env literal, keep the `args == ["serve","--mcp"]` arm; (b) the no-op
+  comparator must compare against the **desired command const**, not
+  `exec.display()`. Cover with a migration test (legacy abs → refreshed to env)
+  AND an idempotency test (already env-form ⇒ `RefreshOutcome::None`, no write).
 - **R2 — Bare `doctrine` install unqualified.** Current `claude plugin install
   doctrine` may fail or mis-resolve; the enable key is `plugin@marketplace`.
   **Mitigation:** qualify to `doctrine@doctrine`; update presence checks to the
@@ -212,6 +225,36 @@ transcript pointers):
   required (remove uninstalls plugins, plugin-marketplaces.md:988, so re-install
   after)? `marketplace update` refreshes *content at the same path*, not a
   relocation. Probe live before choosing.
+- **R5 — `--dev` abs-root not guaranteed at the seam (F-2).** The whole `--dev`
+  axis and the R4 comparator rest on an *absolute* project root, but `root::find`
+  returns an explicit `--path` **verbatim** (root.rs:23) — only the CWD-walk
+  branch is inherently absolute. A relative `--path` feeds a relative source to
+  `marketplace add` (Claude absolutizes it) while the R4 comparator holds the
+  relative intended source ⇒ registered `/abs` ≠ intended `rel` ⇒ spurious
+  refresh every reinstall (reopens the idempotency wound). **Mitigation:**
+  canonicalize/absolutize the resolved root **once** before `--dev` source
+  selection; reuse for the precondition check, `marketplace add`, and the R4
+  comparison. Unit with a relative `--path`.
+- **R6 — Substring presence checks false-match sibling plugins (F-4).**
+  `claude_plugin_installed("doctrine")` / `claude_marketplace_has_doctrine()`
+  grep CLI stdout for the bare substring `doctrine` (install.rs:527-533), which
+  matches `doctrine-memory` / `doctrine-partner`. A teammate with only
+  `doctrine-partner` installed reads as "doctrine present" ⇒ install skipped ⇒
+  doctrine never installs. The slice already edits this seam (R2/EX-4).
+  **Mitigation:** exact parsed match on the qualified key (`doctrine@doctrine`
+  for the plugin; marketplace name `doctrine`); test fixtures carrying the
+  sibling lines so a substring cannot false-satisfy.
+- **R7 — Deferred refresh verb × swallowed shell-out failures (F-5).** PHASE-03
+  defers the refresh verb (add-overwrites vs `remove`+`add`) to a live probe,
+  while the forward-step policy swallows failures into `skipped_*` and returns
+  `Ok` overall (install.rs:315, 430-456). If the destructive `remove`+`add`
+  branch is required, a failure between `remove` and re-`add`/re-install leaves
+  the marketplace/plugin **gone** while the installer reports success. The
+  deferral itself is sound (documented expected answer); the failure interaction
+  is not. **Mitigation:** PHASE-03 exit criteria must commit to **both** branches
+  and, on the destructive branch, **abort** the Claude forward steps on a
+  mid-refresh failure with a clear remediation message — never swallow into
+  `skipped_*`.
 
 ## 9. Quality Engineering & Validation
 
@@ -257,5 +300,34 @@ transcript pointers):
 
 ### External / inquisition pass
 
-<!-- lands here -->
+Design-facet inquisition **RV-241** (`--raiser inquisitor`), external adversary
+codex/GPT-5.5, on the locked design + 3-phase plan pre-execution. **Verdict:
+1 blocker, 4 majors, 3 minors confirmed; F3 flag surface + committed-leak fear
+acquitted.** All eight folded in-slice (User ruling). Disposition summary:
+
+- **F-1 (blocker → design-wrong):** `plan_mcp` no-op comparator baked the abspath;
+  reconciled into R1(b) above + PHASE-01 EX-5/VT-4. SPEC-009.
+- **F-2 (major → design-wrong):** abs-root not enforced at the seam; R5 above +
+  PHASE-02 canonicalize criterion.
+- **F-3 (major → design-wrong):** §5.1 misread the 3-plugin manifest; selection
+  rule pinned above (`name == marketplace name`) + PHASE-02 reordered-fixture test.
+- **F-4 (major → fix-now):** substring presence checks; R6 above + PHASE-02
+  exact-parse criterion, sibling-plugin fixtures.
+- **F-5 (major → design-wrong):** deferred verb × swallowed failure; R7 above +
+  PHASE-03 both-branches/abort-on-failure exit criterion.
+- **F-6 (minor → fix-now):** name the env-form command literal as a const beside
+  `MCP_SERVER_KEY` (STD-001); comparator + `desired_mcp_entry` + tests consume it.
+- **F-7 (minor → fix-now):** `RefreshOutcome::Wired/Refreshed` must carry the
+  written env-form command, not the abspath (falls out of F-1); no abspath in logs.
+- **F-8 (minor → fix-now):** `--dev` prompt/reminder strings (install.rs:426,446,
+  509,514) must render the selected source + qualified `doctrine@doctrine` key.
+
+**Acquittals (tried, sound — no charge):**
+- **F3 flag surface (D1):** bare `--dev` boolean stands; codex concurred — no
+  extensibility trap, a source enum grafts later without breaking the boolean.
+- **Committed abspath leak under `--dev`:** none. Abs root lands only in
+  per-machine `known_marketplaces.json`; `--scope project` commits only the
+  portable `enabledPlugins` key. `baked ⟺ gitignored` + POL-002 boundary survive.
+
+Full charge text + terminal dispositions on the RV-241 ledger.
 
