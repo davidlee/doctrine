@@ -451,3 +451,11 @@ run from edge reads `undeclared` because the declaring selector + F5 design
 amendment live only on the impl bundle, not edge — conformance-against-edge is
 structurally red for any dispatched slice until /close lands the bundle. The
 audit must review the bundle surface, not edge, to read conformance truthfully.
+
+[design; SL-194-ext-review-abc]
+- codex mcp model override `gpt-5.2-codex` 400s on a ChatGPT account ("not
+  supported"); dropping the override → default GPT-5.5 worked. Cost one round-trip.
+- backlog `new` creates BOTH `NNN/` dir and a `NNN-slug` symlink; at commit
+  time the double entry needed an `ls` to confirm before path-limiting (shared
+  index, must exclude another agent's untracked IMP-242). Minor: a note that the
+  slug is a symlink alias would save the inspection.
