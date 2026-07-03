@@ -175,8 +175,11 @@ case of "no out-of-set edit," so it ships host-agnostic and stronger.
 
 **Logic:**
 - `src/hymns.rs` — `traits_covered` pure predicate (engine, DRY core).
-- `src/install.rs` — `resolve_worker_role_body` widened (parse `traits:` → set-valued
-  context, `Only([Role, Model])`); coverage predicate → install-time hard error.
+- `src/install.rs` — `resolve_worker_role_body` gains a `traits: &BTreeSet<String>`
+  param (populates `model`, adds `Band::Model`); the **call site** (`:1713`) parses
+  the def's `traits:` frontmatter and passes it. SL-192 already made the context
+  set-valued (`model: BTreeSet::new()`, `Only([Role])`), so this is populate-set +
+  widen-band, **not** a struct migration. Coverage predicate → install-time hard error.
 - `src/commands/prompt.rs` — `check_corpus`/`Check` enumerates `embedded_agent_defs()`,
   parses `traits:`, runs predicate → findings.
 - `src/dispatch.rs` — reject-and-halt post-import check gate in the import belt.
@@ -224,11 +227,45 @@ case of "no out-of-set edit," so it ships host-agnostic and stronger.
   ride it. Unblocked.
 - **SL-193 at audit** — obj #3 `.doctrine/hymns/**` overlay authoring + the stray
   `role/worker.md` twin reconciliation wait on SL-193 **close** (the self-replaces
-  projection must land first, or the overlay doubles). Framework hymns
-  (`role/worker.md`, `model/adherence/low.md`), the bake widening, the lint, and
-  the funnel beats do **not** depend on SL-193 — they can proceed once SL-192 is
-  in (now). Phase ordering should isolate the overlay work behind SL-193.
+  projection must land first, or the overlay doubles).
+- **⚠ Verification contamination (adversarial F2).** The stray *untracked*
+  `.doctrine/hymns/role/worker.md` already on disk makes `prompt resolve --role
+  worker` emit **twice** today (ISS-206). SL-191 enriches the Framework
+  `install/hymns/role/worker.md` and verifies it via that very resolve — so SL-191's
+  role-band resolve verification is **contaminated until SL-193 reconciles the
+  twin**. Therefore the dependency is stronger than "obj #3 only": SL-191's
+  *execution* (any phase that asserts `prompt resolve --role worker` output) waits
+  on SL-193 close, OR removes the stray twin as an explicit precondition. Only the
+  pure-unit work (the `traits_covered` predicate, `model/adherence/low.md` content,
+  bake signature) is genuinely SL-193-independent. Phase ordering must sequence the
+  role-resolve verification behind SL-193.
 - `after: SL-192, SL-193` recorded.
+
+## Adversarial review (internal pass, 2026-07-03)
+
+- **F1 — layering cycle on `prompt check`→`embedded_agent_defs`. CLEARED.**
+  Checked: `commands/prompt.rs` already imports `crate::install::` (one-directional);
+  `install.rs` does not import `commands::prompt`. No ADR-001 cycle. `embedded_agent_defs`
+  rides the existing edge.
+- **F2 — role-resolve verification contaminated by the stray un-reconciled twin
+  until SL-193 closes. STANDS, integrated** into Sequencing (execution, not just
+  obj #3, waits on SL-193 close / stray-twin removal).
+- **F3 — churn overstated. FIXED.** SL-192 already set-valued the context; the bake
+  change is a `traits` param + populate-set + widen-band, recorded in Code impact.
+- **F4 — marker sentinel smell (minor, plan-time).** The literal
+  `{{ prompt resolve --role worker }}` reads as role-only but now resolves role +
+  traits. Decide at plan whether to rename `WORKER_RESOLVE_MARKER` (blast radius:
+  both shipped defs + constant) or keep it with a code comment. Non-blocking.
+- **F5 — precision (minor).** (a) The base-clean invariant "only the worker's files
+  can be dirty" is exact for **formatting**; for **lint** it means "the delta caused
+  any new red" (whole-crate clippy) — same responsibility, looser phrasing. (b)
+  `traits_covered` must decide "covered" via the **engine membership matcher**
+  (a declared key fires ≥1 model snippet), not string equality — so `adherence/_default`
+  covers a declared `adherence/low`. Reuses `hymns.rs` match semantics (DRY).
+- **F6 — watch-item (not a defect).** With only `adherence/low` populated, SL-191
+  exercises cross-band *union* (adherence ∪ role), not SL-192's headline within-band
+  *intersection* targeting — which ships with no live consumer until `capability/*`
+  populates. Acceptable (YAGNI); noted so the gap is visible.
 
 ## Open code-details (resolve at plan time, non-blocking)
 
