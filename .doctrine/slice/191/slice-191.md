@@ -119,6 +119,17 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
 - **OQ — ownership cut per contract line.** Confirm the whole negative contract is
   expressible on the owned "declared file set / touch only what you're told"
   primitive, pushing all Rust specifics to the overlay. Believed mostly yes.
+- **OQ — required-trait `prompt check` lint (SPEC-023 OQ-3, routed here from
+  SL-192).** SL-192 delivers the set-valued trait engine but has nothing to lint
+  against — trait *declarations* live in the def, which is this slice's surface.
+  So the T2-mitigation lint lands here: `prompt check` warns when a worker def
+  declares no key under a required trait root (e.g. no `adherence/*`), catching a
+  def that silently misses its guidance (RFC-013 §5 T2 watch-item). Contingent on
+  this slice introducing declared trait sets in def frontmatter (SPEC-023 D5 /
+  FR-010) and keying its model hymns on trait paths (`model/adherence/low`, …)
+  rather than the identity path `model/deepseek/_default` the current scope names
+  — reconcile that in `/design`. Decide: which roots are "required", and whether
+  the diagnostic is warn or error.
 - **ASM** — POL-002: `install/hymns` ships only doctrine-owned universal contract;
   `cargo`/`target/`/ADR-001 specifics live in `.doctrine/hymns`. `doctrine check`
   is the sanctioned formatter seam (no host command in shipped code).
