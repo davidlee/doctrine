@@ -3,7 +3,7 @@ version = 1
 
 id = 322
 slug = "load-the-snippet-corpus-as-a-union-of-compile-embedded-installhymns-framework-and-on-disk"
-title = "Load the snippet corpus as a union of compile-embedded install/hymns (framework) and on-disk .doctrine/hymns (user), deriving slot+selector from path with per-axis sidecar supersede, and deriving provenance from the source root, never a stored flag."
+title = "Load the snippet corpus as a union of compile-embedded install/hymns (framework) and on-disk .doctrine/hymns (user), deriving slot+selector from path with per-axis sidecar supersede, and deriving provenance from the source root, never a stored flag; install-time projection of an exposed editable starter also writes a self-replaces sidecar so the projected overlay suppresses its framework origin rather than doubling it."
 status = "pending"
 kind = "functional"
 

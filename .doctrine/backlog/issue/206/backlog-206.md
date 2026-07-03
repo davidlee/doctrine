@@ -57,7 +57,37 @@ resolver's compose invariant that will mislead any future overlay author: editin
 the User twin to diverge would then emit *both* the old Framework text and the new
 User text. Fix before overlays are used in anger.
 
+## Resolution — design settled (REV-019)
+
+Design call landed in **REV-019** (applied against SPEC-023). Verdict: not a
+wontfix — the spec self-contradicted (narrative promised override, mechanism
+delivered append), so it was reconciled to affirm the override intent.
+
+**Chosen fix = option 3** (projector writes `replaces = "<own slot>"`), *not*
+option 1 (implicit same-slot override, which mutates INV-2 and was rejected).
+Grounding: expose becomes the mirror of seal — seal drops the user twin
+(framework wins), expose has the user twin self-`replaces` the framework twin
+(user wins). Both single-emit, via the **existing** `replaces` mechanism; INV-2
+untouched. Pressure-tested against `src/hymns.rs`: the projected user snippet is
+the unique strict top of its slot (provenance tie-break), so it validates as the
+legal replacer (INV-3 passes); the self-edge is excluded from the cycle graph.
+Covers both the unedited twin (dedup) and the edited-divergence case
+(customisation genuinely overrides).
+
+**Spec now mandates it** — SPEC-023 REQ-322 (projector writes the sidecar),
+REQ-323 (seal/expose symmetry), REQ-329 (self-`replaces` suppression), plus the
+precedence / suppression / Concerns prose.
+
+**Known gap (out of scope):** a hand-authored snippet at an exposed slot with no
+projection sidecar still doubles — only implicit same-slot override would cover
+it, and that is rejected. Record a follow-up if demand appears.
+
+**This issue stays open as the IMPLEMENTATION work item**: make
+`expand_worker_marker` / the install-time projector emit the `replaces=<own slot>`
+sidecar for exposed starters. Engine (`src/hymns.rs`) needs no change.
+
 ## Relates
 
 - SL-186 (cascade resolver — the home); SL-187 (delivery/bake).
 - Discovered by IMP-197 (worker prompt template) preflight.
+- Governed by REV-019 → SPEC-023 (REQ-322/323/329). `references` edge recorded.

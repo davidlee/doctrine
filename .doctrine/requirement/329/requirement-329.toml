@@ -3,7 +3,7 @@ version = 1
 
 id = 329
 slug = "permit-suppression-only-via-replaces-legal-only-on-the-unique-most-specific-active-snippet-of-its"
-title = "Permit suppression only via replaces, legal only on the unique most-specific active snippet of its slot; duplicate targets, non-top replacers, and cycles are authoring errors surfaced by prompt check/validate, never silently alpha-ordered."
+title = "Permit suppression only via replaces, legal only on the unique most-specific active snippet of its slot; duplicate targets, non-top replacers, and cycles are authoring errors surfaced by prompt check/validate, never silently alpha-ordered; an exposed projected editable starter carries a self-replaces on its own slot, suppressing its framework origin (the expose-side mirror of seal) so it wins single-emit, not appends."
 status = "pending"
 kind = "functional"
 

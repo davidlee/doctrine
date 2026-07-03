@@ -22,6 +22,11 @@ after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
 [[relation]]
+label = "references"
+role = "concerns"
+target = "REV-019"
+
+[[relation]]
 label = "related"
 target = "SL-186"
 

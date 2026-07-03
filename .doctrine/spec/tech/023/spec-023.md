@@ -54,7 +54,11 @@ The loader (the one impurity, in `src/install.rs`) unions both roots at read
 time; **provenance is derived from the source root**, never stored. The
 **seal set** (embedded, from the install manifest) is enforced at resolution:
 a user-provenance snippet whose slot is sealed is dropped *before matching* —
-sealed framework content wins by active exclusion of disk twins.
+sealed framework content wins by active exclusion of disk twins. **Expose is
+the symmetric complement**: at an unsealed slot the projected editable starter
+is kept and carries a self-`replaces` on its own slot, so the user overlay
+suppresses its framework origin (§ Suppression) and the slot still resolves
+single-emit — the user wins by suppression, not by ordering.
 
 **Bands** are a closed registry in fixed order — position, not identity:
 `preamble · harness · model · role · stage · project`. A band decides *where in
@@ -103,8 +107,12 @@ band → specificity → provenance(framework < user) → alpha(full slot path)
 ```
 
 Specificity dominates provenance: a framework exact-trait snippet outranks a
-user broad one; the user wins only the *same-slot* tiebreak (the legitimate
-customisation). Within a band, specificity leads with the **band's namesake
+user broad one. The same-slot provenance tiebreak is **ordering only** — it
+reorders the twins, it does not suppress. An exposed projected editable starter
+therefore *overrides* its framework origin not by this tiebreak but by carrying
+a self-`replaces` (§ Suppression, the expose-side mirror of seal); that is where
+"the legitimate customisation wins" is actually delivered. Within a band,
+specificity leads with the **band's namesake
 axis**, then the sum of other pinned axis depths — lexicographic
 `(band_axis_depth, Σ other)` — so axis-count can never bury an exact primary-
 axis match.
@@ -135,6 +143,20 @@ replacers targeting one slot, a non-top replacer, and any cycle are authoring
 errors surfaced by `prompt check`/`validate` — never silently alpha-ordered. A
 user replacer may suppress framework; a framework replacer can never reach a
 user snippet (user is never lower in the order).
+
+A `replaces` **may target its own slot** (a self-edge, excluded from the cycle
+graph): it suppresses every other active member of the slot but not itself.
+This is the mechanism behind **expose**. When the projector writes an exposed
+editable starter to disk, it also writes the sidecar `replaces = <own slot>`;
+the projected user snippet is the unique strict top of its slot (provenance
+breaks the same-slot tie), so it validates as the legal replacer and suppresses
+the framework twin. Seal and expose are thus the two sides of one coin — seal
+drops the user twin before matching (framework wins), expose has the user twin
+self-`replaces` the framework twin (user wins) — both single-emit. Note the
+boundary: a **hand-authored** snippet at an exposed slot that carries no such
+sidecar is not covered — it doubles, and is out of scope for the projection
+mechanism (it would require making same-slot override implicit, which this spec
+does not do).
 
 ### The classification layer
 
@@ -214,9 +236,13 @@ injection) depends on that determinism.
   fine-tuning; a missing or stale trait key degrades gracefully to broader
   `_default`/universal content. Delivery may be best-effort (floor +
   supplement), and staleness is bounded by construction.
-- **Double-emit at box intersections.** An agent inside two duplicated boxes
-  receives the shared body twice — wasteful, never incorrect. Accepted as the
-  duplication valve's cost.
+- **Double-emit at box intersections.** An agent inside two **author-chosen**
+  overlapping selector boxes receives the shared body twice — wasteful, never
+  incorrect. Accepted as the duplication valve's cost. This is scoped to
+  authored box intersections only: a **seal/expose projection twin** is *not*
+  this case — the exposed projected starter self-`replaces` its framework origin
+  (§ Suppression), so it resolves single-emit and does not ride this valve
+  (REV-019).
 - **Authoring legibility.** The box/union model asks authors to reason about
   taxonomy shape. `prompt explain` is the mitigation: precedence must always be
   reconstructible from a trace, not folklore.

@@ -3,7 +3,7 @@ version = 1
 
 id = 323
 slug = "enforce-seal-at-resolution-drop-any-user-provenance-snippet-whose-slot-is-in-the-embedded-seal-set"
-title = "Enforce seal at resolution: drop any user-provenance snippet whose slot is in the embedded seal set before matching, so sealed framework content wins by active exclusion of disk twins."
+title = "Enforce seal at resolution: drop any user-provenance snippet whose slot is in the embedded seal set before matching, so sealed framework content wins by active exclusion of disk twins; the exposed complement is symmetric — the user twin is kept and self-replaces the framework twin, so an exposed slot resolves single-emit with the user overlay winning."
 status = "pending"
 kind = "functional"
 
