@@ -12,5 +12,23 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-194"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Ratified worker interpretations (arm-order basis + non-payload moved magnitude) vs literal design sketch"
+detail = "Observed: ArmResequencing orders fork arms among themselves (arms need the hub → absent from the actionable frontier, so 'arm order within frontier order' is perpetually empty); each β variant carries a non-payload moved:usize sourcing magnitude(). Expected (design.md): catalogue table mandates magnitude = 'positions moved'/'arms moved' (so moved is design-specified, not a payload change — JSON stays {high,low}/{hub,order_lo,order_hi}); arm order 'differs lo↔hi' with derivation left unspecified. Both are faithful resolutions of underspecified points, ratified at VH-1, and documented in design.md's PHASE-02 verdict section."
+disposition = "aligned"
+response = "Magnitude semantics (positions/arms moved) were design-mandated in the catalogue table; the moved:usize field carries that spec internally with payloads unchanged. Arm-order-among-arms is a faithful resolution of an underspecified derivation. Both ratified by the user at VH-1 and recorded in design.md's PHASE-02 verdict section — design now tells the truth; no reconcile write needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "OrderInstability output volume (62 lines, ~⅓ of adjacent frontier pairs) — probe-grade, unbounded"
+detail = "Observed: live run at candidate/194/review-001 emits 62 order-instability endpoint-contested pairs alongside 1 arm-resequencing, 1 fork, 96 displacements, 30 plateaus. ~⅓ of adjacent actionable-frontier pairs flip β0↔β1. Expected (design): contested orderings surface as the differentiated β-family value (D1/D4); no volume bound specified. The detector is correct-by-design (endpoint-contested, sound-for-detection per the adjacency proof + R5). Volume is a rendering/threshold concern, not a defect; a magnitude/score-gap gate is the refinement."
+disposition = "tolerated"
+response = "Probe-grade output volume consciously accepted — the probe's purpose was to judge whether contested orderings read useful (VH-1: useful). The detector is correct; volume/threshold tuning is captured as IMP-247 (order-instability magnitude/score-gap gate) and IMP-248 (rendering fold-into-survey), both originates_from SL-194. Not a defect to fix in-scope."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
