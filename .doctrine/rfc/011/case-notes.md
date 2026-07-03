@@ -319,3 +319,15 @@ Solo-fork audit hit real process friction (SL-192, RV-238):
      committed dispatch ledger + fails the classification parity test) — captured
      ISS-207. Auditing on the shared edge tree couples a slice audit to whatever
      else is red on edge; the fork gate (exit 0) was the clean SL-192 evidence.
+
+[reconcile+close; SL-192-close-238]
+Close pre-check `doctrine check gate` is repo-global (full test suite), so a
+single unrelated red test (ISS-207, `.doctrine/dispatch/` gitignore parity)
+couples close-of-SL-192 to repo-wide gate health. SL-192 correctness was
+independently proven (fork gate exit 0 + edge conformance 4/4), yet close
+required a documented-override judgment call rather than a clean green. Every
+close on edge will hit the same forced judgment until ISS-207 is fixed. The
+terminal transition itself (`slice status done`) correctly gates only on RV
+blockers, not the test gate — so the friction is skill-level (pre-check) vs
+binary-level (transition) divergence, not a hard block. Reconcile itself was
+clean: F-1 unlink one verb, F-3 deferral one documented decision.
