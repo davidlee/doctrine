@@ -77,6 +77,34 @@ claude plugin install doctrine@doctrine --scope project
   (don't inherit CC's silent-orphan behaviour).
 - Idempotent re-runs.
 
+## `--dev` is a posture, not one behaviour — exec-path baking is the second axis
+
+The marketplace source (github vs local dir) is only the first thing that differs
+between a dev install and a consumer install. The second, surfaced 2026-07-03: the
+**pi/codex MCP + hook exec paths** the installer bakes.
+
+`doctrine claude install` (pi arm) resolves the current PATH doctrine and bakes it
+via `--define BIN_PATH=…` into the generated
+`.pi/extensions/doctrine/mcp.ts` (`const BIN_PATH = "/home/<user>/.cargo/bin/doctrine"`).
+That is a per-machine absolute path shipped into a generated artifact — the same
+class of non-portability as a literal home path in a source template (which was
+also found and fixed to bare `'doctrine'` in `templates/mcp.ts`).
+
+`--dev` should therefore **not bake an absolute exec path**: leave the consumer
+resolving `doctrine` via PATH (or `DOCTRINE_BIN`), so a rebuilt/reinstalled binary
+is picked up without a stale hardcode. Consumer (normal) mode may still bake a
+resolved path if that's desired for hermeticity — TBD, same open decision tracked
+in [[IMP-249]] (bake-nothing vs bake-resolved).
+
+Related non-baked hardcodes the installer does NOT own (manual edits, out of scope
+here but part of the same census): `.pi/extensions/doctrine/index.ts` and
+`.codex/hooks.json` both carry literal `/home/<user>/.cargo/bin/doctrine`. See the
+full census in [[IMP-249]].
+
+Framing: `--dev` = *load and resolve everything live from this working tree, no
+network, no per-machine bake*; default = *distributable, self-contained*. Both
+marketplace-source and exec-path-baking are instances of that one axis.
+
 ## Open questions
 
 - OQ-1: where does `--dev` point `path` — the repo root (dev-on-doctrine) or a
