@@ -27,9 +27,10 @@ pub(crate) enum PromptCommand {
         #[arg(long)]
         harness: Option<String>,
 
-        /// Model key (e.g. "anthropic/claude-sonnet-4").
+        /// Model key (e.g. "anthropic/claude-sonnet-4"). Repeatable — each
+        /// occurrence adds a member to the context trait set (membership matching).
         #[arg(long)]
-        model: Option<String>,
+        model: Vec<String>,
 
         /// The dispatch arm: "subagent" or "subprocess".
         #[arg(long)]
@@ -70,9 +71,10 @@ pub(crate) enum PromptCommand {
         #[arg(long)]
         harness: Option<String>,
 
-        /// Model key (e.g. "anthropic/claude-sonnet-4").
+        /// Model key (e.g. "anthropic/claude-sonnet-4"). Repeatable — each
+        /// occurrence adds a member to the context trait set (membership matching).
         #[arg(long)]
-        model: Option<String>,
+        model: Vec<String>,
 
         /// The dispatch arm: "subagent" or "subprocess".
         #[arg(long)]
@@ -210,7 +212,7 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
 fn build_ctx(
     role: &str,
     harness: Option<String>,
-    model: Option<String>,
+    model: Vec<String>,
     arm: Option<&str>,
     stage: Option<String>,
     band: &[String],
@@ -229,8 +231,8 @@ fn build_ctx(
         crate::hymns::BandFilter::Only(set)
     };
 
-    // PHASE-01 keeps `--model` single-valued; wrap it into a singleton context set
-    // (empty when absent = the unpinned don't-care). PHASE-02 makes it repeatable.
+    // Repeatable `--model` builds the context trait set (membership matching);
+    // absent = empty set = the unpinned don't-care, one occurrence = singleton.
     let model = model
         .into_iter()
         .collect::<std::collections::BTreeSet<String>>();
