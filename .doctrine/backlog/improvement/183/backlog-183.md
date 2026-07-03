@@ -36,7 +36,13 @@ make the read surface match the write surface.
 | **Slice** | Yes | `SliceDoc` has `estimate: Option<EstimateFacet>`, `value: Option<ValueFacet>` |
 | **Backlog** (ISS/IMP/CHR/RSK/IDE) | No | `Doc` has `facet: Option<RiskFacet>` only; `[estimate]`/`[value]` TOML sections ignored by serde |
 | **Knowledge** (ASM/OBS/etc.) | No | `RawRecordToml` has `deny_unknown_fields = false` → TOML parses but fields dropped |
-| **Spec, ADR, Revision, Review, REC, Concept-map, Memory** | Not yet checked | |
+| **ADR / Policy / Standard** | ✅ Now surfaced (IMP-183) | `Doc` (governance.rs) has `estimate`/`value` with lenient deser |
+| **Spec** | ✅ Now surfaced (IMP-183) | `Spec` has `estimate`/`value` with lenient deser |
+| **Revision** | ✅ Now surfaced (IMP-183) | `RevDoc` has `estimate`/`value` with lenient deser |
+| **Review** | ✅ Now surfaced (IMP-183) | `ReviewDoc` has `estimate`/`value` with lenient deser |
+| **REC** | ✅ Now surfaced (IMP-183) | `RecDoc` has `estimate`/`value` with lenient deser |
+| **Concept-map** | ✅ Now surfaced (IMP-183) | `ConceptMapDoc` has `estimate`/`value` with lenient deser |
+| **Memory** | ✅ Now surfaced (IMP-183) | `Memory` has `estimate`/`value` parsed from `RawMemoryToml.extra` |
 
 The facet commands (`estimate set`/`value set`) are kind-agnostic — they write via
 `entity::id_path` to any kind's TOML. But only `SliceDoc` currently deserialises

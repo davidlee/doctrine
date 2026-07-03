@@ -362,6 +362,18 @@ pub(crate) struct ConceptMapDoc {
     pub(crate) description: String,
     #[serde(default)]
     pub(crate) dsl: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::estimate::deserialize_lenient"
+    )]
+    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::value::deserialize_lenient"
+    )]
+    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 /// Parse a concept-map reference - `CM-001`, `cm-1`, or the bare id `1` - to its
@@ -1152,6 +1164,18 @@ fn format_show(
     if !doc.description.is_empty() {
         parts.push(format!("\nDescription: {}", doc.description));
     }
+    if let Some(ref est) = doc.estimate {
+        parts.push(format!(
+            "\nestimate: {}\n",
+            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+        ));
+    }
+    if let Some(ref val) = doc.value {
+        parts.push(format!(
+            "\nvalue: {}\n",
+            crate::value::format_value_normal(val, "points")
+        ));
+    }
     if !body.trim().is_empty() {
         parts.push(format!("\n\n---\n\n{body}"));
     }
@@ -1199,6 +1223,27 @@ fn show_json(
       "dsl": doc.dsl,
       "body": body,
     });
+    if let Some(ref est) = doc.estimate
+        && let Some(obj) = value.as_object_mut()
+    {
+        obj.insert(
+            "estimate".to_string(),
+            serde_json::json!({
+                "lower": est.lower,
+                "upper": est.upper,
+            }),
+        );
+    }
+    if let Some(ref val) = doc.value
+        && let Some(obj) = value.as_object_mut()
+    {
+        obj.insert(
+            "value".to_string(),
+            serde_json::json!({
+                "value": val.value,
+            }),
+        );
+    }
     if edges
         && let Some(p) = parsed
         && let serde_json::Value::Object(ref mut map) = value

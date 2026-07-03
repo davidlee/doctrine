@@ -168,6 +168,8 @@ fn compose_status_rec(
         }],
         evidence_ref: evidence,
         tags: Vec::new(),
+        estimate: None,
+        value: None,
     }
 }
 
@@ -187,6 +189,8 @@ fn compose_redesign_rec(req: &str, slice: &str, evidence: Vec<CoverageKey>) -> R
         status_delta: Vec::new(),
         evidence_ref: evidence,
         tags: Vec::new(),
+        estimate: None,
+        value: None,
     }
 }
 

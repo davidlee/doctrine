@@ -1271,6 +1271,8 @@ pub(crate) struct Memory {
     pub(crate) trust_level: String,
     pub(crate) severity: String,
     pub(crate) weight: i64,
+    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 pub(crate) struct MemoryCatalogRecord {
@@ -1332,7 +1334,7 @@ impl TryFrom<RawMemoryToml> for Memory {
             ranking,
             relations,
             sources,
-            ..
+            extra,
         } = raw;
 
         if schema_version != 1 {
@@ -1379,6 +1381,12 @@ impl TryFrom<RawMemoryToml> for Memory {
             .map(Provenance::from_raw)
             .collect::<Result<Vec<_>>>()?;
 
+        // Parse optional estimate/value facets from the flatten-captured extra table.
+        let estimate =
+            crate::estimate::parse_optional(extra.get("estimate").and_then(toml::Value::as_table))?;
+        let value =
+            crate::value::parse_optional(extra.get("value").and_then(toml::Value::as_table))?;
+
         Ok(Memory {
             uid: memory_uid,
             key,
@@ -1414,6 +1422,8 @@ impl TryFrom<RawMemoryToml> for Memory {
                 tok => tok.to_lowercase(),
             },
             weight: ranking.weight,
+            estimate,
+            value,
         })
     }
 }
@@ -1981,6 +1991,15 @@ pub(crate) fn render_show(
     let wikilinks = render_wikilinks_block(wikilinks);
     // `retrieve` supplies a computed staleness; `show` (None) omits the line.
     let stale = staleness.map_or(String::new(), |s| format!("staleness: {s}\n"));
+    let estimate_line = m.estimate.as_ref().map_or(String::new(), |est| {
+        format!(
+            "{}\n",
+            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+        )
+    });
+    let value_line = m.value.as_ref().map_or(String::new(), |val| {
+        format!("{}\n", crate::value::format_value_normal(val, "points"))
+    });
     // The terminator carries a per-render `guard` nonce minted in the shell, so a
     // hostile body cannot forge the real close (A-2). The uid will not do: a body
     // author owns the dir named by the uid, so they know it and could reproduce a
@@ -1994,7 +2013,7 @@ pub(crate) fn render_show(
          memory_key: {key}\n\
          trust_level: {trust}\n\
          verification_state: {ver}\n\
-         {stale}\
+         {estimate_line}{value_line}{stale}\
          scope.workspace: {ws}\n\
          scope.repo: {repo}\n\
          scope.paths: {paths}\n\
@@ -2012,6 +2031,8 @@ pub(crate) fn render_show(
         key = m.key.as_deref().unwrap_or("none"),
         trust = scrub_line(&m.trust_level),
         ver = scrub_line(&m.verification_state),
+        estimate_line = estimate_line,
+        value_line = value_line,
         ws = scrub_line(&scope.workspace),
         repo = scrub_line(&scope.repo),
         paths = list(&scope.paths),
@@ -2618,7 +2639,7 @@ pub(crate) fn remove_memory_relation(
 fn show_json(m: &Memory, body: &str, wikilinks: &[ShowWikilink]) -> Result<String> {
     let a = &m.anchor;
     let s = &m.scope;
-    let value = serde_json::json!({
+    let mut value = serde_json::json!({
         "kind": "memory",
         "memory": {
             "uid": m.uid,
@@ -2657,6 +2678,27 @@ fn show_json(m: &Memory, body: &str, wikilinks: &[ShowWikilink]) -> Result<Strin
         },
         "body": body,
     });
+    if let Some(ref est) = m.estimate
+        && let Some(obj) = value.get_mut("memory").and_then(|v| v.as_object_mut())
+    {
+        obj.insert(
+            "estimate".to_string(),
+            serde_json::json!({
+                "lower": est.lower,
+                "upper": est.upper,
+            }),
+        );
+    }
+    if let Some(ref val) = m.value
+        && let Some(obj) = value.get_mut("memory").and_then(|v| v.as_object_mut())
+    {
+        obj.insert(
+            "value".to_string(),
+            serde_json::json!({
+                "value": val.value,
+            }),
+        );
+    }
     serde_json::to_string_pretty(&value).context("failed to serialize memory show JSON")
 }
 
@@ -6206,6 +6248,8 @@ to = "mem_018e000000000000000000000000000b"
             trust_level: "medium".to_owned(),
             severity: "none".to_owned(),
             weight: 0,
+            estimate: None,
+            value: None,
         }
     }
 

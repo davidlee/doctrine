@@ -48,6 +48,10 @@ pub(crate) struct ValueFacet {
     pub value: f64,
 }
 
+/// Structural equality — `value` is validated to be finite, so bitwise float
+/// equality is identical to mathematical equality (no NaN).
+impl Eq for ValueFacet {}
+
 /// Deserialisation target before normalisation. `value` is a raw TOML value so
 /// integers and floats both arrive, and non-finite values are caught.
 #[derive(Debug, Clone, Deserialize)]
@@ -271,4 +275,20 @@ mod tests {
             .to_string();
         assert!(err.contains("finite"), "got: {}", err);
     }
+}
+
+/// Lenient serde deserializer — a malformed `[value]` table becomes `None`
+/// instead of propagating a parse error. Use this on `Doc` structs where the
+/// facet is advisory and a malformed value must not block the entity read
+/// (e.g., `outbound_for` during catalog scan — the diagnostic authority is
+/// `read_facets`).
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "serde deserialize_with must return Result"
+)]
+pub(crate) fn deserialize_lenient<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<ValueFacet>, D::Error> {
+    use serde::Deserialize;
+    Ok(ValueFacet::deserialize(d).ok())
 }

@@ -87,6 +87,10 @@ pub(crate) struct EstimateFacet {
     pub upper: f64,
 }
 
+/// Structural equality — `lower` and `upper` are validated to be finite, so
+/// bitwise float equality is identical to mathematical equality (no NaN).
+impl Eq for EstimateFacet {}
+
 /// Deserialisation target before normalisation. `lower`/`upper` are raw TOML
 /// values so integers and floats both arrive, and non-finite values are caught.
 #[derive(Debug, Clone, Deserialize)]
@@ -516,4 +520,20 @@ mod tests {
         assert!(raw._extra.contains_key("foo"));
         assert!(raw._extra.contains_key("baz"));
     }
+}
+
+/// Lenient serde deserializer — a malformed `[estimate]` table becomes `None`
+/// instead of propagating a parse error. Use this on `Doc` structs where the
+/// facet is advisory and a malformed value must not block the entity read
+/// (e.g., `outbound_for` during catalog scan — the diagnostic authority is
+/// `read_facets`).
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "serde deserialize_with must return Result"
+)]
+pub(crate) fn deserialize_lenient<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<EstimateFacet>, D::Error> {
+    use serde::Deserialize;
+    Ok(EstimateFacet::deserialize(d).ok())
 }

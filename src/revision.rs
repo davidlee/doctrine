@@ -450,6 +450,18 @@ pub(crate) struct RevDoc {
     pub(crate) approval: Approval,
     #[serde(default)]
     pub(crate) tags: Vec<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::estimate::deserialize_lenient"
+    )]
+    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::value::deserialize_lenient"
+    )]
+    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 // ---------------------------------------------------------------------------
@@ -833,6 +845,18 @@ fn format_show(doc: &RevDoc, body: &str) -> String {
         doc.status.as_str(),
         doc.approval.as_str()
     ));
+    if let Some(ref est) = doc.estimate {
+        parts.push(format!(
+            "{}\n",
+            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+        ));
+    }
+    if let Some(ref val) = doc.value {
+        parts.push(format!(
+            "{}\n",
+            crate::value::format_value_normal(val, "points")
+        ));
+    }
     parts.push(format!("\n{body}"));
     parts.concat()
 }
@@ -841,7 +865,7 @@ fn format_show(doc: &RevDoc, body: &str) -> String {
 /// render via `as_str` (a hand-projected row, not a derive that would leak Rust
 /// idents).
 fn show_json(doc: &RevDoc, body: &str) -> anyhow::Result<String> {
-    let value = serde_json::json!({
+    let mut value = serde_json::json!({
         "kind": "revision",
         "revision": {
             "id": canonical_id(doc.id),
@@ -853,6 +877,27 @@ fn show_json(doc: &RevDoc, body: &str) -> anyhow::Result<String> {
         },
         "body": body,
     });
+    if let Some(ref est) = doc.estimate
+        && let Some(obj) = value.get_mut("revision").and_then(|v| v.as_object_mut())
+    {
+        obj.insert(
+            "estimate".to_string(),
+            serde_json::json!({
+                "lower": est.lower,
+                "upper": est.upper,
+            }),
+        );
+    }
+    if let Some(ref val) = doc.value
+        && let Some(obj) = value.get_mut("revision").and_then(|v| v.as_object_mut())
+    {
+        obj.insert(
+            "value".to_string(),
+            serde_json::json!({
+                "value": val.value,
+            }),
+        );
+    }
     serde_json::to_string_pretty(&value).context("failed to serialize revision show JSON")
 }
 
@@ -1457,6 +1502,8 @@ fn compose_apply_rec(req: &str, prior: ReqStatus, written: ReqStatus) -> crate::
         }],
         evidence_ref: Vec::new(),
         tags: Vec::new(),
+        estimate: None,
+        value: None,
     }
 }
 
@@ -1773,6 +1820,8 @@ primary = true
             status: RevStatus::Started,
             approval: Approval::None,
             tags: vec![],
+            estimate: None,
+            value: None,
         };
         let text = toml::to_string(&doc).unwrap();
         assert!(

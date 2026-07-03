@@ -1339,6 +1339,18 @@ struct ReviewDoc {
     finding: Vec<FindingRow>,
     #[serde(default, deserialize_with = "deserialize_tags_lenient")]
     tags: Vec<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::estimate::deserialize_lenient"
+    )]
+    estimate: Option<crate::estimate::EstimateFacet>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::value::deserialize_lenient"
+    )]
+    value: Option<crate::value::ValueFacet>,
 }
 
 /// Lenient [`tags`] deserializer: absent → empty vec; non-array value
@@ -1611,6 +1623,18 @@ fn format_show(doc: &ReviewDoc, body: &str) -> String {
     ));
     if !doc.tags.is_empty() {
         parts.push(format!("tags: {}\n", doc.tags.join(", ")));
+    }
+    if let Some(ref est) = doc.estimate {
+        parts.push(format!(
+            "{}\n",
+            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+        ));
+    }
+    if let Some(ref val) = doc.value {
+        parts.push(format!(
+            "{}\n",
+            crate::value::format_value_normal(val, "points")
+        ));
     }
     parts.push(format!("\n{body}"));
     parts.concat()
@@ -3119,6 +3143,8 @@ mod tests {
             },
             finding: Vec::new(),
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         let out = format_show(&doc, "## Brief\n");
         assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
@@ -3143,6 +3169,8 @@ mod tests {
             },
             finding: Vec::new(),
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         let (status, awaited) = doc.derived();
         let rows = vec![(doc, status, awaited)];
@@ -3181,6 +3209,8 @@ mod tests {
                 response: None,
             }],
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         assert_eq!(doc.derived(), (ReviewStatus::Active, Await::Responder));
         // all-terminal ⇒ Done.

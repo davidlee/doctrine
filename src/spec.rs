@@ -744,6 +744,18 @@ pub(crate) struct Spec {
     /// outbound; the reciprocal children view is derived, never stored (§5.2).
     #[serde(default)]
     pub(crate) parent: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::estimate::deserialize_lenient"
+    )]
+    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::value::deserialize_lenient"
+    )]
+    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 /// One membership row in a spec's `members.toml` — the spec→requirement edge with
@@ -946,6 +958,18 @@ pub(crate) fn render(
             };
             parts.push(format!("  - {} {}{module}\n", s.language, s.identifier));
         }
+    }
+    if let Some(ref est) = spec.estimate {
+        parts.push(format!(
+            "{}\n",
+            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+        ));
+    }
+    if let Some(ref val) = spec.value {
+        parts.push(format!(
+            "{}\n",
+            crate::value::format_value_normal(val, "points")
+        ));
     }
 
     // prose body, verbatim.
@@ -3503,6 +3527,8 @@ parent = \"SPEC-002\"
             sources: Vec::new(),
             descends_from: None,
             parent: None,
+            estimate: None,
+            value: None,
         }
     }
 

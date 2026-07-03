@@ -75,6 +75,16 @@ const ALLOWLIST: &[&str] = &[
     // the priority view + render layers (design EX-3/EX-5) — sanctioned exposure.
     "priority/view.rs",
     "priority/render.rs",
+    // IMP-183: estimate/value surfaced in show for all estimable kinds — each
+    // Doc struct now carries optional facet fields and surfaces them in
+    // format_show / show_json.
+    "concept_map.rs",
+    "governance.rs",
+    "memory.rs",
+    "rec.rs",
+    "review.rs",
+    "revision.rs",
+    "spec.rs",
 ];
 
 fn src_dir() -> PathBuf {

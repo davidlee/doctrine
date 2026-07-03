@@ -5672,6 +5672,8 @@ mod tests {
                 to: to.as_str().to_owned(),
             }],
             evidence_ref: evidence,
+            estimate: None,
+            value: None,
         };
         crate::rec::materialise_populated(root, &doc).unwrap()
     }
@@ -5901,6 +5903,8 @@ mod tests {
                 },
             ],
             evidence_ref: Vec::new(),
+            estimate: None,
+            value: None,
         };
         assert!(
             !rec_discharges(Some(&rec), "REQ-001", ReqStatus::Pending, &[]),

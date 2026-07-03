@@ -202,6 +202,18 @@ struct Doc {
     tags: Vec<String>,
     #[serde(default)]
     relationships: Relationships,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::estimate::deserialize_lenient"
+    )]
+    estimate: Option<crate::estimate::EstimateFacet>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::value::deserialize_lenient"
+    )]
+    value: Option<crate::value::ValueFacet>,
 }
 
 /// Parse a governance reference — `ADR-007`, `adr-7`, or the bare id `7` — to its
@@ -325,6 +337,18 @@ fn format_show(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> String
         "created {} · updated {}\n",
         doc.created, doc.updated
     ));
+    if let Some(ref est) = doc.estimate {
+        parts.push(format!(
+            "{}\n",
+            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+        ));
+    }
+    if let Some(ref val) = doc.value {
+        parts.push(format!(
+            "{}\n",
+            crate::value::format_value_normal(val, "points")
+        ));
+    }
 
     let rel = &doc.relationships;
     if !rel.supersedes.is_empty()
@@ -1109,6 +1133,8 @@ mod tests {
                 supersedes: vec!["ADR-003".to_string()],
                 superseded_by: vec![],
             },
+            estimate: None,
+            value: None,
         };
         // related is read from [[relation]] rows; supersedes stays typed (ADR-010).
         let related = vec!["ADR-004".to_string()];

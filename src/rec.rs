@@ -129,6 +129,18 @@ pub(crate) struct RecDoc {
     pub(crate) evidence_ref: Vec<EvidenceRef>,
     #[serde(default, deserialize_with = "deserialize_tags_lenient")]
     pub(crate) tags: Vec<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::estimate::deserialize_lenient"
+    )]
+    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::value::deserialize_lenient"
+    )]
+    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 /// Lenient [`tags`] deserializer: absent → empty vec; non-array value
@@ -532,6 +544,18 @@ fn format_show(doc: &RecDoc, body: &str) -> String {
         doc.status_delta.len(),
         doc.evidence_ref.len()
     ));
+    if let Some(ref est) = doc.estimate {
+        parts.push(format!(
+            "{}\n",
+            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+        ));
+    }
+    if let Some(ref val) = doc.value {
+        parts.push(format!(
+            "{}\n",
+            crate::value::format_value_normal(val, "points")
+        ));
+    }
     parts.push(format!("\n{body}"));
     parts.concat()
 }
@@ -546,7 +570,28 @@ struct ShowJson<'a> {
 /// Render the `Json` show under the shared `{kind, …}` envelope.
 fn show_json(doc: &RecDoc, body: &str) -> anyhow::Result<String> {
     let row = ShowJson { doc };
-    let value = serde_json::json!({ "kind": "rec", "rec": row, "body": body });
+    let mut value = serde_json::json!({ "kind": "rec", "rec": row, "body": body });
+    if let Some(ref est) = doc.estimate
+        && let Some(obj) = value.get_mut("rec").and_then(|v| v.as_object_mut())
+    {
+        obj.insert(
+            "estimate".to_string(),
+            serde_json::json!({
+                "lower": est.lower,
+                "upper": est.upper,
+            }),
+        );
+    }
+    if let Some(ref val) = doc.value
+        && let Some(obj) = value.get_mut("rec").and_then(|v| v.as_object_mut())
+    {
+        obj.insert(
+            "value".to_string(),
+            serde_json::json!({
+                "value": val.value,
+            }),
+        );
+    }
     serde_json::to_string_pretty(&value).context("failed to serialize rec show JSON")
 }
 
@@ -854,6 +899,8 @@ mod tests {
                 mode: "VT".to_owned(),
             }],
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         let text = toml::to_string(&doc).unwrap();
         let back: RecDoc = toml::from_str(&text).unwrap();
@@ -876,6 +923,8 @@ mod tests {
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         let text = toml::to_string(&doc).unwrap();
         let back: RecDoc = toml::from_str(&text).unwrap();
@@ -908,6 +957,8 @@ mod tests {
                 mode: "VT".to_owned(),
             }],
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // A REAL (un-commented) array-of-tables header, not the template's `#  …`
@@ -943,6 +994,8 @@ mod tests {
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // No REAL (un-commented) status_delta table — only the template's `#  …`
@@ -975,6 +1028,8 @@ mod tests {
             }],
             evidence_ref: Vec::new(),
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // The document still parses (the breaker was escaped, not spliced raw) …
@@ -1002,6 +1057,8 @@ mod tests {
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
             tags: Vec::new(),
+            estimate: None,
+            value: None,
         };
         let text = toml::to_string(&doc).unwrap();
         assert!(text.contains("move = \"accept\""), "bare move key: {text}");
