@@ -17,7 +17,7 @@ output with expected behaviour.
 
 ## 2. Prose Citation — reference docs (3 warnings)
 
-`.doctrine/glossary.md` uses `POL-123` and `STD-123` as exemplar placeholders
+`.doctrine/glossary.md` uses `POL-NNN` and `STD-NNN` as exemplar placeholders
 showing the reference form. These aren't real citations and should not be
 flagged.
 
@@ -26,7 +26,7 @@ known reference/install docs that use exemplar IDs).
 
 ## 3. Prose Citation — runtime/gitignored paths (1 warning)
 
-`.doctrine/rfc/011/case-notes.md` mentions `RV-217` in a hypothetical scenario
+`.doctrine/rfc/011/case-notes.md` mentions `RV-NNN` in a hypothetical scenario
 ("would collide with 16+ already-allocated RVs"). This is informal runtime
 instrumentation, not an authoritative citation. The entire `.doctrine/rfc/` tree
 is gitignored.
@@ -36,9 +36,9 @@ notes).
 
 ## Remaining noise (out of scope for now)
 
-Closed-slice phase/design docs reference ASM-*, DEC-*, EVD-*, SL-998–1001, and
-REQ-999 — in-phase tracking entities that were never materialized or placeholder
-future-dependency refs. These are static historical documents; editing them is
+Closed-slice phase/design docs reference ASM-N, DEC-N, EVD-N, and placeholder
+SL-NNN / REQ-NNN — in-phase tracking entities that were never materialized or
+placeholder future-dependency refs. These are static historical documents; editing them is
 make-work. A stretch goal: skip prose citation scanning in terminal-status slices.
 
 ## Acceptance criteria
