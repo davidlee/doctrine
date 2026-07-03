@@ -59,6 +59,11 @@ intent = "design-target"
 selector = "src/priority/mod.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "verb wiring: a new Command variant forces the exhaustive write_class match in guard.rs (Read-class arm) — necessary consequence of EX-6, under-declared at plan time"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
