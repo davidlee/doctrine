@@ -288,6 +288,136 @@ fn vt3_explain_multi_key_precedence_trace_spec_render() {
     );
 }
 
+// ── SL-193 PHASE-02 EX-2: exposed-slot self-`replaces` projection ─────────────
+//
+// After the producer (install forward-step 4) projects the 5 exposed slots, each
+// disk twin carries a self-`replaces` sidecar (`replaces = "<own slot>"`) that
+// suppresses its embedded framework origin at resolve — the single-emit MIRROR of
+// seal. These E2Es lock that corpus-wide over the built binary:
+//   - VT-3 (`exposed_projection_prompt_check_ok`): the projected sidecars are
+//     LEGAL — `prompt check` (⇒ validate_replaces) returns Ok. This is the sole
+//     guard against a NonTopReplacer/cycle that would make `prompt resolve` error.
+//   - VT-4 (`exposed_slots_single_emit_all_five`): EACH of the 5 exposed slots
+//     emits exactly once with its framework body suppressed — over `prompt resolve`
+//     (where the `replaces` graph is applied), not `prompt explain` (which prints
+//     the raw active set, ranked-but-present).
+//
+// The install producer cannot run here (worker-confined / heavy), so the fixture
+// is projected directly — the sidecar `.toml` is byte-for-byte the producer's
+// emission (`replaces = "<slot.path()>"\n`, src/install.rs::project_starters). The
+// disk `.md` carries a distinct user marker (an EDITED starter), so an un-
+// suppressed framework twin would leave its framework body in the output — the
+// assertion that it is absent is the suppression proof.
+
+/// The 5 exposed slots: (disk-relative `.md`/`.toml` stem, self-`replaces` target,
+/// activating `prompt` args, distinct user-marker body, a framework-body substring
+/// that MUST vanish when the twin is suppressed).
+const EXPOSED: &[(&str, &str, &[&str], &str, &str)] = &[
+    (
+        "harness/claude",
+        "harness/claude",
+        &["--role", "worker", "--harness", "claude"],
+        "EXPOSED-USER-harness-claude",
+        "Claude tool-use protocol",
+    ),
+    (
+        "model/anthropic/claude-sonnet-4",
+        "model/anthropic/claude-sonnet-4",
+        &["--role", "worker", "--model", "anthropic/claude-sonnet-4"],
+        "EXPOSED-USER-model-anthropic",
+        "Connectivity: claude.ai API",
+    ),
+    (
+        "model/deepseek/_default",
+        "model/deepseek/_default",
+        &["--role", "worker", "--model", "deepseek/_default"],
+        "EXPOSED-USER-model-deepseek",
+        "DeepSeek model family",
+    ),
+    (
+        "role/orchestrator",
+        "role/orchestrator",
+        &["--role", "orchestrator"],
+        "EXPOSED-USER-role-orchestrator",
+        "you own the process",
+    ),
+    (
+        "role/worker",
+        "role/worker",
+        &["--role", "worker"],
+        "EXPOSED-USER-role-worker",
+        "dispatch worker implementing ONE phase",
+    ),
+];
+
+/// Project the 5 exposed slots into `root/.doctrine/hymns/**`: a user-marker `.md`
+/// twin and its self-`replaces` sidecar (the producer's exact `.toml` emission).
+fn project_exposed(root: &Path) {
+    let hymns = root.join(".doctrine/hymns");
+    for (stem, target, _args, marker, _fw) in EXPOSED {
+        let md = hymns.join(format!("{stem}.md"));
+        let toml = hymns.join(format!("{stem}.toml"));
+        fs::create_dir_all(md.parent().unwrap()).unwrap();
+        fs::write(&md, format!("{marker}\n")).unwrap();
+        // Byte-for-byte the producer's sidecar (src/install.rs::project_starters).
+        fs::write(&toml, format!("replaces = \"{target}\"\n")).unwrap();
+    }
+}
+
+/// VT-3 — corpus-wide `replaces` legality. Every projected self-`replaces` is the
+/// unique-most-specific active snippet of its slot (INV-3), so `prompt check`
+/// (⇒ validate_replaces) returns Ok over the whole projected corpus.
+#[test]
+fn exposed_projection_prompt_check_ok() {
+    let dir = tmp();
+    project_exposed(dir.path());
+
+    let out = run(dir.path(), &["prompt", "check"]);
+    assert!(
+        out.status.success(),
+        "prompt check must pass over the projected corpus; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stdout(&out).contains("check: corpus OK"),
+        "expected corpus OK, got: {}",
+        stdout(&out)
+    );
+}
+
+/// VT-4 — all 5 exposed slots single-emit corpus-wide (not just role/worker). Drive
+/// a context activating EACH slot; assert the user marker emits exactly once AND the
+/// framework body is suppressed (absent) over `prompt resolve`.
+#[test]
+fn exposed_slots_single_emit_all_five() {
+    let dir = tmp();
+    project_exposed(dir.path());
+
+    for (stem, _target, activate, marker, fw_body) in EXPOSED {
+        let mut args = vec!["prompt", "resolve"];
+        args.extend_from_slice(activate);
+        let out = run(dir.path(), &args);
+        assert!(
+            out.status.success(),
+            "resolve for {stem} failed; stderr: {}",
+            stderr(&out)
+        );
+        let output = stdout(&out);
+
+        // Single emit: the user twin appears exactly once (append would double it).
+        let hits = output.matches(marker).count();
+        assert_eq!(
+            hits, 1,
+            "slot {stem}: expected exactly one emit of {marker}, got {hits}\n{output}"
+        );
+        // Suppression: the framework origin's body is gone — override, not append.
+        assert!(
+            !output.contains(fw_body),
+            "slot {stem}: framework body {fw_body:?} must be suppressed, got:\n{output}"
+        );
+    }
+}
+
 // ── VT-2: model-keys ────────────────────────────────────────────────────────
 
 #[test]

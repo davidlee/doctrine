@@ -22,6 +22,11 @@ intent = "design-target"
 selector = "src/hymns.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "tests/e2e_prompt_resolve_golden.rs"
+intent = "design-target"
+note = "PHASE-02 VT-3/VT-4 mandate corpus-wide legality + 5-slot single-emit E2E in this file (plan.toml)"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-011"

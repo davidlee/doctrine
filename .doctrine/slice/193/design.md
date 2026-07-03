@@ -259,6 +259,21 @@ demonstration of suppression; the `replaces` graph is applied at resolve.)
   invariant, not a current gap.)
 - **Corrected:** `project_starters` has **no** existing test (fully untested dead
   code); the VTs above are net-new, not an extension.
+- **F5 — Projection ordering vs resolver-render, SURFACED AT EXECUTION (refutes
+  the "step 4 breaks nothing" claim above).** `install`'s **step 3**
+  (`install_agents_for`, `src/install.rs:432/438`) renders `.doctrine/agents/*.md`
+  from `prompt resolve`, which **consumes the disk hymn corpus**. Placing the
+  sidecar projection at "step **4**" (append-last, after step 3) makes a single
+  `install` **non-idempotent**: pass 1 renders agents *before* the sidecar exists
+  (framework **+** user body — the ISS-206 doubling), pass 2 renders *after* it
+  (user body only). `e2e_prompt_def_expansion::dispatch_worker_install_refresh_is_stable_when_role_body_is_unchanged`
+  correctly fails on the first-run doubling. **Fix:** the projection MUST run
+  **before any resolver-consuming step** — i.e. before the step-3 agent-render
+  loop — so the disk corpus (including user-override sidecars) is established
+  before anything renders from it. The "forward-step 4" label is nominal ordering;
+  the actual placement is **early**, not last. Preserves single-pass install
+  idempotence and the D4 behaviour-preservation gate (the existing e2e is honoured
+  unchanged, not edited to accommodate).
 
 ## Open questions
 

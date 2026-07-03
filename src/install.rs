@@ -114,7 +114,6 @@ struct HymnsSection {
     #[serde(default)]
     seal: Vec<String>,
     #[serde(default)]
-    #[expect(dead_code, reason = "consumed in src/commands/prompt.rs (PHASE-02)")]
     expose: Vec<String>,
 }
 
@@ -365,6 +364,37 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
         }
     }
 
+    // Forward-step 4 (nominal label): project the exposed-slot starter twins +
+    // self-`replaces` sidecars onto disk. Placement is EARLY, not last (design F5):
+    // it MUST run before the agent-render loop below, because `install_agents_for`
+    // resolves the worker role body from the *disk* hymn corpus — the sidecars must
+    // already be on disk when it renders, or install is non-idempotent (the ISS-206
+    // double-emit). Establish the disk corpus (incl. user-override sidecars) here,
+    // before anything renders from it. Non-fatal on error (matches sibling steps).
+    if prompt_step(
+        "Project exposed hymn starters? [y/N/a]",
+        args.yes,
+        &mut all_yes,
+    )? {
+        match (embedded_expose_set(), embedded_seal_set()) {
+            (Ok(expose), Ok(seal)) => {
+                let disk = root.join(".doctrine").join(HYMNS_DIRNAME);
+                let embedded = embedded_hymns();
+                match project_starters(&disk, &embedded, &seal, &expose.0, args.dry_run) {
+                    Ok(written) => {
+                        writeln!(io::stdout(), "  projected {} hymn file(s)", written.len())?;
+                    }
+                    Err(e) => {
+                        writeln!(io::stdout(), "  hymn projection failed: {e:#}")?;
+                    }
+                }
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                writeln!(io::stdout(), "  hymn projection failed: {e:#}")?;
+            }
+        }
+    }
+
     // 3. Skills per agent
     let catalog = discover()?;
     let selected = select_for_install(&catalog, args.skills, args.domains)?;
@@ -556,6 +586,20 @@ pub(crate) fn embedded_seal_set() -> anyhow::Result<crate::hymns::SealSet> {
     let manifest = load_manifest()?;
     let mut slots = std::collections::BTreeSet::new();
     for s in &manifest.hymns.seal {
+        let slot = parse_seal_slot(s)?;
+        slots.insert(slot);
+    }
+    Ok(crate::hymns::SealSet(slots))
+}
+
+/// Build the exposed-slot set from the `[hymns] expose` entries in the embedded
+/// manifest — the mirror of `embedded_seal_set`. Each entry is a `"band/label"`
+/// string parsed into a `hymns::Slot`. Consumed by `project_starters` (forward
+/// step) to project the self-`replaces` starter twins.
+pub(crate) fn embedded_expose_set() -> anyhow::Result<crate::hymns::SealSet> {
+    let manifest = load_manifest()?;
+    let mut slots = std::collections::BTreeSet::new();
+    for s in &manifest.hymns.expose {
         let slot = parse_seal_slot(s)?;
         slots.insert(slot);
     }
@@ -919,7 +963,17 @@ pub(crate) fn expand_worker_marker(def: &str, body: &str) -> String {
     def.replace(WORKER_RESOLVE_MARKER, body)
 }
 
-#[expect(dead_code, reason = "reserved: SL-187 expose/disk-projection consumer")]
+/// Project the disk starter twin + self-`replaces` sidecar for each exposed slot.
+///
+/// For every exposed (non-sealed) slot, writes `.doctrine/hymns/<band>/<label>.md`
+/// (framework body) and `.doctrine/hymns/<band>/<label>.toml` (carrying
+/// `replaces = "<slot>"`, single-sourced off `Slot::path`, STD-001/D3). The `.md`
+/// and `.toml` are INDEPENDENT write-if-absent (D2): an absent file is written, a
+/// present file is preserved byte-for-byte — so a user-edited starter survives and
+/// a sidecar-less legacy twin is backfilled. `create_dir_all(parent)` runs before
+/// every `write_atomic` because `write_atomic` (`fsutil.rs`) does not mkdir (F2).
+/// `dry_run` writes nothing. The user twin's self-`replaces` suppresses its
+/// framework origin at resolve, so the exposed slot single-emits (REV-019 REQ-322).
 pub(crate) fn project_starters(
     disk_root: &Path,
     embedded: &[(String, Vec<u8>)],
@@ -945,6 +999,8 @@ pub(crate) fn project_starters(
 
     let mut written = Vec::new();
     for slot in exposed_slots {
+        // Belt-and-braces: seal wins if a slot is ever mislisted in both lists
+        // (the manifest lists are disjoint by construction). EX-1/VT-5.
         if sealed.0.contains(slot) {
             continue;
         }
@@ -952,21 +1008,39 @@ pub(crate) fn project_starters(
             continue;
         };
 
-        let dest = disk_root
-            .join(slot.band.as_str())
-            .join(format!("{}.md", slot.label));
+        let dir = disk_root.join(slot.band.as_str());
+        let md = dir.join(format!("{}.md", slot.label));
+        let toml = dir.join(format!("{}.toml", slot.label));
 
-        if dest.exists() {
-            continue;
+        // Independent per-file write-if-absent (D2). `.md` and `.toml` are decided
+        // separately: an absent `.md` is written and a present one preserved;
+        // likewise the sidecar `.toml`, which backfills the legacy orphan twins.
+        if !md.exists() {
+            project_write_if_absent(&md, body.as_bytes(), dry_run)?;
+            written.push(md);
         }
 
-        if !dry_run {
-            crate::fsutil::write_atomic(&dest, body.as_bytes())
-                .with_context(|| format!("project {}", dest.display()))?;
+        if !toml.exists() {
+            // Single-sourced off `Slot::path` — no magic string (D3/STD-001).
+            let sidecar = format!("replaces = \"{}\"\n", slot.path());
+            project_write_if_absent(&toml, sidecar.as_bytes(), dry_run)?;
+            written.push(toml);
         }
-        written.push(dest);
     }
     Ok(written)
+}
+
+/// Write `bytes` to `dest` unless `dry_run`, first ensuring the parent dir exists
+/// (`write_atomic` does not mkdir — F2). Errors are surfaced with per-file context.
+fn project_write_if_absent(dest: &Path, bytes: &[u8], dry_run: bool) -> anyhow::Result<()> {
+    if dry_run {
+        return Ok(());
+    }
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create parent dir {}", parent.display()))?;
+    }
+    crate::fsutil::write_atomic(dest, bytes).with_context(|| format!("project {}", dest.display()))
 }
 
 /// Parse a `"band/label"` seal entry into a `Slot`. Rejects unrecognized bands
@@ -1851,6 +1925,203 @@ mod tests_hymns {
         assert_eq!(sc.model, Some(vec![]));
         let unpinned = overlay_selector(&base, &sc).unwrap();
         assert!(unpinned.model.is_empty(), "empty list must unpin the axis");
+    }
+
+    // ── SL-193 PHASE-01: project_starters (self-`replaces` sidecar projection) ──
+    // project_starters is untested dead code today; these are net-new units
+    // (tempdir-scoped) driving the exposed-slot starter + sidecar emission.
+
+    fn worker_slot() -> crate::hymns::Slot {
+        crate::hymns::Slot::new(crate::hymns::Band::Role, "worker")
+    }
+
+    const FRAMEWORK_BODY: &str = "FRAMEWORK WORKER BODY";
+
+    fn worker_embedded() -> Vec<(String, Vec<u8>)> {
+        vec![(
+            "role/worker.md".to_string(),
+            FRAMEWORK_BODY.as_bytes().to_vec(),
+        )]
+    }
+
+    fn exposed_set(slot: crate::hymns::Slot) -> BTreeSet<crate::hymns::Slot> {
+        BTreeSet::from([slot])
+    }
+
+    fn no_seal() -> crate::hymns::SealSet {
+        crate::hymns::SealSet(BTreeSet::new())
+    }
+
+    // VT-1: an exposed slot gets a `<label>.toml` sidecar carrying replaces=<slot>.
+    #[test]
+    fn project_starters_writes_self_replaces_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        project_starters(
+            root,
+            &worker_embedded(),
+            &no_seal(),
+            &exposed_set(worker_slot()),
+            false,
+        )
+        .unwrap();
+        let sidecar = fs::read_to_string(root.join("role").join("worker.toml")).unwrap();
+        assert!(
+            sidecar.contains("replaces = \"role/worker\""),
+            "sidecar must carry the self-replaces, got: {sidecar:?}"
+        );
+    }
+
+    // VT-2: `.md` present, `.toml` absent ⇒ `.md` preserved byte-for-byte AND
+    // sidecar written (the reconcile path for the 5 legacy orphan twins).
+    #[test]
+    fn project_starters_backfills_sidecar_preserving_md() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let md = root.join("role").join("worker.md");
+        fs::create_dir_all(md.parent().unwrap()).unwrap();
+        fs::write(&md, "PRE-EXISTING ORPHAN BODY").unwrap();
+
+        project_starters(
+            root,
+            &worker_embedded(),
+            &no_seal(),
+            &exposed_set(worker_slot()),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&md).unwrap(),
+            "PRE-EXISTING ORPHAN BODY",
+            "existing .md must be preserved byte-for-byte"
+        );
+        let sidecar = fs::read_to_string(root.join("role").join("worker.toml")).unwrap();
+        assert!(sidecar.contains("replaces = \"role/worker\""));
+    }
+
+    // VT-3: both `.md` and `.toml` present ⇒ no write, no error (re-run safe).
+    #[test]
+    fn project_starters_idempotent_when_both_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let md = root.join("role").join("worker.md");
+        let toml = root.join("role").join("worker.toml");
+        fs::create_dir_all(md.parent().unwrap()).unwrap();
+        fs::write(&md, "EXISTING MD").unwrap();
+        fs::write(&toml, "replaces = \"role/worker\"\n# hand-tuned axis").unwrap();
+
+        let written = project_starters(
+            root,
+            &worker_embedded(),
+            &no_seal(),
+            &exposed_set(worker_slot()),
+            false,
+        )
+        .unwrap();
+
+        assert!(written.is_empty(), "both present ⇒ nothing written");
+        assert_eq!(fs::read_to_string(&md).unwrap(), "EXISTING MD");
+        assert_eq!(
+            fs::read_to_string(&toml).unwrap(),
+            "replaces = \"role/worker\"\n# hand-tuned axis",
+            "present sidecar must be left untouched (no clobber of hand-tuned axes)"
+        );
+    }
+
+    // VT-4: an edited `.md` (distinct from the framework body) is never overwritten.
+    #[test]
+    fn project_starters_preserves_edited_md() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let md = root.join("role").join("worker.md");
+        fs::create_dir_all(md.parent().unwrap()).unwrap();
+        let edited = "USER EDITED B-PRIME BODY (distinct from framework)";
+        fs::write(&md, edited).unwrap();
+
+        project_starters(
+            root,
+            &worker_embedded(),
+            &no_seal(),
+            &exposed_set(worker_slot()),
+            false,
+        )
+        .unwrap();
+
+        let after = fs::read_to_string(&md).unwrap();
+        assert_eq!(
+            after, edited,
+            "user customisation must survive re-projection"
+        );
+        assert_ne!(
+            after, FRAMEWORK_BODY,
+            "must not be overwritten with framework body"
+        );
+    }
+
+    // VT-5: a sealed slot ⇒ neither `.md` nor `.toml` written (belt-and-braces guard).
+    #[test]
+    fn project_starters_skips_sealed_slot() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let seal = crate::hymns::SealSet(BTreeSet::from([worker_slot()]));
+
+        let written = project_starters(
+            root,
+            &worker_embedded(),
+            &seal,
+            &exposed_set(worker_slot()),
+            false,
+        )
+        .unwrap();
+
+        assert!(written.is_empty(), "sealed slot ⇒ nothing written");
+        assert!(!root.join("role").join("worker.md").exists());
+        assert!(!root.join("role").join("worker.toml").exists());
+    }
+
+    // VT-6: dry_run ⇒ nothing written for either file.
+    #[test]
+    fn project_starters_dry_run_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        project_starters(
+            root,
+            &worker_embedded(),
+            &no_seal(),
+            &exposed_set(worker_slot()),
+            true,
+        )
+        .unwrap();
+
+        assert!(!root.join("role").join("worker.md").exists());
+        assert!(!root.join("role").join("worker.toml").exists());
+    }
+
+    // VT-7: projecting into an EMPTY disk root (band dir absent) writes `.md` +
+    // sidecar, creating the parent — the create_dir_all guard against
+    // write_atomic's no-mkdir failure (F2). Fails without the create_dir_all.
+    #[test]
+    fn project_starters_creates_missing_parent_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        // Empty root: neither the root nor the `role/` band dir exists yet.
+        let root = dir.path().join("empty-hymns-root");
+
+        project_starters(
+            &root,
+            &worker_embedded(),
+            &no_seal(),
+            &exposed_set(worker_slot()),
+            false,
+        )
+        .unwrap();
+
+        assert!(
+            root.join("role").join("worker.md").exists(),
+            "missing parent dir must be created before write_atomic"
+        );
+        assert!(root.join("role").join("worker.toml").exists());
     }
 }
 
