@@ -5,10 +5,10 @@ id = 224
 slug = "cordage-scale-cliffs-many-small-cycles-evict-in-linear-time-exceeds-linear-eviction-budget-on-slow"
 title = "cordage scale_cliffs many_small_cycles_evict_in_linear_time exceeds linear-eviction budget on slow hosts (113s)"
 kind = "risk"
-status = "resolved"
+status = "closed"
 resolution = "fixed"
 created = "2026-07-01"
-updated = "2026-07-02"
+updated = "2026-07-03"
 tags = ["cordage", "perf", "testing"]
 
 [facet]                         # risk only — every field typed; seeded empty

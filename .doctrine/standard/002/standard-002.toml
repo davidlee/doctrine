@@ -1,0 +1,16 @@
+schema = "doctrine.standard"
+version = 1
+
+id = 2
+slug = "naming-conventions-short-entity-titles-ids-not-slugs"
+title = "Naming conventions — short entity titles, ids not slugs"
+status = "required"
+created = "2026-07-03"
+updated = "2026-07-03"
+tags = ["authoring", "conventions", "identifiers", "naming", "titles"]
+
+[relationships]
+# `supersedes` stays typed — author with `doctrine supersede STD-NNN <previous>`.
+# `related` edges are uniform `[[relation]]` rows — author with `doctrine link STD-NNN related <target>`.
+supersedes    = []
+superseded_by = []   # reverse link is derived

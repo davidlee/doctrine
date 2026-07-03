@@ -5,10 +5,10 @@ id = 228
 slug = "vtgate-unattributable"
 title = "verify-vt keyword gate: source-delta intersection to detect inert passes"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "fixed"
 created = "2026-07-02"
-updated = "2026-07-02"
+updated = "2026-07-03"
 tags = ["area:cli", "area:coverage", "area:slice"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

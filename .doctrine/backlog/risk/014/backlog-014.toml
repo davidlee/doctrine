@@ -5,10 +5,10 @@ id = 14
 slug = "claude-subagent-confinement-unsolved"
 title = "Claude subagent confinement is unsolved — worker-mode is cooperative-only off the bwrap arm"
 kind = "risk"
-status = "resolved"
+status = "closed"
 resolution = "mitigated"
 created = "2026-06-30"
-updated = "2026-07-02"
+updated = "2026-07-03"
 tags = ["area:dispatch", "area:harness"]
 
 [facet]                         # risk only — every field typed; seeded empty

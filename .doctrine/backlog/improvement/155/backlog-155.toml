@@ -5,10 +5,10 @@ id = 155
 slug = "per-harness-per-model-agent-instructions"
 title = "Per-harness + per-model agent instruction injection"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "fixed"
 created = "2026-06-22"
-updated = "2026-07-02"
+updated = "2026-07-03"
 tags = ["area:agents", "area:boot", "area:governance", "harness:claude", "harness:pi"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform

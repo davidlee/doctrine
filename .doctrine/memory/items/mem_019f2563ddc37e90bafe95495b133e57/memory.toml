@@ -1,0 +1,42 @@
+memory_uid = "mem_019f2563ddc37e90bafe95495b133e57"
+memory_key = "mem.pattern.claude.docs-first-then-probe"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Docs-first, then probe: don't thrash empirically on documented harness semantics"
+summary = "Harness semantics: read official docs FIRST for the contract, THEN a live probe to confirm the deployed build — both, in that order."
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["claude-code", "harness", "methodology"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "c9ee7cf07579b7d9d0ed4ad83533de11f94ee601"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b11a28bc23a1e773c988819cbd5c05ae58ccf605ec1df5a3af7d4661353e6224"
+base_commit = "d1c5b3901cab8010ebce5665cfbeb4f5a9f29527"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+

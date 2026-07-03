@@ -5,10 +5,10 @@ id = 231
 slug = "pi-arm-record-delta-over-attributes-source-delta-sweeps-orchestrator-trailed-knowledge-refresh-base"
 title = "pi-arm record-delta over-attributes source-delta: sweeps orchestrator-trailed knowledge + refresh-base merge commits"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "fixed"
 created = "2026-07-02"
-updated = "2026-07-02"
+updated = "2026-07-03"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

@@ -5,10 +5,10 @@ id = 225
 slug = "subprocess-picodex-seatbelt-backend-reusing-seatbelt-profile-macos-jail-parity-for-the-subprocess"
 title = "Subprocess (pi/codex) Seatbelt backend reusing seatbelt_profile (macOS jail parity for the subprocess arm)"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "fixed"
 created = "2026-07-01"
-updated = "2026-07-02"
+updated = "2026-07-03"
 tags = ["area:dispatch", "area:worktree", "harness:codex", "harness:pi"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

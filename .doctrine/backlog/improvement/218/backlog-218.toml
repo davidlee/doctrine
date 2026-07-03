@@ -5,10 +5,10 @@ id = 218
 slug = "survey-ux-replace-blocked-column-with-red-blocking-item-styling-add-pagination-add-hide-blocked"
 title = "Survey UX: replace BLOCKED column with red blocking-item styling, add pagination, add --hide-blocked"
 kind = "improvement"
-status = "resolved"
+status = "closed"
 resolution = "done"
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-07-03"
 tags = ["area:cli", "area:survey", "area:ux"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
