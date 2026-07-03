@@ -5,13 +5,13 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/audit/SKILL.md",
-      "computedHash": "2763b946fdd8c9f449bf8fc66b739b4c8d506002598ab640de87c2535fd85f5a"
+      "computedHash": "eca338c1863dd9a647f7203f0f8c913477210d23f6b344925a0904bcb04fd2df"
     },
     "backlog": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/backlog/SKILL.md",
-      "computedHash": "d1e55d75fe43c71d09047ac53a9c57a1a74a25ab0142a17b7e1f83e7c2f39cbb"
+      "computedHash": "b0ba2f2bb3c9f7eb26e4809f5f95689bd95c2bcdbe1fc52b357272eeed187efd"
     },
     "canon": {
       "source": "davidlee/doctrine",
@@ -23,7 +23,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/close/SKILL.md",
-      "computedHash": "991de7f98d76490e866b2c83241d3bd76e92d31c0556b1b7bd50f6fbaba13161"
+      "computedHash": "40980d1adf3b4ca809638129e72c66da26f8fa265cb5a5090a45eb308ab96343"
     },
     "code-review": {
       "source": "davidlee/doctrine",
@@ -53,7 +53,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch-agent/SKILL.md",
-      "computedHash": "c08706bc94351ddc87343127860f87287604d2579129e35054d954a759fdb28a"
+      "computedHash": "42180479e355b502df1cf4bb30abd74d3bb1e0f146a4099fe215598f0325ea74"
     },
     "dispatch-subprocess": {
       "source": "davidlee/doctrine",
@@ -77,7 +77,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/handover/SKILL.md",
-      "computedHash": "c1c8c12f45d435bf2f386abee40ee38e63751698a839aa04fe2b457bd5d19b75"
+      "computedHash": "80e402d3fcf567e5a9c484689e7efff7f51028c4f7ae82a387c61111e283a85c"
     },
     "inquisition": {
       "source": "davidlee/doctrine",
@@ -125,7 +125,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/reconcile/SKILL.md",
-      "computedHash": "ac77ded27eb3af0448f23688070fe7cf4cc2017dacfdbb5ea155ed252b512065"
+      "computedHash": "9926c4a01f36793ce7a8566e2e5809b88bc1314a8a6c2e32710404f32d3498ac"
     },
     "record-memory": {
       "source": "davidlee/doctrine",
