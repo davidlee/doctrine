@@ -203,3 +203,31 @@ worker-contract content: trait hymns, def trait-set frontmatter, bake widening.
 Q2's model-source question now reads "def frontmatter declares the trait-key
 SET" (not a single model id); Q3 unchanged. SPEC-023 OQ-3 (required-trait
 lint) placement: decide in SL-192 or SL-191 design.
+
+## Dispatch model plan (2026-07-03) — survives compaction
+
+Arm: **claude, all 7 phases** (operator call). No deepseek/subprocess even where
+VT would backstop — at 7 phases landing on main, minimise weird-diff surface;
+uniform arm > cheap-arm canary.
+
+Model per phase (opus on the three precision phases; sonnet on bounded/prose):
+
+| Phase | Model  | Rationale (cap/adh) |
+|-------|--------|---------------------|
+| 01 predicate     | Sonnet | Med/Med. Pure `traits_covered`, fixture-tested, VT forgiving. |
+| 02 hymns         | Sonnet | Low/High. POL-002 leak risk is obedience not horsepower; tight "no host literals" prompt. |
+| 03 parser+bake   | **Opus** | High/High. Byte-identical behaviour gate + resolver sig + ADR-001 layering. SL-168 defect surface. |
+| 04 prompt check  | Sonnet | Med-High. Rides check_corpus precedent; escalate to opus only if phase-plan widens surface. |
+| 05 funnel        | **Opus** | Med-High/High. import.rs mutating cadence, ADR-012 C1; silent breakage. |
+| 06 READMEs+memo  | Sonnet | Low-Med. Prose + embed ritual (build→sync→validate); checklist prompt. |
+| 07 overlay+comp  | **Opus** | Med-High/High. Loader precision, must not break SL-193 projection. |
+
+Decomposition principle: **adherence→arm, capability→model**. Sonnet on the
+claude arm is still high-adherence (instruction-following is a claude-family
+trait); opus-vs-sonnet buys reasoning, not obedience. So 02 = sonnet despite
+High adherence.
+
+Bootstrap paradox: SL-191's contract protects *future* dispatches, not this one.
+This drive's only guardrails are model tier + tight per-phase-plans. That's why
+03 gets opus + worktree isolation despite being "just a parser" — the contract
+that would catch a loose worker doesn't ship until 03 lands.
