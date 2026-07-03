@@ -1,0 +1,97 @@
+# Implementation plan for SL-192 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-192"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Engine: set-valued model axis, membership + conjunction match, root-wise specificity"
+objective = """
+The pure-engine change (`src/hymns.rs`, ADR-001 leaf), atomic because the type flip
+ripples through every `.model` site in one compile unit. `ContextVector.model` and
+`Selector.model` become `BTreeSet<String>` (empty = the prior `None` don't-care).
+Matching splits into two composing modes: membership on the context side (a single
+model pattern matches if it prefix-matches ANY context-set member — existing
+`_default`/left-to-right logic per member), conjunction on the selector side (every
+pinned pattern must match some context member — intersection targeting). Model-band
+specificity becomes a `Vec<(root, depth)>` primary component (root = first path
+segment, depth = non-`_default` count), sorted by `(root, depth)` and compared by
+derived `Vec: Ord` — lexicographic + prefix-tiebreak IS the root-wise order (D3); a
+raw sorted multiset (NOT collapsed by root) so the legitimate
+`capability/code/high ∧ capability/reasoning/high` distinct-subtree intersection
+outranks its factors. `Spec = (Vec<(String,u32)>, u32)`; `precedence_key` and the
+`explain` render follow. Specificity stays context-free (selector only). The ≈12
+struct-literal `.model` sites migrate `Option`→set; the command/loader boundary
+(`build_ctx`, `default_selector`/`overlay_selector`) wraps its still-single-valued
+inputs into singleton sets so the whole tree stays green. Delivers FR-004, FR-005,
+FR-007.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (internal + codex passes integrated); SPEC-023 D2/D3/D4 the target; RFC-013 §3 the minimal-fix map" },
+  { id = "EN-2", text = "current `.model` sites re-confirmed against tree: hymns.rs types :148/:202, matches :325, depth_of :166, ≈12 test sites; prompt.rs build_ctx :202 + explain :162; install.rs default_selector :689 / overlay_selector :720" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`ContextVector.model` and `Selector.model` are `BTreeSet<String>`; an empty `Selector.model` resolves identically to the delivered `None` don't-care (unpinned axis skipped)" },
+  { id = "EX-2", text = "Membership: `model_pattern_matches(pat, &BTreeSet)` succeeds iff `pat` prefix-matches some member (per-member `_default` wildcard; pattern longer than a member cannot match it)" },
+  { id = "EX-3", text = "Conjunction: `matches` requires every pinned selector pattern to match some context member; a non-empty selector set misses an agent carrying only a proper subset" },
+  { id = "EX-4", text = "Model-band specificity = pinned patterns as `(root, depth)` pairs, sorted, compared lexicographically; same-root deeper wins, prefix-intersection outranks its factor, cross-root falls to root-alpha; distinct-subtree same-root intersection outranks its factors (multiset, not root-collapsed). `Spec = (Vec<(String,u32)>, u32)`; context-free (reads selector only)" },
+  { id = "EX-5", text = "`precedence_key` + `explain` render follow the new `Spec`; ≈12 `.model` construction sites migrated `Option`→`BTreeSet`; `build_ctx`/`default_selector`/`overlay_selector` wrap single-valued inputs into singleton sets — tree compiles and the suite is green" },
+]
+verification = [
+  { id = "VT-1", expects = "membership: multi-key context, single-pattern selector fires when any member matches; a pattern matching no member does not fire", test_file = "src/hymns.rs", keywords = ["model_pattern_matches", "BTreeSet"] },
+  { id = "VT-2", expects = "conjunctive intersection targeting: a multi-pattern selector matches an agent carrying all pinned patterns and misses one carrying a proper subset", test_file = "src/hymns.rs", keywords = ["intersection"] },
+  { id = "VT-3", expects = "root-wise specificity table: same-root depth-ordered; prefix-intersection outranks factor; distinct-subtree same-root intersection outranks factor; cross-root alpha + the accepted alpha-earlier-factor boundary; stability under one-tree deepening", test_file = "src/hymns.rs", keywords = ["specificity", "adherence", "capability"] },
+  { id = "VA-1", expects = "behaviour-preservation: the delivered hymns + prompt suites are green after the Option→set migration; the ONLY intended output change is the `explain`/`Spec` byte-form, reviewed by intent (no silent golden rewrite)" },
+]
+specs             = []
+requirements      = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Command + loader: repeatable --model, presence-preserving sidecar list, e2e"
+objective = """
+Widen the shell surface (ADR-001 command/install layer) to expose the set input —
+the engine already supports it. `--model` becomes repeatable on `resolve` and
+`explain` (`Vec<String>` → `BTreeSet` in `build_ctx`). `Sidecar.model` becomes
+`Option<Vec<String>>` — the `Option` is load-bearing: `None` (field omitted) keeps a
+model-band snippet's path-derived singleton pin, `Some([])` explicitly unpins,
+`Some(list)` replaces with the conjunctive set — preserving the delivered
+`if let Some(..)` presence semantics that a bare defaulted `Vec` would destroy. E2E
+goldens prove the CLI arity end-to-end using the EXISTING shipped model snippets
+(`anthropic/claude-sonnet-4`, `deepseek/_default`) — no dependency on SL-191's
+trait-keyed hymns. Delivers the FR-009 delta.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: engine set-valued (membership + conjunction + root-wise specificity), suite green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`--model` is repeatable on `resolve` and `explain` (`Vec<String>`); multiple occurrences build the context trait set; a single occurrence degenerates to a singleton set (unchanged CLI behaviour)" },
+  { id = "EX-2", text = "`Sidecar.model: Option<Vec<String>>`; `overlay_selector` overrides only when the field is declared — `None` keeps the path pin, `Some([])` unpins, `Some(list)` replaces; `default_selector` for `Band::Model` seeds a singleton set from the path label" },
+  { id = "EX-3", text = "E2E: `prompt resolve --role worker --model anthropic/claude-sonnet-4 --model deepseek/_default` composes both shipped model snippets (membership over the two-key context); `prompt explain` traces the multi-key match with the new `Spec` render" },
+]
+verification = [
+  { id = "VT-1", expects = "repeatable --model builds a multi-key context; both matching model snippets compose in one resolve (membership + FR-009 arity), via shipped snippets", test_file = "tests/e2e_prompt_resolve_golden.rs", keywords = ["--model", "deepseek"] },
+  { id = "VT-2", expects = "sidecar presence semantics: omitted model keeps the path pin; declared list replaces; empty list unpins — overlay_selector honours Option<Vec>", test_file = "src/install.rs", keywords = ["overlay_selector", "model"] },
+  { id = "VT-3", expects = "e2e explain renders the multi-key precedence trace with the generalised Spec form", test_file = "tests/e2e_prompt_resolve_golden.rs", keywords = ["explain"] },
+]
+specs             = []
+requirements      = []
