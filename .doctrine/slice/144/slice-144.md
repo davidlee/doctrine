@@ -113,6 +113,11 @@ scope is reconciled to the live tree:
 - `install/governance.md`, `install/model-band.md` — hook contract documentation.
 - **Delete** `install/boot-footer.md` + orphan `.doctrine/boot-footer.md` (retired).
 - `hymns/`, `agents/`, `templates/` — **map** in the IA (altitude), no restructure.
+- **Ownership matrix** (design D6) — a reviewed fact-class → owner artefact
+  produced before doc edits; may trigger a conditional `install/hooks.md` split
+  if using-doctrine.md over-concentrates.
+- **Restate-line regression tripwire** — a grep/`just` recipe (`doctrine.just` +
+  a script under `install/scripts/`), no CLI-code change.
 - Re-embed and re-sync cycle per batch of edits.
 
 ### Out of scope
@@ -145,6 +150,9 @@ scope is reconciled to the live tree:
 - `install/*.md` (content audit, edits) + `install/manifest.toml` (reachability).
 - `install/boot-footer.md` + `.doctrine/boot-footer.md` — deleted (retired).
 - `plugins/doctrine/skills/*/SKILL.md` — restate-line scan target (8 candidates).
+- `install/hooks.md` — **conditional** new Tier-1 doc, only if the ownership
+  matrix shows using-doctrine.md over-concentration (design D6).
+- `doctrine.just` + `install/scripts/` — restate-line regression tripwire recipe.
 - `src/install.rs` — `touch`/embed target for re-embed.
 - `.doctrine/state/boot.md` — regenerated after routing-process changes.
 
@@ -157,9 +165,12 @@ _All three sliced-time OQs resolved at design (2026-07-03):_
 2. ~~IA audit methodology.~~ **Resolved: a design doc** (this slice's `design.md`)
    captures the target IA; edits then execute against it. Prevents thrash; no
    new ADR (hymns already governed by ADR-011/SPEC-023).
-3. ~~Restate-line automation.~~ **Resolved: grep-assisted + manual triage.** 30
-   skills, 8 `--flag <ARG>` candidates — manual triage suffices; a permanent
-   lint check is an optional follow-up, not a deliverable.
+3. ~~Restate-line automation.~~ **Resolved: manual triage + a cheap structural
+   gate.** 30 skills, 8 `--flag <ARG>` candidates — manual triage for the
+   remediation, **plus** a grep/`just` regression tripwire is now a deliverable
+   (design D5, amended after external review: a compliance slice needs a
+   regression control). A full Rust `doctrine check` linter stays an optional
+   follow-up — the tripwire is a shell/`just` recipe, no CLI-code change.
 
 ## Verification / Closure Intent
 
@@ -172,11 +183,13 @@ _All three sliced-time OQs resolved at design (2026-07-03):_
   mechanism, reset path).
 - `boot-footer.md` deleted from `install/` and `.doctrine/`; nothing references it.
 - All skills comply with the restate line (or documented exceptions exist in
-  the ADR-005 review ledger).
+  the ADR-005 review ledger), and a grep/`just` regression tripwire fails on a
+  seeded flag-table fixture — so compliance holds past close.
 - `glossary.md` and `using-doctrine.md` cover all current entity kinds and
   verbs.
-- Every shipped reference doc is reachable (manifest ship set + a skill/boot
-  pointer); orphans fixed. Reachability contract documented.
+- Every shipped reference doc is distribution-reachable (manifest ship set + a
+  machine-checkable skill/boot pointer edge); orphans fixed. Reachability contract
+  documented, scoped to fresh-install (stale-client currency → IDE-030).
 - PUSH-tier reference-forms block is present and correct in routing-process.md.
 
 ## Follow-Ups
@@ -185,6 +198,9 @@ _All three sliced-time OQs resolved at design (2026-07-03):_
   from.
 - **IDE-029** (lifecycle-stage hymn seams) — the general form of the dropped
   reconcile-rules hook; sequenced after SL-191.
+- **IDE-030** (client-repo doc currency under write-if-absent) — the stale-client
+  hazard this slice's reachability model names but scopes out; likely a `reseat`
+  refresh mode. `IDE-030 references(originates_from) SL-144`.
 - If the hymns cascade genuinely warrants folding into ADR-005's tier model
   (vs staying under ADR-011/SPEC-023), file an ADR-005 review finding — do not
   amend mid-slice.
