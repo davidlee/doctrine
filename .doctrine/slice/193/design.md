@@ -141,7 +141,9 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
   - VT: **idempotent** — both present ⇒ no write, no error.
   - VT: **preserve edits** — edited `.md` present ⇒ never overwritten.
   - VT: **seal respected** — sealed slot ⇒ neither `.md` nor sidecar written.
-  - Extend the existing `project_starters` test; keep green.
+  - VT: **dry_run** — nothing written for either file.
+  - `project_starters` is currently **untested** dead code — these are new
+    tests (tempdir-scoped), not an extension.
 - **Golden — resolver expose/seal symmetry (`src/hymns.rs`):**
   - VT: exposed slot, user twin with self-`replaces` ⇒ **single emit** (user
     body); framework suppressed.
@@ -181,6 +183,31 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
   depends on single-emit exposure).
 - The gitignore→tracked tier change for `.doctrine/hymns` is done (user); the
   SPEC-023 persistence framing is now consistent. No further tier work here.
+
+## Adversarial review (internal pass)
+
+- **Load-bearing risk, CLEARED.** Does the *disk* loader wire sidecar `replaces`,
+  or only the embedded loader? Verified `load_disk_corpus` (`src/install.rs`)
+  reads `<stem>.toml`, parses `Sidecar`, `overlay_selector` → sets
+  `Selector.replaces`, tags `Provenance::User`. So a disk sidecar suppresses the
+  framework twin at resolve. **No loader change needed** — the "engine + loader
+  untouched" claim holds.
+- **Decline-the-step is safe.** If a user declines forward-step 4: no disk twins,
+  resolver sees framework-only ⇒ single emit. If accepted: user twin
+  self-`replaces` ⇒ single emit. The *only* broken state is disk-twin-without-
+  sidecar — which arises solely from legacy orphans (fixed here) or hand-authoring
+  (out-of-scope known gap). The wiring closes the orphan case.
+- **Slash-labels round-trip.** `model/deepseek/_default`: sidecar path
+  `.../model/deepseek/_default.toml`, `replaces = "model/deepseek/_default"`;
+  `parse_slot_ref` splits on first `/` ⇒ band `model`, label `deepseek/_default`.
+  Correct.
+- **No step-count regression.** `run_forward_steps` is not unit-tested for step
+  count (only `prompt_step` is tested in isolation); adding step 4 breaks nothing.
+- **Write order.** New slot writes `.md` (creates dir via `write_atomic`) then
+  sidecar; backfill writes only the sidecar into the existing dir. `write_atomic`
+  must ensure the parent dir for the sidecar-only path — confirm at execute.
+- **Corrected:** `project_starters` has **no** existing test (fully untested dead
+  code); the VTs above are net-new, not an extension.
 
 ## Open questions
 

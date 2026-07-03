@@ -38,13 +38,17 @@ carrier — all pressure-tested in REV-019 against unchanged `hymns.rs`).
    (`#[expect(dead_code, reason = "reserved: SL-187 …")]`) — never called. SL-187
    is `done` but never wired disk-projection of exposed starters. So the fix has
    no live call site to attach to yet.
-2. The reproducing on-disk twin `.doctrine/hymns/role/worker.md` is **untracked
-   and hand-authored** — REV-019's own documented "known gap" (hand-authored
-   exposed snippet, no sidecar). Implementing the projector sidecar alone leaves
-   this file doubling.
+2. The defect is **corpus-wide**: all 5 exposed slots (`harness/claude`,
+   `model/anthropic/claude-sonnet-4`, `model/deepseek/_default`,
+   `role/orchestrator`, `role/worker`) have byte-identical on-disk twins, now
+   **tracked/authored** (gitignore fixed to include `.doctrine/hymns`), none
+   carrying a sidecar → all double. ISS-206 named only `role/worker` (the one
+   visible in the baked worker def). The twins are **orphans** — no live producer
+   (`project_starters` is dead); seeded by earlier/removed wiring.
 
-So this slice must both **wire the projector** and **emit the sidecar**, then
-reconcile the stray hand-made twin, or the symptom does not clear.
+So this slice must both **wire the projector** and **emit the `replaces`
+sidecar**, then reconcile the existing twins (backfill their sidecars by running
+the wired producer), or the symptom does not clear.
 
 ## Scope & Objectives
 
@@ -66,10 +70,10 @@ Realise SPEC-023 REQ-322 / REQ-323 / REQ-329 (already amended by REV-019):
    (byte-identical body → dedup) and edited (`B'` → framework `B` suppressed,
    customisation wins) cases.
 
-4. **Reconcile the stray twin.** The untracked hand-authored
-   `.doctrine/hymns/role/worker.md` must stop doubling: regenerate it via the now-
-   wired projector (gaining the sidecar) or remove it. Confirm
-   `prompt resolve --role worker` emits `role/worker` **once**.
+4. **Reconcile the existing twins.** Run the wired producer to backfill sidecars
+   for all 5 tracked exposed twins (independent write-if-absent preserves the
+   `.md`, adds the `.toml`); commit the sidecars. Confirm `prompt explain` shows
+   **no** exposed slot doubling.
 
 ## Non-Goals
 
