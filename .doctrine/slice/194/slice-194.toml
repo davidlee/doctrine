@@ -1,7 +1,7 @@
 id = 194
 slug = "interestingness-findings"
 title = "Actionability interestingness findings"
-status = "audit"
+status = "reconcile"
 created = "2026-07-03"
 updated = "2026-07-03"
 tags = []
