@@ -480,3 +480,47 @@ Root cause: the verb-registration surface (cli enum + guard write_class +
 help-tree/census asserts) is not discoverable from the plan's "cli match arm +
 members list" wording — a checklist of "files a new verb touches" would have
 pre-declared guard.rs and saved the round-trip.
+
+[dispatch; SL-191-P02-golden-halt]
+PHASE-02 added install/hymns/model/adherence/low.md (a new model-band trait key
+per D2/D3). This changed `prompt model-keys` output 2→3 keys, breaking the e2e
+golden tests/e2e_prompt_resolve_golden.rs::vt2_model_keys_exact_relative_keys
+(pins exactly 2 keys). The funnel regression-diff caught it (HALT, correct).
+TWO cost sources:
+1. Worker-suite-scope: orchestrator prompt told worker to run
+   `cargo test --bin doctrine install` — too narrow. The affected golden is a
+   tests/ integration binary, invisible to a --bin doctrine filter. Violates
+   mem.pattern.dispatch.worker-prompt-run-full-suite. Worker reported green;
+   funnel diff (full suite) is what caught it. Belt worked; the worker's local
+   gate gave a false-green. Prompt should mandate the regression-relevant suite
+   incl. tests/ e2e when a phase mutates the embedded corpus.
+2. Selector/base collision: the golden file is not a design-target selector, so
+   import refuses undeclared-scope. Adding a selector mid-phase advances the
+   coord branch (B→B'') and breaks the in-flight worker's verify-worker base==B'
+   invariant. A foreseeable-golden-coupling that plan-time selector enumeration
+   missed. Recovery requires re-basing the phase on a B'' that carries the
+   selector — i.e. the selector set must be complete before a phase that will
+   touch a coupled golden. Lesson: `slice selector doctor` / plan-stage should
+   flag corpus-mutating phases whose downstream goldens aren't in the selector set.
+
+[execute; IMP-183-01] Lenient deserialization for Doc structs — adding estimate/value
+fields to shared Doc structs (governance::Doc in particular) broke catalog scan
+outbound_for → relation_edges, which parses the full Doc. Had to add lenient
+deserializers (estimate/value) so malformed facets don't block entity reads.
+The 4 failing tests were all ADR-seeded catalog scan tests. Diagnosis required
+tracing scan_entities → outbound_for → relation_edges → read_doc to find the
+serde parse that was failing. A comment on Doc documenting the tight coupling
+between show and relation_edges would help future agents.
+
+[dispatch; SL-191-P02-recovery-phantom-gate]
+Nearly spent a promote(edge→main)+refresh-base+selector-add+re-fork ceremony on
+a recovery, on the false premise that funnel `import --slice` refuses an
+undeclared-selector path (tests/e2e_prompt_resolve_golden.rs). Memory check
+(mem.fact.conformance.rev-only-slice-undeclared) corrected it: undeclared-scope
+is an AUDIT-time `slice conformance` report (dispose `aligned`), NOT an
+import-time gate. The only import path-belt is R-5 (.doctrine/.claude). Real
+root cause was mem.pattern.dispatch.worker-prompt-run-full-suite: P02 worker
+prompt scoped the gate to `--bin doctrine install`, so the worker never ran the
+tests/ e2e golden, never saw it red. Fix = full-suite mandate + declare the
+golden as a 4th worker file; land it, dispose undeclared `aligned` at audit.
+Token cost of the phantom: this whole detour + the halted funnel round.

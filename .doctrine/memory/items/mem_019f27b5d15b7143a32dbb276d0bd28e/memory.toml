@@ -1,0 +1,42 @@
+memory_uid = "mem_019f27b5d15b7143a32dbb276d0bd28e"
+memory_key = "mem.pattern.dispatch.import-scope-belt-omit-slice-for-coupled-paths"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Funnel import scope belt: omit --slice for legitimately-coupled non-selector paths; dispose undeclared aligned at audit"
+summary = "`worktree import --slice` enforces undeclared-scope at IMPORT; omit it for coupled non-selector paths (goldens, mandated caller migrations), verify the delta by hand, dispose undeclared `aligned` at audit — never a promote/refresh-base/selector ceremony."
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine worktree import", "doctrine slice conformance"]
+tags = ["dispatch", "funnel", "conformance", "audit", "import"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e22ffa4db58065568c7b46671714fb03b8fdce1b"
+ref_name = "refs/heads/edge"
+checkout_state_id = "8ad93cf9c978b711949413acb2f8f58f27ad8f7c0155bb66417cd216067d88b4"
+base_commit = "d6cf85ed2ba819d12f454640bd63fc3de05d883c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
