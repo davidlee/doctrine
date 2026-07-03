@@ -687,3 +687,30 @@ but the token floor of an inquisition is "review output + full re-verification",
 not "review output" alone. Cheap win observed: the design's own precise `:line`
 citations (RelationEdge:735, hydrate:278) made verification O(1) lookups vs
 open-ended grep — dense line-citation in a design pays back at inquisition time.
+
+[dispatch/close (orchestrator-author); SL-191-close-2026-07-04]
+Orchestrator-author close required repeatedly resolving WHICH TREE is canonical
+for each write — a recurring token tax with no in-flow signal:
+- Slice lifecycle (audit/reconcile/done), the RV ledger, notes/design/selector
+  reconcile edits → all EDGE (parent tree); the review verbs even refuse a
+  worktree-resolved root (review-ledger §6). But `slice status` auto-detects root
+  from cwd, so running it from the COORD tree silently wrote the coord copy —
+  producing an edge=ready / coord=audit split I had to detect and realign with
+  `-p <edge>`. A `slice status` that warned "you are transitioning a lifecycle on a
+  dispatch worktree, not the parent" would have saved a dig.
+- The integrate topology: `main` EXISTS but had DIVERGED from edge (edge +31 / main
+  +2 from a parallel slice's landing), so the AGENTS.md pre-dispatch `git fetch .
+  edge:main` promotion is WRONG at close (non-ff) — close integrates the admitted
+  close_target onto CURRENT main via ff-CAS, independent of edge. This isn't stated
+  where the close operator is looking; the close skill's step 3a shows the candidate
+  workflow but not "do NOT promote edge→main here."
+- `git rev-parse --short A B C` aborts the whole command if ANY ref fails to
+  resolve ("Needed a single revision"), which misled me into briefly believing
+  `main` was absent. Single-ref checks are reliable; multi-ref --short is a footgun.
+- ISS-030 verify (a) `git diff --quiet HEAD` false-failed on an unrelated
+  concurrently-STAGED `flake.nix` from another agent (shared index) — the check is
+  whole-tree, so any parallel agent's staged file trips it even though the pure-ref
+  integrate never touched the checkout. (b) journal-trunk-oid is the trustworthy
+  signal. A shared-index repo makes (a) noisy for orchestrator-author close.
+Net: the close mechanics are sound and fail-closed, but an orchestrator-author (no
+worker) pays a large navigation tax the worker-driven path never sees.
