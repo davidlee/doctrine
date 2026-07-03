@@ -1,0 +1,155 @@
+# Implementation plan for SL-196 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-196"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Four ordered phases, strictly sequential (each depends on the prior's payload):
+#   01 write seam → 02 read seam → 03 hydrate+render → 04 search.
+# All touch relation.rs / catalog / search — file-overlapping, NOT parallelisable.
+# Every phase rides the SL-176 Degree seam verbatim (design D1); the design's
+# VT-1..12 map onto these phase-local VTs (noted per objective).
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Write seam — rule column, gate, serialization"
+objective = """
+Admit an optional `descriptor` on the write path. Add the `descriptor_bearing:
+bool` column to `RelationRule` (relation.rs:~340), `true` on exactly the
+`references:concerns` row (relation.rs:417), `false` elsewhere. Add the
+`validate_link` gate clause after the degree gate (relation.rs:1447): a descriptor
+on a non-bearing row bails with the home-hint. Thread `descriptor: Option<&str>`
+through the write path — `validate_link` → `append_edge` → `append_relation_row`
+(pure, :1136) → the row builder, which serializes the cell ONLY when present, in
+order `label / role? / degree? / descriptor? / target` (target stays trailing
+anchor). CLI `--descriptor <TEXT>` on `link` (cli.rs:~570, dispatch :1308); raw
+text validated non-empty (trim; empty/whitespace → reject). Memory-source branch
+(run_link, commands/relation.rs:~88) REFUSES `--descriptor`, symmetric to its
+`--role` refusal. Generalise `append_relation_row`'s same-triple branch to compare
+BOTH facets: Noop iff equal, else bail naming the differing facet ("unlink to
+change"). Identity (`row_matches` :1265) is untouched — descriptor excluded.
+Design VTs covered: 2 (write/identity), 3 (gate), 4 (accept), 5 (empty), 7
+(order), 10 (bearing pin).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (slice at plan stage); the SL-176 Degree seam is present at the cited sites (degree_bearing, validate_link:1447, append_relation_row:1136, row_matches:1265)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`link <src> references <tgt> --role concerns --descriptor \"…\"` serializes a `descriptor = \"…\"` cell on the Tier::One row, ordered label/role?/degree?/descriptor?/target." },
+  { id = "EX-2", text = "`--descriptor` on any non-bearing row (references:implements, supersedes, related, fulfils) is rejected with a message naming the descriptor home; on a memory source it is refused symmetric to --role." },
+  { id = "EX-3", text = "Empty/whitespace descriptor rejected. Same-triple relink: identical descriptor → Noop; differing → hard reject naming the facet. `row_matches` identity unchanged; behaviour-preservation suites green." },
+]
+verification = [
+  { id = "VT-1", expects = "validate_link rejects a descriptor on a non-bearing row (home-hint) and accepts it on references:concerns.", test_file = "src/relation.rs", keywords = ["descriptor_bearing", "does not take a descriptor", "concerns"] },
+  { id = "VT-2", expects = "append_relation_row writes the descriptor cell in order label/role?/degree?/descriptor?/target and omits it when absent (diff stability).", test_file = "src/relation.rs", keywords = ["append_relation_row", "descriptor =", "target ="] },
+  { id = "VT-3", expects = "Empty/whitespace descriptor rejected; non-empty accepted.", test_file = "src/relation.rs", keywords = ["descriptor", "non-empty"] },
+  { id = "VT-4", expects = "Same-triple relink: identical descriptor Noops, differing descriptor hard-rejects ('unlink to change'); both-facet conflict compare.", test_file = "src/relation.rs", keywords = ["descriptor", "unlink to change", "Noop"] },
+  { id = "VT-5", expects = "descriptor_bearing true exactly on references:concerns, false elsewhere; disjoint from degree_bearing.", test_file = "src/relation.rs", keywords = ["descriptor_bearing", "degree_bearing"] },
+  { id = "VA-1", expects = "Agent confirms the CLI --descriptor flag reaches run_link and the memory-source branch refuses it symmetric to --role (no unit-test home yet for the CLI wire)." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Read seam — deserialize, round-trip, permissive placement"
+objective = """
+Make the written cell read back. Add `descriptor: Option<String>` to the serde
+`RelationRow` (relation.rs:850) with `#[serde(default, skip_serializing_if =
+"Option::is_none")]`, mirroring `degree`. In `read_block` (:958) resolve the cell
+— ANY non-empty text is legal (no enum parse, unlike `Degree::from_name`) — and
+thread it into the edge via a `RelationEdge::with_descriptor` constructor beside
+`with_degree` (:970). Add `descriptor: Option<String>` to `RelationEdge` (:735)
+and set `descriptor: None` at every existing constructor/default site
+(relation.rs:768/780, relation_query.rs with_role sites, spec.rs:1133,
+rec.rs:456, review.rs:1428) — compile-driven (R1). Placement is PERMISSIVE on
+read (INV-5 / OQ-6, degree parity): read_block does NOT reject a descriptor on a
+non-bearing row — only the write gate does. `unlink` matches the (label,role,
+target) triple, descriptor ignored. Design VTs covered: 1 (round-trip), 6
+(unlink), 11 (read-path parity).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 green: the write path serializes a descriptor cell on the references:concerns row." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A row written with a descriptor reads back via tier1_edges/read_block with RelationEdge.descriptor = Some(text); a row with no descriptor reads back None and serializes no `descriptor =` key." },
+  { id = "EX-2", text = "A hand-authored descriptor cell on a non-bearing row parses into a live edge on read (permissive, INV-5) — NOT rejected, exact parity with a misplaced degree cell." },
+  { id = "EX-3", text = "unlink of a (label,role,target) triple removes the row regardless of its descriptor; all constructor sites compile with descriptor: None; behaviour-preservation suites green." },
+]
+verification = [
+  { id = "VT-1", expects = "Round-trip: write a references:concerns row with descriptor, read it back via tier1_edges with descriptor recovered; absent descriptor ≡ None with no serialized key.", test_file = "src/relation.rs", keywords = ["descriptor", "tier1_edges", "Some"] },
+  { id = "VT-2", expects = "Read-path parity: a hand-authored descriptor on a non-bearing row parses into a live edge (not rejected on read), mirroring the degree parity test at relation.rs:3143.", test_file = "src/relation.rs", keywords = ["descriptor", "tier1_edges"] },
+  { id = "VT-3", expects = "unlink matches the (label,role,target) triple and ignores descriptor.", test_file = "src/relation.rs", keywords = ["unlink", "descriptor"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Hydrate + outbound render"
+objective = """
+Surface the descriptor. Add `descriptor: Option<String>` to `CatalogEdge`
+(catalog/hydrate.rs:129) WITH `#[serde(skip_serializing_if = "Option::is_none")]`
+— mandatory (external F-D): CatalogEdge is a serialized /api/graph + web contract,
+and role's guard at hydrate.rs:140 is the precedent; without it every edge gains
+`descriptor: null`. Populate it in the hydrate loop beside `role`: `descriptor:
+edge.descriptor.clone()` (:273) — the raw RelationEdge is already the loop element
+(scan.rs:122), no re-scan (R3 resolved). Render descriptor on the OUTBOUND edge
+row in inspect/show (relation_query.rs edge display, :74 `references(concerns)
+SL-x — "…"`). NO inbound render, NO inbound_descriptor_index (design D3 — verbose
+prose, diverge from degree). Design VTs covered: 8 (render outbound/absent
+inbound), 12 (serde omission), part of 9 (CatalogEdge populated).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 green: RelationEdge carries descriptor read from disk." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "hydrate populates CatalogEdge.descriptor from the authored row; a None descriptor serializes with NO `descriptor` key (graph/edge JSON byte-identical to pre-slice)." },
+  { id = "EX-2", text = "inspect/show renders the descriptor on the source's outbound references(concerns) edge; the target's inbound listing shows NO descriptor." },
+]
+verification = [
+  { id = "VT-1", expects = "hydrate copies the authored descriptor onto CatalogEdge.descriptor.", test_file = "src/catalog/hydrate.rs", keywords = ["descriptor", "CatalogEdge"] },
+  { id = "VT-2", expects = "serde omission: a CatalogEdge with descriptor None serializes with no `descriptor` key.", test_file = "src/catalog/hydrate.rs", keywords = ["descriptor", "skip_serializing_if"] },
+  { id = "VT-3", expects = "Outbound render shows the descriptor on references(concerns); inbound render omits it.", test_file = "src/relation_query.rs", keywords = ["descriptor", "concerns"] },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Search — descriptor into the lex index"
+objective = """
+Make descriptors findable. Thread each entity's outbound descriptor text into its
+lex document: `entity_lex_doc` (search.rs:124) gains the annotation string, and the
+search doc-build (search.rs:323–336) groups `Catalog.edges` by source and joins the
+descriptors onto the matching entity's doc. `CatalogEdge.descriptor` (PHASE-03)
+keeps it a pure projection — no re-parse (R2). The join MUST be non-regressive:
+an entity with no descriptor edge yields a byte-identical lex doc to today
+(search currently indexes entities only — search.rs:335). Design VT covered: 9
+(found by descriptor text).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 green: CatalogEdge.descriptor is populated and the full Catalog (entities+edges) is in scope at scan_catalog (search.rs:323)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "An entity that authored a references:concerns edge with a descriptor is returned by a search whose query matches the descriptor text." },
+  { id = "EX-2", text = "An entity with no descriptor edge produces a lex doc byte-identical to the pre-slice build (non-regression); existing search suites green." },
+]
+verification = [
+  { id = "VT-1", expects = "An entity is found by BM25 search on its edge's descriptor text.", test_file = "src/search.rs", keywords = ["descriptor", "entity_lex_doc"] },
+  { id = "VT-2", expects = "Non-regression: a descriptor-free entity's lex doc is unchanged by the source-join.", test_file = "src/search.rs", keywords = ["descriptor", "entity_lex_doc"] },
+]
+specs        = []
+requirements = []
