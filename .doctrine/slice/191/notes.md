@@ -49,23 +49,33 @@ premises:
   not logic. (User: "claude arm could run under pi theoretically… that doesn't mean
   you bake that into the hymns.")
 
-## Open decisions (design in progress — NOT locked)
+## Decisions — ALL LOCKED (design.md is canonical; 2026-07-03)
 
-- **Q2 — where the bake learns each def's (model, stage); single source.** My
-  standing recommendation (user has NOT yet confirmed):
-  - **model from the def's frontmatter `model:`** (single source, no drift with the
-    harness's own model selector) — resolve the model band off that. Marker stays a
-    sentinel meaning "resolve my full worker context." Rejected alt: a parametric
-    marker carrying `--model …` (two sources of truth → drift risk).
-  - **Probably NO stage band.** The hermetic-fixture + component-anchored-path
-    directives are **worker-role conduct**, not phase-stage conduct → fold into
-    `role/worker`, drop `stage` from the bake. Smallest coherent change; matches
-    band semantics. Reconsider only if per-arm stage content is wanted.
-  This decision governs whether `install/hymns/stage/*` exists and whether the bake
-  threads `--stage` at all.
+Design targets the **post-unlock world**: SL-192 (trait-set engine) **done**,
+SL-193 (exposed-slot self-replaces) **at audit** (obj #3 overlay + twin
+reconciliation gated on its close).
 
-- **Q3 — import reliability gate shape** (not yet discussed): reject an
-  unformatted/lint-red imported delta, vs auto-`check` + re-import. Funnel wiring.
+- **D2 (Q2) — trait-keyed model band via dedicated `traits:` frontmatter.** Not
+  the harness's `model:` (identity, harness-consumed) — a separate classification
+  field. Hymns are trait-keyed (`model/adherence/low.md`), NOT identity-keyed
+  (`model/deepseek/_default.md`). Absent `traits:` → empty set → no model band.
+  Marker stays a sentinel; bake reads frontmatter (rejected: parametric `--model`
+  marker → drift). **No stage band** (folded into role; `Only([Role, Model])`).
+- **D3 — trait population: `adherence/low` only.** §5c content is low-adherence
+  guidance. `capability/*` deferred (no invented content). pi/universal def
+  declares `traits = ["adherence/low"]`.
+- **D4 (SPEC-023 OQ-3) — dual-site coverage lint over a shared pure predicate.**
+  `traits_covered(declared, corpus)` in `src/hymns.rs`; called at the bake
+  (install-time hard error) AND `prompt check` (author-time finding, embedded defs
+  via `embedded_agent_defs()`). Def→corpus direction; on-disk def linting deferred.
+- **D5 (Q3) — reject-and-halt import gate + base-clean precondition.** Post-import
+  `doctrine check`; red → halt+report, never auto-fix (partial, hides compliance
+  signal, breaks ADR-012 sole-writer + RFC-011 instrumentation). Base-clean before
+  arm-spawn makes the worker's `check quick` delta-scoped.
+
+Selectors updated: `model/deepseek/_default.md` → `model/adherence/low.md`;
++`src/hymns.rs`, `src/commands/prompt.rs`, `install/agents/pi/dispatch-worker.md`,
+`src/dispatch.rs` as design-target. Relation `SL-191 references(implements) SPEC-023`.
 
 ## Content ownership cut (POL-002) — the audit table
 

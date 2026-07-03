@@ -54,10 +54,16 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
      `doctrine check commit` before the final commit — the owned lint/fmt seam,
      never a literal `cargo fmt`.
 
-2. **Deepseek delivery patterns** — `install/hymns/model/deepseek/_default.md`
+2. **Trait-keyed delivery patterns** — `install/hymns/model/adherence/low.md`
    (§5c): explicit negative constraints, concrete patterns over abstract rules,
-   high-density bullets. Model band is legitimately universal (the model is the
-   model regardless of client).
+   high-density bullets. The model band is a **trait classification space**
+   (SPEC-023, delivered by SL-192), NOT a vendor-identity path — this content is
+   *low-adherence* guidance and reaches any loose model by membership, never just
+   `deepseek`. The worker def declares its trait set in a dedicated `traits:`
+   frontmatter field (`traits = ["adherence/low"]`), distinct from the harness's
+   `model:` identity field. Absent `traits:` → no model band. Only `adherence/low`
+   is populated this slice; `capability/*` trees stay an unpopulated extension
+   point (design D3).
 
 3. **This-repo specifics** — `.doctrine/hymns/` overlay (User / `project` band),
    NOT the shipped corpus: `cargo fmt`/`target/`/`node_modules/`, ADR-001
@@ -65,28 +71,50 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
    `architecture_layering` gate. POL-002 explicitly sanctions these as client
    habits in the overlay.
 
-4. **Bake-marker generalization** — `src/install.rs`: resolve the worker
-   subagent-def marker for **role + model + stage**, not `--role worker` only, so
-   the new model/stage hymn content actually lands in the baked def. Load-bearing:
-   without it, (1)'s path/hermetic stage content and (2)'s deepseek content are
-   authored but never delivered to a claude-arm worker.
+4. **Bake generalization** — `src/install.rs`: `resolve_worker_role_body` reads
+   the def's `traits:` frontmatter → set-valued `ContextVector { role: Worker,
+   model: BTreeSet<traits>, bands: Only([Role, Model]) }`, so the new trait-keyed
+   model content lands in the baked def (**not** `--role worker` only). The marker
+   stays a literal but becomes a *sentinel* = "resolve my full worker context." No
+   stage band, no `--stage` threading (folded into role — design D2). Load-bearing:
+   without it, (2)'s trait content is authored but never delivered to a claude-arm
+   worker.
 
-5. **Funnel check-cadence wiring** — `/dispatch` orchestrator + import belt:
+5. **Required-trait coverage lint** (SPEC-023 OQ-3, routed here from SL-192) — a
+   shared pure predicate `traits_covered(declared, corpus)` in `src/hymns.rs`,
+   called at **two sites**: the bake (`src/install.rs`) as an install-time hard
+   error, and `prompt check` (`src/commands/prompt.rs`) as an author-time finding
+   over embedded defs. Catches a typo'd trait → empty set → silent loss of the
+   worker's delivery contract. Def→corpus direction; embedded defs only (design D4).
+
+6. **Funnel check-cadence wiring** — `/dispatch` orchestrator + import belt:
    - **base-clean precondition:** run `doctrine check` (commit/gate cadence) on
      the base before `arm-spawn` (and on `main` before branching), so a worker's
      `doctrine check quick` only ever touches its own delta — the formatter-clean
      base that makes the worker fmt mandate safe (fixes the SL-168 root cause:
      `cargo fmt` on an *unformatted* base spills outside the delta).
-   - **import reliability gate:** run a `doctrine check` cadence on the imported
-     delta so an unformatted / lint-red delta cannot land (belt, not self-report).
+   - **reject-and-halt import gate:** run a `doctrine check` cadence on the
+     post-import tree; a red (unformatted / lint-fail) delta **halts and reports**,
+     never lands and never auto-fixes (belt, not self-report — design D5).
 
 ## Non-Goals
 
 - **Per-fn home-module + layer rationale content** — that is *per-phase*, lives in
   the phase plan / distilled `prompt:`, not a static hymn. Only the static
   *directive* ships here.
-- **ISS-206** — prompt-cascade same-slot Framework+User twin duplication; split
-  off, filed, its own resolver-semantics fix.
+- **ISS-206 / exposed-slot self-replaces** — the same-slot Framework+User twin
+  duplication and its projection fix are **SL-193** (at audit). Obj #3's overlay
+  authoring + the stray `role/worker.md` twin reconciliation *ride* SL-193's close,
+  they are not re-solved here.
+- **Stage band** — folded into `role/worker`; no `install/hymns/stage/*`, no
+  `--stage` threading. The hermetic-fixture + path directives are role conduct.
+- **`capability/*` trait trees** — deferred extension point; only `adherence/low`
+  populated (no invented capability content).
+- **On-disk `.doctrine/agents/**` `traits:` linting** — the coverage lint checks
+  embedded (framework-shipped) defs only; hand-edited on-disk def linting is a
+  follow-up (parallels SL-193's deferred hand-authored-overlay gap).
+- **Auto-fix import** — rejected; the import gate halts-and-reports, it never
+  rewrites the worker delta (ADR-012 sole-writer; design D5).
 - **Postmortem §5b/§5d.2–5 funnel/CI hardening** beyond the check-cadence wiring —
   `architecture_layering` always-green gate, delta-aware gate diff, golden
   regression harness, `doctor --baseline`. Different surface (verification/CI),
@@ -99,37 +127,38 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
 
 ## Affected surface
 
-- `install/hymns/role/worker.md`, `install/hymns/model/deepseek/_default.md`,
-  new `install/hymns/stage/<execute|dispatch>.md` (Framework corpus).
-- `.doctrine/hymns/**` (this-repo overlay: cargo/target/ADR-001 specifics).
-- `src/install.rs` (`WORKER_RESOLVE_MARKER` / `expand_worker_marker` + the render
-  call site).
+- `install/hymns/role/worker.md`, `install/hymns/model/adherence/low.md`
+  (Framework corpus). No `install/hymns/stage/*` (stage folded).
+- `.doctrine/hymns/**` (this-repo overlay: cargo/target/ADR-001 specifics; rides
+  SL-193 close).
+- `src/hymns.rs` (`traits_covered` pure predicate).
+- `src/install.rs` (`resolve_worker_role_body` widened to read `traits:`; bake
+  coverage hard error + the render call site).
+- `src/commands/prompt.rs` (`prompt check` coverage finding over embedded defs).
+- `install/agents/pi/dispatch-worker.md` (+ installed universal twin) — declare
+  `traits = ["adherence/low"]`.
 - `plugins/doctrine/skills/dispatch/**`, `plugins/doctrine/skills/dispatch-agent/**`
   (funnel check-cadence beats).
-- Dispatch import belt in `src/dispatch.rs` (import-time check gate).
+- Dispatch import belt in `src/dispatch.rs` (reject-and-halt import-time check gate).
 - Rendered subagent defs (`.claude/`/`.pi/`/… `dispatch-worker.md`) — build/install
   output, verified not hand-edited.
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ — stage band label & threading.** `stage/execute` vs `stage/dispatch`? Does
-  the bake resolve a stage at all, and does it thread `--model` for a fixed worker
-  model, or stay model-agnostic (model band pulled at the worker's own
-  session-start via SL-187's seam)? Central `/design` fork.
+- **RESOLVED (design D2) — stage band.** Folded into `role/worker`; no stage band,
+  no `--stage`. The bake resolves `Only([Role, Model])`, model band keyed off the
+  def's `traits:` frontmatter.
+- **RESOLVED (design D4) — required-trait lint (SPEC-023 OQ-3).** In scope as a
+  dual-site coverage lint (bake hard error + `prompt check` finding) over a shared
+  `traits_covered` predicate; def→corpus direction; a declared-but-uncovered trait
+  is an **error** (silent-contract-loss), embedded defs only.
 - **OQ — ownership cut per contract line.** Confirm the whole negative contract is
   expressible on the owned "declared file set / touch only what you're told"
-  primitive, pushing all Rust specifics to the overlay. Believed mostly yes.
-- **OQ — required-trait `prompt check` lint (SPEC-023 OQ-3, routed here from
-  SL-192).** SL-192 delivers the set-valued trait engine but has nothing to lint
-  against — trait *declarations* live in the def, which is this slice's surface.
-  So the T2-mitigation lint lands here: `prompt check` warns when a worker def
-  declares no key under a required trait root (e.g. no `adherence/*`), catching a
-  def that silently misses its guidance (RFC-013 §5 T2 watch-item). Contingent on
-  this slice introducing declared trait sets in def frontmatter (SPEC-023 D5 /
-  FR-010) and keying its model hymns on trait paths (`model/adherence/low`, …)
-  rather than the identity path `model/deepseek/_default` the current scope names
-  — reconcile that in `/design`. Decide: which roots are "required", and whether
-  the diagnostic is warn or error.
+  primitive, pushing all Rust specifics to the overlay. Believed mostly yes;
+  finalised when `role/worker.md` content is authored.
+- **Sequencing** — **SL-192 done** (trait engine shipped+closed; trait selectors
+  unblocked). **SL-193 at audit** — obj #3 overlay + twin reconciliation gated on
+  its close; Framework hymns, bake, lint, and funnel beats do not depend on it.
 - **ASM** — POL-002: `install/hymns` ships only doctrine-owned universal contract;
   `cargo`/`target/`/ADR-001 specifics live in `.doctrine/hymns`. `doctrine check`
   is the sanctioned formatter seam (no host command in shipped code).
@@ -145,12 +174,14 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
 ## Verification / Closure intent
 
 - Enriched hymns resolve host-agnostic in `install/hymns`; `prompt resolve
-  --role worker --model deepseek/... --stage ...` emits the full contract.
-- `expand_worker_marker` (generalised) inlines role+model+stage into the baked
-  `dispatch-worker.md`; existing bake unit tests + drift test green.
+  --role worker --model adherence/low` composes the role + trait contract.
+- `resolve_worker_role_body` (widened) inlines role+traits into the baked
+  `dispatch-worker.md`; existing `expand_worker_marker` unit tests + drift test green.
+- Coverage lint: a def declaring an uncovered trait → bake hard error + `prompt
+  check` finding (tests).
 - `install/hymns` contains no host command (`cargo`/`target/`/`just`); a grep
   gate / review confirms POL-002.
-- Funnel runs `doctrine check` at base-handoff and import; an unformatted delta is
-  rejected at import (test).
+- Funnel runs `doctrine check` at base-handoff and import; an unformatted imported
+  delta halts-and-reports, never lands (test).
 - Live/dry dispatch run: a worker receives the contract, runs `doctrine check
   quick`, lands a formatted in-set delta.

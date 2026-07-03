@@ -23,10 +23,6 @@ selector = "src/install.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/dispatch.rs"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "plugins/doctrine/skills/dispatch/**"
 intent = "scope-relevant"
 
@@ -39,7 +35,23 @@ selector = "install/hymns/role/worker.md"
 intent = "design-target"
 
 [[selector]]
-selector = "install/hymns/model/deepseek/_default.md"
+selector = "install/hymns/model/adherence/low.md"
+intent = "design-target"
+
+[[selector]]
+selector = "src/hymns.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/prompt.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/agents/pi/dispatch-worker.md"
 intent = "design-target"
 
 [[relation]]
@@ -50,6 +62,11 @@ target = "ADR-011"
 label = "references"
 role = "originates_from"
 target = "IMP-197"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "SPEC-023"
 
 [[relation]]
 label = "related"
