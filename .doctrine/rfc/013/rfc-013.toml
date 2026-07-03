@@ -1,0 +1,52 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 13
+slug = "cascade-selection-algebra"
+title = "Prompt cascade selection algebra: composable trait categories and disjunction-via-classification"
+status = "open"
+created = "2026-07-03"
+updated = "2026-07-03"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "SL-186"
+
+[[relation]]
+label = "related"
+target = "SL-187"
+
+[[relation]]
+label = "related"
+target = "SL-191"
+
+[[relation]]
+label = "related"
+target = "IMP-155"
+
+[[relation]]
+label = "related"
+target = "IMP-197"
+
+[[relation]]
+label = "related"
+target = "ADR-011"
+
+[[relation]]
+label = "related"
+target = "ADR-005"
+
+[[relation]]
+label = "related"
+target = "ADR-014"
+
+[[relation]]
+label = "related"
+target = "POL-002"
+
