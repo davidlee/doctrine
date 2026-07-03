@@ -29,23 +29,61 @@ never been audited as a system.
 Carved out from SL-143 (CHR-021) to keep the shipped-memory corpus overhaul
 focused on memory bodies, not the broader documentation IA.
 
+### Scope reconciliation (2026-07-03, design)
+
+Sliced 2026-06-23; the `install/` surface has since drifted materially and this
+scope is reconciled to the live tree:
+
+- **`boot-footer.md` is retired**, not a live hook. SL-187 (prompt cascade
+  delivery) replaced the boot-footer round-trip: the `## Onboarding` boot
+  section is now populated from onboarding-tagged **memory** bodies (seeded via
+  `templates/seed-onboarding.md` → `mem.signpost.project.orientation`), and the
+  `## Model band` section is a static `install/model-band.md` pull. `boot.rs`
+  reads `boot-footer.md` nowhere; the file (and the orphan `.doctrine/boot-footer.md`)
+  is stale residue whose header still claims live injection. Objective 2
+  **retires** it rather than "hardens" it.
+- **`model-band.md` is new** and live (boot `Static` source) — added to the
+  hook/IA surface.
+- **The install surface is larger than the flat `*.md` set** — it now includes
+  `hymns/`, `agents/`, `templates/`, `manifest.toml`, `doctrine.just`,
+  `doctrine.toml.example`. Scope shape **C+**: audit the `*.md` set +
+  `manifest.toml` reachability as the system; **map** the new subdirs at stable
+  altitude (they exist, who consumes them, reachability) without restructuring.
+- **Hymns need no ADR-005 revision.** The context-keyed prompt cascade is
+  governed by ADR-011 + SPEC-023, a resolver mechanism — not a 4th tier of
+  ADR-005's static-doc trichotomy. The IA map cross-references rather than
+  amends. `SL-144 references(concerns) SPEC-023`.
+- **`reconcile-rules.md` is dropped**, not built. It would be a parallel
+  implementation of the hymns `stage`/`project` bands. The general form is filed
+  as **IDE-029** (lifecycle-stage hymn seams), sequenced after SL-191.
+- **Skills live under `plugins/doctrine/skills/*/SKILL.md`**, not `.agents/skills/`
+  (path drift). 30 skills; 8 carry `--flag <ARG>` candidates for restate-line
+  triage.
+
 ## Scope & Objectives
 
 ### Objectives
 
-1. **IA audit of `install/*.md`** — audit the set as a coherent system:
-   routing-process.md, using-doctrine.md, glossary.md, governance.md,
-   boot-footer.md, review-ledger.md. Identify overlaps, gaps, contradictions.
-   Resolve them with a clear content hierarchy.
+1. **IA audit of the `install/` ship surface** — audit the `*.md` reference-doc
+   set (routing-process.md, using-doctrine.md, glossary.md, governance.md,
+   model-band.md, review-ledger.md) + `manifest.toml` as a coherent system:
+   overlaps, gaps, contradictions, resolved with a clear content hierarchy. The
+   new subdirs (`hymns/`, `agents/`, `templates/`) are **mapped** at stable
+   altitude — where they sit in the IA, who consumes them, governance authority
+   (ADR-011/SPEC-023 for hymns) — not restructured (scope shape C+).
 
-2. **User-serviceable `.md` hooks** — document and harden the customisation
-   surface:
-   - `governance.md` — boot-injected, user-owned governance pointer.
-   - `boot-footer.md` — boot-injected, user-owned footer.
-   - **New: reconcile-rules.md** — user-owned reconciliation rules (what
-     the reconcile/close loop consults for project-custom drift handling).
-   Ensure each hook has a clear contract (what it controls, how it's injected,
-   precedence rules, how to reset to default).
+2. **User-serviceable hooks** — document each customisation surface with a clear
+   contract (what it controls, injection/resolution mechanism, precedence, reset
+   path):
+   - `governance.md` — boot-injected (PUSH), user-owned governance pointer.
+   - `model-band.md` — boot `Static` source (PUSH), universal model-band floor.
+   - `.doctrine/hymns/` overlay — user overlay of the context-keyed cascade
+     (PULL via `prompt resolve`); documented **at altitude** only, internals
+     owned by SL-191/SPEC-023.
+   - onboarding seed — `templates/seed-onboarding.md` → seeded
+     `mem.signpost.project.orientation` (the real onboarding hook).
+   - **`boot-footer.md` — RETIRE.** Delete `install/boot-footer.md` and the
+     orphan `.doctrine/boot-footer.md`; it is dead post-SL-187.
 
 3. **Restate-line audit** — scan every skill for violations of ADR-005 R-OQ-4
    (skills MUST NOT reproduce flag syntax, option/enum tables, or storage-tier
@@ -67,15 +105,14 @@ focused on memory bodies, not the broader documentation IA.
 
 ### In scope
 
-- All files under `install/` — content audit, restructuring, editing.
-- All skills under `.agents/skills/` — restate-line scan and fixes.
+- `install/*.md` reference-doc set — content audit + editing.
+- `install/manifest.toml` — reachability oracle (ship/seal/expose sets).
+- Skills under `plugins/doctrine/skills/*/SKILL.md` — restate-line scan and fixes.
 - `install/routing-process.md` (boot digest) — PUSH-tier completeness.
-- `install/using-doctrine.md` — reference-doc currency.
-- `install/glossary.md` — reference-doc currency.
-- `install/governance.md` — hook contract documentation.
-- `install/boot-footer.md` — hook contract documentation.
-- **New** `install/reconcile-rules.md` — create and document as new user hook.
-- `src/boot.rs` — if boot-injection needs changes for reconcile-rules.md.
+- `install/using-doctrine.md`, `install/glossary.md` — reference-doc currency.
+- `install/governance.md`, `install/model-band.md` — hook contract documentation.
+- **Delete** `install/boot-footer.md` + orphan `.doctrine/boot-footer.md` (retired).
+- `hymns/`, `agents/`, `templates/` — **map** in the IA (altitude), no restructure.
 - Re-embed and re-sync cycle per batch of edits.
 
 ### Out of scope
@@ -98,8 +135,6 @@ focused on memory bodies, not the broader documentation IA.
   flags is already compliant.
 - **Re-embed footgun.** Edits to `install/*` require `touch src/install.rs`
   (or whichever embedding crate) + `cargo build`. Batch edits accordingly.
-- **New reconcile-rules hook must not break existing flow.** Design it as an
-  optional include — if the file is absent, reconcile/close behaves as today.
 - **ADR-005 compliance is not all-or-nothing.** Some skills may legitimately
   need inline CLI references (e.g. `execute` skill describing a phase
   transition verb). The restate line permits citing a verb and rule by name;
@@ -107,47 +142,52 @@ focused on memory bodies, not the broader documentation IA.
 
 ## Affected Surface
 
-- `install/` — all `.md` files (content audit, edits, new reconcile-rules.md).
-- `.agents/skills/*/SKILL.md` — restate-line scan target.
-- `src/boot.rs` — if reconcile-rules.md needs boot-injection.
-- `src/install.rs` — `touch` target for re-embed.
+- `install/*.md` (content audit, edits) + `install/manifest.toml` (reachability).
+- `install/boot-footer.md` + `.doctrine/boot-footer.md` — deleted (retired).
+- `plugins/doctrine/skills/*/SKILL.md` — restate-line scan target (8 candidates).
+- `src/install.rs` — `touch`/embed target for re-embed.
 - `.doctrine/state/boot.md` — regenerated after routing-process changes.
 
 ## Open Questions
 
-1. **Reconcile-rules hook shape.** A new `.md` file under `install/` that
-   ships to `.doctrine/reconcile-rules.md`. Should it be boot-injected (like
-   governance.md) or skill-read (like using-doctrine.md)? The latter is simpler
-   and avoids boot bloat. Defer to design.
-2. **IA audit methodology.** Should the audit produce a formal document (e.g.
-   an ADR or a design doc) describing the target IA, or should it be
-   resolved inline by editing until the docs are coherent? A design doc
-   prevents thrash but adds ceremony. Defer to design.
-3. **Restate-line automation.** Could a lint-style check (grep for `--flag`
-   patterns in skill files) be useful, or is manual audit sufficient given
-   20-odd skills? Defer to plan.
+_All three sliced-time OQs resolved at design (2026-07-03):_
+
+1. ~~Reconcile-rules hook shape.~~ **Resolved: dropped.** It would parallel the
+   hymns `stage`/`project` bands. Filed general form as **IDE-029**.
+2. ~~IA audit methodology.~~ **Resolved: a design doc** (this slice's `design.md`)
+   captures the target IA; edits then execute against it. Prevents thrash; no
+   new ADR (hymns already governed by ADR-011/SPEC-023).
+3. ~~Restate-line automation.~~ **Resolved: grep-assisted + manual triage.** 30
+   skills, 8 `--flag <ARG>` candidates — manual triage suffices; a permanent
+   lint check is an optional follow-up, not a deliverable.
 
 ## Verification / Closure Intent
 
 "Done" means:
 
-- All `install/*.md` documents audited and coherent — no overlaps or gaps.
-- Each user hook (governance.md, boot-footer.md, reconcile-rules.md) has a
-  documented contract (what it controls, injection mechanism, reset path).
-- Reconcile-rules.md ships as an optional hook (existing flows unchanged when
-  absent).
+- The `install/*.md` set audited and coherent — no overlaps or gaps; the new
+  subdirs (hymns/agents/templates) mapped in the IA with governance cross-refs.
+- Each live user hook (governance.md, model-band.md, hymns overlay, onboarding
+  seed) has a documented contract (what it controls, injection/resolution
+  mechanism, reset path).
+- `boot-footer.md` deleted from `install/` and `.doctrine/`; nothing references it.
 - All skills comply with the restate line (or documented exceptions exist in
   the ADR-005 review ledger).
 - `glossary.md` and `using-doctrine.md` cover all current entity kinds and
   verbs.
-- Every shipped reference doc is reachable from at least one skill or the
-  boot digest.
+- Every shipped reference doc is reachable (manifest ship set + a skill/boot
+  pointer); orphans fixed. Reachability contract documented.
 - PUSH-tier reference-forms block is present and correct in routing-process.md.
 
 ## Follow-Ups
 
 - SL-143 (shipped memory corpus overhaul) — the sibling slice this was carved
   from.
+- **IDE-029** (lifecycle-stage hymn seams) — the general form of the dropped
+  reconcile-rules hook; sequenced after SL-191.
+- If the hymns cascade genuinely warrants folding into ADR-005's tier model
+  (vs staying under ADR-011/SPEC-023), file an ADR-005 review finding — do not
+  amend mid-slice.
 - Any skill violations that are architectural rather than content (e.g. a
   skill whose design requires inline flag reference) should be filed as an
   ADR-005 review finding, not papered over.

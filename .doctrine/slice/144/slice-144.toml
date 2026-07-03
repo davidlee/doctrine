@@ -15,6 +15,11 @@ label = "governed_by"
 target = "ADR-005"
 
 [[relation]]
+label = "references"
+role = "concerns"
+target = "SPEC-023"
+
+[[relation]]
 label = "related"
 target = "SL-143"
 
