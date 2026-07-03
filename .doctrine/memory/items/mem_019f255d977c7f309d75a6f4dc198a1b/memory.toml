@@ -1,0 +1,59 @@
+memory_uid = "mem_019f255d977c7f309d75a6f4dc198a1b"
+memory_key = "mem.pattern.platform.hand-created-worktree-provisioning"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Hand-created worktrees skip fork provisioning"
+summary = "Hand-created worktrees skip doctrine-fork provisioning: missing web/map/dist breaks cargo build (RustEmbed) — prefer 'doctrine worktree fork'"
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = []
+globs = [".worktrees/**", "web/map/dist/**"]
+commands = ["doctrine worktree"]
+tags = ["worktree", "jail", "provisioning"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "726ba456c03d12df1aac2e9ff70bb612678d5ba6"
+tree = "de64e208290baee60f43355c048ee360d6ab40e7"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "726ba456c03d12df1aac2e9ff70bb612678d5ba6"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.platform.jail-host-worktree-gitdir"
+
+[[relation]]
+label = "related"
+target = "mem_019eeac33cf373d3949d04a6f9780351"
+
+[[relation]]
+label = "related"
+target = "mem_019eec3285e471c287a0c3d74c235b25"
+
+[[relation]]
+label = "related"
+target = "mem_019f068fd92e7b9184d5615220d25233"
+

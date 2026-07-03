@@ -1,0 +1,43 @@
+memory_uid = "mem_019f255e18847da2aa383667826a314d"
+memory_key = "mem.pattern.platform.jail-host-worktree-gitdir"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Host-created worktree gitdir breaks in-jail"
+summary = "Host-created worktree stores absolute host gitdir path → git fails 'not a git repository' in-jail; relativize both gitdir pointers"
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = []
+globs = [".worktrees/**"]
+commands = ["git worktree"]
+tags = ["worktree", "jail", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "de64e208290baee60f43355c048ee360d6ab40e7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "88c0b46c06db3be3dd792460abbfbc181e4b9068ea8fcc8d5ff70e8b292fdc11"
+base_commit = "726ba456c03d12df1aac2e9ff70bb612678d5ba6"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
