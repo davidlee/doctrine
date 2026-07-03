@@ -355,6 +355,7 @@ mod tests {
             source: CatalogKey::Memory("mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string()),
             label: CatalogEdgeLabel::Raw("custom-label".to_string()),
             role: None,
+            descriptor: None,
             target: EdgeTarget::UnvalidatedText {
                 raw: "free text target".to_string(),
             },

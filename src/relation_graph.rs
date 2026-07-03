@@ -554,6 +554,10 @@ type InboundSrc = (EntityKey, Option<crate::relation::Degree>);
 pub(crate) struct RelationTargetView {
     pub(crate) target: String,
     pub(crate) degree: Option<crate::relation::Degree>,
+    /// The free-text descriptor on a `references:concerns` outbound edge (SL-196 §5.2).
+    /// `None` on every edge without one and on every inbound view (design D3 — inbound
+    /// carries no descriptor).
+    pub(crate) descriptor: Option<String>,
 }
 
 /// One `(label, role)` group of an inspect surface: the key and its targets (structured
@@ -666,6 +670,7 @@ pub(crate) fn inspect_from(
             .push(RelationTargetView {
                 target: edge.target,
                 degree: edge.degree,
+                descriptor: edge.descriptor.clone(),
             });
     }
     let outbound: Vec<RelationGroup> = outbound_by_key.into_iter().collect();
@@ -718,6 +723,7 @@ pub(crate) fn inspect_from(
                     .map(|(k, deg)| RelationTargetView {
                         target: k.canonical(),
                         degree: deg,
+                        descriptor: None,
                     })
                     .collect(),
             )
@@ -832,9 +838,15 @@ fn render_outbound(
         } else {
             targets
                 .iter()
-                .map(|t| match t.degree {
-                    Some(crate::relation::Degree::Partial) => format!("{} (partial)", t.target),
-                    _ => t.target.clone(),
+                .map(|t| {
+                    let base = match t.degree {
+                        Some(crate::relation::Degree::Partial) => format!("{} (partial)", t.target),
+                        _ => t.target.clone(),
+                    };
+                    match &t.descriptor {
+                        Some(d) => format!("{base} — \"{d}\""),
+                        None => base,
+                    }
                 })
                 .collect()
         };
@@ -3137,6 +3149,51 @@ mod tests {
         assert!(
             render_transitive_human(&view).starts_with("ADR-005 — transitive (depth all)\n"),
             "unbounded header reads depth all"
+        );
+    }
+
+    // SL-196 VT-3 — an outbound references(concerns) edge bearing a descriptor renders
+    // `— "…"` on the source's outbound row; the TARGET's inbound render of the SAME edge
+    // shows NO descriptor (design D3 — inbound carries no descriptor).
+    #[test]
+    fn concerns_descriptor_renders_outbound_only_never_inbound() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001 references(concerns) REQ-005 with a free-text descriptor. rels_block does
+        // not author descriptors, so write the toml directly (the read seam parses it).
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\n\
+             descriptor = \"attention burden\"\ntarget = \"REQ-005\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        write(
+            root,
+            ".doctrine/requirement/005/requirement-005.toml",
+            "id = 5\nslug = \"r\"\ntitle = \"R\"\nstatus = \"active\"\n",
+        );
+        write(root, ".doctrine/requirement/005/requirement-005.md", "r\n");
+        let scanned = scan(root);
+
+        // Source outbound row carries the descriptor.
+        let out = render_from(&scanned, root, "SL-001", Format::Table).unwrap();
+        assert!(
+            out.contains("REQ-005 — \"attention burden\""),
+            "outbound concerns row shows the descriptor: {out}"
+        );
+
+        // Target inbound row omits the descriptor entirely (D3).
+        let inb = render_from(&scanned, root, "REQ-005", Format::Table).unwrap();
+        assert!(
+            inb.contains("concerned by: SL-001"),
+            "inbound concerns row present: {inb}"
+        );
+        assert!(
+            !inb.contains("attention burden"),
+            "inbound render carries NO descriptor: {inb}"
         );
     }
 }
