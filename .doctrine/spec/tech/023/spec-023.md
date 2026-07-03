@@ -194,9 +194,9 @@ whether the offending axis can be made classifiable.
   who won, why. The cascade's debugger.
 - `prompt check` — corpus integrity: sealed slots present and unshadowed,
   selectors parse, sidecars name real bands, `replaces` unique-most-specific.
-  The verb is delivered; its *integration into the `doctrine check` cadence*
-  is forward-intent — the project's `[verification]` argvs delegate to
-  `just quick/check/gate`, none of which invoke `prompt check`.
+  Wired into the `doctrine check` cadence: the `[verification]` argvs resolve
+  to `just quick/check/gate`, each of which runs `just validate`
+  (`doctrine prompt check`).
 
 The engine (`src/hymns.rs`) is pure — no disk, clock, or env; the seal set is
 passed in — and deterministic: the same `(corpus, context, seal)` yields
@@ -281,15 +281,12 @@ injection) depends on that determinism.
 Delivered (SL-186/SL-187, verified in `src/hymns.rs`): two-root corpus, seal
 enforcement, conjunctive matching with prefix/`_default` model patterns,
 band-primary specificity, `replaces` validation, the four `prompt` verbs
-(the engine-facing behaviour; see below for the `check`-cadence caveat),
+(`check` wired into all three `doctrine check` cadences via `just validate`),
 orchestrator session-start delivery, role-band def bake.
 
 Forward-intent (this spec's target, from RFC-013 positions 4 + F-A/F-B):
 set-valued context model axis with membership matching; conjunctive selector
 pattern-set (intersection targeting); root-wise normalized model specificity;
-repeatable `--model`; and wiring `prompt check` into the `doctrine check`
-cadence (the verb runs today, but the configured `[verification]` argvs
-resolve to `just quick/check/gate`, none of which invoke it). Framed as
-SL-186 under-delivering its own
+repeatable `--model`. Framed as SL-186 under-delivering its own
 composable-category design; the change lands via a conformance Revision or
 precursor slice (sequencing open at SL-191).
