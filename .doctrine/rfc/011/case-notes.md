@@ -714,3 +714,28 @@ for each write — a recurring token tax with no in-flow signal:
   signal. A shared-index repo makes (a) noisy for orchestrator-author close.
 Net: the close mechanics are sound and fail-closed, but an orchestrator-author (no
 worker) pays a large navigation tax the worker-driven path never sees.
+
+[execute/phase-plan; SL-195-P03-a]
+R4 live-probe (marketplace add overwrite semantics) was the phase gate — a genuine
+non-token cost (real CC state mutation + restore), correctly front-loaded. Two
+minor self-inflicted incidentals: (1) a nested-heredoc fixture builder parse-errored
+once (`parse error near '\n'`) → rewrote via a python heredoc; (2) `slice plan 195`
+and `slice phase 195 PHASE-03` (no --status) both errored before I recalled the
+plan.toml entry is read via file, and phase needs --status — the CLI has no plain
+"show one phase's plan entry" verb, so I grepped plan.toml directly. Small friction
+locating a single phase's authored EX/VT without a dedicated show.
+
+[audit; SL-195-RV243-a]
+Audit ran cheap and clean — but the disposition-vocab friction cost tokens. The
+audit skill narrows permitted dispositions to {aligned, fix-now, tolerated,
+verified-via-brief} and forbids design-wrong/follow-up for *spec/governance*
+items, but the MCP `review_dispose` enum still advertises the full five
+(design-wrong/follow-up included) with no per-facet gating. For a per-slice
+design.md prose-staleness finding, the skill wants "verified + brief" while the
+tool has no `verified` disposition (verify is a separate raiser action) — so the
+correct move (dispose design-wrong for a per-slice artifact, then verify) had to
+be reasoned out against a prohibition scoped only to spec/gov. A one-line
+in-tool hint ("per-slice design edits: design-wrong OK; spec/gov: route via
+brief, keep verified") or a facet-aware enum would remove a re-read of the skill.
+Also: no single verb prints one phase's authored EX/VT — had to grep plan.toml
+again (same friction logged at SL-195-P03-a).
