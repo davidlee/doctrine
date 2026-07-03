@@ -61,6 +61,7 @@
           bun
           typescript
           typescript-language-server
+          sccache
 
           graphviz
         ];

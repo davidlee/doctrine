@@ -1,4 +1,6 @@
 export JAIL_WORKSPACE_DEPS=""
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 export DIRENV_LAYOUT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/direnv/layouts/doctrine"
+export SCCACHE_DIR="$HOME/.cache/sccache"
+export RUSTC_WRAPPER=sccache
 use flake . --impure
