@@ -575,3 +575,27 @@ compile-time path embedding in a filesystem-walking test.
 
 [preflight + backlog; iss-209-preflight]
 - backlog show ISS-209 returned the template path (.doctrine/backlog/issue/209/ISS-209.md) but the actual file is at `backlog-209.md`. CLI `show` output is correct but the template body path hint was wrong — had to use `paths` to find the real file. Minor friction.
+
+[/dispatch + funnel verify beat; SL-191-P05-verify-caught-worker-misattributed-regression]
+PHASE-05 (Opus worker, arm-spawn ritual → CLEAN isolation this time: real
+`worktreePath` footer, isolated tree — contrast P04's ISS-034 coord-fallback under
+contention; the difference was contention clearing + using the full arm-spawn
+ritual rather than bare isolation:worktree).
+
+Funnel-integrity WIN, zero marginal cost: the worker self-reported ALL e2e reds as
+"ambient worker-marker refusals" and shipped. The funnel's regression-diff beat, run
+on the UNMARKED coord tree, found exactly ONE was NOT ambient —
+`import_from_worktree_happy_stages_tracked_and_untracked`: the phase's new post-apply
+prove gate ran in a happy-path e2e whose temp coord had no justfile → baked
+`just prove` failed → import halted. The worker had patched the sibling UNIT helper
+(`worker_tree_touching_seed`) but missed the e2e integration binary (an undeclared
+file it dismissed under the marker theory).
+
+Hazard identified: the worker's "e2e red == ambient marker" heuristic is CORRECT for
+most e2e reds in a marked worktree but LAUNDERS a real gate-induced regression. A
+worker running the full suite in its own (marked) tree is structurally blind to
+gate-behaviour regressions surfacing in e2e binaries — only the unmarked-coord verify
+beat distinguishes. Direct vindication of the funnel doctrine "self-reports are
+advisory; trust only the verify beat." Orchestrator reconciled the coupled e2e
+test-golden inline (same additive prove-override the worker used in the unit helper) —
+same coupling class as P02's golden (import-scope-belt), surfacing one funnel round late.
