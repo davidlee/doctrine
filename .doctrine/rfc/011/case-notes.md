@@ -465,3 +465,18 @@ not surface the authored plan phases/criteria. Verifying the just-authored
 plan.toml therefore required Reading the raw file (against the "read via show, not
 raw files" guardrail, because show has no plan projection). A `slice show --plan`
 or a plan projection would keep plan authoring inside the guardrail.
+
+[dispatch; dispatch-SL194-p01]
+New top-level verb has scope-coupling beyond the nominal "edit cli.rs":
+adding a `Command::Findings` variant forced (a) a Read-class arm in the
+exhaustive `write_class` match in `src/commands/guard.rs`, and (b) two
+cli.rs help-tree assertions (reports-family membership + verb census
+47→48). guard.rs was not in the slice's design-target selectors, so the
+funnel `import --slice 194` scope-check would have refused it
+(`undeclared-scope`). Cost: worker flagged it as a seam surprise; orchestrator
+dropped the `--slice` scope-check for the batch, manually vetted the 8-file
+delta, imported, then declared guard.rs as a design-target selector post-hoc.
+Root cause: the verb-registration surface (cli enum + guard write_class +
+help-tree/census asserts) is not discoverable from the plan's "cli match arm +
+members list" wording — a checklist of "files a new verb touches" would have
+pre-declared guard.rs and saved the round-trip.
