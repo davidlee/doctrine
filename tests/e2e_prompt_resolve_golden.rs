@@ -258,14 +258,14 @@ fn resolve_json_wraps_cascade_in_session_hook_envelope() {
     // plain form's own trailing-newline normalisation via `writeln!`).
     assert_eq!(ctx.trim_end(), stdout(&plain).trim_end());
 
-    // The Cursor harness hymn (with the nix devshell note) rode the cascade.
+    // The (host-independent, shipped) Cursor harness hymn rode the cascade.
+    // Project-specific build-tooling guidance (e.g. this repo's Nix devshell
+    // note) is authored on-disk per-project (POL-002 — never baked into the
+    // shipped corpus a fresh project would also inherit), so it is NOT
+    // asserted here.
     assert!(
         ctx.contains("operating inside the Cursor harness"),
         "cursor harness hymn missing, got: {ctx}"
-    );
-    assert!(
-        ctx.contains("nix develop -c"),
-        "nix devshell guidance missing, got: {ctx}"
     );
 }
 
