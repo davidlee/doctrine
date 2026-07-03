@@ -704,7 +704,9 @@ fn default_selector(slot: &crate::hymns::Slot) -> crate::hymns::Selector {
             }
         }
         crate::hymns::Band::Model => crate::hymns::Selector {
-            model: Some(slot.label.clone()),
+            // PHASE-01: seed a singleton pin from the path label (still single-valued;
+            // PHASE-02 widens the sidecar to a list).
+            model: BTreeSet::from([slot.label.clone()]),
             ..Default::default()
         },
         crate::hymns::Band::Stage => crate::hymns::Selector {
@@ -725,8 +727,11 @@ fn overlay_selector(
     if let Some(ref h) = sidecar.harness {
         sel.harness = Some(h.clone());
     }
+    // PHASE-01: sidecar `model` stays a single string; wrap it into a singleton set,
+    // preserving the delivered `if let Some(..)` presence semantics (declared →
+    // replace the pin). PHASE-02 widens this to `Option<Vec<String>>`.
     if let Some(ref m) = sidecar.model {
-        sel.model = Some(m.clone());
+        sel.model = BTreeSet::from([m.clone()]);
     }
     if let Some(ref r) = sidecar.role {
         sel.role = Some(parse_role(r)?);
@@ -897,7 +902,7 @@ pub(crate) fn resolve_worker_role_body(
         &crate::hymns::ContextVector {
             role: crate::hymns::Role::Worker,
             harness: None,
-            model: None,
+            model: BTreeSet::new(),
             arm: None,
             stage: None,
             bands: crate::hymns::BandFilter::Only(BTreeSet::from([crate::hymns::Band::Role])),

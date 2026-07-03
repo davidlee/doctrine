@@ -143,9 +143,10 @@ impl Slot {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Selector {
     pub harness: Option<String>,
-    /// A `model` key: `<vendor>/<segment…>`, matched left-to-right; `_default` is the
-    /// wildcard tail.
-    pub model: Option<String>,
+    /// A conjunctive set of `model` patterns (`<root>/<segment…>`, matched
+    /// left-to-right; `_default` is the wildcard tail). Empty = don't-care (the
+    /// prior `None`); every pinned pattern must hit some context member (D2).
+    pub model: BTreeSet<String>,
     pub role: Option<Role>,
     pub arm: Option<Arm>,
     pub stage: Option<String>,
@@ -155,15 +156,17 @@ pub(crate) struct Selector {
 }
 
 impl Selector {
-    /// The pinned depth of an axis: 1 for a single-token axis, the count of
-    /// non-`_default` segments for `model`, 0 when unpinned.
+    /// The pinned depth of an axis: 1 for a single-token axis, 0 when unpinned. For
+    /// `model` (the secondary-axis scalar in `Σ other`) it is the sum of every
+    /// pinned pattern's non-`_default` segment count. The model-band *primary*
+    /// component uses `model_pairs`, never this.
     fn depth_of(&self, axis: Axis) -> u32 {
         match axis {
             Axis::Harness => u32::from(self.harness.is_some()),
             Axis::Role => u32::from(self.role.is_some()),
             Axis::Arm => u32::from(self.arm.is_some()),
             Axis::Stage => u32::from(self.stage.is_some()),
-            Axis::Model => self.model.as_deref().map_or(0, model_depth),
+            Axis::Model => self.model.iter().map(|p| model_depth(p)).sum(),
         }
     }
 }
@@ -199,7 +202,9 @@ impl BandFilter {
 pub(crate) struct ContextVector {
     pub role: Role,
     pub harness: Option<String>,
-    pub model: Option<String>,
+    /// The agent's declared model trait keys — a set of points. A single selector
+    /// pattern matches by membership (prefix-matches ANY member; D2).
+    pub model: BTreeSet<String>,
     pub arm: Option<Arm>,
     pub stage: Option<String>,
     pub bands: BandFilter,
@@ -265,9 +270,16 @@ pub(crate) fn validate_replaces(corpus: &[Snippet]) -> Result<(), ResolveError> 
     Ok(())
 }
 
+/// Within-band specificity (D3): `(primary root-wise `(root, depth)` pairs, Σ other
+/// scalar)`. For the model band the primary is the pinned patterns as a sorted
+/// multiset of `(root, depth)` pairs, compared by derived `Vec: Ord` — lexicographic
+/// with a prefix tiebreak IS the root-wise order. For a single-token band it degenerates
+/// to one `("", 0|1)` pair (orders by depth); `preamble`/`project` → an empty vec.
+pub(crate) type Spec = (Vec<(String, u32)>, u32);
+
 /// The ordering key: `band → specificity → provenance → alpha(full slot path)`,
 /// compared ascending so the most-specific / user snippet lands last (last word wins).
-type PrecedenceKey = (Band, (u32, u32), Provenance, String);
+type PrecedenceKey = (Band, Spec, Provenance, String);
 
 pub(crate) fn precedence_key(s: &Snippet) -> PrecedenceKey {
     (
@@ -284,34 +296,59 @@ fn model_depth(pat: &str) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
-/// Does a `model` selector pattern match a context model key? Left-to-right segment
-/// match; `_default` is a per-level wildcard; a pattern longer than the context cannot
-/// match (it is more specific than the context provides).
-fn model_matches(pat: &str, ctx: Option<&str>) -> bool {
-    let Some(ctx) = ctx else { return false };
+/// `(root, depth)` for one model pattern: root = first segment (literal, including a
+/// leading `_default`); depth = non-`_default` segment count.
+fn model_root_pair(pat: &str) -> (String, u32) {
+    let root = pat.split('/').next().unwrap_or("").to_string();
+    (root, model_depth(pat))
+}
+
+/// The model axis as a sorted multiset of `(root, depth)` pairs — the canonical form
+/// compared lexicographically across selectors. NOT collapsed by root: a legitimate
+/// distinct-subtree intersection (`capability/code/high ∧ capability/reasoning/high`)
+/// stays two entries so the prefix rule ranks it above its factor (design §3.3).
+fn model_pairs(set: &BTreeSet<String>) -> Vec<(String, u32)> {
+    let mut v: Vec<(String, u32)> = set.iter().map(|p| model_root_pair(p)).collect();
+    v.sort();
+    v
+}
+
+/// Does a single `model` pattern prefix-match a single context key? Left-to-right
+/// segment match; `_default` is a per-level wildcard; a pattern longer than the key
+/// cannot match (it is more specific than the key provides).
+fn segments_prefix_match(pat: &str, key: &str) -> bool {
     let pat_segs: Vec<&str> = pat.split('/').collect();
-    let ctx_segs: Vec<&str> = ctx.split('/').collect();
-    if pat_segs.len() > ctx_segs.len() {
+    let key_segs: Vec<&str> = key.split('/').collect();
+    if pat_segs.len() > key_segs.len() {
         return false;
     }
     pat_segs
         .iter()
-        .zip(ctx_segs.iter())
+        .zip(key_segs.iter())
         .all(|(p, c)| *p == DEFAULT_SEGMENT || p == c)
 }
 
-/// Within-band specificity: `(band-primary-axis depth, Σ other-axis depths)`,
-/// lexicographic (D3). Leading with the band's own axis means axis-count can never bury
-/// an exact-model match, without introducing a global axis ranking.
-pub(crate) fn specificity(band: Band, sel: &Selector) -> (u32, u32) {
-    let primary = band.primary_axis();
-    let primary_depth = primary.map_or(0, |ax| sel.depth_of(ax));
-    let other_depth = ALL_AXES
+/// Membership (D2, context side): does a single model pattern prefix-match ANY member
+/// of the context set? Fires all of an agent's declared trait guidance in one resolve.
+fn model_pattern_matches(pat: &str, ctx: &BTreeSet<String>) -> bool {
+    ctx.iter().any(|key| segments_prefix_match(pat, key))
+}
+
+/// Within-band specificity (D3), lexicographic. Leading with the band's own axis means
+/// axis-count can never bury an exact-model match, without a global axis ranking.
+/// Context-free — reads the selector only (INV).
+pub(crate) fn specificity(band: Band, sel: &Selector) -> Spec {
+    let primary: Vec<(String, u32)> = match band.primary_axis() {
+        Some(Axis::Model) => model_pairs(&sel.model),
+        Some(ax) => vec![(String::new(), sel.depth_of(ax))],
+        None => vec![],
+    };
+    let other: u32 = ALL_AXES
         .iter()
-        .filter(|&&ax| Some(ax) != primary)
+        .filter(|&&ax| Some(ax) != band.primary_axis())
         .map(|&ax| sel.depth_of(ax))
         .sum();
-    (primary_depth, other_depth)
+    (primary, other)
 }
 
 /// Does a selector's pinned axes all match the context? An unpinned axis is don't-care;
@@ -322,8 +359,13 @@ pub(crate) fn matches(sel: &Selector, ctx: &ContextVector) -> bool {
     {
         return false;
     }
-    if let Some(m) = &sel.model
-        && !model_matches(m, ctx.model.as_deref())
+    // Model axis is a conjunction over pinned patterns: every pinned pattern must
+    // land on some context member (intersection targeting, D2). Empty = don't-care.
+    if !sel.model.is_empty()
+        && !sel
+            .model
+            .iter()
+            .all(|p| model_pattern_matches(p, &ctx.model))
     {
         return false;
     }
@@ -488,7 +530,7 @@ mod tests {
         ContextVector {
             role,
             harness: None,
-            model: None,
+            model: BTreeSet::new(),
             arm: None,
             stage: None,
             bands: BandFilter::All,
@@ -561,20 +603,26 @@ mod tests {
 
     #[test]
     fn specificity_model_band_exact_beats_shallow_plus_extra_axes() {
-        // exact model (depth 2) → (2, 0)
+        // exact model (depth 2) → ([(anthropic,2)], 0)
         let exact = Selector {
-            model: Some("anthropic/claude-sonnet-4".into()),
+            model: ["anthropic/claude-sonnet-4".into()].into(),
             ..Default::default()
         };
-        // shallow model (depth 1) + harness + role → (1, 2) — the finding-3 footgun
+        // shallow model (depth 1) + harness + role → ([(anthropic,1)], 2) — finding-3
         let shallow = Selector {
-            model: Some("anthropic".into()),
+            model: ["anthropic".into()].into(),
             harness: Some("claude".into()),
             role: Some(Role::Worker),
             ..Default::default()
         };
-        assert_eq!(specificity(Band::Model, &exact), (2, 0));
-        assert_eq!(specificity(Band::Model, &shallow), (1, 2));
+        assert_eq!(
+            specificity(Band::Model, &exact),
+            (vec![("anthropic".to_string(), 2)], 0)
+        );
+        assert_eq!(
+            specificity(Band::Model, &shallow),
+            (vec![("anthropic".to_string(), 1)], 2)
+        );
         // lexicographic: exact-model outranks shallow-model-plus-extras
         assert!(specificity(Band::Model, &exact) > specificity(Band::Model, &shallow));
     }
@@ -582,15 +630,21 @@ mod tests {
     #[test]
     fn specificity_default_tail_does_not_add_depth() {
         let vendor_default = Selector {
-            model: Some("anthropic/_default".into()),
+            model: ["anthropic/_default".into()].into(),
             ..Default::default()
         };
         let bare_vendor = Selector {
-            model: Some("anthropic".into()),
+            model: ["anthropic".into()].into(),
             ..Default::default()
         };
-        assert_eq!(specificity(Band::Model, &vendor_default), (1, 0));
-        assert_eq!(specificity(Band::Model, &bare_vendor), (1, 0));
+        assert_eq!(
+            specificity(Band::Model, &vendor_default),
+            (vec![("anthropic".to_string(), 1)], 0)
+        );
+        assert_eq!(
+            specificity(Band::Model, &bare_vendor),
+            (vec![("anthropic".to_string(), 1)], 0)
+        );
     }
 
     #[test]
@@ -598,11 +652,14 @@ mod tests {
         // In the harness band, model is a non-primary ("other") axis.
         let sel = Selector {
             harness: Some("claude".into()),
-            model: Some("anthropic/claude-sonnet-4".into()),
+            model: ["anthropic/claude-sonnet-4".into()].into(),
             ..Default::default()
         };
-        // primary=harness depth 1; other = model depth 2 = 2
-        assert_eq!(specificity(Band::Harness, &sel), (1, 2));
+        // primary=harness → [("",1)]; other = model depth 2 = 2
+        assert_eq!(
+            specificity(Band::Harness, &sel),
+            (vec![(String::new(), 1)], 2)
+        );
     }
 
     #[test]
@@ -611,8 +668,8 @@ mod tests {
             harness: Some("claude".into()),
             ..Default::default()
         };
-        // preamble primary depth 0; harness counts as other
-        assert_eq!(specificity(Band::Preamble, &sel), (0, 1));
+        // preamble primary → empty vec; harness counts as other
+        assert_eq!(specificity(Band::Preamble, &sel), (vec![], 1));
     }
 
     // ── VT-1: engine goldens ───────────────────────────────────────────────────
@@ -654,14 +711,14 @@ mod tests {
     #[test]
     fn specificity_dominates_provenance_framework_exact_beats_user_vendor_default() {
         let mut c = ctx(Role::Worker);
-        c.model = Some("anthropic/claude-sonnet-4".into());
+        c.model = ["anthropic/claude-sonnet-4".into()].into();
         let corpus = vec![
             // user vendor-default (broad): specificity (1,0)
             snip(
                 Band::Model,
                 "anthropic/_default",
                 Selector {
-                    model: Some("anthropic/_default".into()),
+                    model: ["anthropic/_default".into()].into(),
                     ..Default::default()
                 },
                 Provenance::User,
@@ -672,7 +729,7 @@ mod tests {
                 Band::Model,
                 "anthropic/claude-sonnet-4",
                 Selector {
-                    model: Some("anthropic/claude-sonnet-4".into()),
+                    model: ["anthropic/claude-sonnet-4".into()].into(),
                     ..Default::default()
                 },
                 Provenance::Framework,
@@ -799,14 +856,14 @@ mod tests {
     #[test]
     fn model_default_tail_matches_but_exact_is_not_required() {
         let mut c = ctx(Role::Worker);
-        c.model = Some("anthropic/claude-sonnet-4".into());
+        c.model = ["anthropic/claude-sonnet-4".into()].into();
         // bare vendor and vendor/_default both match anthropic/claude-sonnet-4
         let corpus = vec![
             snip(
                 Band::Model,
                 "anthropic",
                 Selector {
-                    model: Some("anthropic".into()),
+                    model: ["anthropic".into()].into(),
                     ..Default::default()
                 },
                 Provenance::Framework,
@@ -816,7 +873,7 @@ mod tests {
                 Band::Model,
                 "anthropic/_default",
                 Selector {
-                    model: Some("anthropic/_default".into()),
+                    model: ["anthropic/_default".into()].into(),
                     ..Default::default()
                 },
                 Provenance::Framework,
@@ -825,6 +882,97 @@ mod tests {
         ];
         // equal specificity (1,0); alpha on slot path: "anthropic" < "anthropic/_default"
         assert_eq!(resolve_ok(&c, &corpus), "VENDOR\nVENDOR-DEFAULT");
+    }
+
+    // ── SL-192 VT-1: membership — set-valued context, single pattern ───────────
+    #[test]
+    fn model_membership_single_pattern_fires_on_any_ctx_member() {
+        // A ctx carrying two model keys; a single-pattern selector matches iff the
+        // pattern prefix-matches ANY member (membership on the context side).
+        let ctx_set: BTreeSet<String> =
+            ["anthropic/claude-sonnet-4".into(), "openai/gpt-5".into()].into();
+        assert!(model_pattern_matches("openai", &ctx_set));
+        assert!(!model_pattern_matches("google", &ctx_set));
+
+        let hit = Selector {
+            model: ["openai".into()].into(),
+            ..Default::default()
+        };
+        let miss = Selector {
+            model: ["google".into()].into(),
+            ..Default::default()
+        };
+        let mut c = ctx(Role::Worker);
+        c.model = ctx_set;
+        assert!(matches(&hit, &c));
+        assert!(!matches(&miss, &c));
+    }
+
+    // ── SL-192 VT-2: conjunction — intersection targeting ──────────────────────
+    #[test]
+    fn model_conjunction_matches_intersection_misses_proper_subset() {
+        // A selector pinning two patterns is a conjunction: it fires only for an
+        // agent whose set carries BOTH pinned patterns.
+        let sel = Selector {
+            model: ["capability/code".into(), "capability/reasoning".into()].into(),
+            ..Default::default()
+        };
+        let mut both = ctx(Role::Worker);
+        both.model = [
+            "capability/code/high".into(),
+            "capability/reasoning/high".into(),
+        ]
+        .into();
+        let mut subset = ctx(Role::Worker);
+        subset.model = ["capability/code/high".into()].into();
+
+        assert!(
+            matches(&sel, &both),
+            "intersection: every pinned pattern hits a member"
+        );
+        assert!(
+            !matches(&sel, &subset),
+            "a proper subset misses the intersection"
+        );
+        // An empty selector set is the unpinned don't-care — matches regardless.
+        assert!(matches(&Selector::default(), &subset));
+    }
+
+    // ── SL-192 VT-3: root-wise specificity table (D3) ──────────────────────────
+    #[test]
+    fn specificity_root_wise_table_adherence_capability() {
+        let m = |pats: &[&str]| Selector {
+            model: pats.iter().map(|p| (*p).to_string()).collect(),
+            ..Default::default()
+        };
+        let spec = |sel: &Selector| specificity(Band::Model, sel);
+
+        // same-root deeper wins
+        assert!(spec(&m(&["capability/code/high"])) > spec(&m(&["capability/code"])));
+
+        // prefix-intersection outranks its factor (factor is a prefix of the seq)
+        let inter = m(&["adherence/low", "capability/code/high"]);
+        assert!(spec(&inter) > spec(&m(&["adherence/low"])));
+
+        // distinct-subtree same-root intersection outranks its factor (raw multiset,
+        // NOT root-collapsed): [(capability,3),(capability,3)] > [(capability,3)]
+        let two_sub = m(&["capability/code/high", "capability/reasoning/high"]);
+        assert!(spec(&two_sub) > spec(&m(&["capability/code/high"])));
+
+        // cross-root alpha + ACCEPTED boundary (design §4): a two-root intersection
+        // sorts BELOW a one-root alpha-earlier factor — leading `adherence` <
+        // `capability` decides it before length. Intended, not a defect.
+        assert!(spec(&inter) < spec(&m(&["capability/code/high"])));
+
+        // exact primary form — context-free, selector only
+        assert_eq!(
+            spec(&m(&["capability/code/high"])),
+            (vec![("capability".to_string(), 3)], 0)
+        );
+
+        // deepening stability: root-alpha ordering is unchanged when one tree deepens
+        assert!(spec(&m(&["adherence/low"])) < spec(&m(&["capability/code"])));
+        assert!(spec(&m(&["adherence/low"])) < spec(&m(&["capability/code/high"])));
     }
 
     #[test]
