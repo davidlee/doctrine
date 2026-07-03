@@ -1,0 +1,42 @@
+memory_uid = "mem_019f288cc9b676b0a47d08306bb1d70d"
+memory_key = "mem.pattern.env.jail-ro-bind-stale-after-reinstall"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Jail RO-bind of a mutable binary goes stale after in-session reinstall; bind the immutable store path instead"
+summary = "bwrap RO-binds a specific inode at jail creation; cargo install atomic-renames over the path so the bind goes stale and hooks/MCP hard-break till reload. Bind the immutable nix store output over the cargo path instead."
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = ["flake.nix"]
+globs = []
+commands = []
+tags = ["jail", "bwrap", "nix", "dispatch", "mcp", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "35fa22a1d182b1e8ab8abdd3b3cdc1b1e9357b9a"
+tree = "ad5825133164bc49574fd1f05770d3ef7124fc77"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "35fa22a1d182b1e8ab8abdd3b3cdc1b1e9357b9a"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
