@@ -353,3 +353,87 @@ inquisition:
    `references`. Provenance survived only as rationale prose. The REV↔origin
    relationship is real (ADR-018 originates_from) but unauthorable across this
    kind pair.
+
+[backlog; fable-viz-thread-0703]
+Dup-survey friction: `backlog list` (no filter) appends an `overrides:` block of
+dangling soft-edge notices (8 lines, edges to absent SL ids) on every listing —
+noise tokens during a duplicate survey; belongs behind a flag or in `doctor`.
+Also: concurrent-commit surprise — user/background commit ("doctrine", 46bd61ef)
+scooped the freshly created IMP-241 files while agent was still authoring; agent's
+path-limited commit then carried only the toml delta. Harmless here (path-limited
+per AGENTS.md), but worth knowing the window exists.
+
+[preflight; IMP-241-pf-a]
+Card IMP-241 names substrate as "pure functions over the existing
+ActionabilityView (src/priority/view.rs)". Reading the code, ActionabilityView
+is the THIN web projection (id/title/score/rank/blockers + needs/after edges) —
+it lacks the score-component decomposition (leverage/optionality/base, on the
+PriorityGraph maps) AND the provenance reasons (EvictedEdge/CycleDegraded, only
+emitted on the explain path, never attached to ActionabilityView). Roughly half
+the finding catalogue (decomposition, provenance, β-perturbation) cannot be
+computed from ActionabilityView alone. An implementer who took the card's
+substrate literally would build the wrong seam. Cost: one extra read pass of
+surface.rs/channels.rs to discover the true substrate is PriorityGraph. Low, but
+the card's precise-looking file cite (`view.rs`) is a mild false anchor.
+
+---
+
+[dispatch (claude arm); SL-193-edge-0321]
+
+Drove SL-193 (2 phases) end-to-end via /dispatch (claude arm, Opus/Opus). Full
+funnel worked, but several friction points cost significant tokens (~190k in
+avoidable re-dispatches):
+
+1. **F5 design gap caught only at funnel verify, not design.** The locked design
+   named the sidecar projection "forward-step 4" (append-last). But `install`'s
+   step 3 (`install_agents_for`) renders `.doctrine/agents/*.md` from the resolver
+   BEFORE step 4 wrote the sidecar → non-idempotent install (first pass doubles,
+   second suppresses). Caught by an existing e2e (`install_refresh_is_stable`) at
+   the regression-diff verify beat — i.e. AFTER a full worker run (~85k tokens).
+   The adversarial design pass even asserted "no step-count regression / step 4
+   breaks nothing" — the exact claim that was false. Cost: 1 full PHASE-01
+   re-dispatch. A design-time check "does any install step render from the corpus
+   the new step mutates?" would have caught it for ~0 tokens.
+
+2. **Base-drift trap: authored/selector commits between arm-spawn and import
+   invalidate the worker's fork base (`verify-worker: wrong-base`) → forced
+   re-fork.** Hit TWICE. (a) Committing the F5 design-note on `dispatch/193`
+   advanced coord HEAD off the worker's base → had to re-dispatch PHASE-01 at the
+   new base. (b) A missing design-target selector forced `slice selector add`
+   mid-drive; committing it advanced HEAD again → re-dispatch PHASE-02 (~106k
+   tokens). LESSON: all authored corrections (design amendments, selector fixes)
+   must land BEFORE arm-spawn, never interleaved between arm and import — the
+   funnel binds worktree-base==--base==coord-HEAD rigidly. The skills don't warn
+   that an authored commit mid-batch strands the in-flight worker. Worth a
+   memory + a red-flag in /dispatch.
+
+3. **Selector authoring gap vs plan.** plan.toml PHASE-02 VT-3/VT-4 mandate tests
+   in `tests/e2e_prompt_resolve_golden.rs`, but that path was not in the slice's
+   design-target selector set → `import --slice` refused `undeclared-scope`.
+   Selectors should be cross-checked against plan VT `test_file`s at /plan time
+   (a `slice selector doctor` that reads plan test_files would catch it).
+
+4. **Phase-completion flip location is silent + misleading.** The prepare-review
+   completeness gate reads the COMPLETED-PHASE set from the PRIMARY worktree
+   (`dispatch.rs:1873/1900`, `registry_completeness(&primary,&primary)`). But the
+   natural move during dispatch is `slice phase --status completed` in the COORD
+   tree — which makes the coord rollup show "2/2" (looks done!) yet leaves the
+   gate seeing 0/2 → `registry incomplete: recorded row ... not a completed phase`.
+   Cost a debug detour to discover the gate reads primary. The conclude cadence
+   never states "flip phase completion in the primary tree." Fix: either the
+   funnel record-boundary should flip primary phase status, or the conclude doc
+   must say where to flip.
+
+5. **`prompt explain` does not apply replaces-suppression** (prints the raw
+   ranked active set), but design EX-2/VA-1 say "explain shows framework
+   SUPPRESSED." A worker following the design literally would assert against the
+   wrong verb. Correct verb is `prompt resolve` (applies the replaces graph).
+   Design-vs-impl wording mismatch — should be corrected at reconcile.
+
+6. **Reconcile-via-full-install pollutes.** `install` runs `execute_plan` (base
+   materialization) unconditionally after "Proceed?", so running it on the coord
+   tree to backfill 5 sidecars would also write unrelated base files. Worked
+   around by running the producer into a throwaway temp root and relocating the 5
+   producer-generated `.toml` (byte-identical — `replaces` is corpus-independent).
+   A standalone `prompt project` / `install --only-hymns` verb (design OQ-2,
+   deferred) would remove the workaround.
