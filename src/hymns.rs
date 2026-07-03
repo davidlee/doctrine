@@ -387,6 +387,55 @@ pub(crate) fn matches(sel: &Selector, ctx: &ContextVector) -> bool {
     true
 }
 
+/// Trait-coverage audit (design D4/F5b): which declared trait keys does the corpus
+/// leave UNCOVERED? A key is covered iff ≥1 Model-band snippet's pinned model patterns
+/// all fire on it via the membership primitive (`model_pattern_matches`, D2) — so
+/// `adherence/_default` covers `adherence/low`, but a typo covers nothing. Model-axis
+/// only: isolates to `Band::Model` snippets with a non-empty pinned selector, never
+/// routes through `matches()`'s other axes (an unrelated pinned role/harness must not
+/// under-report coverage). Pure (ADR-001).
+pub(crate) fn traits_covered(declared: &BTreeSet<String>, corpus: &[Snippet]) -> Vec<String> {
+    declared
+        .iter()
+        .filter(|key| {
+            let singleton: BTreeSet<String> = std::iter::once((*key).clone()).collect();
+            !corpus.iter().any(|s| {
+                s.slot.band == Band::Model
+                    && !s.selector.model.is_empty()
+                    && s.selector
+                        .model
+                        .iter()
+                        .all(|p| model_pattern_matches(p, &singleton))
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+/// Build the worker's resolution context from its declared trait keys (design D4).
+///
+/// Module home: `hymns` (leaf, ADR-001) — `ContextVector`, `Band`, and `BandFilter`
+/// all live here, and BOTH callers (the `install` bake and, in PHASE-04,
+/// `commands::prompt`) resolve the worker through this same shape, so the shared
+/// builder belongs in the leaf rather than being duplicated per caller. The `Role`
+/// band is always in scope; the `Model` (trait) band joins ONLY when the def declares
+/// at least one trait — so a trait-less worker resolves byte-identically to the
+/// role-only baseline (VT-2/VT-4).
+pub(crate) fn worker_context(traits: &BTreeSet<String>) -> ContextVector {
+    let mut bands = BTreeSet::from([Band::Role]);
+    if !traits.is_empty() {
+        bands.insert(Band::Model);
+    }
+    ContextVector {
+        role: Role::Worker,
+        harness: None,
+        model: traits.clone(),
+        arm: None,
+        stage: None,
+        bands: BandFilter::Only(bands),
+    }
+}
+
 /// Compose the assembled markdown for a context over a corpus.
 ///
 /// Pipeline (design §5.4): drop sealed disk twins (INV-6) → band filter + selector match
@@ -1310,5 +1359,75 @@ mod tests {
             ),
         ];
         assert_eq!(resolve_ok(&ctx(Role::Worker), &corpus), "ONLY\nOTHER");
+    }
+
+    // ── EX-2: traits_covered() — model-axis membership, not string-eq (F5b) ─────
+
+    fn model_snippet(label: &str, pats: &[&str]) -> Snippet {
+        snip(
+            Band::Model,
+            label,
+            Selector {
+                model: pats.iter().map(|p| (*p).to_string()).collect(),
+                ..Default::default()
+            },
+            Provenance::Framework,
+            "BODY",
+        )
+    }
+
+    #[test]
+    fn traits_covered_exact_match_is_not_returned() {
+        let declared: BTreeSet<String> = ["adherence/low".to_string()].into();
+        let corpus = vec![model_snippet("adherence-low", &["adherence/low"])];
+        assert_eq!(traits_covered(&declared, &corpus), Vec::<String>::new());
+    }
+
+    #[test]
+    fn traits_covered_wildcard_default_tail_covers_declared_key() {
+        let declared: BTreeSet<String> = ["adherence/low".to_string()].into();
+        let corpus = vec![model_snippet("adherence-default", &["adherence/_default"])];
+        assert_eq!(traits_covered(&declared, &corpus), Vec::<String>::new());
+    }
+
+    #[test]
+    fn traits_covered_typo_key_matches_nothing_and_is_returned() {
+        let declared: BTreeSet<String> = ["adherance/low".to_string()].into();
+        let corpus = vec![model_snippet("adherence-default", &["adherence/_default"])];
+        assert_eq!(
+            traits_covered(&declared, &corpus),
+            vec!["adherance/low".to_string()]
+        );
+    }
+
+    #[test]
+    fn traits_covered_empty_declared_set_is_empty() {
+        let declared: BTreeSet<String> = BTreeSet::new();
+        let corpus = vec![model_snippet("adherence-default", &["adherence/_default"])];
+        assert_eq!(traits_covered(&declared, &corpus), Vec::<String>::new());
+    }
+
+    // ── worker_context (VT-2) ────────────────────────────────────────────────
+
+    #[test]
+    fn worker_context_traitless_is_role_only_and_byte_identical() {
+        let cx = worker_context(&BTreeSet::new());
+        assert!(cx.model.is_empty());
+        assert_eq!(
+            cx.bands,
+            BandFilter::Only(BTreeSet::from([Band::Role])),
+            "a trait-less worker must resolve exactly the role band (VT-4 byte-identity)"
+        );
+    }
+
+    #[test]
+    fn worker_context_with_traits_adds_model_band_and_carries_keys() {
+        let traits: BTreeSet<String> = ["adherence/low".to_string()].into();
+        let cx = worker_context(&traits);
+        assert_eq!(cx.model, traits);
+        assert_eq!(
+            cx.bands,
+            BandFilter::Only(BTreeSet::from([Band::Role, Band::Model]))
+        );
     }
 }

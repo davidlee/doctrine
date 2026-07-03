@@ -35,6 +35,13 @@ readme-index:
 fmt:
   cargo fmt
 
+# assert rust formatting is clean without mutating (the non-mutating twin of `fmt`)
+fmt-check:
+  cargo fmt --check
+
+# non-mutating prove-clean cadence — asserts fmt+lint clean, never fixes
+prove: fmt-check lint
+
 # lint rust (aggressive)
 lint:
   cargo clippy
