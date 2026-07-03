@@ -1,0 +1,43 @@
+memory_uid = "mem_019f25e0d93175a2b47c5cc73bd8e263"
+memory_key = "mem.fact.doctrine.review-prime-slice-target-only"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "fact"
+status = "active"
+title = "review prime is slice-target only"
+summary = "review prime currently works only for slice-target reviews; spec-target RVs must record the failed prime and proceed without selector cache"
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = ["install/review-ledger.md", ".doctrine/review/"]
+globs = []
+commands = ["doctrine review prime"]
+tags = ["area:review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "dddca34e0de5bb6b0b2a014e86be930ca8817333"
+ref_name = "refs/heads/edge"
+checkout_state_id = "cf63b8ca783540663d2822242ecd07bec486a0906e24c1942e1d96588f07673a"
+base_commit = "203895288247fb3b3e56a49e89929bed17214fc0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

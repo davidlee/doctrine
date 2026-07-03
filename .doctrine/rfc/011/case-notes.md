@@ -205,3 +205,51 @@ CHR-035 rather than fabricate content.
 [spec-tech; rfc013-confidence-fable-0703]
 - `doctrine link SPEC-023 related RFC-013` refused — SPEC may only author `governed_by`. Edge had to be authored from the RFC side. Skill/glossary don't state per-kind writable labels; one wasted round-trip. A hint in the error listing the legal direction (RFC→SPEC `related`) would have saved it (it did list legal labels for SPEC — good — but not the inverse option).
 - Scaffolded spec-023.toml comments say `parent — (SPEC-NNN or PRD-NNN); subtype-aware` while SPEC-017/skill text imply tech parent is SPEC-only; harmless but momentarily confusing.
+
+[route; spec003-inq-0703]
+Boot onboarding names `/retrieving-memory`, but the installed skill is
+`/retrieve-memory`; resolving that spelling mismatch cost a small
+cross-check before the required orientation memories could be retrieved.
+
+[retrieve-memory; spec003-inq-0703]
+Exact onboarding keys (`mem.signpost.doctrine.overview`,
+`mem.signpost.project.orientation`) are easiest to consume via
+`memory retrieve --query <key>`, but the command returns "1 of 30" because the
+query is still lexical rather than an exact-key retrieval surface.
+
+[inquisition; spec003-inq-0703]
+The inquisition skill requires a ledger for durable subjects, but a spec target
+needs CLI discovery to confirm the facet and target support. `review new --help`
+shows facets are lifecycle-aspect names and accepts a generic `--target`, so
+SPEC-003 can be arraigned under `--facet design` with `--raiser inquisitor`.
+After opening RV-236, `review prime` refused because priming is slice-selector
+only ("needs a slice target") even though `review new` accepts SPEC targets.
+That turns "open + prime" into "open + record failed prime" for spec/ADR/design
+inquisitions. Another small mismatch: `--raiser inquisitor` stamps the label,
+but `review raise --as inquisitor` is rejected; the mechanical role remains
+`--as raiser`.
+
+[canon; spec003-inq-0703]
+SPEC-003 descent review exposed a canon ambiguity: PRD-012 says a technical
+spec descends from product intent, SPEC-017 makes `descends_from` optional for
+unfilled tech specs, and `spec validate SPEC-003` accepts an active context spec
+with null descent. Resolving whether root context specs are exempt required a
+finding/follow-up rather than a confident one-line sentence.
+
+[notes; spec003-inq-0703]
+The notes skill assumes a slice-owned unit ("find owning slice" / `notes.md`),
+but this was a spec-level RV with no slice owner. The durable record naturally
+lived in RV-236 synthesis plus IMP-237, not slice notes; determining that still
+cost a skill read. Also backlog item paths use `backlog-NNN.*` even under
+`.doctrine/backlog/improvement/NNN/`, not `improvement-NNN.*`.
+
+[record-memory; spec003-inq-0703]
+`memory record` needed git anchor capture and failed inside the sandbox with
+`.git/index.lock: Read-only file system`; escalation was required for a normal
+local memory. After record, `memory show` and `memory list --filter/tag` found
+the item, but ranked `memory find --command "doctrine review prime"` did not
+surface it even at limit 30 because broad shipped command-scope signposts won
+the ranking. Command-scope alone is weak for fresh local gotchas; add a tag and
+expect list/key retrieval if precise surfacing matters.
+[inquisition/retrieve-memory/route; spec-023-rfc-013-inquisition-01]
+Procedural friction: boot onboarding says `/retrieving-memory`, but the available skill is `/retrieve-memory`; route skill says to run `backlog list`, while the boot command table exposes backlog subcommands without `list`. This forces CLI-shape verification before substantive review work.

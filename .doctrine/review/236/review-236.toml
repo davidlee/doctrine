@@ -1,0 +1,43 @@
+id    = 236
+slug  = "inquisition-spec-003-whole-system-context-spec"
+title = "Inquisition: SPEC-003 whole-system context spec"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SPEC-003"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected active relation canon; observed SPEC-003 cites superseded ADR-004"
+detail = 'Expected: SPEC-003 should pin its system-wide outbound-relation principle to active canon, or explicitly frame historical authority through the active contract. Observed: .doctrine/spec/tech/003/spec-003.md:66-68 names "Outbound-only relations (ADR-004)" as the live authority. `doctrine adr show ADR-004` reports status superseded. Active relation canon is ADR-010 / SPEC-018: SPEC-018 says the forcing relation decision was ADR-010 accepted and points at RELATION_RULES rather than transcribing the vocabulary (.doctrine/spec/tech/018/spec-018.md:18-22). Penance captured in IMP-237.'
+disposition = "follow-up"
+response = "Accepted. SPEC-003 should be corrected by IMP-237 to cite active relation canon (ADR-010 / SPEC-018) or explicitly frame ADR-004 as historical authority under that canon. This review does not edit SPEC-003; it records the defect and its owner."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Expected every root container named by id; observed Dispatch and CLI are naked prose names"
+detail = 'Expected: SPEC-003 says each container has its own spec (.doctrine/spec/tech/003/spec-003.md:13-15), so the root container list should cite durable ids for every named child, matching STD-002 id-not-slug reference discipline. Observed: .doctrine/spec/tech/003/spec-003.md:35-42 lists "Dispatch & worktree" and "CLI surface" without SPEC-012 / SPEC-013, even though `doctrine spec show SPEC-012` and `doctrine spec show SPEC-013` confirm those active container specs parent to SPEC-003. Penance captured in IMP-237.'
+disposition = "follow-up"
+response = "Accepted. IMP-237 should update SPEC-003 so the prose container list cites SPEC-012 for Dispatch & worktree and SPEC-013 for CLI surface, matching the already-authored parent tree and STD-002 reference discipline."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected explicit product-descent rationale; observed active SPEC-003 has null descends_from"
+detail = "Expected: PRD-012 frames technical specs as durable how descending from product what (.doctrine/spec/product/012/spec-012.md:85-88, 92-94), and SPEC-017 defines `descends_from` as the tech-to-PRD link (.doctrine/spec/tech/017/spec-017.md:49-57). If the root context spec is exempt, the exception should be explicit canon. Observed: SPEC-003 is active and context-level, but `doctrine spec show SPEC-003 --json` reports `descends_from: null`; .doctrine/spec/tech/003/spec-003.toml:1-16 has no descent field, while its template comment merely describes how to add one at lines 22-24. `doctrine spec validate SPEC-003` is clean, so this is a design/canon gap rather than a parser failure. Penance captured in IMP-237."
+disposition = "follow-up"
+response = "Accepted as a canon gap. IMP-237 should settle whether SPEC-003 is a sanctioned root-context exception to product descent or should carry a PRD descent; the fix must record the rationale rather than silently leaving null descent on an active tech spec."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
