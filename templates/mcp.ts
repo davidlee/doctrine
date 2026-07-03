@@ -338,7 +338,7 @@ export default function doctrineMcpExtension(pi: ExtensionAPI) {
     const binPath =
       typeof BIN_PATH !== 'undefined'
         ? BIN_PATH
-        : process.env.DOCTRINE_BIN || '/home/david/.cargo/bin/doctrine';
+        : process.env.DOCTRINE_BIN || 'doctrine';
 
     try {
       proc = spawnDoctrine(binPath, ctx.cwd);
