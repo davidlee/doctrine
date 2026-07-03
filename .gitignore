@@ -7,6 +7,7 @@
 /.codex
 /.dirge
 /.mcp.json
+/.cursor
 
 *.tmp
 *.temp
