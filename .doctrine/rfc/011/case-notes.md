@@ -437,3 +437,17 @@ avoidable re-dispatches):
    producer-generated `.toml` (byte-identical — `replaces` is corpus-independent).
    A standalone `prompt project` / `install --only-hymns` verb (design OQ-2,
    deferred) would remove the workaround.
+
+[/audit; SL-193-audit-239]
+Auditing a DISPATCHED slice needs the impl bundle materialised to build+test
+independently, but a fresh detached worktree on review/193 won't compile: the
+RustEmbed `#[folder]` root `web/map/dist/` is a gitignored BUILT asset absent
+from the branch (E0599 `Assets::get` not found + "folder does not exist"). Cost:
+one failed `cargo build` + diagnosis + manual `cp -r` of web/map/dist from the
+primary tree before the build succeeds. A dispatch/audit worktree-prep step (or a
+`doctrine worktree fork`-style provision that seeds gitignored embed roots) would
+save the round-trip. Second friction, already known (F-2): `slice conformance`
+run from edge reads `undeclared` because the declaring selector + F5 design
+amendment live only on the impl bundle, not edge — conformance-against-edge is
+structurally red for any dispatched slice until /close lands the bundle. The
+audit must review the bundle surface, not edge, to read conformance truthfully.
