@@ -97,3 +97,21 @@ prose drift requiring a reconcile write:
 
 **Reconcile is a no-op write pass** for SL-194: the brief is intentionally empty of
 write items. Reconcile confirms the clean audit and advances the lifecycle.
+
+## Reconciliation Outcome
+
+No-op write pass. Both RV-240 findings are terminal with no write surface:
+
+- **F-1 (verified · aligned)** — the two ratified worker interpretations were
+  faithful resolutions, not design mutations. design.md already tells the truth
+  (PHASE-02 verdict section, 52679b8a). No edit.
+- **F-2 (verified · tolerated)** — order-instability volume; correct-by-design,
+  refinement deferred to IMP-247 / IMP-248 (both `originates_from SL-194`). No edit.
+
+### Per-slice (direct edit)
+- None. design.md + slice-194.md already truthful.
+
+### Governance/spec (REV)
+- None. No ADR / spec / REQ divergence; ADR-001/015/017 + STD-001 held.
+
+Reconcile pass complete — handoff to /close.
