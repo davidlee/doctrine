@@ -1,0 +1,43 @@
+memory_uid = "mem_019f26cee34d74f1b144d1042c6cb926"
+memory_key = "mem.fact.hymns.explain-vs-resolve-suppression"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "prompt explain is pre-suppression diagnostic; only prompt resolve applies the replaces graph"
+summary = "prompt explain prints the raw ranked active set (both twins, provenance ★WINNER = ordering only). The replaces suppression graph is applied at RESOLVE. Use prompt resolve (+ prompt check for legality) to verify single-emit/override, never prompt explain."
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = ["src/hymns.rs"]
+globs = ["src/commands/prompt*.rs"]
+commands = ["prompt"]
+tags = ["hymns", "prompt", "replaces"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1a4c24d8cb752e155447d9bbdee315d00387325d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "63d945d65b662a0436a3ac84289c52c0bfb46be2b51b37200ee247c38cffb15d"
+base_commit = "d2e6287c5dba0300261c65c2a46f31a16f82ac9e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
