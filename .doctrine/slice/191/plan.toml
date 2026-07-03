@@ -1,0 +1,256 @@
+# Implementation plan for SL-191 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-191"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Trait-coverage predicate (engine core)"
+objective = """
+Add the shared pure predicate `traits_covered(declared: &BTreeSet<String>, corpus)
+-> Vec<String>` to `src/hymns.rs`, returning declared trait keys that match NO
+model-band selector in the corpus. This is the DRY core both the bake (PHASE-03)
+and `prompt check` (PHASE-04) call down to (design D4). "Covered" is decided by
+the engine's membership matcher (a declared key fires >=1 model snippet), NOT
+string equality — so `adherence/_default` covers a declared `adherence/low`
+(design F5b). Pure over (traits, corpus): no disk/clock/env (pure/imperative
+split, ADR-001 engine layer).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-192 set-valued context shipped: hymns.rs carries Selector.model / ContextVector.model as BTreeSet<String> and the membership matcher (verified at plan)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`traits_covered` exists in src/hymns.rs, pure, using the engine membership matcher (not string equality)." },
+  { id = "EX-2", text = "Unit tests cover: a covered trait (exact + `_default` wildcard), an uncovered/typo trait ('adherance/low'), the empty declared-set case." },
+  { id = "EX-3", text = "`doctrine check gate` green (clippy zero warnings)." },
+]
+verification = [
+  { id = "VT-1", expects = "traits_covered unit tests present and green in src/hymns.rs", test_file = "src/hymns.rs", keywords = ["traits_covered", "adherence"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Worker-contract + trait-keyed delivery hymns (content)"
+objective = """
+Author the two Framework hymns (design D2/D3, ownership table):
+`install/hymns/role/worker.md` — the negative contract expressed on the owned
+"constrained writer / declared file set" primitive (touch only declared set;
+no `.doctrine/`/`.claude/` writes; only git verb = final commit; no unauthored-test
+edits; hermetic goldens; component-anchored paths + owned dirs `.dispatch/`/
+`.worktrees/`; module-home + layer-rationale DIRECTIVE; run `doctrine check
+quick`/`commit`), and `install/hymns/model/adherence/low.md` — the SL-168 §5c
+delivery patterns (explicit negatives, concrete-over-abstract, high-density),
+homed as low-adherence guidance reachable by any loose model via membership.
+POL-002: NO host literals (`cargo`/`target/`/`just`) in `install/hymns` — those
+belong in the `.doctrine/hymns` overlay (PHASE-07). Content only; no bake yet.
+Verify via `prompt explain` against the embedded corpus / hermetic fixtures, NOT
+the live-repo resolve (overlay contamination — F2).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Ownership cut settled (design § Content ownership): every contract line assigned to role/worker, model/adherence/low, or the overlay." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/hymns/role/worker.md carries the full negative contract per the ownership table, host-agnostic." },
+  { id = "EX-2", text = "install/hymns/model/adherence/low.md carries the §5c delivery patterns as low-adherence guidance." },
+  { id = "EX-3", text = "No host literal (cargo/target/just/node_modules) appears anywhere under install/hymns — asserted by a POL-002 content-gate test over the embedded corpus." },
+  { id = "EX-4", text = "`prompt explain --role worker --model adherence/low` traces the role+adherence composition (hermetic corpus / embedded, not live overlay)." },
+]
+verification = [
+  { id = "VT-1", expects = "POL-002 content-gate test asserts no host literal under install/hymns", test_file = "src/install.rs", keywords = ["hymns", "cargo", "target"] },
+  { id = "VA-1", expects = "Agent review: role/worker + adherence/low hymns adequately encode the SL-168 defect-class contract and read host-agnostic" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Agent-def frontmatter parser + bake widening"
+objective = """
+Deliver the trait content to the baked def (design D2/D4, adversarial C2). No
+agent-def frontmatter parser exists today — the bake does a byte-level marker
+replace only (install.rs:1796-1803). Add a dedicated agent-def frontmatter parser
+(schema: `traits` optional list, `model` cascade-ignored, unknown keys tolerated)
+with negative tests (malformed / absent `traits` / unknown keys). Widen
+`resolve_worker_role_body` to take `traits: &BTreeSet<String>`, populate the
+context's `model` set and add `Band::Model` (bands become `Only([Role, Model])`);
+absent traits → empty set → role band only, byte-identical to today. The bake
+call site parses the def's `traits:` and passes them, then runs `traits_covered`
+as an INSTALL-TIME HARD ERROR (a contractless worker cannot ship). Declare
+`traits = ["adherence/low"]` in `install/agents/pi/dispatch-worker.md` (+ installed
+universal twin); the claude def stays trait-less (role band only, D1). Marker
+stays the literal sentinel `{{ prompt resolve --role worker }}` with a loud comment
+documenting "full worker context (role+traits); bake reads frontmatter, not marker
+args" (F4/C6: keep-literal chosen over rename — lower blast radius, no installed-def
+churn). Behaviour-preservation: `expand_worker_marker` unit tests + subagent-def
+drift test stay green.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 predicate green; PHASE-02 content present so resolve is non-empty." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A dedicated agent-def frontmatter parser exists in src/install.rs with negative tests (malformed / absent traits / unknown keys)." },
+  { id = "EX-2", text = "resolve_worker_role_body takes a `traits` param, populates ContextVector.model, and adds Band::Model; trait-less resolve is byte-identical to today." },
+  { id = "EX-3", text = "The bake call site parses def `traits:`, passes them, and runs traits_covered as an install-time hard error (a def declaring an uncovered trait fails install — test)." },
+  { id = "EX-4", text = "install/agents/pi/dispatch-worker.md (+ universal twin) declare traits = [\"adherence/low\"]; claude def has none." },
+  { id = "EX-5", text = "expand_worker_marker unit tests + subagent-def drift test green; a baked pi/universal def inlines role+adherence content." },
+]
+verification = [
+  { id = "VT-1", expects = "Frontmatter parser + widened bake tests present and green, including the uncovered-trait install-time hard-error case", test_file = "src/install.rs", keywords = ["traits", "Band::Model", "adherence/low"] },
+  { id = "VT-2", expects = "Behaviour-preservation: expand_worker_marker + drift tests green", test_file = "src/install.rs", keywords = ["expand_worker_marker", "WORKER_RESOLVE_MARKER"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "prompt check: coverage finding + delivered-band assertion"
+objective = """
+Extend the existing def-loop in `check_corpus` (prompt.rs:322 already enumerates
+`embedded_agent_defs()` and checks marker presence) with two author-time findings
+(design D4, adversarial C3): (1) parse each embedded def's `traits:`, run
+`traits_covered`, and flag a declared-but-uncovered trait BEFORE install; (2) run
+the SAME full-context resolver the bake uses (not the role-only helper) per worker
+def and assert — marker present, full-context resolve succeeds, and when `traits:`
+is non-empty the resolved band filter INCLUDES `Model`. This closes the "trait
+hymn authored but never baked" gap coverage alone leaves (a bake that parses
+`traits:` but forgets to widen `bands` would evade a coverage-only check). Rides
+the `check_def_marker_present_role_unresolvable` precedent. Def→corpus direction,
+embedded defs only.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 widened resolver + frontmatter parser landed." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "check_corpus flags a def declaring an uncovered trait as a finding (author-time, before install)." },
+  { id = "EX-2", text = "check_corpus runs the full-context resolver per worker def and asserts Model band present when traits: is non-empty." },
+  { id = "EX-3", text = "New tests ride the check_def_marker_present_role_unresolvable precedent: uncovered-trait finding + missing-Model-band finding." },
+]
+verification = [
+  { id = "VT-1", expects = "prompt check coverage + delivered-Model-band tests present and green", test_file = "src/commands/prompt.rs", keywords = ["traits_covered", "Model"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-05"
+name      = "Funnel check-cadence wiring (base-clean + reject-and-halt)"
+objective = """
+Wire the owned `doctrine check` cadence into the dispatch funnel (design D5,
+adversarial C1). Base-clean precondition — a NON-MUTATING prove-clean gate
+(`fmt --check` / dry-gate semantics) before arm-spawn (and on `main` before
+branching): assert the base is clean, never fix-in-place (a mutating check on the
+shared base has no owner and re-creates the spill). Pre-existing red is reported
+as a BASE defect distinct from any worker finding; real cleanup is an
+operator-owned commit, never folded into a worker delta. Reject-and-halt import
+gate — run `doctrine check <cadence>` on the post-import tree; a red (unformatted
+OR lint-fail) delta HALTS and reports to the orchestrator, never lands, never
+auto-fixes (belt, not self-report; ADR-012 sole-writer). Homes: `src/dispatch.rs`
+(import belt) + `plugins/doctrine/skills/dispatch/**` and `dispatch-agent/**`
+(base-clean + funnel beats). Resolve the open code-detail: whether the subprocess
+arm (`src/dispatch.rs` fork path) needs its own base-clean beat or the shared
+funnel already covers it.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "`doctrine check` cadence seam (SL-163) confirmed present as the owned formatter/lint proxy." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Base-clean prove-clean is non-mutating (fmt --check/dry gate); a dirty base is reported as a base defect, never auto-fixed." },
+  { id = "EX-2", text = "Import gate runs doctrine check on the post-import tree; an unformatted or lint-red delta halts-and-reports and does not land (test)." },
+  { id = "EX-3", text = "Subprocess-arm base-clean coverage decided and recorded (its own beat vs shared funnel)." },
+]
+verification = [
+  { id = "VT-1", expects = "Reject-and-halt import-gate test: a red imported delta halts and does not land", test_file = "src/dispatch.rs", keywords = ["check", "halt"] },
+  { id = "VA-1", expects = "Agent review: base-clean beat is non-mutating in both dispatch skills and does not double-run on the hot path" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-06"
+name      = "Corpus knowledge refresh (READMEs + shipped memory)"
+objective = """
+Refresh the shipped corpus knowledge so it stops teaching the obsolete mental
+model (design C4/C6, scope obj #7). Rewrite `install/hymns/README.md` and
+`.doctrine/hymns/README.md` — both stale (they describe the model band as
+"model-family / exact-model notes" and claim exposed slots win by the provenance
+tiebreak, contradicting SPEC-023's trait-space contract and SL-193's
+self-`replaces` override) — to the post-unlock authoring model. Author a SHIPPED
+concept memory `memory/mem.concept.doctrine.hymn-cascade/` (embedded `memory/`
+corpus, corpus.rs:44; installs to every doctrine project) capturing: trait-keyed
+model band, the bands registry, seal/expose symmetry, `replaces` suppression, and
+the precedence key. After adding the memory: `cargo build` (re-embed via
+RustEmbed), `doctrine memory sync`, `doctrine memory validate`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02/03 landed: the authoring model the READMEs + memory describe is now the actual shipped behaviour." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Both hymn READMEs describe the trait-space model band and SL-193 self-replaces override; no residual model-family/provenance-tiebreak language." },
+  { id = "EX-2", text = "mem.concept.doctrine.hymn-cascade authored under memory/, embeds via RustEmbed, and validates (`doctrine memory validate`)." },
+]
+verification = [
+  { id = "VT-1", expects = "Embedded-corpus test confirms mem.concept.doctrine.hymn-cascade ships in the embedded memory corpus", test_file = "src/corpus.rs", keywords = ["hymn-cascade"] },
+  { id = "VA-1", expects = "Agent review: READMEs + shipped memory teach the trait-space / self-replaces model with no obsolete rules" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-07"
+name      = "Overlay reconciliation + live role-resolve verification (SL-193-gated)"
+objective = """
+The SL-193-close-gated tail (design Sequencing / F2). Reconcile the this-repo
+overlay `.doctrine/hymns/**` (scope obj #3) to carry ONLY client habits —
+`cargo fmt`/`target/`/`node_modules/`, ADR-001 `leaf <- engine <- command` layer
+names, Rust module homes, the `architecture_layering` gate — deferring the
+universal contract to the enriched Framework `role/worker`. The overlay's
+`role/worker` `replaces` posture must be reconciled against SL-193's projected
+self-replaces (today a stray hand-authored `.doctrine/hymns/role/worker.toml`
+carries `replaces = "role/worker"`; SL-193 reconcile makes this the projector's
+job). Only after that is the live-repo `prompt explain --role worker` a clean
+oracle — so the live role-resolve verification (Framework enrichment + overlay
+compose correctly, no doubling) lands HERE, behind SL-193 close.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-193 closed (self-replaces projection landed; stray role/worker twin reconciled) — the hard gate. Confirm `doctrine slice show 193` = closed before starting." },
+  { id = "EN-2", text = "PHASE-02 Framework role/worker enrichment landed (the overlay reconciles against it)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = ".doctrine/hymns/** overlay carries only client-habit content (cargo/target/ADR-001 layer names/Rust homes); the universal contract defers to Framework." },
+  { id = "EX-2", text = "Overlay role/worker replaces posture reconciled with SL-193's projection (no residual stray hand-authored twin)." },
+  { id = "EX-3", text = "`prompt explain --role worker` in-repo shows a single clean winner composing Framework contract + overlay habits (no ISS-206 doubling)." },
+]
+verification = [
+  { id = "VH-1", expects = "Human acceptance: overlay content split honours POL-002 (client habits only) and live role-resolve composes correctly" },
+  { id = "VA-1", expects = "Agent check: `prompt explain --role worker` trace shows no duplicate role/worker slot and the enriched Framework contract is present" },
+]
+specs        = []
+requirements = []
