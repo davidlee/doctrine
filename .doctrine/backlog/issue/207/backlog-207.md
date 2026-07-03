@@ -32,12 +32,28 @@ Classifying it WITHHELD would encode a false "fork-withheld runtime" claim.
 
 ## Fix direction (dispatch-domain — needs ADR-012 topology call)
 
-Likely REMOVE or NARROW the `.gitignore` line rather than classify it. The
-ledger may be committed on the coordination branch and runtime on `edge`
-(ADR-012 isolated-coordination topology) — determine the intended tier, then
-either drop the line or scope it (e.g. keep coordination scratch ignored but
-`!`-negate the committed `journal.toml`/`boundaries.toml`), and add the matching
-`WITHHELD`/`DERIVED_RUNTIME` entry only for the genuinely-runtime remainder.
+~~Likely REMOVE or NARROW the `.gitignore` line rather than classify it.~~
+**Superseded by the resolution below** — this instinct was wrong.
+
+## Resolution (fixed, commit `fcd6d12f`)
+
+History settled the tier question: `.doctrine/dispatch/` has been ignored since
+before `61eae2ce` (under the old `.doctrine/*` catch-all, dispatch was never in
+the `!`-allowlist). The 4 tracked `journal.toml` were **force-added** by dispatch
+itself (`git add -f`, "journal: prepare-review"); everything else
+(`candidates.toml`, `boundaries.toml`, `handover.md`, ~60 slice dirs) is genuine
+runtime scratch. So the `.gitignore` line is CORRECT — removing it would newly
+expose all that scratch. The defect was only the missing classification.
+
+Fix: added `Tier::Dispatch` to `WITHHELD` (`.doctrine/dispatch/**`) — coordination
+scratch a fork must never receive; committed journal rows travel via git, the
+runtime rest is fork-withheld. No `.gitignore` line change.
+
+Also fixed a second, independent `61eae2ce` casualty: the flip commented out the
+per-kind `!.doctrine/<kind>/` negations, failing dogfood sentinel tests that
+asserted those literal lines (knowledge, standard, revision, policy). Retargeted
+them from implementation (line exists) to behaviour (`git ls-files
+.doctrine/<kind>` non-empty) — model-agnostic. `doctrine check gate` green.
 
 ## Provenance
 
