@@ -84,7 +84,7 @@ provenance untouched. Delivers the composition SL-191's authoring depends on.
 ## Follow-Ups
 
 - SL-191 rides this: trait hymns + def trait-set declaration + bake widening.
-- SPEC-023 OQ-3 (required-trait `prompt check` lint) — candidate here or
-  SL-191; decide in `/design`.
+- SPEC-023 OQ-3 (required-trait `prompt check` lint) — **routed to SL-191**
+  (needs def trait declarations to lint against; written into SL-191 scope).
 - SPEC-023 D4 (disjunction-via-classification) ADR graduation — separate,
   governance-side.
