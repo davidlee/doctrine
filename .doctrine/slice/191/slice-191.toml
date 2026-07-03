@@ -1,7 +1,7 @@
 id = 191
 slug = "worker-contract-hymns-check-cadence"
 title = "Dispatch worker contract: cascade hymns + check-cadence + role/model/stage bake"
-status = "reconcile"
+status = "done"
 created = "2026-07-03"
 updated = "2026-07-03"
 tags = []
