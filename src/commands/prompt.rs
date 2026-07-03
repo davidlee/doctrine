@@ -44,6 +44,11 @@ pub(crate) enum PromptCommand {
         #[arg(long, value_name = "BAND")]
         band: Vec<String>,
 
+        /// Wrap stdout as a Cursor `sessionStart` hook JSON envelope
+        /// (`{"additional_context": "<cascade>"}`) instead of raw markdown.
+        #[arg(long)]
+        json: bool,
+
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -107,6 +112,7 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
             arm,
             stage,
             band,
+            json,
             path,
         } => {
             let root = crate::root::find(path, &crate::root::default_markers())?;
@@ -123,7 +129,16 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
             let universal = crate::boot::resolve_universal_snapshot(&root, &exec, command_map)?;
             let ctx = build_ctx(&role, harness, model, arm.as_deref(), stage, &band)?;
             let hymns = crate::hymns::resolve(&ctx, &corpus, &sealed)?;
-            writeln!(std::io::stdout(), "{}\n{hymns}", universal.trim_end())?;
+            let cascade = format!("{}\n{hymns}", universal.trim_end());
+            if json {
+                write!(
+                    std::io::stdout(),
+                    "{}",
+                    crate::boot::session_start_hook_json(&cascade)?
+                )?;
+            } else {
+                writeln!(std::io::stdout(), "{cascade}")?;
+            }
             Ok(())
         }
         PromptCommand::ModelKeys { harness, path } => {

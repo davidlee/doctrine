@@ -56,7 +56,7 @@ entries = [
 
 [hymns]
 seal = ["preamble/core"]
-expose = ["harness/claude","model/anthropic/claude-sonnet-4","model/deepseek/_default","role/orchestrator","role/worker"]
+expose = ["harness/claude","harness/cursor","model/anthropic/claude-sonnet-4","model/deepseek/_default","role/orchestrator","role/worker"]
 
 [root_markers]
 markers = [

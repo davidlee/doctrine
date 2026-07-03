@@ -509,7 +509,7 @@ struct SessionStartHookOutput<'a> {
 
 /// Render `content` as the Cursor hook JSON envelope, one compact line + `\n`
 /// (mirrors the MCP stdio transport's line-framing convention).
-fn session_start_hook_json(content: &str) -> anyhow::Result<String> {
+pub(crate) fn session_start_hook_json(content: &str) -> anyhow::Result<String> {
     let out = SessionStartHookOutput {
         additional_context: content,
     };

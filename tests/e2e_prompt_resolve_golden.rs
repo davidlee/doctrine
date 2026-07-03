@@ -211,6 +211,64 @@ fn collect_entries(root: &Path, current: &Path, out: &mut Vec<(String, u64)>) {
     }
 }
 
+/// IMP-245 — `prompt resolve --json` wraps the SAME cascade (universal ++
+/// role/harness hymns) as the plain form in the Cursor `sessionStart` hook
+/// envelope (`{"additional_context": "<cascade>"}`), so a Cursor project hook
+/// can point directly at this command instead of the legacy `boot --emit`.
+#[test]
+fn resolve_json_wraps_cascade_in_session_hook_envelope() {
+    let dir = tmp();
+
+    let plain = run(
+        dir.path(),
+        &[
+            "prompt",
+            "resolve",
+            "--role",
+            "orchestrator",
+            "--harness",
+            "cursor",
+        ],
+    );
+    assert!(plain.status.success(), "stderr: {}", stderr(&plain));
+
+    let json_out = run(
+        dir.path(),
+        &[
+            "prompt",
+            "resolve",
+            "--role",
+            "orchestrator",
+            "--harness",
+            "cursor",
+            "--json",
+        ],
+    );
+    assert!(json_out.status.success(), "stderr: {}", stderr(&json_out));
+
+    let raw = stdout(&json_out);
+    assert_eq!(raw.matches('\n').count(), 1, "single-line JSON + newline");
+    let parsed: serde_json::Value = serde_json::from_str(raw.trim_end()).expect("valid JSON");
+    let ctx = parsed
+        .get("additional_context")
+        .and_then(serde_json::Value::as_str)
+        .expect("additional_context string field");
+
+    // The wrapped content is the same cascade as the plain form (modulo the
+    // plain form's own trailing-newline normalisation via `writeln!`).
+    assert_eq!(ctx.trim_end(), stdout(&plain).trim_end());
+
+    // The Cursor harness hymn (with the nix devshell note) rode the cascade.
+    assert!(
+        ctx.contains("operating inside the Cursor harness"),
+        "cursor harness hymn missing, got: {ctx}"
+    );
+    assert!(
+        ctx.contains("nix develop -c"),
+        "nix devshell guidance missing, got: {ctx}"
+    );
+}
+
 // ── PHASE-02 VT-1 / VT-3: repeatable --model, multi-key membership ───────────
 
 /// PHASE-02 VT-1 (FR-009 arity + FR-004 membership) — repeatable `--model` builds
