@@ -20,9 +20,20 @@ attention already is, textually first.
 
 ## The probe
 
-Implement an **interestingness-findings catalogue** as pure functions over the
-existing `ActionabilityView` (`src/priority/view.rs`) plus cordage provenance
-(evictions, `Degraded` levels). No visualisation. Surface as text —
+Implement an **interestingness-findings catalogue** as pure functions over
+`PriorityGraph` (`src/priority/graph.rs`) — NOT the thin `ActionabilityView`
+web projection, which carries only total score + rank + blockers and never
+sees provenance or components. `PriorityGraph` is the honest substrate: the
+cordage `Graph` (provenance: `EvictedEdge`, `Degraded` levels), the
+`EntityKey↔NodeId` projection, per-node attrs (`base_score`, facets), the
+leverage/optionality/score maps, and the dep/seq overlay handles. Findings
+needing β-perturbation additionally need the **rebuild seam** (`build_from`
++ perturbed `[priority.estimate]` config) — est_cost bakes into base at node
+mint, so instability is re-derivation, not a read. Substrate tiers per
+finding: structural (fork/join/inversion/displacement/gating fan-out) ←
+graph + score map; decomposition/plateau ← component maps; provenance ←
+cordage provenance; instability ← rebuild seam. No visualisation. Surface
+as text —
 `survey --interesting` or a `findings` verb (final surface via design
 conversation). Each finding: node subset + reason + magnitude, rendered one
 line each, e.g.
