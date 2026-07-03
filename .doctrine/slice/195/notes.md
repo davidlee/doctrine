@@ -186,3 +186,55 @@ appended. Verdict prose: `review-241.md` §Synthesis.
   can leave pi/hooks baked. **IMP-111** (codex MCP) separate surface.
 - Governance: **POL-002** (governed_by), **SPEC-009** (references/concerns),
   **CHR-013** (the original `.mcp.json` abs-bake this fixes).
+
+## PHASE-03 — DONE (green, gate exit 0)
+
+Reinstall marketplace source-refresh (R4). Closes the stale-source gap: the old
+`if !claude_marketplace_has { add }` skipped on name-present, retaining a stale
+source after a repo move / changed slug.
+
+### R4 live probe — DECIDED (EN-1) · CC 2.1.198
+
+`claude plugin marketplace add <src>`:
+- src == registered → idempotent no-op (`✔ already on disk`, exit 0)
+- src != registered (name collides) → **OVERWRITE** (`✔ Successfully added`,
+  source flips, exit 0)
+
+⇒ refresh verb = a single `add`. NO remove+add, no destructive window.
+`marketplace update` only re-pulls content at the same path (not a relocation).
+Recorded: `mem.fact.claude.marketplace-add-overwrites-source`.
+
+**D-P3-1:** implement single-add refresh only; the destructive remove+add branch
+is NOT written (probe proves it never runs on this CC; dead code fails the repo's
+`-D dead-code` gate; YAGNI). EX-4's destructive-abort clause is vacuously met.
+VT-2 (F-5) is honoured on the add/Refresh path: a failed *refresh* `return Err`s
+(aborts forward steps) — never swallowed into `skipped_*` to report success with
+a stale source live. A failed *fresh add* keeps the softer `skipped_*` reminder.
+
+### Shapes (all src/install.rs)
+
+- `enum RegisteredSource { Directory(String), Github(String) }` + pure
+  `parse_registered_source(list, name)` — reads `❯ <name>` then its
+  `Source: <Kind> (<inner>)` line; unrecognised/absent ⇒ None (⇒ safe Add).
+- `enum MarketplaceAction { Skip, Add, Refresh }` + `marketplace_action` +
+  `source_matches` (kind-tagged equality reusing `MarketplaceSource::as_arg()`).
+- `refresh_failure_is_fatal(action)` = `matches!(Refresh)`.
+- Claude arm rewired to the three-way action; `claude_marketplace_has` retired
+  (dead after rewire).
+
+### Verification
+
+- VT-1 → parser + `marketplace_action` over `marketplace list` fixtures
+  (stale⇒Refresh, match⇒Skip, absent⇒Add, sibling⇒None, kind-mismatch⇒Refresh).
+- VT-2 → `refresh_failure_is_fatal` (pure; no shell-out flakiness).
+- VH-1 (live repo-move reinstall) DEFERRED to a user confirm (mirrors PHASE-01/02
+  VH-1); no code depends on it.
+
+4 new unit tests; gate exit 0 (clippy 0-warn incl pedantic, test, fmt, build).
+Diff confined to src/install.rs — file-disjoint from PHASE-01 (boot.rs), rides
+PHASE-02 seams. **R-P2-1 CLOSED**: restore leg proved `list` echoes the canonical
+abspath byte-equal to `fs::canonicalize` — the `as_arg()` comparator is sound.
+
+Test names: parse_registered_source_reads_directory_and_github,
+parse_registered_source_absent_or_sibling_is_none, marketplace_action_add_skip_refresh,
+refresh_failure_is_fatal_only_on_refresh.

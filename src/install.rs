@@ -439,16 +439,35 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             let source_arg = source.as_arg();
             let key = enable_key();
 
-            // 1. Marketplace registration (exact name match — F-4).
-            if !claude_marketplace_has(DOCTRINE_MARKETPLACE) {
+            // 1. Marketplace registration — refresh a STALE source, not just
+            //    skip-because-name-present (R4). `add` overwrites in place on CC
+            //    2.1.198 (probe, D-P3-1), so refresh is a single add.
+            let registered = claude_cmd_stdout(&["plugin", "marketplace", "list"])
+                .and_then(|o| parse_registered_source(&o, DOCTRINE_MARKETPLACE));
+            let action = marketplace_action(registered, &source);
+            if action != MarketplaceAction::Skip {
+                let verb = if action == MarketplaceAction::Refresh {
+                    "refresh"
+                } else {
+                    "add"
+                };
                 if prompt_step(
-                    &format!("claude plugin marketplace add {source_arg}? [y/N/a]"),
+                    &format!("claude plugin marketplace {verb} {source_arg}? [y/N/a]"),
                     args.yes,
                     &mut all_yes,
                 )? {
                     match claude_plugin_add_marketplace(&source_arg) {
                         Ok(()) => writeln!(out, "  marketplace {source_arg} registered")?,
                         Err(e) => {
+                            // A failed REFRESH aborts (F-5/VT-2): leaving a stale
+                            // source live while reporting success is silent-wrong.
+                            // A failed fresh add keeps the softer reminder.
+                            if refresh_failure_is_fatal(&action) {
+                                return Err(e.context(format!(
+                                    "marketplace refresh to {source_arg} failed — aborting; \
+                                     the previously registered doctrine source is stale"
+                                )));
+                            }
                             writeln!(out, "  marketplace add failed: {e:#}")?;
                             skipped_marketplace = Some(source_arg.to_string());
                         }
@@ -700,14 +719,88 @@ fn claude_cmd_stdout(args: &[&str]) -> Option<String> {
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
 }
 
-/// Whether a marketplace named `name` is registered (exact match).
-fn claude_marketplace_has(name: &str) -> bool {
-    claude_cmd_stdout(&["plugin", "marketplace", "list"]).is_some_and(|o| claude_list_has(&o, name))
-}
-
 /// Whether the qualified plugin `key` is installed (exact match).
 fn claude_plugin_has(key: &str) -> bool {
     claude_cmd_stdout(&["plugin", "list"]).is_some_and(|o| claude_list_has(&o, key))
+}
+
+/// A marketplace source as `claude plugin marketplace list` reports it (the
+/// parenthesized inner of a `Source: <Kind> (<inner>)` line). Kind-tagged so a
+/// slug can never equal a path (PHASE-03 comparator).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RegisteredSource {
+    Directory(String),
+    Github(String),
+}
+
+/// Parse the registered source for marketplace `name` from `marketplace list`
+/// stdout. Each block is `❯ <name>` then an indented `Source: <Kind> (<inner>)`.
+/// Returns `None` if the name is absent or its Source line is unrecognised — the
+/// caller treats `None` as "absent" ⇒ a safe idempotent add.
+fn parse_registered_source(list: &str, name: &str) -> Option<RegisteredSource> {
+    let mut current: Option<&str> = None;
+    for line in list.lines() {
+        let t = line.trim();
+        if let Some(rest) = t.strip_prefix("❯ ") {
+            current = Some(rest.trim());
+            continue;
+        }
+        if current == Some(name)
+            && let Some(spec) = t.strip_prefix("Source:")
+        {
+            let (kind, rest) = spec.trim().split_once(' ')?;
+            let inner = rest.trim().strip_prefix('(')?.strip_suffix(')')?;
+            return match kind {
+                "Directory" => Some(RegisteredSource::Directory(inner.to_string())),
+                "GitHub" => Some(RegisteredSource::Github(inner.to_string())),
+                _ => None,
+            };
+        }
+    }
+    None
+}
+
+/// The registration action for the marketplace step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MarketplaceAction {
+    Skip,
+    Add,
+    Refresh,
+}
+
+/// Whether the registered source is the intended one — same kind AND the inner
+/// string equals `intended.as_arg()` (the exact positional `add` was given, hence
+/// what `list` echoes back).
+fn source_matches(registered: &RegisteredSource, intended: &MarketplaceSource) -> bool {
+    let arg = intended.as_arg();
+    match (registered, intended) {
+        (RegisteredSource::Directory(a), MarketplaceSource::Directory(_))
+        | (RegisteredSource::Github(a), MarketplaceSource::Github(_)) => a.as_str() == arg,
+        _ => false,
+    }
+}
+
+/// Decide the marketplace registration action: absent ⇒ `Add`; registered with
+/// the intended source ⇒ `Skip`; registered with a different source ⇒ `Refresh`
+/// (R4: a single `add` overwrites in place on CC 2.1.198 — D-P3-1). Closes the
+/// stale-source gap where a bare name-present check would skip a moved repo.
+fn marketplace_action(
+    registered: Option<RegisteredSource>,
+    intended: &MarketplaceSource,
+) -> MarketplaceAction {
+    match registered {
+        None => MarketplaceAction::Add,
+        Some(reg) if source_matches(&reg, intended) => MarketplaceAction::Skip,
+        Some(_) => MarketplaceAction::Refresh,
+    }
+}
+
+/// A failed *refresh* (stale→intended) must abort forward steps: a claimed
+/// refresh that left a stale/foreign source live is a silent-wrong success
+/// (F-5/VT-2). A failed initial *add* keeps the softer `skipped_*` reminder — a
+/// fresh install lost nothing.
+fn refresh_failure_is_fatal(action: &MarketplaceAction) -> bool {
+    matches!(action, MarketplaceAction::Refresh)
 }
 
 // ---------------------------------------------------------------------------
@@ -2836,6 +2929,80 @@ mod tests {
             }
             other => panic!("expected Directory, got {other:?}"),
         }
+    }
+
+    // ---------------------------------------------------------------
+    // PHASE-03: marketplace source-refresh (R4)
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn parse_registered_source_reads_directory_and_github() {
+        // VT-1: the `marketplace list` block for `doctrine` yields its source.
+        let dir = "Configured marketplaces:\n\n  ❯ other\n    Source: GitHub (a/b)\n\n  ❯ doctrine\n    Source: Directory (/workspace/doctrine)\n";
+        assert_eq!(
+            parse_registered_source(dir, "doctrine"),
+            Some(RegisteredSource::Directory("/workspace/doctrine".into()))
+        );
+        let gh = "  ❯ doctrine\n    Source: GitHub (davidlee/doctrine)\n";
+        assert_eq!(
+            parse_registered_source(gh, "doctrine"),
+            Some(RegisteredSource::Github("davidlee/doctrine".into()))
+        );
+    }
+
+    #[test]
+    fn parse_registered_source_absent_or_sibling_is_none() {
+        // VT-1: name absent, or only a sibling present, ⇒ None (caller ⇒ Add).
+        let none = "Configured marketplaces:\n\n  ❯ caveman\n    Source: GitHub (j/c)\n";
+        assert_eq!(parse_registered_source(none, "doctrine"), None);
+        // A sibling marketplace must not leak its source to `doctrine`.
+        let sibling = "  ❯ doctrine-memory\n    Source: Directory (/tmp/x)\n";
+        assert_eq!(parse_registered_source(sibling, "doctrine"), None);
+    }
+
+    #[test]
+    fn marketplace_action_add_skip_refresh() {
+        // VT-1: absent ⇒ Add; same source ⇒ Skip; different ⇒ Refresh.
+        let intended = MarketplaceSource::Directory(PathBuf::from("/workspace/doctrine"));
+        assert_eq!(marketplace_action(None, &intended), MarketplaceAction::Add);
+        assert_eq!(
+            marketplace_action(
+                Some(RegisteredSource::Directory("/workspace/doctrine".into())),
+                &intended
+            ),
+            MarketplaceAction::Skip
+        );
+        assert_eq!(
+            marketplace_action(
+                Some(RegisteredSource::Directory("/old/path".into())),
+                &intended
+            ),
+            MarketplaceAction::Refresh
+        );
+        // github slug parity, and a kind mismatch ⇒ Refresh (never a false Skip).
+        let gh = MarketplaceSource::Github("davidlee/doctrine".into());
+        assert_eq!(
+            marketplace_action(
+                Some(RegisteredSource::Github("davidlee/doctrine".into())),
+                &gh
+            ),
+            MarketplaceAction::Skip
+        );
+        assert_eq!(
+            marketplace_action(
+                Some(RegisteredSource::Directory("/workspace/doctrine".into())),
+                &gh
+            ),
+            MarketplaceAction::Refresh
+        );
+    }
+
+    #[test]
+    fn refresh_failure_is_fatal_only_on_refresh() {
+        // VT-2 (F-5): a failed refresh aborts; a failed fresh add is tolerable.
+        assert!(refresh_failure_is_fatal(&MarketplaceAction::Refresh));
+        assert!(!refresh_failure_is_fatal(&MarketplaceAction::Add));
+        assert!(!refresh_failure_is_fatal(&MarketplaceAction::Skip));
     }
 
     // ---------------------------------------------------------------

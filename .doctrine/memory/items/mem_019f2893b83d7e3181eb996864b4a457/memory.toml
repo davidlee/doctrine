@@ -1,0 +1,42 @@
+memory_uid = "mem_019f2893b83d7e3181eb996864b4a457"
+memory_key = "mem.fact.claude.marketplace-add-overwrites-source"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "claude plugin marketplace add overwrites source in place; refresh needs no remove+add"
+summary = """On CC 2.1.198, `claude plugin marketplace add <src>` overwrites an existing marketplace name's source when src differs (exit 0, "Successfully added"); idempotent no-op when src identical ("already on disk"). Stale-source refresh is a single add — no remove+add."""
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = ["src/install.rs"]
+globs = []
+commands = ["install"]
+tags = ["claude-plugin", "marketplace", "install", "sl-195", "cc-2.1.198"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "3529fc8a46942675a55f27f14af743456b6523e4"
+tree = "5edbce146ad078d61de797ea2b5514a25ee2169f"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "3529fc8a46942675a55f27f14af743456b6523e4"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
