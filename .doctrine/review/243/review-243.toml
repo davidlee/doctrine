@@ -1,0 +1,34 @@
+id    = 243
+slug  = "reconciliation-review-of-sl-195"
+title = "reconciliation review of SL-195"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-195"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Live acceptance (VH-1 ×3 + OQ-4) unrun — verification incomplete at audit"
+detail = "Expected: each phase's VH-1 human-acceptance leg run before audit closes. Observed: all three deferred, plus PHASE-01 OQ-4. (1) P01 VH-1/OQ-4 — `.mcp.json` command `${DOCTRINE_BIN:-doctrine}` connects under `/mcp` on live CC. (2) P02 VH-1 — `install --dev` full forward-run → Directory source, zero network, git clean of abspath. (3) P03 VH-1 — repo relocation reinstall → source refresh, no dup entry. No code depends on any leg; the mechanical sub-legs ARE confirmed per the phase sheets (env-form supported mcp.md:384; live `marketplace list` already shows `Source: Directory (/workspace/doctrine)`; R-P2-1 restore proved byte-equal source echo). Only the interactive end-to-end run — needing a live `claude` + a repo move — is outstanding."
+disposition = "tolerated"
+response = "Conscious accepted drift. No code path depends on any live leg; every mechanical sub-leg is already confirmed (phase sheets P01/P02/P03), so residual risk is bounded to interactive end-to-end confirmation that requires a live `claude` session + a physical repo move — neither safely performed in the primary edge worktree during audit. Deferred to a user-driven run and captured as a backlog chore so the leg is not lost (harvest). Slice ships with test-mode (VT) coverage green across all three phases; VH remains the only open verification mode."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "design.md §8 R4/R7 stale post-probe — records the refresh verb as unresolved / describes an unused destructive branch"
+detail = """Expected: design canon reflects the settled implementation. Observed: §8 R4 still says "determine the refresh verb ... Probe live before choosing"; §8 R7 describes a destructive remove+add branch requiring abort-on-mid-refresh-failure. The R4 live probe (CC 2.1.198, mem.fact.claude.marketplace-add-overwrites-source) settled it: `marketplace add <newsrc>` overwrites in place ⇒ refresh = a single `add`, no destructive window. Implementation correctly ships only the single-add branch (marketplace_action → Skip/Add/Refresh; no remove). Plan EX-4's "handles BOTH branches / destructive-abort" clause is thus vacuously satisfied (plan criteria are immutable — not an edit surface). The substantive VT-2 requirement — a failed Refresh aborts via `return Err`, never swallowed into skipped_* — IS honoured on the add/Refresh path. Only the §8 R4/R7 prose is stale; remediation is a per-slice design.md edit for /reconcile."""
+disposition = "design-wrong"
+response = """Observation confirmed — the implementation is correct; the defect is stale design prose, not code. Per-slice design.md artifact (not spec/governance), so remediation routes to /reconcile as a Per-slice direct edit: rewrite §8 R4 (drop "probe live before choosing" — the verb is settled) and §8 R7 (the destructive remove+add branch does not exist on CC 2.1.198; single-add refresh, no destructive window) to record the probed answer, citing mem.fact.claude.marketplace-add-overwrites-source. No plan.toml edit (EX-4 immutable; vacuously satisfied). Recorded in the Reconciliation Brief. Finding kept verified — remediation is reconcile's, not audit's."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

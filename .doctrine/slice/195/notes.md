@@ -238,3 +238,23 @@ abspath byte-equal to `fs::canonicalize` — the `as_arg()` comparator is sound.
 Test names: parse_registered_source_reads_directory_and_github,
 parse_registered_source_absent_or_sibling_is_none, marketplace_action_add_skip_refresh,
 refresh_failure_is_fatal_only_on_refresh.
+
+## AUDIT — RV-243 (conformance facet, done · no blocker)
+
+Gate green; `slice conformance 195` = 0 undelivered, 3 conformant (boot.rs,
+cli.rs, install.rs). All test-mode criteria (P01 VT-1..4, P02 VT-1..6, P03
+VT-1..2) satisfied under gate. STD-001 (`MCP_COMMAND` sole env-literal source),
+SPEC-009 idempotency (comparator vs const, not exec.display()), POL-002 INV-1
+(no tracked abspath) all hold.
+
+Two findings, both terminal, no blocker:
+- **F-1 (major, tolerated):** 3× VH-1 + OQ-4 live-acceptance legs unrun (no code
+  dep; mechanical sub-legs confirmed). Harvested → **CHR-037** (originates_from
+  SL-195).
+- **F-2 (minor, design-wrong):** design.md §8 R4/R7 stale post-probe (records the
+  refresh verb as open / describes an unused destructive branch). Impl correct
+  (single-add); prose fix delegated to /reconcile → Reconciliation Brief
+  Per-slice direct edit. Cite mem.fact.claude.marketplace-add-overwrites-source.
+
+No governance/spec REV needed — all invariants held. Reconciliation Brief in
+review-243.md. Next: /reconcile.
