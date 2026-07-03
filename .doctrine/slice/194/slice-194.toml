@@ -33,7 +33,23 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/commands/cli.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/findings.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/surface.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/render.rs"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

@@ -8,8 +8,8 @@ kind = "chore"
 status = "resolved"
 resolution = "fixed"
 created = "2026-06-30"
-updated = "2026-07-02"
-tags = ["area:dispatch", "tech-debt"]
+updated = "2026-07-03"
+tags = ["area:dispatch", "area:tech-debt"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are

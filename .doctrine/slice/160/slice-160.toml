@@ -1,9 +1,9 @@
 id = 160
 slug = "con-to-inv"
 title = "Replace CON (constraint) with INV (invariant): rename + waived→relaxed semantics"
-status = "proposed"
+status = "abandoned"
 created = "2026-06-26"
-updated = "2026-06-26"
+updated = "2026-07-03"
 tags = []
 
 [relationships]

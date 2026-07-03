@@ -1,9 +1,9 @@
 id = 135
 slug = "cm-contextualizes-scan"
 title = "Wire concept-map contextualizes edges into catalog scan"
-status = "proposed"
+status = "abandoned"
 created = "2026-06-21"
-updated = "2026-06-21"
+updated = "2026-07-03"
 
 [relationships]
 needs = []                      # slice→work hard prerequisite

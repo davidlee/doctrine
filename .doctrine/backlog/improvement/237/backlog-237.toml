@@ -9,7 +9,7 @@ status = "resolved"
 resolution = "fixed"
 created = "2026-07-03"
 updated = "2026-07-03"
-tags = []
+tags = ["area:relations", "area:spec"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are

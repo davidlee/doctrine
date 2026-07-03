@@ -8,8 +8,8 @@ kind = "chore"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-06-23"
-updated = "2026-06-23"
-tags = ["governance", "docs", "adr-005", "templates", "hooks", "skills"]
+updated = "2026-07-03"
+tags = ["adr-005", "area:docs", "area:governance", "area:skills", "hooks", "templates"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
 # `[[relation]]` rows now (SL-048 "the cut") — author them with
