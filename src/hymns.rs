@@ -1064,6 +1064,82 @@ mod tests {
         );
     }
 
+    // ── SL-193 EX-1: expose is the single-emit MIRROR of seal ───────────────────
+    // Seal drops the user twin (framework wins). Expose keeps the user twin, which
+    // carries `replaces = <own slot>` and suppresses its framework origin (user
+    // wins). `replaces` stays the sole suppressor; the engine is unchanged (D4) —
+    // these are TESTS ONLY.
+
+    #[test]
+    fn exposed_slot_self_replaces_single_emit() {
+        // Exposed slot: framework twin + user twin carrying self-`replaces`. Bodies
+        // are byte-identical ("B") so an APPEND would yield "B\nB"; a SINGLE "B" is
+        // the only proof the framework origin was suppressed, not appended.
+        let slot = Slot::new(Band::Role, "worker");
+        let corpus = vec![
+            snip(
+                Band::Role,
+                "worker",
+                Selector {
+                    role: Some(Role::Worker),
+                    ..Default::default()
+                },
+                Provenance::Framework,
+                "B",
+            ),
+            snip(
+                Band::Role,
+                "worker",
+                Selector {
+                    role: Some(Role::Worker),
+                    replaces: Some(slot),
+                    ..Default::default()
+                },
+                Provenance::User,
+                "B",
+            ),
+        ];
+        // Single emit — the self-`replaces` suppresses the framework twin.
+        assert_eq!(resolve_ok(&ctx(Role::Worker), &corpus), "B");
+    }
+
+    #[test]
+    fn exposed_edited_body_suppresses_framework() {
+        // Edited starter: the user body B' is fixture-distinct from the framework
+        // body B. The customisation must WIN outright — output is B' only, framework
+        // B suppressed (override, not append).
+        let slot = Slot::new(Band::Role, "worker");
+        let corpus = vec![
+            snip(
+                Band::Role,
+                "worker",
+                Selector {
+                    role: Some(Role::Worker),
+                    ..Default::default()
+                },
+                Provenance::Framework,
+                "FW-BODY",
+            ),
+            snip(
+                Band::Role,
+                "worker",
+                Selector {
+                    role: Some(Role::Worker),
+                    replaces: Some(slot),
+                    ..Default::default()
+                },
+                Provenance::User,
+                "USER-EDIT",
+            ),
+        ];
+        let out = resolve_ok(&ctx(Role::Worker), &corpus);
+        assert_eq!(out, "USER-EDIT");
+        assert!(
+            !out.contains("FW-BODY"),
+            "framework body must be suppressed, got: {out}"
+        );
+    }
+
     // ── VT-3: replaces (INV-3) ─────────────────────────────────────────────────
 
     #[test]
