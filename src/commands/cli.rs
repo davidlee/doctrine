@@ -466,6 +466,11 @@ pub(crate) enum Command {
         #[arg(long, conflicts_with = "check")]
         emit: bool,
 
+        /// Wrap the `--emit` stdout as a Cursor `sessionStart` hook JSON envelope
+        /// (`{"additional_context": "<snapshot>"}`) instead of raw markdown.
+        #[arg(long, requires = "emit")]
+        json: bool,
+
         /// Report disk staleness + unpopulated sections without writing (the
         /// disk sentry). Ignored when the `install` subcommand is given.
         #[arg(long)]
@@ -1233,8 +1238,16 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             command,
             check,
             emit,
+            json,
             path,
-        } => crate::boot::dispatch(command, check, emit, path, color, render_boot_map),
+        } => {
+            let emit_mode = emit.then_some(if json {
+                crate::boot::EmitMode::Json
+            } else {
+                crate::boot::EmitMode::Raw
+            });
+            crate::boot::dispatch(command, check, emit_mode, path, color, render_boot_map)
+        }
         Command::Catalog { command } => crate::catalog::dispatch(command, color),
         Command::Worktree { command } => crate::worktree::dispatch(command),
         Command::Dispatch { command } => crate::dispatch::dispatch(command, color),

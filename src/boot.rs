@@ -475,13 +475,45 @@ pub(crate) fn run_check(path: Option<PathBuf>, command_map: fn() -> String) -> a
 /// exact bytes to stdout. The same bytes written to disk are written to stdout:
 /// one render, one output path each. No trailing extra newline — `render_boot`
 /// already supplies the terminal newline (the deterministic guarantee).
-pub(crate) fn run_emit(path: Option<PathBuf>, command_map: fn() -> String) -> anyhow::Result<()> {
+///
+/// `json`: wrap stdout as a Cursor `sessionStart` hook envelope instead of raw
+/// markdown (IMP-245) — Cursor's hook runner parses stdout as JSON and errors
+/// on a bare markdown body. The disk write is IDENTICAL either way; only the
+/// stdout encoding branches.
+pub(crate) fn run_emit(
+    path: Option<PathBuf>,
+    command_map: fn() -> String,
+    json: bool,
+) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let exec = resolve_exec()?;
     let content = build_and_render(&root, &exec, command_map);
     write_if_changed(&root.join(BOOT_REL), &content)?;
-    write!(io::stdout(), "{content}")?;
+    if json {
+        write!(io::stdout(), "{}", session_start_hook_json(&content)?)?;
+    } else {
+        write!(io::stdout(), "{content}")?;
+    }
     Ok(())
+}
+
+/// The Cursor `sessionStart` hook output envelope
+/// (`cursor.com/docs/hooks.md`): `{"additional_context": "<snapshot>"}`.
+/// Escaping (quotes, backticks, newlines, unicode) rides `serde_json` — the
+/// same primitive already used for the `.mcp.json`/`.codex/hooks.json` merge
+/// cores below and every MCP tool response body.
+#[derive(serde::Serialize)]
+struct SessionStartHookOutput<'a> {
+    additional_context: &'a str,
+}
+
+/// Render `content` as the Cursor hook JSON envelope, one compact line + `\n`
+/// (mirrors the MCP stdio transport's line-framing convention).
+fn session_start_hook_json(content: &str) -> anyhow::Result<String> {
+    let out = SessionStartHookOutput {
+        additional_context: content,
+    };
+    Ok(format!("{}\n", serde_json::to_string(&out)?))
 }
 
 // ===========================================================================
@@ -2144,18 +2176,32 @@ pub(crate) enum BootCommand {
     },
 }
 
+/// The bare (non-`install`) `boot --emit` stdout encoding. Collapses the
+/// `--emit`/`--json` flag pair into one param on [`dispatch`] (clippy
+/// `fn_params_excessive_bools` — a 4th bare bool tips the pedantic ceiling);
+/// as a bonus this also makes "`--json` without `--emit`" unrepresentable in
+/// Rust, not just CLI-guarded by clap's `requires`.
+pub(crate) enum EmitMode {
+    /// `--emit` alone — raw markdown to stdout.
+    Raw,
+    /// `--emit --json` — Cursor `sessionStart` hook envelope (IMP-245).
+    Json,
+}
+
 pub(crate) fn dispatch(
     command: Option<BootCommand>,
     check: bool,
-    emit: bool,
+    emit: Option<EmitMode>,
     path: Option<PathBuf>,
     _color: bool,
     command_map: fn() -> String,
 ) -> anyhow::Result<()> {
     match command {
-        None if emit => run_emit(path, command_map),
-        None if check => run_check(path, command_map),
-        None => run(path, command_map),
+        None => match emit {
+            Some(mode) => run_emit(path, command_map, matches!(mode, EmitMode::Json)),
+            None if check => run_check(path, command_map),
+            None => run(path, command_map),
+        },
         Some(BootCommand::Install {
             path: install_path,
             agent,
@@ -2675,6 +2721,53 @@ mod tests {
             !regenerate(root, exec, noop_map).unwrap(),
             "second regenerate is a no-op write"
         );
+    }
+
+    // --- IMP-245: `boot --emit --json` — Cursor sessionStart hook envelope ---
+
+    #[test]
+    fn session_start_hook_json_wraps_content_in_additional_context() {
+        let out = session_start_hook_json("# Heading\n\nsome text\n").unwrap();
+        let parsed: Value = serde_json::from_str(out.trim_end()).unwrap();
+        assert_eq!(
+            parsed.get("additional_context").and_then(Value::as_str),
+            Some("# Heading\n\nsome text\n")
+        );
+    }
+
+    #[test]
+    fn session_start_hook_json_escapes_special_characters() {
+        // Quotes, backticks, embedded newlines, and unicode all round-trip —
+        // serde_json is the escaping mechanism, not hand-rolled string surgery.
+        let tricky = "a \"quoted\" `code span`\nline two — emoji 🎉 and \\backslash\\";
+        let out = session_start_hook_json(tricky).unwrap();
+        let parsed: Value = serde_json::from_str(out.trim_end()).unwrap();
+        assert_eq!(
+            parsed.get("additional_context").and_then(Value::as_str),
+            Some(tricky)
+        );
+    }
+
+    #[test]
+    fn session_start_hook_json_is_single_line_plus_newline() {
+        let out = session_start_hook_json("multi\nline\ncontent").unwrap();
+        assert_eq!(out.matches('\n').count(), 1, "one trailing newline only");
+        assert!(out.ends_with('\n'));
+    }
+
+    #[test]
+    fn run_emit_json_writes_disk_identically_to_plain_emit() {
+        // Two separate roots, one per branch — proves `--json` only changes
+        // stdout encoding, never the disk artifact `write_if_changed` produces.
+        let dir_plain = tempfile::tempdir().unwrap();
+        let dir_json = tempfile::tempdir().unwrap();
+
+        run_emit(Some(dir_plain.path().to_path_buf()), noop_map, false).unwrap();
+        run_emit(Some(dir_json.path().to_path_buf()), noop_map, true).unwrap();
+
+        let disk_plain = fs::read_to_string(dir_plain.path().join(BOOT_REL)).unwrap();
+        let disk_json = fs::read_to_string(dir_json.path().join(BOOT_REL)).unwrap();
+        assert_eq!(disk_plain, disk_json, "disk artifact is byte-identical");
     }
 
     // --- VT-1: section_or_marker — real rows, else the benign marker ---
