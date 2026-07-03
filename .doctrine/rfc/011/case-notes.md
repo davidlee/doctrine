@@ -599,3 +599,49 @@ beat distinguishes. Direct vindication of the funnel doctrine "self-reports are
 advisory; trust only the verify beat." Orchestrator reconciled the coupled e2e
 test-golden inline (same additive prove-override the worker used in the unit helper) —
 same coupling class as P02's golden (import-scope-belt), surfacing one funnel round late.
+
+---
+
+[dispatch; SL-191-P06]
+
+PHASE-06 (Sonnet arm, corpus knowledge refresh: hymn-cascade README + shipped
+memory + VT-1). Arm-spawn ritual again gave clean isolation (real worktreePath
+footer). Sonnet authored the content faithfully — the trait-space model, seal/
+expose symmetry, and provenance-as-ordering-only all correct on first pass; VA-1
+content review needed no correction. Distilling the *delivered* model (with the
+forward-intent set-valued parts explicitly fenced off) into the worker prompt
+paid off — the risk was Sonnet reintroducing model-identity framing, and it
+didn't.
+
+TWO worker-contract / import-mechanism gaps surfaced, both orchestrator-absorbed:
+
+F1 — worker-mode marker guard refuses `memory record --global` (and `memory
+sync`) INSIDE the worker tree ("worker fork (signal: marker): refusing authored
+write"). The canonical shipped-corpus scaffold path is unavailable to a
+dispatch worker; the worker hand-authored memory.toml/.md + minted a uid +
+symlink by hand, and correctly declined to route around the sandbox guard. Cost:
+the master never passed the real CLI `memory validate` in-tree — the orchestrator
+had to run sync+validate+show post-import as the true proof (VT-1 lint_master had
+already proven schema/INV/scope-floor). A corpus-authoring phase is a poor fit
+for the current worker contract; either exempt `--global` authoring from the
+marker guard or make corpus authoring an orchestrator beat.
+
+F2 — the claude-arm import (`run_import_from_worktree`) DROPS untracked symlinks.
+The new master's `mem.<key>` alias symlink (an authored corpus artifact, git-
+tracked for every other master) was NOT in the gathered working-tree delta;
+only the uid dir's two regular files came across. Orchestrator recreated +
+staged the symlink. Silent gap — no error, just a missing file that would have
+shipped a keyless master.
+
+Funnel verify beat earned its keep AGAIN (third phase running): the regression
+diff on the unmarked coord caught a real new failure — `e2e_memory_sync::
+sync_populates_...` — that the worker's `cargo test --bin doctrine` structurally
+could not see (that form runs only the in-binary unit tests, skipping every
+`tests/` integration binary). Root cause was a brittle test, not the delta: the
+"writes planned" guard `!contains("0 new,")` is a substring false-positive once
+the corpus count ends in 0 (grew 29→30 with this master). Same coupled-golden
+class as P02/P05, surfaced one funnel round late, fixed inline (anchor on the
+": " count prefix). Reinforces: a worker running `--bin doctrine` is blind to
+integration-binary regressions; only the coord verify beat (full suite) sees
+them. Worker-contract note: the worker SHOULD run the full `cargo test`, not
+`--bin doctrine`, but the funnel does not depend on it doing so.
