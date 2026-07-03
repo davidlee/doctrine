@@ -100,3 +100,14 @@ live/dry dispatch, never as the correctness oracle.
 - **Behaviour-preservation gate** — `expand_worker_marker` unit tests + the
   subagent-def drift test stay green (PHASE-03 VT-2); the trait-less resolve is
   byte-identical to today.
+- **Graceful degradation on the SL-193 gate.** PHASE-01…06 deliver the whole
+  shipped payload — Framework contract, bake, coverage lint, funnel belt, corpus
+  knowledge — with **no** dependency on SL-193 close. If SL-193 has not closed
+  when PHASE-06 completes, the slice is *code-complete minus the overlay
+  reconciliation*: PHASE-07 waits on the gate, it does not block the rest. The
+  slice should not read as blocked while only PHASE-07 is outstanding.
+- **PHASE-03 is the heaviest phase** — new agent-def frontmatter parser + widened
+  `resolve_worker_role_body` + call-site wiring + install-time hard-error + def
+  declarations. Kept as one unit (objective-cohesive: "make the bake deliver
+  traits"); the parser is the de-riskable sub-unit and should land red/green
+  first within the phase, before the resolver widens onto it.

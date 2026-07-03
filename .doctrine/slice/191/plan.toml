@@ -185,7 +185,7 @@ exit_criteria = [
   { id = "EX-3", text = "Subprocess-arm base-clean coverage decided and recorded (its own beat vs shared funnel)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Reject-and-halt import-gate test: a red imported delta halts and does not land", test_file = "src/dispatch.rs", keywords = ["check", "halt"] },
+  { id = "VT-1", expects = "Reject-and-halt import-gate test: a red imported delta halts and does not land", test_file = "src/dispatch.rs", keywords = ["check", "import"] },
   { id = "VA-1", expects = "Agent review: base-clean beat is non-mutating in both dispatch skills and does not double-run on the hot path" },
 ]
 specs        = []
