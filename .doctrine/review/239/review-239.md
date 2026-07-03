@@ -125,3 +125,63 @@ carry-forward (F-2) makes the /close land-the-whole-bundle requirement explicit.
   code alone — or edge's design/selector stay stale and conformance stays red
   (F-2). The e2e selector is already correctly authored on the bundle; no re-add
   needed, only the landing.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md — F-1 verb correction (3 loci), on `edge`** (drives RV-239 F-1):
+  §Target behaviour (~L92), §Verification/E2E (~L165-167), §Corpus check
+  (~L180-181). `prompt explain` → `prompt resolve` wherever the doc claimed the
+  verb demonstrates single-emit / suppression / no-doubling; `prompt explain`
+  reframed as the **pre-suppression diagnostic** (raw ranked active set, both
+  twins present) and `prompt check` cited for legality. The Problem-statement use
+  (~L10-12) was **left unchanged** — it correctly uses `explain` to show both
+  twins *surviving* (the doubling), which is exactly what a pre-suppression
+  diagnostic shows; it is not one of the three claim-loci.
+
+### REVs completed
+- **None.** No governance/spec divergence surfaced (brief §Governance/spec: none).
+  REV-019's design is delivered as locked, engine untouched — no ADR/SPEC/REQ
+  edit owed.
+
+### Withdrawn / tolerated
+- **RV-239 F-2** (`aligned`): benign integration artifact, no reconcile write. The
+  conformance `undeclared` is an edge-lags-bundle effect; the declaring selector
+  already exists on the `review/193` bundle. Resolves when the bundle lands —
+  carry-forward to /close (below), not a reconcile surface.
+- **RV-239 F-3** (`aligned`): positive gate confirmation (D4 engine-untouched,
+  F1 compile gate, F5 idempotence, D3/STD-001, POL-002). No remediation.
+
+### Off-surface note (NOT edited)
+- **plan.toml PHASE-02 EX-2** carries the same `prompt explain` wording as F-1.
+  `plan.toml` criteria are **immutable-append** (boot rule) — not a reconcile
+  direct-edit surface. Left as-authored; recorded as a design/plan-accuracy note
+  only. If a corrected criterion is wanted, it is an append via /plan, not an
+  edit here.
+
+### Carry-forward to /close
+1. **Land the bundle's genuine delta only — cherry-pick, NOT whole-tree.** The
+   `review/193` bundle (`fadaef5e`) forked from an **old** merge-base
+   (`1b5e3b4a`); `edge` (`63d5c576`) has advanced far past it. `git diff edge
+   review/193` therefore shows the bundle *reverting* a mass of later edge work
+   (this RV-239, REV-020, SL-191 progress, memories, backlog transitions). A
+   whole-tree integration would destroy that. /close must land **only** the
+   bundle's real additions:
+   - code: `src/hymns.rs` (test-only prod-empty), `src/install.rs`,
+     `tests/e2e_prompt_resolve_golden.rs`
+   - 5 sidecars: `.doctrine/hymns/{harness/claude, model/anthropic/claude-sonnet-4,
+     model/deepseek/_default, role/orchestrator, role/worker}.toml`
+   - authored corrections: `design.md` **F5 block** (+15 lines, added at ~L254,
+     before ## Open questions) and `slice-193.toml` **e2e selector** + status.
+2. **F-1 edits (this pass, on edge) are disjoint from the bundle's design.md F5
+   hunk.** F-1 loci are ~L92/L165/L180; the F5 block lands at ~L254. Apply the
+   bundle's design.md change as the **+15 F5 hunk** (patch/cherry-pick of that
+   region), **never a blind whole-file overwrite** of design.md — an overwrite
+   would clobber the F-1 correction and re-stale the file. Disjoint regions ⇒
+   clean apply.
+3. On `slice-193.toml`: the bundle flips status `reconcile` → `started` (stale
+   base). /close owns the terminal status transition — take the bundle's
+   **selector** addition, not its status value.
+
+Reconcile pass complete — every finding terminal, one direct-edit item applied,
+zero REV surface. Handoff to /close.

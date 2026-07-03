@@ -89,7 +89,10 @@ After this slice, for every exposed (non-sealed) slot:
 - an edited starter (`B'`) wins outright — framework `B` suppressed, not appended;
 - an unedited starter (`B`) dedups to a single `B`.
 
-Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
+Verified corpus-wide: `prompt resolve` emits each exposed slot once — no
+doubling. (`prompt explain` prints the raw ranked active set — both twins
+present, provenance-ordered — so it is a pre-suppression diagnostic, not a
+demonstration of suppression; the `replaces` graph is applied at resolve.)
 
 ## Design decisions
 
@@ -163,8 +166,10 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
   - (seal disk-twin-drop golden already exists — symmetry is the new half.)
 - **E2E — `prompt` verbs:**
   - VT: after projection, `prompt resolve --role worker` emits `role/worker`
-    once; `prompt explain` shows framework `role/worker` suppressed, not `rank`-
-    ordered-but-present.
+    once — framework twin suppressed by the sidecar's self-`replaces`. (`prompt
+    explain` still shows the framework `role/worker` `rank`-ordered-but-present:
+    it reports the raw active set pre-suppression, so it is the diagnostic, not
+    the suppression proof.)
   - VT: **`replaces` legality — corpus-wide.** After projection, `prompt check`
     (⇒ `validate_replaces`, `hymns.rs`) returns `Ok` over the real projected
     corpus: every self-`replaces` is the unique-most-specific active snippet of
@@ -177,8 +182,10 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
     once. The defect is corpus-wide; role/worker alone under-covers it.
 - **Behaviour-preservation:** full resolver/loader/e2e suites green **unchanged**
   (D4 gate).
-- **Corpus check:** in-repo, `prompt explain` across a full context shows **no**
-  exposed slot double-emitting.
+- **Corpus check:** in-repo, `prompt resolve` across a full context emits **no**
+  exposed slot twice, and `prompt check` confirms every projected self-`replaces`
+  is legal. (`prompt explain` shows the raw ranked set — both twins present — as a
+  pre-suppression diagnostic.)
 
 ## Invariants / boundary conditions
 
