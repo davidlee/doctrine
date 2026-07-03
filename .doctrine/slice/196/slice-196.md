@@ -22,83 +22,78 @@ taxonomy as *descriptive*, not the source of runtime truth. A descriptor adds a
 third, **non-semantic** attribute alongside label and role — inert to validation,
 inference, graph effects, and edge identity.
 
-## Directionality principle
+## Driver
 
-Free-text edge annotation is named by the edge's **directedness**, read off the
-model's own `inbound_name` (the derived reciprocal spelling):
-`inbound_name == label.name()` ⟺ **symmetric** edge; otherwise **directed**.
-
-- **`descriptor`** *refines a directed edge* (A→B): `contextualizes`
-  (→`contextualized_by`), `references:concerns` (→`concerned by`).
-- **`notes`** *annotate a symmetric pairing* ({A,B}): `interactions`
-  (→`interactions`), `related` (→`related`).
-
-Putting a `descriptor` on a symmetric edge is a category error (describes which
-direction?). This slice builds `descriptor` for the **directed** broad edges and
-leaves the existing `interactions.notes` (symmetric) untouched.
+The motivating use case: a **concept record (`CPT`, IMP-244 part 1 / SL-197)
+saying annotated things about entities** —
+`link CPT-001 references SL-128 --role concerns --descriptor "frames estimation as
+attention burden"`. The `descriptor` is the statement; `references:concerns`
+("aboutness/relevance, source → any numbered") is the carrier.
 
 ## Scope & Objectives
 
-Add an **optional, free-text `descriptor: String`** facet to **directed** broad
-relation edges, riding the existing `Degree` facet seam (SL-176).
+Add an **optional, free-text `descriptor: String`** facet to the
+**`references:concerns`** relation edge, riding the existing `Degree` facet seam
+(SL-176). Source-agnostic — legal for every source the rule already admits (SL,
+backlog, records, and `CPT` once SL-197 wires it).
 
-1. **Data model** — a Tier::One `[[relation]]` row may carry an optional
+1. **Data model** — a `Tier::One` `[[relation]]` row may carry an optional
    `descriptor` cell. Free text only: stored, round-tripped, searchable,
    renderable. **Excluded from edge identity** — identity stays the
-   `(label, role, target)` triple (two edges differing only in descriptor are the
-   *same* edge), exactly as `degree` is excluded (`relation.rs` §A.5). Never an
-   input to validation, inference, graph traversal/effects, or reciprocity.
+   `(label, role, target)` triple, exactly as `degree` is excluded. Never an input
+   to validation, inference, graph traversal/effects, or reciprocity.
 
-2. **Admissibility (closed allow-set, per-rule column)** — a
+2. **Admissibility (per-`(source,label,role)` row column)** — a
    `descriptor_bearing: bool` column on `RelationRule` (mirroring `degree_bearing`),
-   `true` on exactly the directed broad labels:
-   - **Allow:** `contextualizes`, `references` with `role = concerns`.
-   - **Deny (reject, not ignore):** every non-bearing label — structural/lifecycle
-     (`parent`, `descends_from`, `members`, `supersedes`, `fulfils`,
-     `owning_slice`) **and** symmetric labels (`related`, `interactions`). Policy
-     is the established house rule: `validate_link` bails on a facet set against a
-     non-bearing label, symmetric to `degree`/`role` (`relation.rs:1447`).
+   `true` on exactly the `references:concerns` row. Reject (not ignore) on any
+   non-bearing row — the established house rule (`validate_link` bails, symmetric
+   to `degree`/`role`, `relation.rs:1447`).
 
 3. **Write seam** — `doctrine link` gains `--descriptor <text>`; threaded through
-   `validate_link` (gate) → `append_edge(…, descriptor)` → the row builder
-   (`row.insert("descriptor", …)` only when present, load-bearing for diff
-   stability), mirroring `degree` end-to-end. Append-conflict semantics: **design
-   §2 decides** (reject differing descriptor on same edge, like `degree`, vs
-   overwrite/no-op).
+   `validate_link` (gate) → `append_edge(…, descriptor)` → the row builder,
+   mirroring `degree` end-to-end. Append-conflict: reject a differing descriptor on
+   the same edge (degree precedent); `unlink`+relink is the change path.
 
-4. **Surfacing (unify at the view layer, not storage)** — one render/search
-   helper treats *both* `descriptor` (directed) and the existing
-   `interactions.notes` (symmetric) as "edge annotation text": rendered adjacent
-   to the edge in `show`/`inspect`, and included in the search index. Interactions
-   `notes` gains search indexing as a consequence (it has none today).
+4. **Surfacing** — descriptor renders on the **outbound** edge in `inspect`/`show`;
+   descriptor text is included in the search index (via `CatalogEdge.descriptor` +
+   a source-join in the search doc-build).
+
+## Out of scope (adversarial-pass F0)
+
+IMP-244 also listed `contextualizes`, `related`, `interactions`. All excluded:
+- **`contextualizes`** — `CM`-source, authored via concept-map **DSL** lines, a
+  separate write path `link`/`append_edge` never touches. Descriptor there needs a
+  DSL grammar change → **follow-up**.
+- **`related`, `interactions`** — **symmetric** edges (`inbound_name == label`); a
+  directed descriptor is a category error. `interactions` keeps its free-text
+  `notes` (untouched); `related` gets nothing (YAGNI).
 
 ## Non-Goals
 
 - **No new label or role.** Closed `RelationLabel` / role vocabularies unchanged
   (ADR-016 preserved).
 - **No `notes`→`descriptor` migration / no `--notes` rename.** `interactions`
-  keeps `notes` (symmetric) untouched; no breaking change to `spec interaction add`.
-- **No descriptor on symmetric or structural edges** — deny-set is firm.
-- **No `notes` on `related`** — symmetric, would take `notes` not `descriptor`; no
-  present demand (YAGNI). Deferred.
+  keeps `notes` untouched.
+- **No descriptor on symmetric, structural, or DSL-authored edges.**
+- **No CPT source-set wiring** — SL-197 must add `CPT` to the `references:concerns`
+  `sources` array (it assumes RECORD auto-inheritance, but the set is
+  hand-enumerated). Flagged to SL-197.
 - **No graph semantics.** Descriptor never affects validation, inference,
   traversal, priority, reciprocity (ADR-004), or dedup/identity.
-- **The future record→work "informs/bears-on" label** — named as a forward
-  inheritor of the descriptor rule (it is directed), not built here.
-- **Part 1 (concept/CPT kind)** — separate track.
+- **Part 1 (concept/CPT kind)** — SL-197.
 
 ## Summary
 
-One optional free-text cell on a Tier::One `[[relation]]` row, admissible on the
-two directed broad labels (`contextualizes`, `references:concerns`), riding the
-proven `Degree` seam and inert to all graph semantics. The view layer unifies
-descriptor + the retained symmetric `interactions.notes` for render and search.
-Behaviour-preservation gate: existing relation validation, storage-tier
-behaviour, and graph effects stay green unchanged (IMP-244 acceptance). Remaining
-design question: append-conflict semantics on re-link with a differing descriptor.
+One optional free-text cell on the `Tier::One` `references:concerns` `[[relation]]`
+row, riding the proven `Degree` seam, inert to all graph semantics, source-agnostic.
+Renders outbound; searchable via the hydrated `CatalogEdge`. Purely additive — no
+migration, no `--notes` rename, no template change. Behaviour-preservation gate:
+existing relation validation, storage-tier behaviour, and graph effects stay green
+unchanged (IMP-244 acceptance).
 
 ## Follow-Ups
 
-- Future record→work "informs/bears-on" relation inherits the descriptor rule.
+- `contextualizes` descriptor via concept-map DSL grammar.
+- `interactions.notes` search indexing.
 - `related` symmetric `notes` — if demand arises.
-- Part 1: `concept`/CPT knowledge kind (off-backlog).
+- SL-197: add `CPT` to `references:concerns` sources (driver dependency).
