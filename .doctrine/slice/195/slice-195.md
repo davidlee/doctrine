@@ -58,7 +58,12 @@ axes to one:
    the sole committed POL-002 breach.
 5. **Qualify + detect on `doctrine@doctrine`** (current code installs bare
    `doctrine`); update presence checks.
-6. **Idempotent re-runs** for both modes.
+6. **Reinstall refreshes, not skips** (dev invariant). Baked gitignored surfaces
+   (pi `mcp.ts`, hooks) already compare-and-regenerate on a changed exec path. The
+   marketplace step must refresh a **stale source** (moved repo / changed slug),
+   not skip-because-name-present — the current `if !has_marketplace` guard is the
+   gap (design R4). Directory sources are live-loaded, so only the registered
+   *path* goes stale.
 
 ## Non-Goals
 

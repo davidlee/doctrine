@@ -132,8 +132,14 @@ transcript pointers):
 ### 5.5 Invariants, Assumptions & Edge Cases
 
 - **INV-1:** no absolute host path in any git-tracked file after install.
-- **INV-2:** re-run is a no-op (marketplace/plugin presence checks; `.mcp.json`
-  ownership match).
+- **INV-2:** re-run converges to current — **refresh, not skip**. Baked gitignored
+  surfaces (pi `mcp.ts`, hooks) already compare-and-regenerate on a changed exec
+  path (boot.rs:1818). The marketplace step must likewise refresh a **stale
+  source** (moved repo / changed slug), not skip-because-name-present — see R4.
+- **INV-3 (dev refresh):** reinstalling `--dev` after a repo move / rebuild must
+  update the registered directory source (and any baked path) to the current
+  location. Directory sources are live-loaded, so *content* edits never need
+  reinstall; only the registered *path* can go stale. INV-2 + R4 carry this.
 - **EDGE:** `--dev` in a repo lacking `.claude-plugin/marketplace.json` → error.
 - **EDGE:** an existing `.mcp.json` written by the *old* absolute-baking installer
   must be recognised as ours and refreshed to the env-expansion form — see §8 R1.
@@ -192,8 +198,20 @@ transcript pointers):
   **Mitigation:** qualify to `doctrine@doctrine`; update presence checks to the
   qualified key.
 - **R3 — `--dev` idempotency.** Re-running `marketplace add` on an already-added
-  directory source. **Mitigation:** reuse the existing `marketplace list` presence
-  guard, keyed on marketplace **name** (`doctrine`), not source.
+  directory source. **Mitigation:** presence guard keyed on marketplace **name**
+  (`doctrine`) — but see R4: name-presence alone is insufficient when the source
+  is stale.
+- **R4 — stale marketplace source on reinstall (INV-2/INV-3).** The current guard
+  (`if !has_marketplace { add }`, install.rs:423) skips when a `doctrine`
+  marketplace exists, retaining a **stale source** after a repo move or a changed
+  `install.repo` slug. **Mitigation:** compare the *registered source* (from
+  `marketplace list`, which prints `Source: Directory (/abs)` / the git slug)
+  against the intended source; on mismatch, refresh it. **Impl-time empirical
+  (for `/plan`):** determine the refresh verb — does `claude plugin marketplace
+  add <newsrc>` overwrite an existing name's source, or is `remove`+`add`
+  required (remove uninstalls plugins, plugin-marketplaces.md:988, so re-install
+  after)? `marketplace update` refreshes *content at the same path*, not a
+  relocation. Probe live before choosing.
 
 ## 9. Quality Engineering & Validation
 
@@ -206,9 +224,13 @@ transcript pointers):
   precondition error when `.claude-plugin/marketplace.json` absent.
 - **Behaviour-preservation:** existing `plan_mcp_*` / install tests stay green
   except the intentional command-form change (update fixtures).
-- **Manual smoke (OQ-4):** hand-write env-form `.mcp.json`, confirm `/mcp`
-  connects; `doctrine install --dev` on this repo → live plugin load, no network;
-  `git status` clean of any abspath.
+- **Reinstall-refresh (INV-2/INV-3):** unit — source-mismatch detection selects
+  refresh vs skip; a stale directory source (simulated `marketplace list` output
+  with an old abspath) triggers refresh. Manual — `--dev`, move the repo, reinstall,
+  confirm the registered source updates to the new abspath.
+- **Manual smoke (OQ-4, R4 verb):** hand-write env-form `.mcp.json`, confirm `/mcp`
+  connects; `doctrine install --dev` → live plugin load, no network; `git status`
+  clean of any abspath; probe the marketplace-source refresh verb live.
 
 ## 10. Review Notes
 
