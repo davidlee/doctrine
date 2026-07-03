@@ -1,7 +1,7 @@
 id = 195
 slug = "installer-dual-mode-source-bake-axes"
 title = "Installer dual-mode: marketplace source + exec-path bake axes, --dev sugar"
-status = "reconcile"
+status = "done"
 created = "2026-07-03"
 updated = "2026-07-03"
 tags = []
