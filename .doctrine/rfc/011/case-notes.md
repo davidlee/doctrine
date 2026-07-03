@@ -560,3 +560,15 @@ isolation — a concurrent second worker in the same coord tree would collide.
   (commit pathspec only matches tracked/staged paths). Expected git behaviour, but
   the path-limit-the-commit discipline (AGENTS.md) collides with new-file capture —
   one `add` then `commit -- <paths>`. Not doctrine's fault; noting the two-step.
+
+[/close; SL-194-close-9785ea03]
+`check gate` failed RED at close pre-check on a cordage `denylist` test —
+`root = env!("CARGO_MANIFEST_DIR")` bakes the BUILD-TIME abs path into the test
+binary. The cached `target/debug` binary was compiled on the host
+(`/home/david/dev/doctrine/...`), which doesn't exist in the jail
+(`/workspace/doctrine`), so the scan's self-guard walked 0 files and panicked.
+`touch tests/denylist.rs && cargo test -p cordage --test denylist` (force
+recompile → correct CARGO_MANIFEST_DIR) → 3/3 green. Slice-independent (SL-194
+doesn't touch cordage). Cost: a spurious RED gate at a close gate, ~2 min to
+prove environmental. Root cause: stale cross-environment target cache + env!
+compile-time path embedding in a filesystem-walking test.
