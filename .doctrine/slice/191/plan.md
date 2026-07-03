@@ -45,8 +45,9 @@ design's premises against the current tree, with two favourable shifts:
   `resolve_worker_role_body` (SL-192 already made the context set-valued, so the
   resolver change is populate-set + widen-band, not a struct migration).
 
-**The belt (PHASE-05) floats.** The funnel wiring touches `src/dispatch.rs` and
-the dispatch skills, invoking the already-owned `doctrine check` seam (SL-163). It
+**The belt (PHASE-05) floats.** The funnel wiring touches the import belt
+`src/worktree/import.rs` (codex F3 — not `src/dispatch.rs`) and the dispatch
+skills, invoking the already-owned `doctrine check` seam (SL-163). It
 depends on nothing in 01–04 and could sequence anywhere; it is placed after the
 delivery spine to keep the bake/lint story contiguous and to land the enforcement
 belt once the contract it enforces exists.
@@ -121,4 +122,36 @@ live/dry dispatch, never as the correctness oracle.
   `resolve_worker_role_body` + call-site wiring + install-time hard-error + def
   declarations. Kept as one unit (objective-cohesive: "make the bake deliver
   traits"); the parser is the de-riskable sub-unit and should land red/green
-  first within the phase, before the resolver widens onto it.
+  first within the phase, before the resolver widens onto it. Split into 4 VT rows
+  (parser negatives / trait-less byte-identity / covered-bake+uncovered-hard-error
+  / behaviour-preservation) so a failed phase localises.
+
+## Codex/GPT-5.5 inquisition — integrated (2026-07-03)
+
+An adversarial pass on the plan (not the locked design) surfaced 8 findings, all
+verified against the tree and integrated:
+
+- **F1 (blocker) — whole-tree POL-002 gate was impossible.** `install/hymns/harness/
+  cursor.md` (IMP-245, just merged) legitimately names `cargo`/`clippy`/`nix develop`
+  — the harness band's job. PHASE-02's gate is now **scoped to the SL-191-authored
+  hymns** (`role/worker.md` + `model/**`), not the whole `install/hymns` tree; the
+  harness band is explicitly out of scope.
+- **F2 (blocker) — no non-mutating `doctrine check` variant exists.** `check` is a
+  config-cadence proxy (`src/commands/check.rs`); `check quick` runs mutating
+  `cargo fmt`. PHASE-05 now **establishes** a non-mutating base-clean cadence
+  (fmt `--check` + lint) rather than assuming one (EX-1).
+- **F3 (major) — import belt home was wrong.** The reject-and-halt gate lives in
+  `src/worktree/import.rs` (`classify_import`, `run_import_from_worktree`), not
+  `src/dispatch.rs`. PHASE-05 VT-1 retargeted; a stray-substring false-pass avoided.
+- **F5 (major) — PHASE-04 had no structural seam.** `resolve_worker_role_body`
+  returns `String`, so a band assertion could only substring-grep the body. PHASE-03
+  now extracts a pure `worker_context(traits) -> ContextVector` builder (EX-6) that
+  both bake and `prompt check` use; PHASE-04 asserts `bands ∋ Band::Model` directly.
+- **F6 (major) — PHASE-07 had no automated VT** and was the *only* phase proving
+  live composition, while the full-replace overlay makes PHASE-02's in-repo
+  verification meaningless. PHASE-02 EX-4 now verifies the model band live but the
+  role band via hermetic fixture; PHASE-07 gains a hermetic composition VT (VT-1).
+- **F4/F7/F8 (sizing + weak mandates) — hardened.** PHASE-03 split into 4 VTs;
+  PHASE-02/06 VT rows given unique fn-name keywords + `patterns` regex so
+  `verify-vt` asserts real shape, not incidental substrings (`hymns`/`target`
+  already pervade `src/install.rs`).

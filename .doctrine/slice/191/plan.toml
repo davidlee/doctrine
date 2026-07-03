@@ -64,10 +64,18 @@ edits; hermetic goldens; component-anchored paths + owned dirs `.dispatch/`/
 quick`/`commit`), and `install/hymns/model/adherence/low.md` — the SL-168 §5c
 delivery patterns (explicit negatives, concrete-over-abstract, high-density),
 homed as low-adherence guidance reachable by any loose model via membership.
-POL-002: NO host literals (`cargo`/`target/`/`just`) in `install/hymns` — those
-belong in the `.doctrine/hymns` overlay (PHASE-07). Content only; no bake yet.
-Verify via `prompt explain` against the embedded corpus / hermetic fixtures, NOT
-the live-repo resolve (overlay contamination — F2).
+POL-002: NO host literals (`cargo`/`target/`/`just`) in the SL-191-AUTHORED hymns
+(`install/hymns/role/worker.md`, `install/hymns/model/**`) — those belong in the
+`.doctrine/hymns` overlay (PHASE-07). NB the gate is scoped to the authored set,
+NOT the whole `install/hymns` tree: the pre-existing `harness/` band (e.g.
+`harness/cursor.md`, IMP-245) legitimately names host tooling — the harness band's
+job — and is out of SL-191 scope (codex F1). Content only; no bake yet.
+Live-verification caveat (codex F5/F6): in THIS repo the overlay `role/worker`
+FULLY replaces the Framework slot, so a live in-repo `prompt explain --role worker`
+reflects the overlay, NOT this enrichment — the role-band live composition is only
+observable after PHASE-07 re-homes the overlay. The MODEL band (`adherence/low`)
+has no overlay twin, so its composition IS live-observable. Verify role content
+via a hermetic fixture / embedded corpus; verify the model band live.
 """
 entrance_criteria = [
   { id = "EN-1", text = "Ownership cut settled (design § Content ownership): every contract line assigned to role/worker, model/adherence/low, or the overlay." },
@@ -75,11 +83,11 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "install/hymns/role/worker.md carries the full negative contract per the ownership table, host-agnostic." },
   { id = "EX-2", text = "install/hymns/model/adherence/low.md carries the §5c delivery patterns as low-adherence guidance." },
-  { id = "EX-3", text = "No host literal (cargo/target/just/node_modules) appears anywhere under install/hymns — asserted by a POL-002 content-gate test over the embedded corpus." },
-  { id = "EX-4", text = "`prompt explain --role worker --model adherence/low` traces the role+adherence composition (hermetic corpus / embedded, not live overlay)." },
+  { id = "EX-3", text = "No host literal (cargo/target/just/node_modules) appears in the SL-191-authored hymns (install/hymns/role/worker.md + install/hymns/model/**) — asserted by a POL-002 content-gate test scoped to that set (NOT the whole install/hymns tree — harness band excluded)." },
+  { id = "EX-4", text = "MODEL band live-observable: `prompt explain --model adherence/low` traces the adherence/low composition in-repo. ROLE band verified via a hermetic fixture / embedded corpus (overlay suppresses it live until PHASE-07)." },
 ]
 verification = [
-  { id = "VT-1", expects = "POL-002 content-gate test asserts no host literal under install/hymns", test_file = "src/install.rs", keywords = ["hymns", "cargo", "target"] },
+  { id = "VT-1", expects = "POL-002 content-gate test (unique fn, e.g. install_hymns_authored_set_has_no_host_literals) enumerates install/hymns/role/worker.md + install/hymns/model/** and asserts absence of the forbidden host-literal list", test_file = "src/install.rs", keywords = ["install_hymns", "no_host_literals", "adherence"], patterns = ["fn .*no_host_literals", "assert.*(cargo|target)"] },
   { id = "VA-1", expects = "Agent review: role/worker + adherence/low hymns adequately encode the SL-168 defect-class contract and read host-agnostic" },
 ]
 specs        = []
@@ -107,6 +115,17 @@ documenting "full worker context (role+traits); bake reads frontmatter, not mark
 args" (F4/C6: keep-literal chosen over rename — lower blast radius, no installed-def
 churn). Behaviour-preservation: `expand_worker_marker` unit tests + subagent-def
 drift test stay green.
+
+Shared context-builder (codex F5): extract a pure `worker_context(traits:
+&BTreeSet<String>) -> ContextVector` that both the bake AND `prompt check`
+(PHASE-04) call — `resolve_worker_role_body` becomes `resolve(worker_context(traits),
+…)`. Without this seam PHASE-04 can only substring-grep the resolved String body and
+cannot assert the band filter structurally; the builder is the DRY seam that lets
+PHASE-04 check `worker_context(traits).bands ∋ Band::Model` directly.
+
+Intra-phase ordering (parser-first): land the frontmatter parser red/green FIRST
+(it is the new, de-riskable surface), then widen the resolver onto it, then the
+call-site + hard-error, then the def declarations.
 """
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 predicate green; PHASE-02 content present so resolve is non-empty." },
@@ -117,10 +136,13 @@ exit_criteria = [
   { id = "EX-3", text = "The bake call site parses def `traits:`, passes them, and runs traits_covered as an install-time hard error (a def declaring an uncovered trait fails install — test)." },
   { id = "EX-4", text = "install/agents/pi/dispatch-worker.md (+ universal twin) declare traits = [\"adherence/low\"]; claude def has none." },
   { id = "EX-5", text = "expand_worker_marker unit tests + subagent-def drift test green; a baked pi/universal def inlines role+adherence content." },
+  { id = "EX-6", text = "A pure `worker_context(traits) -> ContextVector` builder exists, used by both the bake and PHASE-04's prompt check (codex F5 — the structural seam for band-filter assertion)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Frontmatter parser + widened bake tests present and green, including the uncovered-trait install-time hard-error case", test_file = "src/install.rs", keywords = ["traits", "Band::Model", "adherence/low"] },
-  { id = "VT-2", expects = "Behaviour-preservation: expand_worker_marker + drift tests green", test_file = "src/install.rs", keywords = ["expand_worker_marker", "WORKER_RESOLVE_MARKER"] },
+  { id = "VT-1", expects = "Frontmatter parser negative tests: malformed / absent traits / unknown keys", test_file = "src/install.rs", keywords = ["fn parse", "traits"], patterns = ["fn .*frontmatter.*(malformed|absent|unknown)"] },
+  { id = "VT-2", expects = "Trait-less resolve is byte-identical to today (behaviour-preservation of the role-only path)", test_file = "src/install.rs", keywords = ["worker_context", "Band::Role"] },
+  { id = "VT-3", expects = "Covered-trait bake inlines adherence content; uncovered-trait bake is an install-time hard error", test_file = "src/install.rs", keywords = ["adherence/low", "Band::Model"], patterns = ["assert.*(err|panic|hard)"] },
+  { id = "VT-4", expects = "Behaviour-preservation: expand_worker_marker + subagent-def drift tests green", test_file = "src/install.rs", keywords = ["expand_worker_marker", "WORKER_RESOLVE_MARKER"] },
 ]
 specs        = []
 requirements = []
@@ -151,7 +173,8 @@ exit_criteria = [
   { id = "EX-3", text = "New tests ride the check_def_marker_present_role_unresolvable precedent: uncovered-trait finding + missing-Model-band finding." },
 ]
 verification = [
-  { id = "VT-1", expects = "prompt check coverage + delivered-Model-band tests present and green", test_file = "src/commands/prompt.rs", keywords = ["traits_covered", "Model"] },
+  { id = "VT-1", expects = "prompt check coverage test: a def declaring an uncovered/typo'd trait yields a finding", test_file = "src/commands/prompt.rs", keywords = ["traits_covered", "check_corpus"], patterns = ["fn .*(uncovered|coverage).*trait"] },
+  { id = "VT-2", expects = "Delivered-band test: a worker def with non-empty traits whose bake drops Band::Model yields a finding (via the shared worker_context builder, not body-substring)", test_file = "src/commands/prompt.rs", keywords = ["worker_context", "Band::Model"], patterns = ["fn .*(model|band).*missing|missing.*(model|band)"] },
 ]
 specs        = []
 requirements = []
@@ -170,23 +193,35 @@ as a BASE defect distinct from any worker finding; real cleanup is an
 operator-owned commit, never folded into a worker delta. Reject-and-halt import
 gate — run `doctrine check <cadence>` on the post-import tree; a red (unformatted
 OR lint-fail) delta HALTS and reports to the orchestrator, never lands, never
-auto-fixes (belt, not self-report; ADR-012 sole-writer). Homes: `src/dispatch.rs`
-(import belt) + `plugins/doctrine/skills/dispatch/**` and `dispatch-agent/**`
-(base-clean + funnel beats). Resolve the open code-detail: whether the subprocess
-arm (`src/dispatch.rs` fork path) needs its own base-clean beat or the shared
-funnel already covers it.
+auto-fixes (belt, not self-report; ADR-012 sole-writer).
+
+Non-mutating mechanism (codex F2): `doctrine check {quick|commit|gate}` is a
+config-cadence PROXY (src/commands/check.rs) — non-mutating-ness depends on the
+configured argv, and no built-in prove-clean variant exists today. `check quick`
+runs `cargo fmt` (MUTATING); `check gate` runs clippy (non-mutating but no fmt
+check). So this phase must ESTABLISH the non-mutating base-clean mechanism, not
+assume it: resolve a non-mutating cadence (fmt `--check` + lint, no in-place fmt)
+via the owned `[verification]` config and have the base-clean beat invoke exactly
+that. Naming the argv is in scope; a mutating base-clean is rejected (C1).
+
+Homes (codex F3): the import belt is `src/worktree/import.rs` (`classify_import`,
+`run_import_from_worktree`), NOT `src/dispatch.rs`. The base-clean + funnel beats
+also touch `plugins/doctrine/skills/dispatch/**` and `dispatch-agent/**`. Resolve
+the open code-detail: whether the subprocess arm needs its own base-clean beat or
+the shared funnel covers it.
 """
 entrance_criteria = [
-  { id = "EN-1", text = "`doctrine check` cadence seam (SL-163) confirmed present as the owned formatter/lint proxy." },
+  { id = "EN-1", text = "`doctrine check` cadence seam (SL-163) confirmed present as the owned formatter/lint proxy (src/commands/check.rs) — a config-cadence proxy with no built-in prove-clean variant." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "Base-clean prove-clean is non-mutating (fmt --check/dry gate); a dirty base is reported as a base defect, never auto-fixed." },
-  { id = "EX-2", text = "Import gate runs doctrine check on the post-import tree; an unformatted or lint-red delta halts-and-reports and does not land (test)." },
-  { id = "EX-3", text = "Subprocess-arm base-clean coverage decided and recorded (its own beat vs shared funnel)." },
+  { id = "EX-1", text = "A NON-MUTATING base-clean cadence is established (fmt --check + lint, no in-place fmt) via the owned [verification] config; the base-clean beat invokes exactly that argv (no mutating check on the shared base)." },
+  { id = "EX-2", text = "A dirty base is reported as a base defect distinct from any worker finding, never auto-fixed." },
+  { id = "EX-3", text = "Import gate (src/worktree/import.rs) runs doctrine check on the post-import tree; an unformatted or lint-red delta halts-and-reports and does not land (test)." },
+  { id = "EX-4", text = "Subprocess-arm base-clean coverage decided and recorded (its own beat vs shared funnel)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Reject-and-halt import-gate test: a red imported delta halts and does not land", test_file = "src/dispatch.rs", keywords = ["check", "import"] },
-  { id = "VA-1", expects = "Agent review: base-clean beat is non-mutating in both dispatch skills and does not double-run on the hot path" },
+  { id = "VT-1", expects = "Reject-and-halt import-gate test in the real import belt: a red imported delta halts and does not land", test_file = "src/worktree/import.rs", keywords = ["classify_import", "check"], patterns = ["fn .*(reject|halt|red|unformatted).*import|import.*(reject|halt)"] },
+  { id = "VA-1", expects = "Agent review: base-clean beat is non-mutating in both dispatch skills, invokes the established non-mutating cadence, and does not double-run on the hot path" },
 ]
 specs        = []
 requirements = []
@@ -216,7 +251,7 @@ exit_criteria = [
   { id = "EX-2", text = "mem.concept.doctrine.hymn-cascade authored under memory/, embeds via RustEmbed, and validates (`doctrine memory validate`)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Embedded-corpus test confirms mem.concept.doctrine.hymn-cascade ships in the embedded memory corpus", test_file = "src/corpus.rs", keywords = ["hymn-cascade"] },
+  { id = "VT-1", expects = "Embedded-corpus test (unique fn) asserts embedded_assets() / the shipped memory corpus contains a valid memory keyed mem.concept.doctrine.hymn-cascade", test_file = "src/corpus.rs", keywords = ["hymn-cascade", "embedded"], patterns = ["fn .*hymn_cascade.*(ship|embed)", "assert.*hymn-cascade"] },
   { id = "VA-1", expects = "Agent review: READMEs + shipped memory teach the trait-space / self-replaces model with no obsolete rules" },
 ]
 specs        = []
@@ -233,24 +268,28 @@ overlay `.doctrine/hymns/**` (scope obj #3) to carry ONLY client habits —
 names, Rust module homes, the `architecture_layering` gate — deferring the
 universal contract to the enriched Framework `role/worker`. The overlay's
 `role/worker` `replaces` posture must be reconciled against SL-193's projected
-self-replaces (today a stray hand-authored `.doctrine/hymns/role/worker.toml`
-carries `replaces = "role/worker"`; SL-193 reconcile makes this the projector's
-job). Only after that is the live-repo `prompt explain --role worker` a clean
-oracle — so the live role-resolve verification (Framework enrichment + overlay
-compose correctly, no doubling) lands HERE, behind SL-193 close.
+self-replaces. GATE CLEARED (2026-07-03): SL-193 is `done`+merged; the twin is now
+a git-tracked authored overlay carrying `replaces = "role/worker"` and FULLY
+suppresses the Framework slot — its thin generic content wins. So enriching the
+Framework `role/worker` (PHASE-02) has NO in-repo effect until this phase re-homes
+the client habits (likely to the `project` band / a non-replacing slot) so the
+enriched Framework contract actually composes rather than being suppressed. Only
+after that is the live-repo `prompt explain --role worker` a clean oracle — so the
+live role-resolve composition verification lands HERE.
 """
 entrance_criteria = [
-  { id = "EN-1", text = "SL-193 closed (self-replaces projection landed; stray role/worker twin reconciled) — the hard gate. Confirm `doctrine slice show 193` = closed before starting." },
+  { id = "EN-1", text = "SL-193 closed (self-replaces projection landed; overlay twin reconciled) — SATISFIED 2026-07-03 (`doctrine slice show 193` = done, merged main+edge). Re-confirm at phase entry." },
   { id = "EN-2", text = "PHASE-02 Framework role/worker enrichment landed (the overlay reconciles against it)." },
 ]
 exit_criteria = [
   { id = "EX-1", text = ".doctrine/hymns/** overlay carries only client-habit content (cargo/target/ADR-001 layer names/Rust homes); the universal contract defers to Framework." },
-  { id = "EX-2", text = "Overlay role/worker replaces posture reconciled with SL-193's projection (no residual stray hand-authored twin)." },
-  { id = "EX-3", text = "`prompt explain --role worker` in-repo shows a single clean winner composing Framework contract + overlay habits (no ISS-206 doubling)." },
+  { id = "EX-2", text = "Overlay role/worker no longer FULLY replaces the Framework slot — the replaces posture is re-homed so the enriched Framework contract composes with the client habits." },
+  { id = "EX-3", text = "`prompt explain --role worker` in-repo shows a single winner composing Framework contract + overlay habits (no ISS-206 doubling, and the Framework enrichment is present not suppressed)." },
 ]
 verification = [
+  { id = "VT-1", expects = "Hermetic composition test (codex F6): with the Framework role/worker enrichment + a re-homed (non-fully-replacing) client overlay, resolve composes BOTH — the Framework contract and the client habits both appear, exactly once", test_file = "src/hymns.rs", keywords = ["compose", "role/worker"], patterns = ["fn .*(compose|overlay).*worker|worker.*(compose|overlay)"] },
   { id = "VH-1", expects = "Human acceptance: overlay content split honours POL-002 (client habits only) and live role-resolve composes correctly" },
-  { id = "VA-1", expects = "Agent check: `prompt explain --role worker` trace shows no duplicate role/worker slot and the enriched Framework contract is present" },
+  { id = "VA-1", expects = "Agent check: `prompt explain --role worker` trace shows no duplicate role/worker slot and the enriched Framework contract is present (not suppressed)" },
 ]
 specs        = []
 requirements = []
