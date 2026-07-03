@@ -1,0 +1,43 @@
+id    = 237
+slug  = "inquisition-spec-023-from-rfc-013"
+title = "Inquisition: SPEC-023 from RFC-013"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "respondent"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SPEC-023"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected dispatch delivery as structured interaction; observed dispatch only in prose"
+detail = "Expected: SPEC-023 must keep queried relationships in structured interactions when it says another container consumes the cascade. Observed: doctrine spec show SPEC-023 says the prompt cascade is consumed by boot snapshot SPEC-011 and dispatch SPEC-012/SPEC-021 delivery surfaces, but doctrine inspect SPEC-023 shows outbound interactions only to SPEC-009 and SPEC-011. Dispatch consumption is therefore prose-only, so relation queries and impact walks miss the dispatch blast radius. Penance: add explicit interactions from SPEC-023 to SPEC-012 and SPEC-021, or remove the dispatch-consumer claim if it is not owned here."
+disposition = "follow-up"
+response = "Accepted. Dispatch interaction drift is real and is tracked by IMP-238. Corrective work must add structured interactions from SPEC-023 to SPEC-012/SPEC-021 or remove the dispatch-consumer prose claim."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected owned source anchors cover corpus loading; observed loader stranded outside sources"
+detail = "Expected: when SPEC-023 owns corpus loading, seal enforcement, sidecar parsing, and worker-def bake implications, its structured source anchors must either include the implementation surfaces or explicitly delegate them through relationships. Observed: SPEC-023 responsibilities and REQ-322/REQ-323 name the two-root loader and seal contract; SPEC-023 prose names src/install.rs as the loader home; rg shows embedded_hymns, embedded_seal_set, load_full_corpus, sidecar parsing, and resolve_worker_role_body in src/install.rs. But doctrine spec show SPEC-023 structured source lists only src/hymns.rs and src/commands/prompt.rs. The loader ownership is therefore hidden in prose and interaction notes rather than carried as a source anchor. Penance: add src/install.rs and any required install/hymns or manifest anchor to SPEC-023 sources, or rewrite the responsibility/interactions to make SPEC-009 the explicit owner."
+disposition = "follow-up"
+response = "Accepted. Source ownership ambiguity is real and is tracked by IMP-238. Corrective work must add src/install.rs and any necessary install asset anchors to SPEC-023 sources, or rewrite the spec so SPEC-009 explicitly owns those surfaces."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected delivered-vs-target boundary for check cadence; observed unqualified feed claim"
+detail = "Expected: SPEC-023 must mark any not-yet-delivered obligation as target or forward intent, especially where the Delivered vs target section is explicitly meant to separate shipped behaviour from planned correction. Observed: SPEC-023 REQ-330 and the verb contract say prompt check feeds doctrine check, but doctrine check --help shows the check verb only proxy-runs configured quick/commit/gate cadences, the repo has no doctrine.toml, and justfile check is fmt lint lint-js test build with no doctrine prompt check. The Delivered vs target section names the four prompt verbs as delivered and lists only set-valued model/context changes as forward intent, leaving the check-cadence feed looking already shipped when local evidence does not show it. Penance: either wire prompt check into the project check cadence and record coverage, or mark the check-cadence feed as target/follow-up rather than delivered fact."
+disposition = "follow-up"
+response = "Accepted. The check-cadence boundary is ambiguous and is tracked by IMP-238. Corrective work must either wire prompt check into the project check cadence with coverage or mark the obligation as target/follow-up rather than delivered fact."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

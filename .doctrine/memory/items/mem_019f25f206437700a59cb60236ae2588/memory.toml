@@ -1,0 +1,51 @@
+memory_uid = "mem_019f25f206437700a59cb60236ae2588"
+memory_key = "mem.fact.review.prime-slice-target-only"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "fact"
+status = "superseded"
+title = "review prime is slice-target only"
+summary = "review prime only supports slice-target RVs; SPEC-target reviews must proceed unprimed with manual show/inspect evidence"
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = ["install/review-ledger.md", ".doctrine/review/"]
+globs = []
+commands = ["doctrine review prime", "doctrine review new"]
+tags = ["review", "inquisition"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3e259a48965164b4cb1609878f04064dcba4ffe8"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ea81bd1594cbf3f94ed8f4c2b584aa705c39d48596a405010ec4f1b85df9f641"
+base_commit = "960d0000be4ce57d37db20c891b725d2ab961c1e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-237"
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f25e0d93175a2b47c5cc73bd8e263"
+

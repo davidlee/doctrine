@@ -31,3 +31,8 @@ module = "doctrine::hymns"
 language = "rust"
 identifier = "src/commands/prompt.rs"
 module = "doctrine::commands::prompt"
+
+[[source]]
+language = "rust"
+identifier = "src/install.rs"
+module = "doctrine::install"

@@ -7,6 +7,16 @@ notes = "rust_embed asset root, install-time projection of exposed starters, the
 target = "SPEC-011"
 type = "feeds"
 notes = "prompt resolve output rides boot's session-start delivery surfaces; resolve regenerates the universal boot artifact axis-invariantly; cache-hold rests on resolver determinism"
+
+[[edge]]
+target = "SPEC-012"
+type = "feeds"
+notes = "prompt resolve + worker-def bake feed dispatch worker-context delivery; spawn-time model/trait content rides cache-busting paths (delivery boundary owned by dispatch, not the cascade)"
+
+[[edge]]
+target = "SPEC-021"
+type = "feeds"
+notes = "dispatch delivery surface consuming resolved worker context; where the composition lands is this container's contract, the cascade only composes+emits"
 # Interactions — outbound spec -> spec edges (tech specs only).
 # Seeded empty; authored via `doctrine spec interactions add`:
 #   [[edge]]
