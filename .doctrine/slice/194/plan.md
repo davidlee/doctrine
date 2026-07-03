@@ -91,10 +91,32 @@ grade and documented in the design's risks:
   OrderInstability's claim is narrowed accordingly; the finer flip-β grid is the
   deferred refinement.
 
+### Order sources per detector (plan clarification)
+
+The design says the detectors "derive orders via `order.rs`". Precisely: only the
+**frontier** orders (`next`, and the β=0/β=1 sweeps) come from the extracted
+`frontier_order`. The other two bases are direct sorts the pure detector computes
+itself:
+
+- **Displacement** — *survey-order* is `act_rank(actionability) → score desc → id`
+  (the `survey_for_map` sort, over `channels::{blocked, score}`); *pure-score
+  order* is `score desc → id`. Neither is a frontier order; both are plain sorts,
+  so Displacement does not depend on `order.rs`.
+- **Plateau** — near-ties over the `next` frontier order (uses `order.rs`).
+- **OrderInstability / ArmResequencing** — frontier order at β=0 vs β=1 (uses
+  `order.rs` over the `BetaEndpoints` graphs).
+
+This keeps every order pure and avoids the engine layer importing the shell
+(`survey_for_map` lives in `surface.rs`; the detector re-derives the sort from
+channels rather than calling into the shell — ADR-001).
+
 ## Notes
 
 - `specs`/`requirements` stay empty (no registry in v1); SL-194's governing
   relations live as `doctrine link` edges, not typed plan keys.
+- The **behaviour-preservation gate** (existing `graph`/`surface` suites green +
+  unmodified) is `VA-1` on PHASE-01 — a test can't self-assert it, so it is an
+  agent/human check on the diff.
 - Closure hinges on the `VH-1` probe verdicts, not on the detectors alone — the
   slice's question is "does this read more useful?", answered against the live
   corpus, recorded in the design.
