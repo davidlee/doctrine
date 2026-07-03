@@ -627,8 +627,11 @@ pub(crate) const KNOWN_STAGE_LABELS: &[&str] = &[
 struct Sidecar {
     #[serde(default)]
     harness: Option<String>,
+    // Load-bearing Option (§8/D4): `None` (omitted) keeps the path-derived pin,
+    // `Some([])` unpins, `Some(list)` replaces with the conjunctive trait set. A
+    // bare `#[serde(default)] Vec` could not tell omitted from explicit-empty.
     #[serde(default)]
-    model: Option<String>,
+    model: Option<Vec<String>>,
     #[serde(default)]
     role: Option<String>,
     #[serde(default)]
@@ -704,7 +707,9 @@ fn default_selector(slot: &crate::hymns::Slot) -> crate::hymns::Selector {
             }
         }
         crate::hymns::Band::Model => crate::hymns::Selector {
-            model: Some(slot.label.clone()),
+            // PHASE-01: seed a singleton pin from the path label (still single-valued;
+            // PHASE-02 widens the sidecar to a list).
+            model: BTreeSet::from([slot.label.clone()]),
             ..Default::default()
         },
         crate::hymns::Band::Stage => crate::hymns::Selector {
@@ -725,8 +730,11 @@ fn overlay_selector(
     if let Some(ref h) = sidecar.harness {
         sel.harness = Some(h.clone());
     }
-    if let Some(ref m) = sidecar.model {
-        sel.model = Some(m.clone());
+    // Presence semantics on the load-bearing Option: declared (`Some`) replaces the
+    // base pin with the conjunctive set — an empty list unpins the axis; omitted
+    // (`None`) keeps whatever the base carries (the path-derived pin).
+    if let Some(ref list) = sidecar.model {
+        sel.model = list.iter().cloned().collect();
     }
     if let Some(ref r) = sidecar.role {
         sel.role = Some(parse_role(r)?);
@@ -897,7 +905,7 @@ pub(crate) fn resolve_worker_role_body(
         &crate::hymns::ContextVector {
             role: crate::hymns::Role::Worker,
             harness: None,
-            model: None,
+            model: BTreeSet::new(),
             arm: None,
             stage: None,
             bands: crate::hymns::BandFilter::Only(BTreeSet::from([crate::hymns::Band::Role])),
@@ -1806,6 +1814,43 @@ mod tests_hymns {
             hymns.iter().any(|(name, _)| name == "harness/claude.md"),
             "expected harness/claude.md, got: {hymns:?}"
         );
+    }
+
+    // PHASE-02 VT-2: `Sidecar.model: Option<Vec<String>>` — the load-bearing Option.
+    // Presence semantics through serde into `overlay_selector`: omitted keeps the
+    // path pin, a declared list replaces (conjunctive set), an empty list unpins.
+    #[test]
+    fn overlay_selector_model_presence_semantics() {
+        let base = default_selector(&crate::hymns::Slot::new(
+            crate::hymns::Band::Model,
+            "anthropic/claude-sonnet-4",
+        ));
+        let pin: std::collections::BTreeSet<String> = ["anthropic/claude-sonnet-4".into()].into();
+        assert_eq!(base.model, pin, "default_selector seeds the path pin");
+
+        // (a) omitted `model` → None → keep the path pin.
+        let sc: Sidecar = toml::from_str("").unwrap();
+        assert_eq!(sc.model, None);
+        let kept = overlay_selector(&base, &sc).unwrap();
+        assert_eq!(kept.model, pin, "omitted model must keep the path pin");
+
+        // (b) declared list → Some(list) → replace with the conjunctive set.
+        let sc: Sidecar =
+            toml::from_str("model = [\"capability/code/high\", \"capability/reasoning/high\"]")
+                .unwrap();
+        let replaced = overlay_selector(&base, &sc).unwrap();
+        let want: std::collections::BTreeSet<String> = [
+            "capability/code/high".into(),
+            "capability/reasoning/high".into(),
+        ]
+        .into();
+        assert_eq!(replaced.model, want, "declared list must replace the pin");
+
+        // (c) empty list → Some([]) → unpin the axis (don't-care).
+        let sc: Sidecar = toml::from_str("model = []").unwrap();
+        assert_eq!(sc.model, Some(vec![]));
+        let unpinned = overlay_selector(&base, &sc).unwrap();
+        assert!(unpinned.model.is_empty(), "empty list must unpin the axis");
     }
 }
 

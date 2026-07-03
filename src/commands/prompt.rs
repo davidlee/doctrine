@@ -27,9 +27,10 @@ pub(crate) enum PromptCommand {
         #[arg(long)]
         harness: Option<String>,
 
-        /// Model key (e.g. "anthropic/claude-sonnet-4").
+        /// Model key (e.g. "anthropic/claude-sonnet-4"). Repeatable — each
+        /// occurrence adds a member to the context trait set (membership matching).
         #[arg(long)]
-        model: Option<String>,
+        model: Vec<String>,
 
         /// The dispatch arm: "subagent" or "subprocess".
         #[arg(long)]
@@ -70,9 +71,10 @@ pub(crate) enum PromptCommand {
         #[arg(long)]
         harness: Option<String>,
 
-        /// Model key (e.g. "anthropic/claude-sonnet-4").
+        /// Model key (e.g. "anthropic/claude-sonnet-4"). Repeatable — each
+        /// occurrence adds a member to the context trait set (membership matching).
         #[arg(long)]
-        model: Option<String>,
+        model: Vec<String>,
 
         /// The dispatch arm: "subagent" or "subprocess".
         #[arg(long)]
@@ -162,15 +164,23 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
             for (rank, s) in active.iter().enumerate() {
                 let winner = rank == active.len() - 1;
                 let spec = crate::hymns::specificity(s.slot.band, &s.selector);
+                // Render the root-wise primary as `[root:depth,…]` (house style:
+                // build via Vec<String>+join, never push_str(&format!) — the
+                // `format_push_string` deny).
+                let pairs = spec
+                    .0
+                    .iter()
+                    .map(|(pair_root, depth)| format!("{pair_root}:{depth}"))
+                    .collect::<Vec<_>>()
+                    .join(",");
                 let prov_str = match s.provenance {
                     crate::hymns::Provenance::Framework => "Framework",
                     crate::hymns::Provenance::User => "User",
                 };
                 writeln!(
                     stdout,
-                    "{:<50} prov={prov_str} spec=({},{}) rank={}{}",
+                    "{:<50} prov={prov_str} spec=([{pairs}],{}) rank={}{}",
                     s.slot.path(),
-                    spec.0,
                     spec.1,
                     rank,
                     if winner { " ★ WINNER" } else { "" }
@@ -202,7 +212,7 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
 fn build_ctx(
     role: &str,
     harness: Option<String>,
-    model: Option<String>,
+    model: Vec<String>,
     arm: Option<&str>,
     stage: Option<String>,
     band: &[String],
@@ -220,6 +230,12 @@ fn build_ctx(
         }
         crate::hymns::BandFilter::Only(set)
     };
+
+    // Repeatable `--model` builds the context trait set (membership matching);
+    // absent = empty set = the unpinned don't-care, one occurrence = singleton.
+    let model = model
+        .into_iter()
+        .collect::<std::collections::BTreeSet<String>>();
 
     Ok(crate::hymns::ContextVector {
         role,
@@ -434,7 +450,7 @@ mod tests {
         let fw_exact = Snippet {
             slot: Slot::new(Band::Model, "anthropic/claude-sonnet-4"),
             selector: Selector {
-                model: Some("anthropic/claude-sonnet-4".into()),
+                model: ["anthropic/claude-sonnet-4".into()].into(),
                 ..Default::default()
             },
             provenance: Provenance::Framework,
@@ -443,17 +459,20 @@ mod tests {
         let user_default = Snippet {
             slot: Slot::new(Band::Model, "anthropic/_default"),
             selector: Selector {
-                model: Some("anthropic/_default".into()),
+                model: ["anthropic/_default".into()].into(),
                 ..Default::default()
             },
             provenance: Provenance::User,
             body: "USER-DEFAULT".into(),
         };
 
-        // specificity: fw_exact = (2,0), user_default = (1,0)
+        // specificity: fw_exact = ([(anthropic,2)],0), user_default = ([(anthropic,1)],0)
         let fw_spec = hymns::specificity(fw_exact.slot.band, &fw_exact.selector);
         let user_spec = hymns::specificity(user_default.slot.band, &user_default.selector);
-        assert!(fw_spec > user_spec, "expected (2,0) > (1,0)");
+        assert!(
+            fw_spec > user_spec,
+            "expected ([(anthropic,2)],0) > ([(anthropic,1)],0)"
+        );
 
         let mut active: Vec<&Snippet> = vec![&fw_exact, &user_default];
         active.sort_by_key(|s| hymns::precedence_key(s));

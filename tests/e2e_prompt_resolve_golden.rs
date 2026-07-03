@@ -211,6 +211,83 @@ fn collect_entries(root: &Path, current: &Path, out: &mut Vec<(String, u64)>) {
     }
 }
 
+// ── PHASE-02 VT-1 / VT-3: repeatable --model, multi-key membership ───────────
+
+/// PHASE-02 VT-1 (FR-009 arity + FR-004 membership) — repeatable `--model` builds
+/// a two-key context; BOTH shipped model snippets match by membership and compose
+/// into one resolve. Drives the EXISTING embedded snippets (no SL-191 trait hymns).
+#[test]
+fn vt1_repeatable_model_composes_both_shipped_snippets() {
+    let dir = tmp();
+
+    let out = run(
+        dir.path(),
+        &[
+            "prompt",
+            "resolve",
+            "--role",
+            "worker",
+            "--model",
+            "anthropic/claude-sonnet-4",
+            "--model",
+            "deepseek/_default",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+
+    let output = stdout(&out);
+    // Both model snippet bodies compose — membership over the two-key context.
+    assert!(
+        output.contains("Connectivity: claude.ai API"),
+        "anthropic model snippet missing, got: {output}"
+    );
+    assert!(
+        output.contains("DeepSeek model family"),
+        "deepseek model snippet missing, got: {output}"
+    );
+}
+
+/// PHASE-02 VT-3 — `prompt explain` traces the multi-key match; each matched model
+/// snippet prints with the generalised `Spec` render (`spec=([root:depth,…],other)`).
+#[test]
+fn vt3_explain_multi_key_precedence_trace_spec_render() {
+    let dir = tmp();
+
+    let out = run(
+        dir.path(),
+        &[
+            "prompt",
+            "explain",
+            "--role",
+            "worker",
+            "--model",
+            "anthropic/claude-sonnet-4",
+            "--model",
+            "deepseek/_default",
+        ],
+    );
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+
+    let output = stdout(&out);
+    assert!(
+        output.contains("model/anthropic/claude-sonnet-4"),
+        "anthropic model slot missing from explain, got: {output}"
+    );
+    assert!(
+        output.contains("model/deepseek/_default"),
+        "deepseek model slot missing from explain, got: {output}"
+    );
+    // The generalised Spec render, per model key (root-keyed pair vector).
+    assert!(
+        output.contains("spec=([anthropic:"),
+        "anthropic Spec render missing, got: {output}"
+    );
+    assert!(
+        output.contains("spec=([deepseek:"),
+        "deepseek Spec render missing, got: {output}"
+    );
+}
+
 // ── VT-2: model-keys ────────────────────────────────────────────────────────
 
 #[test]
