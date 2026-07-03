@@ -1,0 +1,42 @@
+memory_uid = "mem_019f286c92fe77a391635ba1d0743d5f"
+memory_key = "mem.pattern.doctrine.idempotency-comparator-tracks-emitted-value"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Idempotency comparator must track the emitted value: when a planner's output switches input-derived → constant, switch the no-op check too"
+summary = "A refresh planner's no-op branch must compare existing state against the value it now WRITES, not the old input; a constant emit with an input-derived comparator thrashes forever."
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = ["src/boot.rs"]
+globs = []
+commands = []
+tags = ["idempotency", "pol-002", "footgun", "sl-195", "mcp", "refresh-planner"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e026c220e6f61f02ad09ab66b7353b14606afdfa"
+ref_name = "refs/heads/edge"
+checkout_state_id = "372f6ab8b6c1f891563b34d63acc8355f640c3e15aac0277d6d8fa21bc7aa8ac"
+base_commit = "b33bea5b85cf339c6a419ab61c5c21e39f2722cb"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

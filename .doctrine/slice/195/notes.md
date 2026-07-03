@@ -86,6 +86,26 @@ A long clarifying loop collapsed a two-axis slice to one real axis + a POL-002 f
 - **Behaviour-preservation:** existing `plan_mcp_extension` bake tests + hook tests
   must stay green **unchanged** (we don't touch those paths).
 
+## PHASE-01 — DONE (green, committed `b33bea5b`)
+
+MCP command portability. `desired_mcp_entry` emits `MCP_COMMAND` const
+(`${DOCTRINE_BIN:-doctrine}`); `is_doctrine_mcp_entry` owns env + legacy abs;
+`plan_mcp` no-op comparator compares the const not `exec.display()` (F-1 blocker
+fixed); `RefreshOutcome` carries the env command (F-7); dead `exec` param dropped
+through 4 fns (DRY). `generate_mcp_extension` + pi `mcp.ts` + hooks untouched
+(baked ⟺ gitignored, D2/F1). New tests: `plan_mcp_idempotent_when_current`
+(env-form ⇒ None), `plan_mcp_migrates_legacy_abs_to_env_form`. `doctrine check
+gate` PASS. EX-1..7 / VT-1..4 satisfied.
+
+- **VH-1 (OQ-4) — VT-green; live env-expansion leg deferred to user reconnect.**
+  `serve --mcp` launches; this session proves doctrine MCP connects under `/mcp`
+  (old abspath file). The `${VAR:-default}` expansion is a CC contract
+  (mcp.md:384), confirmable only by a `/mcp` reconnect against a regenerated
+  env-form `.mcp.json`. No PHASE-02/03 code depends on it.
+- **Footgun harvested:** `mem.pattern.doctrine.idempotency-comparator-tracks-emitted-value`
+  — a refresh planner's no-op check must compare against what it now WRITES; a
+  constant emit with an input-derived comparator thrashes. RV-241 F-1 root cause.
+
 ## Inquisition RV-241 (codex/GPT-5.5) — DONE, 8/8 terminal, all folded in-slice
 
 Design-facet adversarial pass on the locked design + plan. **1 blocker + 4 majors
