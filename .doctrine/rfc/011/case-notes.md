@@ -645,3 +645,4 @@ class as P02/P05, surfaced one funnel round late, fixed inline (anchor on the
 integration-binary regressions; only the coord verify beat (full suite) sees
 them. Worker-contract note: the worker SHOULD run the full `cargo test`, not
 `--bin doctrine`, but the funnel does not depend on it doing so.
+[slice; sl-197-scope] Creating SL-197 from an IMP backlog item. The `link` command's error message lists legal labels as ["references", "references", "references", ...] with duplicates — the three `references` rows differ by role (implements/originates_from/concerns) but the error message doesn't differentiate them, forcing a second guess-then-error cycle to discover --role is required. Mild token waste.
