@@ -331,3 +331,25 @@ terminal transition itself (`slice status done`) correctly gates only on RV
 blockers, not the test gate — so the friction is skill-level (pre-check) vs
 binary-level (transition) divergence, not a hard block. Reconcile itself was
 clean: F-1 unlink one verb, F-3 deferral one documented decision.
+
+[revision (REV-020 enacting RV-236 penance); rv236-followup]
+Three friction points surfaced enacting a governance correction from an
+inquisition:
+1. Inquisition trust cost. RV-236 F-1 was a false positive that consumed a full
+   verification pass to refute: it read ADR-004's `superseded_by` flag as proof
+   of dead authority without checking the superseder's topic (ADR-012 = dispatch
+   topology, unrelated) or that the active corpus still cites ADR-004 as live.
+   Root cause was a fixture supersede from SL-155, not the flagged citation.
+   A cheap guard ("is the superseder on-topic? do peers still cite the target?")
+   would have saved the round-trip. Recorded as
+   mem.system.governance.no-fixture-supersede-on-live-adr.
+2. No supersede reversal verb. `doctrine supersede` is one-way and refuses an
+   already-superseded OLD; `unlink` only touches tier-1 `link` edges, not the
+   lifecycle supersede. Reverting the bad edge required hand-editing two TOMLs
+   (status + superseded_by + supersedes). A `doctrine unsupersede`/`revision`
+   reversal path would keep the operator off raw TOML.
+3. No typed backlog↔REV provenance edge. IMP-237 (origin) could not link to
+   REV-020: backlog `references` targets exclude REV, and REV rejects inbound
+   `references`. Provenance survived only as rationale prose. The REV↔origin
+   relationship is real (ADR-018 originates_from) but unauthorable across this
+   kind pair.

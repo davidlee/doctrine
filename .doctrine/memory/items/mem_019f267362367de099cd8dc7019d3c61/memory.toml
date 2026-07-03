@@ -1,0 +1,54 @@
+memory_uid = "mem_019f267362367de099cd8dc7019d3c61"
+memory_key = "mem.system.governance.no-fixture-supersede-on-live-adr"
+schema_version = 1
+memory_type = "system"
+status = "active"
+title = "No fixture supersede edges on live ADRs"
+summary = "Never author a governance supersede edge as a CLI/storage fixture — it stamps live canon 'superseded' and misleads inquisitions"
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["governance", "supersede", "adr", "fixture-hazard"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "6798d5701e4cabf3b1e4a23ee61c3a952142f1ca"
+ref_name = "refs/heads/edge"
+checkout_state_id = "aa3e997386f3a00e536e5806b489f29af447b83a052ee7d5c4eb7e3835796485"
+base_commit = "1b5e3b4a338355400defcadbe7a1a3adbefe3e63"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-155"
+
+[[source]]
+kind = "review"
+ref = "RV-236"
+
+[[source]]
+kind = "revision"
+ref = "REV-020"
+

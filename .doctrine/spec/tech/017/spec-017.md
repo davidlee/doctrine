@@ -56,6 +56,16 @@ the reciprocal views — a PRD's realising specs, a parent's children — are de
 on read, never authored on both sides. Render reflects this: children are never
 emitted, only the outbound edge.
 
+**Root-context exception.** Both fields being `Option` is not only the
+authored-before-placement default: a `c4_level = "context"` tech spec is the
+whole-system root (SPEC-003), so it *has* no decomposition `parent` and descends
+from no single `PRD-NNN` capability — it is the synthesis above the product
+capabilities, not a realisation of one. A context-level tech spec therefore
+lawfully carries `descends_from = null` and `parent = null`; the silence is the
+root marker, not an unfilled field. This exception is scoped to the C4 context
+altitude — a container- or component-level spec with null lineage is still an
+unplaced spec, not a root.
+
 ### The source anchor model
 
 A `[[source]]` is `{language, identifier, module?}` — a language tag, a code

@@ -4,15 +4,15 @@ version = 1
 id = 4
 slug = "relations-stored-outbound-only-reciprocity-is-derived"
 title = "Relations stored outbound-only; reciprocity is derived"
-status = "superseded"
+status = "accepted"
 created = "2026-06-07"
-updated = "2026-06-27"
+updated = "2026-07-03"
 
 [relationships]
 # `supersedes` stays typed — author with `doctrine supersede ADR-004 <previous>`.
 # `related` edges are uniform `[[relation]]` rows — author with `doctrine link ADR-004 related <target>`.
 supersedes    = []
-superseded_by = ["ADR-012"]   # set on the old ADR by F1; reverse link is derived
+superseded_by = []
 
 
 [[relation]]

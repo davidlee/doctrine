@@ -32,14 +32,14 @@ The system decomposes into these containers:
 - **Prompt cascade** (SPEC-023) — the per-context instruction resolver composing
   banded snippet guidance by conjunctive selector match over a trait-classified
   context.
-- **Dispatch & worktree** — the isolation and orchestrator-sole-writer machinery
-  for concurrent work.
+- **Dispatch & worktree** (SPEC-012) — the isolation and orchestrator-sole-writer
+  machinery for concurrent work.
 - **Priority engine** (SPEC-001) — the derived, explainable "what next" view over
   the entity graph.
 - **Reconciliation** (SPEC-002) — the two-tier authored-status-vs-observed-coverage
   machinery and its closure gate.
-- **CLI surface** — the uniform command grammar and listing model that fronts every
-  container.
+- **CLI surface** (SPEC-013) — the uniform command grammar and listing model that
+  fronts every container.
 
 The root *contains* these containers by C4 decomposition; it does not peer with
 them. Containment (`parent`) and peering (interaction edges) are different
