@@ -114,3 +114,34 @@ reconcile; F-2 is a conscious, recorded deferral routed to backlog.
 - F-2 fork-arm base-clean parity → **backlog** (harvested), not a reconcile write
   surface (no design/spec/governance edit; owned future code work).
 - ISS-210 (projection default) → already filed; out of scope.
+
+## Reconciliation Outcome
+
+### Direct edits applied (per-slice)
+- **Selector registry (`slice-191.toml`)** [F-1]: `slice selector rm` the stale
+  `src/dispatch.rs` and the glob-vs-symlink `memory/mem.concept.doctrine.hymn-cascade/**`;
+  `slice selector add` (design-target) the delivered surface — `justfile`,
+  `src/commands/check.rs`, `src/corpus.rs`, `src/verify.rs`, `src/worktree/import.rs`,
+  `memory/mem.concept.doctrine.hymn-cascade`,
+  `memory/mem_88193c2859d72f043ef83a97a5952a96/**`, and the three coupled e2e tests.
+  Result: `slice conformance 191` = **0 undeclared / 0 undelivered / 24 conformant**.
+- **design.md §6 (Code impact)** [F-1]: added the P05/P06 delivered paths + a
+  reconciliation note mirroring the registry change (design.md is LOCKED — the delta
+  is marked, not silently rewritten).
+
+### REVs completed
+- None. No governance/spec change was required (Reconciliation Brief `Governance/spec`
+  section is empty) — the work conforms to ADR-005 / POL-002 / ADR-001.
+
+### Withdrawn / tolerated / follow-up
+- F-2 (follow-up): fork-arm base-clean parity → **IMP-250** (minted, `originates_from`
+  SL-191). Off reconcile surface.
+
+### Note
+- `slice selector doctor 191` run from the edge tree reports 3 `unmatched`
+  (`install/hymns/model/adherence/low.md`, the hymn-cascade memory symlink + target)
+  — a pre-integration artifact: those files live on `dispatch/191` and have not yet
+  landed on the edge working tree, so the live-tree doctor cannot see them.
+  Conformance (source-delta based) is clean; doctor resolves once the code integrates.
+
+Reconcile pass complete — handoff to /close.

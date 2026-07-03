@@ -1,7 +1,7 @@
 id = 191
 slug = "worker-contract-hymns-check-cadence"
 title = "Dispatch worker contract: cascade hymns + check-cadence + role/model/stage bake"
-status = "audit"
+status = "reconcile"
 created = "2026-07-03"
 updated = "2026-07-03"
 tags = []
@@ -31,10 +31,6 @@ selector = "src/commands/prompt.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/dispatch.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "install/agents/pi/dispatch-worker.md"
 intent = "design-target"
 
@@ -55,7 +51,43 @@ selector = "install/hymns/README.md"
 intent = "design-target"
 
 [[selector]]
-selector = "memory/mem.concept.doctrine.hymn-cascade/**"
+selector = "justfile"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/check.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/corpus.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/verify.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/import.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "memory/mem.concept.doctrine.hymn-cascade"
+intent = "design-target"
+
+[[selector]]
+selector = "memory/mem_88193c2859d72f043ef83a97a5952a96/**"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_memory_sync.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_prompt_resolve_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_import.rs"
 intent = "design-target"
 
 [[relation]]

@@ -220,6 +220,18 @@ case of "no out-of-set edit," so it ships host-agnostic and stronger.
   F3 at plan time corrected this anchor).
 - `plugins/doctrine/skills/dispatch/**`, `plugins/doctrine/skills/dispatch-agent/**`
   — base-clean `doctrine check` before arm-spawn/branch; funnel check-cadence beats.
+- `src/commands/check.rs`, `src/verify.rs`, `justfile` — the non-mutating
+  base-clean **`prove`** cadence (fmt-`--check` + lint, never auto-fix) built for
+  D5's gate; `src/corpus.rs` — the embedded `memory/` root touch carrying the
+  hymn-cascade concept memory.
+
+> **Reconciled post-audit (RV-242 F-1, 2026-07-04).** The delivered P05/P06 surface
+> above (`src/commands/check.rs`, `src/verify.rs`, `justfile`, `src/corpus.rs`, the
+> `memory/mem.concept.doctrine.hymn-cascade` symlink + target) was under-declared in
+> the original design-target selector set; the selector registry and this mirror
+> were updated to match, and the stale `src/dispatch.rs` selector was removed (the
+> import belt landed in `src/worktree/import.rs`, as noted above). `slice
+> conformance 191` is now 0 undeclared / 0 undelivered.
 
 **Def declaration:**
 - `install/agents/pi/dispatch-worker.md` (+ installed universal twin) — add
