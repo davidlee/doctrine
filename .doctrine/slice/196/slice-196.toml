@@ -1,7 +1,7 @@
 id = 196
 slug = "relation-edge-descriptor"
 title = "Per-edge relation descriptor"
-status = "design"
+status = "plan"
 created = "2026-07-03"
 updated = "2026-07-03"
 tags = []

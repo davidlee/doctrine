@@ -41,9 +41,23 @@ reciprocity, and edge identity.
     (`row_matches`, `:1265`); `append_relation_row` (`:1136`) matches the triple,
     then Noops on identical degree / hard-rejects a differing degree
     ("unlink to change").
+  - **Write-path gate only** — the `degree_bearing` reject fires in `validate_link`
+    (`:1447`), i.e. the `link` authoring path. The **read** path is permissive:
+    `read_block` (`:958`) parses ANY `degree` cell into a live edge regardless of
+    `degree_bearing` (only an unknown *spelling* is `IllegalDegree`); the test at
+    `:3143` asserts `governed_by degree="full"` round-trips. Descriptor inherits
+    this parity (§5.5 INV-5) — the decision (OQ-6) is to accept it, not diverge.
+  - **Read/deserialize path** — the on-disk row is the serde struct `RelationRow`
+    (`:850`, `label/role?/degree?/target`, each optional cell `#[serde(default,
+    skip_serializing_if)]`); `read_block` resolves the cells and builds the edge via
+    `RelationEdge::with_degree` (`:970`). Descriptor must thread here too, not only
+    the write builder (adversarial F-C).
   - Read struct `RelationEdge.degree` (`:746`); **not** carried on the hydrated
     `CatalogEdge` (degree's inbound render re-scans via `inbound_degree_index`,
-    `relation_graph.rs:308`).
+    `relation_graph.rs:308`). But the raw `RelationEdge` (with its facets) **is** the
+    element type the hydrate loop iterates (`se.outbound: Vec<RelationEdge>`,
+    `scan.rs:122`; hydrate copies `edge.role` at `hydrate.rs:278`) — so a facet cell
+    is trivially in scope at hydrate (§7 D4, R3 resolved).
 - **`references:concerns` rule** (`relation.rs:417`): `sources` **hand-enumerated**
   `[SL, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON, EVD, HYP]` (NOT `RECORD`
   splatted — the comment notes the record tail is *manually* kept in sync);
@@ -88,15 +102,22 @@ admissible on **exactly one rule: `references` with `role = concerns`**. It is
 inert to all graph semantics and excluded from edge identity. It surfaces on
 **outbound** relation render and in the **search index**.
 
-**Scope boundary (adversarial-pass F0).** IMP-244 also listed `contextualizes`,
-`related`, `interactions`. All are excluded:
-- `contextualizes` — `sources: &[CM]`, authored as **concept-map DSL** lines
-  (`source > rel > target`, `concept_map.rs:1550`), a wholly separate write path
-  the `link`/`append_edge` seam never touches. A descriptor there needs a
-  concept-map DSL grammar change → **follow-up**, not this slice.
+**Scope boundary (adversarial-pass F0; external inquisition F-A correction).**
+IMP-244 also listed `contextualizes`, `related`, `interactions`. All are excluded:
+- `contextualizes` — **is** `link`-writable (`relation.rs:498`: `sources:&[CM]`,
+  `tier:One`, `link:Writable`), so the earlier "DSL-only, `link` never touches it"
+  rationale was **false** (external F-A). The real reason to exclude it: **CM
+  outbound edges are read-dropped** — `CM` is not in the `relation_edges` dispatch
+  (`scan.rs:52–53`, "CM authors no outbound relations"), so a descriptor authored
+  on a `contextualizes` row would never render or index. Descriptor there is inert
+  and invisible → excluded. (The write-path/read-drop mismatch — `link` authors a
+  CM row that scan silently drops — is a **pre-existing latent bug**, backlogged,
+  not this slice.) `descriptor_bearing:false` on that row keeps the gate rejecting
+  it regardless.
 - `related`, `interactions` — **symmetric** edges (`inbound_name == label.name()`);
-  a directed "descriptor" is a category error. `interactions` keeps its existing
-  free-text `notes`; `related` gets no free text (YAGNI). See §7 D2.
+  a directed "descriptor" is a category error. `interactions` is `TypedVerbOnly`
+  (`:495`, own `interactions.toml` path) and keeps its existing free-text `notes`;
+  `related` gets no free text (YAGNI). See §7 D2.
 
 ### 5.2 Interfaces & Contracts
 
@@ -135,10 +156,32 @@ text (no parse-enum helper); validated **non-empty** (trim; empty/whitespace →
 **refuses** `--descriptor`, symmetric to its `--role` refusal (memory→entity
 descriptors deferred).
 
+**Read / deserialize path** (external F-C — omitted from the first inventory; the
+write builder alone leaves descriptor unreadable, VT-1 would fail):
+```rust
+// RelationRow — the serde on-disk row (relation.rs:850). Mirror degree exactly:
+#[serde(default, skip_serializing_if = "Option::is_none")]
+descriptor: Option<String>,
+// read_block (relation.rs:958) — resolve the cell (any non-empty text is legal;
+// no enum parse, unlike Degree::from_name), thread into the edge constructor:
+RelationEdge::with_descriptor(label, role, degree, descriptor, target)  // :970 site
+// Constructor default sites gain `descriptor: None`, mirroring degree:None:
+//   relation.rs:768/780, spec.rs:1133, rec.rs:456, review.rs:1428  (compile-driven, R1)
+```
+Read path is **permissive on placement** (degree parity, OQ-6/INV-5): `read_block`
+does NOT reject a `descriptor` cell on a non-bearing row — only the `link` write
+gate does. A hand-authored misplaced descriptor parses into a live edge, exactly as
+a hand-authored misplaced `degree` does today (`:3143`).
+
 **Read + hydrate**:
 ```rust
 RelationEdge.descriptor: Option<String>   // relation.rs:735, beside .degree
-CatalogEdge.descriptor: Option<String>    // catalog/hydrate.rs:129 — NEW facet on the hydrated edge
+// CatalogEdge — MUST carry the omission guard or every graph edge gains
+// `descriptor: null` in the /api/graph + web serde contract (external F-D;
+// mirrors role's guard at hydrate.rs:140):
+#[serde(skip_serializing_if = "Option::is_none")]
+CatalogEdge.descriptor: Option<String>    // catalog/hydrate.rs:129 — NEW hydrated facet
+// hydrate populates it beside role: `descriptor: edge.descriptor.clone()` at :273.
 ```
 
 ### 5.3 Data, State & Ownership
@@ -189,6 +232,10 @@ mutated only through `link` / `unlink`. `descriptor_bearing` is owned by
   the conflict check but is not required for its correctness.)
 - **INV-3** — a `[[relation]]` row serializes `descriptor` iff non-empty-present.
 - **INV-4** — existing relation behaviour unchanged when no descriptor is authored.
+- **INV-5** — placement legality is a **write-path** invariant: `validate_link`
+  rejects a descriptor on a non-bearing row; `read_block` is permissive (parses the
+  cell into a live edge regardless), exact parity with `degree` (`:3143`). Accepted,
+  not diverged (OQ-6).
 - Edge cases: empty/whitespace rejected; multi-line/special chars round-trip via
   `toml_edit::value`; descriptor on a non-bearing role/label or memory source
   rejected; descriptor never affects reciprocity, priority, traversal, dedup.
@@ -203,6 +250,10 @@ mutated only through `link` / `unlink`. `descriptor_bearing` is owned by
   `references:concerns` `sources` array. SL-197 assumes CPT auto-inherits via
   `RECORD`, but the source-set is hand-enumerated (§2) — **SL-197 must add CPT
   explicitly**. Flagged to SL-197; not this slice's touch-site.
+- **OQ-6 (resolved)** — read-path enforcement of placement (external F-B). **Accept
+  degree parity**: gate on the `link` write path only, no read-path `IllegalDescriptor`
+  divergence (that machinery `degree` itself lacks). The only authoring route is
+  gated; hand-edited TOML is the user's own footgun, same as `degree`. INV-5.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -219,21 +270,28 @@ mutated only through `link` / `unlink`. `descriptor_bearing` is owned by
   prose vs terse marker.
 - **D4 — descriptor on the hydrated `CatalogEdge`** (not degree's re-scan side-path)
   — consumer-neutral home; search + any future consumer project from one structure.
-  *Novelty risk:* no `degree` precedent on `CatalogEdge` (§8 R3).
+  *Novelty risk resolved (external, R3):* no `degree` precedent on `CatalogEdge`, but
+  the raw cell is provably in scope — `se.outbound: Vec<RelationEdge>` (`scan.rs:122`)
+  carries every facet; hydrate copies `edge.role` at `:278`, so `edge.descriptor`
+  copies the same way. No re-scan fallback needed. Requires the serde omission guard
+  (§5.2, F-D).
 - **D5 — `related`/`interactions`/`contextualizes` excluded** — symmetric (notes) or
   different write path (DSL); each a follow-up if demanded.
 
 ## 8. Risks & Mitigations
 
 - **R1 — signature churn** across `validate_link`/`append_edge`/`run_link` +
-  constructor sites. *Mitigation*: compile-driven; `descriptor: None` mirrors the
-  `degree: None` defaults at `:768/780`.
+  `RelationRow`/`read_block`/`RelationEdge` constructor sites (external F-C — the
+  read/deserialize path is a first-class site, not just the write builder).
+  *Mitigation*: compile-driven; `descriptor: None` mirrors the `degree: None`
+  defaults at `:768/780`, `spec.rs:1133`, `rec.rs:456`, `review.rs:1428`.
 - **R2 — search doc-build coupling** (group `Catalog.edges` by source).
   *Mitigation*: `CatalogEdge.descriptor` keeps it a pure projection; no re-parse.
-- **R3 — `CatalogEdge.descriptor` is novel plumbing** — `degree` is not on
-  `CatalogEdge`, so no precedent; `hydrate` must newly thread the raw cell.
-  *Mitigation*: phase-plan confirms `hydrate` has the raw row in scope before
-  committing to D4; fall back to a source-keyed re-scan (degree's pattern) if not.
+- **R3 (resolved) — `CatalogEdge.descriptor` novelty** — `degree` is not on
+  `CatalogEdge`, so no precedent. *Resolved (external verify):* `hydrate` provably
+  has the raw cell — `se.outbound` is `Vec<RelationEdge>` and `edge.role` already
+  copies onto `CatalogEdge` at `hydrate.rs:278`. No re-scan fallback. Residual: the
+  serde omission guard (F-D), folded into §5.2.
 - **R4 — behaviour-preservation regressions** in shared relation machinery.
   *Mitigation*: existing suites green unchanged; new VTs additive.
 - **R5 — verbose/multiline descriptor render noise**. *Mitigation*: outbound-only;
@@ -255,6 +313,8 @@ VT set (mirrors the `Degree` VTs at `relation.rs:3106+`):
 | VT-8 | Render: descriptor on outbound `inspect`; absent on inbound |
 | VT-9 | Search: entity with a descriptor edge found by descriptor text; `CatalogEdge.descriptor` populated |
 | VT-10 | Bearing pin: `descriptor_bearing` true exactly on `references:concerns`; disjoint from `degree_bearing` |
+| VT-11 | Read-path parity (INV-5): a hand-authored `descriptor` cell on a non-bearing row parses into a live edge on read (NOT rejected) — write gate rejects the same input |
+| VT-12 | Serde omission (F-D): a `CatalogEdge` with no descriptor serializes with **no** `descriptor` key — graph JSON byte-identical to pre-slice |
 
 Behaviour-preservation (VA/VH): existing relation + catalog suites green unchanged.
 
@@ -276,4 +336,22 @@ Behaviour-preservation (VA/VH): existing relation + catalog suites green unchang
   codebase does so for `"degree"`/`"role"`/`"label"` (currently literals — follow
   suit; low priority, STD-001).
 
-**External:** GPT inquisition pending (per handoff).
+**External adversarial inquisition (codex/GPT-5.5, integrated 2026-07-04):** all 4
+findings verified against source, re-graded, integrated.
+- **F-A (MAJOR, integrated)** — `contextualizes` exclusion rested on a false premise
+  (it *is* `link`-writable, `:498`, not DSL-only). Outcome (exclude) survives on the
+  corrected reason: CM outbound edges are read-dropped (`scan.rs:52`). Rationale
+  rewritten (§5.1). Latent write/read-drop bug → **backlogged** (ISS-211).
+- **F-B (MAJOR → accepted, OQ-6)** — placement enforcement is write-path only;
+  `read_block` is permissive (`:958`), degree parity. Accepted, not diverged. INV-5,
+  VT-11.
+- **F-C (MAJOR, integrated)** — read/deserialize site inventory was incomplete;
+  `RelationRow` (`:850`) + `read_block` (`:958`) + `RelationEdge` constructors added
+  to §5.2 + R1. Without these, round-trip (VT-1) fails.
+- **F-D (MAJOR, integrated)** — `CatalogEdge` is a serialized `/api/graph` contract;
+  `descriptor` needs `#[serde(skip_serializing_if)]` (role's precedent, `:140`) or
+  every edge gains `descriptor: null`. Folded into §5.2 + D4; VT-12.
+- **Held (verified):** D4 hydrate hedge unnecessary (R3 resolved — raw cell in scope);
+  search indexes entities only today (non-regressive join); `interactions`/`related`
+  correctly excluded (`TypedVerbOnly`); STD-001 does not force a `"descriptor"`
+  constant (`"degree"`/`"role"` are bare literals — F6 stays low-priority).

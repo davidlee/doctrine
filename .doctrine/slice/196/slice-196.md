@@ -45,9 +45,11 @@ backlog, records, and `CPT` once SL-197 wires it).
 
 2. **Admissibility (per-`(source,label,role)` row column)** — a
    `descriptor_bearing: bool` column on `RelationRule` (mirroring `degree_bearing`),
-   `true` on exactly the `references:concerns` row. Reject (not ignore) on any
-   non-bearing row — the established house rule (`validate_link` bails, symmetric
-   to `degree`/`role`, `relation.rs:1447`).
+   `true` on exactly the `references:concerns` row. Reject (not ignore) on a
+   non-bearing row **at the `link` write path** (`validate_link` bails, symmetric
+   to `degree`/`role`, `relation.rs:1447`). The read path is permissive — degree
+   parity, accepted (design OQ-6/INV-5): `read_block` does not reject a hand-authored
+   misplaced cell.
 
 3. **Write seam** — `doctrine link` gains `--descriptor <text>`; threaded through
    `validate_link` (gate) → `append_edge(…, descriptor)` → the row builder,
@@ -61,9 +63,11 @@ backlog, records, and `CPT` once SL-197 wires it).
 ## Out of scope (adversarial-pass F0)
 
 IMP-244 also listed `contextualizes`, `related`, `interactions`. All excluded:
-- **`contextualizes`** — `CM`-source, authored via concept-map **DSL** lines, a
-  separate write path `link`/`append_edge` never touches. Descriptor there needs a
-  DSL grammar change → **follow-up**.
+- **`contextualizes`** — `CM`-source, `link`-writable Tier::One (`relation.rs:498`).
+  Excluded because **CM outbound edges are read-dropped** (`scan.rs:52`, "CM authors
+  no outbound relations") — a descriptor there never renders or indexes, inert.
+  (Earlier "DSL-only write path" reason was false — external inquisition F-A. The
+  write/read-drop mismatch is a pre-existing bug → ISS-211.)
 - **`related`, `interactions`** — **symmetric** edges (`inbound_name == label`); a
   directed descriptor is a category error. `interactions` keeps its free-text
   `notes` (untouched); `related` gets nothing (YAGNI).
@@ -93,7 +97,8 @@ unchanged (IMP-244 acceptance).
 
 ## Follow-Ups
 
-- `contextualizes` descriptor via concept-map DSL grammar.
+- `contextualizes` descriptor — blocked on ISS-211 (CM outbound edges read-dropped;
+  fix the write/read-drop mismatch first, then descriptor becomes meaningful there).
 - `interactions.notes` search indexing.
 - `related` symmetric `notes` — if demand arises.
 - SL-197: add `CPT` to `references:concerns` sources (driver dependency).

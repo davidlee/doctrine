@@ -6,10 +6,30 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Design stage (2026-07-04)
 
-**Status:** design authored + internal adversarial pass integrated + narrowed.
-Status = `design`. **Not yet locked** — awaiting external GPT inquisition, then
-`/plan`. Commits: `e8ab9ef` (scope), `778d587` (design), `43fe87a` (adversarial
-integration).
+**Status:** design authored + internal adversarial pass + **external inquisition
+integrated + narrowed**. **Locked** (user approved 2026-07-04) → `/plan` next.
+Commits: `e8ab9ef` (scope), `778d587` (design), `43fe87a` (internal adversarial),
++ external-inquisition integration (this session).
+
+### External inquisition (codex/GPT-5.5, 2026-07-04)
+
+4 findings, all verified against source, all integrated (design §10):
+- **F-A** — `contextualizes` exclusion rationale was FALSE (it *is* `link`-writable,
+  `relation.rs:498`, not DSL-only). Outcome (exclude) survives on corrected reason:
+  CM outbound edges are read-dropped (`scan.rs:52`). Latent write/read-drop bug →
+  **ISS-211** (new). Design §5.1 + scope rewritten.
+- **F-B** — placement enforcement is write-path only (`read_block:958` permissive,
+  degree parity, `:3143`). **User decision: accept parity**, no read-path divergence.
+  OQ-6/INV-5, VT-11.
+- **F-C** — read/deserialize inventory incomplete: added `RelationRow:850` +
+  `read_block:958` + `RelationEdge` constructors to §5.2/R1 (else VT-1 round-trip
+  fails).
+- **F-D** — `CatalogEdge` is a serialized `/api/graph` contract: `descriptor` needs
+  `#[serde(skip_serializing_if)]` (`hydrate.rs:140` precedent) or every edge gets
+  `descriptor: null`. §5.2/D4, VT-12.
+- **Held:** D4 hedge unnecessary (R3 resolved — raw `RelationEdge` in hydrate scope);
+  search entity-only (join non-regressive); interactions/related correctly excluded;
+  STD-001 no constant forced.
 
 **Shape:** `descriptor` = optional free-text cell on the `references:concerns`
 `[[relation]]` row, riding the SL-176 `Degree` seam verbatim (per-row
