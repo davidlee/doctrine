@@ -161,7 +161,8 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
   `traits = ["adherence/low"]`.
 - `plugins/doctrine/skills/dispatch/**`, `plugins/doctrine/skills/dispatch-agent/**`
   (funnel check-cadence beats).
-- Dispatch import belt in `src/dispatch.rs` (reject-and-halt import-time check gate).
+- Dispatch import belt in `src/worktree/import.rs` (reject-and-halt import-time
+  check gate; corrected from `src/dispatch.rs` at plan time — codex F3).
 - Rendered subagent defs (`.claude/`/`.pi/`/… `dispatch-worker.md`) — build/install
   output, verified not hand-edited.
 

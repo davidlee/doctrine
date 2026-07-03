@@ -215,7 +215,9 @@ case of "no out-of-set edit," so it ships host-agnostic and stronger.
   predicate → install-time hard error.
 - `src/commands/prompt.rs` — `check_corpus`/`Check` enumerates `embedded_agent_defs()`,
   parses `traits:`, runs predicate → findings.
-- `src/dispatch.rs` — reject-and-halt post-import check gate in the import belt.
+- `src/worktree/import.rs` — reject-and-halt post-import check gate in the import
+  belt (`classify_import`/`run_import_from_worktree`; NOT `src/dispatch.rs` — codex
+  F3 at plan time corrected this anchor).
 - `plugins/doctrine/skills/dispatch/**`, `plugins/doctrine/skills/dispatch-agent/**`
   — base-clean `doctrine check` before arm-spawn/branch; funnel check-cadence beats.
 
