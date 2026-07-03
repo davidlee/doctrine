@@ -299,6 +299,20 @@ before investing in β).
   the output read more useful than the flat list? Design records the verdict +
   whether the rendering follow-on (arc-strip, fold-into-`survey`) is warranted.
 
+### Probe verdict — PHASE-01 core (VH-1: useful → proceed)
+
+Live run against the corpus (dispatch/194 S=3d338655): 125 findings —
+displacements (95), plateaus (29), forks (1); joins/gating/value-inversions/
+provenance silent (R1 starvation, as expected). **Verdict: useful.** The
+differentiating signal is the **fork↔displacement composition**: `IMP-085`
+(flat `next` #2) settles → {IMP-086, IMP-087, IMP-088, IMP-089}, and those arms
+are the top displacements (`IMP-086` score #57 vs survey #181, Δ124) — i.e. a
+hub gating four high-intrinsic-value items sunk ~120 ranks by blocked status, a
+narrative the per-node flat list cannot express. Plateaus flag score-tie bands
+where flat ordering is noise. Decision: **proceed to PHASE-02 (β-family)**. The
+rendering follow-on remains deferred pending the full-catalogue verdict (VH-1 on
+PHASE-02).
+
 ## Constraints (canon)
 
 ADR-001 (module layering — finding module engine-layer, pure), ADR-015 (score
