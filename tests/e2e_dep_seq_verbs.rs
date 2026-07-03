@@ -654,3 +654,37 @@ fn backlog_after_prune() {
     let out = stdout(&prune);
     assert!(out.contains("dropped"), "backlog prune dropped: {out}");
 }
+
+/// IMP-140 (F-13): the top-level `needs`/`after` verbs echo the CANONICAL id,
+/// matching the backlog path — a non-canonical (unpadded) input normalizes in the
+/// echo, so the two write paths no longer diverge.
+#[test]
+fn top_level_needs_after_echo_canonical_id() {
+    let t = tmp();
+    let root = t.path();
+    seed_slice(root, 1, "One", "one"); // SL-001
+    seed_slice(root, 2, "Two", "two"); // SL-002
+
+    // Unpadded input `SL-1`/`SL-2` must echo the canonical `SL-001`/`SL-002`.
+    let needs = run(root, &["needs", "SL-1", "SL-2"]);
+    assert!(needs.status.success(), "needs: {}", stderr(&needs));
+    assert_eq!(
+        stdout(&needs),
+        "SL-001 needs SL-002\n",
+        "needs echoes the canonical id, not the raw input"
+    );
+    // The STORED target is canonical too — echo and storage agree.
+    let stored = fs::read_to_string(root.join(".doctrine/slice/001/slice-001.toml")).unwrap();
+    assert!(
+        stored.contains("needs = [\"SL-002\"]"),
+        "stored target is canonicalized, not raw `SL-2`: {stored}"
+    );
+
+    let after = run(root, &["after", "SL-1", "SL-2"]);
+    assert!(after.status.success(), "after: {}", stderr(&after));
+    assert_eq!(
+        stdout(&after),
+        "SL-001 after SL-002\n",
+        "after echoes the canonical id, not the raw input"
+    );
+}

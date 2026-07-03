@@ -57,8 +57,9 @@ Then: STOP
   reference material.
 - **Terrain** — the surface to ride, not refork; e.g. what the last phase
   built. Point to it described elsewhere, or summarise if it is not.
-- **Next actions** — the literal `doctrine slice phase … in_progress`
-  / other obvious and immediate next step(s).
+- **Next actions** — the literal `doctrine slice phase <ID> PHASE-NN --status in_progress`
+  (status is the `--status` flag, not a trailing positional) / other obvious and
+  immediate next step(s).
 - **Procedure & Caveats** — risks, unknowns and open decisions. Process
   guardrails (command, fill the sheet, TDD, commit, flip status, etc).
 - **Environment notes** — build/gate/lint specifics; pre-existing dirty files

@@ -138,9 +138,15 @@ pub(crate) fn run_estimate_set(args: &EstimateSetArgs) -> anyhow::Result<()> {
         Some(n) => (n, n),
         None => match (args.lower, args.upper) {
             (Some(l), Some(u)) => (l, u),
-            (None | Some(_), None | Some(_)) => {
-                anyhow::bail!("estimate set: must supply both lower and upper, or -x/--exact");
-            }
+            (Some(_), None) => anyhow::bail!(
+                "estimate set: LOWER without UPPER — supply both bounds, or -x/--exact for a point estimate"
+            ),
+            (None, Some(_)) => anyhow::bail!(
+                "estimate set: UPPER without LOWER — supply both bounds, or -x/--exact for a point estimate"
+            ),
+            (None, None) => anyhow::bail!(
+                "estimate set: supply both LOWER and UPPER, or -x/--exact for a point estimate"
+            ),
         },
     };
 
@@ -380,13 +386,15 @@ mod tests {
         };
         let err = run_estimate_set(&args).unwrap_err().to_string();
         assert!(
-            err.contains("must supply both lower and upper"),
-            "got: {err}"
+            err.contains("supply both LOWER and UPPER"),
+            "neither-bound message names both: {err}"
         );
     }
 
     #[test]
     fn vt8_one_lone_positional_rejected() {
+        // IMP-139: LOWER without UPPER gets a SPECIFIC message naming which bound
+        // is missing — not the same generic text as the neither case.
         let (_tmp, root) = mk_project_root();
         seed_entity(&root, "SL", 118);
         let args = EstimateSetArgs {
@@ -398,8 +406,27 @@ mod tests {
         };
         let err = run_estimate_set(&args).unwrap_err().to_string();
         assert!(
-            err.contains("must supply both lower and upper"),
-            "got: {err}"
+            err.contains("LOWER without UPPER"),
+            "lone-lower message names the missing bound: {err}"
+        );
+    }
+
+    #[test]
+    fn vt8_lone_upper_rejected() {
+        // IMP-139: the symmetric case — UPPER without LOWER.
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let args = EstimateSetArgs {
+            id: "SL-118".into(),
+            lower: None,
+            upper: Some(5.0),
+            exact: None,
+            path: Some(root),
+        };
+        let err = run_estimate_set(&args).unwrap_err().to_string();
+        assert!(
+            err.contains("UPPER without LOWER"),
+            "lone-upper message names the missing bound: {err}"
         );
     }
 

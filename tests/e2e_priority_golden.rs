@@ -194,8 +194,8 @@ fn next_human_actionable_only_blocked_absent() {
     assert_eq!(
         stdout(&out),
         "id      │ status │ score │ estimate │ value │ title\n\
-         RSK-001 │ open   │ 1.5   │ ·        │ ·     │ The prereq\n\
-         ISS-002 │ open   │ 1.0   │ ·        │ ·     │ Free work\n\
+         RSK-001 │ open   │ 1.5   │ ·        │ 1.0*  │ The prereq\n\
+         ISS-002 │ open   │ 1.0   │ ·        │ 1.0*  │ Free work\n\
          RV-001  │ active │ 0.0   │ ·        │ ·     │ The review\n"
     );
     // The blocked item is absent from the actionable worklist.
