@@ -197,3 +197,11 @@ discovering the refusal per-row. Separately: found one corpus memory
 (mem.pattern.doctrine.plan-va-scoping) with a body that is ONLY the title —
 no content. `memory validate` does not flag empty bodies as a finding; filed
 CHR-035 rather than fabricate content.
+
+[preflight; rfc013-confidence-fable-0703]
+- User pointer "transcript & design docs from SL-186,SL-187" — no transcript files exist under .doctrine/slice/{186,187}/; only rfc/013/transcript.md. Cost: one find + one ls round-trip disambiguating. Slice dirs carrying no session transcripts is fine, but the RFC's References could name transcript.md's location explicitly.
+- memory_search "hymns prompt cascade" surfaced mostly dispatch-worker memories (scope overlap via 'worker/prompt' terms); only 1/20 rows cascade-relevant. BM25 term collision between dispatch-prompt and cascade-prompt vocabularies.
+
+[spec-tech; rfc013-confidence-fable-0703]
+- `doctrine link SPEC-023 related RFC-013` refused — SPEC may only author `governed_by`. Edge had to be authored from the RFC side. Skill/glossary don't state per-kind writable labels; one wasted round-trip. A hint in the error listing the legal direction (RFC→SPEC `related`) would have saved it (it did list legal labels for SPEC — good — but not the inverse option).
+- Scaffolded spec-023.toml comments say `parent — (SPEC-NNN or PRD-NNN); subtype-aware` while SPEC-017/skill text imply tech parent is SPEC-only; harmless but momentarily confusing.
