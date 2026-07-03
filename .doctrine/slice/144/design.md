@@ -170,7 +170,7 @@ where the hook is boot-resident.
 | Hook | Controls | Mechanism | Precedence | Reset |
 |---|---|---|---|---|
 | `.doctrine/governance.md` | project governance pointer text in boot | boot reads `GOVERNANCE_REL`, injects as `## Governance (project)` | user text replaces the seeded default wholesale | delete → boot shows marker; re-install re-seeds |
-| `install/model-band.md` → `.doctrine/…` | universal model-band floor directive | boot `Static` source → `## Model band` | shipped default; user edits the installed copy | re-install / restore from `install/` |
+| `install/model-band.md` → `.doctrine/…` | universal model-band floor directive | boot `Static` source → `## Model band` | **shipped constant**, not a user-authored hook: the "universal, model-agnostic" invariant means projects normally leave it; per-model content belongs in the hymns cascade, not here | restore from `install/` |
 | `.doctrine/hymns/` overlay | per-context prompt bands (harness/model/role/stage/project) | `doctrine prompt resolve` merges framework + overlay | **overlay wins** over framework at equal key (SPEC-023) | remove overlay file → framework band resolves |
 | onboarding seed | boot `## Onboarding` body | `manifest.toml [memory]` seeds `mem.signpost.project.orientation` from `templates/seed-onboarding.md`; onboarding-tagged memory bodies render | edit the seeded memory (or add onboarding-tagged memories, key-ordered) | `memory verify`/edit; re-install skips existing key |
 
@@ -184,9 +184,15 @@ SPEC-023 / SL-191.
 ### 5.3 Data, State & Ownership — reachability contract (Objective 6)
 
 **Reachability = shipped ∧ pointed-at.** A doc is reachable iff both hold:
-1. **Shipped** — `install.rs` embed-copies it into `.doctrine/` (for `.md`
-   docs) or `manifest.toml` exposes it (for hymns: `[hymns] expose`). A doc in
-   `install/` that the embed set skips ships to nobody.
+1. **Shipped** — for `.md` docs this is **automatic**: `build_plan` step 2
+   copies every embedded `install/*` file (except `manifest.toml`) into
+   `.doctrine/`, write-if-absent — no per-file allowlist (confirmed, OQ-2). So
+   "shipped" ≡ "exists under `install/`" (RustEmbed `#[folder="install/"]`).
+   For hymns, `manifest.toml [hymns] expose` is the ship gate. **Consequence:**
+   the reachability *risk* for `.md` docs is not shipping — it is being
+   *unreferenced* (pointer side); and retiring a doc means deleting the file
+   from `install/` (removing it from the automatic ship set), which is why
+   boot-footer.md must be file-deleted, not just de-referenced.
 2. **Pointed-at** — a skill or the boot digest names it, so an agent has a path
    to open it (the AGENTS.md lesson: an unreferenced `.doctrine/*.md` is read by
    no one).
@@ -249,10 +255,10 @@ footgun forces batching):
 
 - **OQ-1 — model-band.md contract home.** Confirmed: documented in
   using-doctrine.md as a PUSH hook. No residual question.
-- **OQ-2 — does `install.rs` copy every `install/*.md`, or an allowlist?** To
-  confirm in the reachability pass by reading the embed logic; shapes whether
-  "ship" is automatic or needs a manifest entry. Low risk — either way the
-  audit closes the gap.
+- ~~**OQ-2** — does `install.rs` copy every `install/*.md`, or an allowlist?~~
+  **Resolved (design):** every embedded `install/*` file except `manifest.toml`
+  is copied (`build_plan` step 2), no allowlist. "Ship" is automatic; reachability
+  risk is the pointer side. Folded into §5.3.
 - **OQ-3 — review-ledger.md tier.** Is it Tier-1 PULL-reference (a doc skills
   point at) or effectively skill-owned by review/inquisition? Resolve in the IA
   pass; affects which skill owns its pointer.
@@ -300,7 +306,15 @@ Verification alignment (maps to ADR-005 VT/VA + this slice's closure intent):
 - **VT** — `doctrine boot --check` passes after edits (shipped snapshot ==
   regenerated); reference-forms block present in the regenerated boot (R-OQ-5).
 - **VT** — fresh-install / embed test: `glossary.md`, `using-doctrine.md`,
-  `model-band.md` present in `.doctrine/`; `boot-footer.md` **absent**.
+  `model-band.md` present in `.doctrine/`; `boot-footer.md` **absent** from the
+  install set. Plus a **grep gate**: no `boot-footer` reference survives in
+  `src/` (incl. tests), `install/manifest.toml`, or any skill — so the deletion
+  cannot strand a dangling reference (existing boot.rs tests assert the retired
+  round-trip; they reference the *concept*, not the file, and stay green).
+- **VA** — IA coherence is **falsifiable**: the audit retains an
+  overlap/gap/contradiction **ledger** (in slice notes / §10) with each entry
+  marked resolved + how; closure checks the ledger is empty of open entries. No
+  "coherent" claim without the ledger backing it.
 - **VA** — restate-line: the 8 candidate skills triaged; each disposition
   recorded (fixed offender / compliant pointer); no skill reproduces a
   command/flag table.
@@ -310,3 +324,34 @@ Verification alignment (maps to ADR-005 VT/VA + this slice's closure intent):
   (spot-check REC/REV/POL/STD/knowledge each named).
 
 ## 10. Review Notes
+
+### Internal adversarial pass (2026-07-03)
+
+- **F1 — reachability rested on an unconfirmed embed assumption.** *Resolved
+  during design:* `build_plan` step 2 copies every `install/*` file except
+  `manifest.toml`, no allowlist (§5.3, OQ-2). "Ship" is automatic.
+- **F2 — using-doctrine.md as contract home risks kitchen-sink bloat**, the very
+  IA smell this slice cures. *Disposition:* contracts land in using-doctrine.md
+  (it *is* the CLI/editing/mechanics reference), but the IA pass carries a
+  **watch-item**: if using-doctrine.md loses coherence under the added hook +
+  reachability contracts, split a dedicated `hooks.md` (Tier-1, pointed-at).
+  Not pre-emptively created (YAGNI); decided by the audit's own coherence test.
+- **F3 — Objective 1 "no overlaps/gaps" was unfalsifiable.** *Resolved:* the
+  audit retains a resolved-entry ledger; VA checks it (§9). Coherence is now
+  evidenced, not asserted.
+- **F4 — restate-line disposition had no named home.** *Resolved:* per-skill
+  dispositions (fixed / compliant) live in slice notes; only genuine
+  *architectural* exceptions (a skill whose design needs inline flag reference)
+  escalate to an **ADR-005 review finding** (RV), per closure intent. Slice
+  notes for the pass; RV for the exceptions.
+- **F5 — boot-footer deletion could strand a reference.** *Resolved:* added a
+  grep gate to §9 (no `boot-footer` survives in src/tests/manifest/skills).
+- **F6 — model-band.md conflated with a user hook.** *Resolved:* reframed in
+  §5.2 as a **shipped constant** (universal floor), distinct from the genuinely
+  user-authored `governance.md`; per-model content belongs in the cascade.
+
+Residual open items: OQ-3 (review-ledger.md tier) — resolve in the IA pass.
+
+### External review
+
+_(pending — `/inquisition` or external adversarial prompt offered at design lock)_
