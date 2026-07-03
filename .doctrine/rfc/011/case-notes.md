@@ -544,3 +544,19 @@ detour to disprove; the missing `worktreePath` footer is the memory's documented
 red flag that no isolated tree was created. Serial single-worker funnel + parked
 coord cwd + base-guard makes the coord-fallback recoverable, but it is NOT
 isolation — a concurrent second worker in the same coord tree would collide.
+
+[/dispatch conclude + /audit; SL-194-conclude-9785ea03]
+- `dispatch sync --prepare-review` clap usage line lists all three stage selectors
+  (`--prepare-review --integrate --show-journal-trunk-oid`) as "required", so a
+  first invocation with only `--slice N --prepare-review` errored demanding the
+  other two. They are mutually-exclusive stages, not co-required — the required-args
+  error mis-signals. Cost one retry + a --help read. A clap group (one-of) or a
+  clearer usage string would remove the false "missing required arg" halt.
+- `link ... --intent <role>` is wrong; the flag is `--role` (originates_from etc).
+  The `link --help` "intent role refining a references edge" prose primes `--intent`
+  but the flag is `--role`. Cost one retry. Minor naming mismatch (prose says
+  "intent", flag says "role").
+- Untracked backlog dirs need `git add` before a path-limited `git commit -- <dir>`
+  (commit pathspec only matches tracked/staged paths). Expected git behaviour, but
+  the path-limit-the-commit discipline (AGENTS.md) collides with new-file capture —
+  one `add` then `commit -- <paths>`. Not doctrine's fault; noting the two-step.
