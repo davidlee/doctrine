@@ -140,3 +140,14 @@ special case of "no out-of-set edit," so it ships host-agnostic and stronger.
 `slice selector add` writes the `[[selector]]` array AFTER `[[relation]]`; a later
 `doctrine link` then refuses to append (F1 ordering) → manual TOML re-home needed.
 Seed relations first, selectors last — or fix the verb. (In `.doctrine/rfc/011/case-notes.md`.)
+
+## Sequencing fork settled (2026-07-03, RFC-013 outcome)
+
+Option (ii) + (iii)-as-framing: engine capability lands in **SL-192** (cascade
+trait-set selection — set-valued context, selector conjunctive pattern-set,
+root-wise normalized specificity, repeatable `--model`; implements SPEC-023
+FR-004/005/007). `SL-191 after SL-192` recorded. SL-191 stays pure
+worker-contract content: trait hymns, def trait-set frontmatter, bake widening.
+Q2's model-source question now reads "def frontmatter declares the trait-key
+SET" (not a single model id); Q3 unchanged. SPEC-023 OQ-3 (required-trait
+lint) placement: decide in SL-192 or SL-191 design.

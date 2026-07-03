@@ -1,6 +1,6 @@
-id = 191
-slug = "worker-contract-hymns-check-cadence"
-title = "Dispatch worker contract: cascade hymns + check-cadence + role/model/stage bake"
+id = 192
+slug = "cascade-trait-set-selection"
+title = "Cascade trait-set selection"
 status = "design"
 created = "2026-07-03"
 updated = "2026-07-03"
@@ -8,39 +8,23 @@ tags = []
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = [{ to = "SL-192", rank = 0 }]                      # slice→work soft sequence: { to, rank }
+after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
-selector = "install/hymns/**"
+selector = "src/hymns.rs"
 intent = "scope-relevant"
 
 [[selector]]
-selector = ".doctrine/hymns/**"
+selector = "src/commands/prompt.rs"
 intent = "scope-relevant"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/dispatch.rs"
 intent = "scope-relevant"
 
 [[selector]]
-selector = "plugins/doctrine/skills/dispatch/**"
+selector = "tests/e2e_prompt_*.rs"
 intent = "scope-relevant"
-
-[[selector]]
-selector = "plugins/doctrine/skills/dispatch-agent/**"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "install/hymns/role/worker.md"
-intent = "design-target"
-
-[[selector]]
-selector = "install/hymns/model/deepseek/_default.md"
-intent = "design-target"
 
 [[relation]]
 label = "governed_by"
@@ -48,20 +32,12 @@ target = "ADR-011"
 
 [[relation]]
 label = "references"
-role = "originates_from"
-target = "IMP-197"
-
-[[relation]]
-label = "related"
-target = "RFC-005"
+role = "implements"
+target = "SPEC-023"
 
 [[relation]]
 label = "related"
 target = "SL-186"
-
-[[relation]]
-label = "related"
-target = "SL-187"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
