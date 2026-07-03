@@ -20,12 +20,24 @@ Assume multiple agents are working in the same repository, and use `/worktree`
 or `/dispatch` accordingly.
 
 commit as soon as work is coherent; git add specifies paths, don't use -A unless asked.
+**Path-limit the commit itself, not just the add** — agents share one index, so
+another agent's already-staged file rides a pathless `git commit` into your
+commit. `git add <paths>` doesn't unstage what's already there; only a pathspec
+on `commit` excludes it: `git commit <paths> -F -` (or `-- <paths>`), never a
+pathless commit. `git status --porcelain` first and bail on unexpected staged
+files.
 
 the main worktree stays on edge. DO NOT checkout the primary working tree
 to another branch or i WILL END YOU. If auditing / closing a feature, land it on 
 a worktree and push to main. 
 
-DO NOT USE `git checkout <ref> --`
+DO NOT USE `git checkout <ref> --` — an **empty pathspec** after `--` (a
+shell-expanded var that came up blank, or nothing typed) makes git fall back to
+a **whole-worktree branch switch**, silently moving the primary tree off edge.
+To read another ref without switching: `git show <ref>:<path>` or
+`git diff <base>...<ref> -- <paths>`. To restore files:
+`git restore --source=<ref> -- <explicit paths>`. After any branch-ish op,
+verify with `git branch --show-current`.
 
 The thing to watch with the edge/main split: dispatch setup forks from trunk
 (ladder → main). If main hasn't been promoted from edge before dispatch starts,
@@ -96,6 +108,17 @@ If you need something else that's missing, STOP and ask the User.
 Each worktree builds into its own gitignored in-tree `target/` (cargo's default —
 no shared `CARGO_TARGET_DIR` redirect). So `./target/debug/doctrine` is the live
 binary after `cargo build`, and no two worktrees thrash a shared cache.
+
+### nix build — embedded assets
+
+`flake.nix` builds via crane; `craneLib.cleanCargoSource` filters the sandbox to
+**only** `.rs`/`.toml`/`.lock` (ignores git tracking and Cargo `exclude`). So
+every non-rust **embedded** asset is stripped: RustEmbed `#[folder]` roots
+(`plugins/`, `install/`, `memory/`, `web/map/dist/`) and `include_str!` targets.
+A dropped asset ships a hollow binary with **no compile error**. Any new embed
+root MUST be grafted into `srcWithDist` in flake.nix or the nix binary won't
+match `cargo install`. Validate with `just nix-build` (host only — nix is absent
+in jails; it's a release-check gate, not per-commit). Surfaced at the v0.5.0 tag.
 
 - Always use READ tool *before* writing any substantial edit (e.g.
   filling a template, writing `handover.md`) to avoid expensive write
