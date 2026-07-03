@@ -12,11 +12,15 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/hymns/**"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/hymns.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
