@@ -29,9 +29,23 @@ Ensure every **estimable** kind surfaces its `estimate` / `value` facets in `sho
 collides on the `[facet]` table name with knowledge records' typed kind-facet) and
 make the read surface match the write surface.
 
+## Kinds audit (2026-07-03)
+
+| Kind | `show` surfaces? | `estimate`/`value` fields in serde struct? |
+|---|---|---|
+| **Slice** | Yes | `SliceDoc` has `estimate: Option<EstimateFacet>`, `value: Option<ValueFacet>` |
+| **Backlog** (ISS/IMP/CHR/RSK/IDE) | No | `Doc` has `facet: Option<RiskFacet>` only; `[estimate]`/`[value]` TOML sections ignored by serde |
+| **Knowledge** (ASM/OBS/etc.) | No | `RawRecordToml` has `deny_unknown_fields = false` → TOML parses but fields dropped |
+| **Spec, ADR, Revision, Review, REC, Concept-map, Memory** | Not yet checked | |
+
+The facet commands (`estimate set`/`value set`) are kind-agnostic — they write via
+`entity::id_path` to any kind's TOML. But only `SliceDoc` currently deserialises
+the `[estimate]`/`[value]` sections into its `show` output.
+
 ## Notes
 
 - Distinct from SL-158's gating scope; SL-158 only adds a confirmatory design note
   that estimate/value are admissible on records.
 - Watch the `[facet]` table-name collision: risk's `[facet]` ≠ knowledge's typed
   `[facet]`. Don't conflate them when surfacing.
+- IMP-246 (`backlog list` columns + JSON) depends on this item.
