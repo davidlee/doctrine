@@ -21,12 +21,143 @@ dependencies = []
 # are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
 # reference forms): EN-1 entry, EX-1 exit, and verification by mode —
 # VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ---------------------------------------------------------------------------
 [[phase]]
 id        = "PHASE-01"
-name      = ""
-objective = ""
-entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
-exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
-specs             = []           # per-phase narrowing of the plan's specs
-requirements      = []
+name      = "IA analysis & ownership matrix"
+objective = """
+Produce the externalised, reviewed analysis artefacts that gate every later \
+edit — no doc content changes yet (design D6, §5.4 steps 0–1). Author the \
+ownership matrix (fact-class → owning surface · pointer surfaces · non-owner \
+prohibition), the doc→fact inventory, the pointer graph over install/*.md, and \
+the overlap/gap/contradiction ledger against the responsibility boundaries \
+(design §5.1). Decide the conditional install/hooks.md split from the matrix, \
+not from taste. These artefacts live in slice notes (working tier)."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; slice status = plan; premises re-grepped green (install/*.md set, boot Static model-band, build_plan write-if-absent all confirmed)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Ownership matrix authored: every fact-class in {verb-for-intent, storage/edit mechanics, hook contracts, reachability contract, vocabulary, review protocol} has exactly one owning surface + named pointer surfaces." },
+  { id = "EX-2", text = "hooks.md split decision recorded with its trigger: split iff a single doc owns unrelated fact-classes failing the one-invariant test (design §5.1)." },
+  { id = "EX-3", text = "Overlap/gap/contradiction ledger enumerates every finding across the closed corpus {ADR-005 duties, live install/*.md, skills, boot, manifest}, each with a target disposition; PUSH admission criterion applied to each Tier-0 line." },
+  { id = "EX-4", text = "Pointer graph drafted: for each Tier-0/1 doc, the specific machine-checkable pointer edge (boot section / named skill / manifest) that reaches it, and any orphan flagged." },
+]
+verification = [
+  { id = "VA-1", expects = "Reviewer confirms the ownership matrix assigns each fact-class a single owner; no fact is unowned or dual-owned; the hooks.md split decision follows the matrix's own trigger, not intuition." },
+  { id = "VA-2", expects = "Reviewer confirms the ledger's comparison basis is the fixed closed corpus and each Tier-0 line passes the PUSH admission criterion (omission → incorrect action before any routed read) or is demoted." },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Reference-doc currency"
+objective = """
+Bring glossary.md and using-doctrine.md current for the kinds and verbs that \
+landed since the docs were last touched — REC/REV/POL/STD/knowledge kinds and \
+the revision/policy/standard/review/knowledge verbs (§5.4 step 2, Objective 4). \
+Definitional content → glossary.md; verb-for-intent → using-doctrine.md, per \
+the PHASE-01 ownership matrix. Each kind's facts get a single owner across the \
+two docs (mention ≠ ownership). Re-embed and build green."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: ownership matrix fixes which of glossary.md / using-doctrine.md owns each kind/verb fact-class." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "glossary.md defines every current entity kind (incl. REC/REV/POL/STD/knowledge) with id/reference forms; using-doctrine.md routes every current verb by intent (revision/policy/standard/review/knowledge)." },
+  { id = "EX-2", text = "No kind's facts are duplicated across the two docs — each is singly-owned per the matrix, the other cites by name." },
+  { id = "EX-3", text = "install/*.md edits re-embedded (touch src/install.rs + cargo build); build green." },
+]
+verification = [
+  { id = "VT-1", expects = "glossary.md and using-doctrine.md still ship after edits (embed regression).", test_file = "src/install.rs", keywords = ["glossary_is_shipped", "using_doctrine_is_shipped"] },
+  { id = "VA-1", expects = "Agent spot-checks REC, REV, POL, STD, knowledge each named in glossary AND routed in using-doctrine, and each singly-owned (not restated in both)." },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-03"
+name      = "Hook contracts & boot-footer retirement"
+objective = """
+Document each live user-serviceable hook with a what/mechanism/precedence/reset \
+contract in its matrix-assigned home (using-doctrine.md, or a new install/hooks.md \
+if PHASE-01 triggered the split), with the user-editable vs shipped-input type \
+split visible (§5.2, Objective 2). Land the reachability contract in the same \
+assigned home. RETIRE boot-footer.md: delete install/boot-footer.md and the \
+orphan .doctrine/boot-footer.md; add an install.rs test asserting it no longer \
+ships (§5.3, Objective 2/6). Re-embed and build green."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 matrix names the hook-contract + reachability-contract owning surface (using-doctrine.md or hooks.md) and the split decision is settled." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "governance.md, model-band.md (shipped-input), hymns overlay, onboarding seed each have a documented contract (what/mechanism/precedence/reset); user-editable hooks visually separated from shipped inputs." },
+  { id = "EX-2", text = "Reachability contract (distribution-reachable = shipped ∧ machine-checkable pointer edge; currency scoped to fresh-install → IDE-030) documented in the assigned home." },
+  { id = "EX-3", text = "install/boot-footer.md and .doctrine/boot-footer.md deleted; no boot-footer.md file/asset reference survives in src/ (excluding retirement-concept comments), install/manifest.toml, or any skill." },
+  { id = "EX-4", text = "If PHASE-01 triggered it: install/hooks.md authored, shipped, and pointed-at (a skill or boot names it)." },
+  { id = "EX-5", text = "Edits re-embedded (touch src/install.rs + cargo build); build green." },
+]
+verification = [
+  { id = "VT-1", expects = "install.rs test asserts boot-footer.md is absent from the shipped/embedded set (new test alongside the *_is_shipped assertions).", test_file = "src/install.rs", keywords = ["boot_footer", "boot-footer.md"] },
+  { id = "VA-1", expects = "Agent greps src/ (excluding legitimate 'retired boot-footer round-trip' concept comments), install/manifest.toml, and plugins/doctrine/skills/** — zero surviving boot-footer.md file/asset reference; existing boot.rs round-trip tests stay green." },
+  { id = "VA-2", expects = "Agent confirms each live hook contract states all four fields and the user-editable/shipped-input split is legible; hymns documented at altitude only (cross-ref SPEC-023/SL-191, no internals)." },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-04"
+name      = "Restate-line remediation & regression tripwire"
+objective = """
+Triage the 8 --flag<ARG> candidate skills against R-OQ-4 (backlog, close, \
+worktree, dispatch, dispatch-agent, dispatch-subprocess, reconcile, \
+reviewing-memory); for each, reproduces-a-table → fix (cite `doctrine --help \
+--boot-map` or the verb+rule by name) vs names-a-verb → already-compliant, \
+recording the disposition per skill (evidence-bound, §5.4 step 4, Objective 3). \
+Then land a cheap structural regression tripwire — a grep/regex denylist recipe \
+(doctrine.just + install/scripts/) that fails on a seeded flag-table fixture — \
+NOT wired into the doctrine check Rust path (no-CLI-code boundary, §1/D5)."""
+entrance_criteria = [
+  { id = "EN-1", text = "Reference docs current (PHASE-02) so a skill can cite using-doctrine.md/glossary.md by name instead of restating." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "All 8 candidate skills triaged; per-skill disposition recorded in slice notes (fixed offender / already-compliant); no skill reproduces a command/flag table or storage-tier mechanics as prose." },
+  { id = "EX-2", text = "Genuine architectural exceptions (a skill whose design needs inline flag reference) escalated to an ADR-005 review finding (RV), not papered over." },
+  { id = "EX-3", text = "Regression tripwire recipe exists (doctrine.just target + install/scripts/ script): a grep/regex denylist over plugins/doctrine/skills/** that exits non-zero on a seeded flag-table fixture and zero on the cleaned corpus." },
+]
+verification = [
+  { id = "VT-1", expects = "The tripwire script exists and greps the skills corpus for the flag-table / storage-prose denylist (candidate path — the phase may rename it, updating this mandate).", test_file = "install/scripts/restate-lint.sh", keywords = ["plugins/doctrine/skills", "grep"] },
+  { id = "VA-1", expects = "Agent confirms each of the 8 candidate skills carries a recorded disposition and none reproduces a flag/enum table; the tripwire demonstrably fails on a seeded fixture and passes on the cleaned corpus." },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-05"
+name      = "PUSH-tier completeness, reachability close & verify"
+objective = """
+Verify the reference-forms block in routing-process.md is present, correct, and \
+comprehensive per R-OQ-5 (Objective 5) — the boot snapshot already projects a \
+'Reference forms' section (boot.rs test), so this is verify-and-fix-if-gap, not \
+author-from-scratch. Close the reachability graph: every Tier-0/1 doc is \
+distribution-reachable (shipped ∧ a machine-checkable pointer edge); fix any \
+orphan (add the missing pointer, or delete dead weight). Final re-embed, \
+regenerate boot, and gate shipped == regenerated (§5.4 steps 5–6, Objective 6)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02..04 doc edits landed and embedded; the pointer graph from PHASE-01 is the checklist to close." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "routing-process.md reference-forms block verified present + correct (padded ids, durable-not-membership rule, doc-local bare enumerations); gap fixed if any." },
+  { id = "EX-2", text = "Every Tier-0/1 doc (routing-process, governance, model-band, glossary, using-doctrine, review-ledger, +hooks.md if split) is shipped AND has a recorded pointer edge; zero orphans." },
+  { id = "EX-3", text = "Final touch src/install.rs + cargo build + doctrine boot; doctrine boot --check reports clean (shipped snapshot == regenerated); full test suite green." },
+]
+verification = [
+  { id = "VT-1", expects = "Boot snapshot projects the reference-forms block (existing boot.rs assertion stays green after routing-process edits).", test_file = "src/boot.rs", keywords = ["Reference forms", "reference-forms block projected"] },
+  { id = "VA-1", expects = "Agent runs `doctrine boot --check` → clean; confirms every Tier-0/1 doc is shipped ∧ pointed-at via a named edge; reachability contract documented; zero orphans." },
+  { id = "VH-1", expects = "Human accepts the audited install/ surface as coherent: the PHASE-01 ledger is empty of open entries and the closure intent (slice §Verification) is met." },
+]
+specs        = []
+requirements = []
