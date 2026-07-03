@@ -170,3 +170,30 @@ Also: `doctrine check gate` (→ just gate proxy) emitted a thin captured output
 binaries) that was easy to misread as the full suite; had to run `just gate` explicitly
 to confirm the real 3703/0. The proxy's cadence vs the full-suite command is not
 self-evident from the output.
+
+[preflight; iss206-pf1]
+ISS-206 preflight: issue framed the fix as "touches INV-2/INV-3 semantics — design call". Real, higher-value find surfaced only after reading design.md §L95-101/L133-134 against INV-2 (L271-273): the SL-186 design *narrative* already claims same-slot user override ("the user wins the same slot", "a user edit at the same slot wins") but attributes it to the *provenance tiebreak* — which is ordering-only, never suppression. So the design is internally inconsistent with its own INV-2 ("only replaces suppresses"), and the resolver faithfully implements INV-2. Cost: ~2 file reads (design + hymns.rs) to promote the issue's "correctness smell" into "design contradicts stated intent". Cheap, but the issue body could have cited the design line that promises override, saving the cross-read.
+
+[slice; IMP-197→SL-191]
+`doctrine slice selector add` writes the `[[selector]]` array AFTER the
+`[[relation]]` block in the slice toml. A later `doctrine link` then refuses
+to append (F1: "typed table `[selector]` authored after `[[relation]]`"),
+forcing a manual TOML re-home of the selector block above the relations.
+Order-of-authoring coupling between two write verbs on the same file — the
+selector-add verb should home its block above the relation array (or link
+should tolerate a trailing array-of-tables). Cost: one Read + one Edit +
+re-run. Suggest: seed relations first, selectors last — or fix the verb.
+
+[dreaming; dream-2026-07-03-a]
+`doctrine link <src> related <target>` refused on a shipped-corpus memory
+(`mem.pattern.doctrine.close-drift-discharge-rec`, in `shipped/`, ADR-005 tier)
+with "shipped/ is read-only — record a version in items/ first". The error
+message is clear and actionable, but `memory list --orphans` doesn't
+distinguish shipped-tier orphans (structurally can't gain relations without a
+promote step) from items/-tier orphans (a plain missed-link). Cost: two failed
+`link` calls before recognizing the pattern; a `--tier` column on the orphans
+table would let a dreaming pass skip shipped rows up front instead of
+discovering the refusal per-row. Separately: found one corpus memory
+(mem.pattern.doctrine.plan-va-scoping) with a body that is ONLY the title —
+no content. `memory validate` does not flag empty bodies as a finding; filed
+CHR-035 rather than fabricate content.

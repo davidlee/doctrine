@@ -41,3 +41,11 @@ trust_level = "high"
 severity = "high"
 weight = 0
 
+[[relation]]
+label = "related"
+target = "mem_019f20e37e4d7cf2911f9e3937c76afb"
+
+[[relation]]
+label = "related"
+target = "mem_019f20dd547c7f42827c21527c9ad3f6"
+
