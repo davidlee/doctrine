@@ -12,15 +12,15 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/relation.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/relation.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/search.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/governance.rs"
@@ -37,6 +37,18 @@ intent = "scope-relevant"
 [[selector]]
 selector = "src/backlog.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/hydrate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation_graph.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
