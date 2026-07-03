@@ -392,6 +392,26 @@ pub(crate) enum Command {
         path: Option<PathBuf>,
     },
 
+    /// Read-only interestingness findings over the priority graph.
+    ///
+    /// Surfaces the aggregate / relational structure a flat `next`/`survey` list cannot
+    /// show: forks, joins, gating fan-out, value inversions, order displacements, score
+    /// plateaus, and provenance (evicted soft edges + degraded dep cycles), grouped by
+    /// kind. Advisory — never writes.
+    Findings {
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// Create and list architecture decision records.
     Adr {
         #[command(subcommand)]
@@ -768,7 +788,9 @@ static FAMILIES: &[Family] = &[
     Family {
         key: "reports",
         suppress_verbs: false,
-        members: &["status", "next", "blockers", "survey", "explain"],
+        members: &[
+            "status", "next", "blockers", "survey", "explain", "findings",
+        ],
     },
     Family {
         key: "explore",
@@ -1222,6 +1244,15 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 term_width: crate::tty::stdout_terminal_width(),
             },
         ),
+        Command::Findings { format, json, path } => crate::priority::run_findings(
+            path,
+            format,
+            json,
+            crate::listing::RenderOpts {
+                color,
+                term_width: crate::tty::stdout_terminal_width(),
+            },
+        ),
         Command::Adr { command } => crate::adr::dispatch(command, color),
         Command::Policy { command } => crate::policy::dispatch(command, color),
         Command::Standard { command } => crate::standard::dispatch(command, color),
@@ -1451,8 +1482,9 @@ mod tests {
             );
         }
 
-        // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168).
-        assert_eq!(visible.len(), 47, "expected 47 visible top-level commands");
+        // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168)
+        // + `findings` (SL-194 PHASE-01).
+        assert_eq!(visible.len(), 48, "expected 48 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the

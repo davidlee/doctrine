@@ -58,6 +58,10 @@ pub(crate) struct VerificationConfig {
     /// test` family), NOT the coarse `just gate` aggregate (SL-170 design D4) —
     /// the gate parses per-test failure keys.
     regression: Option<Vec<String>>,
+    /// Override argv for `doctrine check prove` (non-mutating prove-clean cadence).
+    /// Absent ⇒ [`DEFAULT_PROVE`] — like Commit/Gate, NEVER an owned no-op (only
+    /// `quick` is Noop-when-unset). Read ONLY by [`resolve_check`] (INV-1).
+    prove: Option<Vec<String>>,
 }
 
 impl VerificationConfig {
@@ -149,6 +153,10 @@ const DEFAULT_GATE: &[&str] = &["just", "gate"];
 /// A per-test runner (NOT `just gate`) so the gate can parse per-test failure
 /// keys (design D4). Pure data — informs, never gates (POL-002), overridable.
 const DEFAULT_REGRESSION: &[&str] = &["cargo", "test", "--no-fail-fast"];
+/// The baked argv for `doctrine check prove` when `[verification].prove` is absent.
+/// The non-mutating prove-clean cadence (fmt-check + lint). Pure data — a host
+/// convention that *informs* (POL-002), client-overridable.
+const DEFAULT_PROVE: &[&str] = &["just", "prove"];
 /// What the `quick` shell prints on the owned no-op path (unconfigured quick).
 const QUICK_UNSET_NOTE: &str = "doctrine check quick: no [verification].quick set — skipping";
 
@@ -159,6 +167,7 @@ pub(crate) enum CheckKind {
     Quick,
     Commit,
     Gate,
+    Prove,
 }
 
 impl CheckKind {
@@ -169,6 +178,7 @@ impl CheckKind {
             CheckKind::Quick => "quick",
             CheckKind::Commit => "commit",
             CheckKind::Gate => "gate",
+            CheckKind::Prove => "prove",
         }
     }
 }
@@ -194,11 +204,13 @@ pub(crate) enum CheckPlan {
 ///   override `None`, Quick       → `Noop(QUICK_UNSET_NOTE)` (CR-F3, owned)
 ///   override `None`, Commit      → `Run(DEFAULT_COMMIT)`
 ///   override `None`, Gate        → `Run(DEFAULT_GATE)`
+///   override `None`, Prove       → `Run(DEFAULT_PROVE)`
 pub(crate) fn resolve_check(cfg: &VerificationConfig, kind: CheckKind) -> CheckPlan {
     let override_argv = match kind {
         CheckKind::Quick => &cfg.quick,
         CheckKind::Commit => &cfg.commit,
         CheckKind::Gate => &cfg.gate,
+        CheckKind::Prove => &cfg.prove,
     };
     match override_argv {
         Some(argv) if argv.is_empty() => CheckPlan::Empty(kind),
@@ -207,6 +219,7 @@ pub(crate) fn resolve_check(cfg: &VerificationConfig, kind: CheckKind) -> CheckP
             CheckKind::Quick => CheckPlan::Noop(QUICK_UNSET_NOTE),
             CheckKind::Commit => CheckPlan::Run(owned(DEFAULT_COMMIT)),
             CheckKind::Gate => CheckPlan::Run(owned(DEFAULT_GATE)),
+            CheckKind::Prove => CheckPlan::Run(owned(DEFAULT_PROVE)),
         },
     }
 }
@@ -556,5 +569,41 @@ mod tests {
         assert_eq!(CheckKind::Quick.key(), "quick");
         assert_eq!(CheckKind::Commit.key(), "commit");
         assert_eq!(CheckKind::Gate.key(), "gate");
+        assert_eq!(CheckKind::Prove.key(), "prove");
+    }
+
+    // --- SL-191 PHASE-05: prove cadence resolution -----------------------------
+
+    #[test]
+    fn resolve_check_unconfigured_prove_uses_default() {
+        // Prove is NOT a Noop-when-unset cadence (only quick is): unset ⇒ the
+        // baked `just prove`, exactly like Commit/Gate.
+        let cfg = VerificationConfig::default();
+        assert_eq!(resolve_check(&cfg, CheckKind::Prove), run(DEFAULT_PROVE));
+        assert_eq!(
+            resolve_check(&cfg, CheckKind::Prove),
+            run(&["just", "prove"])
+        );
+    }
+
+    #[test]
+    fn resolve_check_prove_override_runs_it_verbatim() {
+        let cfg = VerificationConfig {
+            prove: Some(vec!["x".to_owned()]),
+            ..Default::default()
+        };
+        assert_eq!(resolve_check(&cfg, CheckKind::Prove), run(&["x"]));
+    }
+
+    #[test]
+    fn resolve_check_empty_prove_override_is_keyed_error() {
+        let cfg = VerificationConfig {
+            prove: Some(vec![]),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_check(&cfg, CheckKind::Prove),
+            CheckPlan::Empty(CheckKind::Prove)
+        );
     }
 }

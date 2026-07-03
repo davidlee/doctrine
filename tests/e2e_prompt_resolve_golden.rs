@@ -483,7 +483,8 @@ fn vt2_model_keys_exact_relative_keys() {
     let dir = tmp();
 
     // No user models — only the embedded corpus.
-    // The framework embeds: model/anthropic/claude-sonnet-4, model/deepseek/_default.
+    // The framework embeds: model/adherence/low, model/anthropic/claude-sonnet-4,
+    // model/deepseek/_default (SL-191 PHASE-02 added adherence/low).
 
     let out = run(dir.path(), &["prompt", "model-keys"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
@@ -491,10 +492,11 @@ fn vt2_model_keys_exact_relative_keys() {
     let output = stdout(&out);
     let lines: Vec<&str> = output.lines().collect();
 
-    // Two model keys, sorted.
-    assert_eq!(lines.len(), 2, "expected 2 model keys, got: {output}");
-    assert_eq!(lines[0], "anthropic/claude-sonnet-4");
-    assert_eq!(lines[1], "deepseek/_default");
+    // Three model keys, sorted.
+    assert_eq!(lines.len(), 3, "expected 3 model keys, got: {output}");
+    assert_eq!(lines[0], "adherence/low");
+    assert_eq!(lines[1], "anthropic/claude-sonnet-4");
+    assert_eq!(lines[2], "deepseek/_default");
 }
 
 #[test]

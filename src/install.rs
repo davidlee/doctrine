@@ -45,6 +45,9 @@ const DISPATCH_WORKER_AGENT_ASSET_PI: &str = "agents/pi/dispatch-worker.md";
 /// When `install_agent_def` sees this literal in a def, it resolves the role
 /// band (`Role::Worker`) through the prompt engine and replaces the marker with
 /// the assembled text.
+// full worker context (role+traits); the bake reads the def's frontmatter, not the
+// marker args (kept literal, F4/C6). The sentinel stays this exact string — it is
+// matched by `.contains`, never parsed for its `--role` argument.
 pub(crate) const WORKER_RESOLVE_MARKER: &str = "{{ prompt resolve --role worker }}";
 
 /// Read one embedded `install/`-relative asset's bytes (`None` if absent). The
@@ -1081,26 +1084,46 @@ pub(crate) fn load_full_corpus(
     Ok(corpus)
 }
 
+/// Resolve the worker's full context (role band + any declared trait/model bands)
+/// through the prompt engine. `traits` are the def's declared trait keys; an empty
+/// set collapses to the role-only baseline (byte-identical to the pre-SL-191 bake,
+/// VT-4). The context shape is built by `hymns::worker_context` (the shared leaf
+/// builder — no parallel `ContextVector` construction, ADR-001).
 pub(crate) fn resolve_worker_role_body(
     corpus: &[crate::hymns::Snippet],
     sealed: &crate::hymns::SealSet,
+    traits: &BTreeSet<String>,
 ) -> Result<String, crate::hymns::ResolveError> {
-    crate::hymns::resolve(
-        &crate::hymns::ContextVector {
-            role: crate::hymns::Role::Worker,
-            harness: None,
-            model: BTreeSet::new(),
-            arm: None,
-            stage: None,
-            bands: crate::hymns::BandFilter::Only(BTreeSet::from([crate::hymns::Band::Role])),
-        },
-        corpus,
-        sealed,
-    )
+    crate::hymns::resolve(&crate::hymns::worker_context(traits), corpus, sealed)
 }
 
 pub(crate) fn expand_worker_marker(def: &str, body: &str) -> String {
     def.replace(WORKER_RESOLVE_MARKER, body)
+}
+
+/// Bake a worker agent def against a resolved corpus: read the def's OWN declared
+/// traits from its frontmatter, enforce trait coverage (a hard error on any uncovered
+/// key — a contractless worker must never ship, T4), resolve role + trait bands, and
+/// inline the assembled body at the marker. The single seam both the real bake
+/// (`install_agent_def`) and VT-3 drive; corpus-pure (disk/embed I/O stays in the
+/// caller). Module home `install` — the bake engine leg (ADR-001).
+fn bake_worker_def(
+    def_str: &str,
+    asset_label: &str,
+    corpus: &[crate::hymns::Snippet],
+    sealed: &crate::hymns::SealSet,
+) -> anyhow::Result<String> {
+    let traits = parse_agent_def_traits(def_str)
+        .with_context(|| format!("agent def '{asset_label}' frontmatter"))?;
+    let uncovered = crate::hymns::traits_covered(&traits, corpus);
+    if !uncovered.is_empty() {
+        bail!(
+            "dispatch-worker def '{asset_label}' declares uncovered trait(s) {uncovered:?}; \
+             a contractless worker cannot ship — add a Model-band hymn covering each key",
+        );
+    }
+    let body = resolve_worker_role_body(corpus, sealed, &traits)?;
+    Ok(expand_worker_marker(def_str, &body))
 }
 
 /// Project the disk starter twin + self-`replaces` sidecar for each exposed slot.
@@ -1485,18 +1508,47 @@ pub(crate) struct Entry {
 // Pure: frontmatter
 // ---------------------------------------------------------------------------
 
-/// Parse leading `---` YAML frontmatter from a `SKILL.md` body.
-fn parse_meta(md: &str) -> anyhow::Result<Meta> {
+/// Extract the inner YAML of a leading `---`…`---` frontmatter block. Errs on an
+/// absent or unterminated fence. Single-sources the fence-slicing shared by the
+/// `SKILL.md` (`parse_meta`) and agent-def (`parse_agent_def_traits`) readers — one
+/// frontmatter impl, no parallel copy (DRY).
+fn frontmatter_yaml(md: &str) -> anyhow::Result<&str> {
     let after = md
         .strip_prefix("---")
-        .context("SKILL.md missing leading '---' frontmatter")?
+        .context("missing leading '---' frontmatter")?
         .trim_start_matches(['\r', '\n']);
     let end = after
         .find("\n---")
-        .context("SKILL.md frontmatter is not terminated by '---'")?;
-    let yaml = after.get(..end).context("frontmatter slice out of range")?;
+        .context("frontmatter is not terminated by '---'")?;
+    after.get(..end).context("frontmatter slice out of range")
+}
+
+/// Parse leading `---` YAML frontmatter from a `SKILL.md` body.
+fn parse_meta(md: &str) -> anyhow::Result<Meta> {
+    let yaml = frontmatter_yaml(md).context("SKILL.md")?;
     let meta: Meta = serde_yaml::from_str(yaml).context("Failed to parse SKILL.md frontmatter")?;
     Ok(meta)
+}
+
+/// The agent-def frontmatter fields this bake consumes. Only `traits` is read;
+/// every other declared key (`name`/`description`/`tools`/`model`) is tolerated by
+/// default serde (NO `deny_unknown_fields`) so the def keeps its full YAML head and
+/// the cascade-ignored `model:` pin stays put.
+#[derive(Debug, Default, Deserialize)]
+struct AgentDefMeta {
+    traits: Option<Vec<String>>,
+}
+
+/// Parse an agent def's `---` YAML frontmatter and return its declared trait keys as
+/// a `BTreeSet` (empty when `traits:` is absent). Errs on a malformed/unterminated
+/// fence so a broken def fails the bake loudly rather than silently shipping a
+/// contractless worker. Rides `frontmatter_yaml` (no parallel frontmatter impl).
+/// Pure — module home `install` (the engine leg of the bake, ADR-001).
+pub(crate) fn parse_agent_def_traits(def: &str) -> anyhow::Result<BTreeSet<String>> {
+    let yaml = frontmatter_yaml(def).context("agent def")?;
+    let meta: AgentDefMeta =
+        serde_yaml::from_str(yaml).context("Failed to parse agent def frontmatter")?;
+    Ok(meta.traits.unwrap_or_default().into_iter().collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -1939,8 +1991,7 @@ pub(crate) fn install_agent_def(
         let embedded = embedded_hymns();
         let sealed = embedded_seal_set()?;
         let corpus = load_full_corpus(&disk, &embedded, &sealed)?;
-        let body = resolve_worker_role_body(&corpus, &sealed)?;
-        let expanded = expand_worker_marker(def_str, &body);
+        let expanded = bake_worker_def(def_str, embed_asset, &corpus, &sealed)?;
         crate::fsutil::write_atomic(&canon, expanded.as_bytes())?;
     } else {
         crate::fsutil::write_atomic(&canon, &data)?;
@@ -2263,6 +2314,95 @@ mod tests_hymns {
         );
         assert!(root.join("role").join("worker.toml").exists());
     }
+
+    // SL-191 PHASE-07 / VT-1: overlay-reconciliation composition guard.
+    // PHASE-07 re-homes THIS repo's client habits OUT of a fully-replacing
+    // `role/worker` twin (which suppressed the enriched Framework contract)
+    // INTO a non-replacing `project/*` overlay. A worker resolve must then
+    // compose BOTH the enriched Framework role/worker contract AND the client
+    // habit — each exactly once (no ISS-206 doubling, enrichment not
+    // suppressed). Driven through the REAL embedded+disk loader
+    // (`load_full_corpus`) against a hermetic temp-dir overlay: a pure
+    // in-memory snippet fixture in `hymns.rs` cannot catch a disk-overlay /
+    // sidecar-shape / loader-composition regression (codex F6).
+    #[test]
+    fn worker_resolve_composes_framework_role_worker_and_nonreplacing_project_habit() {
+        // Hermetic disk overlay: one non-replacing project-band habit and NO
+        // `role/worker` twin — nothing suppresses the Framework contract. This
+        // is the shape PHASE-07 lands in `.doctrine/hymns/` (T2 deletes the
+        // suppressor; T3 authors the project habit).
+        const HABIT_SENTINEL: &str = "DOCTRINE-RUST-HABIT-SENTINEL-VT1";
+        let dir = tempfile::tempdir().unwrap();
+        let disk_root = dir.path();
+        let habit = disk_root.join("project").join("doctrine-conventions.md");
+        fs::create_dir_all(habit.parent().unwrap()).unwrap();
+        fs::write(&habit, HABIT_SENTINEL).unwrap();
+
+        // Real embedded Framework corpus (carries the enriched role/worker) +
+        // the disk overlay, loaded through the production loader.
+        let embedded = embedded_hymns();
+        let sealed = embedded_seal_set().unwrap();
+        let corpus = load_full_corpus(disk_root, &embedded, &sealed).unwrap();
+
+        // The worker SESSION cascade is All-bands — exactly what `prompt
+        // resolve/explain --role worker` builds (`build_ctx` with no `--band`),
+        // and what a worker's SessionStart hook delivers. The `project` band
+        // composes here, unlike the role-only agent-def bake
+        // (`resolve_worker_role_body`, `Only([Role, Model])`).
+        let ctx = crate::hymns::ContextVector {
+            role: crate::hymns::Role::Worker,
+            harness: None,
+            model: BTreeSet::new(),
+            arm: None,
+            stage: None,
+            bands: crate::hymns::BandFilter::All,
+        };
+        let body = crate::hymns::resolve(&ctx, &corpus, &sealed).unwrap();
+
+        assert_eq!(
+            body.matches("NEGATIVE CONTRACT").count(),
+            1,
+            "enriched Framework role/worker contract must compose exactly once \
+             (not suppressed, not doubled):\n{body}"
+        );
+        assert_eq!(
+            body.matches(HABIT_SENTINEL).count(),
+            1,
+            "non-replacing project-band client habit must compose exactly once:\n{body}"
+        );
+    }
+
+    // SL-191 PHASE-02 / VT-1: POL-002 content gate — the shipped-corpus hymns
+    // authored by this phase (role/worker.md, model/adherence/**) are FRAMEWORK
+    // corpus (every client project), so they must never carry host build-tooling
+    // literals belonging to THIS repo's own habits (those live in the
+    // `.doctrine/hymns` overlay, out of scope here). `harness/**` legitimately
+    // names host tooling and is deliberately excluded from this gate.
+    const FORBIDDEN_HOST_LITERALS: &[&str] = &["cargo", "target/", "just", "node_modules"];
+
+    #[test]
+    fn install_hymns_authored_set_has_no_host_literals() {
+        let authored: Vec<(String, Vec<u8>)> = embedded_hymns()
+            .into_iter()
+            .filter(|(rel, _)| rel == "role/worker.md" || rel.starts_with("model/"))
+            .collect();
+
+        assert!(
+            !authored.is_empty(),
+            "expected the authored hymn set (role/worker.md + model/**) to be non-empty"
+        );
+
+        for (rel, bytes) in &authored {
+            let text = String::from_utf8_lossy(bytes).to_lowercase();
+            for literal in FORBIDDEN_HOST_LITERALS {
+                assert!(
+                    !text.contains(literal),
+                    "authored hymn '{rel}' contains forbidden host literal '{literal}' — \
+                     POL-002 requires host-agnostic shipped corpus"
+                );
+            }
+        }
+    }
 }
 
 // Tests (skills — moved from skills.rs, IMP-226)
@@ -2338,6 +2478,41 @@ mod tests_skills {
     #[test]
     fn parse_meta_rejects_missing_frontmatter() {
         assert!(parse_meta("# no frontmatter\n").is_err());
+    }
+
+    // --- agent-def frontmatter parser (SL-191 VT-1) ---
+
+    #[test]
+    fn parse_agent_def_traits_reads_declared_keys() {
+        let def = "---\nname: dispatch-worker\ntraits: [\"adherence/low\"]\n---\n\nbody\n";
+        let traits = parse_agent_def_traits(def).unwrap();
+        assert_eq!(traits, ["adherence/low".to_string()].into());
+    }
+
+    #[test]
+    fn parse_agent_def_traits_absent_traits_is_empty_ok() {
+        let def = "---\nname: dispatch-worker\nmodel: some/model\n---\n\nbody\n";
+        let traits = parse_agent_def_traits(def).unwrap();
+        assert!(traits.is_empty());
+    }
+
+    #[test]
+    fn parse_agent_def_traits_tolerates_unknown_keys() {
+        // name/description/tools/model are unknown to AgentDefMeta yet tolerated
+        // (no deny_unknown_fields) — the def keeps its full YAML head.
+        let def = "---\nname: dispatch-worker\ndescription: d\ntools: read, edit\nmodel: deepseek/deepseek-v4-pro\ntraits: [\"adherence/low\"]\n---\n\nbody\n";
+        let traits = parse_agent_def_traits(def).unwrap();
+        assert_eq!(traits, ["adherence/low".to_string()].into());
+    }
+
+    #[test]
+    fn parse_agent_def_traits_rejects_unterminated_frontmatter() {
+        assert!(parse_agent_def_traits("---\nname: x\nno closing fence\n").is_err());
+    }
+
+    #[test]
+    fn parse_agent_def_traits_rejects_missing_frontmatter() {
+        assert!(parse_agent_def_traits("# no frontmatter\n").is_err());
     }
 
     // --- discovery (against the embedded sample) ---
@@ -3210,6 +3385,87 @@ mod tests {
         let expected = embedded_asset("glossary.md").unwrap();
         let written = fs::read(dir.path().join(".doctrine/agents/dispatch-worker.md")).unwrap();
         assert_eq!(written, expected.as_ref());
+    }
+
+    // --- trait-aware bake (SL-191 VT-3) ---
+
+    /// A corpus that resolves the worker role AND covers the `adherence/low` trait,
+    /// so a covered bake inlines the adherence body and an uncovered/typo'd key fails.
+    fn role_plus_adherence_corpus() -> Vec<crate::hymns::Snippet> {
+        use crate::hymns::{Band, Provenance, Role, Selector, Slot, Snippet};
+        vec![
+            Snippet {
+                slot: Slot::new(Band::Role, "worker"),
+                selector: Selector {
+                    role: Some(Role::Worker),
+                    ..Default::default()
+                },
+                provenance: Provenance::Framework,
+                body: "ROLE WORKER BODY".into(),
+            },
+            Snippet {
+                slot: Slot::new(Band::Model, "adherence-low"),
+                selector: Selector {
+                    model: ["adherence/low".to_string()].into(),
+                    ..Default::default()
+                },
+                provenance: Provenance::Framework,
+                body: "ADHERENCE LOW BODY".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn bake_worker_def_covered_trait_inlines_adherence_via_model_band() {
+        let corpus = role_plus_adherence_corpus();
+        let def = format!("---\ntraits: [\"adherence/low\"]\n---\n\n{WORKER_RESOLVE_MARKER}\n");
+        // worker_context adds Band::Model because a trait is declared, so the
+        // adherence body composes into the baked def.
+        let out = bake_worker_def(&def, "pi", &corpus, &crate::hymns::SealSet::default()).unwrap();
+        assert!(out.contains("ADHERENCE LOW BODY"), "{out}");
+        assert!(!out.contains(WORKER_RESOLVE_MARKER), "{out}");
+    }
+
+    #[test]
+    fn bake_worker_def_traitless_stays_role_only() {
+        let corpus = role_plus_adherence_corpus();
+        let def = format!("---\nname: x\n---\n\n{WORKER_RESOLVE_MARKER}\n");
+        // No traits ⇒ role-only band ⇒ adherence content must NOT leak in (VT-2/VT-4).
+        let out =
+            bake_worker_def(&def, "claude", &corpus, &crate::hymns::SealSet::default()).unwrap();
+        assert!(out.contains("ROLE WORKER BODY"), "{out}");
+        assert!(!out.contains("ADHERENCE LOW BODY"), "{out}");
+    }
+
+    #[test]
+    fn bake_worker_def_uncovered_trait_is_a_hard_error() {
+        let corpus = role_plus_adherence_corpus();
+        // A typo'd key ("adherance") is covered by nothing → contractless → bail.
+        let def = format!("---\ntraits: [\"adherance/low\"]\n---\n\n{WORKER_RESOLVE_MARKER}\n");
+        let err = bake_worker_def(&def, "pi", &corpus, &crate::hymns::SealSet::default())
+            .expect_err("uncovered trait must fail the bake");
+        assert!(err.to_string().contains("uncovered trait"), "{err}");
+    }
+
+    // --- shipped-def declarations (SL-191 VT-5) ---
+
+    #[test]
+    fn embedded_dispatch_worker_defs_declare_expected_traits() {
+        let defs = embedded_agent_defs();
+        let traits_of = |rel: &str| -> BTreeSet<String> {
+            let (_, bytes) = defs
+                .iter()
+                .find(|(name, _)| name == rel)
+                .unwrap_or_else(|| panic!("embedded agent def {rel} present"));
+            parse_agent_def_traits(std::str::from_utf8(bytes).unwrap()).unwrap()
+        };
+        // The pi/universal twin ships the low-adherence trait; losing this declaration
+        // (not just a fixture) must fail. The claude def declares none (D1).
+        assert_eq!(
+            traits_of("pi/dispatch-worker.md"),
+            ["adherence/low".to_string()].into()
+        );
+        assert!(traits_of("claude/dispatch-worker.md").is_empty());
     }
 
     // SL-011 VT-1: the boot governance layer rides the existing seed path —

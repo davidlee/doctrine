@@ -17,7 +17,9 @@
 //! PHASE-01/02 self-clearing `dead_code` scopes.
 pub(crate) mod channels;
 pub(crate) mod config;
+pub(crate) mod findings;
 pub(crate) mod graph;
+pub(crate) mod order;
 pub(crate) mod partition;
 pub(crate) mod render;
 pub(crate) mod surface;
@@ -128,6 +130,27 @@ pub(crate) fn run_blockers(
         render::blockers_json(&view)?
     } else {
         render::blockers_human(&view)
+    };
+    write!(io::stdout(), "{out}")?;
+    Ok(())
+}
+
+/// `doctrine findings [--json]` (SL-194 PHASE-01 / design D2) — the interestingness
+/// catalogue (forks, joins, gating fan-out, value inversions, displacements, plateaus,
+/// provenance) grouped by kind. Builds once via [`surface::findings`] and renders per
+/// `Format` (`--json` forces JSON). Advisory — never writes.
+pub(crate) fn run_findings(
+    path: Option<PathBuf>,
+    format: Format,
+    json: bool,
+    _render: RenderOpts,
+) -> anyhow::Result<()> {
+    let root = root(path)?;
+    let findings = surface::findings(&root)?;
+    let out = if json || format == Format::Json {
+        render::findings_json(&findings)?
+    } else {
+        render::findings_human(&findings)
     };
     write!(io::stdout(), "{out}")?;
     Ok(())

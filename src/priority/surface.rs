@@ -19,10 +19,14 @@
 
 use std::path::Path;
 
+use crate::catalog::scan::ScanMode;
 use crate::relation_graph::{self, EntityKey};
 
 use super::channels;
 use super::graph::{self, NodeAttr, PriorityGraph};
+// SL-194: the frontier-order primitives moved to the pure `order` module; `next`
+// reuses them byte-identically (the detectors share the same implementation).
+use super::order::{frontier_order, surviving_seq_predecessors};
 use super::partition::{StatusClass, status_class};
 use super::view::{
     Actionability, ActionabilityBlock, ActionabilityEdge, ActionabilityNode, ActionabilityView,
@@ -364,100 +368,6 @@ pub(crate) fn survey_view_for_map(g: &PriorityGraph, all: bool) -> Actionability
     }
 }
 
-/// The **surviving** seq predecessors of each actionable node (SL-133 §5.4 / F-3) —
-/// the `seq_overlay` `in_edges` MINUS the edges cordage EVICTED to linearize an `Evict`
-/// cycle, restricted to edges whose BOTH endpoints are in `actionable`. The induced
-/// precedence relation `next`'s frontier sort honours; an evicted (broken) seq edge
-/// does NOT re-impose precedence.
-///
-/// Empirical finding (this cordage build): `in_edges(seq_overlay, ·)` ALREADY excludes
-/// the evicted edge — for an `Evict` 2-cycle, `provenance().evictions()` reports both
-/// directed entries but `in_edges` yields only the one surviving edge. The explicit
-/// subtraction via [`channels::evicted_seq_edges`] is therefore DEFENSIVE here (a no-op
-/// in the common path), kept to honour the design §5.4 contract ("read surviving edges,
-/// not raw `seq_overlay`") and stay correct if cordage's enumeration ever changes. VT-7's
-/// evicted-seq case proves the broken edge does not re-impose precedence either way.
-fn surviving_seq_predecessors(
-    g: &PriorityGraph,
-    actionable: &std::collections::BTreeSet<EntityKey>,
-) -> std::collections::BTreeMap<EntityKey, std::collections::BTreeSet<EntityKey>> {
-    let mut preds: std::collections::BTreeMap<EntityKey, std::collections::BTreeSet<EntityKey>> =
-        std::collections::BTreeMap::new();
-    for &k in actionable {
-        // The evicted (from, to) pairs touching `k` — subtract these from the raw
-        // enumeration so a broken seq edge never re-imposes an order.
-        let evicted: std::collections::BTreeSet<(EntityKey, EntityKey)> =
-            channels::evicted_seq_edges(g, k)
-                .into_iter()
-                .map(|(from, to, _reason)| (from, to))
-                .collect();
-        let mut set = std::collections::BTreeSet::new();
-        if let Some(n) = g.projection.resolve(k) {
-            for (pred, _) in g.graph.in_edges(g.seq_overlay, n) {
-                if let Some(pk) = g.projection.key_of(pred)
-                    && actionable.contains(&pk)
-                    && !evicted.contains(&(pk, k))
-                {
-                    set.insert(pk);
-                }
-            }
-        }
-        preds.insert(k, set);
-    }
-    preds
-}
-
-/// Pure induced-frontier (Kahn-style) sort of the actionable set (SL-133 §5.4 / F-3).
-/// Precedence is `preds` (the SURVIVING actionable seq edges); among nodes whose
-/// surviving predecessors are all emitted, the next pick is the max by
-/// `(score desc via total_cmp, id asc)`. NOT cordage `order_key` (its `(Level, NodeId)`
-/// ranks Level before `NodeId`, demoting score-promoted successors; RV-132 F-3).
-///
-/// Total + terminating: every node is emitted exactly once; a residual seq cycle (none
-/// expected — the seq overlay is `Evict`-linearized) would still drain via the same
-/// `(score, id)` pick once the ready set empties, so the loop always makes progress.
-fn frontier_order(
-    actionable: &[EntityKey],
-    score: &dyn Fn(EntityKey) -> f64,
-    preds: &std::collections::BTreeMap<EntityKey, std::collections::BTreeSet<EntityKey>>,
-) -> Vec<EntityKey> {
-    let mut emitted: std::collections::BTreeSet<EntityKey> = std::collections::BTreeSet::new();
-    let mut out: Vec<EntityKey> = Vec::with_capacity(actionable.len());
-    while out.len() < actionable.len() {
-        // Ready = un-emitted nodes whose surviving predecessors are all emitted.
-        let ready: Vec<EntityKey> = actionable
-            .iter()
-            .copied()
-            .filter(|k| !emitted.contains(k))
-            .filter(|k| {
-                preds
-                    .get(k)
-                    .is_none_or(|ps| ps.iter().all(|p| emitted.contains(p)))
-            })
-            .collect();
-        // No ready node ⇒ a residual cycle among the un-emitted; fall back to every
-        // un-emitted node so the loop still terminates (defensive — Evict precludes it).
-        let candidates: Vec<EntityKey> = if ready.is_empty() {
-            actionable
-                .iter()
-                .copied()
-                .filter(|k| !emitted.contains(k))
-                .collect()
-        } else {
-            ready
-        };
-        let Some(pick) = candidates.into_iter().max_by(|a, b| {
-            // Max by score asc then id DESC ⇒ picks highest score, lowest id first.
-            score(*a).total_cmp(&score(*b)).then_with(|| b.cmp(a))
-        }) else {
-            break;
-        };
-        emitted.insert(pick);
-        out.push(pick);
-    }
-    out
-}
-
 /// `next` (design §5.4 / SL-133) — the ACTIONABLE nodes only, in a score-aware
 /// induced-frontier order over the SURVIVING seq edges (`seq_overlay` − evictions). The
 /// workable-but-BLOCKED items are ABSENT (the divergence feature). Advisory; mutates
@@ -624,6 +534,53 @@ pub(crate) fn actionability_block_from(
         blocking: refs(&channels::blocking(&g, key)),
         score: channels::score(&g, key),
     })
+}
+
+/// `findings` (SL-194) — the impure shell that owns ALL disk for the interestingness
+/// catalogue: ONE `scan_entities`, ONE `config::load`, then the base build plus the β
+/// endpoint sweep (`beta_endpoints`), before delegating to the PURE graph-only
+/// `findings::detect` (design §The purity boundary). `beta_endpoints` returns `None` when
+/// no non-terminal interval estimate exists, so the β-family findings simply do not fire.
+pub(crate) fn findings(root: &Path) -> anyhow::Result<Vec<super::findings::Finding>> {
+    let scanned = relation_graph::scan_entities(root, &mut vec![], ScanMode::default())?;
+    let cfg = super::config::load(root);
+    let base = graph::build_from_with_cfg(&scanned, root, &cfg)?;
+    let betas = beta_endpoints(&scanned, root, &cfg)?;
+    Ok(super::findings::detect(&base, &cfg, betas.as_ref()))
+}
+
+/// Whether the corpus carries a NON-terminal interval estimate (`lower < upper`) — the
+/// precondition for the β sweep to say anything. A point estimate (`lower == upper`) is
+/// β-invariant (`est_cost` is constant in `skew`), and terminal items are excluded from
+/// the cost anchor, so neither can produce a contested ordering.
+fn has_nonterminal_interval(scanned: &[relation_graph::ScannedEntity]) -> bool {
+    scanned.iter().any(|e| {
+        status_class(e.kind, e.status.as_deref()) != StatusClass::Terminal
+            && e.estimate.as_ref().is_some_and(|est| est.lower < est.upper)
+    })
+}
+
+/// The β endpoint sweep (SL-194 PHASE-02) — rebuild the graph at `skew = BETA_LO` and
+/// `skew = BETA_HI` over the SAME `scanned` (design D4 / §Purity boundary). Returns
+/// `Some(BetaEndpoints)` iff a non-terminal interval estimate exists; else `None` — no
+/// wasted builds, and the β-family stays silent (starved-until-estimates, R1). The
+/// three reads (base + lo + hi) share the one scan; dep/seq topology is re-read per build
+/// under the quiescent-tree precondition (R4).
+pub(crate) fn beta_endpoints(
+    scanned: &[relation_graph::ScannedEntity],
+    root: &Path,
+    cfg: &super::config::PriorityConfig,
+) -> anyhow::Result<Option<super::findings::BetaEndpoints>> {
+    if !has_nonterminal_interval(scanned) {
+        return Ok(None);
+    }
+    let mut lo_cfg = cfg.clone();
+    lo_cfg.estimate.skew = super::findings::BETA_LO;
+    let mut hi_cfg = cfg.clone();
+    hi_cfg.estimate.skew = super::findings::BETA_HI;
+    let lo = graph::build_from_with_cfg(scanned, root, &lo_cfg)?;
+    let hi = graph::build_from_with_cfg(scanned, root, &hi_cfg)?;
+    Ok(Some(super::findings::BetaEndpoints { lo, hi }))
 }
 
 #[cfg(test)]
@@ -1104,6 +1061,61 @@ mod tests {
                 "evicted edge does NOT re-impose precedence; higher-score ISS-002 leads: {ids:?}"
             );
         }
+    }
+
+    // ── SL-194 VT-1: beta_endpoints — Some over interval estimate, None otherwise ──
+
+    #[test]
+    fn beta_endpoints_some_over_interval_estimate_none_over_estimate_free() {
+        // Interval-estimate corpus: seed_valued authors [estimate] lower 0 < upper 10 on
+        // an OPEN (non-terminal) item → a β sweep has something to perturb.
+        let dir = tmp();
+        let root = dir.path();
+        seed_valued(root, 1, 10.0, "");
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = super::super::config::load(root);
+        assert!(
+            beta_endpoints(&scanned, root, &cfg).unwrap().is_some(),
+            "a non-terminal interval estimate yields Some"
+        );
+
+        // Estimate-free corpus: a bare open issue authors no [estimate] → None (no wasted
+        // builds; the β-family stays silent).
+        let dir2 = tmp();
+        let root2 = dir2.path();
+        seed_issue(root2, 1, "open", "", &[]);
+        let scanned2 =
+            relation_graph::scan_entities(root2, &mut vec![], ScanMode::default()).unwrap();
+        let cfg2 = super::super::config::load(root2);
+        assert!(
+            beta_endpoints(&scanned2, root2, &cfg2).unwrap().is_none(),
+            "an estimate-free corpus yields None"
+        );
+    }
+
+    /// A terminal item's interval must NOT trip the sweep — the precondition is a
+    /// NON-terminal interval (terminals are excluded from the cost anchor).
+    #[test]
+    fn beta_endpoints_none_when_only_terminal_has_interval() {
+        let dir = tmp();
+        let root = dir.path();
+        // A CLOSED (terminal) issue carrying an interval estimate, nothing else.
+        write(
+            root,
+            ".doctrine/backlog/issue/001/backlog-001.toml",
+            "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"closed\"\n\
+             resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [estimate]\nlower = 0.0\nupper = 10.0\n",
+        );
+        write(root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = super::super::config::load(root);
+        assert!(
+            beta_endpoints(&scanned, root, &cfg).unwrap().is_none(),
+            "a terminal-only interval does not arm the sweep"
+        );
     }
 
     /// VA-1: the `explain` Score reason exposes the full breakdown and the human render

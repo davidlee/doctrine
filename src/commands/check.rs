@@ -41,6 +41,13 @@ pub(crate) enum CheckCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// Non-mutating prove-clean cadence — asserts fmt+lint clean, never fixes.
+    /// Unconfigured ⇒ `just prove`.
+    Prove {
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
     /// S1 regression baseline-diff (SL-170) — capture a failure-set baseline at a
     /// base ref, then diff a later run against it. NOT a cadence proxy: this verb
     /// runs the per-test suite itself and partitions failures (new/changed/fixed/
@@ -88,6 +95,7 @@ pub(crate) fn dispatch(cmd: CheckCommand) -> anyhow::Result<()> {
         CheckCommand::Quick { path } => (CheckKind::Quick, path),
         CheckCommand::Commit { path } => (CheckKind::Commit, path),
         CheckCommand::Gate { path } => (CheckKind::Gate, path),
+        CheckCommand::Prove { path } => (CheckKind::Prove, path),
     };
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let cfg = crate::coverage_store::load_config(&root)?;

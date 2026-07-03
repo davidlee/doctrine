@@ -552,6 +552,15 @@ fn make_worker_worktree(
 fn import_from_worktree_happy_stages_tracked_and_untracked() {
     let src = tempfile::tempdir().unwrap();
     init_repo(src.path());
+    // SL-191 PHASE-05: the claude-arm import now runs the post-apply prove gate
+    // (`doctrine check prove`) on the coord root. This temp coord has no justfile,
+    // so pin an always-clean override (`true`) so the happy path reaches success.
+    std::fs::create_dir_all(src.path().join(".doctrine")).unwrap();
+    std::fs::write(
+        src.path().join(".doctrine/doctrine.toml"),
+        "[verification]\nprove = [\"true\"]\n",
+    )
+    .unwrap();
     let holder = tempfile::tempdir().unwrap();
     // a.txt is tracked (from init_repo) → an unstaged edit exercises the diff-HEAD leg;
     // feature.rs is new → an untracked add exercises the index-free synthesis leg.

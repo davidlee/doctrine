@@ -39,6 +39,11 @@ const QUOTE_PATH_OFF: [&str; 2] = ["-c", "core.quotePath=false"];
 const NO_RENAMES: &str = "--no-renames";
 const DEV_NULL: &str = "/dev/null";
 
+/// The verdict token when the POST-import (post-apply) tree fails `doctrine check
+/// prove` — unformatted or lint-red (STD-001). Distinct from the pre-apply
+/// [`Refusal`] belt: this gate runs AFTER `git apply` on the claude arm.
+const POST_IMPORT_UNCLEAN: &str = "post-import-unclean";
+
 /// Verdict of the PURE import classifier: apply the delta, or fail closed with a
 /// distinct named refusal token. The shell ([`run_import`]) gathers the FACTS and
 /// acts on this verdict — never the other way round (ADR-001 leaf, gather →
@@ -188,6 +193,52 @@ fn classify_or_report(
         Err(refusal) => bail!("import-refused: {}", refusal.token()),
         Ok(Apply::Ok) => Ok(()),
     }
+}
+
+/// The POST-apply prove-gate verdict (PURE). SEPARATE from the pre-apply
+/// [`classify_import`]/[`Refusal`] belt: that belt runs BEFORE `git apply`; this
+/// runs AFTER, on the post-import tree, over a single boolean fact (`prove` exited
+/// clean?). Pure so VT-1 pins the halt semantics without spawning a child. A red
+/// (unformatted OR lint-fail) delta HALTS — the orchestrator NEVER auto-fixes
+/// (auto-fix hides the compliance signal + can't repair clippy/layering reds, and
+/// violates ADR-012 sole-writer: land-or-reject, never rewrite).
+fn import_prove_verdict(prove_clean: bool) -> Result<(), &'static str> {
+    if prove_clean {
+        Ok(())
+    } else {
+        Err(POST_IMPORT_UNCLEAN)
+    }
+}
+
+/// Resolve the `prove` cadence argv IN-PROCESS (never spawn the `doctrine` binary —
+/// PATH-independent by design) and run it on the coord `root`, inheriting stdio.
+/// Returns whether it exited clean. Reuses the exact `load_config` + `resolve_check`
+/// pair the `check` verb uses (both `pub(crate)`, layering-legal — no cycle).
+fn run_prove_on(root: &Path) -> anyhow::Result<bool> {
+    let cfg = crate::coverage_store::load_config(root)?;
+    let argv = match crate::verify::resolve_check(&cfg, crate::verify::CheckKind::Prove) {
+        crate::verify::CheckPlan::Run(argv) => argv,
+        crate::verify::CheckPlan::Empty(_) => {
+            bail!("import: [verification].prove is empty — cannot run the post-import prove gate")
+        }
+        // Prove never resolves to Noop (only `quick` is Noop-when-unset); guard the
+        // invariant defensively rather than panic.
+        crate::verify::CheckPlan::Noop(_) => {
+            bail!(
+                "import: [verification].prove resolved to a no-op — the post-import prove gate is inert"
+            )
+        }
+    };
+    // `Run` is non-empty by construction (INV-2); guard defensively rather than panic.
+    let Some((program, rest)) = argv.split_first() else {
+        bail!("import: resolved prove argv is empty — cannot spawn the post-import prove gate")
+    };
+    let status = std::process::Command::new(program)
+        .args(rest)
+        .current_dir(root)
+        .status()
+        .with_context(|| format!("spawning the post-import prove gate: {}", argv.join(" ")))?;
+    Ok(status.success())
 }
 
 /// `doctrine worktree import --base <B> --fork <branch>` — mechanizes the dispatch
@@ -375,6 +426,19 @@ fn run_import_from_worktree(
     // separately. The raw bytes carry the trailing newline `git apply` requires. ---
     git::git_apply_index(&root, &patch_bytes)
         .with_context(|| format!("git apply --3way --index from {}", dir.display()))?;
+
+    // --- reject-and-halt prove gate (SL-191 PHASE-05): run the NON-mutating
+    // `prove` cadence on the POST-import tree. A red (unformatted OR lint-fail)
+    // delta HALTS — the delta is staged but NOT committed; the orchestrator fixes
+    // the delta / re-dispatches, NEVER auto-fixes (ADR-012 sole-writer). ---
+    let prove_clean = run_prove_on(&root)?;
+    import_prove_verdict(prove_clean).map_err(|tok| {
+        anyhow::anyhow!(
+            "import halted: {tok} — the post-import tree fails `doctrine check prove` \
+             (unformatted or lint-red); delta staged but NOT committed. Fix the delta / \
+             re-dispatch (never auto-fix; ADR-012 sole-writer)."
+        )
+    })?;
 
     writeln!(
         io::stdout(),
@@ -570,6 +634,21 @@ mod tests {
         );
     }
 
+    // --- VT-1 (SL-191 PHASE-05): the post-apply prove-gate verdict is pure ---
+
+    #[test]
+    fn import_prove_verdict_halts_on_unclean_with_the_specific_token() {
+        // A red (unformatted / lint-fail) post-import tree HALTS with the exact
+        // token — assert the token, not merely `is_err()`.
+        assert_eq!(
+            import_prove_verdict(false),
+            Err("post-import-unclean"),
+            "an unclean post-import tree halts with POST_IMPORT_UNCLEAN"
+        );
+        // A clean tree lands.
+        assert_eq!(import_prove_verdict(true), Ok(()));
+    }
+
     // --- VT-5: run_import_from_worktree fed `--slice`-resolved selectors ---
 
     /// Stand up a coordination primary at HEAD == base with a linked worker
@@ -577,6 +656,16 @@ mod tests {
     fn worker_tree_touching_seed() -> (tempfile::TempDir, PathBuf, PathBuf) {
         let tmp = tempfile::tempdir().unwrap();
         let primary = init_repo(&tmp.path().join("primary"));
+        // The claude arm's post-import prove gate (SL-191 PHASE-05) spawns the
+        // resolved `prove` argv on the coord root. This temp coord has no justfile,
+        // so pin an always-clean prove override (`true`) in `.doctrine/doctrine.toml`
+        // — untracked, so the `tree_clean` precond (tracked-only) is unaffected.
+        fs::create_dir_all(primary.join(".doctrine")).unwrap();
+        fs::write(
+            primary.join(".doctrine/doctrine.toml"),
+            "[verification]\nprove = [\"true\"]\n",
+        )
+        .unwrap();
         let wt = tmp.path().join("wt");
         git(
             &primary,
