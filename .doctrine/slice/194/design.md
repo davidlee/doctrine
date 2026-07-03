@@ -313,6 +313,26 @@ where flat ordering is noise. Decision: **proceed to PHASE-02 (β-family)**. The
 rendering follow-on remains deferred pending the full-catalogue verdict (VH-1 on
 PHASE-02).
 
+### Probe verdict — PHASE-02 full catalogue (VH-1: useful)
+
+Live run against the corpus (dispatch/194 S=d30ed33a, β-family landed): forks (1),
+**arm resequencing (1)**, **order instability (62)**, displacements (96), plateaus
+(30); joins/gating/value-inversions/provenance silent (R1, as PHASE-01). **Verdict:
+useful.** The differentiated β-family value composes on one hub: `IMP-085` — the
+same fork PHASE-01 flagged (gates 4 sunk arms) — now also shows a **β-contested arm
+order** (`{…IMP-089, IMP-087…} → {…IMP-087, IMP-089…}` β0↔β1), i.e. optimistic vs
+pessimistic cost swaps which arm is next. That composite (fork + arm-resequencing on
+the same node) is the sharpest signal a flat list cannot express. 62 order-instability
+pairs (~⅓ of adjacent frontier pairs flip β0↔β1) honestly mark rank as β-sensitive but
+read as high-volume — **wants a magnitude/score-gap threshold before it earns screen
+space** (deferred follow-on, not a redo). Two worker interpretations ratified: (1)
+ArmResequencing orders fork arms among themselves (arms `need` the hub → absent from
+the actionable frontier, so "arm order within frontier order" would be perpetually
+empty), β-sensitive via score; (2) a non-payload `moved: usize` field sources
+`magnitude()` only (JSON/human payloads unchanged: `{high,low}` / `{hub,order_lo,
+order_hi}`). Rendering follow-on (arc-strip, fold-into-`survey`) + the order-instability
+threshold are captured as backlog, deferred past this probe.
+
 ## Constraints (canon)
 
 ADR-001 (module layering — finding module engine-layer, pure), ADR-015 (score
