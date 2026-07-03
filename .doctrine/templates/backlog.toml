@@ -1,0 +1,17 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = {{id}}
+slug = "{{slug}}"
+title = "{{title}}"
+kind = "{{kind}}"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "{{date}}"
+updated = "{{date}}"
+tags = []
+
+[relationships]                 # outbound-only (ADR-004); seeded empty
+slices = []
+specs  = []
+drift  = []

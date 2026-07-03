@@ -1,0 +1,9 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = {{id}}
+slug = "{{slug}}"
+title = "{{title}}"
+status = "draft"
+kind = "product"
+tags = []

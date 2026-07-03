@@ -1,0 +1,29 @@
+memory_uid = "{{uid}}"
+{{key_line}}schema_version = {{schema_version}}
+memory_type = "{{type}}"
+status = "{{status}}"
+title = "{{title}}"
+summary = "{{summary}}"
+created = "{{date}}"
+updated = "{{date}}"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = [{{tags}}]
+workspace = "{{workspace}}"
+repo = ""
+
+[git]
+anchor_kind = "none"
+
+[review]
+verification_state = "unverified"
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0

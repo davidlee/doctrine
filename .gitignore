@@ -22,23 +22,24 @@ docs/claude/*.txt
 # for oops
 .spec-driver
 
-.doctrine/*
-!.doctrine/slice/
-!.doctrine/adr/
-!.doctrine/agents/
-!.doctrine/policy/
-!.doctrine/standard/
-!.doctrine/review/
-!.doctrine/rec/
-!.doctrine/revision/
-!.doctrine/rfc/
-!.doctrine/backlog/
-!.doctrine/knowledge/
-!.doctrine/requirement/
-!.doctrine/spec/
-!.doctrine/memory/
-!.doctrine/rules/
-!.doctrine/concept-map/
+# .doctrine/*
+# !.doctrine/slice/
+# !.doctrine/adr/
+# !.doctrine/agents/
+# !.doctrine/policy/
+# !.doctrine/standard/
+# !.doctrine/review/
+# !.doctrine/hymns/
+# !.doctrine/rec/
+# !.doctrine/revision/
+# !.doctrine/rfc/
+# !.doctrine/backlog/
+# !.doctrine/knowledge/
+# !.doctrine/requirement/
+# !.doctrine/spec/
+# !.doctrine/memory/
+# !.doctrine/rules/
+# !.doctrine/concept-map/
 # SL-011 dogfood: commit the seeded boot governance layer
 # !.doctrine/governance.md
 
@@ -65,6 +66,7 @@ handover.md
 .doctrine/slice/*/research/
 .doctrine/**/handover.md
 .doctrine/agents/*
+.doctrine/dispatch/
 !.doctrine/agents/AGENTS.md
 
 web/map/dist/

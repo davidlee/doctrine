@@ -8,7 +8,7 @@ tags = []
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
-after = [{ to = "SL-192", rank = 0 }]                      # slice→work soft sequence: { to, rank }
+after = [{ to = "SL-192", rank = 0 }, { to = "SL-193", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "install/hymns/**"

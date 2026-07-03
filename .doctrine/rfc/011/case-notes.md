@@ -253,3 +253,45 @@ the ranking. Command-scope alone is weak for fresh local gotchas; add a tag and
 expect list/key retrieval if precise surfacing matters.
 [inquisition/retrieve-memory/route; spec-023-rfc-013-inquisition-01]
 Procedural friction: boot onboarding says `/retrieving-memory`, but the available skill is `/retrieve-memory`; route skill says to run `backlog list`, while the boot command table exposes backlog subcommands without `list`. This forces CLI-shape verification before substantive review work.
+[inquisition/consult; spec-023-rfc-013-inquisition-02]
+Review priming friction: `doctrine review prime RV-237` refuses a SPEC target because priming only knows slice selectors, while the inquisition skill says durable doctrine subjects such as design/spec artifacts should be tried on an RV and then primed. The review must proceed unprimed with manual `show`-sourced evidence.
+[inquisition/backlog/review; spec-023-rfc-013-inquisition-03]
+Review role-label friction: `review new --responder respondent` records a custom responder label, but `review dispose --as respondent` is refused; `--as` accepts only role-axis tokens (`raiser`/`responder`). The help text says cooperative role assertion but does not warn that custom labels are display-only for `--as`.
+
+[/design SL-192; sess-opus-192-design]
+- Detailed handover (reading list + pre-enumerated watch-points + banked
+  algebra) collapsed the clarifying loop to a single confirm-question. High
+  signal-per-token: the design skill's full multi-turn clarify was mostly
+  formality because the hard forks were pre-resolved upstream (SPEC-023 D2/D3,
+  RFC-013). Handover quality directly bought token efficiency.
+- Codex external pass earned its cost: 2 real catches (Sidecar.model presence —
+  bare defaulted Vec loses omitted-vs-empty; singleton-degeneration wording
+  conflated behaviour-preserved with tests-unchanged when ~12 struct-literal
+  sites take a forced type migration). Also 1 over-reach (proposed collapsing
+  same-root pins, which would break a legitimate distinct-subtree intersection)
+  — triage against source truth mattered, don't apply reviewer findings blind.
+- Minor CLI friction: `relation census <ID>` rejects a positional id (wants a
+  flag); cost one wasted call. Low.
+[record-memory; spec-023-rfc-013-inquisition-04]
+Memory-recording inefficiency: I recorded `mem.fact.review.prime-slice-target-only` before probing for an existing scoped memory. The recorder suggested `mem.fact.doctrine.review-prime-slice-target-only`, which already captured the same fact, forcing a duplicate show + supersede cleanup. Future record-memory flow should run `memory find` for the proposed title/key first when the fact is likely already known.
+
+[execute; SL-192-p01 solo-exec]
+- Atomic BTreeSet type-flip (Option→set on 2 structs) rippled to ~17 sites; the
+  long red window between authoring goldens and last migration is inherent, not
+  incidental — new-diagnostics stream made it cheap to chase remaining sites
+  without full recompiles.
+- Minor friction: (a) shell is zsh — `${PIPESTATUS[0]}` empty after a pipe, had
+  to re-run `check gate` to capture exit; (b) `perl` absent in jail, fell back to
+  Edit replace_all for batch `model: Some(..)→BTreeSet` migration; (c) edge HEAD
+  advanced under me twice mid-session (concurrent agents) — expected, cost one
+  extra `git rev-parse` to reconfirm the fork base.
+- Zero design ambiguity: design §3/§4 carried every decision incl. the accepted
+  cross-root alpha boundary; no /consult needed. Signals a well-shaped design→plan.
+
+[reconcile-REV; ISS-206/REV-019 session]
+Reading a requirement's *statement* cost several dead tool calls. `doctrine spec
+req` has only `list` (roster: id/label/kind/status — no statement). No `spec req
+show`; no top-level `req` (it's `rec`, easy misfire). `spec req list --json`
+rows omit the statement/title field too. Ended up grepping `.doctrine/requirement/NNN/requirement-NNN.toml`
+directly for `title =`. For a REV that targets requirements by statement content,
+"show me REQ-NNN's statement" should be one call. ~6 wasted calls.

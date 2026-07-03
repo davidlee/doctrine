@@ -1,0 +1,35 @@
+[priority]
+
+[priority.coefficients]
+risk = 0.4
+
+[priority.tag_coefficients]
+boring = 0.0
+[dispatch]
+claude-force-subprocess-dispatch = true
+# SL-166: buffered-trunk posture — arms g1 (refuse trunk-mutating verbs on a
+# `main` checkout) and g2 (base-corpus freshness at setup). deliver-to defaults
+# to refs/heads/main, so authoring=edge / buffer=main. Env-local (untracked
+# post-SL-146); enabled as a runtime operator edit, not a commit.
+authoring-branch = "refs/heads/edge"
+
+[reservation]
+allow-local-fallback = true
+reach = "local"
+
+[verification]
+# # Project-default base argv for checks whose matcher names no source.
+command = ["just", "gate"]
+quick   = ["just", "quick"]
+check   = ["just", "check"]
+# # Named base argvs that checks can alias against.
+[verification.aliases]
+gate = ["just", "gate"]
+#
+# # Default matcher source when a check's matcher names none.
+# #   stdout  — match against stdout
+# #   exit    — match exit code only
+# default-source = "stdout"
+# # Per-check timeout in seconds (default 300).
+# timeout-secs = 300
+#
