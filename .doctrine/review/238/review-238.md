@@ -110,3 +110,33 @@ No blocker. Slice is conformant and ready to reconcile.
 - **ISS-207** — edge gate blocker: `.doctrine/dispatch/` over-broad gitignore
   shadows the committed dispatch ledger + fails the classification parity test
   (commit `61eae2ce`, dispatch-domain). Pre-existing on edge; unrelated to SL-192.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **slice-192.toml relation (RV-238 F-1)** — removed the spurious `governed_by
+  ADR-011` edge via `doctrine unlink SL-192 governed_by ADR-011`. Verified:
+  relationships now carry only `references(implements): SPEC-023` — the real
+  governance. No relink (no prompt-cascade ADR).
+
+### Governance/spec (REV) — deferred, not authored
+- **SPEC-023 D3 summary / FR-007 = REQ-328 (RV-238 F-3)** — deferred to SPEC-023's
+  own lifecycle; **no REV minted**. The finding is an OPTIONAL upstream spec-clarity
+  nit (add shared-prefix qualifier to the "intersections outrank their factors"
+  summary at spec-023.md:250 + the FR-007 one-liner). REQ-328 is still `pending`;
+  minting a one-qualifier REV would duplicate SPEC-023's own pending work. SL-192 is
+  conformant to the locked D3 mechanism regardless (VT-3 asserts the boundary). The
+  clarify lands when SPEC-023 next advances REQ-328. Brief explicitly sanctioned
+  this deferral.
+
+### Follow-up / tolerated
+- **RV-238 F-2** (follow-up) — captured as **IMP-239** (onboard `--model` copy
+  understates the repeatable trait-set contract; SL-187 delivery surface). Provenance
+  only; not a reconcile write.
+- **RV-238 F-4** (aligned) — REV-019 / SL-193 `install.rs` adjacency: no collision at
+  this land (verified empty). No action.
+- **ISS-207** — edge-gate blocker (`.doctrine/dispatch/` gitignore, dispatch-domain).
+  Pre-existing, unrelated to SL-192. Provenance only.
+
+Reconcile pass complete — every brief item resolved (F-1 applied, F-3 deferred with
+rationale, F-2/F-4/ISS-207 provenance). No half-applied REV. Handoff to /close.

@@ -31,10 +31,6 @@ selector = "tests/e2e_prompt_resolve_golden.rs"
 intent = "design-target"
 
 [[relation]]
-label = "governed_by"
-target = "ADR-011"
-
-[[relation]]
 label = "references"
 role = "implements"
 target = "SPEC-023"
