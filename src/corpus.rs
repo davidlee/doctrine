@@ -884,6 +884,24 @@ weight = 0
     }
 
     #[test]
+    fn hymn_cascade_master_is_present_and_valid_in_the_embedded_corpus() {
+        // VT-1: the hymn-cascade concept master ships as a global-orientation
+        // master and lints clean, so `memory find`/`retrieve` surface the
+        // corrected (SPEC-023-aligned) authoring model rather than the stale
+        // model-registry / provenance-wins-suppression claims it replaces.
+        let assets = embedded_assets();
+        let cascade = assets
+            .iter()
+            .find(|a| a.toml.contains("mem.concept.doctrine.hymn-cascade"))
+            .expect("hymn-cascade shipped master present in the embedded corpus");
+        assert!(
+            lint_master(&cascade.toml).is_ok(),
+            "hymn-cascade master must lint clean: {:?}",
+            lint_master(&cascade.toml).err()
+        );
+    }
+
+    #[test]
     fn lint_flags_a_non_empty_repo() {
         // repo set, anchor still none — parses fine (the repo⇒anchor gate is a
         // write-path concern, not a parse one), so the repo signal is isolated.

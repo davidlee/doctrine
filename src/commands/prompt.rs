@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 
-use crate::hymns::{Arm, Band, Provenance, SealSet, Snippet};
+use crate::hymns::{Arm, Band, BandFilter, Provenance, SealSet, Snippet};
 
 // ── PromptCommand + dispatch (PHASE-03) ────────────────────────────────────
 
@@ -333,7 +333,12 @@ pub(crate) fn check_corpus(corpus: &[Snippet], sealed: &SealSet) -> Vec<String> 
         }
     }
 
-    // (d) def-marker integrity (SL-186 PHASE-04 / T6)
+    // (d) def-marker integrity (SL-186 PHASE-04 / T6) + declared-trait coverage and
+    // declared→delivered proof (SL-191 PHASE-04): a declared trait must both (i) match
+    // ≥1 Model-band snippet (coverage — else it's a silent typo, e.g. `adherance/low`)
+    // and (ii) survive into the SAME full-context resolve + delivered band filter the
+    // bake actually uses (else a bake that parses traits but forgets to widen the
+    // resolved bands would evade a coverage-only check).
     for (name, bytes) in crate::install::embedded_agent_defs() {
         let Ok(def_text) = std::str::from_utf8(&bytes) else {
             continue;
@@ -341,7 +346,14 @@ pub(crate) fn check_corpus(corpus: &[Snippet], sealed: &SealSet) -> Vec<String> 
         if !def_text.contains(crate::install::WORKER_RESOLVE_MARKER) {
             continue;
         }
-        match crate::install::resolve_worker_role_body(corpus, sealed) {
+        // Role-band resolvability only: pass no traits so this integrity probe stays
+        // byte-identical to the pre-SL-191 role-only check (the bake enforces trait
+        // coverage separately, at install time).
+        match crate::install::resolve_worker_role_body(
+            corpus,
+            sealed,
+            &std::collections::BTreeSet::new(),
+        ) {
             Ok(body) if !body.trim().is_empty() => {}
             Ok(_) | Err(_) => {
                 problems.push(format!(
@@ -349,13 +361,71 @@ pub(crate) fn check_corpus(corpus: &[Snippet], sealed: &SealSet) -> Vec<String> 
                 ));
             }
         }
+
+        // Declared trait keys — a malformed frontmatter fence is a loud finding, not a
+        // silent skip (a broken def must never evade the coverage/delivered checks).
+        let traits = match crate::install::parse_agent_def_traits(def_text) {
+            Ok(traits) => traits,
+            Err(e) => {
+                problems.push(format!("def {name}: unparseable frontmatter — {e}"));
+                continue;
+            }
+        };
+
+        // Coverage: does ≥1 Model-band snippet fire on each declared key?
+        let uncovered = crate::hymns::traits_covered(&traits, corpus);
+        if !uncovered.is_empty() {
+            problems.push(format!(
+                "def {name}: declares uncovered trait(s) {uncovered:?}"
+            ));
+        }
+
+        // Declared→delivered proof, part 1: the SAME full-context resolver the bake
+        // uses (role + trait bands), run with the def's actual parsed traits.
+        match crate::install::resolve_worker_role_body(corpus, sealed, &traits) {
+            Ok(body) if !body.trim().is_empty() => {}
+            Ok(_) | Err(_) => {
+                problems.push(format!(
+                    "def {name}: marker present but full-context (role + trait) band unresolvable"
+                ));
+            }
+        }
+
+        // Declared→delivered proof, part 2: coverage alone doesn't prove the bake
+        // widens the delivered band filter — assert it structurally.
+        let bands = crate::hymns::worker_context(&traits).bands;
+        if let Some(finding) = delivered_band_finding(&name, &traits, &bands) {
+            problems.push(finding);
+        }
     }
 
     problems
 }
 
+/// Pure predicate: does the delivered band filter drop `Band::Model` despite the def
+/// declaring ≥1 trait? Closes the gap where trait coverage alone doesn't prove the
+/// bake actually widens the resolved band set to inline the trait content (SL-191
+/// PHASE-04). Module home: `commands::prompt` (command layer) — a thin caller-side
+/// check over `hymns::BandFilter`/`Band`, depending only DOWN onto the leaf (ADR-001).
+fn delivered_band_finding(
+    name: &str,
+    traits: &std::collections::BTreeSet<String>,
+    bands: &BandFilter,
+) -> Option<String> {
+    if !traits.is_empty() && !bands.includes(Band::Model) {
+        Some(format!(
+            "def {name}: declares traits {traits:?} but delivered band filter drops \
+             Band::Model — the bake would not inline the trait content"
+        ))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
     use crate::hymns::{Selector, Slot};
 
@@ -430,12 +500,27 @@ mod tests {
 
     #[test]
     fn check_clean_corpus_passes() {
-        let corpus = corpus_with_resolvable_worker_role(vec![Snippet {
-            slot: Slot::new(Band::Preamble, "core"),
-            selector: Selector::default(),
-            provenance: Provenance::Framework,
-            body: "FW".into(),
-        }]);
+        let corpus = corpus_with_resolvable_worker_role(vec![
+            Snippet {
+                slot: Slot::new(Band::Preamble, "core"),
+                selector: Selector::default(),
+                provenance: Provenance::Framework,
+                body: "FW".into(),
+            },
+            // Covers the real embedded pi/dispatch-worker def's declared
+            // `traits: ["adherence/low"]` (SL-191 PHASE-04 trait-coverage beat) — a
+            // "clean" corpus must also satisfy declared-trait coverage now, not just
+            // the legacy checks.
+            Snippet {
+                slot: Slot::new(Band::Model, "adherence/_default"),
+                selector: Selector {
+                    model: ["adherence/_default".into()].into(),
+                    ..Default::default()
+                },
+                provenance: Provenance::Framework,
+                body: "ADHERENCE".into(),
+            },
+        ]);
         let sealed = SealSet::default();
         let problems = check_corpus(&corpus, &sealed);
         assert!(problems.is_empty(), "expected clean, got {:?}", problems);
@@ -454,6 +539,61 @@ mod tests {
             has_dispatch_worker,
             "expected marker resolve problem, got {problems:?}"
         );
+    }
+
+    // ── VT-1: declared-trait coverage finding (SL-191 PHASE-04) ─────────
+
+    #[test]
+    fn check_uncovered_declared_trait_is_flagged() {
+        // The real embedded pi/dispatch-worker def declares `traits: ["adherence/low"]`.
+        // Against an empty corpus, no Model-band snippet exists to cover it, so
+        // `traits_covered` must surface it as an uncovered-key finding — distinct from
+        // the (also-firing) legacy role-unresolvable finding, HARD FACT 2.
+        let problems = check_corpus(&[], &SealSet::default());
+        assert!(
+            problems.iter().any(|problem| {
+                problem.contains("pi/dispatch-worker")
+                    && problem.contains("declares uncovered trait(s)")
+                    && problem.contains("adherence/low")
+            }),
+            "expected uncovered-trait finding, got: {problems:?}"
+        );
+    }
+
+    // ── VT-2: declared→delivered band-filter predicate (SL-191 PHASE-04) ─
+
+    #[test]
+    fn delivered_band_finding_flags_model_less_filter_for_declared_traits() {
+        // Synthetic negative: a delivered band filter that drops Band::Model despite
+        // non-empty declared traits — the red-driving case `worker_context` itself can
+        // never produce (HARD FACT 1), so it must be constructed by hand.
+        let traits: BTreeSet<String> = ["adherence/low".to_string()].into();
+        let model_less = BandFilter::Only(BTreeSet::from([Band::Role]));
+        assert_eq!(
+            delivered_band_finding("x", &traits, &model_less),
+            Some(
+                "def x: declares traits {\"adherence/low\"} but delivered band filter \
+                 drops Band::Model — the bake would not inline the trait content"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn delivered_band_finding_is_clean_for_live_worker_context() {
+        // Live tripwire: proves `worker_context` actually delivers Band::Model for
+        // non-empty traits today — flips to `Some` (test goes red) if that ever
+        // regresses.
+        let traits: BTreeSet<String> = ["adherence/low".to_string()].into();
+        let bands = crate::hymns::worker_context(&traits).bands;
+        assert_eq!(delivered_band_finding("x", &traits, &bands), None);
+    }
+
+    #[test]
+    fn delivered_band_finding_is_clean_for_empty_traits() {
+        let traits: BTreeSet<String> = BTreeSet::new();
+        let model_less = BandFilter::Only(BTreeSet::from([Band::Role]));
+        assert_eq!(delivered_band_finding("x", &traits, &model_less), None);
     }
 
     // ── VT-5: explain ordering unit test ─────────────────────────────────

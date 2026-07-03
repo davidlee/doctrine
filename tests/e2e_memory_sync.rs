@@ -53,8 +53,11 @@ fn sync_populates_the_shipped_corpus_then_is_idempotent_and_retrievable() {
 
     let (ok, stdout) = run(repo.path(), &["memory", "sync", "-y", "-p", &path(&repo)]);
     assert!(ok, "in-repo sync must exit 0: {stdout}");
+    // Anchor the zero-new guard on the `": "` that precedes the count, so it reads
+    // the count position — a bare `"0 new,"` is a substring of any count ending in
+    // 0 (e.g. "30 new,"), a false positive as the corpus grows (SL-191 PHASE-06).
     assert!(
-        stdout.contains(" new, 0 changed") && !stdout.contains("0 new,"),
+        stdout.contains(" new, 0 changed") && !stdout.contains(": 0 new,"),
         "the populated embed must plan writes: {stdout}"
     );
     let shipped = repo.path().join(".doctrine/memory/shipped");

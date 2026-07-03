@@ -36,6 +36,20 @@ orchestrator funnel."
 
 ## The funnel (per batch)
 
+**Base-clean precondition (pre-spawn, NON-mutating).** Before capturing `B` /
+spawning any worker — and on `main` before you branch the coordination fork —
+assert the base is prove-clean:
+```
+doctrine check prove     # fmt-check + lint; asserts, never fixes
+```
+A RED base is a **BASE defect**, DISTINCT from any worker finding: it means the
+tree you are about to fork from is already unformatted or lint-red. Remediate it
+operator-side — a format-and-commit you own (or an isolated prep worktree) — and
+NEVER fold it into a worker delta, NEVER auto-fix it. A worker spawned off a dirty
+base would either inherit the red (and be halted at import for a defect it did not
+cause) or launder it. Run this exactly once per batch here on the hot path (the
+only other prove run is the post-import gate below — do not double-run).
+
 Capture `B = git rev-parse HEAD` pre-spawn, then capture the S1 regression
 baseline on the coord tree at `B`:
 ```
@@ -54,7 +68,12 @@ After workers return, in exact order:
 1. Precond — worktree/index clean, HEAD == B
 2. Delta check — net diff `B..S`, single non-merge commit, `S^ == B`
 3. R-5 belt — reject any `.doctrine/` or `.claude/` touch
-4. Import — apply surviving net-diffs onto `B`, non-committing
+4. Import — apply surviving net-diffs onto `B`, non-committing. The claude arm
+   then runs the **post-import reject-and-halt prove gate** in-process
+   (`doctrine check prove` on the post-import tree): an unformatted OR lint-red
+   delta HALTS the import (staged, NOT committed) and is reported — never
+   auto-fixed (ADR-012 sole-writer: land-or-reject, never rewrite). A red here is
+   a WORKER-delta defect, distinct from the pre-spawn BASE defect above.
 5. Verify — `doctrine check regression diff --base "$B"` (suite @ S, SAME
    normalised filter state as the capture). Exits non-zero on `new ∪ changed` (a
    slice regression regardless of which test binary/env it surfaces under) OR an

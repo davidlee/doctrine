@@ -19,6 +19,13 @@ the Agent payload cwd **is** the arming dir
 `base` file in that dir — never cwd HEAD. cwd is the *discriminator*, not the base
 source.
 
+**Base-clean beat (before `arm-spawn`).** Assert the base is prove-clean —
+`doctrine check prove` (NON-mutating fmt-check + lint) — before arming/spawning,
+and on `main` before you branch the fork. A RED base is a BASE defect (operator
+format-and-commit / prep worktree), NEVER folded into a worker delta, NEVER
+auto-fixed. This is the same pre-spawn beat the funnel documents; run it once per
+batch (the post-import prove gate is the only other prove run).
+
 **Before every spawn (or parallel batch):**
 1. `doctrine dispatch arm-spawn --base <B> [--slice <N>]` — writes
    `<coord>/.doctrine/state/dispatch/spawn/base = <B>` and prints the spawn dir's
@@ -95,6 +102,12 @@ The orchestrator imports that live tree directly. Five steps, in order:
    before the halt). This realizes the router funnel's arm-neutral **Import** beat on
    this arm (the `B..S` single-commit check reads vacuously — a worktree carries no
    commits). A belt/precond/scope violation exits **nonzero** → the funnel HALTS here.
+   After the apply, `import` also runs the **reject-and-halt prove gate** on the
+   post-import tree (`doctrine check prove`, in-process): an unformatted/lint-red
+   delta HALTS (staged, not committed), never auto-fixed. EX-4: the subprocess
+   (fork) arm shares the SAME pre-spawn base-clean beat (no separate beat); the
+   post-import prove gate ships on THIS (claude) arm this phase — fork-arm parity is
+   a deferred follow-up.
 5. **Reap — GATED on step 4 exit 0 (F-3).** ONLY after `import` succeeded (and the
    batch's commit + `record-boundary` have landed) reap the tree:
    ```
