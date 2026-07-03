@@ -5,10 +5,10 @@ id = 19
 slug = "cordage-golden-net-proves-determinism-but-not-value-correctness-no-independent-value-oracle"
 title = "cordage golden_net proves determinism but not value-correctness: no independent value oracle"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "done"
 created = "2026-06-10"
-updated = "2026-06-16"
+updated = "2026-07-03"
 tags = ["area:relations", "cordage", "correctness", "testing"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty

@@ -5,10 +5,10 @@ id = 3
 slug = "cordage-explain-foreign-node-id-returns-singleton-chains-rustdoc-says-empty-paths"
 title = "cordage explain() foreign node id returns singleton chains, rustdoc says empty paths"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "fixed"
 created = "2026-06-10"
-updated = "2026-06-16"
+updated = "2026-07-03"
 tags = ["area:relations", "cordage"]
 
 [relationships]                 # outbound-only (ADR-004); seeded empty
