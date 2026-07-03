@@ -219,12 +219,12 @@ transcript pointers):
   marketplace exists, retaining a **stale source** after a repo move or a changed
   `install.repo` slug. **Mitigation:** compare the *registered source* (from
   `marketplace list`, which prints `Source: Directory (/abs)` / the git slug)
-  against the intended source; on mismatch, refresh it. **Impl-time empirical
-  (for `/plan`):** determine the refresh verb — does `claude plugin marketplace
-  add <newsrc>` overwrite an existing name's source, or is `remove`+`add`
-  required (remove uninstalls plugins, plugin-marketplaces.md:988, so re-install
-  after)? `marketplace update` refreshes *content at the same path*, not a
-  relocation. Probe live before choosing.
+  against the intended source; on mismatch, refresh it. **Refresh verb (SETTLED,
+  RV-243 F-2 — probed live on CC 2.1.198):** `claude plugin marketplace add
+  <newsrc>` **overwrites** an existing name's source in place (exit 0) — refresh
+  is a single non-destructive `add`, no `remove`+`add`. `marketplace update` only
+  re-pulls *content at the same path*, not a relocation. See
+  `mem.fact.claude.marketplace-add-overwrites-source`.
 - **R5 — `--dev` abs-root not guaranteed at the seam (F-2).** The whole `--dev`
   axis and the R4 comparator rest on an *absolute* project root, but `root::find`
   returns an explicit `--path` **verbatim** (root.rs:23) — only the CWD-walk
@@ -244,17 +244,17 @@ transcript pointers):
   **Mitigation:** exact parsed match on the qualified key (`doctrine@doctrine`
   for the plugin; marketplace name `doctrine`); test fixtures carrying the
   sibling lines so a substring cannot false-satisfy.
-- **R7 — Deferred refresh verb × swallowed shell-out failures (F-5).** PHASE-03
-  defers the refresh verb (add-overwrites vs `remove`+`add`) to a live probe,
-  while the forward-step policy swallows failures into `skipped_*` and returns
-  `Ok` overall (install.rs:315, 430-456). If the destructive `remove`+`add`
-  branch is required, a failure between `remove` and re-`add`/re-install leaves
-  the marketplace/plugin **gone** while the installer reports success. The
-  deferral itself is sound (documented expected answer); the failure interaction
-  is not. **Mitigation:** PHASE-03 exit criteria must commit to **both** branches
-  and, on the destructive branch, **abort** the Claude forward steps on a
-  mid-refresh failure with a clear remediation message — never swallow into
-  `skipped_*`.
+- **R7 — Refresh-step failure must not be swallowed (F-5).** The forward-step
+  policy swallows shell-out failures into `skipped_*` and returns `Ok` overall
+  (install.rs:315, 430-456). **Resolved (RV-243 F-2):** the R4 probe settled the
+  refresh verb to a single non-destructive `add` (add overwrites in place, CC
+  2.1.198) — there is **no** `remove`+`add` destructive window to abort. The
+  surviving F-5 protection is `refresh_failure_is_fatal` ⇒ a failed Refresh
+  returns `Err` (aborts forward steps), never swallowed into `skipped_*` (a
+  claimed refresh leaving a stale/foreign source live is a silent-wrong success).
+  Add-failure keeps the existing `skipped_*` reminder (fresh install, nothing
+  lost). Plan EX-4's destructive-branch abort clause is vacuously satisfied
+  (branch not taken; immutable criterion — not edited).
 
 ## 9. Quality Engineering & Validation
 

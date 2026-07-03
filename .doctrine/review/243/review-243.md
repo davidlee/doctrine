@@ -94,3 +94,26 @@ selector — expected registry noise, not scope creep. No finding.
 ### Governance/spec (REV)
 - None. No ADR, policy, standard, or spec (SPEC-009, POL-002, STD-001) diverged —
   all held. No REV required.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §8 R4** (RV-243 F-2): replaced the "Impl-time empirical / probe
+  live before choosing" open question with the settled refresh verb — a single
+  non-destructive `marketplace add` (overwrites in place, CC 2.1.198), citing
+  `mem.fact.claude.marketplace-add-overwrites-source`.
+- **design.md §8 R7** (RV-243 F-2): rewrote the deferred-verb × swallowed-failure
+  mitigation — the destructive `remove`+`add` branch does not exist on this CC
+  version; the surviving F-5 protection is `refresh_failure_is_fatal` (failed
+  Refresh ⇒ `Err`, never swallowed into `skipped_*`). Noted plan EX-4's
+  destructive-abort clause is vacuously satisfied (immutable criterion — not edited).
+
+### REVs completed
+- None. Reconciliation Brief carried no governance/spec items.
+
+### Withdrawn / tolerated
+- RV-243 F-1: `tolerated` — 3× VH-1 + OQ-4 live-acceptance legs deferred (no code
+  dep, mechanical sub-legs confirmed). Harvested to CHR-037. Rationale in finding
+  disposition + Synthesis tradeoff (1).
+
+Reconcile pass complete — handoff to /close.
