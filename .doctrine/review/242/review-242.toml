@@ -1,0 +1,46 @@
+id    = 242
+slug  = "reconciliation-review-of-sl-191"
+title = "reconciliation review of SL-191"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-191"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Selector registry diverges from delivered surface: 11 undeclared / 2 undelivered"
+detail = """
+`slice conformance 191` reports 11 undeclared and 2 undelivered paths. Expected: design-target selectors mirror the delivered surface. Observed drift, all genuine (no scope creep):
+
+UNDECLARED (touched, no selector):
+- P05 prove-cadence + import gate: justfile (added fmt-check + prove recipes), src/commands/check.rs, src/verify.rs, src/corpus.rs, src/worktree/import.rs
+- coupled test coverage: tests/e2e_worktree_import.rs, tests/e2e_memory_sync.rs, tests/e2e_prompt_resolve_golden.rs
+- P06 hymn-cascade memory content (symlink + target): memory/mem.concept.doctrine.hymn-cascade, memory/mem_88193c2859d72f043ef83a97a5952a96/{memory.md,memory.toml}
+
+UNDELIVERED (selector matched nothing):
+- src/dispatch.rs — declared design-target but untouched in the slice range (5b71b7ec..999e80b0); the import-gate work landed in src/worktree/import.rs instead. Stale/aspirational selector.
+- memory/mem.concept.doctrine.hymn-cascade/** — glob mismatch: the P06 memory is a SYMLINK file, not a directory tree, so `/**` matches nothing (selector doctor: unmatched). The content is present (the two undeclared cells above) but declared with the wrong glob.
+
+No code defect — all delivered work is correct and `check gate` is green. The registry, not the code, is out of sync."""
+disposition = "verified"
+response = "Observation confirmed — the drift is real and entirely benign (delivered work correct, gate green). Remediation delegated to /reconcile via the Reconciliation Brief (per-slice selector-registry surface — slice-191.toml is a reconcile direct-edit surface via `slice selector` verbs, mirrored in design.md §6). Planned ops: rm the stale `src/dispatch.rs` and the mismatched `memory/mem.concept.doctrine.hymn-cascade/**`; add the delivered P05 code surface (src/worktree/import.rs, src/commands/check.rs, src/verify.rs, src/corpus.rs, justfile) and the P06 memory (memory/mem.concept.doctrine.hymn-cascade + memory/mem_88193c2859d72f043ef83a97a5952a96/**). Coupled test files are acceptable coupling — reconcile's judgment whether to declare them. No code change."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "PHASE-05 EX-4 subprocess/fork-arm base-clean parity deferred, not implemented"
+detail = """PHASE-05 EX-4: "Subprocess-arm base-clean coverage decided and recorded (its own beat vs shared funnel)." Expected: an explicit, recorded decision on whether the subprocess/fork dispatch arm gets its own base-clean beat or rides the shared funnel. Observed: the non-mutating prove cadence + import gate (EX-1..3) were delivered for the pi/shared-funnel arm; parity for the subprocess/fork arm was deferred rather than implemented. The decision is "defer to follow-up" — which satisfies "decided" but the "recorded" half needs a durable home (backlog item), not just conversation. Not a blocker: the shipped arm's gate is correct and green; the fork arm is a separate delivery path with no regression."""
+disposition = "follow-up"
+response = """Conscious deferral, not a drop. The shipped pi/shared-funnel arm's non-mutating base-clean gate (EX-1..3) is delivered, tested, and green. Subprocess/fork-arm parity is a separate delivery path with no regression on the shipped arm. Captured as a backlog item at harvest (fork-arm import-gate / base-clean parity) — that is the durable "recorded" half of EX-4. Owned future work; no reconciliation surface (no spec/governance/design change needed)."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

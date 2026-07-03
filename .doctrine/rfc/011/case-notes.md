@@ -646,3 +646,44 @@ integration-binary regressions; only the coord verify beat (full suite) sees
 them. Worker-contract note: the worker SHOULD run the full `cargo test`, not
 `--bin doctrine`, but the funnel does not depend on it doing so.
 [slice; sl-197-scope] Creating SL-197 from an IMP backlog item. The `link` command's error message lists legal labels as ["references", "references", "references", ...] with duplicates — the three `references` rows differ by role (implements/originates_from/concerns) but the error message doesn't differentiate them, forcing a second guess-then-error cycle to discover --role is required. Mild token waste.
+
+[dispatch/close (orchestrator-author); SL-191-conclude-2026-07-04]
+prepare-review bailed "conformance registry incomplete: recorded row for
+PHASE-01..07, which is not a completed phase". Root cause: phase-completion
+sheets are per-worktree runtime state, and `registry_completeness` reads the
+COMPLETED-set from `git::primary_worktree(root)` (state.rs:906 / dispatch.rs:1901),
+while an orchestrator-AUTHOR drives `slice phase --status completed` from the COORD
+worktree cwd. So all 7 completions landed on coord's sheets; primary's stayed
+stale (01 in_progress, 02–07 planned) → every recorded boundary row read as
+"Extra" (completed-set empty). record-boundary DOES write primary (source_deltas
+rooted on primary), so the boundaries ledger was fine — only the completion flags
+diverged. Fix was a manual replay: `slice phase 191 PHASE-NN --status completed -p
+<primary>` ×7. Token/complexity cost: a full mechanism dig (state.rs completeness
+reader + dispatch.rs gate) to discover the primary-vs-coord asymmetry, then a
+7-command reconciliation. For a WORKER-driven dispatch this never bites (orchestrator
+flips completion from root); it is specific to orchestrator-AUTHOR phases run with
+cwd in the coord tree. Candidate remedies: (a) `slice phase` completion could
+also stamp the primary registry the way record-boundary does; (b) prepare-review
+could read the completed-set from the dispatch tip like it reads the ledger; (c)
+document the orchestrator-author "flip completion with -p <primary>" step.
+
+[phase-plan; SL-195-P02-a]
+Live-probed `claude plugin list` + `marketplace list` output formats during
+phase-planning because the F-4 exact-match parser design needs the token shape,
+and notes.md captured `marketplace list` (`Source: Directory (/abs)`) but NOT
+`plugin list`. One extra live shell-out round-trip. Minor; ground truth now in
+the phase sheet. Root cause: PHASE-01 notes recorded the marketplace-list format
+(it was the R4 lever) but the plugin-list format was only relevant to PHASE-02's
+F-4 fix, so it wasn't carried forward. Handover reading-list pointed at the seam
+(install.rs:527-533) but not the runtime format.
+
+[inquisition; SL-196-ext-2026-07-04]
+External adversarial review (codex mcp) is high-signal but every finding needed
+independent line-number re-verification before integration — codex cites precise
+`file:line` that mostly held, but the trust model (CLAUDE.md: subagents/reviewers
+hallucinate params) mandates re-reading each site. Cost: ~8 targeted Reads to
+ground-truth 4 findings. Not incidental complexity — inherent to external review —
+but the token floor of an inquisition is "review output + full re-verification",
+not "review output" alone. Cheap win observed: the design's own precise `:line`
+citations (RelationEdge:735, hydrate:278) made verification O(1) lookups vs
+open-ended grep — dense line-citation in a design pays back at inquisition time.

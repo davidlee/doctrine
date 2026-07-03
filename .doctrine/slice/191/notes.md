@@ -231,3 +231,44 @@ Bootstrap paradox: SL-191's contract protects *future* dispatches, not this one.
 This drive's only guardrails are model tier + tight per-phase-plans. That's why
 03 gets opus + worktree isolation despite being "just a parser" — the contract
 that would catch a loose worker doesn't ship until 03 lands.
+
+## Audit harvest (RV-242, 2026-07-04) — closure + durable findings
+
+All 7 phases green: `check gate` clean, clippy zero-warning, `verify-vt 191` all
+pass, both live oracles correct (`prompt explain --role worker` = single FW
+role/worker winner + additive User project habit, no ISS-206 doubling; `--model
+adherence/low` composes the FW model band), VH-1 signed off. Audit = RV-242
+(reconciliation facet), two minor findings, both terminal, no blockers.
+
+**F-1 (verified → reconcile): selector-registry drift.** `slice conformance 191` =
+11 undeclared / 2 undelivered — all benign (delivered work correct). Undelivered
+`src/dispatch.rs` is the stale selector this notes file already flagged (line ~112:
+import belt lives in `src/worktree/import.rs`); undelivered `…hymn-cascade/**` is a
+glob-vs-symlink mismatch. Reconcile owns the fix (`slice selector rm`/`add` +
+design.md §6 mirror) — see RV-242 `## Reconciliation Brief`. No code change.
+
+**F-2 (follow-up → backlog): PHASE-05 EX-4 fork-arm base-clean parity deferred.**
+The pi/shared-funnel arm's non-mutating prove cadence + import gate shipped and are
+green; subprocess/fork-arm parity is conscious future work. Backlog item minted at
+harvest (the "recorded" half of EX-4).
+
+**Durable design insight — band-filter asymmetry (→ memory).** The agent-def bake
+(`resolve_worker_role_body` → `worker_context` = `BandFilter::Only([Role,Model])`)
+EXCLUDES the `project` band; the session cascade (`prompt resolve/explain`,
+`BandFilter::All`) INCLUDES it. The `project`-band home for the client habit
+(P07's `doctrine-rust-conventions`) is correct *only because* EX-3/VA-1 verify the
+All-bands cascade — a project habit reaches a worker via SessionStart, not the
+narrow baked contract. Recorded as `mem.concept.doctrine.worker-resolve-band-filter`.
+
+**Dispatch-tooling gotcha hit at close (→ backlog + RFC-011 case-note).** Phase-
+completion sheets are per-worktree runtime state; `registry_completeness` reads the
+completed-set from `git::primary_worktree` (state.rs:906 / dispatch.rs:1901) while
+an orchestrator-AUTHOR flips `slice phase --status completed` from the COORD cwd →
+all completions land on coord, primary stays stale → `prepare-review` bails
+("recorded row … not a completed phase"). record-boundary DOES write primary, so
+only the completion flags diverge. Fix was `slice phase … --status completed -p
+<primary>` ×7. Bites orchestrator-author dispatch only, never worker-driven.
+
+**Standing risks accepted:** (1) overlay reconciliation is this-repo-only; the
+projection default re-writes the self-`replaces` starter on `doctrine install`
+(ISS-210, out of scope by design). (2) fork-arm base-clean parity deferred (F-2).

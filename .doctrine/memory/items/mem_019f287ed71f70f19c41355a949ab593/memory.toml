@@ -1,0 +1,42 @@
+memory_uid = "mem_019f287ed71f70f19c41355a949ab593"
+memory_key = "mem.concept.doctrine.worker-resolve-band-filter"
+schema_version = 1
+memory_type = "concept"
+status = "active"
+title = "Worker resolve band-filter asymmetry: agent-def bake excludes project band, session cascade includes it"
+summary = "Two worker hymn resolutions differ by BandFilter: the agent-def bake is Only([Role,Model]) and drops the project band; the session cascade is All and keeps it."
+created = "2026-07-03"
+updated = "2026-07-03"
+
+[scope]
+paths = ["src/hymns.rs", "src/install.rs", "src/commands/prompt.rs"]
+globs = []
+commands = []
+tags = ["hymns", "dispatch", "cascade", "worker"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b6b8c1458c71cecf4b0792386bd52743e9ea0998"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b932dc49a11a91ce41b35e35f0caf868992565181566ade440d2b4e609f5055c"
+base_commit = "12cd26e174b1aa8aabed34227c7d797456b79f26"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
