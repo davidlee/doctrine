@@ -268,6 +268,36 @@ constants), SL-172 (β-skew cost model), render-source-of-truth discipline
 - **R3 — ε defaults are guesses** until the first live run. The probe itself is
   the calibration instrument (D5).
 
+## Adversarial review (internal pass — integrated)
+
+Hostile self-review against code; all findings resolved into the design above:
+
+- **F1 — undeclared dispatch layer.** Verbs route via `crate::priority::run_*`
+  (`priority/mod.rs`) *and* `cli.rs` match arms. Added `mod.rs::run_findings` to
+  the architecture + design-target selectors.
+- **F2 — order basis was hand-waved.** `next`'s linear order is computed by pure
+  fns *private in `surface.rs`* (`frontier_order` /
+  `surviving_seq_predecessors`), not carried on the graph. Displacement/Plateau/
+  Instability need linear orders. Resolved by extracting those primitives to a
+  pure `order.rs` reused by both `surface::next` and the detectors — no
+  re-implementation, `detect` stays graph-only.
+- **F3 — order basis differs per finding.** Pinned: Displacement =
+  survey-order vs pure-score-order; Plateau = next order; Instability/Resequencing
+  = frontier order at β=0/β=1. (Was ambiguously "score_rank vs rank"; the
+  topological `rank` layer is coarse and wrong for a linear position.)
+- **F4 — OrderInstability O(N²) flood.** Bounded to adjacent transpositions.
+- **F5 — `blocking` includes terminal successors.** Fork/GatingFanOut filter arms
+  to non-terminal.
+- **F6 — Fork/GatingFanOut double-report.** Fork excludes gating-class hubs.
+- **F7 — accessors named.** `channels::blocking`/`blocked_by`/`dep_cycles`/
+  `evicted_seq_edges`/`class_of` all exist and are used verbatim (no new plumbing;
+  cordage `Graph` has no `edge_count` — these iterate overlay edges per node).
+- **F8 — test-purity wording.** Detector fns are pure; their tests may seed a temp
+  corpus + `build` (the established idiom).
+
+Residual (accepted, tracked as risks): gating/β-family may ship starved (R1);
+ISS-003 adjacency (R2); ε defaults are guesses until first live run (R3).
+
 ## Follow-ups (out of scope)
 
 - Rendering-policy follow-on (arc-strip linear view, include-by-finding graph

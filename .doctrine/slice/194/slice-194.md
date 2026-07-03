@@ -56,20 +56,28 @@ anomalies, plateau exposure.
 
 ## Affected surface
 
-- `src/priority/` — new finding module (pure), consuming `graph.rs` +
-  `config.rs`; likely new view types in `view.rs`; renderer in `render.rs`.
-- `src/priority/surface.rs` — the impure shell that builds/perturbs and fills
-  finding rows.
-- CLI wiring — `src/commands/cli.rs` (member list) + command dispatch, per the
-  surface decision (`survey --interesting` or `findings`).
+(Finalised in `design.md` code-impact; recorded as `design-target` selectors.)
+
+- `src/priority/findings.rs` — NEW pure engine module: `Finding` enum + `impl` +
+  detectors + thresholds.
+- `src/priority/order.rs` — NEW pure engine module: `frontier_order` +
+  `surviving_seq_predecessors` extracted from `surface.rs` (reused by `next` +
+  detectors).
+- `src/priority/graph.rs` — extract `build_from_with_cfg` (the β rebuild seam).
+- `src/priority/surface.rs` — impure shell `fn findings(root)` + `beta_endpoints`;
+  `next` reuses `order.rs`.
+- `src/priority/render.rs` — `findings_human` + `findings_json`.
+- `src/priority/mod.rs` — `run_findings` dispatch entry.
+- `src/commands/cli.rs` — `findings` verb (match arm + members list).
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ-1 (surface)** — `survey --interesting` flag vs `findings` verb. Ties to
-  RFC-007 OQ-3 (how much decomposition before noise).
-- **OQ-2 (β semantics)** — "β" is a scoring-coefficient / estimate-config
-  perturbation, not a per-estimate interval (estimates are point values). Pin
-  which config knob β maps to in `/design`.
+- **OQ-1 (surface) — RESOLVED:** new `findings` verb (design D2). Findings are
+  aggregate/relational, not per-node rows; fold-into-`survey` is a follow-on.
+- **OQ-2 (β semantics) — RESOLVED:** β ≡ `cfg.estimate.skew` (SL-172);
+  `est_cost = floor_eps(lower + skew·(upper−lower))`. Estimates DO carry an
+  interval (`lower`/`upper`) — the earlier point-value assumption was wrong.
+  Sweep = endpoints {0,1} over one scan (design D4).
 - **Gotcha** — cordage `Graph` has no public `edge_count`/`node_count`; fork/join
   degree detection iterates `out_edges` per overlay (mem
   `fact.cordage.graph-no-public-edge-count`).
