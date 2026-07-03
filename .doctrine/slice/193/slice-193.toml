@@ -1,7 +1,7 @@
 id = 193
 slug = "exposed-slot-self-replaces"
 title = "Exposed-slot self-replaces projection"
-status = "audit"
+status = "reconcile"
 created = "2026-07-03"
 updated = "2026-07-03"
 tags = []

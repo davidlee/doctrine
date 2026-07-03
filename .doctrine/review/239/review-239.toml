@@ -1,0 +1,57 @@
+id    = 239
+slug  = "sl-193-reconciliation-exposed-slot-self-replaces-projection-conformance-behaviour-preservation"
+title = "SL-193 reconciliation — exposed-slot self-replaces projection: conformance + behaviour-preservation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-193"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design.md claims `prompt explain` demonstrates single-emit/suppression; it prints the raw ranked set (no suppression)"
+detail = """
+Expected (design.md): three loci assert `prompt explain` demonstrates the fix — §Target behaviour ("Verified corpus-wide: `prompt explain` shows no exposed slot doubling", ~L92), §Verification/E2E ("`prompt explain` shows framework role/worker suppressed, not rank-ordered-but-present", ~L164-167), §Corpus check ("in-repo, `prompt explain` across a full context shows no exposed slot double-emitting", ~L180-181). Same wording rides plan.toml PHASE-02 EX-2.
+
+Observed (empirical, built binary on review/193): `prompt explain --role worker` over a projected corpus prints BOTH `role/worker` prov=Framework rank=1 AND prov=User rank=2 ★ WINNER — the raw ranked active set. The `replaces` suppression graph is NOT applied by explain; the framework twin is present, ordering-ranked only. Suppression is a resolve-time operation: `prompt resolve --role worker` emits the user body exactly once. The implementation correctly verifies single-emit over `prompt resolve` (e2e VT-4 `exposed_slots_single_emit_all_five`) and the implementer left an in-test comment noting explain "prints the raw active set, ranked-but-present". So the CODE is right; the DESIGN PROSE names the wrong verb. `prompt explain` cannot demonstrate suppression — it is a pre-suppression diagnostic."""
+disposition = "design-wrong"
+response = "Observation confirmed — the code is correct (verifies over `prompt resolve`), the design PROSE names the wrong verb. Per-slice design.md defect, reconcile's DIRECT-EDIT surface (not governance/REV). Remediation delegated to /reconcile via the Reconciliation Brief: rewrite the three `prompt explain` loci in design.md (§Target behaviour, §Verification/E2E, §Corpus check) to `prompt resolve` — the verb that applies the `replaces` suppression graph — and reframe `prompt explain` as a pre-suppression diagnostic (raw ranked set). The identical wording in plan.toml PHASE-02 EX-2 is OFF-SURFACE (immutable-append; not a reconcile direct-edit target) — flagged as a design/plan note, not edited. Finding terminal-verified; the observation stands, remediation is reconcile's."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "`slice conformance` reports `tests/e2e_prompt_resolve_golden.rs` undeclared — transient: selector lives on the impl bundle, not yet on edge"
+detail = """
+Expected: conformance clean (all recorded source-deltas covered by a `design-target` selector). Observed: `slice conformance SL-193` (run from edge/working tree) reports 1 undeclared — `tests/e2e_prompt_resolve_golden.rs` — 0 undelivered, 7 conformant.
+
+Root cause: the selector declaring that file (`[[selector]] selector="tests/e2e_prompt_resolve_golden.rs"`, with note citing PHASE-02 VT-3/VT-4) exists on the `review/193` impl bundle but NOT on `edge` — `git show edge:.doctrine/slice/193/slice-193.toml` has no such selector; the bundle adds it. Same for the F5 design amendment (`git show edge:...design.md` lacks "F5 — Projection ordering"). Both authored corrections were entangled into the impl bundle by the mid-drive base-drift re-forks (RFC-011 case-notes, friction #2). On the actual LANDING surface (review/193) the selector is present ⇒ conformance would be clean. Not a real drift; resolves when the bundle lands. Load-bearing action for /close: land the bundle's AUTHORED files (design.md F5, slice-193.toml selector) onto edge/main alongside the code — not the code alone — or edge's design/selector stay stale."""
+disposition = "aligned"
+response = "Not a real drift. The `undeclared` is an artifact of running `slice conformance` against `edge`, which lags the impl bundle. On the LANDING surface (review/193) the selector for `tests/e2e_prompt_resolve_golden.rs` is present and correctly authored (with a note citing PHASE-02 VT-3/VT-4) ⇒ conformance is clean there. No selector-registry change is owed — the selector already exists on the bundle. Carry-forward to /close (NOT reconcile): the bundle's AUTHORED files (design.md F5 amendment + slice-193.toml selector) must land on edge/main together with the code, or edge's design/selector remain stale. Recorded so /close lands the full bundle, not the code alone."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "D4 behaviour-preservation + F1/F5 gates confirmed — engine untouched, suites green unchanged"
+detail = """
+Positive confirmation on the ledger (VA-1/VA-2, plan PHASE-02 EX-4). Verified independently on the review/193 worktree:
+- D4/VA-2: `git diff main...review/193 -- src/hymns.rs` = a single hunk entirely inside `mod tests` (2 goldens); production engine unchanged. REV-019's "engine + loader untouched" thesis holds.
+- Behaviour-preservation: full bin suite 2993 pass / 0 fail; e2e_prompt suite 9 pass / 0 fail — no existing golden edited to accommodate the slice.
+- 11/11 VT shape gate green (7 project_starters units + 2 expose goldens + 2 e2e).
+- F1 gate: both `#[expect(dead_code)]` attrs removed (fn + `HymnsSection.expose` field); clippy `--bin doctrine` clean under `warnings = "deny"`; zero dead_code.
+- F5 idempotence: forward-step 4 is placed EARLY (before the step-3 `install_agents_for` render loop), documented in-code and captured in design.md's F5 adversarial-review entry (present on the bundle). Placement preserves single-pass install idempotence.
+- D3/STD-001: sidecar body single-sourced off `slot.path()` — no magic string. POL-002: sidecar is doctrine-owned mechanism, host-agnostic.
+No remediation required."""
+disposition = "aligned"
+response = "Confirmed, no remediation. D4 engine-untouched holds (hymns.rs diff is test-only), behaviour-preservation suites green unchanged (2993+9 pass), 11/11 VT shape gate, F1 compile gate green (both dead_code expects removed, clippy clean), F5 early-placement preserves single-pass idempotence, D3/STD-001 no magic string, POL-002 host-agnostic. REV-019's projector-only thesis is validated in implementation."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
