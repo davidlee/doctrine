@@ -64,6 +64,7 @@
           sccache
 
           graphviz
+          doctrine
         ];
 
         jailEnvOptions = with jailLib.combinators; [
