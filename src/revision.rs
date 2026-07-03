@@ -828,7 +828,20 @@ pub(crate) fn run_show(
     let doc = read_revision(&rev_root, id)?;
     let body = read_rationale(&rev_root, id)?;
     let out = match format {
-        Format::Table => format_show(&doc, &body),
+        Format::Table => {
+            let cfg = crate::dtoml::load_doctrine_toml(&root)?;
+            let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+            let value_unit = crate::value::resolve_unit(&cfg.value);
+            let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            format_show(
+                &doc,
+                &body,
+                &estimation_unit,
+                &value_unit,
+                lower_pct,
+                upper_pct,
+            )
+        }
         Format::Json => show_json(&doc, &body)?,
     };
     write!(io::stdout(), "{out}")?;
@@ -837,7 +850,14 @@ pub(crate) fn run_show(
 
 /// Render the `Table` show: identity header, the status + approval, then the
 /// rationale body. House style — `Vec<String>` joined by `concat`.
-fn format_show(doc: &RevDoc, body: &str) -> String {
+fn format_show(
+    doc: &RevDoc,
+    body: &str,
+    estimation_unit: &str,
+    value_unit: &str,
+    lower_pct: f64,
+    upper_pct: f64,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
     parts.push(format!(
@@ -848,13 +868,18 @@ fn format_show(doc: &RevDoc, body: &str) -> String {
     if let Some(ref est) = doc.estimate {
         parts.push(format!(
             "{}\n",
-            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+            crate::estimate::display::format_estimate_confidence(
+                est,
+                lower_pct,
+                upper_pct,
+                estimation_unit,
+            )
         ));
     }
     if let Some(ref val) = doc.value {
         parts.push(format!(
             "{}\n",
-            crate::value::format_value_normal(val, "points")
+            crate::value::format_value_normal(val, value_unit)
         ));
     }
     parts.push(format!("\n{body}"));

@@ -602,7 +602,21 @@ fn load_spec(
         resolved.push((member, req));
     }
     let interactions = crate::spec::read_interactions(&dir.join("interactions.toml"))?;
-    let body = crate::spec::render(&spec, &prose_body, &resolved, &req_bodies, &interactions);
+    let cfg = crate::dtoml::load_doctrine_toml(root)?;
+    let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+    let value_unit = crate::value::resolve_unit(&cfg.value);
+    let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+    let body = crate::spec::render(
+        &spec,
+        &prose_body,
+        &resolved,
+        &req_bodies,
+        &interactions,
+        &estimation_unit,
+        &value_unit,
+        lower_pct,
+        upper_pct,
+    );
 
     let head = AuthoredHead::parse(&spec_text);
     let base = EntityRecord {

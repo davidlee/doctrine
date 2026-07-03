@@ -325,7 +325,17 @@ pub(crate) fn relation_edges(
 ///
 /// SL-095 PHASE-02: `supersedes` is now passed in like `related` (read from
 /// `[[relation]]`), not a field on `Doc`.
-fn format_show(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> String {
+#[expect(clippy::too_many_arguments, reason = "display config adds 4 params")]
+fn format_show(
+    g: &GovKind,
+    doc: &Doc,
+    related: &[String],
+    body: &str,
+    estimation_unit: &str,
+    value_unit: &str,
+    lower_pct: f64,
+    upper_pct: f64,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
         "{} — {}\n",
@@ -340,13 +350,18 @@ fn format_show(g: &GovKind, doc: &Doc, related: &[String], body: &str) -> String
     if let Some(ref est) = doc.estimate {
         parts.push(format!(
             "{}\n",
-            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+            crate::estimate::display::format_estimate_confidence(
+                est,
+                lower_pct,
+                upper_pct,
+                estimation_unit,
+            )
         ));
     }
     if let Some(ref val) = doc.value {
         parts.push(format!(
             "{}\n",
-            crate::value::format_value_normal(val, "points")
+            crate::value::format_value_normal(val, value_unit)
         ));
     }
 
@@ -527,7 +542,22 @@ pub(crate) fn run_show(
         .collect();
 
     let out = match format {
-        Format::Table => format_show(g, &doc, &related, &body),
+        Format::Table => {
+            let cfg = crate::dtoml::load_doctrine_toml(&root)?;
+            let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+            let value_unit = crate::value::resolve_unit(&cfg.value);
+            let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            format_show(
+                g,
+                &doc,
+                &related,
+                &body,
+                &estimation_unit,
+                &value_unit,
+                lower_pct,
+                upper_pct,
+            )
+        }
         Format::Json => show_json(g, &doc, &related, &body)?,
     };
     write!(io::stdout(), "{out}")?;
@@ -1138,7 +1168,16 @@ mod tests {
         };
         // related is read from [[relation]] rows; supersedes stays typed (ADR-010).
         let related = vec!["ADR-004".to_string()];
-        let out = format_show(&ADR_KIND, &doc, &related, "# ADR-007: Use Rust\n\nbody.\n");
+        let out = format_show(
+            &ADR_KIND,
+            &doc,
+            &related,
+            "# ADR-007: Use Rust\n\nbody.\n",
+            "points",
+            "points",
+            0.0,
+            1.0,
+        );
         assert!(out.contains("ADR-007 — Use Rust"), "identity: {out}");
         assert!(out.contains("use-rust · accepted"), "flat fields: {out}");
         assert!(out.contains("created 2026-06-01 · updated 2026-06-08"));
@@ -1149,6 +1188,41 @@ mod tests {
             out.contains("# ADR-007: Use Rust"),
             "prose body appended: {out}"
         );
+    }
+
+    #[test]
+    fn format_show_renders_estimate_and_value_when_present() {
+        let doc = Doc {
+            id: 8,
+            slug: "use-rust".into(),
+            title: "Use Rust".into(),
+            status: "accepted".into(),
+            created: "2026-01-01".into(),
+            updated: "2026-01-02".into(),
+            tags: vec![],
+            relationships: Relationships::default(),
+            estimate: Some(crate::estimate::EstimateFacet {
+                lower: 3.0,
+                upper: 8.0,
+            }),
+            value: Some(crate::value::ValueFacet { value: 42.0 }),
+        };
+        let related: Vec<String> = vec![];
+        let out = format_show(
+            &ADR_KIND,
+            &doc,
+            &related,
+            "# Body\n",
+            "espresso_shots",
+            "magic_beans",
+            0.1,
+            0.9,
+        );
+        assert!(
+            out.contains("estimate: 3.5–7.5 espresso_shots (80% confidence)"),
+            "estimate row: {out}"
+        );
+        assert!(out.contains("value: 42.0 magic_beans"), "value row: {out}");
     }
 
     #[test]

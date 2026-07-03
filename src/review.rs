@@ -1554,7 +1554,20 @@ pub(crate) fn run_show(
     let body = read_brief(&review_root, id)?;
     let (status, awaiting) = doc.derived();
     let formatted = match format {
-        Format::Table => format_show(&doc, &body),
+        Format::Table => {
+            let cfg = crate::dtoml::load_doctrine_toml(&root)?;
+            let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+            let value_unit = crate::value::resolve_unit(&cfg.value);
+            let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            format_show(
+                &doc,
+                &body,
+                &estimation_unit,
+                &value_unit,
+                lower_pct,
+                upper_pct,
+            )
+        }
         Format::Json => show_json(&doc, &body)?,
     };
     let canonical = canonical_id(id);
@@ -1600,7 +1613,14 @@ fn read_brief(review_root: &Path, id: u32) -> anyhow::Result<String> {
 /// Render the `Table` show: identity header, the derived status + await, the
 /// `reviews` edge, then the brief body. House style — `Vec<String>` joined by
 /// `concat` (avoids the `push_str(&format!)` lint).
-fn format_show(doc: &ReviewDoc, body: &str) -> String {
+fn format_show(
+    doc: &ReviewDoc,
+    body: &str,
+    estimation_unit: &str,
+    value_unit: &str,
+    lower_pct: f64,
+    upper_pct: f64,
+) -> String {
     let (status, awaited) = doc.derived();
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
@@ -1627,13 +1647,18 @@ fn format_show(doc: &ReviewDoc, body: &str) -> String {
     if let Some(ref est) = doc.estimate {
         parts.push(format!(
             "{}\n",
-            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+            crate::estimate::display::format_estimate_confidence(
+                est,
+                lower_pct,
+                upper_pct,
+                estimation_unit,
+            )
         ));
     }
     if let Some(ref val) = doc.value {
         parts.push(format!(
             "{}\n",
-            crate::value::format_value_normal(val, "points")
+            crate::value::format_value_normal(val, value_unit)
         ));
     }
     parts.push(format!("\n{body}"));
@@ -3146,7 +3171,7 @@ mod tests {
             estimate: None,
             value: None,
         };
-        let out = format_show(&doc, "## Brief\n");
+        let out = format_show(&doc, "## Brief\n", "points", "points", 0.0, 1.0);
         assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
         // empty ⇒ Done, await=None.
         assert!(out.contains("done · await=none"), "{out}");

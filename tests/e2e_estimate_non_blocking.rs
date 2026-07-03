@@ -85,6 +85,13 @@ const ALLOWLIST: &[&str] = &[
     "review.rs",
     "revision.rs",
     "spec.rs",
+    // IMP-183: config loading for estimate/value display units in show/render
+    // paths — these files now call resolve_unit / resolve_confidence.
+    "lazyspec.rs",
+    "retrieve.rs",
+    // IMP-183 extended: backlog now surfaces estimate/value (RawBacklogToml +
+    // BacklogItem fields + format_metadata rendering).
+    "backlog.rs",
 ];
 
 fn src_dir() -> PathBuf {

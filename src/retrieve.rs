@@ -1047,7 +1047,21 @@ pub(crate) fn retrieve_reference(
 
     // 7. Security-framed render
     let nonce = uuid::Uuid::new_v4().simple().to_string();
-    let rendered = crate::memory::render_show(memory, &body, &nonce, Some(st.label()), &[]);
+    let cfg = crate::dtoml::load_doctrine_toml(root)?;
+    let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+    let value_unit = crate::value::resolve_unit(&cfg.value);
+    let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+    let rendered = crate::memory::render_show(
+        memory,
+        &body,
+        &nonce,
+        Some(st.label()),
+        &[],
+        &estimation_unit,
+        &value_unit,
+        lower_pct,
+        upper_pct,
+    );
     write!(writer, "{rendered}")?;
     Ok(())
 }
@@ -1211,6 +1225,11 @@ pub(crate) fn run_retrieve(
     let visible: Vec<&Candidate<'_>> = eligible.iter().skip(offset).take(limit).copied().collect();
     let shown = visible.len();
     let mut parts: Vec<String> = Vec::new();
+    // Resolve display units once — shared across all rendered memories.
+    let cfg = crate::dtoml::load_doctrine_toml(&root)?;
+    let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+    let value_unit = crate::value::resolve_unit(&cfg.value);
+    let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
     match format {
         crate::listing::Format::Table => {
             for c in &visible {
@@ -1224,6 +1243,10 @@ pub(crate) fn run_retrieve(
                     &nonce,
                     Some(c.staleness.label()),
                     &[],
+                    &estimation_unit,
+                    &value_unit,
+                    lower_pct,
+                    upper_pct,
                 ));
             }
             // Truncation notice: suppressed under --json (D4).
@@ -1255,6 +1278,12 @@ fn expand_graph(
     max_depth: usize,
     root: &Path,
 ) -> Result<()> {
+    // Resolve display units for rendered memories.
+    let cfg = crate::dtoml::load_doctrine_toml(root)?;
+    let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+    let value_unit = crate::value::resolve_unit(&cfg.value);
+    let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+
     // Build edge set from all memories
     let all_memories = collect_all(root)?;
     let mut edges = BTreeMap::new();
@@ -1340,8 +1369,17 @@ fn expand_graph(
             // Reuse render_show with proper parameters
             let guard = "memory-show";
             let wikilinks = Vec::new(); // Empty for now
-            let rendered =
-                memory::render_show(memory, &body, guard, Some(&staleness_line), &wikilinks);
+            let rendered = memory::render_show(
+                memory,
+                &body,
+                guard,
+                Some(&staleness_line),
+                &wikilinks,
+                &estimation_unit,
+                &value_unit,
+                lower_pct,
+                upper_pct,
+            );
             write!(writer, "{rendered}")?;
         }
     }

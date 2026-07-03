@@ -888,12 +888,17 @@ fn spec_scaffold(subtype: SpecSubtype, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<
 /// absent file and a tech spec with zero edges uniformly (VT-3). The spec's own
 /// prose body is emitted **verbatim** — never structurally parsed (D8 / storage
 /// rule); per-requirement fields come from the structured toml, not their prose.
+#[expect(clippy::too_many_arguments, reason = "display config adds 4 params")]
 pub(crate) fn render(
     spec: &Spec,
     prose_body: &str,
     members: &[(Member, Requirement)],
     req_bodies: &[Option<String>],
     interactions: &[Interaction],
+    estimation_unit: &str,
+    value_unit: &str,
+    lower_pct: f64,
+    upper_pct: f64,
 ) -> String {
     let canonical_ref = spec.kind.canonical_id(spec.id);
     // House style: collect pre-formatted pieces (each carrying its own newlines)
@@ -962,13 +967,18 @@ pub(crate) fn render(
     if let Some(ref est) = spec.estimate {
         parts.push(format!(
             "{}\n",
-            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+            crate::estimate::display::format_estimate_confidence(
+                est,
+                lower_pct,
+                upper_pct,
+                estimation_unit,
+            )
         ));
     }
     if let Some(ref val) = spec.value {
         parts.push(format!(
             "{}\n",
-            crate::value::format_value_normal(val, "points")
+            crate::value::format_value_normal(val, value_unit)
         ));
     }
 
@@ -1502,7 +1512,23 @@ pub(crate) fn run_show(
     let interactions = read_interactions(&spec_dir.join("interactions.toml"))?;
 
     let out = match format {
-        Format::Table => render(&spec, &prose_body, &resolved, &req_bodies, &interactions),
+        Format::Table => {
+            let cfg = crate::dtoml::load_doctrine_toml(&root)?;
+            let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+            let value_unit = crate::value::resolve_unit(&cfg.value);
+            let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            render(
+                &spec,
+                &prose_body,
+                &resolved,
+                &req_bodies,
+                &interactions,
+                &estimation_unit,
+                &value_unit,
+                lower_pct,
+                upper_pct,
+            )
+        }
         Format::Json => show_json(&spec, &prose_body, &resolved, &req_bodies, &interactions)?,
     };
     write!(io::stdout(), "{out}")?;
@@ -3550,7 +3576,17 @@ parent = \"SPEC-002\"
                 req(2, "Second", ReqKind::Quality),
             ),
         ];
-        let out = render(&spec, "## Body\n\nverbatim prose\n", &members, &[], &[]);
+        let out = render(
+            &spec,
+            "## Body\n\nverbatim prose\n",
+            &members,
+            &[],
+            &[],
+            "points",
+            "points",
+            0.0,
+            1.0,
+        );
 
         // structured identity (single non-H1 line) + prose body verbatim.
         assert!(out.starts_with("`SPEC-007` — CLI\n"));
@@ -3598,7 +3634,17 @@ parent = \"SPEC-002\"
         r.acceptance_criteria = vec!["dispatch works".to_string()];
         let members = vec![(member("REQ-001", "FR-001", 1), r)];
 
-        let out = render(&spec, "## Overview\n", &members, &[], &[]);
+        let out = render(
+            &spec,
+            "## Overview\n",
+            &members,
+            &[],
+            &[],
+            "points",
+            "points",
+            0.0,
+            1.0,
+        );
         // every tech flat field renders (un-deads Spec/SpecStatus/C4Level/Source).
         assert!(out.contains("tags: infra"));
         assert!(out.contains("category: cli"));
@@ -3617,7 +3663,17 @@ parent = \"SPEC-002\"
         let mut r = req(1, "Bare", ReqKind::Functional);
         r.description = None; // no statement (D-P4-1: absent → no line)
         let members = vec![(member("REQ-001", "FR-001", 1), r)];
-        let out = render(&spec, "p\n", &members, &[], &[]);
+        let out = render(
+            &spec,
+            "p\n",
+            &members,
+            &[],
+            &[],
+            "points",
+            "points",
+            0.0,
+            1.0,
+        );
         assert!(out.contains("### FR-001 (REQ-001) — Bare"));
         assert!(!out.contains("statement"));
     }
@@ -3637,13 +3693,13 @@ parent = \"SPEC-002\"
                 notes: None,
             },
         ];
-        let with = render(&spec, "p\n", &[], &[], &edges);
+        let with = render(&spec, "p\n", &[], &[], &edges, "points", "points", 0.0, 1.0);
         assert!(with.contains("## Interactions"));
         assert!(with.contains("- SPEC-002 — uses: calls boot"));
         assert!(with.contains("- SPEC-003 — extends\n"));
 
         // empty (product spec or a tech spec with zero edges) → block omitted.
-        let without = render(&spec, "p\n", &[], &[], &[]);
+        let without = render(&spec, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
         assert!(!without.contains("## Interactions"));
     }
 
@@ -3657,7 +3713,7 @@ parent = \"SPEC-002\"
             responsibilities: vec!["route".to_string()],
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[]);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
         assert!(out.contains("descends from: PRD-001\n"));
         assert!(out.contains("parent: SPEC-002\n"));
         // no derived children line ever (ADR-004 §3, outbound-only).
@@ -3674,7 +3730,7 @@ parent = \"SPEC-002\"
     fn render_omits_descent_and_parent_when_none_and_for_product() {
         // VT-2: tech with both None → neither line.
         let tech = tech_spec(1);
-        let out = render(&tech, "p\n", &[], &[], &[]);
+        let out = render(&tech, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
         assert!(!out.contains("descends from:"));
         assert!(!out.contains("\nparent:"));
 
@@ -3686,7 +3742,7 @@ parent = \"SPEC-002\"
             parent: None,
             ..tech_spec(1)
         };
-        let pout = render(&product, "p\n", &[], &[], &[]);
+        let pout = render(&product, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
         assert!(!pout.contains("descends from:"));
         assert!(!pout.contains("parent:"));
     }
@@ -3700,7 +3756,7 @@ parent = \"SPEC-002\"
             parent: Some("PRD-003".to_string()),
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[]);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
         assert!(out.contains("product level: capability\n"));
         assert!(out.contains("parent: PRD-003\n"));
         // reciprocal children are derived, never rendered (ADR-004 §3).
@@ -3719,8 +3775,34 @@ parent = \"SPEC-002\"
             c4_level: Some(C4Level::Container),
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[]);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
         assert!(!out.contains("c4 level:"));
+    }
+
+    #[test]
+    fn render_estimate_and_value_when_present() {
+        let mut spec = tech_spec(1);
+        spec.estimate = Some(crate::estimate::EstimateFacet {
+            lower: 3.0,
+            upper: 8.0,
+        });
+        spec.value = Some(crate::value::ValueFacet { value: 21.0 });
+        let out = render(
+            &spec,
+            "p\n",
+            &[],
+            &[],
+            &[],
+            "espresso_shots",
+            "magic_beans",
+            0.1,
+            0.9,
+        );
+        assert!(
+            out.contains("estimate: 3.5–7.5 espresso_shots (80% confidence)"),
+            "estimate row: {out}"
+        );
+        assert!(out.contains("value: 21.0 magic_beans"), "value row: {out}");
     }
 
     // --- FIX 2: build_registry canonicalizes non-canonical author-supplied FKs ---

@@ -581,6 +581,18 @@ struct RawBacklogToml {
     facet: Option<risk::RawRiskFacet>,
     #[serde(default)]
     relationships: Relationships,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::estimate::deserialize_lenient"
+    )]
+    estimate: Option<crate::estimate::EstimateFacet>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::value::deserialize_lenient"
+    )]
+    value: Option<crate::value::ValueFacet>,
 }
 
 /// The validated entity (design §5.2). `id/slug/title/status` are top-level in the
@@ -607,6 +619,8 @@ pub(crate) struct BacklogItem {
     tier1: Vec<crate::relation::RelationEdge>,
     /// Prose body read from the sibling `backlog-NNN.md`.
     pub(crate) body: String,
+    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 /// A `triggers` rider (PRD-009 §5.7): the source `globs` this item watches, with
@@ -690,6 +704,8 @@ fn validate(raw: RawBacklogToml) -> anyhow::Result<BacklogItem> {
         tier1: Vec::new(),
         // Filled by `read_item` from the sibling .md; empty otherwise.
         body: String::new(),
+        estimate: raw.estimate,
+        value: raw.value,
     })
 }
 
@@ -1418,6 +1434,10 @@ fn derive_fulfils_inbound(
 fn format_metadata(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+    estimation_unit: &str,
+    value_unit: &str,
+    lower_pct: f64,
+    upper_pct: f64,
 ) -> Vec<String> {
     use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut parts: Vec<String> = Vec::new();
@@ -1461,6 +1481,25 @@ fn format_metadata(
         if !facet.controls.is_empty() {
             parts.push(format!("  controls: {}\n", facet.controls.join(", ")));
         }
+    }
+
+    // estimate / value facets — advisory, rendered only when authored.
+    if let Some(ref est) = item.estimate {
+        parts.push(format!(
+            "{}\n",
+            crate::estimate::display::format_estimate_confidence(
+                est,
+                lower_pct,
+                upper_pct,
+                estimation_unit,
+            )
+        ));
+    }
+    if let Some(ref val) = item.value {
+        parts.push(format!(
+            "{}\n",
+            crate::value::format_value_normal(val, value_unit)
+        ));
     }
 
     // outbound relations (§5.5) — each axis only when non-empty.
@@ -1563,8 +1602,19 @@ fn format_metadata(
 fn format_show(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+    estimation_unit: &str,
+    value_unit: &str,
+    lower_pct: f64,
+    upper_pct: f64,
 ) -> String {
-    let mut parts = format_metadata(item, fulfils_inbound);
+    let mut parts = format_metadata(
+        item,
+        fulfils_inbound,
+        estimation_unit,
+        value_unit,
+        lower_pct,
+        upper_pct,
+    );
     parts.push(format!("\n{}", item.body));
     parts.concat()
 }
@@ -1573,8 +1623,20 @@ fn format_show(
 fn format_inspect(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
+    estimation_unit: &str,
+    value_unit: &str,
+    lower_pct: f64,
+    upper_pct: f64,
 ) -> String {
-    format_metadata(item, fulfils_inbound).concat()
+    format_metadata(
+        item,
+        fulfils_inbound,
+        estimation_unit,
+        value_unit,
+        lower_pct,
+        upper_pct,
+    )
+    .concat()
 }
 
 /// `doctrine backlog show <ID>` — reassemble metadata + prose body (PRD-009 REQ-051, §5.4). Thin
@@ -1593,7 +1655,7 @@ fn run_show_inspect(
     path: Option<PathBuf>,
     reference: &str,
     format: Format,
-    format_table: fn(&BacklogItem, &[FulfilsRef]) -> String,
+    format_table: fn(&BacklogItem, &[FulfilsRef], &str, &str, f64, f64) -> String,
     with_body: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
@@ -1602,7 +1664,20 @@ fn run_show_inspect(
     // SL-176 PHASE-03: derive fulfils-inbound from the relation graph.
     let fulfils_inbound = derive_fulfils_inbound(&root, &item)?;
     let out = match format {
-        Format::Table => format_table(&item, &fulfils_inbound),
+        Format::Table => {
+            let cfg = crate::dtoml::load_doctrine_toml(&root)?;
+            let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+            let value_unit = crate::value::resolve_unit(&cfg.value);
+            let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            format_table(
+                &item,
+                &fulfils_inbound,
+                &estimation_unit,
+                &value_unit,
+                lower_pct,
+                upper_pct,
+            )
+        }
         Format::Json => show_json(&item, &fulfils_inbound, with_body)?,
     };
     write!(io::stdout(), "{out}")?;
@@ -1659,6 +1734,23 @@ fn show_json(
         inner.insert("body".into(), serde_json::json!(item.body));
     }
     inner.insert("facet".into(), serde_json::json!(facet));
+    if let Some(ref est) = item.estimate {
+        inner.insert(
+            "estimate".into(),
+            serde_json::json!({
+                "lower": est.lower,
+                "upper": est.upper,
+            }),
+        );
+    }
+    if let Some(ref val) = item.value {
+        inner.insert(
+            "value".into(),
+            serde_json::json!({
+                "value": val.value,
+            }),
+        );
+    }
     // SL-176 PHASE-03: `fulfilled_by` replaces `slices` (derived inbound with degree).
     let fulfils_json: Vec<serde_json::Value> = fulfils_inbound
         .iter()
@@ -3747,7 +3839,7 @@ tags = []
         // a plain issue and an assessed risk, both reserved id 1 (independent trees).
         new_item(root, ItemKind::Issue, "Auth bug");
         let issue = read_item(root, ItemKind::Issue, 1).unwrap();
-        let issue_out = format_show(&issue, &[]);
+        let issue_out = format_show(&issue, &[], "points", "points", 0.0, 1.0);
         assert!(
             issue_out.starts_with("ISS-001 — Auth bug\n"),
             "identity line: {issue_out}"
@@ -3764,12 +3856,34 @@ tags = []
         // an assessed risk (seeded directly) shows its facet axes.
         write_assessed_risk(root, 1);
         let risk = read_item(root, ItemKind::Risk, 1).unwrap();
-        let risk_out = format_show(&risk, &[]);
+        let risk_out = format_show(&risk, &[], "points", "points", 0.0, 1.0);
         assert!(risk_out.starts_with("RSK-001 — Token expiry\n"));
         assert!(risk_out.contains("[facet]"), "risk shows the facet block");
         assert!(risk_out.contains("likelihood: high"));
         assert!(risk_out.contains("impact: critical"));
         assert!(risk_out.contains("controls: rate-limit"));
+    }
+
+    #[test]
+    fn backlog_show_renders_estimate_and_value_when_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Size me");
+
+        // Splice [estimate] and [value] tables into the on-disk TOML.
+        let toml_path = root.join(".doctrine/backlog/issue/001/backlog-001.toml");
+        let mut text = fs::read_to_string(&toml_path).unwrap();
+        text.push_str("\n[estimate]\nlower = 5\nupper = 20\n");
+        text.push_str("\n[value]\nvalue = 42\n");
+        fs::write(&toml_path, &text).unwrap();
+
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        let out = format_show(&item, &[], "espresso_shots", "magic_beans", 0.1, 0.9);
+        assert!(
+            out.contains("estimate: 6.5–18.5 espresso_shots (80% confidence)"),
+            "estimate row: {out}"
+        );
+        assert!(out.contains("value: 42.0 magic_beans"), "value row: {out}");
     }
 
     // --- VT-3: outbound relations render; inbound is NOT surfaced (ADR-004) ---
@@ -3785,7 +3899,14 @@ tags = []
         write_related(root, ItemKind::Issue, 1, &[], &["PRD-009"]);
         write_related(root, ItemKind::Issue, 2, &[], &[]);
 
-        let out = format_show(&read_item(root, ItemKind::Issue, 1).unwrap(), &[]);
+        let out = format_show(
+            &read_item(root, ItemKind::Issue, 1).unwrap(),
+            &[],
+            "points",
+            "points",
+            0.0,
+            1.0,
+        );
         assert!(out.contains("relationships:"), "the outbound seam renders");
         assert!(
             out.contains("references(concerns): PRD-009"),
@@ -3794,7 +3915,14 @@ tags = []
 
         // an item with no relations renders no relationships block — the inbound
         // derived view is computed but empty, and no outbound edges exist.
-        let bare = format_show(&read_item(root, ItemKind::Issue, 2).unwrap(), &[]);
+        let bare = format_show(
+            &read_item(root, ItemKind::Issue, 2).unwrap(),
+            &[],
+            "points",
+            "points",
+            0.0,
+            1.0,
+        );
         assert!(
             !bare.contains("relationships:"),
             "no relations → no block (inbound never surfaced): {bare}"
@@ -3882,7 +4010,7 @@ tags = []
 
         // table seam: each axis renders, in fixed §5.2 order (needs/after/triggers);
         // a non-zero `after` rank annotates, the trigger note trails its globs.
-        let out = format_show(&item, &[]);
+        let out = format_show(&item, &[], "points", "points", 0.0, 1.0);
         assert!(out.contains("needs: ISS-002"), "hard prereq axis: {out}");
         assert!(
             out.contains("after: ISS-003 (rank 2)"),

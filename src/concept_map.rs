@@ -1136,7 +1136,23 @@ pub(crate) fn run_show(
         None
     };
     let out = match format {
-        Format::Table => format_show(&doc, &body, edges, nodes, parsed.as_ref()),
+        Format::Table => {
+            let cfg = crate::dtoml::load_doctrine_toml(&root)?;
+            let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
+            let value_unit = crate::value::resolve_unit(&cfg.value);
+            let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            format_show(
+                &doc,
+                &body,
+                edges,
+                nodes,
+                parsed.as_ref(),
+                &estimation_unit,
+                &value_unit,
+                lower_pct,
+                upper_pct,
+            )
+        }
         Format::Json => show_json(&doc, &body, edges, nodes, parsed.as_ref())?,
     };
     write!(io::stdout(), "{out}")?;
@@ -1144,12 +1160,20 @@ pub(crate) fn run_show(
 }
 
 /// Render the table-format show output for a concept map.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "display config adds 4 params; refactoring into a struct trades one lint for indirection"
+)]
 fn format_show(
     doc: &ConceptMapDoc,
     body: &str,
     edges: bool,
     nodes: bool,
     parsed: Option<&ParsedConceptMap>,
+    estimation_unit: &str,
+    value_unit: &str,
+    lower_pct: f64,
+    upper_pct: f64,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
@@ -1166,14 +1190,19 @@ fn format_show(
     }
     if let Some(ref est) = doc.estimate {
         parts.push(format!(
-            "\nestimate: {}\n",
-            crate::estimate::display::format_estimate_confidence(est, 0.0, 100.0, "points")
+            "\n{}\n",
+            crate::estimate::display::format_estimate_confidence(
+                est,
+                lower_pct,
+                upper_pct,
+                estimation_unit,
+            )
         ));
     }
     if let Some(ref val) = doc.value {
         parts.push(format!(
-            "\nvalue: {}\n",
-            crate::value::format_value_normal(val, "points")
+            "\n{}\n",
+            crate::value::format_value_normal(val, value_unit)
         ));
     }
     if !body.trim().is_empty() {
@@ -2305,7 +2334,7 @@ mod tests {
         std::fs::write(&toml_path, text).unwrap();
 
         let (doc, _toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
-        let out = format_show(&doc, "", false, false, None);
+        let out = format_show(&doc, "", false, false, None, "points", "points", 0.0, 1.0);
         assert!(out.contains("CM-001"));
         assert!(out.contains("Domain Model"));
         assert!(out.contains("draft"));
@@ -2332,15 +2361,70 @@ mod tests {
         let parsed = parse_dsl(&doc.dsl);
 
         // --edges
-        let out = format_show(&doc, "", true, false, Some(&parsed));
+        let out = format_show(
+            &doc,
+            "",
+            true,
+            false,
+            Some(&parsed),
+            "points",
+            "points",
+            0.0,
+            1.0,
+        );
         assert!(out.contains("User > creates > Document"));
         assert!(out.contains("Workspace > contains > Document"));
 
         // --nodes
-        let out = format_show(&doc, "", false, true, Some(&parsed));
+        let out = format_show(
+            &doc,
+            "",
+            false,
+            true,
+            Some(&parsed),
+            "points",
+            "points",
+            0.0,
+            1.0,
+        );
         assert!(out.contains("user - User"));
         assert!(out.contains("document - Document"));
         assert!(out.contains("workspace - Workspace"));
+    }
+
+    #[test]
+    fn format_show_renders_estimate_and_value_when_present() {
+        let doc = ConceptMapDoc {
+            id: 1,
+            slug: "domain-model".into(),
+            title: "Domain Model".into(),
+            description: String::new(),
+            status: "active".into(),
+            created: "2026-01-01".into(),
+            updated: "2026-01-02".into(),
+            dsl: String::new(),
+            estimate: Some(crate::estimate::EstimateFacet {
+                lower: 2.0,
+                upper: 5.0,
+            }),
+            value: Some(crate::value::ValueFacet { value: 7.0 }),
+        };
+        let out = format_show(
+            &doc,
+            "",
+            false,
+            false,
+            None,
+            "espresso_shots",
+            "magic_beans",
+            0.1,
+            0.9,
+        );
+        assert!(
+            out.contains("estimate: 2.3–4.7 espresso_shots (80% confidence)"),
+            "estimate row: {out}"
+        );
+        assert!(out.contains("value: 7.0 magic_beans"), "value row: {out}");
     }
 
     #[test]
