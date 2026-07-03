@@ -11,24 +11,8 @@ needs = []                      # slice→work hard prerequisite
 after = [{ to = "SL-192", rank = 0 }, { to = "SL-193", rank = 0 }]                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
-selector = "install/hymns/**"
-intent = "scope-relevant"
-
-[[selector]]
-selector = ".doctrine/hymns/**"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "src/install.rs"
 intent = "design-target"
-
-[[selector]]
-selector = "plugins/doctrine/skills/dispatch/**"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "plugins/doctrine/skills/dispatch-agent/**"
-intent = "scope-relevant"
 
 [[selector]]
 selector = "install/hymns/role/worker.md"
@@ -52,6 +36,18 @@ intent = "design-target"
 
 [[selector]]
 selector = "install/agents/pi/dispatch-worker.md"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/hymns/**"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch/**"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-agent/**"
 intent = "design-target"
 
 [[relation]]
