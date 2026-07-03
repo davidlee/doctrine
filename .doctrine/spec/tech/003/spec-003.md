@@ -29,6 +29,9 @@ The system decomposes into these containers:
   installed skill tree.
 - **Boot snapshot** (SPEC-011) — the cache-friendly governance projection assembled for
   session start.
+- **Prompt cascade** (SPEC-023) — the per-context instruction resolver composing
+  banded snippet guidance by conjunctive selector match over a trait-classified
+  context.
 - **Dispatch & worktree** — the isolation and orchestrator-sole-writer machinery
   for concurrent work.
 - **Priority engine** (SPEC-001) — the derived, explainable "what next" view over

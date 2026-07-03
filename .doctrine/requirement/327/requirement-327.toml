@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 327
+slug = "order-matched-snippets-by-the-total-order-precedence-key-band-specificity-provenanceframeworkuser"
+title = "Order matched snippets by the total-order precedence key band → specificity → provenance(framework<user) → alpha(slot path), ascending, with within-band specificity led by the band's namesake axis."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

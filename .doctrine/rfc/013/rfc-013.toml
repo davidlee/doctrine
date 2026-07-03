@@ -50,3 +50,7 @@ target = "ADR-014"
 label = "related"
 target = "POL-002"
 
+[[relation]]
+label = "related"
+target = "SPEC-023"
+

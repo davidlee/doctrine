@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 332
+slug = "keep-the-engine-pure-no-diskclockenv-seal-set-passed-in-and-deterministic-the-same-corpus-context"
+title = "Keep the engine pure (no disk/clock/env; seal set passed in) and deterministic: the same corpus, context, and seal set yield byte-identical output — downstream session-start cache-hold depends on it."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

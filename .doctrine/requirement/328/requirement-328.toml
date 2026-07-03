@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 328
+slug = "compare-model-axis-specificity-root-wise-pinned-patterns-keyed-by-top-level-segment-ordered-root"
+title = "Compare model-axis specificity root-wise — pinned patterns keyed by top-level segment, ordered (root, depth) pairs, lexicographic — so same-root stays depth-ordered, intersections outrank their factors, and cross-tree ordering is stable under taxonomy deepening."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

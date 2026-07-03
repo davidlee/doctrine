@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 325
+slug = "carry-the-contexts-model-axis-as-a-set-of-trait-keys-matched-by-membership-a-model-pattern-matches"
+title = "Carry the context's model axis as a set of trait keys, matched by membership: a model pattern matches if it matches any member, so all of an agent's declared trait guidance composes in one resolve."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

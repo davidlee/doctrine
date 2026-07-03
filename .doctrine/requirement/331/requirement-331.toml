@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 331
+slug = "source-trait-classification-from-the-defs-declared-trait-key-set-spawner-may-override-at-spawn-no"
+title = "Source trait classification from the def's declared trait-key set (spawner may override at spawn); no central model-to-traits registry exists, and adherence is assigned, never self-asserted."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

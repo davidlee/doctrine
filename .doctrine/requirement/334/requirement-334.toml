@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 334
+slug = "keep-the-selector-grammar-conjunctive-disjunction-lives-in-classification-tree-shape-set-membership"
+title = "Keep the selector grammar conjunctive: disjunction lives in classification (tree shape, set membership), never in selector grammar — specificity must remain a total order over conjunctions."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

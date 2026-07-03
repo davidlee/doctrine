@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 322
+slug = "load-the-snippet-corpus-as-a-union-of-compile-embedded-installhymns-framework-and-on-disk"
+title = "Load the snippet corpus as a union of compile-embedded install/hymns (framework) and on-disk .doctrine/hymns (user), deriving slot+selector from path with per-axis sidecar supersede, and deriving provenance from the source root, never a stored flag."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

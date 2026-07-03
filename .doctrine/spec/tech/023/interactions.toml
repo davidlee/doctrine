@@ -1,0 +1,15 @@
+[[edge]]
+target = "SPEC-009"
+type = "uses"
+notes = "rust_embed asset root, install-time projection of exposed starters, the impure corpus loader home (src/install.rs), and the worker-def bake (expand_worker_marker)"
+
+[[edge]]
+target = "SPEC-011"
+type = "feeds"
+notes = "prompt resolve output rides boot's session-start delivery surfaces; resolve regenerates the universal boot artifact axis-invariantly; cache-hold rests on resolver determinism"
+# Interactions — outbound spec -> spec edges (tech specs only).
+# Seeded empty; authored via `doctrine spec interactions add`:
+#   [[edge]]
+#   target = "SPEC-002"       # canonical FK into .doctrine/spec/tech/NNN
+#   type = "uses"             # free-text edge kind (calls / extends / uses / …)
+#   notes = "…"               # optional

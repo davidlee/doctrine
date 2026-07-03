@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 330
+slug = "front-the-engine-with-prompt-resolve-stdout-composition-repeatable-model-the-on-disk-universal-boot"
+title = "Front the engine with prompt resolve (stdout composition; repeatable --model; the on-disk universal boot artifact is axis-invariant), model-keys (corpus-reflected taxonomy keys only), explain (precedence trace), and check (corpus integrity, feeding doctrine check)."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

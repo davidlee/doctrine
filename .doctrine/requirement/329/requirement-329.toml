@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 329
+slug = "permit-suppression-only-via-replaces-legal-only-on-the-unique-most-specific-active-snippet-of-its"
+title = "Permit suppression only via replaces, legal only on the unique most-specific active snippet of its slot; duplicate targets, non-top replacers, and cycles are authoring errors surfaced by prompt check/validate, never silently alpha-ordered."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

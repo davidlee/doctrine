@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 326
+slug = "allow-a-selector-to-pin-a-conjunctive-set-of-model-patterns-every-pinned-pattern-must-match-some"
+title = "Allow a selector to pin a conjunctive set of model patterns — every pinned pattern must match some context key — so trait intersections (e.g. smart AND loose) are targetable by one snippet without grammar-OR."
+status = "pending"
+kind = "functional"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

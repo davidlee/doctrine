@@ -1,0 +1,33 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 23
+slug = "prompt-cascade"
+title = "Prompt cascade"
+status = "draft"
+kind = "tech"
+category = "prompt"
+c4_level = "container"
+parent = "SPEC-003"
+descends_from = "PRD-007"
+tags = ["prompt", "cascade", "hymns", "selector", "specificity", "trait-classification", "seal", "two-root-layering"]
+responsibilities = [
+  "Load the snippet corpus from two layered roots — compile-embedded `install/hymns/**` (framework) unioned with on-disk `.doctrine/hymns/**` (user) — deriving each snippet's slot and selector from its path, superseding per-axis via sidecar TOML, and tagging provenance by source root, never by a stored flag.",
+  "Enforce seal at resolution: drop any user-provenance snippet whose slot is in the embedded seal set before matching, so sealed framework content wins by active exclusion of disk twins, not by hoping the path stays empty.",
+  "Match snippets to a context by a purely conjunctive selector algebra: every pinned axis must match (AND across axes), a model pattern prefix-matches with `_default` as per-level wildcard (contiguous-subtree OR within an axis), and unpinned axes are don't-care — one selector is an axis-aligned box in the taxonomy product space; the corpus is a union of boxes.",
+  "Carry the model axis as a CLASSIFICATION space, not an identity path: the context holds a set-valued trait-key set (agent as a set of points), a selector may pin a conjunctive SET of model patterns (each must match some context key — intersection targeting), and every taxonomy key is opaque vocabulary owned by hymn authors, never a registry.",
+  "Order matched snippets by the total-order precedence key `band → specificity → provenance(framework<user) → alpha(slot path)`, where within-band specificity leads with the band's namesake axis and model-axis specificity compares root-wise ((root, depth) pairs, lexicographic) so cross-trait-tree ordering is stable under taxonomy deepening.",
+  "Suppress only via `replaces`, legal only on the unique most-specific active snippet of its slot; duplicate targets, non-top replacers, and cycles are authoring errors surfaced by `prompt check`/`validate`, never silently alpha-ordered.",
+  "Front the engine with the `prompt` verbs — `resolve` (stdout composition; the on-disk universal boot artifact is axis-invariant), `model-keys` (corpus-reflected taxonomy keys, never an enumeration), `explain` (precedence trace), `check` (corpus integrity) — keeping the engine pure (no disk/clock/env; seal set passed in) and deterministic (same corpus+context+seal yields byte-identical output).",
+  "Hold the delivery boundary: the cascade composes and emits; WHERE output lands (session-start injection, `@`-import fallback, `doctrine_onboard` supplement, install-time def bake) is the boot and dispatch containers' contract, split by cache property — and classification of an agent INTO the trait taxonomy happens outside the cascade, which receives an already-classified context.",
+]
+
+[[source]]
+language = "rust"
+identifier = "src/hymns.rs"
+module = "doctrine::hymns"
+
+[[source]]
+language = "rust"
+identifier = "src/commands/prompt.rs"
+module = "doctrine::commands::prompt"

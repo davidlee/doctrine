@@ -1,0 +1,14 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 333
+slug = "rest-no-correctness-invariant-on-the-model-band-a-missing-stale-or-unmatched-trait-key-degrades"
+title = "Rest no correctness invariant on the model band: a missing, stale, or unmatched trait key degrades gracefully to broader _default or universal content."
+status = "pending"
+kind = "quality"
+
+# description — optional one-line summary (queryable). Omitted by default (None);
+# the full statement/rationale stays prose in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

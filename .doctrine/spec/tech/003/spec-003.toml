@@ -10,7 +10,7 @@ category = "platform"
 c4_level = "context"
 tags = ["doctrine", "context", "synthesis", "storage-rule", "outbound-relations", "pure-imperative-split", "architecture"]
 responsibilities = [
-  "Name the containers Doctrine is composed of — the entity engine, spec composition, memory, id lifecycle, install, skills distribution, boot, dispatch/worktree, the priority engine, reconciliation, and the CLI surface — and the C4 decomposition that arranges them under one whole-system context.",
+  "Name the containers Doctrine is composed of — the entity engine, spec composition, memory, id lifecycle, install, skills distribution, boot, the prompt cascade, dispatch/worktree, the priority engine, reconciliation, and the CLI surface — and the C4 decomposition that arranges them under one whole-system context.",
   "Hold the cross-cutting principles that govern every container system-wide: the storage rule's three-tier truth model, outbound-only relations with derived reciprocity, and the pure/imperative split.",
   "State the system-wide quality invariants the corpus is checked against — never restating any single container's mechanism, only the composition and the shared discipline.",
 ]
