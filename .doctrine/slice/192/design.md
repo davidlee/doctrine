@@ -158,6 +158,10 @@ primary uses `model_pairs`, never `depth_of`.
   `default_selector` for `Band::Model` seeds a singleton set from the path label;
   `overlay_selector` replaces the set when the sidecar declares one.
 
+The `explain` render of the primary pair-vec is a **cosmetic** detail (byte-golden
+only, no algebra) — its exact string is pinned at execution, not an open design
+question.
+
 ## 4. Invariants & edge cases
 
 - **INV — specificity is context-free.** `specificity` reads the selector only,
