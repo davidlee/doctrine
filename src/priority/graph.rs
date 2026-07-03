@@ -273,10 +273,33 @@ pub(crate) fn build_from(
     scanned: &[relation_graph::ScannedEntity],
     root: &std::path::Path,
 ) -> anyhow::Result<PriorityGraph> {
-    // 1b. Load PriorityConfig once — covers every caller including
-    //      actionability_block_from (D4).
-    let cfg = config::load(root);
+    // The single config load lives HERE (D4) and is threaded into the build seam.
+    // SL-194 PHASE-01 lifted it to a parameter so a β sweep can inject a swept
+    // `estimate.skew`; every existing caller routes through this byte-identical wrapper.
+    build_from_with_cfg(scanned, root, &config::load(root))
+}
 
+/// Build the priority graph from a PRE-SCANNED entity slice with an INJECTED
+/// [`config::PriorityConfig`] (the SL-194 PHASE-01 rebuild seam — the body of
+/// [`build_from`], extracted so β perturbation can sweep `estimate.skew` over the same
+/// scan). Identical to [`build_from`] except the config is supplied rather than loaded.
+///
+/// **The injected `cfg` threads the WHOLE build.** The base pre-pass (2c, `base_score`)
+/// AND the consequence post-pass (6, `consequence_post_pass` — leverage/optionality
+/// coeffs) both read it, so a swept `skew` perturbs base cost and consequence coeffs
+/// consistently (design "cfg threads the WHOLE build") — never base-only with default
+/// consequence coeffs. Byte-identical to the pre-extraction `build_from` when passed
+/// `&config::load(root)` (the behaviour-preservation gate, VT-1).
+///
+/// # Errors
+///
+/// Propagates a read error, or an internal cordage rejection of well-formed adapter
+/// input (an adapter bug, not a recoverable condition).
+pub(crate) fn build_from_with_cfg(
+    scanned: &[relation_graph::ScannedEntity],
+    root: &std::path::Path,
+    cfg: &config::PriorityConfig,
+) -> anyhow::Result<PriorityGraph> {
     // 2b. Anchor fold (SL-172 §5.4): max upper among non-terminal estimated items.
     //      If none, fall back to 1.0 (empty-corpus fallback). Terminals (closed/done)
     //      must NOT inflate bare-item cost — their large upper is irrelevant.
@@ -308,7 +331,7 @@ pub(crate) fn build_from(
                     tags: entity.tags.clone(),
                 },
                 entity.kind,
-                &cfg,
+                cfg,
                 ctx,
             );
             (entity.key, base)
@@ -454,14 +477,8 @@ pub(crate) fn build_from(
     //      needs-leverage (recursive DP) + ref-optionality (one-hop).
     //      Reads NodeAttr.base_score from `attrs` (the field is consumed here —
     //      no dead_code).
-    let (leverage, optionality, score) = consequence_post_pass(
-        &graph,
-        &projection,
-        &attrs,
-        &ref_by_label,
-        dep_overlay,
-        &cfg,
-    );
+    let (leverage, optionality, score) =
+        consequence_post_pass(&graph, &projection, &attrs, &ref_by_label, dep_overlay, cfg);
 
     Ok(PriorityGraph {
         graph,
@@ -2332,5 +2349,64 @@ mod tests {
         //   effective_raw_value(Some(1.0)) → unwrap_or(0.0) → 1.0 (delivers default)
         // This guards against the old path that read f.value directly and missed
         // the default for value-bearing kinds.
+    }
+
+    // ── SL-194 VT-1: build_from == build_from_with_cfg(…, load(root)) ─────────
+
+    /// The behaviour-preservation gate for the SL-194 rebuild-seam extraction:
+    /// `build_from` must be byte-identical to `build_from_with_cfg` fed the same
+    /// `config::load(root)` it would have loaded internally. Compares the observable
+    /// products — the score/leverage/optionality maps, the base scores, and the minted
+    /// node order — over a multi-kind corpus with dep + facet variety.
+    #[test]
+    fn build_from_equals_build_from_with_cfg_over_loaded_config() {
+        let dir = tmp();
+        let root = dir.path();
+        // A corpus with base-score variety, a needs edge (leverage), and a ref edge
+        // (optionality) so every consequence path is exercised.
+        seed_issue_with_facets(
+            root,
+            1,
+            "needs = [\"RSK-001\"]",
+            "lower = 0.0\nupper = 10.0",
+            "value = 25.0",
+            "",
+        );
+        seed_issue_with_facets(root, 2, "", "lower = 1.0\nupper = 4.0", "value = 5.0", "");
+        seed_risk(root, 1, "open", "");
+        seed_slice(root, 1, "references = [\"REQ-005\"]");
+        seed_requirement(root, 5);
+
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let via_load = build_from(&scanned, root).unwrap();
+        let via_cfg = build_from_with_cfg(&scanned, root, &config::load(root)).unwrap();
+
+        assert_eq!(via_load.score, via_cfg.score, "score map identical");
+        assert_eq!(
+            via_load.leverage, via_cfg.leverage,
+            "leverage map identical"
+        );
+        assert_eq!(
+            via_load.optionality, via_cfg.optionality,
+            "optionality map identical"
+        );
+        // Base scores per node identical (the injected cfg drove base_score identically).
+        let base = |pg: &PriorityGraph| -> std::collections::BTreeMap<EntityKey, (f64, f64)> {
+            pg.attrs
+                .iter()
+                .map(|(k, a)| (*k, (a.base_score.value_dim, a.base_score.risk_dim)))
+                .collect()
+        };
+        assert_eq!(base(&via_load), base(&via_cfg), "base scores identical");
+        // Minted node order identical (NodeId assignment is the mint tiebreak).
+        let order = |pg: &PriorityGraph| -> Vec<EntityKey> {
+            pg.graph
+                .ordered()
+                .iter()
+                .filter_map(|n| pg.projection.key_of(*n))
+                .collect()
+        };
+        assert_eq!(order(&via_load), order(&via_cfg), "minted order identical");
     }
 }

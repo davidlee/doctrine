@@ -335,6 +335,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         | Command::Next { .. }
         | Command::Blockers { .. }
         | Command::Explain { .. }
+        | Command::Findings { .. }
         // The check proxy writes NO authored doctrine state; a proxied command
         // that mutates source (e.g. `cargo fmt`) is a worker-legal source delta,
         // not an authored write — and a worker running `check gate` to verify its

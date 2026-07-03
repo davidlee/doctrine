@@ -17,6 +17,7 @@ use owo_colors::{
     DynColors,
 };
 
+use super::findings::Finding;
 use super::view::{ActionabilityBlock, BlockersView, Explanation, NextRow, ReasonKind, SurveyRow};
 
 /// The priority policy version stamped into every `--json` envelope (D6 / REQ-094).
@@ -313,12 +314,26 @@ fn reason_line(reason: &ReasonKind) -> String {
             "  score: {total:.1} (base {base:.1} [value {value_dim:.1}, risk {risk_dim:.1}], \
              leverage {leverage:.1}, optionality {optionality:.1})\n"
         ),
+        ReasonKind::EvictedEdge { .. } | ReasonKind::CycleDegraded { .. } => {
+            format!("  {}\n", provenance_fragment(reason).unwrap_or_default())
+        }
+    }
+}
+
+/// The human fragment for the two PROVENANCE reason variants — an evicted soft (`after`)
+/// edge, or a degraded dep cycle. The SINGLE source shared by `explain`'s [`reason_line`]
+/// and the `findings` `Provenance` render (SL-194 R2: reuse the *fragment*, NOT
+/// `explain()` — its foreign-node path is the ISS-003 hazard). Returns the bare text (no
+/// indent, no newline — the caller frames it); `None` for any non-provenance reason.
+fn provenance_fragment(reason: &ReasonKind) -> Option<String> {
+    match reason {
         ReasonKind::EvictedEdge { from, to, reason } => {
-            format!("  evicted seq edge: {from} → {to} ({reason:?})\n")
+            Some(format!("evicted seq edge: {from} → {to} ({reason:?})"))
         }
         ReasonKind::CycleDegraded { nodes } => {
-            format!("  dep cycle (order degraded): {}\n", nodes.join(", "))
+            Some(format!("dep cycle (order degraded): {}", nodes.join(", ")))
         }
+        _ => None,
     }
 }
 
@@ -335,6 +350,152 @@ pub(crate) fn explain_human(ex: &Explanation) -> String {
     }
     parts.push(reason_line(&ex.score));
     parts.concat()
+}
+
+// ---------------------------------------------------------------------------
+// findings (SL-194 PHASE-01) — human grouped by kind + --json.
+// ---------------------------------------------------------------------------
+
+/// One `findings` line (the indented body under its kind header) — the render source of
+/// truth for the human catalogue. Provenance REUSES the shared [`provenance_fragment`]
+/// (R2), never re-formatting. Every other variant formats its own structured payload.
+fn finding_line(f: &Finding) -> String {
+    match f {
+        Finding::Fork { hub, arms } => {
+            format!(
+                "  {hub}  settles → {{{}}}   ({} arms)\n",
+                arms.join(", "),
+                arms.len()
+            )
+        }
+        Finding::Join { node, prereqs } => format!(
+            "  {node}  needs → {{{}}}   ({} prereqs)\n",
+            prereqs.join(", "),
+            prereqs.len()
+        ),
+        Finding::GatingFanOut { record, blocks } => format!(
+            "  {record}  gates → {{{}}}   ({} blocks)\n",
+            blocks.join(", "),
+            blocks.len()
+        ),
+        Finding::ValueInversion {
+            blocker,
+            blocked,
+            gap,
+        } => format!("  {blocker} gates {blocked}   Δ{gap:.1}\n"),
+        Finding::Displacement {
+            node,
+            score_rank,
+            constrained_rank,
+            delta,
+        } => format!("  {node}  score #{score_rank} vs survey #{constrained_rank}   Δ{delta}\n"),
+        Finding::Plateau { members, span } => {
+            let body = match members.as_slice() {
+                [] => String::new(),
+                [only] => only.clone(),
+                [first, .., last] => format!("{first} … {last}"),
+            };
+            format!("  {{{body}}}  ({}, span {span:.2})\n", members.len())
+        }
+        Finding::OrderInstability { high, low, .. } => {
+            format!("  {high} ↔ {low}   (flips β0↔β1)\n")
+        }
+        Finding::ArmResequencing {
+            hub,
+            order_lo,
+            order_hi,
+            ..
+        } => format!(
+            "  {hub}  arms {{{}}} → {{{}}}   (β0↔β1)\n",
+            order_lo.join(", "),
+            order_hi.join(", ")
+        ),
+        // Provenance reuses the shared explain fragment (R2 — no re-format).
+        Finding::Provenance(reason) => {
+            format!("  {}\n", provenance_fragment(reason).unwrap_or_default())
+        }
+    }
+}
+
+/// Render `findings` for human reading — findings GROUPED by `kind_label` (a header per
+/// group), one line per finding within. `detect` already sorts `(kind_label, magnitude
+/// desc)`, so magnitude ranks WITHIN a kind section and kind grouping outranks magnitude
+/// (F-ext-5). An empty catalogue renders a clean note.
+pub(crate) fn findings_human(findings: &[Finding]) -> String {
+    if findings.is_empty() {
+        return "(no findings)\n".to_string();
+    }
+    let mut parts: Vec<String> = Vec::new();
+    let mut current: Option<&str> = None;
+    for f in findings {
+        let label = f.kind_label();
+        if current != Some(label) {
+            parts.push(format!("{label}\n"));
+            current = Some(label);
+        }
+        parts.push(finding_line(f));
+    }
+    parts.concat()
+}
+
+/// One finding as JSON — `{kind, …payload, magnitude}` (the `kind` tag IS the
+/// `kind_label`, the group header's single source). Provenance nests the shared
+/// [`reason_json`] under `detail` (source-of-truth reuse — no re-format).
+fn finding_json(f: &Finding) -> serde_json::Value {
+    let mut value = match f {
+        Finding::Fork { hub, arms } => serde_json::json!({ "hub": hub, "arms": arms }),
+        Finding::Join { node, prereqs } => serde_json::json!({ "node": node, "prereqs": prereqs }),
+        Finding::GatingFanOut { record, blocks } => {
+            serde_json::json!({ "record": record, "blocks": blocks })
+        }
+        Finding::ValueInversion {
+            blocker,
+            blocked,
+            gap,
+        } => serde_json::json!({ "blocker": blocker, "blocked": blocked, "gap": gap }),
+        Finding::Displacement {
+            node,
+            score_rank,
+            constrained_rank,
+            delta,
+        } => serde_json::json!({
+            "node": node,
+            "score_rank": score_rank,
+            "constrained_rank": constrained_rank,
+            "delta": delta,
+        }),
+        Finding::Plateau { members, span } => {
+            serde_json::json!({ "members": members, "span": span })
+        }
+        // `moved` is surfaced via the top-level `magnitude`, NOT as a payload key
+        // (design payload = {high, low}).
+        Finding::OrderInstability { high, low, .. } => {
+            serde_json::json!({ "high": high, "low": low })
+        }
+        Finding::ArmResequencing {
+            hub,
+            order_lo,
+            order_hi,
+            ..
+        } => serde_json::json!({ "hub": hub, "order_lo": order_lo, "order_hi": order_hi }),
+        Finding::Provenance(reason) => serde_json::json!({ "detail": reason_json(reason) }),
+    };
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("kind".to_string(), serde_json::json!(f.kind_label()));
+        obj.insert("magnitude".to_string(), serde_json::json!(f.magnitude()));
+    }
+    value
+}
+
+/// `findings --json` — every finding as `{kind, …payload, magnitude}` under the
+/// policy-versioned envelope.
+pub(crate) fn findings_json(findings: &[Finding]) -> anyhow::Result<String> {
+    let items: Vec<serde_json::Value> = findings.iter().map(finding_json).collect();
+    finish(&serde_json::json!({
+        "kind": "findings",
+        "policy_version": PRIORITY_POLICY_VERSION,
+        "findings": items,
+    }))
 }
 
 /// Render the `inspect` actionability block for human reading — the trailing block
@@ -823,6 +984,187 @@ mod tests {
             page2.lines().next().unwrap_or("").contains("tags"),
             "page 2 (tagged row) shows tags column: {page2}"
         );
+    }
+
+    // ── SL-194 VT-6: findings_human golden + findings_json shape ────────────
+
+    use super::super::view::ReasonKind;
+    use crate::backlog_order::OverrideReason;
+
+    #[test]
+    fn vt6_findings_human_groups_by_kind_and_reuses_provenance_fragment() {
+        let findings = vec![
+            Finding::Fork {
+                hub: "ISS-001".to_string(),
+                arms: vec!["ISS-002".to_string(), "ISS-003".to_string()],
+            },
+            Finding::ValueInversion {
+                blocker: "ISS-004".to_string(),
+                blocked: "ISS-005".to_string(),
+                gap: 16.3,
+            },
+            Finding::Provenance(ReasonKind::EvictedEdge {
+                from: "ISS-006".to_string(),
+                to: "ISS-007".to_string(),
+                reason: OverrideReason::SoftCycleEvicted,
+            }),
+        ];
+        let out = findings_human(&findings);
+        // Kind headers present, one per group.
+        assert!(out.contains("forks\n"), "forks header: {out}");
+        assert!(
+            out.contains("value inversions\n"),
+            "value inversions header: {out}"
+        );
+        assert!(out.contains("provenance\n"), "provenance header: {out}");
+        // Fork line carries the hub → arms and the count.
+        assert!(
+            out.contains("ISS-001  settles → {ISS-002, ISS-003}   (2 arms)"),
+            "fork line: {out}"
+        );
+        // Inversion line carries the Δ.
+        assert!(
+            out.contains("ISS-004 gates ISS-005   Δ16.3"),
+            "inversion line: {out}"
+        );
+        // Provenance REUSES the explain fragment verbatim (R2) — same text `reason_line`
+        // would produce for the wrapped ReasonKind.
+        let via_reason = reason_line(&ReasonKind::EvictedEdge {
+            from: "ISS-006".to_string(),
+            to: "ISS-007".to_string(),
+            reason: OverrideReason::SoftCycleEvicted,
+        });
+        assert!(
+            out.contains(via_reason.trim_end()),
+            "reuses explain fragment: {out}"
+        );
+    }
+
+    #[test]
+    fn vt6_findings_human_empty_is_clean_note() {
+        assert_eq!(findings_human(&[]), "(no findings)\n");
+    }
+
+    #[test]
+    fn vt6_findings_json_shape_kind_payload_magnitude() {
+        let findings = vec![Finding::Fork {
+            hub: "ISS-001".to_string(),
+            arms: vec!["ISS-002".to_string(), "ISS-003".to_string()],
+        }];
+        let out = findings_json(&findings).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["kind"], "findings");
+        assert_eq!(v["policy_version"], PRIORITY_POLICY_VERSION);
+        let f0 = &v["findings"][0];
+        assert_eq!(f0["kind"], "forks", "json kind tag == kind_label");
+        assert_eq!(f0["hub"], "ISS-001");
+        assert_eq!(f0["arms"][0], "ISS-002");
+        assert_eq!(f0["magnitude"], 2.0, "magnitude = arm count");
+    }
+
+    #[test]
+    fn vt6_findings_json_provenance_nests_reason() {
+        let findings = vec![Finding::Provenance(ReasonKind::CycleDegraded {
+            nodes: vec!["ISS-001".to_string(), "ISS-002".to_string()],
+        })];
+        let out = findings_json(&findings).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let f0 = &v["findings"][0];
+        assert_eq!(f0["kind"], "provenance");
+        // The nested detail is the shared reason_json (source-of-truth reuse).
+        assert_eq!(f0["detail"]["kind"], "cycle_degraded");
+        assert_eq!(f0["detail"]["nodes"][1], "ISS-002");
+        assert_eq!(f0["magnitude"], 2.0);
+    }
+
+    // ── SL-194 VT-3: β-family render extension (human line + json payload) ──────
+
+    #[test]
+    fn vt3_beta_family_renders_one_line_each_human() {
+        let findings = vec![
+            Finding::OrderInstability {
+                high: "IMP-054".to_string(),
+                low: "IMP-071".to_string(),
+                moved: 3,
+            },
+            Finding::ArmResequencing {
+                hub: "QUE-003".to_string(),
+                order_lo: vec!["IMP-054".to_string(), "IMP-071".to_string()],
+                order_hi: vec!["IMP-071".to_string(), "IMP-054".to_string()],
+                moved: 2,
+            },
+        ];
+        let out = findings_human(&findings);
+        // Kind headers present, one per group.
+        assert!(
+            out.contains("order instability\n"),
+            "order instability header: {out}"
+        );
+        assert!(
+            out.contains("arm resequencing\n"),
+            "arm resequencing header: {out}"
+        );
+        // OrderInstability: the contested pair, flip annotation.
+        assert!(
+            out.contains("IMP-054 ↔ IMP-071   (flips β0↔β1)"),
+            "order-instability line: {out}"
+        );
+        // ArmResequencing: hub + both arm orders.
+        assert!(
+            out.contains("QUE-003  arms {IMP-054, IMP-071} → {IMP-071, IMP-054}   (β0↔β1)"),
+            "arm-resequencing line: {out}"
+        );
+    }
+
+    #[test]
+    fn vt3_beta_family_json_payload_and_magnitude() {
+        // OrderInstability: payload {high, low} + kind + magnitude (== moved); `moved`
+        // itself is NOT a payload key.
+        let oi = Finding::OrderInstability {
+            high: "IMP-054".to_string(),
+            low: "IMP-071".to_string(),
+            moved: 4,
+        };
+        let out = findings_json(std::slice::from_ref(&oi)).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let f0 = &v["findings"][0];
+        assert_eq!(f0["kind"], "order instability");
+        assert_eq!(f0["high"], "IMP-054");
+        assert_eq!(f0["low"], "IMP-071");
+        assert_eq!(f0["magnitude"], 4.0, "magnitude = positions moved");
+        assert!(
+            f0.get("moved").is_none(),
+            "moved is surfaced via magnitude only"
+        );
+
+        // ArmResequencing: payload {hub, order_lo, order_hi} + kind + magnitude.
+        let ar = Finding::ArmResequencing {
+            hub: "QUE-003".to_string(),
+            order_lo: vec!["A-1".to_string(), "A-2".to_string()],
+            order_hi: vec!["A-2".to_string(), "A-1".to_string()],
+            moved: 2,
+        };
+        let out2 = findings_json(std::slice::from_ref(&ar)).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(&out2).unwrap();
+        let g0 = &v2["findings"][0];
+        assert_eq!(g0["kind"], "arm resequencing");
+        assert_eq!(g0["hub"], "QUE-003");
+        assert_eq!(g0["order_lo"][0], "A-1");
+        assert_eq!(g0["order_hi"][0], "A-2");
+        assert_eq!(g0["magnitude"], 2.0, "magnitude = arms moved");
+    }
+
+    /// A findings list WITHOUT any β variant (the estimate-free / `None`-betas case)
+    /// renders no β-family section — the human surface stays silent, mirroring `detect`.
+    #[test]
+    fn vt3_no_beta_variants_render_no_beta_section() {
+        let findings = vec![Finding::Fork {
+            hub: "ISS-001".to_string(),
+            arms: vec!["ISS-002".to_string(), "ISS-003".to_string()],
+        }];
+        let out = findings_human(&findings);
+        assert!(!out.contains("order instability"), "no OI section: {out}");
+        assert!(!out.contains("arm resequencing"), "no AR section: {out}");
     }
 
     #[test]
