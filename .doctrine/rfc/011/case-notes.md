@@ -524,3 +524,23 @@ prompt scoped the gate to `--bin doctrine install`, so the worker never ran the
 tests/ e2e golden, never saw it red. Fix = full-suite mandate + declare the
 golden as a 4th worker file; land it, dispose undeclared `aligned` at audit.
 Token cost of the phantom: this whole detour + the halted funnel round.
+
+[dispatch; SL-191-P04-isolation-worktree-fell-back-to-coord]
+PHASE-04 Sonnet worker: Agent `isolation:worktree` lost the git repo-lock race
+under a busy shared clone (7 stray `agent-*` worktrees, 4 live dispatches
+SL-185/186/192/194) and silently fell back to the Bash-cwd worktree — a textbook
+ISS-034 / mem.signpost.doctrine.dispatch-claude-arm-wrong-base instance. BENIGN
+variant: because orchestrator cwd was parked at COORD@B (not main), the fallback
+landed at the CORRECT base b77396cc, so the worker's base-guard
+(`merge-base --is-ancestor B HEAD`) passed legitimately and the delta was sound.
+Cost: the delta materialised in the coord working tree (not an isolated tree), so
+the automated `worktree import` R-5 belt was bypassed; orchestrator recovered by
+hand — R-5 by `git status --porcelain` (exactly the 2 declared files, no
+`.doctrine/`/`.claude/`, no untracked), full `check regression diff --base B`
+(clean), branch-point guard (HEAD==B), single path-limited commit → 22833fbe.
+Token/complexity note: the worker's confused self-report ("isolated worktree
+/workspace/doctrine/.dispatch/SL-191" — that IS the coord tree) cost a verify
+detour to disprove; the missing `worktreePath` footer is the memory's documented
+red flag that no isolated tree was created. Serial single-worker funnel + parked
+coord cwd + base-guard makes the coord-fallback recoverable, but it is NOT
+isolation — a concurrent second worker in the same coord tree would collide.
