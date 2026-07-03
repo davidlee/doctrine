@@ -141,20 +141,172 @@ target). Tier 3 is ADR-011/SPEC-023's domain (mapped, cross-referenced, not
 restructured). The IA map names both so the surface is fully *accounted for*
 without the slice reaching into cascade internals.
 
-### 5.2 Interfaces & Contracts
+**Derived vs authored (the currency line).** The boot `## Commands` section is
+**derived** — `render_boot_map()` projects it from the compiled clap tree
+(SL-150), exposed to users as `doctrine --help --boot-map` (dense map) and
+`doctrine --help --commands` (grouped table). Two consequences bind the audit:
+- **Currency is automatic** for anything projected from the CLI (commands,
+  `## Invoking doctrine`, gov-row sections) — it cannot drift, so the currency
+  work (Objective 4) targets only the *authored* Tier-1 docs.
+- **Restate-line has a concrete point-at target.** A skill or doc that needs to
+  reference the command surface cites `doctrine --help --boot-map` /
+  `--commands` — it never reproduces a command list. This sharpens the R-OQ-4
+  test: any command/flag table in a skill is a violation *because a live
+  generator exists*.
+  - **Finding (ISS-208):** that point-at target is currently **undiscoverable**
+    — `--boot-map`/`--commands` are not registered clap args and are absent from
+    `doctrine --help`; they only work riding `--help`. CLI wiring, out of this
+    slice's scope, but the restate-line fixes must cite an invocation that
+    actually resolves. Until ISS-208 lands, docs cite the full `doctrine --help
+    --boot-map` combo (which works today), not a bare flag.
 
-### 5.3 Data, State & Ownership
+### 5.2 Interfaces & Contracts — user-serviceable hooks (Objective 2)
 
-### 5.4 Lifecycle, Operations & Dynamics
+Each live hook gets a documented contract: **what it controls · mechanism ·
+precedence · reset**. The contracts live in `using-doctrine.md` (the CLI/editing
+reference — its rightful home), with a one-line pointer from the boot digest
+where the hook is boot-resident.
+
+| Hook | Controls | Mechanism | Precedence | Reset |
+|---|---|---|---|---|
+| `.doctrine/governance.md` | project governance pointer text in boot | boot reads `GOVERNANCE_REL`, injects as `## Governance (project)` | user text replaces the seeded default wholesale | delete → boot shows marker; re-install re-seeds |
+| `install/model-band.md` → `.doctrine/…` | universal model-band floor directive | boot `Static` source → `## Model band` | shipped default; user edits the installed copy | re-install / restore from `install/` |
+| `.doctrine/hymns/` overlay | per-context prompt bands (harness/model/role/stage/project) | `doctrine prompt resolve` merges framework + overlay | **overlay wins** over framework at equal key (SPEC-023) | remove overlay file → framework band resolves |
+| onboarding seed | boot `## Onboarding` body | `manifest.toml [memory]` seeds `mem.signpost.project.orientation` from `templates/seed-onboarding.md`; onboarding-tagged memory bodies render | edit the seeded memory (or add onboarding-tagged memories, key-ordered) | `memory verify`/edit; re-install skips existing key |
+
+**Retirement — `boot-footer.md`:** delete `install/boot-footer.md` and the
+orphan `.doctrine/boot-footer.md`. Contract: none — the file is dead post-SL-187.
+The audit verifies no `src/` read path, no skill pointer, no manifest reference
+survives (all confirmed absent at design time). Hymns internals
+(`traits:` frontmatter, band layout) are **not** documented here — cross-ref to
+SPEC-023 / SL-191.
+
+### 5.3 Data, State & Ownership — reachability contract (Objective 6)
+
+**Reachability = shipped ∧ pointed-at.** A doc is reachable iff both hold:
+1. **Shipped** — `install.rs` embed-copies it into `.doctrine/` (for `.md`
+   docs) or `manifest.toml` exposes it (for hymns: `[hymns] expose`). A doc in
+   `install/` that the embed set skips ships to nobody.
+2. **Pointed-at** — a skill or the boot digest names it, so an agent has a path
+   to open it (the AGENTS.md lesson: an unreferenced `.doctrine/*.md` is read by
+   no one).
+
+The audit builds the reachability graph and closes every gap:
+- **Tier 0** docs are pointed-at by construction (boot renders them).
+- **Tier 1** docs (`glossary.md`, `using-doctrine.md`, `review-ledger.md`) each
+  need a skill/boot pointer — the audit records which skill owns each pointer.
+- **Orphans** (shipped-but-unreferenced, or referenced-but-unshipped) are
+  resolved: delete the dead (`boot-footer.md`), or add the missing pointer/ship
+  entry.
+
+Ownership: this slice owns the *authored* `install/*.md` docs + the manifest's
+knowledge-relevant entries. The clap-derived sections (commands, invoking
+doctrine, gov rows) are owned by the CLI and out of the audit (they regenerate).
+
+### 5.4 Lifecycle, Operations & Dynamics — execution shape
+
+The corrective work executes against the §5.1 map in batches (the re-embed
+footgun forces batching):
+
+1. **IA audit pass** — walk the `install/*.md` set + manifest, produce the
+   overlap/gap/contradiction ledger against the responsibility boundaries (a
+   working artefact, may live in slice notes).
+2. **Currency pass** (Objective 4) — bring `glossary.md` + `using-doctrine.md`
+   current for REC/REV/POL/STD/knowledge kinds and the revision/policy/standard/
+   review/knowledge verbs. Definitional content → glossary; verb-for-intent →
+   using-doctrine.
+3. **Hook-contract pass** (Objective 2) — write the §5.2 table into
+   using-doctrine.md; retire boot-footer.md.
+4. **Restate-line pass** (Objective 3) — triage the 8 `--flag <ARG>` candidate
+   skills; for each, decide *reproduces-a-table* (fix → cite `doctrine --help
+   --boot-map` / the verb + rule by name) vs *names-a-verb* (already compliant).
+   Evidence-bound; record the disposition per skill.
+5. **PUSH-tier pass** (Objective 5) — verify the reference-forms block in
+   routing-process.md is present + correct (R-OQ-5).
+6. **Re-embed + verify** — `touch src/install.rs` + `cargo build`; regenerate
+   boot (`doctrine boot`); run `doctrine boot --check`; confirm reachability.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
+- **INV — no ADR amendment.** Hymns stay under ADR-011/SPEC-023; any pressure to
+  fold them into ADR-005's tiers becomes a review finding, not a slice edit.
+- **INV — derived content untouched.** The audit never hand-edits a clap-derived
+  boot section; currency there is automatic.
+- **INV — PUSH stays compact.** Load-bearing rules only in Tier 0; detail is
+  pushed to Tier 1 pointers (ADR-005).
+- **Assumption** — `install.rs` embed-copies the full `install/*.md` set to
+  `.doctrine/`; the manifest has no per-`.md` allowlist (confirmed: only `[dirs]`
+  `[memory]` `[gitignore]` `[hymns]` `[root_markers]`). *Edge:* if a `.md` is in
+  fact NOT copied, that is an orphan to fix in the reachability pass.
+- **Edge — boot-footer residue.** The orphan `.doctrine/boot-footer.md` may be
+  tracked in some client installs; deletion is safe because no read path
+  consumes it.
+- **Edge — restate-line false positives.** A `--flag <ARG>` inside a fenced
+  *example command* a skill tells the agent to run may be legitimate; the test
+  is reproduction of a *table/enumeration*, not a single cited invocation.
+
 ## 6. Open Questions & Unknowns
+
+- **OQ-1 — model-band.md contract home.** Confirmed: documented in
+  using-doctrine.md as a PUSH hook. No residual question.
+- **OQ-2 — does `install.rs` copy every `install/*.md`, or an allowlist?** To
+  confirm in the reachability pass by reading the embed logic; shapes whether
+  "ship" is automatic or needs a manifest entry. Low risk — either way the
+  audit closes the gap.
+- **OQ-3 — review-ledger.md tier.** Is it Tier-1 PULL-reference (a doc skills
+  point at) or effectively skill-owned by review/inquisition? Resolve in the IA
+  pass; affects which skill owns its pointer.
 
 ## 7. Decisions, Rationale & Alternatives
 
+- **D1 — Scope shape C+ (audit `.md`+manifest; map new subdirs).** Alt A (tight,
+  6 files) leaves Objective 1 knowingly partial; Alt B (full IA incl. hymns
+  internals) drags in SL-186/187/191 + an ADR amendment. C+ makes the surface
+  *accounted for* without reaching into cascade internals. **Chosen.**
+- **D2 — Hymns governed by ADR-011/SPEC-023, no ADR-005 revision.** The cascade
+  is a resolver mechanism, not a static-doc tier. IA map cross-references.
+  `SL-144 references(concerns) SPEC-023`; no `after SL-191` edge (altitude
+  de-conflicts). Alt: amend ADR-005 to a 4-tier model — rejected as mid-slice
+  governance churn; filed as a conditional review finding instead.
+- **D3 — reconcile-rules.md dropped → IDE-029.** A per-skill hook file would
+  parallel the hymns `stage`/`project` bands (DRY violation). General form
+  captured as IDE-029, sequenced after SL-191. Alt: build it now — rejected
+  (YAGNI, no consumer, parallel implementation).
+- **D4 — boot-footer.md retired, not hardened.** Dead post-SL-187; header
+  comment is a lie. Delete both copies. Alt: repurpose as a second onboarding
+  hook — rejected (onboarding already has a live seed mechanism; two hooks for
+  one slot re-creates the drift).
+- **D5 — Restate-line: grep-assisted manual triage, evidence-bound.** 8/30
+  candidates, manual disposition. Alt: build a permanent lint check — deferred
+  as optional follow-up (not a deliverable; over-engineering for 8 candidates).
+
 ## 8. Risks & Mitigations
 
+- **R1 — restate-line scope creep.** *Mitigation:* evidence-bound (R-C1); a
+  cited invocation ≠ a reproduced table. Disposition recorded per skill; genuine
+  architectural cases → ADR-005 review finding, not papered over.
+- **R2 — re-embed footgun strands edits.** *Mitigation:* batch per §5.4;
+  `doctrine boot --check` gates that shipped == regenerated.
+- **R3 — ISS-208 makes the restate point-at target undiscoverable.** *Mitigation:*
+  docs cite the working `doctrine --help --boot-map` combo; ISS-208 tracks the
+  CLI fix separately (out of scope).
+- **R4 — hymns section drifts as SL-191 lands.** *Mitigation:* document hymns at
+  altitude only (existence, two-site, resolver, authority cross-ref) — nothing
+  SL-191 can invalidate.
+
 ## 9. Quality Engineering & Validation
+
+Verification alignment (maps to ADR-005 VT/VA + this slice's closure intent):
+- **VT** — `doctrine boot --check` passes after edits (shipped snapshot ==
+  regenerated); reference-forms block present in the regenerated boot (R-OQ-5).
+- **VT** — fresh-install / embed test: `glossary.md`, `using-doctrine.md`,
+  `model-band.md` present in `.doctrine/`; `boot-footer.md` **absent**.
+- **VA** — restate-line: the 8 candidate skills triaged; each disposition
+  recorded (fixed offender / compliant pointer); no skill reproduces a
+  command/flag table.
+- **VA** — reachability: every Tier-0/1 doc is shipped ∧ pointed-at; zero
+  orphans; the reachability contract is documented in using-doctrine.md.
+- **VA** — currency: glossary + using-doctrine cover all current kinds/verbs
+  (spot-check REC/REV/POL/STD/knowledge each named).
 
 ## 10. Review Notes

@@ -27,6 +27,26 @@ target = "SL-143"
 label = "fulfils"
 target = "CHR-023"
 
+[[selector]]
+selector = "install/using-doctrine.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/glossary.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/routing-process.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/boot-footer.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/**/SKILL.md"
+intent = "design-target"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
