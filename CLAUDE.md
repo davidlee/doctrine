@@ -8,6 +8,8 @@ If you have NOT seen `BOOT-SENTINEL: doctrine-governance-snapshot` anywhere in y
 docs/claude has claude official docs cache - trust these, not
 hallucination-ridden haiku summaries of web versions.
 
+Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
+
 ## Reviewer
 - default reviewer: codex mcp — use default (GPT-5.5) for external adversarial reviews.
 - Opus sub-agent is also useful for variety on subsequent passes.
