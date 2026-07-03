@@ -1,9 +1,9 @@
 id = 144
 slug = "adr-005-full-compliance"
 title = "ADR-005 full compliance: reference-doc IA, user hooks, restate-line audit"
-status = "design"
+status = "ready"
 created = "2026-06-23"
-updated = "2026-06-23"
+updated = "2026-07-03"
 tags = ["governance", "docs", "adr-005", "templates", "hooks", "skills"]
 
 [relationships]
