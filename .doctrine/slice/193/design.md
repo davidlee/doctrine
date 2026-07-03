@@ -118,10 +118,19 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
 ## Code impact
 
 - **`src/install.rs`**
-  - `project_starters`: remove `#[expect(dead_code)]`; split the whole-slot skip
-    into independent `.md` / `.toml` write-if-absent; add sidecar emission
-    (`replaces = "<slot.path()>"`). Signature already carries
-    `(disk_root, embedded, sealed, exposed_slots, dry_run)`.
+  - `project_starters`: remove its `#[expect(dead_code)]`; split the whole-slot
+    skip into independent `.md` / `.toml` write-if-absent; add sidecar emission
+    (`replaces = "<slot.path()>"`); **`create_dir_all(parent)` before each
+    `write_atomic`** — `write_atomic` (`fsutil.rs`) does *not* mkdir; it fails on
+    a missing parent (see Adversarial review, "Write order"). Signature already
+    carries `(disk_root, embedded, sealed, exposed_slots, dry_run)`.
+  - **Remove the second `#[expect(dead_code, reason = "…prompt.rs (PHASE-02)")]`
+    on `HymnsSection.expose` (`install.rs:117`)** — reading it via
+    `embedded_expose_set` makes the field live, so the expectation goes
+    unfulfilled. `Cargo.toml` sets `warnings = "deny"`, so an unfulfilled lint
+    expectation is a **hard compile error**, not a warning. Two distinct
+    `#[expect(dead_code)]` attributes must go (the fn and the field); the reason
+    string was also stale (named `prompt.rs`, consumed here in `install.rs`).
   - Add `embedded_expose_set() -> SealSet`-shaped `BTreeSet<Slot>` from
     `manifest.hymns.expose` (mirror of `embedded_seal_set`).
   - `run_forward_steps`: add forward step 4 — *"Project exposed hymn starters?
@@ -142,6 +151,9 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
   - VT: **preserve edits** — edited `.md` present ⇒ never overwritten.
   - VT: **seal respected** — sealed slot ⇒ neither `.md` nor sidecar written.
   - VT: **dry_run** — nothing written for either file.
+  - VT: **fresh dir** — projecting into an **empty** disk root (band dir absent)
+    writes `.md` + sidecar, creating the parent — guards the `create_dir_all`
+    added above (regresses if `write_atomic`'s no-mkdir behaviour bites).
   - `project_starters` is currently **untested** dead code — these are new
     tests (tempdir-scoped), not an extension.
 - **Golden — resolver expose/seal symmetry (`src/hymns.rs`):**
@@ -153,6 +165,16 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
   - VT: after projection, `prompt resolve --role worker` emits `role/worker`
     once; `prompt explain` shows framework `role/worker` suppressed, not `rank`-
     ordered-but-present.
+  - VT: **`replaces` legality — corpus-wide.** After projection, `prompt check`
+    (⇒ `validate_replaces`, `hymns.rs`) returns `Ok` over the real projected
+    corpus: every self-`replaces` is the unique-most-specific active snippet of
+    its slot (INV-3). This is the *only* test that guards the produced sidecars
+    against `NonTopReplacer`/cycle errors that would make `resolve` fail outright
+    — the file-I/O unit tests do not exercise it.
+  - VT: **all 5 exposed slots single-emit**, not just `role/worker` — drive a
+    context that activates the model-band slots (`model/deepseek/_default`,
+    `model/anthropic/claude-sonnet-4`) and `harness/claude`, asserting each emits
+    once. The defect is corpus-wide; role/worker alone under-covers it.
 - **Behaviour-preservation:** full resolver/loader/e2e suites green **unchanged**
   (D4 gate).
 - **Corpus check:** in-repo, `prompt explain` across a full context shows **no**
@@ -176,6 +198,12 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
   exposed-slot snippet with no sidecar still doubles (REV-019 documented known
   gap). This slice fixes the *projection* path + the existing projected twins,
   not arbitrary hand authoring. Follow-up only if demand appears.
+- **Sidecar repair.** Write-if-absent (D2) is self-healing only for a *missing*
+  sidecar; a user who hand-edits a projected `<label>.toml` and drops the
+  `replaces` line gets a permanently doubling slot the projector will not repair
+  (`.toml` present ⇒ skipped). Accepted flip side of rejecting always-clobber
+  (D2/iii, which would destroy hand-tuned axes). Out of scope; `prompt check`
+  surfaces the doubling if run.
 - Set-valued trait selection (SPEC-023 FR-004/5/7/9) — **SL-192**; engine-
   independent of this slice.
 - Worker-contract hymn content / deepseek patterns / bake generalization / funnel
@@ -203,9 +231,25 @@ Verified corpus-wide: `prompt explain` shows no exposed slot doubling.
   Correct.
 - **No step-count regression.** `run_forward_steps` is not unit-tested for step
   count (only `prompt_step` is tested in isolation); adding step 4 breaks nothing.
-- **Write order.** New slot writes `.md` (creates dir via `write_atomic`) then
-  sidecar; backfill writes only the sidecar into the existing dir. `write_atomic`
-  must ensure the parent dir for the sidecar-only path — confirm at execute.
+- **Write order — CORRECTED (was backwards).** `write_atomic` (`fsutil.rs:52`)
+  resolves `path.parent()` and writes+renames a temp into it, but **never
+  `create_dir_all`s** — a missing parent fails ("Failed to write temp"). So the
+  at-risk path is the *fresh* `.md` write into a not-yet-existing `<band>/`, not
+  the sidecar-only backfill (which lands in the existing dir beside the `.md`).
+  In a normal `doctrine install`, base install pre-materialises every embedded
+  `install/hymns/**` `.md` (creating the band dirs) before forward-steps run, so
+  the fresh path is not hit there — but the unit "fresh dir" VT and the
+  user-reset self-heal case (deleted band dir) both hit it. Fix: `project_starters`
+  `create_dir_all(parent)` before each `write_atomic` (moved from "confirm at
+  execute" to a Code-impact line).
+- **Corpus exhaustiveness — CLEARED.** Embedded `install/hymns/**` = `preamble/
+  core` (sealed) + the 5 exposed slots + `README.md` (non-slot, loader skips).
+  `seal ∪ expose` covers **every** embedded hymn slot, so base install copies no
+  non-sealed/non-exposed twin that would double outside the projector's reach —
+  the "corpus-wide, 5 slots" claim is complete, not a sample. (If a future
+  embedded hymn is added that is neither sealed nor exposed, base install would
+  copy it as a doubling User twin the projector never sidecars — a maintenance
+  invariant, not a current gap.)
 - **Corrected:** `project_starters` has **no** existing test (fully untested dead
   code); the VTs above are net-new, not an extension.
 
