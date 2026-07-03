@@ -251,8 +251,9 @@ transcript pointers):
   env-form entry reads as foreign (never refreshed) while a legacy abs entry
   (file_name `doctrine`) still matches — risking a half-migrated double-register.
   Predicate must OR-in the env literal; migration test required.
-- **F3 — flag-surface approval (open).** D1 picks a bare `--dev` boolean over an
-  explicit `--marketplace-source`. Author's call, pending user sign-off.
+- **F3 — flag-surface (provisionally locked).** D1 picks a bare `--dev` boolean
+  over an explicit `--marketplace-source`. User instruction "lock and plan" taken
+  as acceptance; the pending GPT inquisition may reopen it.
 
 ### External / inquisition pass
 
