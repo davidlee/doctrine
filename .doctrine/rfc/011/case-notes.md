@@ -572,3 +572,6 @@ recompile → correct CARGO_MANIFEST_DIR) → 3/3 green. Slice-independent (SL-1
 doesn't touch cordage). Cost: a spurious RED gate at a close gate, ~2 min to
 prove environmental. Root cause: stale cross-environment target cache + env!
 compile-time path embedding in a filesystem-walking test.
+
+[preflight + backlog; iss-209-preflight]
+- backlog show ISS-209 returned the template path (.doctrine/backlog/issue/209/ISS-209.md) but the actual file is at `backlog-209.md`. CLI `show` output is correct but the template body path hint was wrong — had to use `paths` to find the real file. Minor friction.

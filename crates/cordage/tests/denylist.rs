@@ -67,9 +67,21 @@ fn forbidden_tokens() -> Vec<String> {
     frags.iter().map(|parts| parts.concat()).collect()
 }
 
+/// The cordage crate root, resolved at RUNTIME via cargo's `CARGO_MANIFEST_DIR`
+/// env var (set per-invocation to the invoking tree). Never resolved at
+/// compile-time via `env!` — the compile-time `CARGO_MANIFEST_DIR` bakes the
+/// absolute path at build time, which differs between jail and non-jail
+/// environments, causing spurious rebuilds (same class as SL-162 / CHR-014).
+fn crate_root() -> PathBuf {
+    PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR not set — run via cargo test"),
+    )
+}
+
 #[test]
 fn crate_source_carries_no_forbidden_vocabulary() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let root = crate_root();
     let tokens = forbidden_tokens();
     let mut files: Vec<PathBuf> = Vec::new();
     collect_files(&root, &mut files);
@@ -129,7 +141,7 @@ fn self_exclusion_and_walk_skips_are_sound() {
     // as data; and the skip-dirs are honoured.
     assert!(SKIP_DIRS.contains(&"target"));
     let mut files: Vec<PathBuf> = Vec::new();
-    collect_files(&PathBuf::from(env!("CARGO_MANIFEST_DIR")), &mut files);
+    collect_files(&crate_root(), &mut files);
     let names: BTreeSet<String> = files
         .iter()
         .filter_map(|p| p.file_name().and_then(OsStr::to_str).map(str::to_owned))

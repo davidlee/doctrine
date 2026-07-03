@@ -67,6 +67,7 @@ fn no_baked_paths() {
     let mut files = Vec::new();
     rs_files(&root.join("src"), &mut files);
     rs_files(&root.join("tests"), &mut files);
+    rs_files(&root.join("crates"), &mut files);
 
     let mut offenders: Vec<String> = Vec::new();
     for needle in &needles {
