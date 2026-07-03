@@ -541,6 +541,12 @@ const MCP_REL: &str = ".mcp.json";
 /// The `mcpServers` key doctrine registers its server under in `.mcp.json` — the
 /// client-side alias, so its tools surface as `mcp__doctrine__review_*`.
 const MCP_SERVER_KEY: &str = "doctrine";
+/// The portable `.mcp.json` `command` (SL-195, POL-002): env-expansion resolved
+/// by Claude Code at load (`${VAR:-default}`, mcp.md:384). Single source of the
+/// literal — `desired_mcp_entry`, the `plan_mcp` comparator, and
+/// `is_doctrine_mcp_entry` all consume it (STD-001). NO host abspath in the
+/// committed file; `DOCTRINE_BIN` overrides when `doctrine` is off PATH.
+const MCP_COMMAND: &str = "${DOCTRINE_BIN:-doctrine}";
 
 /// The `SessionStart` matcher token — fires on a fresh session and on `/clear`
 /// (`clear` firing a `SessionStart` hook is already witnessed; the OR-token is
@@ -1293,7 +1299,7 @@ fn install_refresh(
             let baseref = install_baseref(root, dry_run)?;
             // `.mcp.json` registration (CHR-013) — a SEPARATE project-root file,
             // not the settings file; its own narrow-path merge core.
-            let mcp = install_mcp(root, exec, dry_run)?;
+            let mcp = install_mcp(root, dry_run)?;
             Ok(RefreshReport {
                 hook,
                 baseref,
@@ -1462,25 +1468,31 @@ fn mcp_fallback() -> McpPlan {
 }
 
 /// The canonical server entry doctrine writes under `mcpServers.doctrine`:
-/// `{ "command": "<exec>", "args": ["serve", "--mcp"] }`. The command is the
-/// absolute exec path (stamped like the hooks), so a project without `doctrine`
-/// on the harness PATH still resolves it.
-fn desired_mcp_entry(exec: &Path) -> Value {
+/// `{ "command": "${DOCTRINE_BIN:-doctrine}", "args": ["serve", "--mcp"] }`. The
+/// command is the portable env-expansion literal ([`MCP_COMMAND`]), NOT a host
+/// abspath — the committed `.mcp.json` must carry no per-machine path (POL-002,
+/// SL-195). `DOCTRINE_BIN` overrides when `doctrine` is off the harness PATH.
+fn desired_mcp_entry() -> Value {
     serde_json::json!({
-        "command": exec.display().to_string(),
+        "command": MCP_COMMAND,
         "args": ["serve", "--mcp"],
     })
 }
 
-/// Whether `entry` is doctrine's own MCP server entry — the command's file name
-/// is `doctrine` AND the args are exactly `["serve", "--mcp"]`. Robust to a
-/// space-bearing exec path. A foreign command or customised args is NOT ours, so
-/// a deliberate user override under the `doctrine` key is never clobbered.
+/// Whether `entry` is doctrine's own MCP server entry — the command is EITHER
+/// the portable env form ([`MCP_COMMAND`], the new shape) OR a legacy abspath
+/// whose file name is `doctrine` (the pre-SL-195 baked shape), AND the args are
+/// exactly `["serve", "--mcp"]`. Owning both forms lets `plan_mcp` migrate an old
+/// abs entry to the env form without treating it as foreign or double-registering
+/// (SL-195 R1). Robust to a space-bearing legacy path. A foreign command or
+/// customised args is NOT ours — a deliberate user override is never clobbered.
 fn is_doctrine_mcp_entry(entry: &Value) -> bool {
     let is_doctrine = entry
         .get("command")
         .and_then(Value::as_str)
-        .is_some_and(|c| Path::new(c).file_name() == Some(OsStr::new("doctrine")));
+        .is_some_and(|c| {
+            c == MCP_COMMAND || Path::new(c).file_name() == Some(OsStr::new("doctrine"))
+        });
     let args_ok = entry
         .get("args")
         .and_then(Value::as_array)
@@ -1491,11 +1503,15 @@ fn is_doctrine_mcp_entry(entry: &Value) -> bool {
 /// PURE planner for the `mcpServers.doctrine` entry in `.mcp.json` (CHR-013).
 /// Sets the nested key WITHOUT disturbing sibling servers or unrelated keys
 /// (mutates a `serde_json::Value` at the narrow path). Absent ⇒ write; ours and
-/// current ⇒ no-op; ours with a stale exec path ⇒ refresh; a foreign-shaped
+/// ALREADY the portable env form ⇒ no-op; ours but a legacy abspath (or any other
+/// non-env command) ⇒ refresh to the env form (SL-195 migration); a foreign-shaped
 /// `doctrine` entry, a non-object `mcpServers`, or malformed JSON ⇒ leave
-/// untouched (no clobber). Rides BESIDE the hook merge core.
-fn plan_mcp(existing_json: Option<&str>, exec: &Path) -> McpPlan {
-    let command = exec.display().to_string();
+/// untouched (no clobber). The desired command is the const [`MCP_COMMAND`], NOT a
+/// host path — so the no-op test compares against it (SL-195 F-1: comparing
+/// against the abspath here made an already-env entry never no-op ⇒ thrash).
+/// Rides BESIDE the hook merge core.
+fn plan_mcp(existing_json: Option<&str>) -> McpPlan {
+    let command = MCP_COMMAND.to_string();
     let mut value: Value = match existing_json.map(str::trim) {
         None | Some("") => Value::Object(Map::new()),
         Some(text) => match serde_json::from_str(text) {
@@ -1527,7 +1543,7 @@ fn plan_mcp(existing_json: Option<&str>, exec: &Path) -> McpPlan {
         // A `doctrine` key that is not our shape is a deliberate user entry.
         Some(_foreign) => return mcp_fallback(),
     };
-    servers.insert(MCP_SERVER_KEY.to_string(), desired_mcp_entry(exec));
+    servers.insert(MCP_SERVER_KEY.to_string(), desired_mcp_entry());
     match serde_json::to_string_pretty(&value) {
         Ok(json) => McpPlan {
             outcome,
@@ -1539,18 +1555,18 @@ fn plan_mcp(existing_json: Option<&str>, exec: &Path) -> McpPlan {
 
 /// The snippet printed when `.mcp.json` carries a foreign/malformed `doctrine`
 /// entry that can't be merged automatically — the full `mcpServers` block to add.
-fn mcp_fallback_snippet(exec: &Path) -> String {
-    let block = serde_json::json!({ "mcpServers": { MCP_SERVER_KEY: desired_mcp_entry(exec) } });
-    serde_json::to_string_pretty(&block).unwrap_or_else(|_| exec.display().to_string())
+fn mcp_fallback_snippet() -> String {
+    let block = serde_json::json!({ "mcpServers": { MCP_SERVER_KEY: desired_mcp_entry() } });
+    serde_json::to_string_pretty(&block).unwrap_or_else(|_| MCP_COMMAND.to_string())
 }
 
 /// Register the doctrine MCP server in the project-root `.mcp.json`, writing only
 /// on change (unless `dry_run`). Reads → [`plan_mcp`] → atomic write, mirroring
 /// [`install_baseref`]. Rides beside the hook installer in the Claude arm.
-fn install_mcp(root: &Path, exec: &Path, dry_run: bool) -> anyhow::Result<RefreshOutcome> {
+fn install_mcp(root: &Path, dry_run: bool) -> anyhow::Result<RefreshOutcome> {
     let path = root.join(MCP_REL);
     let existing = fs::read_to_string(&path).ok();
-    let plan = plan_mcp(existing.as_deref(), exec);
+    let plan = plan_mcp(existing.as_deref());
     if let (Some(json), false) = (&plan.new_json, dry_run) {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -1561,7 +1577,7 @@ fn install_mcp(root: &Path, exec: &Path, dry_run: bool) -> anyhow::Result<Refres
     Ok(match plan.outcome {
         RefreshOutcome::PrintedFallback { .. } => RefreshOutcome::PrintedFallback {
             hook_file: MCP_REL,
-            snippet: mcp_fallback_snippet(exec),
+            snippet: mcp_fallback_snippet(),
         },
         other => other,
     })
@@ -3919,11 +3935,12 @@ mod tests {
         );
         let parsed: Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["worktree"]["baseRef"], Value::String("head".into()));
-        // ...and registers the MCP server in .mcp.json.
+        // ...and registers the MCP server in .mcp.json with the PORTABLE env
+        // command — no host abspath in the committed file (SL-195, POL-002).
         let mcp_json: Value = serde_json::from_str(&fs::read_to_string(&mcp).unwrap()).unwrap();
         assert_eq!(
             mcp_json["mcpServers"]["doctrine"]["command"],
-            Value::String("/abs/doctrine".into())
+            Value::String(MCP_COMMAND.into())
         );
         assert_eq!(
             mcp_json["mcpServers"]["doctrine"]["args"],
@@ -4021,20 +4038,21 @@ mod tests {
 
     // --- CHR-013: `.mcp.json` doctrine server registration (Claude arm) ---
 
-    fn mcp_exec() -> PathBuf {
-        PathBuf::from("/abs/doctrine")
-    }
-
     #[test]
     fn plan_mcp_writes_entry_when_absent() {
         // Empty/absent .mcp.json ⇒ Wired, with the nested server entry written.
-        let plan = plan_mcp(None, &mcp_exec());
+        // SL-195: the command is the portable env literal, NEVER a host abspath.
+        assert_eq!(
+            MCP_COMMAND, "${DOCTRINE_BIN:-doctrine}",
+            "the portable command literal is pinned (POL-002, mcp.md:384)"
+        );
+        let plan = plan_mcp(None);
         assert!(matches!(plan.outcome, RefreshOutcome::Wired(_)));
         let parsed: Value =
             serde_json::from_str(&plan.new_json.expect("a write is planned")).unwrap();
         assert_eq!(
             parsed["mcpServers"]["doctrine"]["command"],
-            Value::String("/abs/doctrine".into())
+            Value::String(MCP_COMMAND.into())
         );
         assert_eq!(
             parsed["mcpServers"]["doctrine"]["args"],
@@ -4044,24 +4062,27 @@ mod tests {
 
     #[test]
     fn plan_mcp_idempotent_when_current() {
-        let existing =
-            r#"{"mcpServers":{"doctrine":{"command":"/abs/doctrine","args":["serve","--mcp"]}}}"#;
-        let plan = plan_mcp(Some(existing), &mcp_exec());
+        // SL-195 F-1 (the blocker): an entry ALREADY in the portable env form is a
+        // true no-op — no rewrite. The comparator must weigh the existing command
+        // against MCP_COMMAND, not a host abspath (which would never match ⇒ thrash).
+        let existing = r#"{"mcpServers":{"doctrine":{"command":"${DOCTRINE_BIN:-doctrine}","args":["serve","--mcp"]}}}"#;
+        let plan = plan_mcp(Some(existing));
         assert!(matches!(plan.outcome, RefreshOutcome::None));
-        assert!(plan.new_json.is_none(), "no write when already current");
+        assert!(plan.new_json.is_none(), "no write when already env-form");
     }
 
     #[test]
-    fn plan_mcp_refreshes_stale_exec_path() {
-        // Our entry by shape, but a stale command path ⇒ Refreshed (rewrite command).
-        let existing =
-            r#"{"mcpServers":{"doctrine":{"command":"/old/doctrine","args":["serve","--mcp"]}}}"#;
-        let plan = plan_mcp(Some(existing), &mcp_exec());
+    fn plan_mcp_migrates_legacy_abs_to_env_form() {
+        // SL-195 migration: a legacy entry baked by the OLD installer (abspath whose
+        // file name is `doctrine`) is still ours (widened predicate) ⇒ Refreshed to
+        // the portable env form — never foreign, never double-registered (R1).
+        let existing = r#"{"mcpServers":{"doctrine":{"command":"/old/abs/doctrine","args":["serve","--mcp"]}}}"#;
+        let plan = plan_mcp(Some(existing));
         assert!(matches!(plan.outcome, RefreshOutcome::Refreshed(_)));
         let parsed: Value = serde_json::from_str(&plan.new_json.unwrap()).unwrap();
         assert_eq!(
             parsed["mcpServers"]["doctrine"]["command"],
-            Value::String("/abs/doctrine".into())
+            Value::String(MCP_COMMAND.into())
         );
     }
 
@@ -4069,7 +4090,7 @@ mod tests {
     fn plan_mcp_preserves_foreign_servers() {
         // A sibling MCP server under mcpServers must survive our write intact.
         let existing = r#"{"mcpServers":{"other":{"command":"/x/other","args":["go"]}}}"#;
-        let plan = plan_mcp(Some(existing), &mcp_exec());
+        let plan = plan_mcp(Some(existing));
         assert!(matches!(plan.outcome, RefreshOutcome::Wired(_)));
         let parsed: Value = serde_json::from_str(&plan.new_json.unwrap()).unwrap();
         assert_eq!(
@@ -4078,7 +4099,7 @@ mod tests {
         );
         assert_eq!(
             parsed["mcpServers"]["doctrine"]["command"],
-            Value::String("/abs/doctrine".into())
+            Value::String(MCP_COMMAND.into())
         );
     }
 
@@ -4087,7 +4108,7 @@ mod tests {
         // A `doctrine` key that is NOT our shape (foreign command / customised args)
         // is a deliberate user entry — leave it untouched, surface a snippet.
         let existing = r#"{"mcpServers":{"doctrine":{"command":"/x/tool","args":["run"]}}}"#;
-        let plan = plan_mcp(Some(existing), &mcp_exec());
+        let plan = plan_mcp(Some(existing));
         assert!(matches!(
             plan.outcome,
             RefreshOutcome::PrintedFallback { .. }
@@ -4100,7 +4121,7 @@ mod tests {
 
     #[test]
     fn plan_mcp_malformed_left_untouched() {
-        let plan = plan_mcp(Some("{ not json"), &mcp_exec());
+        let plan = plan_mcp(Some("{ not json"));
         assert!(matches!(
             plan.outcome,
             RefreshOutcome::PrintedFallback { .. }
@@ -4114,7 +4135,7 @@ mod tests {
     #[test]
     fn plan_mcp_non_object_servers_left_untouched() {
         let existing = r#"{"mcpServers":[1,2,3]}"#;
-        let plan = plan_mcp(Some(existing), &mcp_exec());
+        let plan = plan_mcp(Some(existing));
         assert!(matches!(
             plan.outcome,
             RefreshOutcome::PrintedFallback { .. }
@@ -4124,9 +4145,13 @@ mod tests {
 
     #[test]
     fn is_doctrine_mcp_entry_recognises_only_our_shape() {
-        let ours: Value =
+        // SL-195: BOTH the new env form and a legacy abspath (file name `doctrine`)
+        // are ours; foreign command or customised args is not.
+        let env_form: Value = serde_json::json!({"command": MCP_COMMAND, "args":["serve","--mcp"]});
+        assert!(is_doctrine_mcp_entry(&env_form), "env form is ours");
+        let legacy_abs: Value =
             serde_json::json!({"command":"/nix/store/a b/doctrine","args":["serve","--mcp"]});
-        assert!(is_doctrine_mcp_entry(&ours));
+        assert!(is_doctrine_mcp_entry(&legacy_abs), "legacy abspath is ours");
         // foreign command file name
         let foreign: Value = serde_json::json!({"command":"/x/tool","args":["serve","--mcp"]});
         assert!(!is_doctrine_mcp_entry(&foreign));
