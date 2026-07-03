@@ -459,3 +459,9 @@ audit must review the bundle surface, not edge, to read conformance truthfully.
   time the double entry needed an `ls` to confirm before path-limiting (shared
   index, must exclude another agent's untracked IMP-242). Minor: a note that the
   slug is a symlink alias would save the inspection.
+
+[plan; SL-191-plan-a] `doctrine slice show <id>` renders scope MD only — it does
+not surface the authored plan phases/criteria. Verifying the just-authored
+plan.toml therefore required Reading the raw file (against the "read via show, not
+raw files" guardrail, because show has no plan projection). A `slice show --plan`
+or a plan projection would keep plan authoring inside the guardrail.
