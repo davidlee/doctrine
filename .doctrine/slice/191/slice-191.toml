@@ -50,6 +50,14 @@ intent = "design-target"
 selector = "plugins/doctrine/skills/dispatch-agent/**"
 intent = "design-target"
 
+[[selector]]
+selector = "install/hymns/README.md"
+intent = "design-target"
+
+[[selector]]
+selector = "memory/mem.concept.doctrine.hymn-cascade/**"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-011"

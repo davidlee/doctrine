@@ -86,16 +86,31 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
    error, and `prompt check` (`src/commands/prompt.rs`) as an author-time finding
    over embedded defs. Catches a typo'd trait → empty set → silent loss of the
    worker's delivery contract. Def→corpus direction; embedded defs only (design D4).
+   `prompt check` additionally runs the **full-context resolver** per def and
+   asserts the `Model` band is present when `traits:` is non-empty — proving the
+   bake actually delivers traits, not merely that they exist in corpus (design C3).
+   The bake reads `traits:` via a **new dedicated agent-def frontmatter parser**
+   (none exists today — the bake does byte-level marker replace only).
 
 6. **Funnel check-cadence wiring** — `/dispatch` orchestrator + import belt:
-   - **base-clean precondition:** run `doctrine check` (commit/gate cadence) on
-     the base before `arm-spawn` (and on `main` before branching), so a worker's
-     `doctrine check quick` only ever touches its own delta — the formatter-clean
-     base that makes the worker fmt mandate safe (fixes the SL-168 root cause:
-     `cargo fmt` on an *unformatted* base spills outside the delta).
+   - **base-clean precondition (non-mutating prove-clean):** *assert* the base is
+     clean before `arm-spawn` (and `main` before branching) with a non-mutating
+     check (`fmt --check` / dry gate), never a fix-in-place — a mutating check on
+     the shared base has no owner and re-creates the spill. Pre-existing red is a
+     base defect (distinct from worker findings); real cleanup is an operator-owned
+     commit (design D5/C1). A clean base makes the worker's `check quick`
+     delta-scoped (fixes the SL-168 root cause).
    - **reject-and-halt import gate:** run a `doctrine check` cadence on the
      post-import tree; a red (unformatted / lint-fail) delta **halts and reports**,
      never lands and never auto-fixes (belt, not self-report — design D5).
+
+7. **Corpus knowledge refresh** — the hymn READMEs (`install/hymns/README.md`,
+   `.doctrine/hymns/README.md`) are stale (model band as "model-family notes";
+   exposed slots winning by provenance tiebreak) — rewrite to the SPEC-023
+   trait-space + SL-193 self-`replaces` model. Plus a **shipped concept memory**
+   (`memory/mem.concept.doctrine.hymn-cascade`) capturing the authoring model
+   (trait-keyed band, bands registry, seal/expose, `replaces`, precedence), which
+   installs to every doctrine project (design C4/C6).
 
 ## Non-Goals
 
@@ -113,6 +128,9 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
 - **On-disk `.doctrine/agents/**` `traits:` linting** — the coverage lint checks
   embedded (framework-shipped) defs only; hand-edited on-disk def linting is a
   follow-up (parallels SL-193's deferred hand-authored-overlay gap).
+- **Reverse dead-hymn lint (corpus→def)** — split to **IMP-242**. A `model/**`
+  hymn no def can match is dead prose, but has no live trigger this slice (our one
+  hymn is wired) and its only unique catch needs a second trait root that D3 defers.
 - **Auto-fix import** — rejected; the import gate halts-and-reports, it never
   rewrites the worker delta (ADR-012 sole-writer; design D5).
 - **Postmortem §5b/§5d.2–5 funnel/CI hardening** beyond the check-cadence wiring —
@@ -129,12 +147,16 @@ mandate and the funnel — so an unformatted / out-of-set delta cannot land.
 
 - `install/hymns/role/worker.md`, `install/hymns/model/adherence/low.md`
   (Framework corpus). No `install/hymns/stage/*` (stage folded).
+- `install/hymns/README.md`, `.doctrine/hymns/README.md` (rewrite to trait-space /
+  self-`replaces` model — currently stale).
+- `memory/mem.concept.doctrine.hymn-cascade` (new shipped concept memory).
 - `.doctrine/hymns/**` (this-repo overlay: cargo/target/ADR-001 specifics; rides
   SL-193 close).
 - `src/hymns.rs` (`traits_covered` pure predicate).
-- `src/install.rs` (`resolve_worker_role_body` widened to read `traits:`; bake
-  coverage hard error + the render call site).
-- `src/commands/prompt.rs` (`prompt check` coverage finding over embedded defs).
+- `src/install.rs` (new agent-def frontmatter parser; `resolve_worker_role_body`
+  gains a `traits` param + `Band::Model`; bake coverage hard error + call site).
+- `src/commands/prompt.rs` (`prompt check`: coverage finding + full-context
+  resolve/`Model`-band assertion over embedded defs).
 - `install/agents/pi/dispatch-worker.md` (+ installed universal twin) — declare
   `traits = ["adherence/low"]`.
 - `plugins/doctrine/skills/dispatch/**`, `plugins/doctrine/skills/dispatch-agent/**`

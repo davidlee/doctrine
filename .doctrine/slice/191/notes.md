@@ -77,6 +77,30 @@ Selectors updated: `model/deepseek/_default.md` → `model/adherence/low.md`;
 +`src/hymns.rs`, `src/commands/prompt.rs`, `install/agents/pi/dispatch-worker.md`,
 `src/dispatch.rs` as design-target. Relation `SL-191 references(implements) SPEC-023`.
 
+## External adversarial pass integrated (codex/GPT-5.5, 2026-07-03)
+
+Confirmed internal F1 (layering clean), F2 (contamination scope), and the
+`traits:`↔`model:` separation (no hidden second source: `boot.rs:828`
+orchestrator-only, `install.rs:900` role-only). Seven findings triaged (full
+detail in design.md § External adversarial pass):
+
+- **C1** base-clean is now **non-mutating prove-clean** (mutating the shared base
+  has no owner → re-spill); cleanup operator-owned; pre-existing red ≠ worker fault.
+- **C2** **no agent-def frontmatter parser exists** — my design claim was wrong;
+  added a dedicated parser (traits optional, model cascade-ignored) + negative tests.
+- **C3** `prompt check` now runs the **full-context resolver** + asserts `Model`
+  band when `traits:` non-empty — proves declared→delivered, not just coverage.
+- **C4** reverse dead-hymn lint → **deferred to IMP-242** (no live trigger; needs a
+  2nd trait root D3 defers).
+- **C5** SL-192 dep satisfied (done); one trait degenerates to cross-band union.
+- **C6** hymn READMEs stale → rewrite in scope; marker rename deferred to plan.
+- **C7** verification uses `prompt explain` + bake tests, not stateful `prompt
+  resolve` (it regenerates boot.md before emit).
+
+New deliverables: agent-def frontmatter parser, both hymn README rewrites, shipped
+concept memory `mem.concept.doctrine.hymn-cascade`. Selectors +README/+memory
+(design-target); IMP-242 filed (`originates_from SL-191`).
+
 ## Content ownership cut (POL-002) — the audit table
 
 Ships in `install/hymns` (doctrine-owned, host-agnostic) vs `.doctrine/hymns`

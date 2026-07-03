@@ -112,6 +112,15 @@ silent-wrong harm this slice fights. Guard it:
   finding** into `check_corpus`'s `Vec<String>`. Catches the typo at edit, before
   install. Rides the existing `check_def_marker_present_role_unresolvable`
   precedent (`prompt check` is already def-aware).
+  - **Prove declared→delivered (adversarial C3).** Coverage alone ("the trait
+    exists in corpus") does *not* prove the bake actually feeds traits — the
+    existing marker check is role-only (`prompt.rs:321`), so a bake that parses
+    `traits:` but drops them (forgets to widen `bands`) evades it. So `prompt
+    check` must, per embedded worker def, run the **same full-context resolver the
+    bake uses** (not the role-only helper) and assert: marker present, full-context
+    resolve succeeds, and when `traits:` is non-empty the resolved context's band
+    filter **includes `Model`**. This closes the "trait hymn authored but never
+    baked" gap the coverage predicate alone leaves open.
 - **Direction:** def→corpus only (declared-but-uncovered = silent-contract-loss).
   The reverse (dead hymn: a selector pinning a trait no def declares) stays out —
   inert, not harmful.
@@ -128,12 +137,18 @@ bake and `prompt check` call down. No cycle. Resolves SPEC-023 OQ-3 at *both* th
 Worker instruction alone is unreliable (a worker forgets its `check quick`). The
 funnel needs a belt:
 
-- **Base-clean precondition:** run `doctrine check` (commit/gate cadence) on the
-  **base** before `arm-spawn` (and on `main` before branching). A formatter-clean
-  base is what makes the worker's `check quick` touch *only its own delta* (fixes
-  the SL-168 root cause: fmt on an unformatted base spilled outside the delta),
-  and makes the post-import check delta-scoped (given a clean base, only the
-  worker's files can be dirty).
+- **Base-clean precondition — NON-MUTATING prove-clean (adversarial C1).** Before
+  `arm-spawn` (and on `main` before branching), *assert* the base is clean with a
+  **non-mutating** check (`fmt --check` / dry `gate` semantics), never a
+  fix-in-place. Rationale: a mutating `doctrine check` on the shared base would
+  reformat unrelated files, and that write has **no owner** — it re-creates the
+  exact spill this gate exists to prevent, and blames the worker for ambient debt.
+  So the base gate only *proves* cleanliness; if it fails (pre-existing red), that
+  is reported **as a base defect, distinct from any worker finding**, and real
+  cleanup is a separate **operator-owned** commit (or an isolated preparatory
+  worktree), never folded silently into a worker's delta. A clean base is what
+  makes the worker's `check quick` touch only its own delta and the post-import
+  check delta-scoped (fmt-exact; for lint, "the delta caused any new red").
 - **Reject-and-halt import gate:** on import, run `doctrine check <cadence>` on
   the post-import tree; red (unformatted **or** lint-fail) → **halt, report to
   orchestrator, don't land.** The orchestrator (sole writer) decides —
@@ -172,14 +187,32 @@ case of "no out-of-set edit," so it ships host-agnostic and stronger.
 - `install/hymns/model/adherence/low.md` — §5c delivery patterns.
 - `.doctrine/hymns/**` — this-repo overlay (cargo/`target/`/ADR-001-layer/Rust-home);
   authored/reconciled post-SL-193.
+- **`install/hymns/README.md` + `.doctrine/hymns/README.md`** (adversarial C4/C6) —
+  both stale: they describe the model band as "model-family / exact-model notes"
+  and claim exposed slots win by the provenance tiebreak — contradicting SPEC-023's
+  **trait-space** contract and SL-193's **self-`replaces`** override. Rewrite to the
+  post-unlock authoring model so the shipped corpus stops teaching obsolete rules.
+- **`memory/mem.concept.doctrine.hymn-cascade/`** — a **shipped** concept memory
+  (embedded `memory/` corpus, `src/corpus.rs:44`; installs to every doctrine
+  project) capturing the hymn/cascade authoring model: trait-keyed model band,
+  bands registry, seal/expose symmetry, `replaces` suppression, precedence. The
+  memory-tier peer of the README rewrite — supersedes the stale mental model in
+  the corpus knowledge tier.
 
 **Logic:**
 - `src/hymns.rs` — `traits_covered` pure predicate (engine, DRY core).
-- `src/install.rs` — `resolve_worker_role_body` gains a `traits: &BTreeSet<String>`
-  param (populates `model`, adds `Band::Model`); the **call site** (`:1713`) parses
-  the def's `traits:` frontmatter and passes it. SL-192 already made the context
-  set-valued (`model: BTreeSet::new()`, `Only([Role])`), so this is populate-set +
-  widen-band, **not** a struct migration. Coverage predicate → install-time hard error.
+- `src/install.rs` — **new agent-def frontmatter parser (adversarial C2).** The
+  bake does **not** parse def frontmatter today — it reads embedded bytes + does a
+  literal marker replace (`:1716`, `:900`); the only frontmatter parser is
+  skill-specific (`:1252`). So this slice adds a dedicated agent-def frontmatter
+  parser (schema: `traits` optional list, `model` cascade-ignored) with negative
+  tests (malformed / absent `traits` / unknown keys). `resolve_worker_role_body`
+  then gains a `traits: &BTreeSet<String>` param (populates `model`, adds
+  `Band::Model`); the **call site** (`:1713`) parses `traits:` and passes it.
+  SL-192 already made the context set-valued (`model: BTreeSet::new()`,
+  `Only([Role])`), so the *resolver* change is populate-set + widen-band, **not** a
+  struct migration — but the frontmatter parse is genuinely new surface. Coverage
+  predicate → install-time hard error.
 - `src/commands/prompt.rs` — `check_corpus`/`Check` enumerates `embedded_agent_defs()`,
   parses `traits:`, runs predicate → findings.
 - `src/dispatch.rs` — reject-and-halt post-import check gate in the import belt.
@@ -192,8 +225,15 @@ case of "no out-of-set edit," so it ships host-agnostic and stronger.
 
 ## Verification alignment
 
-- **Resolve/bake:** `prompt resolve --role worker --model adherence/low` composes
-  role+adherence; bake inlines both into the baked def. Behaviour-preservation:
+- **Verification verb (adversarial C7): prefer `prompt explain` + bake unit/e2e,
+  not `prompt resolve`.** `prompt resolve` has a **side effect** — it regenerates
+  `.doctrine/state/boot.md` before emitting (`prompt.rs:118`→`boot.rs:316`), so it
+  depends on boot writeability + snapshot freshness and fails read-only. Slice
+  verification uses `prompt explain --role worker …` (pure precedence trace) and
+  pure bake unit/e2e tests; `prompt resolve` is used only in live/dry dispatch, not
+  as a correctness oracle.
+- **Resolve/bake:** `prompt explain --role worker --model adherence/low` traces the
+  role+adherence composition; bake inlines both into the baked def. Behaviour-preservation:
   `expand_worker_marker` unit tests + subagent-def drift test green (drift pins
   `name:` — unaffected; `resolve_worker_role_body` tests migrate to set-valued
   context, outcomes preserved for the role-only / trait-less case).
@@ -267,10 +307,43 @@ case of "no out-of-set edit," so it ships host-agnostic and stronger.
   *intersection* targeting — which ships with no live consumer until `capability/*`
   populates. Acceptable (YAGNI); noted so the gap is visible.
 
+## External adversarial pass (codex / GPT-5.5, 2026-07-03)
+
+Confirmed the internal verdicts: F1 layering clean (checked `boot.rs:828`
+orchestrator-only + `install.rs:900` role-only — no hidden cascade coupling), F2
+correctly scoped, and the `traits:`↔`model:` separation genuinely clean today
+(no second source feeds the cascade). New findings triaged:
+
+- **C1 (major) — D5 base-clean ownership hole. ACCEPTED** → base-clean is now a
+  **non-mutating prove-clean** gate; cleanup is operator-owned; pre-existing red
+  reported as a base defect (D5, above).
+- **C2 (major) — no agent-def frontmatter parser exists. ACCEPTED** → dedicated
+  parser added to scope; the false "seam exists" claim corrected (Code impact).
+- **C3 (major) — `prompt check` too weak to prove the bake uses traits. ACCEPTED**
+  → `prompt check` runs the full-context resolver + asserts `Model` band when
+  `traits:` non-empty (D4, above).
+- **C4 (major) — dead-hymn reverse lint. DEFERRED → IMP-242.** No live trigger in
+  this slice (our one hymn is wired); its only unique catch needs a second trait
+  root / capability hymn that D3 defers; the author-layer drift it guards is
+  already covered by C3 + the README rewrite + the shipped memory. Filed as an
+  `improvement`, triggered when the trait corpus grows.
+- **C5 (minor) — SL-192 dependency framing. ACCEPTED (= internal F6).** SL-192 is
+  **done**, so the `after:` is satisfied; with one trait, SL-191 exercises
+  cross-band *union*, not within-band intersection — the dependency is
+  retrospectively soft. Kept as sequencing-satisfied, not reopened.
+- **C6 (minor) — marker sentinel + stale READMEs. ACCEPTED** → README rewrite in
+  scope (Content); marker rename deferred to plan (Open code-details).
+- **C7 (minor) — `prompt resolve` is stateful. ACCEPTED** → verification prefers
+  `prompt explain` + bake tests (Verification, above).
+
 ## Open code-details (resolve at plan time, non-blocking)
 
-- Whether `resolve_worker_role_body` has existing YAML-frontmatter parsing to read
-  `traits:` or needs a small parse helper (defs already carry `model:`/`name:`
-  frontmatter the bake reads — likely a seam exists).
+- **[RESOLVED by adversarial C2]** ~~Whether frontmatter parsing exists~~ — it does
+  **not**; a dedicated agent-def frontmatter parser is now explicit scope (Code
+  impact). The earlier claim that "defs already carry frontmatter the bake reads"
+  was wrong (the bake does byte-level marker replace only).
 - Whether the subprocess arm (`/dispatch-subprocess`, `src/dispatch.rs` fork path)
   needs the base-clean beat too, or the shared funnel already covers it.
+- Marker rename (C6): rename `WORKER_RESOLVE_MARKER` to state the sentinel contract,
+  or keep the literal with a loud comment at `install.rs:44`/`:918`. Blast radius:
+  both shipped defs + the constant. Decide at plan.
