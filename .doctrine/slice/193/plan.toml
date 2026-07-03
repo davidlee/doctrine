@@ -1,0 +1,103 @@
+# Implementation plan for SL-193 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-193"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ── PHASE-01 — Producer + wiring (src/install.rs) ──────────────────────────────
+# The whole install.rs change lands atomically: making `project_starters` and the
+# `expose` field live is what removes their two `#[expect(dead_code)]` attrs, and
+# under Cargo.toml `warnings = "deny"` an unfulfilled expectation is a HARD COMPILE
+# ERROR (design F1). A phase that split producer-logic from wiring would leave the
+# tree unbuildable at its boundary. Engine (hymns.rs) untouched (D4).
+[[phase]]
+id        = "PHASE-01"
+name      = "Producer + wiring — self-replaces sidecar emission, forward-step 4"
+objective = """
+Make `project_starters` (src/install.rs) emit the self-`replaces` sidecar for
+each exposed slot with INDEPENDENT per-file write-if-absent (`.md` and `.toml`
+checked separately, D2) and `create_dir_all(parent)` before every `write_atomic`
+(F2 — `write_atomic` does not mkdir). Add `embedded_expose_set()` reading
+`manifest.hymns.expose` (mirror of `embedded_seal_set`). Wire forward-step 4
+("Project exposed hymn starters? [y/N/a]") into `run_forward_steps`, non-fatal on
+error. Remove BOTH `#[expect(dead_code)]` attrs (the fn and the `HymnsSection.expose`
+field, install.rs:117) — reading/calling them makes the lint expectations
+unfulfilled, and `warnings = "deny"` turns that into a compile error (F1). TDD the
+producer via new tests in `mod tests_hymns` (project_starters is untested dead
+code today). No production change to src/hymns.rs.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (external adversarial pass integrated: F1 dead-code gate, F2 create_dir_all, F3 corpus-wide legality VT, F4 sidecar-repair gap). project_starters signature (disk_root, embedded, sealed, exposed_slots: &BTreeSet<Slot>, dry_run), embedded_seal_set, load_disk_corpus's replaces-wiring (overlay_selector → Selector.replaces, Provenance::User), manifest.hymns.expose (5 slots), write_atomic's no-mkdir behaviour, and both #[expect(dead_code)] attrs present in current tree (re-grep verified during /plan)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`project_starters` writes `.doctrine/hymns/<band>/<label>.toml` carrying `replaces = \"<slot.path()>\"` (single-sourced off Slot::path, no magic string, D3) for each exposed slot. The `.md` and `.toml` writes are INDEPENDENT write-if-absent (D2): an absent `.md` is written (framework body) and preserved if present (byte-for-byte, incl. user edits); an absent `.toml` is written and skipped if present. A sealed slot writes neither (`if sealed.0.contains(slot) continue`)." },
+  { id = "EX-2", text = "`create_dir_all(parent)` runs before each `write_atomic` in `project_starters` so a fresh projection into a not-yet-existing `<band>/` dir succeeds (F2). `dry_run` writes nothing for either file. Errors are surfaced with `with_context` per file." },
+  { id = "EX-3", text = "`embedded_expose_set() -> SealSet`-shaped set reads `manifest.hymns.expose` and yields the 5 exposed Slots; `run_forward_steps` gains forward-step 4 calling `project_starters(disk_hymns_root, embedded_hymns, seal_set, expose_set, dry_run)`, non-fatal on error (matches sibling steps)." },
+  { id = "EX-4", text = "BOTH `#[expect(dead_code)]` attrs removed (project_starters fn AND HymnsSection.expose field, install.rs:117); the stale reason string on the field is gone. `doctrine check gate` (clippy --workspace, warnings=deny) is green — no unfulfilled-lint-expectation, no dead_code, zero warnings." },
+]
+verification = [
+  { id = "VT-1", expects = "project_starters writes a `<label>.toml` sidecar carrying replaces=\"<slot>\" for an exposed slot. Keyword names a test-unique fn (won't collide with prod, which emits `replaces = ` in a format string); the assert-anchored pattern proves a TEST asserts the sidecar body (prod has no assert lines).", test_file = "src/install.rs", keywords = ["project_starters_writes_self_replaces_sidecar"], patterns = ["assert.*replaces"] },
+  { id = "VT-2", expects = "Backfill: `.md` present, `.toml` absent ⇒ `.md` preserved byte-for-byte AND sidecar written. This is the reconcile path for the 5 existing orphan twins.", test_file = "src/install.rs", keywords = ["project_starters_backfills_sidecar_preserving_md"], patterns = ["assert"] },
+  { id = "VT-3", expects = "Idempotent: both `.md` and `.toml` present ⇒ no write, no error (re-run safe).", test_file = "src/install.rs", keywords = ["project_starters_idempotent_when_both_present"], patterns = ["assert"] },
+  { id = "VT-4", expects = "Preserve edits: an edited `.md` (fixture body distinct from the framework body) is never overwritten — the user customisation survives re-projection.", test_file = "src/install.rs", keywords = ["project_starters_preserves_edited_md"], patterns = ["assert"] },
+  { id = "VT-5", expects = "Seal respected: a sealed slot ⇒ neither `.md` nor `.toml` written (the projector's belt-and-braces guard, even though seal/expose lists are disjoint by construction).", test_file = "src/install.rs", keywords = ["project_starters_skips_sealed_slot"], patterns = ["assert"] },
+  { id = "VT-6", expects = "dry_run: nothing written for either file (both the .md and .toml write paths are gated).", test_file = "src/install.rs", keywords = ["project_starters_dry_run_writes_nothing"], patterns = ["assert"] },
+  { id = "VT-7", expects = "Fresh dir: projecting into an EMPTY disk root (band dir absent) writes `.md` + sidecar, creating the parent — guards the create_dir_all against write_atomic's no-mkdir failure (F2). Fails today (write_atomic ENOENTs); the create_dir_all is what makes it green.", test_file = "src/install.rs", keywords = ["project_starters_creates_missing_parent_dir"], patterns = ["assert"] },
+  { id = "VA-1", expects = "Agent confirms the compile gate (F1): neither `#[expect(dead_code)]` remains (grep src/install.rs — zero matches for the project_starters fn attr and the expose-field attr), and `doctrine check gate` exits 0 with zero warnings under warnings=deny. This cannot be a VT — it is a build-gate outcome, not a test assertion." },
+]
+specs        = []
+requirements = []
+
+# ── PHASE-02 — Symmetry verification + reconcile ───────────────────────────────
+# Depends on PHASE-01's wired producer. Locks the expose/seal resolver symmetry
+# against the UNCHANGED engine (D4 behaviour-preservation), verifies corpus-wide
+# `replaces` legality + single-emit (F3), then runs the producer to backfill the
+# 5 orphan sidecars and commits them (D5 reconcile). Ends with the repo corpus
+# clean (no exposed slot doubles).
+[[phase]]
+id        = "PHASE-02"
+name      = "Symmetry goldens + corpus-wide legality/single-emit + reconcile"
+objective = """
+Author the expose-side resolver golden in src/hymns.rs `mod tests` (the mirror of
+the existing `sealed_slot_drops_user_disk_twin_but_keeps_framework` at :1006),
+TESTS ONLY — no production change to hymns.rs (D4). Add an E2E over the `prompt`
+verbs asserting corpus-wide `replaces` legality (`prompt check` ⇒ validate_replaces
+Ok — the ONLY guard against NonTopReplacer/cycle errors the file-I/O units don't
+reach, F3) and that ALL 5 exposed slots single-emit (not just role/worker). Then
+reconcile: run the wired producer (accept forward-step 4) to backfill the 5 orphan
+sidecars under `.doctrine/hymns/**`, commit them as authored data, and confirm the
+in-repo corpus shows no exposed slot doubling. Full resolver/loader/e2e suites stay
+green UNCHANGED (behaviour-preservation gate).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed and green: project_starters emits the self-replaces sidecar with per-file write-if-absent + create_dir_all, forward-step 4 is wired, both dead_code expects removed, `doctrine check gate` green." },
+  { id = "EN-2", text = "resolve/validate_replaces/is_unique_top_of_slot present in src/hymns.rs and the existing seal golden at src/hymns.rs `mod tests`; tests/e2e_prompt_resolve_golden.rs present (re-grep verified)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Resolver golden (src/hymns.rs, tests only): an exposed slot with a user twin carrying self-`replaces` resolves to a SINGLE emit (user body), framework origin suppressed — the expose-side mirror of the existing seal golden. A second golden: an EDITED user body B' ⇒ output B' only, framework B suppressed (customisation wins, not appends). src/hymns.rs production code is unchanged (D4) — verified by an empty prod diff." },
+  { id = "EX-2", text = "E2E (tests/): after projecting the 5 exposed slots + sidecars into a fixture corpus, `prompt check` returns Ok (validate_replaces legality — every self-replaces is the unique-most-specific active snippet of its slot, INV-3), AND each of the 5 exposed slots emits exactly once under a context that activates it (model-band slots under deepseek/anthropic contexts, harness/claude, role/worker, role/orchestrator). `prompt explain` shows each framework twin SUPPRESSED, not rank-ordered-but-present." },
+  { id = "EX-3", text = "Reconcile (D5): the wired producer has been run against the repo (forward-step 4 accepted), backfilling the 5 sidecars `.doctrine/hymns/{harness/claude,model/anthropic/claude-sonnet-4,model/deepseek/_default,role/orchestrator,role/worker}.toml` (each `replaces = \"<own slot>\"`); they are committed as authored data. In-repo `prompt explain` across a full context shows NO exposed slot double-emitting." },
+  { id = "EX-4", text = "Behaviour-preservation gate: the full resolver/loader/e2e suites pass UNCHANGED — no existing golden was edited to accommodate this slice (D4). Any change to a frozen golden is a regression, not an accommodation." },
+]
+verification = [
+  { id = "VT-1", expects = "Expose symmetry golden: exposed slot + user twin self-replaces ⇒ single emit (user body), framework suppressed. Mirror of the seal golden. Keyword is a test-unique fn name; assert pattern proves the single-emit assertion.", test_file = "src/hymns.rs", keywords = ["exposed_slot_self_replaces_single_emit"], patterns = ["assert"] },
+  { id = "VT-2", expects = "Edited-body golden: user body B' (fixture-distinct from framework B) ⇒ resolver output is B' only, framework B suppressed — the customisation genuinely overrides rather than appends.", test_file = "src/hymns.rs", keywords = ["exposed_edited_body_suppresses_framework"], patterns = ["assert"] },
+  { id = "VT-3", expects = "Corpus-wide replaces legality: after projecting the exposed slots + sidecars, `prompt check` / validate_replaces returns Ok over the whole corpus — the sole guard that a produced self-replaces never trips NonTopReplacer/cycle (which would make `prompt resolve` error outright). tests/ file is test-only, so the mandated fn-name keyword is uncontaminated by prod.", test_file = "tests/e2e_prompt_resolve_golden.rs", keywords = ["exposed_projection_prompt_check_ok"] },
+  { id = "VT-4", expects = "All 5 exposed slots single-emit corpus-wide (not just role/worker): drive contexts activating each of harness/claude, model/anthropic/claude-sonnet-4, model/deepseek/_default, role/orchestrator, role/worker and assert exactly one emit each with framework suppressed. Covers the corpus-wide defect, not a sample.", test_file = "tests/e2e_prompt_resolve_golden.rs", keywords = ["exposed_slots_single_emit_all_five"] },
+  { id = "VA-1", expects = "Reconcile confirmed (D5): the 5 sidecar `.toml` files exist under .doctrine/hymns/** (each replaces=\"<own slot>\"), are committed as authored data, and were produced by RUNNING the wired producer (not hand-authored). In-repo `prompt explain` across a full context shows no exposed slot doubling. Agent-verified because it is a live-repo state + provenance check, not a hermetic assertion." },
+  { id = "VA-2", expects = "Behaviour-preservation (D4 gate): the full resolver/loader/e2e suites pass unchanged and `git diff` shows NO production change to src/hymns.rs (tests-only additions). The engine claim of REV-019 stands — the fix is entirely in the projector." },
+]
+specs        = []
+requirements = []
