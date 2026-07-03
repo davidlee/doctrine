@@ -79,7 +79,8 @@ cd my_project || mkdir my_project
 doctrine install                  # prompts to confirm; or use --dry-run | --yes
 npx skills add davidlee/doctrine  # or `doctrine install --agent claude` for claude code only
 
-doctrine slice new "add killer feature"
+claude 
+> Let's design a feature: ...
 ```
 
 or install from source (customise templates / skills):
@@ -139,7 +140,25 @@ doctrine install --agent claude --only-memory -y
 ## Usage
 
 ``` zsh
-doctrine slice new "add killer feature"
+# start up your harness of choice 
+claude
+
+# it'll route through doctrine when it needs to
+> I've got a markdown file @here.md with a task description. Take a look and let's shape it up.
+```
+
+Many / most of the CLI surface is really for agents. Once you have some content, you might find some of these useful:
+
+```zsh
+
+doctrine --help
+doctrine slice list 
+doctrine status
+doctrine next
+doctrine backlog list
+doctrine <kind> paths <ID>
+doctrine search ...
+doctrine memory find ...
 ```
 
 Doctrine ships with self-documenting agent memories. 
