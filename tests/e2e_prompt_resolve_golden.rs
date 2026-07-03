@@ -183,6 +183,54 @@ fn resolve_regenerates_only_boot_md_axis_invariant_stdout_varies() {
     );
 }
 
+/// IMP-251 — an explicit `--band` restricts stdout to the named hymns bands; it
+/// must ALSO suppress the universal boot prefix (which is not a band). The boot
+/// floor-directive's own "resolve --band model to load your model band" only pays
+/// off if the caller gets the delta, not the whole ~430-line snapshot re-emitted
+/// mid-stream — a real uncached-token cost whenever boot already sits at the
+/// caller's byte zero (interactive `@`-import; a one-shot full-cascade inject).
+///
+/// INV-D1 preserved: the idempotent on-disk boot.md write is a resolve side effect,
+/// orthogonal to stdout shaping — it must still fire under `--band`, byte-identical.
+#[test]
+fn resolve_explicit_band_suppresses_universal_boot_prefix() {
+    let dir = tmp();
+
+    const SENTINEL: &str = "BOOT-SENTINEL: doctrine-governance-snapshot";
+
+    // Baseline: an unbanded resolve DOES carry the universal boot prefix.
+    let full = run(dir.path(), &["prompt", "resolve", "--role", "worker"]);
+    assert!(full.status.success(), "stderr: {}", stderr(&full));
+    assert!(
+        stdout(&full).contains(SENTINEL),
+        "unbanded resolve must carry the universal boot prefix"
+    );
+
+    // Banded: the same resolve, restricted to a hymns band, must NOT emit boot.
+    let banded = run(
+        dir.path(),
+        &["prompt", "resolve", "--role", "worker", "--band", "role"],
+    );
+    assert!(banded.status.success(), "stderr: {}", stderr(&banded));
+    assert!(
+        !stdout(&banded).contains(SENTINEL),
+        "band-scoped resolve must not re-emit the universal boot prefix, got: {}",
+        stdout(&banded)
+    );
+
+    // INV-D1: the disk boot.md side effect still fires under --band, and the boot
+    // sentinel lives THERE (proving suppression shapes stdout only, not generation).
+    let boot_md = dir.path().join(".doctrine/state/boot.md");
+    assert!(
+        boot_md.exists(),
+        "resolve must still regenerate boot.md under --band (INV-D1)"
+    );
+    assert!(
+        fs::read_to_string(&boot_md).unwrap().contains(SENTINEL),
+        "boot.md on disk must still carry the universal snapshot (INV-D1)"
+    );
+}
+
 /// Collect relative paths + file sizes under `root` for comparison.
 fn dir_contents(root: &Path) -> Vec<(String, u64)> {
     let mut entries = Vec::new();

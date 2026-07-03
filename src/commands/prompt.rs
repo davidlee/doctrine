@@ -126,10 +126,19 @@ pub(crate) fn dispatch(cmd: PromptCommand, command_map: fn() -> String) -> anyho
             // universal snapshot ++ the role/harness hymns to stdout. The disk write
             // is idempotent; stdout carries the axis-specific cascade.
             let exec = crate::boot::resolve_exec()?;
+            // Always regenerate boot.md (idempotent, axis-invariant side effect,
+            // INV-D1) — but only PREPEND the universal snapshot to stdout on a
+            // full (unbanded) resolve. An explicit `--band` asks for the delta;
+            // re-emitting the ~430-line prefix mid-stream is a real uncached-token
+            // cost whenever boot already sits at the caller's byte zero (IMP-251).
             let universal = crate::boot::resolve_universal_snapshot(&root, &exec, command_map)?;
             let ctx = build_ctx(&role, harness, model, arm.as_deref(), stage, &band)?;
             let hymns = crate::hymns::resolve(&ctx, &corpus, &sealed)?;
-            let cascade = format!("{}\n{hymns}", universal.trim_end());
+            let cascade = if band.is_empty() {
+                format!("{}\n{hymns}", universal.trim_end())
+            } else {
+                hymns
+            };
             if json {
                 write!(
                     std::io::stdout(),
