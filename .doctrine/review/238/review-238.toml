@@ -1,0 +1,52 @@
+id    = 238
+slug  = "reconciliation-review-of-sl-192"
+title = "reconciliation review of SL-192"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-192"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "governed_by ADR-011 misapplied (expected: prompt-cascade governance or none; observed: ADR-011 orchestrator-spawn)"
+detail = "slice-192.toml:34 [[relation]] governed_by ADR-011. ADR-011 = 'Harness-agnostic orchestrator spawn interface' — governs dispatch spawn, unrelated to this prompt-cascade engine change. No prompt-cascade ADR exists; the real edges references->SPEC-023 (implements) + related->SL-186 are both correct. The ADR-011 edge is spurious. Fix (per-slice, via the verb): doctrine unlink SL-192 governed_by ADR-011."
+disposition = "verified"
+response = "Confirmed spurious. Remediation is per-slice (reconcile direct-edit surface via the verb): doctrine unlink SL-192 governed_by ADR-011. No prompt-cascade ADR to relink to; references->SPEC-023 + related->SL-186 already carry the real governance. Briefed as Per-slice."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "onboard --model copy understates trait-set contract (expected: reflected or tracked; observed: single-valued, uncaptured)"
+detail = "src/mcp_server/tools.rs:1222 PROMPT_RESOLVE_MODEL_CMD = 'doctrine prompt resolve --band model --model <id>', single-valued. --model now repeatable -> copy understates (not wrong) the conjunctive trait-set contract. Design §7 fences it as an SL-187/delivery follow-up (non-goal; engine change does not touch onboard wiring). No backlog item captures it. Route: backlog new (durable follow-up work), NOT fix-now in this slice."
+disposition = "follow-up"
+response = "Out-of-scope for SL-192 (SL-187 delivery surface; fenced non-goal, design §7) — legitimate follow-up, not deferred-because-large. Captured as IMP-239 (tagged prompt-cascade/onboarding, related SL-187). No SL-192 code change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "SPEC-023 FR-007 summary reads unqualified vs D3 body (expected: shared-prefix qualifier; observed: 'intersections outrank their factors' bare)"
+detail = "spec-023.md:250 (D3 summary) + the FR-007 one-liner state 'intersections outrank their factors' without the shared-prefix qualifier. The D3 body (spec-023.md:121-123) IS precise. SL-192 implements the locked D3 MECHANISM exactly (VT-3 asserts the accepted alpha-earlier-factor boundary) -> slice is CONFORMANT. Upstream SPEC-023 spec-clarity nit, already surfaced in design §4/§7/§8; REQ-328 (FR-007) still 'pending'. No SL-192 code impact."
+disposition = "verified"
+response = "SL-192 is CONFORMANT to the locked D3 mechanism (VT-3 asserts the boundary). The finding is an upstream SPEC-023 spec-clarity nit (FR-007 summary vs D3 body), REQ-328 still pending. Briefed as optional/minor Governance (REV clarify SPEC-023 D3/FR-007 summary) — reconcile's call; no SL-192 impact."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "REV-019 install.rs landing-adjacency is FUTURE not now (expected: collision at land; observed: zero collision — REV-019 edge commit was doc-only)"
+detail = "notes.md:73-77 flagged an install.rs textual merge with REV-019. Verified at land: edge-since-base vs fork file-collision set is EMPTY; REV-019's edge commit d4a868ff was a SPEC-023 doc reconcile, not the install.rs code change. The actual install.rs exposed-slot code is scoped to SL-193 (unimplemented). So the adjacency is a FUTURE concern (when SL-193 lands), not this land. No action."
+disposition = "aligned"
+response = "Superseded by verified fact: at land, edge-since-base vs fork collision set was EMPTY; REV-019's edge commit was doc-only, the install.rs exposed-slot code is SL-193 (unimplemented). Adjacency is a future SL-193-land concern, not this slice. No action."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

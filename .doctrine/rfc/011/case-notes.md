@@ -295,3 +295,27 @@ show`; no top-level `req` (it's `rec`, easy misfire). `spec req list --json`
 rows omit the statement/title field too. Ended up grepping `.doctrine/requirement/NNN/requirement-NNN.toml`
 directly for `title =`. For a REV that targets requirements by statement content,
 "show me REQ-NNN's statement" should be one call. ~6 wasted calls.
+
+[audit; SL-192-audit-238]
+Solo-fork audit hit real process friction (SL-192, RV-238):
+ (1) `review new` SUCCEEDS on a solo fork worktree but `review raise`/`dispose`/
+     `status` HARD-REFUSE it (IMP-024: turn baton lives in parent-tree gitignored
+     state). So `review new` mints an RV on the fork that can never be driven from
+     the fork — a mint-then-strand trap. Either `new` should refuse too (fail
+     early) or all baton verbs should tolerate the fork. Cost a full create+raise
+     round-trip + a stranded RV-238-on-fork to discover.
+ (2) No documented solo-fork audit path. Review must run from the parent tree
+     (IMP-024), but the parent tree lacked BOTH the delivered code (fork-only
+     commits) AND the completed-phase runtime state (.doctrine/state is
+     gitignored/fork-local; `worktree land` git-merges code but carries no runtime
+     state). Dispatch has the candidate-branch projection for exactly this; solo
+     /execute has no analog. Net resolution: land fork->edge FIRST (ledger's
+     "merge the fork first"), then manually reconstruct phase state on edge
+     (`slice phase ... completed` x2 + `slice status audit`) — steps no verb
+     performs and which aren't written down. Worth a solo-fork audit runbook or a
+     `worktree land`-carries-state / candidate-analog feature.
+ (3) Running the gate on edge surfaced an UNRELATED pre-existing edge blocker
+     (`.doctrine/dispatch/` over-broad gitignore, commit 61eae2ce, shadows the
+     committed dispatch ledger + fails the classification parity test) — captured
+     ISS-207. Auditing on the shared edge tree couples a slice audit to whatever
+     else is red on edge; the fork gate (exit 0) was the clean SL-192 evidence.
