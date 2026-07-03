@@ -20,7 +20,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/dispatch.rs"
@@ -33,6 +33,14 @@ intent = "scope-relevant"
 [[selector]]
 selector = "plugins/doctrine/skills/dispatch-agent/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "install/hymns/role/worker.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/hymns/model/deepseek/_default.md"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
