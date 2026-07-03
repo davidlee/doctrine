@@ -30,6 +30,10 @@ struct PluginAssets;
 
 const MEMORY_SUBSET_DOMAIN: &str = "doctrine-memory";
 const PARTNER_SUBSET_DOMAIN: &str = "doctrine-partner";
+/// Doctrine's own marketplace/plugin/owner name — the manifest `name` field,
+/// source-agnostic across the github and local-directory sources (design §5.4.2).
+/// Single source for the qualified enable key `doctrine@doctrine` (STD-001).
+const DOCTRINE_MARKETPLACE: &str = "doctrine";
 const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
 const RUNNER_BUNX: &str = "bunx";
 const RUNNER_NPX: &str = "npx";
@@ -164,6 +168,9 @@ pub(crate) struct InstallArgs<'a> {
     pub(crate) global: bool,
     pub(crate) dry_run: bool,
     pub(crate) yes: bool,
+    /// `--dev`: point the claude marketplace source at the local project root
+    /// (live plugin load, no network) instead of the github `install.repo` slug.
+    pub(crate) dev: bool,
 }
 
 /// Run `doctrine install`.
@@ -404,8 +411,10 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
     let mut non_claude_agents: Vec<String> = Vec::new();
 
     // Track which plugin steps were skipped-but-needed for the final reminder.
-    let mut skipped_marketplace = false;
-    let mut skipped_plugin = false;
+    // Each holds the exact command argument to render (selected source / enable
+    // key), so the reminder matches what the run would have done (F-8).
+    let mut skipped_marketplace: Option<String> = None;
+    let mut skipped_plugin: Option<String> = None;
 
     for agent in &agents {
         let question: String = if agent == "claude" {
@@ -419,43 +428,49 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
         if agent == "claude" {
             let mut out = io::stdout();
 
-            // 1. Marketplace registration.
-            let has_marketplace = claude_marketplace_has_doctrine();
-            if !has_marketplace {
+            // Resolve the marketplace source ONCE (F-2): the github slug, or —
+            // under --dev — the canonicalized local project root, precondition-
+            // checked to hold a doctrine marketplace manifest (hard error else).
+            let cwd = std::env::current_dir().context("failed to read current directory")?;
+            let source = select_marketplace_source(root, &cwd, repo, args.dev)?;
+            let source_arg = source.as_arg();
+            let key = enable_key();
+
+            // 1. Marketplace registration (exact name match — F-4).
+            if !claude_marketplace_has(DOCTRINE_MARKETPLACE) {
                 if prompt_step(
-                    &format!("claude plugin marketplace add {repo}? [y/N/a]"),
+                    &format!("claude plugin marketplace add {source_arg}? [y/N/a]"),
                     args.yes,
                     &mut all_yes,
                 )? {
-                    match claude_plugin_add_marketplace(repo) {
-                        Ok(()) => writeln!(out, "  marketplace {repo} registered")?,
+                    match claude_plugin_add_marketplace(&source_arg) {
+                        Ok(()) => writeln!(out, "  marketplace {source_arg} registered")?,
                         Err(e) => {
                             writeln!(out, "  marketplace add failed: {e:#}")?;
-                            skipped_marketplace = true;
+                            skipped_marketplace = Some(source_arg.to_string());
                         }
                     }
                 } else {
-                    skipped_marketplace = true;
+                    skipped_marketplace = Some(source_arg.to_string());
                 }
             }
 
-            // 2. Plugin install.
-            let has_plugin = claude_plugin_installed("doctrine");
-            if !has_plugin {
+            // 2. Plugin install (qualified enable key — F-4).
+            if !claude_plugin_has(&key) {
                 if prompt_step(
-                    "claude plugin install doctrine --scope project? [y/N/a]",
+                    &format!("claude plugin install {key} --scope project? [y/N/a]"),
                     args.yes,
                     &mut all_yes,
                 )? {
-                    match claude_plugin_install("doctrine") {
-                        Ok(()) => writeln!(out, "  doctrine plugin installed")?,
+                    match claude_plugin_install(&key) {
+                        Ok(()) => writeln!(out, "  {key} plugin installed")?,
                         Err(e) => {
                             writeln!(out, "  plugin install failed: {e:#}")?;
-                            skipped_plugin = true;
+                            skipped_plugin = Some(key.clone());
                         }
                     }
                 } else {
-                    skipped_plugin = true;
+                    skipped_plugin = Some(key.clone());
                 }
             }
 
@@ -498,20 +513,21 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
     }
 
     // Final reminder: if the user skipped a needed plugin step, print how to
-    // install it manually.
-    if skipped_marketplace || skipped_plugin {
+    // install it manually — rendering the SELECTED source and qualified enable
+    // key that the run would have used (F-8), not the github repo + bare name.
+    if skipped_marketplace.is_some() || skipped_plugin.is_some() {
         writeln!(io::stdout())?;
         writeln!(
             io::stdout(),
             "Claude Code requires the doctrine plugin. To install:"
         )?;
-        if skipped_marketplace {
-            writeln!(io::stdout(), "  claude plugin marketplace add {repo}")?;
+        if let Some(source_arg) = &skipped_marketplace {
+            writeln!(io::stdout(), "  claude plugin marketplace add {source_arg}")?;
         }
-        if skipped_plugin {
+        if let Some(key) = &skipped_plugin {
             writeln!(
                 io::stdout(),
-                "  claude plugin install doctrine --scope project"
+                "  claude plugin install {key} --scope project"
             )?;
         }
     }
@@ -522,24 +538,6 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
 // ---------------------------------------------------------------------------
 // Claude plugin helpers (IMP-223)
 // ---------------------------------------------------------------------------
-
-/// Check whether the doctrine marketplace is registered in Claude.
-fn claude_marketplace_has_doctrine() -> bool {
-    claude_cmd_output_contains(&["plugin", "marketplace", "list"], "doctrine")
-}
-
-/// Check whether the named Claude plugin is installed.
-fn claude_plugin_installed(name: &str) -> bool {
-    claude_cmd_output_contains(&["plugin", "list"], name)
-}
-
-/// Run `claude <args>` and check whether stdout contains `needle`.
-fn claude_cmd_output_contains(args: &[&str], needle: &str) -> bool {
-    Command::new("claude")
-        .args(args)
-        .output()
-        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains(needle))
-}
 
 /// Run `claude plugin marketplace add <repo>`.
 fn claude_plugin_add_marketplace(repo: &str) -> anyhow::Result<()> {
@@ -565,6 +563,148 @@ fn claude_plugin_install(name: &str) -> anyhow::Result<()> {
         "claude plugin install exited with {status}"
     );
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace source selection + exact presence (SL-195 PHASE-02)
+// ---------------------------------------------------------------------------
+
+/// The marketplace source `claude plugin marketplace add <SOURCE>` is pointed at.
+/// `--dev` ⇒ a local directory (the absolutized project root); default ⇒ the
+/// github `install.repo` slug. Only the source arg differs between modes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MarketplaceSource {
+    Github(String),
+    Directory(PathBuf),
+}
+
+impl MarketplaceSource {
+    /// The positional argument for `claude plugin marketplace add`.
+    fn as_arg(&self) -> std::borrow::Cow<'_, str> {
+        match self {
+            MarketplaceSource::Github(slug) => std::borrow::Cow::Borrowed(slug),
+            MarketplaceSource::Directory(path) => path.to_string_lossy(),
+        }
+    }
+}
+
+/// Doctrine's `.claude-plugin/marketplace.json`, parsed for the names the enable
+/// key is composed from. Tolerant of unknown fields (schema may carry more).
+#[derive(Debug, Deserialize)]
+struct MarketplaceManifest {
+    name: String,
+    #[serde(default)]
+    plugins: Vec<ManifestPlugin>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ManifestPlugin {
+    name: String,
+}
+
+/// The target plugin is the manifest entry whose `name` equals the top-level
+/// marketplace `name` (both `doctrine`) — NEVER `plugins[0]`. The manifest holds
+/// three plugins (`doctrine`, `doctrine-memory`, `doctrine-partner`); the last
+/// two are standalone subsets (design §5.1, inquisition F-3).
+fn select_plugin(manifest: &MarketplaceManifest) -> Option<&str> {
+    manifest
+        .plugins
+        .iter()
+        .map(|p| p.name.as_str())
+        .find(|name| *name == manifest.name)
+}
+
+/// The qualified enable key `<plugin>@<marketplace>` — `doctrine@doctrine`,
+/// source-agnostic and identical across modes (design §5.1). The single literal
+/// (STD-001) is `DOCTRINE_MARKETPLACE`.
+fn enable_key() -> String {
+    format!("{DOCTRINE_MARKETPLACE}@{DOCTRINE_MARKETPLACE}")
+}
+
+/// Relative path to the `--dev` marketplace manifest under the project root.
+const MARKETPLACE_MANIFEST_REL: &str = ".claude-plugin/marketplace.json";
+
+/// Resolve the marketplace source for the claude arm.
+///
+/// `dev=false` ⇒ the github `repo` slug. `dev=true` ⇒ the project root
+/// absolutized once (relative `root` is joined onto `cwd`, then canonicalized so
+/// the stored source matches what Claude records — inquisition F-2/R5) and
+/// required to hold `.claude-plugin/marketplace.json` whose selected plugin
+/// validates the `doctrine@doctrine` identity; absent ⇒ hard error, never a
+/// silent github fallback.
+fn select_marketplace_source(
+    root: &Path,
+    cwd: &Path,
+    repo: &str,
+    dev: bool,
+) -> anyhow::Result<MarketplaceSource> {
+    if !dev {
+        return Ok(MarketplaceSource::Github(repo.to_string()));
+    }
+
+    let joined = if root.is_absolute() {
+        root.to_path_buf()
+    } else {
+        cwd.join(root)
+    };
+    let abs = fs::canonicalize(&joined).with_context(|| {
+        format!(
+            "--dev: could not resolve project root {} (does it exist?)",
+            joined.display()
+        )
+    })?;
+
+    let manifest_path = abs.join(MARKETPLACE_MANIFEST_REL);
+    let raw = fs::read_to_string(&manifest_path).with_context(|| {
+        format!(
+            "--dev requires a plugin marketplace manifest at {} — none found; \
+             run from doctrine's own repo or drop --dev for the github source",
+            manifest_path.display()
+        )
+    })?;
+    let manifest: MarketplaceManifest = serde_json::from_str(&raw).with_context(|| {
+        format!(
+            "--dev: malformed marketplace manifest {}",
+            manifest_path.display()
+        )
+    })?;
+    anyhow::ensure!(
+        select_plugin(&manifest).is_some(),
+        "--dev: {} does not define the `{DOCTRINE_MARKETPLACE}` plugin \
+         (marketplace `{}`) — not a doctrine marketplace",
+        manifest_path.display(),
+        manifest.name,
+    );
+
+    Ok(MarketplaceSource::Directory(abs))
+}
+
+/// Exact-match a Claude `list` entry: whitespace-tokenize stdout and compare.
+/// A qualified plugin key (`doctrine@doctrine`) or a bare marketplace name
+/// (`doctrine`) is a whole token, so a sibling (`doctrine-memory@doctrine`) or a
+/// source path (`(/workspace/doctrine)`) cannot false-satisfy — unlike the bare
+/// `contains(..)` substring grep this replaces (inquisition F-4).
+fn claude_list_has(output: &str, key: &str) -> bool {
+    output.split_whitespace().any(|tok| tok == key)
+}
+
+/// Run `claude <args>` and capture stdout (`None` on spawn failure).
+fn claude_cmd_stdout(args: &[&str]) -> Option<String> {
+    Command::new("claude")
+        .args(args)
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+}
+
+/// Whether a marketplace named `name` is registered (exact match).
+fn claude_marketplace_has(name: &str) -> bool {
+    claude_cmd_stdout(&["plugin", "marketplace", "list"]).is_some_and(|o| claude_list_has(&o, name))
+}
+
+/// Whether the qualified plugin `key` is installed (exact match).
+fn claude_plugin_has(key: &str) -> bool {
+    claude_cmd_stdout(&["plugin", "list"]).is_some_and(|o| claude_list_has(&o, key))
 }
 
 // ---------------------------------------------------------------------------
@@ -2394,6 +2534,134 @@ mod tests_skills {
 mod tests {
     use super::*;
     use std::fs;
+
+    // ---------------------------------------------------------------
+    // Marketplace source selection + exact presence (SL-195 PHASE-02)
+    // ---------------------------------------------------------------
+
+    fn write_marketplace_manifest(root: &Path) {
+        let dir = root.join(".claude-plugin");
+        fs::create_dir_all(&dir).unwrap();
+        // Reordered on purpose: doctrine is NOT first.
+        fs::write(
+            dir.join("marketplace.json"),
+            r#"{"name":"doctrine","plugins":[{"name":"doctrine-memory"},{"name":"doctrine"}]}"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn enable_key_is_qualified_doctrine() {
+        // VT-3: names compose the source-agnostic key.
+        assert_eq!(enable_key(), "doctrine@doctrine");
+    }
+
+    #[test]
+    fn select_plugin_picks_by_name_not_first() {
+        // VT-5 (F-3): reordered manifest with doctrine-memory / doctrine-partner
+        // siblings — selection must key on name == marketplace name, not [0].
+        let manifest = MarketplaceManifest {
+            name: "doctrine".into(),
+            plugins: vec![
+                ManifestPlugin {
+                    name: "doctrine-memory".into(),
+                },
+                ManifestPlugin {
+                    name: "doctrine-partner".into(),
+                },
+                ManifestPlugin {
+                    name: "doctrine".into(),
+                },
+            ],
+        };
+        assert_eq!(select_plugin(&manifest), Some("doctrine"));
+        assert_ne!(manifest.plugins[0].name, "doctrine", "[0] would be wrong");
+    }
+
+    #[test]
+    fn plugin_presence_is_exact_not_substring() {
+        // VT-6 (F-4): a `plugin list` showing only the sibling — doctrine-partner
+        // installed, doctrine absent — must NOT satisfy the doctrine@doctrine check.
+        let fixture =
+            "Installed plugins:\n\n  ❯ doctrine-partner@doctrine\n    Status: ✔ enabled\n";
+        assert!(
+            !claude_list_has(fixture, "doctrine@doctrine"),
+            "sibling doctrine-partner@doctrine must not false-satisfy"
+        );
+        // Lock the fix: the old bare substring grep WOULD have false-matched.
+        assert!(fixture.contains("doctrine"));
+        let present = "  ❯ doctrine@doctrine\n    Status: ✔ enabled\n";
+        assert!(claude_list_has(present, "doctrine@doctrine"));
+    }
+
+    #[test]
+    fn marketplace_presence_is_exact_token() {
+        let present = "Configured marketplaces:\n\n  ❯ doctrine\n    Source: Directory (/workspace/doctrine)\n";
+        assert!(claude_list_has(present, "doctrine"));
+        // A slug path that merely contains `doctrine` is not the bare token.
+        let other = "  ❯ other\n    Source: GitHub (davidlee/doctrine)\n";
+        assert!(!claude_list_has(other, "doctrine"));
+    }
+
+    #[test]
+    fn source_default_is_github_slug() {
+        // VT-1: dev=false ⇒ the github install.repo slug.
+        let cwd = tempfile::tempdir().unwrap();
+        let src =
+            select_marketplace_source(Path::new("/unused"), cwd.path(), "davidlee/doctrine", false)
+                .unwrap();
+        assert_eq!(src, MarketplaceSource::Github("davidlee/doctrine".into()));
+    }
+
+    #[test]
+    fn source_dev_is_directory_abs() {
+        // VT-1: dev=true ⇒ Directory(abs canonical root).
+        let dir = tempfile::tempdir().unwrap();
+        write_marketplace_manifest(dir.path());
+        let src =
+            select_marketplace_source(dir.path(), Path::new("/unused"), "davidlee/doctrine", true)
+                .unwrap();
+        match src {
+            MarketplaceSource::Directory(p) => {
+                assert!(p.is_absolute());
+                assert_eq!(p, fs::canonicalize(dir.path()).unwrap());
+            }
+            other => panic!("expected Directory, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn source_dev_missing_manifest_errors() {
+        // VT-2: --dev with no .claude-plugin/marketplace.json ⇒ hard error.
+        let dir = tempfile::tempdir().unwrap();
+        let err =
+            select_marketplace_source(dir.path(), Path::new("/unused"), "davidlee/doctrine", true)
+                .unwrap_err();
+        assert!(
+            err.to_string().contains("marketplace manifest"),
+            "expected a manifest-absent error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn source_dev_relative_root_canonicalizes_absolute() {
+        // VT-4 (F-2): a relative --path yields an absolute canonical source, with
+        // cwd injected so the test is deterministic (no process-CWD mutation).
+        let base = tempfile::tempdir().unwrap();
+        let proj = base.path().join("proj");
+        fs::create_dir_all(&proj).unwrap();
+        write_marketplace_manifest(&proj);
+        let src =
+            select_marketplace_source(Path::new("proj"), base.path(), "davidlee/doctrine", true)
+                .unwrap();
+        match src {
+            MarketplaceSource::Directory(p) => {
+                assert!(p.is_absolute(), "relative root must yield absolute source");
+                assert_eq!(p, fs::canonicalize(&proj).unwrap());
+            }
+            other => panic!("expected Directory, got {other:?}"),
+        }
+    }
 
     // ---------------------------------------------------------------
     // detect_project_root

@@ -110,6 +110,12 @@ pub(crate) enum Command {
         /// Skip the confirmation prompt.
         #[arg(short = 'y', long)]
         yes: bool,
+
+        /// Register the claude marketplace from the local project root (live
+        /// plugin load, no network) instead of the github `install.repo` slug.
+        /// Requires `.claude-plugin/marketplace.json` at the root.
+        #[arg(long)]
+        dev: bool,
     },
 
     /// Debug catalog inspection.
@@ -1055,6 +1061,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             global,
             dry_run,
             yes,
+            dev,
         } => crate::install::run(
             path,
             &crate::install::InstallArgs {
@@ -1065,6 +1072,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 global,
                 dry_run,
                 yes,
+                dev,
             },
         ),
         Command::ConceptMap { command } => crate::concept_map::dispatch(command, color),

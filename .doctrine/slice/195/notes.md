@@ -106,6 +106,41 @@ gate` PASS. EX-1..7 / VT-1..4 satisfied.
   — a refresh planner's no-op check must compare against what it now WRITES; a
   constant emit with an input-derived comparator thrashes. RV-241 F-1 root cause.
 
+## PHASE-02 — DONE (green, gate PASS)
+
+`--dev` flag + marketplace source selection + 4 inquisition fixes. src/install.rs
++ src/commands/cli.rs only (file-disjoint from PHASE-01 boot.rs).
+
+- **`--dev` bool** (cli.rs Install → InstallArgs.dev, dry_run pattern). EX-1.
+- **`select_marketplace_source(root, cwd, repo, dev)` → `MarketplaceSource`**
+  (`Github(slug)` | `Directory(abs)`). dev=true canonicalizes the root ONCE
+  (relative joined onto injected cwd, then `fs::canonicalize` — F-2/EX-5) and
+  requires `.claude-plugin/marketplace.json` (hard error else — EX-3). cwd is a
+  param ⇒ VT-4 relative-path test is deterministic (no process-CWD mutation).
+- **Selection rule (F-3/EX-6):** `select_plugin` = manifest entry whose
+  `name == manifest.name` (`doctrine`), never `[0]`. VT-5 reordered fixture.
+- **Exact presence (F-4/EX-7):** `claude_list_has` = whitespace-token equality
+  over `claude plugin[/marketplace] list` stdout — kills the `contains("doctrine")`
+  substring that false-matched `doctrine-memory`/`-partner`. Replaced the 3 old
+  substring helpers. VT-6.
+- **Qualified install (EX-4):** `enable_key()` = `doctrine@doctrine` from the
+  single const `DOCTRINE_MARKETPLACE` (STD-001). Both modes install the qualified
+  key at `--scope project`.
+- **Prompts/reminders (F-8/EX-8):** render the selected source + qualified key;
+  skip flags now carry the display string (`Option<String>`) so the manual-install
+  reminder matches what the run would have done.
+- **VH-1:** mechanical legs confirmed (parses; manifest present; live marketplace
+  already `Directory (/workspace/doctrine)`; no abspath in diff). Full interactive
+  `install --dev` forward-run deferred to user confirm — no code dep.
+- **CARRY → PHASE-03 (R-P2-1):** live-probe that `marketplace add <canonical-abs>`
+  stores a path byte-equal to `fs::canonicalize` output before the R4 comparator
+  trusts equality. select_marketplace_source already emits canonical abs.
+- New tests (8, all green): `enable_key_is_qualified_doctrine`,
+  `select_plugin_picks_by_name_not_first`, `plugin_presence_is_exact_not_substring`,
+  `marketplace_presence_is_exact_token`, `source_default_is_github_slug`,
+  `source_dev_is_directory_abs`, `source_dev_missing_manifest_errors`,
+  `source_dev_relative_root_canonicalizes_absolute`.
+
 ## Inquisition RV-241 (codex/GPT-5.5) — DONE, 8/8 terminal, all folded in-slice
 
 Design-facet adversarial pass on the locked design + plan. **1 blocker + 4 majors
