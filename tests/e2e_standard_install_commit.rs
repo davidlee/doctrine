@@ -135,14 +135,18 @@ fn without_the_negation_the_standard_is_silently_ignored() {
 // --- The dogfood guard: THIS repo's own .gitignore carries the negation ---
 
 #[test]
-fn this_repos_gitignore_negates_the_standard_tree() {
-    // Cargo runs tests with CWD = crate root, so the repo's authored .gitignore
-    // is readable directly — a cheap sentinel that the dogfood surface stays wired.
-    let gitignore = std::fs::read_to_string(".gitignore").expect("read .gitignore");
+fn this_repos_standard_tree_is_tracked() {
+    // Cargo runs tests with CWD = crate root. Model-agnostic dogfood sentinel:
+    // whatever the .gitignore model, the authored standard tree must actually be
+    // tracked — assert git lists it, not that a specific gitignore line is present.
+    let out = Command::new("git")
+        .args(["ls-files", ".doctrine/standard"])
+        .output()
+        .expect("run git ls-files");
+    assert!(out.status.success(), "git ls-files failed");
+    let tracked = String::from_utf8_lossy(&out.stdout);
     assert!(
-        gitignore
-            .lines()
-            .any(|l| l.trim() == "!.doctrine/standard/"),
-        "this repo's .gitignore must negate the authored standard tree"
+        tracked.lines().any(|l| !l.trim().is_empty()),
+        "this repo's authored standard tree must be tracked (git ls-files .doctrine/standard is empty)"
     );
 }
