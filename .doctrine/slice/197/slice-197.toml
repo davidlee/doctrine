@@ -12,19 +12,19 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/knowledge.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/kinds.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/integrity.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/relation.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/supersede.rs"
@@ -32,7 +32,11 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/templates/knowledge-concept.toml"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/partition.rs"
+intent = "design-target"
 
 [[relation]]
 label = "references"
