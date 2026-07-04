@@ -6,7 +6,7 @@ status = "active"
 title = "Skill masters live in plugins/doctrine/skills/, not .doctrine/skills/"
 summary = ""
 created = "2026-06-17"
-updated = "2026-06-17"
+updated = "2026-07-04"
 
 [scope]
 paths = ["plugins/doctrine/skills/"]
@@ -25,12 +25,12 @@ tree = "aaa92b327221508500ac735f9f6ac4bcbb293a2d"
 ref_name = "refs/heads/main"
 checkout_state_id = "0573dffe03cf75b67dcd6ee8d333ba2d7b4c6fe129b51874ff0b600d1d92c7e9"
 base_commit = "922f26f8757cbd3bfa957d2b2d203b96d0d7eb61"
-verified_sha = ""
+verified_sha = "3edeb514bf212edca630fcd393f8b430ed8c7fe43d76566a4031e2e51daa7ae2"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-07-04"
 review_by = ""
 
 [trust]

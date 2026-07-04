@@ -7,7 +7,7 @@ status = "active"
 title = "Shipped skills carry no repo-local couplings"
 summary = "POL-002: authored skills under plugins/ ship to client projects; never load-bear on this repo's conventions or local entities."
 created = "2026-06-27"
-updated = "2026-06-27"
+updated = "2026-07-04"
 
 [scope]
 paths = []
@@ -26,12 +26,12 @@ tree = "b5af9392a4c18a3a77218e6a4fb8e061d1fff31d"
 ref_name = "refs/heads/edge"
 checkout_state_id = "f10cb2a52de0c6ab8bec7f47e1f46d707e5ccb50c507554864afcd38d891cde5"
 base_commit = "8de30671e00593863e14c54771feecc7b54d2819"
-verified_sha = ""
+verified_sha = "c1768f19a052715ae8622ab178b11ef1ec9d09c07b758bc9713f00dc09f4f54a"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-07-04"
 review_by = ""
 
 [trust]
