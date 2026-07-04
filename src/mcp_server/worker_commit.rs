@@ -135,9 +135,14 @@ fn run_commit_gate(dir: &Path, cfg: &VerificationConfig) -> anyhow::Result<GateO
     let (program, rest) = argv
         .split_first()
         .ok_or_else(|| anyhow::anyhow!("worker_commit: resolved commit-gate argv is empty"))?;
+    // The gate runs in the fork worktree — a LINKED worktree, so the authored-write
+    // guard (`is_linked_worktree`, marker.rs) trips on its own. DOCTRINE_WORKER-keyed
+    // test skips (the `adr status` goldens) fire only if the gate child sees that env,
+    // so export it here: the two worker-mode signals (guard vs test-skip) must agree.
     let output = std::process::Command::new(program)
         .args(rest)
         .current_dir(dir)
+        .env("DOCTRINE_WORKER", "1")
         .output()
         .with_context(|| format!("spawning the worker commit gate: {}", argv.join(" ")))?;
     if output.status.success() {
@@ -482,6 +487,22 @@ mod tests {
             other => panic!("expected commit-gate-red, got {other:?}"),
         }
         assert_eq!(git_run(&wt, &["rev-parse", "HEAD^{commit}"]), base);
+    }
+
+    #[test]
+    fn worker_commit_gate_child_sees_doctrine_worker_env() {
+        // The gate runs cargo test in a LINKED worktree; the authored-write guard trips
+        // on `is_linked_worktree` alone, so DOCTRINE_WORKER-keyed test skips (the adr_status
+        // goldens) only fire if the gate child inherits that env. A gate that passes iff
+        // DOCTRINE_WORKER==1 lands the commit only when the env is exported.
+        let gate = r#"["sh", "-c", "test \"$DOCTRINE_WORKER\" = 1"]"#;
+        let (_tmp, primary, wt, agent, base) = worker_fixture(gate, &[]);
+        fs::write(wt.join("seed"), "worker change\n").unwrap();
+        let out = run_worker_commit(&primary, &agent, "msg").unwrap();
+        match out {
+            WorkerCommitOutput::Committed { base: out_base, .. } => assert_eq!(out_base, base),
+            other => panic!("gate child must see DOCTRINE_WORKER=1 and pass; got {other:?}"),
+        }
     }
 
     #[test]
