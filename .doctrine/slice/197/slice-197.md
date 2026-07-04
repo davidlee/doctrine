@@ -49,6 +49,8 @@ All four opened questions resolved in `design.md` (D1–D4):
 1. **Status vocabulary** → `[draft, active, retired]`, seed `draft`, hidden/terminal
    `{retired}`. Rejected `refined`/`defined` (no behavioural line vs `active`).
 2. **ConceptFacet** → empty (unit-like, no fields). Sections are prose (IMP-244).
+   Seed emits an empty `[facet]` header (scaffold-order invariant); `show` suppresses
+   it at display.
 3. **Shapes/Spawns** → keep via RECORD-ride (permissive edges; DRY the single source).
 4. **Supersede** → None (no `supersede.rs` edit; `_ => None` + `validate_matrix`
    absence gate it, identical to HYP).
@@ -74,8 +76,15 @@ partition-terminal ≠ knowledge terminal/hidden (design §2).
 
 Touch-set (design-target selectors): `kinds.rs`, `knowledge.rs`, `integrity.rs`,
 `relation.rs`, `priority/partition.rs`, `commands/dep_seq.rs`, `commands/cli.rs`,
-`install/templates/knowledge-concept.toml`. `supersede.rs` stays scope-fence only
-(not edited — D4).
+`install/templates/knowledge-concept.toml`, `install/using-doctrine.md`, and the two
+re-pinned goldens `tests/e2e_validate_byte_exact_golden.rs` +
+`tests/e2e_knowledge_cli_golden.rs` (added post-external-review). `supersede.rs`
+stays scope-fence only (not edited — D4).
+
+External review (codex/GPT-5.5) integrated into design.md §1/§3-D2/§4/§7: seed
+emits an empty `[facet]` header (scaffold-order invariant), the four combined
+constants are canary-forced manual adds (not auto-cascade), two goldens re-pin in
+PHASE-02.
 
 ## Follow-Ups
 

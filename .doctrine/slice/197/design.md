@@ -15,11 +15,16 @@ canaries were added (`combined_constants_cover_record`, the partition ALL-loop,
 integrity count pin, `sources_match_shipped_accessors`). A missing CPT now trips a
 red test or a compile error at nearly every site.
 
-`kinds::RECORD` is the single source; appending `CPT` auto-cascades to the four
-combined constants (`SEARCH_DEFAULT`, `ALL_KINDS`, `TAGGABLE`,
-`ADMISSIBLE_DEP_TARGETS`), the relation rules with `sources: RECORD` /
-`target: Kinds(RECORD)` (Supersedes, Shapes-source, Spawns-source), and the
-`catalog/scan.rs` `outbound_for` dispatch (data-driven via `from_prefix`).
+`kinds::RECORD` is the single source, but the cascade splits two ways:
+- **Genuinely auto** — the relation rules keyed on `sources: RECORD` /
+  `target: Kinds(RECORD)` (Supersedes, Shapes-source, Spawns-source) and the
+  `catalog/scan.rs` `outbound_for` dispatch (`from_prefix`) read `RECORD` live,
+  so CPT rides them with zero edits.
+- **Canary-forced manual** — the four combined constants (`SEARCH_DEFAULT`,
+  `ALL_KINDS`, `TAGGABLE`, `ADMISSIBLE_DEP_TARGETS`) are **hand-spelled arrays**
+  (kinds.rs:61-79), NOT derived. Appending CPT to `RECORD` turns
+  `combined_constants_cover_record` (kinds.rs:113) **red** until CPT is added to
+  each — loud, not silent, but four manual edits.
 
 **Residual unsafe scatter — the two composite-union relation sites with no
 canary:**
@@ -44,8 +49,11 @@ DROPPED as unsound.** Partition's `terminal` is a *distinct* set from knowledge'
 but `EVIDENCE_TERMINAL = [retracted, superseded]` (confirmed evidence is
 dependency-settled yet still supersedable and visible). Three intentional
 partitions of one vocab — collapsing them is a bug, not a cleanup. The `:380`
-ALL-loop canary checks only coverage (`gating ∪ terminal == statuses`), correctly
-not equality. So partition keeps a hand-written CPT row, guarded by that canary.
+ALL-loop canary checks **trinary** coverage (`workable ∪ gating ∪ terminal ==
+statuses`, partition.rs:377 via `vocab(prefix)`), not per-set equality — so CPT's
+hand-written row passes iff its union equals `CONCEPT_STATUSES`
+(`workable []` ∪ `gating [draft,active]` ∪ `terminal [retired]` == the vocab). ✓
+So partition keeps a hand-written CPT row, guarded by that canary.
 
 ### PHASE-01 — behaviour-preserving DRY (6 kinds, no new kind; suites green unchanged)
 - **P2** — single-entry the two double-entry pins (`:1774`, `:1782`): re-spelled
@@ -85,8 +93,14 @@ clap auto-lists the `ValueEnum` variants.
   fields**) — intentional, a first in the `RecordFacet` enum, not an oversight.
   IMP-244's sections (Definition, Notes, Distinguish from, Examples, Related) are
   **prose in the md body**. A structured `definition` field would duplicate the md
-  Definition section (two sources of truth, drift). `RawFacet` gains no fields;
-  `format_facet` emits no `[facet]` block for concepts (empty → suppressed).
+  Definition section (two sources of truth, drift). `RawFacet` gains no fields.
+  **Seed emits an empty `[facet]` header** (zero fields): the per-kind
+  scaffold-order invariant (`record_scaffold_lays_out_toml_md_symlink_per_kind`,
+  knowledge.rs:2162) `.expect`s a `[facet]` block for **every** `RecordKind::ALL`
+  and pins F1 order meta→`[facet]`→`[evidence]`→`[relationships]`. On-disk
+  uniform; `format_facet` **suppresses** the empty block at *display* time (`show`)
+  — different render path, no conflict. (A seed with no `[facet]` block would panic
+  that existing test — caught by the external review.)
 - **D3 — Shapes/Spawns membership: keep via RECORD-ride.** CPT auto-joins the
   Shapes/Spawns source-sets. These are *permissive* (may-author, not must); a
   rarely-used edge costs nothing, and carving CPT out would need a bespoke const
@@ -110,7 +124,11 @@ PHASE-01:
 
 PHASE-02:
 - `src/kinds.rs` — `pub(crate) const CPT: &str = "CPT";`; append `CPT` to `RECORD`;
-  update the `groupings_match_documented_membership` RECORD assertion.
+  **manually append `CPT` to the four hand-spelled combined constants**
+  (`SEARCH_DEFAULT`, `ALL_KINDS`, `TAGGABLE`, `ADMISSIBLE_DEP_TARGETS`) in the
+  record-tail position (after `HYP`) — `combined_constants_cover_record` forces
+  this; they are NOT auto-derived. Update the `groupings_match_documented_membership`
+  RECORD assertion.
 - `src/knowledge.rs` — `Concept` enum variant; `CONCEPT_KIND` const; `CONCEPT_STATUSES`
   / `CONCEPT_HIDDEN` / `CONCEPT_TERMINAL`; `ConceptFacet` (empty) + `RecordFacet::Concept`;
   arms in `kind`, `as_str`, `statuses`, `hidden`, `terminal`, `validate_facet`,
@@ -126,9 +144,21 @@ PHASE-02:
 - `src/commands/cli.rs` — `:461` clap doc-comment prose: hand-add "concept"
   (editorial). **Coordinate with the concurrent `cli.rs` edit in flight.**
 - `install/templates/knowledge-concept.toml` — new seed. `record_kind = "concept"`,
-  `status = "draft"`, `[evidence]` + `[relationships]` empty, and **no `[facet]`
-  block** (empty facet — nothing to seed; `RawFacet` defaults absent, `format_facet`
-  suppresses the block). `knowledge.rs:1650` clap prose hand-add "concept".
+  `status = "draft"`, an **empty `[facet]` header** (header line, zero fields — the
+  scaffold-order invariant requires it, D2), `[evidence]` + `[relationships]` empty.
+  `knowledge.rs:1650` clap prose hand-add "concept".
+- **Test goldens (PHASE-02 re-pins):**
+  - `tests/e2e_validate_byte_exact_golden.rs:36` — the byte-exact scanned-kind list
+    is `ALL_KINDS`; CPT joins it → re-pin the expected string (CPT after HYP).
+  - `tests/e2e_knowledge_cli_golden.rs:280` — the unknown-prefix error golden
+    (`expected ASM/DEC/QUE/CON/EVD/HYP`) is the same string P4 derives; gains `/CPT`
+    in PHASE-02 → re-pin. (`:197` routing loop is hand-listed — no break; optionally
+    extend to seed+route a `CPT-001`.)
+  - `record_scaffold_lays_out_toml_md_symlink_per_kind` (knowledge.rs:2162) stays
+    green **unedited** — the empty `[facet]` header keeps CPT conformant (D2).
+- `install/using-doctrine.md:49` — "six kinds" → "seven"; embedded distribution
+  asset (ships in the binary via RustEmbed), so stale text is *shipped* drift
+  (editorial).
 
 **Not edited:** `src/supersede.rs` (D4) — stays a `scope-relevant` fence, not a
 `design-target`. `catalog/scan.rs`, the combined constants, `search.rs`, `tag.rs`,
@@ -150,7 +180,13 @@ PHASE-02:
   CPT automatically once in `RECORD`/`ALL`; integrity count pin bumped.
 - **Relation edges (VT):** `link CPT-001 concerns SL-YYY` accepted; `supersede`
   rejects CPT as NEW and OLD (D4).
-- **Seed anti-drift (VT):** template `status = "draft"` == `default_status(Concept)`.
+- **Seed anti-drift (VT):** template `status = "draft"` == `default_status(Concept)`;
+  scaffold-order loop (knowledge.rs:2162) green **unedited** — CPT seed carries the
+  empty `[facet]` header.
+- **Golden re-pins (PHASE-02):** `e2e_validate_byte_exact_golden` (scanned list +CPT)
+  and `e2e_knowledge_cli_golden:280` (unknown-prefix +/CPT) re-pinned to 7-kind
+  strings. Both stay green **unchanged** through PHASE-01 (P4 derives the current
+  6-kind string), flip only on the PHASE-02 append.
 
 ## 6. Invariants & boundary conditions
 
@@ -159,8 +195,9 @@ PHASE-02:
   from the kind-blind `RawFacet` reading zero fields. VT-1 round-trip (the test-only
   hand-emit `render_record_toml`): a Concept record renders `\n[facet]\n` with no field
   lines, parses back to `ConceptFacet::default()`, re-renders identically — byte-stable.
-  This is independent of the seed template (production seed omits `[facet]`; VT-1 checks
-  render→parse→render, not seed==render). `format_facet`/`facet_json`: `show` suppresses
+  This is independent of the seed template (production seed emits an empty `[facet]`
+  header per D2; VT-1 checks render→parse→render, not seed==render).
+  `format_facet`/`facet_json`: `show` suppresses
   the empty `[facet]` block; `facet_json` emits `{}` for the concept facet.
 - CPT never value-bearing (`VALUE_BEARING` excludes `RECORD`) — no value/priority facet.
 - Concept as Shapes/Spawns/Supersedes *target*: admitted structurally via `RECORD`;
@@ -169,6 +206,13 @@ PHASE-02:
 ## 7. Carried assumptions / open questions / notes
 
 - No open design questions. Decisions D0–D4 + P4 locked.
+- **External review (codex/GPT-5.5) integrated.** Caught: (1) the scaffold-order
+  invariant (knowledge.rs:2162) requires a `[facet]` block per kind → D2 seed now
+  emits an empty `[facet]` header (was: omit); (2) two integration goldens re-pin
+  in PHASE-02 (`e2e_validate_byte_exact_golden`, `e2e_knowledge_cli_golden:280`);
+  (3) `install/using-doctrine.md:49` ships stale. Self-caught alongside: the four
+  combined constants are canary-forced manual adds, not auto-cascade (§1, §4).
+  Confirmed sound: D4 supersede gate; the trinary partition canary + CPT row.
 - **P3 `governed_by` canary is a new assertion** — it codifies "every record kind is a
   `governed_by` source" (true today). Deliberate and loud: a future record kind that
   should NOT be governance-governed would trip it, forcing an explicit carve-out rather

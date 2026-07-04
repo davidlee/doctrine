@@ -155,3 +155,27 @@ the unit suite because the coupling lived across the SVG DOM boundary:
   all deep-links; SL-201 was the first feature to load a focus from the URL.
 Incidental friction: `localhost` vs `127.0.0.1` flaky under the jail; `pkill` absent
 from nix PATH; map serve has no `--no-open`/`--port` on the `onboard` subcommand.
+
+[/design; SL-197-cpt-kind]
+`mem.pattern.doctrine.record-kind-touch-sites` (staleness: unknown) was written
+at the 4-kind era (RECORD = ASM/DEC/QUE/CON). EVD/HYP + several canaries have
+landed since, so its "~17 silent-drift sites" alarm is materially outdated —
+most sites are now compiler-forced or canaried. Cost ~4 verification greps to
+re-establish current guard state before trusting the memory for design. A
+`verify`/re-anchor pass on that memory would have saved the round-trip. The
+memory's core value (the scatter EXISTS, treat as grep-task) held; its severity
+(silent) did not. Suggest: memories asserting "N unguarded sites" should carry a
+verification anchor that re-checks on retrieval, or a staleness ping when the
+cited consts change.
+
+[backlog / rsk-227-fork; sess-intra-tier]
+Forked backlog-authoring to a background worker (/fork). Worker was under
+worktree-jail — every Bash on the primary tree (`echo`/`git`/`doctrine`)
+returns `worktree-jail: cwd-not-a-worturtree`, and there is no backlog MCP verb
+(only memory/review/worker_commit). Authoring a backlog entity is a primary-tree
+corpus write reachable ONLY via `doctrine backlog new` (Bash), so a jailed fork
+structurally cannot land it. ~77k subagent tokens spent to return a draft the
+parent then re-authored + landed itself. Net: the fork produced a good draft but
+zero direct writes; the delegation was pure overhead vs authoring inline.
+Signal: forking corpus-write work to a jailed worker is a false economy — route
+corpus writes to the unjailed parent, reserve forks for read/analysis.

@@ -46,6 +46,18 @@ intent = "design-target"
 selector = "src/commands/cli.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "tests/e2e_validate_byte_exact_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_knowledge_cli_golden.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/using-doctrine.md"
+intent = "design-target"
+
 [[relation]]
 label = "references"
 role = "concerns"
