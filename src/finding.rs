@@ -26,6 +26,7 @@ const CATEGORY_NAME_LIFECYCLE: &str = "Lifecycle";
 const CATEGORY_NAME_RAW_LABEL: &str = "Raw Label";
 const CATEGORY_NAME_TOML_PARSE: &str = "TOML Parse";
 const CATEGORY_NAME_PROSE_CITE: &str = "Prose Citation";
+const CATEGORY_NAME_AGENT_CONFORMANCE: &str = "Agent Conformance";
 
 const SEVERITY_ERROR: &str = "error";
 const SEVERITY_WARNING: &str = "warning";
@@ -74,17 +75,21 @@ pub(crate) enum Category {
     RawLabel,
     TomlParse,
     ProseCite,
+    AgentConformance,
 }
 
 impl Category {
     /// Single severity source (F5) — IdIntegrity/RelationIntegrity/SpecFk/MemoryHealth
-    /// are errors; Lifecycle/RawLabel/TomlParse/ProseCite are warnings.
+    /// and `AgentConformance` (SL-198 RSK-225: worker tool-surface is a jail wall) are
+    /// errors; Lifecycle/RawLabel/TomlParse/ProseCite are warnings.
     #[must_use]
     pub(crate) const fn severity(self) -> Severity {
         match self {
-            Self::IdIntegrity | Self::RelationIntegrity | Self::SpecFk | Self::MemoryHealth => {
-                Severity::Error
-            }
+            Self::IdIntegrity
+            | Self::RelationIntegrity
+            | Self::SpecFk
+            | Self::MemoryHealth
+            | Self::AgentConformance => Severity::Error,
             Self::Lifecycle | Self::RawLabel | Self::TomlParse | Self::ProseCite => {
                 Severity::Warning
             }
@@ -102,6 +107,7 @@ impl Category {
             Self::RawLabel => 5,
             Self::TomlParse => 6,
             Self::ProseCite => 7,
+            Self::AgentConformance => 8,
         }
     }
 
@@ -116,6 +122,7 @@ impl Category {
             Self::RawLabel => CATEGORY_NAME_RAW_LABEL,
             Self::TomlParse => CATEGORY_NAME_TOML_PARSE,
             Self::ProseCite => CATEGORY_NAME_PROSE_CITE,
+            Self::AgentConformance => CATEGORY_NAME_AGENT_CONFORMANCE,
         }
     }
 }
@@ -136,7 +143,7 @@ impl Serialize for Category {
 }
 
 /// All categories in ordinal order.
-const CATEGORIES_BY_ORDINAL: [Category; 8] = [
+const CATEGORIES_BY_ORDINAL: [Category; 9] = [
     Category::IdIntegrity,
     Category::RelationIntegrity,
     Category::SpecFk,
@@ -145,6 +152,7 @@ const CATEGORIES_BY_ORDINAL: [Category; 8] = [
     Category::RawLabel,
     Category::TomlParse,
     Category::ProseCite,
+    Category::AgentConformance,
 ];
 
 #[derive(Debug, Clone)]
@@ -252,6 +260,7 @@ mod tests {
         assert_eq!(Category::RawLabel.severity(), Severity::Warning);
         assert_eq!(Category::TomlParse.severity(), Severity::Warning);
         assert_eq!(Category::ProseCite.severity(), Severity::Warning);
+        assert_eq!(Category::AgentConformance.severity(), Severity::Error);
     }
 
     #[test]

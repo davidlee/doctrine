@@ -368,6 +368,15 @@ pub(crate) fn run_gc(
     // The fork's in-tree `target/` needs no separate reap step — it lived inside the
     // worktree dir and died with the `git worktree remove` above (SL-156).
 
+    // Step 3 (NET-NEW, SL-198 PHASE-01): delete the per-worktree dispatch record,
+    // co-located with the worktree+branch reap — no record survives a reaped worktree
+    // (closes the stale-oracle, design §5.3 EX-2). Keyed off the fork NAME (strip the
+    // `dispatch/` prefix); a no-op for a non-dispatch fork or an idempotent rerun.
+    let record_name = fork.strip_prefix("dispatch/").unwrap_or(fork);
+    if let Err(cause) = super::dispatch_record::delete_dispatch_record(&root, record_name) {
+        leftovers.push(format!("dispatch record: {cause:#}"));
+    }
+
     if !leftovers.is_empty() {
         bail!(
             "gc-incomplete: leftover(s) need manual cleanup: {}",
@@ -511,5 +520,52 @@ mod tests {
 
         // neither `--is-ancestor` nor an all-`-` `cherry` ⇒ not landed.
         assert!(!landed_against(repo.path(), target, fork).expect("oracle"));
+    }
+
+    // --- SL-198 PHASE-01 (VT-2): reap deletes the per-worktree DispatchRecord -----
+    // A reaped worker worktree must leave NO record behind (closes the stale-oracle):
+    // after gc removes the worktree+branch, a `resolve_agent` of the same agent yields
+    // `unknown-agent`.
+    #[test]
+    fn reap_deletes_dispatch_record_and_resolve_yields_unknown_agent() {
+        use super::run_gc;
+        use crate::worktree::dispatch_record::{
+            RECORD_SUBPATH, ResolveRefusal, provision_dispatch_record, resolve_agent,
+        };
+
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "0", "base");
+        let coord = std::fs::canonicalize(repo.path()).unwrap();
+
+        // Stand up a live worker worktree on dispatch/<name> + its trusted record.
+        let name = "agent-cafe";
+        let branch = format!("dispatch/{name}");
+        let dir = coord.join(".worktrees").join(name);
+        let dir_s = dir.to_string_lossy().to_string();
+        repo.git(&["worktree", "add", "-b", &branch, &dir_s, &base]);
+        provision_dispatch_record(&coord, name, &base, &dir, &branch).unwrap();
+
+        let record_file = coord.join(RECORD_SUBPATH).join(format!("{name}.toml"));
+        assert!(
+            record_file.exists(),
+            "the DispatchRecord is written for a live worker"
+        );
+        assert!(
+            resolve_agent(&coord, name).is_ok(),
+            "a live, consistent worker resolves pre-reap"
+        );
+
+        // Reap the worker fork (--force bypasses the landed oracle).
+        run_gc(Some(coord.clone()), &branch, None, true, false).expect("gc reap");
+
+        assert!(
+            !record_file.exists(),
+            "reap deleted the DispatchRecord — none survives a reaped worktree"
+        );
+        assert_eq!(
+            resolve_agent(&coord, name),
+            Err(ResolveRefusal::UnknownAgent),
+            "post-reap resolve of the same agent yields unknown-agent"
+        );
     }
 }

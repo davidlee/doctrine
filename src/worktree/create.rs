@@ -284,6 +284,13 @@ fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<PathBuf> {
             // fork, ro to the worker (design §5.3). Absent declaration ⇒ no-op.
             provision_jail_policy(root, &name)
                 .with_context(|| format!("provision jail policy for {name}"))?;
+            // NET-NEW (SL-198 PHASE-01): write the per-worktree dispatch record beside
+            // the jail policy at the fork point — the trust anchor `worker_commit`
+            // (PHASE-02) resolves. `base` is B snapshotted HERE (not re-read from the
+            // mutable arming slot); `dir`/`branch`/`root(=coord)` are all in scope.
+            // Fail-closed, exactly like the jail-policy write (design §5.2 EX-1).
+            super::dispatch_record::provision_dispatch_record(root, &name, &base, &dir, &branch)
+                .with_context(|| format!("provision dispatch record for {name}"))?;
             fs::canonicalize(&dir)
                 .with_context(|| format!("canonicalize fork dir {}", dir.display()))
         }
@@ -589,5 +596,141 @@ mod tests {
             !root.join(JAIL_SUBPATH).exists(),
             "no jail dir materialised when nothing was declared"
         );
+    }
+
+    // ---- SL-198 PHASE-01: per-worktree dispatch record + resolver -------------
+    //
+    // These drive the real fork path (`act_on_create`) over a temp coord tree, so
+    // they stand up a live worktree the resolver keys on — the same fixture idiom the
+    // e2e create-fork suite uses, in-process.
+
+    use crate::worktree::dispatch_record::{
+        DispatchRecord, RECORD_SUBPATH, ResolveFacts, ResolveRefusal, classify_resolve,
+        resolve_agent,
+    };
+
+    /// `git rev-parse HEAD` at `root` (full oid). Impure test helper.
+    fn head_sha(root: &Path) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .expect("spawn git rev-parse");
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    }
+
+    /// Commit a file inside worktree `dir` (advances that worktree's HEAD).
+    fn commit_in(dir: &Path, rel: &str, contents: &str, msg: &str) {
+        fs::write(dir.join(rel), contents).unwrap();
+        let run = |args: &[&str]| {
+            assert!(
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(dir)
+                    .args(args)
+                    .status()
+                    .expect("spawn git")
+                    .success(),
+                "git {args:?} failed"
+            );
+        };
+        run(&["add", rel]);
+        run(&["commit", "-q", "-m", msg]);
+    }
+
+    // VT-1: create-fork writes the DispatchRecord with all five fields; `base` is the
+    // fork-time snapshot; `coord` is the coordination root.
+    #[test]
+    fn create_fork_writes_dispatch_record_with_all_five_fields() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        let name = "agent-abc123";
+
+        act_on_create(
+            &root,
+            CreateAction::Fork {
+                base: base.clone(),
+                name: name.to_string(),
+            },
+        )
+        .expect("fork + record provision");
+
+        let raw =
+            fs::read_to_string(root.join(RECORD_SUBPATH).join(format!("{name}.toml"))).unwrap();
+        let record: DispatchRecord = toml::from_str(&raw).unwrap();
+        assert_eq!(record.name, name, "field 1: name");
+        assert_eq!(
+            record.dir,
+            root.join(WORKTREES_SUBDIR).join(name),
+            "field 2: worker worktree dir"
+        );
+        assert_eq!(record.branch, format!("dispatch/{name}"), "field 3: branch");
+        assert_eq!(record.base, base, "field 4: base snapshotted at fork");
+        assert_eq!(
+            record.coord, root,
+            "field 5: coord is the coordination root"
+        );
+    }
+
+    // VT-3: the resolver refusal table (unknown-agent / ambiguous-agent / stale-record)
+    // PLUS a happy single-hit resolve; the agent is sanitised before any path join.
+    #[test]
+    fn resolve_agent_refusal_table_and_happy_single_hit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+
+        // unknown-agent: a name that was never forked ⇒ 0 live worktree hits.
+        assert_eq!(
+            resolve_agent(&root, "agent-never"),
+            Err(ResolveRefusal::UnknownAgent)
+        );
+        // The agent is sanitised via `sanitise_name` BEFORE any path join — a traversal
+        // id is rejected up front and folds to unknown-agent (never joins a hostile path).
+        assert!(sanitise_name("../evil").is_err());
+        assert_eq!(
+            resolve_agent(&root, "../evil"),
+            Err(ResolveRefusal::UnknownAgent)
+        );
+
+        // Happy path: fork a live worker ⇒ one consistent hit resolves to its record.
+        let name = "agent-live";
+        act_on_create(
+            &root,
+            CreateAction::Fork {
+                base: base.clone(),
+                name: name.to_string(),
+            },
+        )
+        .expect("fork the live worker");
+        let record = resolve_agent(&root, name).expect("a live, consistent worker resolves");
+        assert_eq!(record.name, name);
+        assert_eq!(record.branch, format!("dispatch/{name}"));
+        assert_eq!(record.base, base);
+
+        // stale-record: advance the worker HEAD past base ⇒ HEAD != record.base.
+        let dir = root.join(WORKTREES_SUBDIR).join(name);
+        commit_in(&dir, "work.txt", "c", "worker advances HEAD");
+        assert_eq!(resolve_agent(&root, name), Err(ResolveRefusal::StaleRecord));
+
+        // ambiguous-agent: unreachable through `worktree_for_ref` (git ≤1 worktree per
+        // branch), so pin it at the pure classifier — >1 live hits refuses defensively.
+        assert_eq!(
+            classify_resolve(ResolveFacts {
+                worktree_hits: 2,
+                record: None,
+                dir_exists: false,
+                branch_head: None,
+                base_commit: None,
+            }),
+            Err(ResolveRefusal::AmbiguousAgent)
+        );
+
+        // Distinct named tokens.
+        assert_eq!(ResolveRefusal::UnknownAgent.token(), "unknown-agent");
+        assert_eq!(ResolveRefusal::AmbiguousAgent.token(), "ambiguous-agent");
+        assert_eq!(ResolveRefusal::StaleRecord.token(), "stale-record");
     }
 }

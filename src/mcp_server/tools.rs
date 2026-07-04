@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! MCP tool definitions (JSON Schema) and handler dispatch.
 //!
-//! 18 tools: 10 review + 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
-//! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`).
+//! 19 tools: 10 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
+//! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`),
+//! and `worker_commit` (the gated dispatch-worker self-commit, SL-198).
 //! Each review tool calls the matching `review::run_*` function,
 //! maps errors through `ReviewError` variant identity (design D8, §5), and
 //! returns JSON text.
@@ -21,7 +22,7 @@ use std::str::FromStr;
 
 // ── Tool definitions (function, not const — json!() is non-const) ─────────
 
-/// Return all 10 tool definitions with JSON Schema parameter descriptions.
+/// Return all 19 tool definitions with JSON Schema parameter descriptions.
 fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -330,6 +331,24 @@ fn tools() -> Vec<McpTool> {
                 "type": "object",
                 "properties": {},
                 "required": []
+            }),
+        },
+        McpTool {
+            name: "worker_commit".to_owned(),
+            description: "Gated server-side self-commit for a jailed dispatch worker (SL-198). The worker passes ONLY its opaque `agent` id (its worktree name) — never a path — and the unconfined server resolves the target, runs the belts (non-empty pre-fmt delta → two-tier scope → HEAD==B → the `check commit` gate), and lands exactly ONE non-merge commit on the worker's own `dispatch/<agent>` branch. Belts are the security boundary; a `.doctrine/`/`.claude/` or `[dispatch].worker-forbidden-writes` write hard-refuses.\n\nReturns: {\"Committed\": { oid: string, base: string, undeclared: [string] }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-agent | ambiguous-agent | stale-record | empty-delta | forbidden-zone | not-at-base | commit-gate-red.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "agent": {
+                        "type": "string",
+                        "description": "The worker's own worktree name (self-reported, opaque). Resolved server-side; NOT a path."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "The commit message (worker-authored; the orchestrator may amend)."
+                    }
+                },
+                "required": ["agent", "message"]
             }),
         },
     ]
@@ -891,6 +910,22 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
             Ok(String::from_utf8(buf)?)
         }
         "doctrine_onboard" => render_onboard(root),
+        "worker_commit" => {
+            // Opaque-id resolution: the `agent` comes from the tool INPUT and is resolved
+            // server-side (no caller agent_id, no worker-supplied path — INV-4). A belt
+            // refusal is a structured `Ok` result, not a JSON-RPC error.
+            let fields = ExtractFields::from_value(arguments, &["agent", "message"]);
+            let agent = fields.str_field("agent");
+            let message = fields.str_field("message");
+            if agent.is_empty() {
+                anyhow::bail!("invalid arguments: agent is required");
+            }
+            if message.is_empty() {
+                anyhow::bail!("invalid arguments: message is required");
+            }
+            let out = super::worker_commit::run_worker_commit(root, &agent, &message)?;
+            Ok(serde_json::to_string(&out)?)
+        }
         _ => anyhow::bail!("Tool not found: {name}"),
     }
 }
@@ -1285,9 +1320,9 @@ mod tests {
     // VT-3: tool list response contains exactly 10 tools with correct names
 
     #[test]
-    fn tool_list_has_18_tools() {
+    fn tool_list_has_19_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 18);
+        assert_eq!(list.tools.len(), 19);
     }
 
     #[test]
@@ -1312,6 +1347,7 @@ mod tests {
         assert!(names.contains(&"memory_record"));
         assert!(names.contains(&"memory_edit"));
         assert!(names.contains(&"doctrine_onboard"));
+        assert!(names.contains(&"worker_commit"));
     }
 
     // ISS-033: review_list must accept its advertised (all-optional) arg shapes —
@@ -1626,7 +1662,7 @@ mod tests {
         let resp = dispatch(&req, &root);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 18);
+        assert_eq!(tools.len(), 19);
     }
 
     #[test]

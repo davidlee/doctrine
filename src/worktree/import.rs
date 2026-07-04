@@ -21,9 +21,9 @@ use std::path::{Path, PathBuf};
 /// The two coordination/runtime tier prefixes the import belt rejects. The
 /// `.claude/` tier is wholly gitignored, so its leg only ever catches a
 /// *force-added* path — parity with `.doctrine/`, not a special case (PHASE-07).
-const DOCTRINE_PREFIX: &str = ".doctrine/";
+pub(crate) const DOCTRINE_PREFIX: &str = ".doctrine/";
 
-const CLAUDE_PREFIX: &str = ".claude/";
+pub(crate) const CLAUDE_PREFIX: &str = ".claude/";
 
 // ---- git belt-hardening flags (STD-001; shared by the live-worktree gather) ------
 // The claude arm imports the worker's LIVE working-tree diff, so the SAME hardening
@@ -498,7 +498,7 @@ fn gather_worktree_patch(wt: &Path) -> anyhow::Result<Vec<u8>> {
 /// non-ASCII governance path is verbatim past the pure belt. Untracked paths must ride
 /// the belt too: an untracked `.doctrine/foo` the worker dropped is still a governance
 /// touch and must be rejected, exactly like a tracked one.
-fn gather_worktree_delta_paths(wt: &Path) -> anyhow::Result<Vec<String>> {
+pub(crate) fn gather_worktree_delta_paths(wt: &Path) -> anyhow::Result<Vec<String>> {
     let tracked = git::git_text(
         wt,
         &[
