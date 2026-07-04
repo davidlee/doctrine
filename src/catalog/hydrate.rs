@@ -194,6 +194,13 @@ pub(crate) struct SourceSpan {
 // Hydration — pure projection over scanned entities
 // ---------------------------------------------------------------------------
 
+/// Edge label for a memory body `[[mem.…]]` wikilink rendered as a catalog edge
+/// (SL-202) — mirrors how an untyped TOML memory relation renders (STD-001).
+const MEMORY_WIKILINK_EDGE_LABEL: &str = "related";
+/// `EdgeOrigin.field` marker distinguishing a body-wikilink edge from a
+/// TOML-relation edge (whose origin field is the relation label).
+const MEMORY_WIKILINK_ORIGIN_FIELD: &str = "body";
+
 impl Catalog {
     /// Pure projection of a raw entity scan into a hydrated `Catalog`.
     /// Classifies every edge target via `integrity::parse_canonical_ref`,
@@ -309,6 +316,12 @@ impl Catalog {
                 },
             });
 
+            // Resolved targets already drawn for this record, so the body pass
+            // can dedup against them (INV-1). The TOML pass only *populates*
+            // this set — it never checks it, so TOML-vs-TOML multiplicity is
+            // unchanged (two TOML relations to one target still draw two edges).
+            let mut seen: BTreeSet<CatalogKey> = BTreeSet::new();
+
             for relation in &record.relations {
                 // D10: empty-field rows are surfaced as diagnostics, NOT emitted
                 // as blank graph edges. Continue after each empty-field diagnostic
@@ -350,6 +363,11 @@ impl Catalog {
                     });
                 }
 
+                // Feed the dedup set (populate-only — see the `seen` comment).
+                if let EdgeTarget::Resolved(k) = &target {
+                    seen.insert(k.clone());
+                }
+
                 edges.push(CatalogEdge {
                     source: CatalogKey::Memory(record.uid.clone()),
                     label: CatalogEdgeLabel::Raw(relation.label.clone()),
@@ -363,6 +381,62 @@ impl Catalog {
                         field: Some(relation.label.clone()),
                     },
                 });
+            }
+
+            // Body wikilink pass (SL-202): body `[[mem.…]]` wikilinks become
+            // catalog edges alongside TOML relations. `record.body` feeds edge
+            // extraction here; the entity node itself carries no prose
+            // (`CatalogEntity.body` stays `None`, set above) — opposite lifecycles.
+            if let Some(body) = &record.body {
+                for link in crate::links::extract_wikilinks(body) {
+                    let target = classify_target(&link.target, &key_set, mem_key_map);
+                    match &target {
+                        EdgeTarget::Resolved(k) => {
+                            // Dedup on the resolved `CatalogKey`: suppress if a TOML
+                            // relation OR a prior body wikilink already drew this
+                            // edge (one-directional — body defers to TOML; INV-1).
+                            if !seen.insert(k.clone()) {
+                                continue;
+                            }
+                        }
+                        EdgeTarget::UnvalidatedText { raw } => {
+                            // Deliberate divergence from the silent TOML path (F-1):
+                            // a well-formed `mem.<key>` wikilink that fails to resolve
+                            // is near-certainly a real dangling reference (the
+                            // `mem.word.word` extractor shape excludes prose). Scoped
+                            // to the body pass — `classify_target` and the TOML
+                            // diagnostic are untouched, so TOML `UnvalidatedText`
+                            // targets stay silent (behaviour-preservation).
+                            diagnostics.push(CatalogDiagnostic {
+                                file: record.path.join("memory.md"),
+                                entity_key: Some(CatalogKey::Memory(record.uid.clone())),
+                                field: Some(MEMORY_WIKILINK_ORIGIN_FIELD.to_string()),
+                                message: format!(
+                                    "dangling reference: body wikilink `{raw}` does not resolve"
+                                ),
+                                severity: Severity::Warning,
+                            });
+                        }
+                        EdgeTarget::UnresolvedRef { .. } => {
+                            // Unreachable: `extract_wikilinks` yields only `mem.*`/`mem_*`
+                            // targets, which `parse_canonical_ref` rejects → memory
+                            // branch → never a numbered `UnresolvedRef`. No-op for
+                            // match exhaustiveness (design BOUNDARY).
+                        }
+                    }
+
+                    edges.push(CatalogEdge {
+                        source: CatalogKey::Memory(record.uid.clone()),
+                        label: CatalogEdgeLabel::Raw(MEMORY_WIKILINK_EDGE_LABEL.to_string()),
+                        role: None,
+                        descriptor: None,
+                        target,
+                        origin: EdgeOrigin {
+                            file: record.path.join("memory.md"),
+                            field: Some(MEMORY_WIKILINK_ORIGIN_FIELD.to_string()),
+                        },
+                    });
+                }
             }
         }
 
@@ -1079,6 +1153,168 @@ mod tests {
         // The injected units are stored verbatim on the catalog.
         assert_eq!(catalog.units.estimation, "espresso_shots");
         assert_eq!(catalog.units.value, "magic_beans");
+    }
+
+    // == SL-202 PHASE-02: body wikilinks as deduped catalog edges ==
+
+    /// A `MemoryCatalogRecord` for the body-wikilink edge tests — pure
+    /// `from_scanned` input, no disk. `path` is synthetic; body edges cite
+    /// `path.join("memory.md")` for their origin.
+    fn mem_record(
+        uid: &str,
+        body: Option<&str>,
+        relations: Vec<memory::RawRelation>,
+    ) -> MemoryCatalogRecord {
+        MemoryCatalogRecord {
+            uid: uid.to_string(),
+            key: None,
+            title: "M".to_string(),
+            status: "active".to_string(),
+            memory_type: "pattern".to_string(),
+            path: PathBuf::from("/mem").join(uid),
+            relations,
+            body: body.map(str::to_string),
+        }
+    }
+
+    fn raw_relation(label: &str, target: &str) -> memory::RawRelation {
+        memory::RawRelation {
+            label: label.to_string(),
+            target: target.to_string(),
+        }
+    }
+
+    /// Body edges emitted by this pass, in emission order.
+    fn body_edges(catalog: &Catalog) -> Vec<&CatalogEdge> {
+        catalog
+            .edges
+            .iter()
+            .filter(|e| e.origin.field.as_deref() == Some("body"))
+            .collect()
+    }
+
+    const A_UID: &str = "mem_0000000000000000000000000000aaaa";
+    const B_UID: &str = "mem_0000000000000000000000000000bbbb";
+
+    /// VT-1: a memory whose only cross-reference is a body `[[mem.<key>]]`
+    /// wikilink draws exactly one resolved edge, label `"related"`, origin
+    /// field `"body"`, origin file `…/memory.md`.
+    #[test]
+    fn body_wikilink_draws_one_related_edge() {
+        let root = Path::new("/root");
+        let a = mem_record(A_UID, Some("See [[mem.target.key]] for more."), vec![]);
+        let b = mem_record(B_UID, None, vec![]);
+        let mut map = BTreeMap::new();
+        map.insert("mem.target.key".to_string(), B_UID.to_string());
+
+        let catalog = Catalog::from_scanned(root, &[], &[a, b], &map, test_units());
+
+        let body = body_edges(&catalog);
+        assert_eq!(body.len(), 1, "one body edge");
+        let edge = body[0];
+        assert_eq!(edge.source, CatalogKey::Memory(A_UID.to_string()));
+        assert_eq!(
+            edge.target,
+            EdgeTarget::Resolved(CatalogKey::Memory(B_UID.to_string()))
+        );
+        assert_eq!(edge.label, CatalogEdgeLabel::Raw("related".to_string()));
+        assert_eq!(edge.role, None);
+        assert_eq!(edge.origin.field.as_deref(), Some("body"));
+        assert!(edge.origin.file.to_string_lossy().ends_with("memory.md"));
+    }
+
+    /// VT-2: a body wikilink AND a TOML relation to the SAME target draw one
+    /// edge, not two — the body wikilink defers to the TOML relation (INV-1).
+    #[test]
+    fn body_wikilink_dedups_against_toml_relation() {
+        let root = Path::new("/root");
+        let a = mem_record(
+            A_UID,
+            Some("See [[mem.target.key]]."),
+            vec![raw_relation("supports", B_UID)],
+        );
+        let b = mem_record(B_UID, None, vec![]);
+        let mut map = BTreeMap::new();
+        map.insert("mem.target.key".to_string(), B_UID.to_string());
+
+        let catalog = Catalog::from_scanned(root, &[], &[a, b], &map, test_units());
+
+        assert!(
+            body_edges(&catalog).is_empty(),
+            "body edge deduped by TOML relation"
+        );
+        let to_b = catalog
+            .edges
+            .iter()
+            .filter(|e| e.target == EdgeTarget::Resolved(CatalogKey::Memory(B_UID.to_string())))
+            .count();
+        assert_eq!(to_b, 1, "exactly one edge to the shared target");
+    }
+
+    /// VT-3: two identical body wikilinks to the same target draw one edge
+    /// (body-vs-body dedup via the shared `seen` set — INV-1).
+    #[test]
+    fn duplicate_body_wikilinks_draw_one_edge() {
+        let root = Path::new("/root");
+        let a = mem_record(
+            A_UID,
+            Some("First [[mem.target.key]], then again [[mem.target.key]]."),
+            vec![],
+        );
+        let b = mem_record(B_UID, None, vec![]);
+        let mut map = BTreeMap::new();
+        map.insert("mem.target.key".to_string(), B_UID.to_string());
+
+        let catalog = Catalog::from_scanned(root, &[], &[a, b], &map, test_units());
+
+        assert_eq!(
+            body_edges(&catalog).len(),
+            1,
+            "duplicate body wikilinks collapse to one edge"
+        );
+    }
+
+    /// VT-4: a body wikilink resolving to `UnvalidatedText` emits one edge plus
+    /// one `Warning` (body-pass divergence, INV-2); a TOML relation whose target
+    /// is also `UnvalidatedText` stays silent (behaviour-preservation, VA-1).
+    #[test]
+    fn unresolved_body_wikilink_warns_while_toml_stays_silent() {
+        let root = Path::new("/root");
+        let a = mem_record(
+            A_UID,
+            Some("Dangling [[mem.missing.key]]."),
+            vec![raw_relation("supports", "mem.also.missing")],
+        );
+        let mut map = BTreeMap::new();
+        // Neither target is mapped → both classify as UnvalidatedText.
+        map.insert("mem.unrelated".to_string(), B_UID.to_string());
+
+        let catalog = Catalog::from_scanned(root, &[], &[a], &map, test_units());
+
+        // Body pass: one edge to the UnvalidatedText target.
+        let body = body_edges(&catalog);
+        assert_eq!(body.len(), 1, "one body edge even when unresolved");
+        assert_eq!(
+            body[0].target,
+            EdgeTarget::UnvalidatedText {
+                raw: "mem.missing.key".to_string()
+            }
+        );
+
+        // Exactly one diagnostic — the body warning; the TOML UnvalidatedText
+        // target produces none (the divergence is body-pass-scoped).
+        assert_eq!(catalog.diagnostics.len(), 1, "only the body wikilink warns");
+        let diag = &catalog.diagnostics[0];
+        assert_eq!(diag.severity, Severity::Warning);
+        assert_eq!(diag.field.as_deref(), Some("body"));
+        assert!(diag.file.to_string_lossy().ends_with("memory.md"));
+        assert!(
+            !catalog
+                .diagnostics
+                .iter()
+                .any(|d| d.file.to_string_lossy().ends_with("memory.toml")),
+            "TOML UnvalidatedText target stays silent"
+        );
     }
 
     /// VT-2: unit resolution — configured `[estimation].unit` / `[value].unit`

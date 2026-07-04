@@ -1289,17 +1289,7 @@ pub(crate) struct MemoryCatalogRecord {
     /// Prose body from the sibling `memory.md`, read transiently for catalog
     /// edge extraction (body `[[mem.…]]` wikilinks — SL-202). `None` when the
     /// `.md` is absent/unreadable; mirrors the `corpus.rs:370` `.ok()` seam.
-    // PHASE-01 produces this; PHASE-02's body-wikilink pass in `from_scanned`
-    // consumes it. Gated to non-test builds: the VT-1 tests read the field, so
-    // `dead_code` only fires in the production build. `expect` (not `allow`) so
-    // PHASE-02's production read unfulfils it and clippy forces removal.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "consumed by PHASE-02 body-wikilink edge pass (SL-202)"
-        )
-    )]
+    /// Consumed by the body-wikilink pass in `Catalog::from_scanned`.
     pub(crate) body: Option<String>,
 }
 
