@@ -23,7 +23,19 @@ pub(crate) struct MapServeArgs {
     pub(crate) depth: u8,
 }
 
+/// The onboarding entry memory — a stable global-orientation signpost (SL-201
+/// D1). Single-source constant (STD-001); the `onboard` verb focuses on it.
+pub(crate) const ONBOARDING_MEMORY_KEY: &str = "mem.signpost.doctrine.overview";
+
 fn validate_focus(s: &str) -> Result<String, String> {
+    // Memory refs (`mem.<key>` / `mem_<uid>`): a canonical id or bare numeric can
+    // never start with these prefixes, so they are an unambiguous discriminator.
+    // Shape-check only here (pure, no disk); `run_serve` resolves key→uid.
+    if s.starts_with("mem.") || s.starts_with("mem_") {
+        return crate::memory::MemoryRef::parse(s)
+            .map(|_| s.to_owned())
+            .map_err(|e| format!("focus: invalid memory ref '{s}': {e}"));
+    }
     // Accept both prefixed (SL-001) and bare (1) forms.
     if s.contains('-') {
         crate::integrity::parse_canonical_ref(s)
@@ -42,6 +54,24 @@ fn validate_focus(s: &str) -> Result<String, String> {
 
 pub(crate) fn run_serve(path: Option<PathBuf>, args: MapServeArgs) -> anyhow::Result<()> {
     let root = crate::root::find(args.path.or(path), &crate::root::default_markers())?;
+    // A memory-ref focus resolves to its `mem_<uid>` here (the frontend addresses
+    // memory by uid). Resolution spans items/ AND shipped/ (the onboarding memory
+    // is shipped) via `collect_all` — `resolve_inspect_uid` is items-only and
+    // misses shipped keys. An unknown ref errors before the server binds.
+    // Non-memory focus (canonical id / numeric) passes through untouched.
+    let focus = match args.focus {
+        Some(f) if f.starts_with("mem.") || f.starts_with("mem_") => {
+            let mref = crate::memory::MemoryRef::parse(&f)
+                .map_err(|e| anyhow::anyhow!("invalid focus memory ref '{f}': {e}"))?;
+            let all = crate::memory::collect_all(&root)?;
+            Some(
+                crate::memory::resolve_memory_from_all(&all, &mref)?
+                    .uid
+                    .clone(),
+            )
+        }
+        other => other,
+    };
     let catalog = crate::catalog::hydrate::scan_catalog(&root, ScanMode::default())
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     let graph = crate::catalog::graph::CatalogGraph::from_catalog(&catalog);
@@ -51,9 +81,26 @@ pub(crate) fn run_serve(path: Option<PathBuf>, args: MapServeArgs) -> anyhow::Re
         graph,
         port: args.port,
         open: args.open,
-        focus: args.focus,
+        focus,
         depth: args.depth,
     }))
+}
+
+/// Serve args for `doctrine onboard`: the map focused on the onboarding memory,
+/// browser opened. Extracted so the wiring is unit-testable without disk.
+fn onboard_args() -> MapServeArgs {
+    MapServeArgs {
+        port: 0,
+        path: None,
+        open: true,
+        focus: Some(ONBOARDING_MEMORY_KEY.to_owned()),
+        depth: 1,
+    }
+}
+
+/// `doctrine onboard` — drop a human into the onboarding graph in one step.
+pub(crate) fn run_onboard() -> anyhow::Result<()> {
+    run_serve(None, onboard_args())
 }
 
 // ---------------------------------------------------------------------------
@@ -83,6 +130,36 @@ mod tests {
     #[test]
     fn invalid_focus_empty() {
         assert!(validate_focus("").is_err());
+    }
+
+    #[test]
+    fn valid_focus_memory_key() {
+        // A memory key is shape-accepted (resolution to uid happens in run_serve).
+        assert!(validate_focus("mem.signpost.doctrine.overview").is_ok());
+    }
+
+    #[test]
+    fn valid_focus_memory_uid() {
+        // A full mem_<32hex> uid is accepted.
+        assert!(validate_focus("mem_019e9a11b3797af3a8833c67acfa69bf").is_ok());
+    }
+
+    #[test]
+    fn invalid_focus_memory_ref() {
+        // A `mem`-prefixed but malformed ref (uppercase segment — not a valid
+        // key, not a uid) is rejected with a memory-ref message, not the
+        // canonical-id message.
+        let err = validate_focus("mem.Bad").unwrap_err();
+        assert!(err.contains("memory ref"), "unexpected message: {err}");
+    }
+
+    #[test]
+    fn run_onboard_wires_onboarding_focus() {
+        // Wiring assertion (no disk): the onboard verb serves the onboarding
+        // memory with the browser opened.
+        let args = onboard_args();
+        assert_eq!(args.focus.as_deref(), Some(ONBOARDING_MEMORY_KEY));
+        assert!(args.open);
     }
 
     #[test]

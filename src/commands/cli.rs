@@ -133,6 +133,9 @@ pub(crate) enum Command {
         command: crate::commands::map::MapCommand,
     },
 
+    /// Open the map focused on the onboarding memory (human onboarding entry).
+    Onboard,
+
     /// Create, list, and show concept maps — DSL-driven relationship diagrams.
     ConceptMap {
         #[command(subcommand)]
@@ -799,7 +802,14 @@ static FAMILIES: &[Family] = &[
     Family {
         key: "explore",
         suppress_verbs: false,
-        members: &["search", "inspect", "relation", "concept-map", "map"],
+        members: &[
+            "search",
+            "inspect",
+            "relation",
+            "concept-map",
+            "map",
+            "onboard",
+        ],
     },
     Family {
         key: "infra",
@@ -1428,6 +1438,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         }
         Command::Prompt { command } => crate::commands::prompt::dispatch(command, render_boot_map),
         Command::Map { command } => crate::commands::map::dispatch(command),
+        Command::Onboard => crate::commands::map::run_onboard(),
     }
 }
 
@@ -1489,8 +1500,8 @@ mod tests {
         }
 
         // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168)
-        // + `findings` (SL-194 PHASE-01).
-        assert_eq!(visible.len(), 48, "expected 48 visible top-level commands");
+        // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01).
+        assert_eq!(visible.len(), 49, "expected 49 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the

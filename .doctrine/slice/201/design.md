@@ -46,10 +46,19 @@ resolution. **That symbol does not exist.** The real seam is two existing
   *classifier*. `mem.<key>` → `Key`, `mem_<32hex>` → `Uid`, `mem_<8..32hex>` →
   `UidPrefix`; `SL-001` and bare numerics → `Err`. Pure, no disk — safe inside a
   clap `value_parser`.
-- **`memory::resolve_inspect_uid(root, reference) -> Result<String>`**
-  (`memory.rs:2459`) — resolves a key/uid/prefix against `items/` to the stored
-  `mem_<hex>` uid. Needs `root`; runs in `run_serve`, not the value_parser. An
-  unknown ref returns `Err`, surfaced before the server binds.
+- **`memory::collect_all(root)` + `memory::resolve_memory_from_all(&all, &mref)`**
+  (`memory.rs:2834`, `:3052`) — resolve a `MemoryRef` to its `Memory` (take
+  `.uid`) across **both** `items/` and shipped/ tiers. Needs `root`; runs in
+  `run_serve`, not the value_parser. An unknown ref returns `Err`, surfaced
+  before the server binds.
+
+  > **Correction (impl):** an earlier draft named `resolve_inspect_uid`
+  > (`memory.rs:2459`) here. That resolver is **items-only** — it misses the
+  > *shipped* onboarding memory (`mem.signpost.doctrine.overview` lives in
+  > shipped/, not symlinked in items/). `memory show` works because `run_show`
+  > adds an explicit shipped fallback; `resolve_inspect_uid` has none. The
+  > items+shipped union seam is `collect_all` + `resolve_memory_from_all` (the
+  > path `run_resolve_links` uses).
 
 No new parsing, no duplicated map.
 
@@ -82,11 +91,17 @@ No new parsing, no duplicated map.
     building `Config` (non-memory focus passes through):
     ```rust
     let focus = match args.focus {
-        Some(f) if f.starts_with("mem.") || f.starts_with("mem_") =>
-            Some(crate::memory::resolve_inspect_uid(&root, &f)?),
+        Some(f) if f.starts_with("mem.") || f.starts_with("mem_") => {
+            let mref = crate::memory::MemoryRef::parse(&f)?;
+            let all = crate::memory::collect_all(&root)?;         // items + shipped
+            Some(crate::memory::resolve_memory_from_all(&all, &mref)?.uid.clone())
+        }
         other => other,
     };
     ```
+    Note: `--focus` seeds the initial `#/focus/<uid>` hash only under `--open`
+    (existing `map serve` semantics — `map_url` is the sole focus consumer).
+    `onboard` sets `open=true`, so its focus always lands.
   - add `const ONBOARDING_MEMORY_KEY` and a `run_onboard()` that builds a default
     `MapServeArgs { focus: Some(ONBOARDING_MEMORY_KEY.into()), open: true, .. }`
     and calls `run_serve` — the verb is a one-line delegation, no duplicated

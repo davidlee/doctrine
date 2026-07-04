@@ -57,6 +57,7 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
     match cmd {
         Command::Install { .. } => Write("install"),
         Command::Map { .. } => Write("map"),
+        Command::Onboard => Write("onboard"),
         Command::ConceptMap { command } => match command {
             ConceptMapCommand::New { .. } => Write("concept-map new"),
             ConceptMapCommand::Add { .. } => Write("concept-map add"),
