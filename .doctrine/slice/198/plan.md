@@ -116,18 +116,23 @@ Grounding the plan against implementation reality before phases materialise:
 
 - **Scope belt is two-tier (PHASE-02, owner steer) — don't hard-fail a planner omission.**
   A hard reject on any out-of-selector write punishes the common case where the planner
-  under-declared `design-target`. Split by zone: **doctrine-platform escalation zones**
-  (`.doctrine/**`, `.claude/**`, `.agents/**`, `install/agents/**`) HARD-refuse
-  (`forbidden-zone`) — a worker there could rewrite its own scope or tool-grant; **src
-  paths outside the selectors** but in no forbidden zone COMMIT and return in `undeclared:
-  [paths]` (soft warn) — the orchestrator blesses them into the selectors or rejects at
-  import. The soft tier feeds the *existing* audit-time `slice conformance` delta rather
-  than pre-empting it, and stays within the locked threat model (same audit-caught class as
-  the X1 sibling-spoof residual). **Build/gate config (`justfile`, `flake.nix`, CI) is NOT
-  hard-fenced — POL-002:** those are host-project state, and the gate command is already
-  config-driven (`resolve_check`/`[verification]`), so doctrine cannot presume the gate's
-  file. A worker neutering its own gate is caught by the soft tier + audit, not a
-  platform-baked path.
+  under-declared `design-target`. So the hard tier is a **config surface**, not a
+  hard-coded list (owner steer): **`[dispatch].worker-forbidden-writes`** in
+  `.doctrine/doctrine.toml`, gitignore syntax (globs, negation, precedence — library
+  matcher, no hand-roll; the `ignore` crate, or reuse `allowlist.rs` if it fits). The
+  default block set ships in the **install template** `install/doctrine.toml.example`
+  (visible, editable): `.doctrine/**`, the agent/harness-config dirs (`.claude/**`,
+  `.agents/**`, `install/agents/**`), and **`flake.nix`** (project-specific but hard-fenced —
+  highest security leverage in the repo). A project negates (`!path`) where a defaulted zone
+  must legitimately be written. The **`.doctrine/**` floor is code-enforced, fail-closed** —
+  applied with precedence over config, so an absent/emptied/negated config can never
+  un-fence doctrine's own state (where the config itself lives; a fence disable-able from
+  inside the fence is no fence). **Src paths outside the selectors** but in no forbidden zone
+  COMMIT and return in `undeclared:[paths]` (soft warn) — the orchestrator blesses them into
+  the selectors or rejects at import; feeds the *existing* audit-time `slice conformance`
+  delta, within the locked threat model (same audit-caught class as the X1 sibling-spoof
+  residual). POL-002 is satisfied at the root: doctrine presumes only the `.doctrine/**`
+  floor; every other zone (incl. `justfile`/CI, if a project wants them) is project-declared.
 
 - **DispatchRecord home + shape.** The record is a **sibling** file to the jail policy,
   not an overload of `<name>.toml` — confinement policy and dispatch-resolution are

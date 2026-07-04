@@ -24,7 +24,7 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/dispatch_config.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".claude/agents/**"
@@ -60,6 +60,10 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/gc.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/doctrine.toml.example"
 intent = "design-target"
 
 [[relation]]

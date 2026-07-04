@@ -129,15 +129,25 @@ in order (codex pass-2 shape, §10):
    separate `prove` on this path; `prove` stays for import/integration.)
 3. **Scope belt — two tiers (owner steer 2026-07-04).** `classify_import` of the
    pre-fmt intended delta vs the slice's `design-target` selectors, split by zone:
-   - **Hard reject (`forbidden-zone`).** Writes to doctrine-platform escalation surfaces —
-     `.doctrine/**` (governance state, plans, selectors — universal platform), and the
-     agent-def / tool-grant dirs `.claude/**`, `.agents/**`, `install/agents/**` (the
-     jail-completeness surface — a worker there could rewrite its own scope or tool grant)
-     ⇒ refuse the commit. This is the security fence. **Not build/gate config** (`justfile`,
-     `flake.nix`, CI): those are **host-project** state, and hard-coding their names into a
-     platform belt violates POL-002 (the gate command is already config-driven via
-     `resolve_check`/`[verification]`). A worker neutering its own gate is instead caught by
-     the soft tier + audit (doctrine cannot presume the gate's file).
+   - **Hard reject (`forbidden-zone`).** A write matching the **`[dispatch].worker-forbidden-writes`**
+     matcher refuses the commit. This is a **user-config surface** (owner steer 2026-07-04),
+     not a hard-coded list — **gitignore syntax** (positive + negative globs, precedence),
+     evaluated by a library matcher (recommend the `ignore` crate's `GitignoreBuilder`;
+     check `src/worktree/allowlist.rs` for existing reuse — do not hand-roll).
+     **Block by default via the install template (owner steer).** The default block set ships
+     as pre-populated config in the `doctrine install` **template for `.doctrine/doctrine.toml`**
+     — visible, editable text, not magic Rust defaults — seeding `.doctrine/**`, `.claude/**`,
+     `.agents/**`, `install/agents/**` (governance + agent-def/tool-grant surface) and
+     **`flake.nix`** (project-specific but HARD-fenced — more security leverage than anything
+     else in the repo). A project **negates** (`!path`) or extends entries as legitimate
+     writes require.
+     **Non-negatable floor `.doctrine/**` — code-enforced, fail-closed.** The floor is applied
+     in code with precedence *over* config (present, absent, or emptied), because the config
+     that defines every other zone lives at `.doctrine/doctrine.toml` (§5.3); a fence a worker
+     could disable from inside the fenced zone is no fence. The template's `.doctrine/**` entry
+     is thus a visible echo of the code floor; the other defaults are the project's to tune.
+     (This supersedes the hard-coded-list framing and the justfile/POL-002 debate: doctrine
+     presumes only the code floor; everything else is project-declared config.)
    - **Soft warn (`undeclared`).** Src paths outside the current `design-target` selectors
      but in no forbidden zone. The planner under-declares (leaves off a file that
      legitimately needs the change), so this **does not block** — the commit lands and the
@@ -161,6 +171,14 @@ servers required.
 
 ### 5.3 Data, State & Ownership
 
+- **`[dispatch].worker-forbidden-writes` — config for the hard scope tier.** New field on
+  `DispatchConfig` (`src/dispatch_config.rs`), read from `.doctrine/doctrine.toml`
+  (`DOCTRINE_TOML`, dtoml.rs:80 — itself under the `.doctrine/**` floor, so worker-unwritable
+  and tamper-proof). Value is gitignore-syntax lines compiled once into the matcher. The
+  default block set ships pre-populated in the install template `install/doctrine.toml.example`
+  (seeded by `doctrine install`). The `.doctrine/**` floor is a **code** constant applied with
+  precedence over the config, never sourced from it — so an absent/emptied/negated config
+  still fails closed on `.doctrine/**`.
 - **Per-worktree dispatch record (NET-NEW, load-bearing — X-2/X-5).** `create-fork`
   (trusted, pre-worker, harness-invoked hook) writes an atomic record at
   `<coord>/.doctrine/state/dispatch/jail/<name>.toml` carrying
@@ -225,11 +243,12 @@ servers required.
   that normalises a pre-existing/out-of-scope file cannot drag it into the commit. Holds
   independently of the pre-fmt-clean-trunk ritual (§5.4) — that ritual makes the case not
   arise; this invariant makes it safe if it does.
-- **INV-6 (scope tiers).** A write to a doctrine-platform escalation zone (`.doctrine/**`,
-  `.claude/**`, `.agents/**`, `install/agents/**`) hard-refuses (`forbidden-zone`).
-  Build/gate config (`justfile`, `flake.nix`, CI) is **not** in the hard tier — host-project
-  state, POL-002. A src write outside the `design-target` selectors but in no forbidden zone
-  commits and is reported as `undeclared` — never silently dropped, never hard-blocked.
+- **INV-6 (scope tiers).** A write matching `[dispatch].worker-forbidden-writes` (gitignore
+  syntax; template default set incl. `flake.nix` + agent-defs) OR the code floor `.doctrine/**`
+  hard-refuses (`forbidden-zone`). The `.doctrine/**` floor holds even if the config is absent,
+  emptied, or negates it (fail-closed, code-enforced). A src write outside the `design-target`
+  selectors but in no forbidden zone commits and is reported as `undeclared` — never silently
+  dropped, never hard-blocked.
 - **Edge — empty delta.** Worker made no in-scope change ⇒ refuse `empty-delta` (no
   empty commit).
 - **Edge — gate mutates then still red.** fmt reformats but lint/test fails ⇒ refuse;
@@ -447,3 +466,20 @@ the loose parts of pass-1 X1/X2 (§5.2 step 1, §5.3); the finding numbers below
 (record deletion). Plan consequences unchanged in shape; step (1) now = "create-fork writes the
 `{name,dir,branch,base,coord}` record + gc deletes it", step (2)'s resolver = git-worktree-list
 enumerate → probe → one-live-hit → validate.
+
+### Owner steer — scope-belt hard tier is a config surface (2026-07-04)
+
+Iterating the hard tier with the owner (POL-002 pressure on host-project paths) landed on a
+config surface rather than a hard-coded list:
+- **`[dispatch].worker-forbidden-writes`** — gitignore syntax (positive + negative globs,
+  precedence); no hand-roll (recommend the `ignore` crate; check `allowlist.rs` for reuse).
+- **Block-by-default via the install template** `install/doctrine.toml.example` (visible,
+  editable), NOT Rust defaults. Default set: `.doctrine/**`, `.claude/**`, `.agents/**`,
+  `install/agents/**`, **`flake.nix`** (project-specific but hard — highest security leverage;
+  agent/harness configs are defensibly blockable but blanket bans have legit edge cases, so
+  they live in config where a project can negate).
+- **Code floor `.doctrine/**` (fail-closed):** applied with precedence over config, so an
+  absent/emptied/negated config can never un-fence doctrine's own state (where the config
+  itself lives). The template's `.doctrine/**` entry echoes the floor visibly.
+- New `design-target`: `src/dispatch_config.rs` (the config field), `install/doctrine.toml.example`
+  (default set). `justfile`/CI are NOT defaulted (host-project, POL-002 — a project may add them).

@@ -34,11 +34,12 @@ it needs are the serial-dependent capstone (**SL-199**, `needs` this slice). Mod
    probe each for the per-worktree record `jail/<agent>.toml` → **exactly one live hit**
    (0 ⇒ `unknown-agent`, >1 ⇒ `ambiguous-agent`) → validate `{dir,branch,base}` consistent
    (design §10 pass-2). Then commits the worker's delta with cheap-first belts: non-empty
-   pre-fmt in-scope delta → **two-tier scope belt** (HARD-reject doctrine-platform
-   escalation zones `.doctrine/`/`.claude/`/agent-defs as `forbidden-zone` — NOT host-project
-   build/gate config like `justfile`/`flake.nix`, POL-002; SOFT-warn src paths outside the
-   design-target selectors as `undeclared:[paths]`, committed + returned for the orchestrator
-   to bless or reject at import — owner steer) → `HEAD==B` → **exactly one
+   pre-fmt in-scope delta → **two-tier scope belt** (HARD-reject via the
+   `[dispatch].worker-forbidden-writes` config surface — gitignore syntax, default set in the
+   install template `install/doctrine.toml.example` incl. `flake.nix` + agent-defs,
+   project-negatable, with a code-enforced fail-closed `.doctrine/**` floor; SOFT-warn src
+   paths outside the design-target selectors as `undeclared:[paths]`, committed + returned for
+   the orchestrator to bless or reject at import — owner steer) → `HEAD==B` → **exactly one
    non-merge commit `parent(tip)==B`** (ancestry is too weak — would accept a `B→C1→C2→C3`
    stack) → then the mutating `doctrine check commit` gate (worker-side, forces fmt —
    owner-locked; the orchestrator pre-fmts trunk before arming so B is fmt-clean). B comes from the record, written by the
