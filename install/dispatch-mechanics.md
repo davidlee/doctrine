@@ -86,11 +86,14 @@ multi-commit solo fork.
 
 ### The squash blind spot
 
-The patch-id oracle **cannot** distinguish a squash-merged fork from one that
-never landed. A multi-commit `git merge --squash` produces one squash commit
-whose patch-id matches none of the fork's individual commits, so `git cherry`
-lists every commit `+` and the tip is not an ancestor — byte-for-byte the signal
-of a fork that never landed. Do not build a squash detector; it cannot exist.
+The patch-id oracle **cannot** distinguish a *multi-commit* squash-merge from a
+fork that never landed. A multi-commit `git merge --squash` produces one squash
+commit whose patch-id matches none of the fork's individual commits, so `git
+cherry` lists every commit `+` and the tip is not an ancestor — byte-for-byte the
+signal of a fork that never landed. (A *single*-commit squash is fine: its
+patch-id equals the squash commit's, so `git cherry` marks it `-` and certifies
+it landed — the blind spot is strictly the multi-commit case.) Do not build a
+squash detector; it cannot exist.
 Collapse squash + never-landed into one `not-landed` refusal whose message names
 both remedies. This is the load-bearing reason a solo fork must land via a
 non-squash (`--no-ff`) verb: squash destroys the oracle.
@@ -125,8 +128,10 @@ On a stamp failure the worker proceeds unstamped and un-gateable by the hook. So
 worker identity must be fenced by the **import belt + a worker-mode env guard +
 the pre-distilled prompt**, never by the hook's exit status. The only
 fail-closed-capable creation seam is a worktree-creation hook (non-zero exit
-aborts creation), which is preferable where the harness exposes it with enough
-payload to act on.
+aborts creation), preferable *where the harness exposes it with enough payload to
+act on* — often it does not: a creation hook whose payload lacks the worker's
+type/path can neither scope its check nor identify what to abort, so it stays
+deferred and the belt-plus-guard fence remains the default.
 
 ## Workers can silently discard their own work
 
