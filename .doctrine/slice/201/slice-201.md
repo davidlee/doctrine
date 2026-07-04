@@ -21,10 +21,12 @@ onboarding view:
    one-liner that opens the map focused on the onboarding memory; the URL requires
    knowing the opaque `mem_<hex>` uid.
 
-Key→uid resolution already exists (`memory::resolve_inspect_uid` +
-`MemoryRef::parse`; the scope originally cited a non-existent
-`build_memory_key_map` — see design.md § Reuse seam). Node titles already render
-readable. This slice exposes memory refs to `--focus` and adds the onboarding
+Key→uid resolution already exists — `MemoryRef::parse` (classifier) +
+`memory::collect_all` + `resolve_memory_from_all` (the items+shipped union;
+the shipped onboarding key is not in `items/`, so the items-only
+`resolve_inspect_uid` an earlier draft named would miss it). The scope
+originally cited a non-existent `build_memory_key_map` — see design.md § Reuse
+seam. Node titles already render readable. This slice exposes memory refs to `--focus` and adds the onboarding
 command — nodes stay human-readable, the URL keeps the uid.
 
 ## Scope & Objectives
@@ -55,8 +57,10 @@ command — nodes stay human-readable, the URL keeps the uid.
 - `src/commands/map.rs` — `validate_focus`, `run_serve`, `MapServeArgs`.
 - `src/map_server/` — initial-focus → hash seeding, if focus resolution lives
   server-side (`state.rs`, `mod.rs`).
-- key→uid resolution — reuse `build_memory_key_map` (`src/catalog/hydrate.rs`);
-  do not duplicate.
+- key→uid resolution — reuse `memory::collect_all` + `resolve_memory_from_all`
+  (`src/memory.rs`, items+shipped union); do not duplicate. (The scope first
+  guessed `build_memory_key_map` in `src/catalog/hydrate.rs` — that symbol does
+  not exist; see design.md § Reuse seam.)
 - `.agents/skills/<onboarding>/` — the custom command definition (OQ-1).
 - Possibly `web/map/src/` — only if initial focus is seeded client-side; prefer
   server-side.
@@ -75,8 +79,10 @@ graph around the memory is sparse. Ordering is a value hint, not a hard block.
   no flags, entry memory hard-coded as a named constant. Skill entry dropped.
 - **OQ-2 — RESOLVED (design.md D2):** server/CLI-side; focus already reaches the
   hash untouched, so `web/map/src` and `src/map_server/` are not touched.
-- **Assumption:** ref validation reuses `MemoryRef::parse` (classifier) and
-  `memory::resolve_inspect_uid` (resolution). No new parsing.
+- **Assumption:** ref validation reuses `MemoryRef::parse` (classifier, in the
+  pure value_parser) and `memory::collect_all` + `resolve_memory_from_all`
+  (resolution, items+shipped). No new parsing. (`resolve_inspect_uid` is
+  items-only and misses the shipped onboarding key — see design.md § Reuse seam.)
 - **Risk:** `--focus` on a non-existent memory key should error clearly at CLI
   time (before serving), matching the existing `validate_focus` error ergonomics.
 

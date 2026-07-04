@@ -90,3 +90,31 @@ entire reconcile surface — no REV, no governance touch.
 
 ### Governance/spec (REV)
 - None. No ADR, policy, standard, or spec finding.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- `slice-201.md` — F-1 drift corrected at all three sites where the abandoned
+  resolver was named (same finding, three locations):
+  - `## Context`: "Key→uid resolution already exists" now names
+    `MemoryRef::parse` + `collect_all` + `resolve_memory_from_all` (items+shipped
+    union) and explains why the items-only `resolve_inspect_uid` misses the
+    shipped onboarding key. `build_memory_key_map`-nonexistence note kept.
+  - `## Affected Surface`: key→uid resolution bullet repointed from the
+    nonexistent `build_memory_key_map` (`catalog/hydrate.rs`) to the real
+    `memory::collect_all` + `resolve_memory_from_all` seam.
+  - `## Risks / Assumptions`: assumption bullet repointed off `resolve_inspect_uid`
+    onto the union seam, with the items-only caveat.
+  Scope narrative now agrees with `design.md § Reuse seam` and the shipped code.
+
+### REVs completed
+- None — governance/spec brief was empty.
+
+### Withdrawn / tolerated
+- F-2 (tolerated): VH browser title-render residue — no graphical host; rationale
+  in the finding disposition. Standing manual check (run `doctrine onboard` on a
+  graphical host).
+- F-3 (aligned): conformance undeclared cell = authored edits + shared-tree churn;
+  no write.
+
+Reconcile pass complete — handoff to /close.
