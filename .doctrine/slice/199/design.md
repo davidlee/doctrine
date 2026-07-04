@@ -1,9 +1,10 @@
 # Design SL-199: Confined subagent orchestrator drive-loop (Mode B capstone)
 
 <!-- Reference forms: entity ids padded (SL-199, SL-198, ADR-012, ADR-011);
-     doc-local refs bare — §A/§B/§C/§D, D-B1, OS1, R1. Status: SHAPING.
-     Locked: §A (create-fork discriminator), §B (MCP funnel surface), §6 (probe).
-     Provisional: §C (agent-def + lint), §D (drive-loop). -->
+     doc-local refs bare — §A/§B/§C/§D, D-B1, OS1, R1. Status: SHAPED (pre-review).
+     Locked: §A (create-fork discriminator), §B (MCP funnel surface — dispatch_import
+     folds the commit), §C (agent-def + lint), §D (drive-loop), §6 (probe).
+     Next: internal adversarial pass → reconcile slice-199.md → /plan. -->
 
 ## 1. Design Problem
 
@@ -96,7 +97,10 @@ else Passthrough. Both arms run the same `act_on_create::Fork` → `fork_core` +
 
 **Shell gather** (create.rs ~362): `cwd_is_coord_root = (root == payload.cwd)`;
 `coord_in_dispatch = git -C root branch --show-current =~ ^dispatch/[0-9]+$`; read
-`base` whenever either Fork condition is live.
+`base` whenever either Fork condition is live. **The `base` file is the same
+location for both arms** — `<root>/.doctrine/state/dispatch/spawn/base` — only the
+*trigger* differs (positional cwd vs coord-root∧dispatch-branch); no second base
+source, no divergent read path.
 
 **Disarm discipline (confined).** No cd-out self-clear. The drive-loop writes
 `base`+`jail.toml` immediately before each spawn (`dispatch arm-spawn --path .`
@@ -135,12 +139,23 @@ Four **discrete** MCP tools, one per engine seam. Each: parse `{slice, …}` →
 **resolve the coord tree server-side by slice-id** → call the existing `run_*`
 with `path = <coord>` → serialize.
 
-| Tool | Wraps | Args |
-|---|---|---|
-| `dispatch_import` | `run_import` (fork arm) | `{slice, name}` → base=coord tip, fork=`dispatch/<name>` |
-| `dispatch_reap` | `run_gc` | `{slice, name}` |
-| `dispatch_record_boundary` | `run_record_boundary` | `{slice, phase, code_start, code_end}` |
-| `dispatch_phase_status` | `run_phase` | `{slice, phase, status, note?}` |
+| Tool | Wraps | Args | Returns |
+|---|---|---|---|
+| `dispatch_import` | `run_import` (fork arm) **+ commit** | `{slice, name}` → base=coord tip, fork=`dispatch/<name>` | `{coord_tip, undeclared:[paths]}` |
+| `dispatch_reap` | `run_gc` (patch-id landed-oracle belt) | `{slice, name}` | — |
+| `dispatch_record_boundary` | `run_record_boundary` | `{slice, phase, code_start, code_end}` | — |
+| `dispatch_phase_status` | `run_phase` | `{slice, phase, status, note?}` | — |
+
+- **D-B0 — `dispatch_import` folds the commit** (surfaced shaping §D; proven).
+  `run_import` applies **non-committing** (import.rs:82-97, "delta staged
+  (uncommitted)"); on the CLI arm the orchestrator commits next. The **confined**
+  orchestrator can't — coord `.git` is RO-walled. So the Mode B tool does the same
+  apply **then** commits server-side (the unconfined server writes coord `.git`,
+  exactly as `worker_commit` does for a worker) and returns the new `coord_tip`
+  (feeds `record_boundary`'s `code_end` and the next phase's `B`). `undeclared` is
+  the SOFT scope report (SL-198 posture) — advisory, audit-caught, **not** a
+  pre-commit gate (a post-apply reject would need a `git reset` the orchestrator
+  also can't run).
 
 - **D-B1 — discrete, not one coarse `advance` tool.** One seam/two doors (DRY);
   each carries its engine's existing belts (import's `classify_import` scope +
@@ -167,23 +182,141 @@ The orchestrator's tool-surface is pinned by SL-198's conformance lint (the
 slice.rs:1046?); whether `dispatch_import` returns the `undeclared` scope set for
 orchestrator bless/reject.
 
-### 5.C — `dispatch-orchestrator` agent-def + conformance lint (PROVISIONAL)
+### 5.C — `dispatch-orchestrator` agent-def + conformance lint (LOCKED)
 
-An agent-def listing `Agent` (nested spawn, depth-5) + the four funnel tools +
-`Read`/confined `Bash`/`Edit`/`Write`, nothing else writable. Marked
-`doctrine-role: orchestrator` so SL-198's conformance lint pins its `tools:` (no
-writable MCP beyond the sanctioned funnel set). Placement contract: spawned with
-cwd inside the coord tree (primary-tree cwd ⇒ `Reject`). *To shape.*
+**Agent-def** — `.claude/agents/dispatch-orchestrator.md`, modelled on
+`dispatch-worker.md`:
 
-### 5.D — The drive-loop (PROVISIONAL)
+```yaml
+---
+name: dispatch-orchestrator
+description: Confined dispatch orchestrator — drives the funnel for one slice from
+  inside its coordination worktree; nested-spawns workers, lands their deltas via
+  doctrine MCP tools, reports conflict-judgement back to the main thread.
+doctrine-role: orchestrator
+tools: Read, Edit, Write, Bash, Grep, Glob, Agent,
+  mcp__doctrine__dispatch_import, mcp__doctrine__dispatch_reap,
+  mcp__doctrine__dispatch_record_boundary, mcp__doctrine__dispatch_phase_status
+---
+```
 
-Cadence per phase (serial happy path): `arm-spawn --path .` (write base+jail.toml)
-→ spawn nested `dispatch-worker` (`Agent`, isolation:worktree) → worker
-self-commits via `worker_commit` → `dispatch_import` → `dispatch_phase_status
-completed` → `dispatch_record_boundary` (true range, last) → `dispatch_reap` →
-clear base. Conflict-judgement ops (`refresh-base`, `candidate create/admit`,
-`integrate`) **report-and-halt**: the orchestrator returns a structured summary to
-the main thread. Serial vs parallel drive shape: deferred to plan. *To shape.*
+**Two layers pin two different things** (why native writers + a marker coexist):
+- **The wall** (runtime) bounds *where* raw `Edit`/`Write`/`Bash` land — coord cwd
+  only, shared `.git` RO. Native writers are safe *because* the wall confines
+  their blast radius.
+- **The lint** (static) bounds the *MCP* surface — the only privileged
+  cross-boundary door. Asserts the def's `mcp__*` tokens ⊆ the `orchestrator`
+  allowlist = exactly the four §B funnel tools. Any other `mcp__*` (a second
+  server, a bare `mcp__doctrine` grant, `worker_commit`) ⇒ lint fail. Stops a
+  doctored orchestrator smuggling a second write channel.
+
+**§C's delta over SL-198's lint.** SL-198 lands the lint mechanism + parses the
+marker/`tools:` list + the `worker → {worker_commit}` allowlist row. §C adds one
+row: `orchestrator → {dispatch_import, dispatch_reap, dispatch_record_boundary,
+dispatch_phase_status}`. Per STD-001 the allowlist references the **same named
+constants** §B defines for the tool names — no second literal. §C is data (a
+table row), not new parsing.
+
+**Reads go raw; only git-writes go MCP.** The tight allowlist is sufficient
+*because* the orchestrator reads slice/phase/dispatch state via the raw `doctrine`
+CLI over Bash (in-jail, cwd-safe — `doctrine slice show --path .`, `dispatch
+status`, corpus search from the coord tree's `./target/debug/doctrine`). Reads
+never cross the wall, so they need no MCP grant. Only the four **git-boundary
+writes** (§B) do. **Soft coupling:** the main thread spawns via `Agent
+subagent_type: dispatch-orchestrator`, referencing this `name:` from a
+skill/prompt (not a Rust constant, unlike the worker's) — lower-stakes drift,
+pinned by prose not a test.
+
+**Placement contract — self-enforcing, no hook.** Unlike the worker, the
+orchestrator is **not** forked by `WorktreeCreate`: it's a plain subagent spawned
+into a **pre-existing** coord tree (created by `dispatch setup`), the main thread
+having parked its persistent cwd there before the `Agent` spawn ⇒ `agent_id`
+present + cwd = a linked worktree ⇒ `Jail(coord)`. So no `SubagentStart` provision
+hook, no jail record for the orchestrator itself, and therefore **no
+`name:`↔Rust-constant drift pin** (the worker needs one because its
+`SubagentStart` matcher keys on `DISPATCH_WORKER_AGENT_TYPE`; the orchestrator is
+matched by the `doctrine-role` marker, a free string the lint owns). Mis-placement
+(spawned from primary cwd) fails loud — first raw `Bash`/`Edit` ⇒ `Reject`.
+
+**OS → plan.** OS-C1: is the allowlist a **ceiling only** (prevent excess
+privilege) or also a **floor** (reject a def *missing* `Agent`/a funnel tool)?
+Lean ceiling-only — SL-198's grain; an under-equipped def fails loud at runtime,
+not a security concern. OS-C2: confirm SL-198's lint iterates **all** marked defs
+(a client project's second `orchestrator`-marked def is covered) vs. name-matching
+one file.
+
+### 5.D — The drive-loop (LOCKED)
+
+**Scope line — the orchestrator owns the per-phase fork→land loop *into the coord
+tree*; cross-tree/trunk ops stay main-thread.** `prepare-review` and `integrate`
+write trunk (outside the coord jail, RO) — the confined orchestrator *cannot*
+touch them. It drives ready phases, lands each into the coord branch, then
+**reports-and-halts** to the main thread, which runs `dispatch sync --integrate`.
+This is why the funnel is exactly four tools, not more: the trunk-facing verbs are
+never the orchestrator's.
+
+**Serial per-phase cadence (happy path):**
+
+1. **`arm-spawn --path .`** (raw Bash, cwd = coord-root — cwd-safe; writes
+   `base=B`+`jail.toml` into `.doctrine/state/dispatch/spawn/`, inside its own
+   jail). `B` = current coord tip.
+2. **Spawn nested `dispatch-worker`** (`Agent`, isolation:worktree). Confined-
+   subagent cwd = coord-root ⇒ §A's confined arm Forks: `dispatch/<name>` at `B`,
+   jail record provisioned. *This is the base-control vanilla `isolation:worktree`
+   lacks* — the harness forks off session HEAD unless a `WorktreeCreate` hook
+   overrides (dispatch-mechanics.md:39-42); §A's fork **is** that override, and the
+   **fail-closed** provisioning seam (unlike the read-only `SubagentStart` stamp,
+   mechanics:154-166).
+3. **Worker self-commits** via `worker_commit` (SL-198) — one gated commit `C`
+   (`C^==B`) on its own branch.
+4. **`dispatch_import`** → apply **+ commit** server-side (D-B0), returns
+   `{coord_tip, undeclared}`.
+5. **`dispatch_phase_status completed`** — flip **first** (D-B3).
+6. **`dispatch_record_boundary`** with the true `(B, coord_tip)` range — **last**
+   (D-B3: UPSERT last-writer-wins overwrites the degenerate `start==end` the
+   `completed` flip's auto solo-bind installs).
+7. **`dispatch_reap`** — belt-gated by the **patch-id landed-oracle** (`git
+   cherry`, mechanics:108-117): `run_gc` refuses to delete a fork whose patch isn't
+   yet in coord history. Crash-proof, sibling-move-proof; inherited free.
+8. **Disarm** — clear `base` (raw file op in-jail). Next phase re-arms with the new
+   `coord_tip` as `B`.
+
+**Conflict-judgement → report-and-halt.** Any op needing main-thread/human
+judgement — a red worker verify, an import scope violation the orchestrator won't
+bless, a `refresh-base`/`candidate`/`integrate` race (mechanics:134-152, all
+report-and-halt by design) — the orchestrator returns a **structured summary** and
+stops. Never auto-merges, never self-unblocks a dirty-trunk refusal.
+
+**Serial vs parallel: deferred to plan.** The serial loop is the design baseline;
+a parallel batch reuses the same per-phase steps under the existing single-slot
+arming rendezvous (one shared `B` per batch,
+[[mem.fact.dispatch.single-slot-arming-rendezvous]]) — worker count / file-disjoint
+batching is a plan concern, not a design fork.
+
+### 5.E — Verification alignment
+
+What evidence each part must add/change (mode per criterion — VT test / VA agent /
+VH human):
+
+- **§A — VT (pure, table-driven).** Extend `classify_create`'s existing table:
+  positional cases unchanged → Fork (regression, must stay green); confined
+  `coord_root ∧ dispatch-branch ∧ base` → Fork; benign `coord_root ∧ dispatch-branch
+  ∧ ¬base` → Passthrough; `coord_root ∧ ¬dispatch-branch ∧ base` → Passthrough;
+  `coord_root ∧ base ∧ bad-sha` → `BadBase`. Plus one e2e: both Fork arms provision
+  the jail record.
+- **§B — VT (tool integration).** Per tool: parse args → resolve coord by slice →
+  `run_*` → serialize. `dispatch_import` specifically asserts **commit happened**
+  (coord tip advanced, one non-merge commit, `undeclared` surfaced) — the D-B0
+  behaviour, not just the apply. Belt regressions (import scope, reap landed-oracle)
+  ride the existing `run_*` suites unchanged (behaviour-preservation gate).
+- **§C — VT (lint).** Extend SL-198's lint suite: the sanctioned orchestrator def
+  passes; a def granting a 5th `mcp__*` / a bare `mcp__doctrine` / `worker_commit`
+  fails, message naming the offender. A fixture def under `.claude/agents/`.
+- **§D — VH + VA.** The end-to-end confined drive-loop is orchestration — witnessed
+  live (VH, as the §6 probe was) that a real phase forks→lands→reaps under the
+  confined orchestrator; the mechanical pieces (steps 4–7) are covered by §B VTs.
+  D-B3 ordering gets a VT at the `run_phase`/`run_record_boundary` seam (flip-then-
+  boundary leaves the true range).
 
 ## 6. Feasibility probe (empirical basis, 2026-07-04)
 
@@ -211,6 +344,13 @@ positional-arming discriminator gains the confined-arm branch; the D6 risk
 calculus under MCP-mediated writes), and a **note on SL-182/ADR-008** that Mode B
 adds a *sanctioned MCP write surface* to a confined orchestrator without lifting
 the wall (made safe by the conformance lint). ADRs are owner-locked VH.
+
+**Doc + spec deltas (deliverables, not just ratification):** the shipped
+`install/dispatch-mechanics.md` needs a **Mode B section** (the confined-
+orchestrator arm: MCP funnel, `dispatch_import` folds the commit, reads-raw/writes-
+MCP split) — it currently documents only the main-thread + pi arms. And check
+tech-spec-021 (dispatch orchestrator process) for a **REQ delta** covering the
+confined-orchestrator actor class. Both land in-slice; sized at reconcile/plan.
 
 ## 8. Risks (initial)
 

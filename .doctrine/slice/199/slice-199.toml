@@ -38,6 +38,14 @@ intent = "design-target"
 selector = "src/mcp_server/tools.rs"
 intent = "design-target"
 
+[[selector]]
+selector = ".claude/agents/dispatch-orchestrator.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/dispatch-mechanics.md"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
