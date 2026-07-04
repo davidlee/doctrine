@@ -6,6 +6,7 @@
 //! #2 `RelationIntegrity` (§ `RelationIntegrity`'s `IllegalRows`) checks — different
 //! data sources, different severities.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use crate::catalog::diagnostic::CatalogDiagnostic;
@@ -140,8 +141,19 @@ fn is_facet_diagnostic(d: &CatalogDiagnostic) -> bool {
 ///
 /// Emits a `ProseCite` Warning for each known-prefix 2-part citation that does
 /// not resolve to an entity on disk.
-pub(crate) fn prose_cite_findings(root: &Path, verbose: bool) -> Vec<Finding> {
+pub(crate) fn prose_cite_findings(
+    root: &Path,
+    verbose: bool,
+    with_terminal_slices: bool,
+) -> Vec<Finding> {
     let mut findings = Vec::new();
+
+    // Collect terminal slice IDs when exclusion is active.
+    let terminal_slices: BTreeSet<u32> = if with_terminal_slices {
+        BTreeSet::new()
+    } else {
+        collect_terminal_slice_ids(root)
+    };
 
     // Anchor to the authored corpus (design §5.5/§7 D11): scan only
     // `.doctrine/**`, never the whole repo — a whole-repo glob descends into
@@ -170,6 +182,11 @@ pub(crate) fn prose_cite_findings(root: &Path, verbose: bool) -> Vec<Finding> {
             continue;
         }
         if is_disposable_prose_d11(&entry) {
+            continue;
+        }
+        // Terminal-slice exclusion: skip prose under closed/abandoned slices
+        // unless --with-terminal-slices or --json.
+        if !terminal_slices.is_empty() && is_terminal_slice_file(&entry, &terminal_slices) {
             continue;
         }
         // Non-verbose path exclusions: glossary.md exemplar placeholders and
@@ -238,6 +255,64 @@ pub(crate) fn prose_cite_findings(root: &Path, verbose: bool) -> Vec<Finding> {
     }
 
     findings
+}
+
+/// Collect the set of slice ids whose status is terminal (`done` or `abandoned`).
+/// Reads each slice's TOML to extract `status`; a missing or unreadable TOML is
+/// silently skipped (no finding — that's the `TomlParse` check's job).
+fn collect_terminal_slice_ids(root: &Path) -> BTreeSet<u32> {
+    let mut ids = BTreeSet::new();
+    let slice_root = root.join(".doctrine/slice");
+    let Ok(entries) = std::fs::read_dir(&slice_root) else {
+        return ids;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() || path.is_symlink() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Ok(id): Result<u32, _> = name.parse() else {
+            continue;
+        };
+        let toml_path = path.join(format!("slice-{name}.toml"));
+        let Ok(text) = std::fs::read_to_string(&toml_path) else {
+            continue;
+        };
+        let Ok(table) = text.parse::<toml::Table>() else {
+            continue;
+        };
+        let Some(status) = table.get("status").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if status == "done" || status == "abandoned" {
+            ids.insert(id);
+        }
+    }
+    ids
+}
+
+/// Return `true` when `path` lives under `.doctrine/slice/NNN/` where NNN is in
+/// the terminal set.
+fn is_terminal_slice_file(path: &Path, terminal: &BTreeSet<u32>) -> bool {
+    // Walk up from the file to find the slice directory.
+    let mut current = path.parent();
+    while let Some(parent) = current {
+        if let Some(grandparent) = parent.parent()
+            && grandparent.ends_with(".doctrine/slice")
+        {
+            if let Some(name) = parent.file_name().and_then(|n| n.to_str())
+                && let Ok(id) = name.parse::<u32>()
+            {
+                return terminal.contains(&id);
+            }
+            break;
+        }
+        current = parent.parent();
+    }
+    false
 }
 
 /// D11 scan scope: extends [`crate::integrity::is_disposable_prose`] with
@@ -488,11 +563,12 @@ mod tests {
     /// Write prose to a `.md` file in `root` and run `prose_cite_findings`.
     /// The fixture lives under the authored corpus (`.doctrine/**`) so the
     /// anchored scan (RV-185 F-3) reaches it — a durable, non-disposable file.
+    /// Defaults to `with_terminal_slices=true` so existing tests are unaffected.
     fn scan_md(root: &Path, prose: &str) -> Vec<Finding> {
         let file = root.join(".doctrine/slice/099/slice-099.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, prose).unwrap();
-        prose_cite_findings(root, true)
+        prose_cite_findings(root, true, true)
     }
 
     /// Root with SL-001 seeded so `SL-001` resolves.
@@ -904,7 +980,7 @@ mod tests {
         let file = root.join(".doctrine/slice/001/audit.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert!(
             findings.is_empty(),
             "audit.md should be skipped: {findings:?}"
@@ -918,7 +994,7 @@ mod tests {
         let file = root.join(".doctrine/slice/001/inquisition.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert!(
             findings.is_empty(),
             "inquisition.md should be skipped: {findings:?}"
@@ -932,7 +1008,7 @@ mod tests {
         let file = root.join(".doctrine/slice/001/notes.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert!(
             findings.is_empty(),
             "notes.md should be skipped: {findings:?}"
@@ -946,7 +1022,7 @@ mod tests {
         let file = root.join(".doctrine/research/notes/some.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert!(
             findings.is_empty(),
             "research/ should be skipped: {findings:?}"
@@ -960,7 +1036,7 @@ mod tests {
         let file = root.join(".doctrine/review/042/summary.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert!(
             findings.is_empty(),
             ".doctrine/review/ should be skipped: {findings:?}"
@@ -974,7 +1050,7 @@ mod tests {
         let file = root.join(".doctrine/slice/002/slice-002.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert_eq!(
             findings.len(),
             1,
@@ -990,7 +1066,7 @@ mod tests {
         let file = root.join(".doctrine/slice/001/handover.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert!(
             findings.is_empty(),
             "handover.md should be skipped via is_disposable_prose: {findings:?}"
@@ -1004,7 +1080,7 @@ mod tests {
         let file = root.join(".doctrine/state/slice/001/phase-01.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert!(
             findings.is_empty(),
             ".doctrine/state should be skipped via is_disposable_prose: {findings:?}"
@@ -1020,7 +1096,7 @@ mod tests {
         let file = root.join(".doctrine/glossary.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling POL-123 here\n").unwrap();
-        let findings = prose_cite_findings(root, false);
+        let findings = prose_cite_findings(root, false, true);
         assert!(
             findings.is_empty(),
             "glossary.md should be skipped when not verbose: {findings:?}"
@@ -1034,7 +1110,7 @@ mod tests {
         let file = root.join(".doctrine/glossary.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling POL-123 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert_eq!(
             findings.len(),
             1,
@@ -1050,7 +1126,7 @@ mod tests {
         let file = root.join(".doctrine/rfc/011/case-notes.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling RV-217 here\n").unwrap();
-        let findings = prose_cite_findings(root, false);
+        let findings = prose_cite_findings(root, false, true);
         assert!(
             findings.is_empty(),
             "rfc/ should be skipped when not verbose: {findings:?}"
@@ -1064,13 +1140,103 @@ mod tests {
         let file = root.join(".doctrine/rfc/011/case-notes.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling RV-217 here\n").unwrap();
-        let findings = prose_cite_findings(root, true);
+        let findings = prose_cite_findings(root, true, true);
         assert_eq!(
             findings.len(),
             1,
             "rfc/ should be scanned when verbose: {findings:?}"
         );
         assert!(findings[0].message.contains("RV-217"));
+    }
+
+    // --- ProseCite terminal-slice exclusion ---
+
+    /// Helper: seed a slice TOML with `status` at `root/.doctrine/slice/NNN/`.
+    fn seed_slice_toml(root: &Path, id: u32, status: &str) {
+        let dir = root.join(format!(".doctrine/slice/{id:03}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("slice-{id:03}.toml")),
+            format!("id = {id}\nslug = \"s{id}\"\ntitle = \"S{id}\"\nstatus = \"{status}\"\n"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn prose_cite_skips_done_slice_by_default() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice_toml(root, 200, "done");
+        // Write prose with a dangling citation into the done slice.
+        let file = root.join(".doctrine/slice/200/slice-200.md");
+        std::fs::write(&file, "dangling DEC-005 here\n").unwrap();
+        // Without terminal slices — should skip.
+        let findings = prose_cite_findings(root, true, false);
+        assert!(
+            findings.is_empty(),
+            "done slice should be skipped by default: {findings:?}"
+        );
+        // With terminal slices — should find it.
+        let findings_with = prose_cite_findings(root, true, true);
+        assert_eq!(
+            findings_with.len(),
+            1,
+            "done slice should be included with --with-terminal-slices: {findings_with:?}"
+        );
+        assert!(findings_with[0].message.contains("DEC-005"));
+    }
+
+    #[test]
+    fn prose_cite_skips_abandoned_slice_by_default() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice_toml(root, 201, "abandoned");
+        let file = root.join(".doctrine/slice/201/slice-201.md");
+        std::fs::write(&file, "dangling DEC-006 here\n").unwrap();
+        let findings = prose_cite_findings(root, true, false);
+        assert!(
+            findings.is_empty(),
+            "abandoned slice should be skipped by default: {findings:?}"
+        );
+        let findings_with = prose_cite_findings(root, true, true);
+        assert_eq!(findings_with.len(), 1);
+    }
+
+    #[test]
+    fn prose_cite_scans_non_terminal_slice_always() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice_toml(root, 202, "started");
+        let file = root.join(".doctrine/slice/202/slice-202.md");
+        std::fs::write(&file, "dangling DEC-007 here\n").unwrap();
+        // Without terminal slices — non-terminal, so still scanned.
+        let findings = prose_cite_findings(root, true, false);
+        assert_eq!(
+            findings.len(),
+            1,
+            "non-terminal slice should always be scanned: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn prose_cite_terminal_exclusion_only_affects_slice_dir() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice_toml(root, 203, "done");
+        // Prose outside the slice dir (e.g. in an ADR) should still be scanned.
+        std::fs::create_dir_all(root.join(".doctrine/adr/001")).unwrap();
+        std::fs::write(
+            root.join(".doctrine/adr/001/adr-001.md"),
+            "dangling DEC-008 here\n",
+        )
+        .unwrap();
+        let findings = prose_cite_findings(root, true, false);
+        assert_eq!(
+            findings.len(),
+            1,
+            "non-slice prose should still be scanned: {findings:?}"
+        );
+        assert!(findings[0].message.contains("DEC-008"));
     }
 
     // ------------------------------------------------------------------

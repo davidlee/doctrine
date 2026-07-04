@@ -554,6 +554,11 @@ pub(crate) enum Command {
         /// Show all findings including expected noise (raw labels, reference-doc exemplars).
         #[arg(long)]
         verbose: bool,
+
+        /// Include prose-citation findings from terminal-status slices (done, abandoned).
+        /// By default, terminal slices are excluded from `ProseCite` warnings.
+        #[arg(long)]
+        with_terminal_slices: bool,
     },
 
     /// Renumber an entity's canonical id.
@@ -1313,7 +1318,8 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             path,
             json,
             verbose,
-        } => crate::commands::doctor::run_doctor(path, json, verbose),
+            with_terminal_slices,
+        } => crate::commands::doctor::run_doctor(path, json, verbose, with_terminal_slices),
         Command::Reseat {
             reference,
             to,

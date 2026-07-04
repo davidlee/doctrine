@@ -12,7 +12,12 @@ use std::path::PathBuf;
 
 use crate::finding::{Category, Finding};
 
-pub(crate) fn run_doctor(path: Option<PathBuf>, json: bool, verbose: bool) -> anyhow::Result<()> {
+pub(crate) fn run_doctor(
+    path: Option<PathBuf>,
+    json: bool,
+    verbose: bool,
+    with_terminal_slices: bool,
+) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
 
     let mut findings: Vec<Finding> = Vec::new();
@@ -49,9 +54,13 @@ pub(crate) fn run_doctor(path: Option<PathBuf>, json: bool, verbose: bool) -> an
     // IMP-252: JSON mode always gets the full dataset; path exclusions only
     // apply to non-JSON, non-verbose terminal output.
     let prose_verbose = json || verbose;
+    // Terminal-slice exclusion (IMP-252 follow-up): skip closed/abandoned
+    // slices by default; --with-terminal-slices or --json overrides.
+    let include_terminal = json || with_terminal_slices;
     findings.extend(crate::doctor_checks::prose_cite_findings(
         &root,
         prose_verbose,
+        include_terminal,
     ));
 
     // #9 — Agent Conformance (Error) — SL-198 RSK-225: worker tool-surface is a
