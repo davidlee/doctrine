@@ -16,11 +16,11 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/catalog/hydrate.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/memory.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[relation]]
 label = "references"
