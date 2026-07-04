@@ -28,12 +28,18 @@ it needs are the serial-dependent capstone (**SL-199**, `needs` this slice). Mod
 ## Scope & Objectives
 
 1. **IMP-253 keystone — gated `mcp__doctrine__worker_commit`.** A jailed worker calls
-   it; the unconfined MCP server commits the worker's delta with the funnel belts:
-   `doctrine check prove` gate; scope belt (reject `.doctrine/`/`.claude/` writes,
-   enforce the slice's design-target selectors); **exactly one non-merge commit with
-   `parent(tip) == B`** (ancestry "descended from B" is too weak — it would accept a
-   `B→C1→C2→C3` stack on a resumed worktree). The worker's Bash `git commit` is walled
-   (ro `.git`); this is its only self-commit route.
+   it with its **`agent` id (its worktree name), not a path**; the unconfined MCP server
+   **looks up** the target worktree from the per-worktree registry
+   (`JAIL_SUBPATH/<agent>.toml`, present ⟺ legitimately spawned — the target-fence; owner
+   ruling / design §10 X1), then commits the worker's delta with the funnel belts:
+   `doctrine check commit` gate (worker-side, forces fmt — owner-locked); scope belt
+   (reject `.doctrine/`/`.claude/` writes, enforce the slice's design-target selectors);
+   **exactly one non-merge commit with `parent(tip) == B`** (ancestry "descended from B"
+   is too weak — it would accept a `B→C1→C2→C3` stack on a resumed worktree), B read from
+   the immutable per-worktree base snapshot (design §10 X2). The worker's Bash `git
+   commit` is walled (ro `.git`); this is its only self-commit route. Residual: a worker
+   may spoof a *sibling's* registered name (attribution confusion, review-caught, own work
+   not promoted) — accepted, tracked by RSK-226.
 
 2. **Retire the import-the-working-tree-**diff** dance — claude arm only.** Today the
    orchestrator reads the Agent footer's `worktreePath`, runs `verify-worker --dir`,

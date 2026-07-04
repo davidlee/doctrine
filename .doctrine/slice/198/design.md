@@ -67,9 +67,10 @@ worker's own tree; everything cross-boundary stays with the (unchanged) orchestr
 
 ```
  worker (jailed, cwd=worktree, .git RO)
-   │  calls mcp__doctrine__worker_commit { dir, message }
+   │  calls mcp__doctrine__worker_commit { agent, message }   # agent = self-reported worktree name
    ▼
  doctrine MCP server (UNCONFINED, cwd=primary, .git RW)
+   │  resolve agent→registry (jail/<name>.toml) → dir + base B + branch  (NOT a worker path)
    │  belt: check commit (in dir) → scope classify → one non-merge commit parent==B
    ▼
  worker worktree HEAD advances B → C   (C = one commit, C^ == B)
@@ -86,17 +87,22 @@ worker's own tree; everything cross-boundary stays with the (unchanged) orchestr
 
 ```
 name: "worker_commit"
-input:  { dir: string (required),      # the worker's own worktree path (its cwd)
+input:  { agent: string (required),    # worker's own agent-id / worktree name (self-reported)
           message: string (required) } # worker-authored; orchestrator may amend
 returns: { "Committed": { oid: string, base: string } }   # or a typed refusal
 ```
 
-Handler (imperative shell; unconfined; operates on `dir`), in order:
-1. **Resolve + validate.** Assert `dir` is a linked project worktree (reuse the
-   `run_verify_worker` fact-gather). Recover the coord root from `dir` by layout-strip
-   ([[mem.fact.dispatch.coord-root-not-git-common-dir]]); read base **B** from the
-   arming slot `<coord>/.doctrine/state/dispatch/spawn/base`
-   ([[mem.fact.dispatch.single-slot-arming-rendezvous]]).
+Handler (imperative shell; unconfined; resolves its target from the registry), in order:
+1. **Resolve target from the registry — NOT a worker-supplied path (owner ruling, X1).**
+   The worker passes its `agent` id (its worktree name, `agent-<hex>`), never a `dir`.
+   The server recovers the coord root, then **requires** a per-worktree jail record
+   `<coord>/.doctrine/state/dispatch/jail/<agent>.toml` (`JAIL_SUBPATH`, provisioned ro
+   at `create-fork`, `create.rs:245`) — its presence **is** the target-fence (a
+   legitimately-spawned worktree; absent ⇒ refuse `unknown-agent`). From that one key,
+   derive: worktree `dir = <coord>/.worktrees/<agent>` (`WORKTREES_SUBDIR`), branch
+   `dispatch/<agent>`, and the immutable per-worktree **base B** snapshotted beside the
+   jail record (X2). A worker cannot name a path — only an `agent` that must hit the
+   registry; the residual is spoofing a *sibling's* registered name (X1).
 2. **Gate belt — `check commit`.** Run the resolved `commit` tier
    (`resolve_check(Commit)`) in `dir`. fmt mutates the tree *first*, then lint/validate/
    test/build. Red ⇒ refuse `commit-gate-red` (report captured output). (Replaces a
@@ -293,20 +299,22 @@ plumbing** (X1/X2) + a **non-fail-open lint** (X3).
   not the arming slot. Supersedes §5.2 step 1 and D4. **This is load-bearing net-new
   work** (touches `src/worktree/create.rs`).
 
-- **X1 (BLOCKER → reframed to MAJOR — reality) — `worker_commit` cannot authenticate its
-  caller; fence the TARGET and document the residual.** The MCP server entrypoint gets
-  `name`+arbitrary JSON args (`tools.rs:395`, `:408`) — **no caller `agent_id`**, and a
-  worker's `Read` passes the wall so **no on-disk secret is safe** either. So true
-  "the caller owns `dir`" auth is **not achievable in this harness**. Drop the "the
-  worker's own worktree" authority language (§5.1/§5.2). Instead: `worker_commit(dir)`
-  **fences the target** — `dir` must be a spawned worker worktree carrying a trusted,
-  immutable, per-worktree **base record** (X2); belts (`check commit`, scope,
-  `single-commit C^==B`) bound the rest. **Residual (documented, accepted per the locked
-  threat model):** a poisoned worker can target a *sibling's* legitimately-spawned
-  worktree and land an **in-scope, prove-passing** commit onto its branch — attribution
-  confusion, review/audit-caught, **not** a jail escape or privilege escalation.
-  Follow-on: a real caller-binding needs a harness `agent_id`→worktree channel to the
-  server (out of scope; backlog).
+- **X1 (BLOCKER → RESOLVED by owner ruling — registry-keyed target, residual accepted).**
+  The MCP server entrypoint gets `name`+arbitrary JSON args (`tools.rs:395`, `:408`) —
+  **no caller `agent_id`**, and a worker's `Read` passes the wall so **no on-disk secret
+  is safe** either. So true caller-auth ("this caller owns this worktree") is **not
+  achievable in this harness**. **Owner ruling (2026-07-04):** don't accept a
+  worker-supplied `dir` at all — the worker passes an **`agent` id (its worktree name)**,
+  and the server **looks up** the worktree from the per-worktree registry
+  (`JAIL_SUBPATH/<agent>.toml`, present ⟺ legitimately spawned; `dir`, `base`, `branch`
+  all derive from that one key — §5.2 step 1). The worker **cannot freely specify** a
+  path; the identifier must hit the registry. **Residual (accepted, small blast radius):**
+  a poisoned worker that knows/guesses a *sibling's* registered name can land an in-scope,
+  gate-passing commit onto that sibling's `dispatch/<name>` branch — attribution
+  confusion, review/audit-caught, **not** a jail escape or escalation; **and the
+  poisoner's own work is not promoted** (the orchestrator imports the branch it spawned).
+  This aligns with the locked threat model (belts bound blast radius, not intent). A true
+  caller-binding (harness `agent_id`→server channel) is the follow-on — **RSK-226**.
 
 - **X3 (BLOCKER → adopt) — the lint targets the wrong files and fails open.** Worker
   defs live at `.doctrine/agents/dispatch-worker.md` + `install/agents/{claude,pi}/

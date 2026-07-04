@@ -4,9 +4,9 @@ Durable per-slice scratchpad — tracked in git.
 
 ## State (2026-07-04)
 
-- **Lifecycle:** `design`. Design authored + internal adversarial pass done. **No
-  plan, no phases yet.** Next step: external codex adversarial pass (in flight), then
-  `/plan`.
+- **Lifecycle:** `design`. Design authored + internal (F1–F5) + external codex (X1–X5)
+  adversarial passes done and folded. X1 blocker **resolved by owner ruling** (agent-id
+  registry lookup). **No plan, no phases yet.** Next step: `slice status 198 plan` → `/plan`.
 - **Not started:** all implementation. This is a scoped+designed slice only.
 - **Gate (`doctrine check gate`):** N/A — no code touched yet.
 
@@ -41,13 +41,17 @@ All 5 findings source-verified. **The reuse is real but the real work moved:**
   (beside jail policy, `JAIL_SUBPATH`, ro to worker) — NOT read from the mutable arming
   slot at commit time (racy, overwritten on re-arm). worker_commit reads that immutable
   base. Touches `src/worktree/create.rs`. **Supersedes D4.**
-- **X1 (reframed blocker→major, NEEDS OWNER RULING):** the MCP server gets **no caller
-  agent_id** (`tools.rs:395`), and worker `Read` passes the wall → true caller-auth is
-  **unachievable in this harness**. worker_commit **fences the target** (dir = a spawned
-  worktree with trusted per-worktree base, belts bound the rest). **Residual:** a
-  poisoned worker can land an in-scope/prove-passing commit onto a *sibling's* branch
-  (attribution confusion, review-caught, no escalation). Owner must accept this residual
-  (aligns with locked threat model) or fund a harness caller-binding follow-on.
+- **X1 (RESOLVED by owner ruling 2026-07-04):** MCP server gets **no caller agent_id**
+  (`tools.rs:395`), worker `Read` passes the wall → true caller-auth **unachievable in
+  this harness**. **Ruling:** worker passes an **`agent` id (its worktree name), not a
+  `dir`**; server **looks up** the worktree from the registry (`JAIL_SUBPATH/<agent>.toml`
+  present ⟺ spawned — the target-fence; `dir`/`base`/`branch` derive from that one key).
+  Worker cannot freely specify a path. **Residual accepted (small blast radius):** spoof a
+  *sibling's* registered name → in-scope commit on its branch (attribution confusion,
+  review-caught, **own work not promoted**, no escalation). Seam verified: registry keyed
+  by name at `create.rs:245`, path `<coord>/.worktrees/<agent>` (`WORKTREES_SUBDIR`),
+  branch `dispatch/<agent>`. Composes with X2 (base snapshot beside the same key).
+  Follow-on caller-binding = RSK-226.
 - **X3 (adopt):** lint targets `.doctrine/agents/**` + `install/agents/**` (authored),
   NOT `.claude/agents` (installed copy); marker **MANDATORY** (deny-by-default), fixes
   the fail-open R2. design-target selectors updated.
