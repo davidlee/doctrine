@@ -33,23 +33,27 @@ and performs every boundary-crossing write through doctrine MCP tools.
    trigger (`cwd_is_coord_root ∧ coord_in_dispatch ∧ base`); positional path unchanged.
    Branch guard is hygiene, not security (lifts nothing a jailed worker lacks).
 
-3. **Dispatch MCP funnel surface** — four **discrete** tools over existing clap-free
-   `run_*` seams: **`dispatch_import`** (folds apply **+ commit** server-side —
-   `run_import` is non-committing and the confined orchestrator can't reach coord
-   `.git`; returns `{coord_tip, undeclared}`), **`dispatch_reap`** (patch-id landed-
-   oracle belt), **`dispatch_record_boundary`**, **`dispatch_phase_status`**. Coord
-   resolved server-side by slice-id (sibling of SL-198's worker-by-agent resolver).
-   Each rides its CLI verb's belts (one seam, two doors — no forked implementation).
+3. **Dispatch MCP funnel surface** — a tight tool set over existing clap-free `run_*`
+   seams, **every committed-output tool committing server-side** (the confined
+   orchestrator can't reach coord `.git`, and the CLI arm's "orchestrator commits next"
+   doesn't hold): **`dispatch_import`** (apply + commit code; **scope violation is a
+   HARD pre-commit refuse → report-and-halt**, reusing `classify_import`'s existing
+   belt — not advisory), **`dispatch_conclude_phase`** (flip `completed` + record the
+   true boundary + **one atomic** commit — they must not split across a crash),
+   **`dispatch_reap`** (patch-id landed-oracle belt). Coord resolved server-side by
+   slice-id (sibling of SL-198's worker-by-agent resolver). One seam, two doors — no
+   forked implementation. (External review 2026-07-04 forced the commit-folding, the
+   hard scope gate, and the atomic conclude — see design §B.)
 
 4. **The drive-loop.** The confined orchestrator runs the funnel cadence:
-   `arm-spawn` → spawn `dispatch-worker` (nested) → worker self-commits via
-   `worker_commit` → orchestrator `dispatch_import` → flip `completed` **then**
-   `record-boundary` with the true range **last** (D-B3, else the flip's auto
-   solo-bind clobbers it) → reap — all via MCP, its raw `Edit`/`Write` confined to the
-   coord tree, raw Bash to shared `.git` walled (proving no un-jailing). Reads go raw
-   (in-jail `doctrine` CLI); only the four git-boundary writes go MCP. Conflict-
-   judgement ops (`refresh-base`, `candidate create/admit`, `integrate`) write trunk
-   (outside the jail) → stay **report-and-halt** to the human/main-thread, unchanged.
+   `arm-spawn` → spawn `dispatch-worker` (nested; create-fork consumes the arm
+   one-shot) → worker self-commits via `worker_commit` → orchestrator `dispatch_import`
+   → `dispatch_conclude_phase` (flip + boundary + one atomic commit) → reap — all via
+   MCP, its raw `Edit`/`Write` confined to the coord tree, raw Bash to shared `.git`
+   walled (proving no un-jailing). Reads go raw (in-jail `doctrine` CLI); only the
+   git-boundary writes go MCP. Conflict-judgement ops (`refresh-base`, `candidate
+   create/admit`, `integrate`) write trunk (outside the jail) → stay
+   **report-and-halt** to the human/main-thread, unchanged.
 
 ## Non-Goals
 
@@ -63,7 +67,8 @@ and performs every boundary-crossing write through doctrine MCP tools.
 - `.claude/agents/dispatch-orchestrator.md` — the agent-def (design-target).
 - `src/worktree/create.rs` — the §A create-fork Fork discriminator (design-target,
   the linchpin).
-- `src/mcp_server/tools.rs` — the four funnel tools + coord-by-slice resolver
+- `src/mcp_server/tools.rs` — the funnel tools (import / conclude-phase / reap) +
+  coord-by-slice resolver
   (design-target).
 - `src/dispatch.rs`, `src/worktree/**` — belt/logic reuse (import/gc/record-boundary);
   `arm-spawn` under a subagent spawner.
