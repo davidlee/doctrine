@@ -265,6 +265,66 @@ TDD, behaviour-preserving. Key cases:
   frontmatter schema (list vs comma-string) at plan; the marker is a new doctrine
   convention shipped on `dispatch-worker`.
 
-### External adversarial pass
+### External adversarial pass (codex / GPT-5.5, 2026-07-04) — all findings source-verified
 
-(pending — codex, default reviewer)
+This pass **amends** the sections it names; the body §§5–8 are reconciled at `/plan`.
+Net reframe: the design's "one import switch, mostly reuse" framing was **wrong** — the
+reuse is real (F5), but the true net-new work is **trusted per-worktree base/target
+plumbing** (X1/X2) + a **non-fail-open lint** (X3).
+
+- **X5 (de-risk — supersedes OQ-2, OQ-2b) — the reuse claims HOLD (source-verified).**
+  `run_import`'s `fork` is a **revspec** — resolves `{fork}^^{commit}`, diffs
+  `{base}..{fork}`, `git apply`s into the coord index non-committing, and already
+  requires `S^==B` single-non-merge (`import.rs:301`, `:323`, `:354`). A **detached
+  worktree-HEAD oid works as the fork revspec** — the claude-arm switch from
+  `--from-worktree` to the fork path is clean reuse, **no new code**.
+  `run_verify_worker` already asserts `merge-base --is-ancestor B HEAD` (**not**
+  `HEAD==B`; `subagent.rs:360`), so the post-commit `HEAD==C, C descends B` case passes
+  **unchanged**. ⇒ OQ-2 and OQ-2b are **closed YES**; delete them from the plan's risk.
+
+- **X2 (BLOCKER → adopt) — base B must be snapshotted per-worktree at spawn, not read
+  from the live arming slot.** The arming slot (`ARMING_SUBPATH/base`, `create.rs:194`)
+  is a **single per-coord slot overwritten on re-arm** (`dispatch.rs` arm-spawn); reading
+  it at *commit* time means a later spawn silently redefines B for an in-flight worker
+  (parallel fan-out corrupts; serial overlap is brittle). **Fix:** at `create-fork`,
+  snapshot B into per-worktree trusted state beside the jail policy
+  (`JAIL_SUBPATH/<name>.toml` pattern — outside the fork, ro to the worker,
+  `create.rs:198`, `:216`). `worker_commit` reads **that immutable per-worktree base**,
+  not the arming slot. Supersedes §5.2 step 1 and D4. **This is load-bearing net-new
+  work** (touches `src/worktree/create.rs`).
+
+- **X1 (BLOCKER → reframed to MAJOR — reality) — `worker_commit` cannot authenticate its
+  caller; fence the TARGET and document the residual.** The MCP server entrypoint gets
+  `name`+arbitrary JSON args (`tools.rs:395`, `:408`) — **no caller `agent_id`**, and a
+  worker's `Read` passes the wall so **no on-disk secret is safe** either. So true
+  "the caller owns `dir`" auth is **not achievable in this harness**. Drop the "the
+  worker's own worktree" authority language (§5.1/§5.2). Instead: `worker_commit(dir)`
+  **fences the target** — `dir` must be a spawned worker worktree carrying a trusted,
+  immutable, per-worktree **base record** (X2); belts (`check commit`, scope,
+  `single-commit C^==B`) bound the rest. **Residual (documented, accepted per the locked
+  threat model):** a poisoned worker can target a *sibling's* legitimately-spawned
+  worktree and land an **in-scope, prove-passing** commit onto its branch — attribution
+  confusion, review/audit-caught, **not** a jail escape or privilege escalation.
+  Follow-on: a real caller-binding needs a harness `agent_id`→worktree channel to the
+  server (out of scope; backlog).
+
+- **X3 (BLOCKER → adopt) — the lint targets the wrong files and fails open.** Worker
+  defs live at `.doctrine/agents/dispatch-worker.md` + `install/agents/{claude,pi}/
+  dispatch-worker.md` (source-verified) — **not** `.claude/agents/*.md` (that is the
+  installed copy). And R2 accepting an unmarked worker as a "doc gap" is **fail-open**.
+  **Fix:** lint the **authored + install** trees; make the `doctrine-role` marker
+  **mandatory** — an unmarked def used as a dispatch worker is a **lint failure**, not a
+  doc gap (deny-by-default). Supersedes §5.2 (lint target), §7 D3, and R2. Update the
+  `design-target` selectors to `.doctrine/agents/**` + `install/agents/**`.
+
+- **X4 (MAJOR → adopt) — belt order is backwards.** `check commit` mutates (`fmt`)
+  *before* scope + `HEAD==B` refusal, so stacks/empty/out-of-scope pay the full
+  test+build, and `fmt` can widen the touched-path set before classification (the
+  general form of F2). **Fix order:** target-fence → immutable-base resolve → `HEAD==B`
+  → non-empty **pre-fmt** intended delta → **pre-fmt** scope belt → *then* the mutating
+  `check commit` gate → commit. Supersedes §5.2 belt order; subsumes F2.
+
+**Plan consequences:** the real slice is (1) `create-fork` base snapshot + trusted
+per-worktree base read (X2), (2) `worker_commit` MCP tool with the reordered cheap-first
+belts over that base + reused `classify_import`/fork-import (X1/X4/X5), (3) a mandatory,
+correctly-targeted conformance lint (X3). The "import-path switch" is the *small* part.

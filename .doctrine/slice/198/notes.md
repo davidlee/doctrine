@@ -31,6 +31,34 @@ Conformance **lint** = MCP allowlist (only `worker_commit`) on agent-defs marked
 `doctrine-role: worker`. All over existing seams (`src/worktree/import.rs`,
 `subagent.rs`, `verify.rs`). Subprocess arm + main-thread fallback untouched.
 
+## External codex pass (2026-07-04) — REFRAMED the slice (design.md §10 X1–X5)
+
+All 5 findings source-verified. **The reuse is real but the real work moved:**
+- **X5 (de-risk):** OQ-2/OQ-2b **CLOSED YES**. `run_import` fork path takes a detached
+  worktree-HEAD oid (`import.rs:301/354`); `run_verify_worker` already does
+  `--is-ancestor B HEAD` not `HEAD==B` (`subagent.rs:360`). Import-switch = clean reuse.
+- **X2 (adopt, net-new):** base B must be **snapshotted per-worktree at `create-fork`**
+  (beside jail policy, `JAIL_SUBPATH`, ro to worker) — NOT read from the mutable arming
+  slot at commit time (racy, overwritten on re-arm). worker_commit reads that immutable
+  base. Touches `src/worktree/create.rs`. **Supersedes D4.**
+- **X1 (reframed blocker→major, NEEDS OWNER RULING):** the MCP server gets **no caller
+  agent_id** (`tools.rs:395`), and worker `Read` passes the wall → true caller-auth is
+  **unachievable in this harness**. worker_commit **fences the target** (dir = a spawned
+  worktree with trusted per-worktree base, belts bound the rest). **Residual:** a
+  poisoned worker can land an in-scope/prove-passing commit onto a *sibling's* branch
+  (attribution confusion, review-caught, no escalation). Owner must accept this residual
+  (aligns with locked threat model) or fund a harness caller-binding follow-on.
+- **X3 (adopt):** lint targets `.doctrine/agents/**` + `install/agents/**` (authored),
+  NOT `.claude/agents` (installed copy); marker **MANDATORY** (deny-by-default), fixes
+  the fail-open R2. design-target selectors updated.
+- **X4 (adopt):** reorder belts — cheap admissibility (target-fence, immutable base,
+  HEAD==B, non-empty pre-fmt delta, pre-fmt scope) FIRST, then the mutating `check
+  commit`. Subsumes F2.
+
+**Real slice = (1) create-fork base snapshot + trusted read (X2), (2) worker_commit with
+cheap-first belts over reused classify_import/fork-import (X1/X4/X5), (3) mandatory
+correctly-targeted lint (X3).** The import switch is the small part.
+
 ## Open items → resolve at /plan (do NOT lose these)
 
 - **OQ-2b (sharpest).** Does `run_import`'s fork path accept a **detached worktree-HEAD

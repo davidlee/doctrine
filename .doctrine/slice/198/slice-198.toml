@@ -46,6 +46,18 @@ intent = "design-target"
 selector = "CLAUDE.md"
 intent = "design-target"
 
+[[selector]]
+selector = "src/worktree/create.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/agents/**"
+intent = "design-target"
+
+[[selector]]
+selector = "install/agents/**"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
