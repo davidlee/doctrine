@@ -1046,6 +1046,7 @@ mod tests {
             memory_type: "pattern".to_string(),
             path: root.join("mem"),
             relations: Vec::new(),
+            body: None,
         };
 
         let catalog =
