@@ -199,7 +199,8 @@ impl Finding {
 /// Group findings by category (ordinal order), render each non-empty group
 /// with a bracketed header, then a summary line.
 pub(crate) fn render_findings(findings: &[Finding]) -> String {
-    let mut by_category: [Vec<&Finding>; 8] = [
+    let mut by_category: [Vec<&Finding>; 9] = [
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -296,5 +297,22 @@ mod tests {
         assert!(out.contains(CATEGORY_NAME_ID_INTEGRITY));
         assert!(out.contains(CATEGORY_NAME_LIFECYCLE));
         assert!(out.contains("2 finding(s)"));
+    }
+
+    #[test]
+    fn test_render_all_nine_categories() {
+        let findings: Vec<Finding> = CATEGORIES_BY_ORDINAL
+            .iter()
+            .map(|&cat| Finding {
+                category: cat,
+                entity: None,
+                message: format!("test {cat}"),
+            })
+            .collect();
+        let out = render_findings(&findings);
+        for cat in &CATEGORIES_BY_ORDINAL {
+            assert!(out.contains(cat.display_name()), "missing category: {cat}");
+        }
+        assert!(out.contains("9 finding(s)"));
     }
 }
