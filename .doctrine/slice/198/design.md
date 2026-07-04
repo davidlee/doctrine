@@ -169,6 +169,9 @@ servers required.
 - **OQ-2 — `run_verify_worker` delta.** How much the base==B assertion relaxes for the
   post-commit (HEAD==C) claude-arm case without disturbing the subprocess arm's use. →
   plan/execute.
+- **OQ-2b — `run_import` fork-source shape (from F1).** Does the fork path accept a
+  detached worktree-HEAD oid, or need a named ref (⇒ cut `phase/<slice>-NN` at the
+  worker HEAD per ADR-012 D3)? Gates the "reuse, no new code" claim. → plan.
 - **OQ-3 — message stamping.** Whether to prefix a server-side `slice/phase` tag for
   funnel legibility, or leave fully worker-authored (orchestrator amends). Low stakes.
 
@@ -229,4 +232,39 @@ TDD, behaviour-preserving. Key cases:
 
 ## 10. Review Notes
 
-(pending adversarial pass)
+### Internal adversarial pass (2026-07-04)
+
+- **F1 (sharpest — reuse may not hold).** §5.4 claims the orchestrator imports the
+  worker commit via `run_import`'s **fork path** `(Some(fork), None)`. But that path
+  likely expects a **branch ref**, whereas the claude-arm worker HEAD is a **detached**
+  commit (baseRef=head fork). Must verify `run_import`'s fork source accepts a worktree
+  detached-HEAD oid; if it needs a named ref, either cut an ephemeral `phase/<slice>-NN`
+  ref at the worker HEAD (ADR-012 D3 already cuts `phase/<slice>-NN` from
+  `dispatch/<slice>` at sync on the Agent arm — align with that) or extend the fork
+  path to take an oid. **Promoted to OQ-2b; resolve at plan before committing to
+  "reuse, no new code."**
+- **F2 (edge).** `check commit` runs `fmt` (mutating) *before* the scope belt. If base
+  B carried a pre-existing mis-formatted file the worker didn't touch, fmt rewrites it
+  → `classify_import` flags a false `undeclared-scope`. Low risk (B is formatted by its
+  own prior gate) but real. Mitigation: run the scope belt on the worker's *intended*
+  change-set (diff vs B **excluding** fmt-only hunks in untouched files), or assert B
+  is fmt-clean at fork. → plan.
+- **F3 (concurrency, mostly SL-199).** Concurrent `worker_commit` calls act on
+  **distinct** linked worktrees (separate index + HEAD files; git object db writes are
+  concurrent-safe), so they don't corrupt each other. Whether the MCP server serializes
+  tool calls is an SL-199 (parallel-orchestrator) concern; SL-198's main-thread arm is
+  effectively serial. Recorded as an assumption, not a blocker.
+- **F4 (governance — needs a ruling).** SL-198 **rides** the witnessed passthrough and
+  **un-jails nothing**, so it needs no ADR-012/ADR-011 REV (those are SL-199 / Mode A).
+  BUT: granting a worker a *sanctioned* writable MCP tool is a deliberate hole in the
+  SL-182/ADR-008 confinement premise, made safe by the lint. Is that a **note** on
+  ADR-008/SL-182 (recommended) or does it rise to an amendment? Flagged for the external
+  reviewer + `/consult` if contested. Lean: a note, ratified at reconcile.
+- **F5 (lint parsing).** The lint assumes `.claude/agents/*.md` YAML frontmatter with a
+  parseable `tools:` list + the new `doctrine-role:` marker. Confirm the agent-def
+  frontmatter schema (list vs comma-string) at plan; the marker is a new doctrine
+  convention shipped on `dispatch-worker`.
+
+### External adversarial pass
+
+(pending — codex, default reviewer)
