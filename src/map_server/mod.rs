@@ -34,13 +34,13 @@ pub(crate) async fn serve(config: state::Config) -> anyhow::Result<()> {
     let listener =
         tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, config.port)).await?;
     let addr = listener.local_addr()?;
-    writeln!(std::io::stdout(), "Serving Doctrine map at http://{addr}/")?;
+    let url = open::map_url(addr, config.focus.as_deref(), config.depth);
+    writeln!(std::io::stdout(), "Serving Doctrine map at {url}")?;
 
-    if config.open {
-        let url = open::map_url(addr, config.focus.as_deref(), config.depth);
-        if let Err(err) = open::open_browser(&url) {
-            writeln!(std::io::stderr(), "Could not open browser: {err}")?;
-        }
+    if config.open
+        && let Err(err) = open::open_browser(&url)
+    {
+        writeln!(std::io::stderr(), "Could not open browser: {err}")?;
     }
 
     axum::serve(listener, app).await?;
