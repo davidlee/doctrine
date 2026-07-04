@@ -48,8 +48,8 @@ entrance_criteria = [
 ]
 exit_criteria = [
   { id = "EX-1", text = "The memory loop in from_scanned runs a body-wikilink pass: `extract_wikilinks(body)` → `classify_target` → push `CatalogEdge` with `label = Raw(MEMORY_WIKILINK_EDGE_LABEL)`, `role = None`, origin `{ file: memory.md, field: MEMORY_WIKILINK_ORIGIN_FIELD }`." },
-  { id = "EX-2", text = "Dedup: a per-record `seen: BTreeSet<CatalogKey>` populated by the TOML pass suppresses a body-wikilink edge to an already-linked resolved target; unresolved links are never deduped." },
-  { id = "EX-3", text = "Unresolved body wikilink emits one edge AND one dangling-reference `Warning` diagnostic (parity with the TOML relation path)." },
+  { id = "EX-2", text = "Dedup: a per-record `seen: BTreeSet<CatalogKey>` populated by the TOML pass AND by each emitted body edge suppresses a body-wikilink edge to an already-linked resolved target (covers both body-vs-TOML and body-vs-body); unresolved links are never deduped. One-directional: TOML-vs-TOML multiplicity is unchanged." },
+  { id = "EX-3", text = "A body wikilink that resolves to `UnvalidatedText` (the only unresolved outcome a mem.-prefixed link yields — `UnresolvedRef` is unreachable here) emits one edge AND one `Warning` diagnostic, scoped to the body pass. This is a DELIBERATE DIVERGENCE from the TOML path, which stays silent on `UnvalidatedText` (hydrate.rs:341 warns only on `UnresolvedRef`) — behaviour-preservation of the TOML path holds." },
   { id = "EX-4", text = "`MEMORY_WIKILINK_EDGE_LABEL = \"related\"` and `MEMORY_WIKILINK_ORIGIN_FIELD = \"body\"` are named constants (STD-001); no inline literals at the edge site." },
   { id = "EX-5", text = "Existing TOML-edge and CLI-backlink suites stay green unchanged (behaviour-preservation); `just gate` clean." },
 ]
@@ -57,7 +57,7 @@ verification = [
   { id = "VT-1", expects = "A memory whose only cross-reference is a body [[mem.<key>]] wikilink draws exactly one resolved edge with label \"related\" and origin field \"body\".", test_file = "src/catalog/hydrate.rs", keywords = ["related", "body", "extract_wikilinks"] },
   { id = "VT-2", expects = "A body wikilink and a TOML relation to the SAME target draw one edge, not two (dedup on resolved CatalogKey).", test_file = "src/catalog/hydrate.rs", keywords = ["dedup", "related"] },
   { id = "VT-3", expects = "Two identical body wikilinks to the same target draw one edge.", test_file = "src/catalog/hydrate.rs", keywords = ["related"] },
-  { id = "VT-4", expects = "An unresolved body wikilink emits an edge plus a dangling-reference Warning diagnostic.", test_file = "src/catalog/hydrate.rs", keywords = ["Warning", "dangling", "body"] },
+  { id = "VT-4", expects = "A body wikilink resolving to UnvalidatedText emits one edge plus one Warning (body-pass divergence); the TOML path's UnvalidatedText targets stay silent (behaviour-preservation).", test_file = "src/catalog/hydrate.rs", keywords = ["Warning", "UnvalidatedText", "body"] },
   { id = "VA-1", expects = "Behaviour-preservation: the pre-existing memory TOML-relation edge tests and CLI backlink tests pass unchanged — confirmed by an agent reading the diff, not only a green run." },
 ]
 specs             = []

@@ -104,6 +104,11 @@ Catalog::from_scanned  (pure)
 - `seen` is per-record, local to the loop iteration — no cross-record state.
 - Dedup identity = `CatalogKey` (the `Resolved` variant's payload). Unresolved
   targets carry no dedup key and never suppress an edge (same as the TOML path).
+- **Naming (F-3):** `MemoryCatalogRecord.body` (populated, transient, source of
+  wikilinks) and `CatalogEntity.body` (stays `None`) coexist in one loop with
+  opposite lifecycles. Disambiguate at the site with a one-line comment
+  (`// record.body feeds edge extraction; the entity node carries no prose`) so a
+  reader does not mistake one for the other.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -113,19 +118,37 @@ Per memory record, in `from_scanned`:
    `Resolved(k)`, `seen.insert(k)`.
 2. Body wikilink pass (new) — `extract_wikilinks(body)`; for each `Wikilink`:
    - `let target = classify_target(&link.target, &key_set, mem_key_map);`
-   - if `Resolved(k)` and `!seen.insert(k.clone())` → **continue** (deduped).
-   - if `UnresolvedRef`/`UnvalidatedText` → push a dangling-reference `Warning`
-     diagnostic (parity with the TOML path, `hydrate.rs:341`).
+   - if `Resolved(k)` and `!seen.insert(k.clone())` → **continue** (deduped). The
+     `seen.insert` here also dedups **body-vs-body** — a second body wikilink to
+     the same resolved target is suppressed.
+   - if `UnvalidatedText` → push a `Warning` diagnostic. **This is the ONLY
+     unresolved outcome a `mem.`-prefixed body wikilink can produce** (F-1):
+     `parse_canonical_ref` fails on a `mem.…` string, the memory branch misses,
+     and `classify_target` returns `UnvalidatedText` — the `UnresolvedRef` arm is
+     **unreachable** from this pass (it requires a *numbered* ref) and is not
+     handled here. The warning is a **deliberate divergence** from the TOML path,
+     which is **silent** on `UnvalidatedText` (`hydrate.rs:341` warns only on
+     `UnresolvedRef`) — NOT "parity". Justified by the `mem.word.word` shape-gate:
+     a well-formed-but-unresolvable memory key is near-certainly a real dangling
+     reference, not prose (owner ruling). **Scoped to the body pass** — neither
+     `classify_target` nor the shared TOML diagnostic is touched, so TOML
+     `UnvalidatedText` targets stay silent and behaviour-preservation holds.
    - push `CatalogEdge { source: Memory(uid), label: Raw(MEMORY_WIKILINK_EDGE_
      LABEL), role: None, descriptor: None, target, origin: EdgeOrigin { file:
-     memory.md, field: Some("body") } }`.
+     memory.md, field: MEMORY_WIKILINK_ORIGIN_FIELD } }`.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **INV-1:** at most one edge per `(source, resolved-target)` pair, regardless of
-  whether the link is authored as TOML relation, body wikilink, or both.
-- **INV-2:** an unresolved body wikilink emits exactly one edge + one `Warning`,
-  never suppressed by dedup.
+- **INV-1 (one-directional dedup — F-2):** a **body-wikilink** edge is suppressed
+  when a TOML relation OR a prior body wikilink already draws an edge to the same
+  resolved target — body defers to TOML, and body-vs-body collapses. This is NOT a
+  global uniqueness rule: **TOML-vs-TOML multiplicity is unchanged** — two TOML
+  relations to one target still draw two edges (pre-existing behaviour,
+  `hydrate.rs:312-366`, preserved; the TOML pass populates `seen` but never checks
+  it). Dedup is enforced only in the body pass.
+- **INV-2 (F-1):** a body wikilink whose target is `UnvalidatedText` emits exactly
+  one edge + one `Warning`, never suppressed by dedup (unresolved targets carry no
+  dedup key). `UnresolvedRef` does not arise in this pass.
 - **EDGE:** wikilink whose target is the memory itself (self-link) — resolves and
   draws a self-edge; acceptable, matches TOML self-relation behaviour (no special
   case). Rare in practice.
@@ -144,8 +167,10 @@ Per memory record, in `from_scanned`:
 ## 6. Open Questions & Unknowns
 
 None open. Prior forks resolved:
-- Unresolved body wikilink → **Warning** (parity). The `mem.word.word` extractor
-  shape excludes prose false-positives, so warnings do not misfire (owner ruling).
+- Unresolved body wikilink → **`Warning` on `UnvalidatedText`, a deliberate
+  divergence** from the silent TOML path (F-1), scoped to the body pass. The
+  `mem.word.word` extractor shape excludes prose false-positives, so warnings do
+  not misfire (owner ruling).
 - Edge label → **`"related"`** with `EdgeOrigin.field = "body"` for origin
   traceability (owner ruling).
 - Clickable focus-link renderer → **deferred** (non-goal; follow-up).
@@ -186,7 +211,9 @@ New tests (VT):
 - **VT-1** body-only `[[mem.<key>]]` wikilink → one resolved edge (`from_scanned`).
 - **VT-2** body wikilink + TOML relation to same target → one edge (dedup, INV-1).
 - **VT-3** two body wikilinks to same target → one edge (dedup).
-- **VT-4** unresolved body wikilink → edge + dangling `Warning` (INV-2).
+- **VT-4** unresolved body wikilink → `UnvalidatedText` → one edge + one `Warning`
+  (INV-2, body-pass divergence); the TOML path's `UnvalidatedText` handling stays
+  silent (behaviour-preservation).
 - **VT-5** `read_catalog_record` populates `body`; missing `memory.md` → `None`.
 - **VT-6 (behaviour-preservation)** existing TOML-edge + backlink suites green
   unchanged.
@@ -207,3 +234,24 @@ Internal adversarial pass (design stage):
 - **A5 — test-infra gap.** `seed_memory` writes only `memory.toml` (its `body`
   param is TOML content, misnamed). VT-1..5 need a helper that also writes
   `memory.md`. Carried to /plan as a build-the-fixture task, not a design change.
+
+External inquisition (RV-245, design stage) — all three findings accepted,
+design reconciled:
+
+- **F-1 (major, design-wrong → fixed).** The "diagnostic parity with the TOML
+  path (`hydrate.rs:341`)" claim was false: a `mem.`-prefixed body wikilink
+  resolves to `UnvalidatedText`, not `UnresolvedRef`, and the TOML path is silent
+  on `UnvalidatedText`. Rewrote §5.4/§5.5-INV-2/§6/§9-VT-4: warn on
+  `UnvalidatedText` only, scoped to the body pass, named a **deliberate
+  divergence** (not parity); struck the dead `UnresolvedRef` arm and the false
+  citation. Plan EX-3/VT-4 moved in lockstep.
+- **F-2 (minor → fixed).** INV-1 overclaimed global edge-uniqueness; the TOML pass
+  self-dedups nothing. Rescoped INV-1 to one-directional dedup (body defers to
+  TOML; TOML-vs-TOML multiplicity unchanged). Plan EX-2 already stated this
+  correctly — design now matches the plan.
+- **F-3 (nit → adopted).** The two opposite-lifecycle `body` fields get a one-line
+  disambiguating comment at the loop site (§5.3).
+
+Informal plan review (owner) folded alongside: plan EX-2 reworded so `seen` is
+populated by the TOML pass **and** each emitted body edge (covers VT-3
+body-vs-body); plan EX-3/VT-4 aligned to the F-1 divergence.
