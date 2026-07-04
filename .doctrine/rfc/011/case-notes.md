@@ -739,3 +739,52 @@ in-tool hint ("per-slice design edits: design-wrong OK; spec/gov: route via
 brief, keep verified") or a facet-aware enum would remove a re-read of the skill.
 Also: no single verb prints one phase's authored EX/VT — had to grep plan.toml
 again (same friction logged at SL-195-P03-a).
+
+[dispatch; sl196-p03-fork-fail]
+PHASE-03 spawn: claude isolation:worktree arm silently failed to provision a
+writable fork — git registered the worktree but the code tree mounted READ-ONLY,
+jailing the worker in the coord spawn subdir (2×) then the primary tree (1×,
+cwd=/workspace/doctrine after session restart). Root cause: a bad line in the
+marketplaces config broke worktree provisioning. Cost: 3 failed claude spawns
+(~145k worker tokens total) + orchestrator diagnosis churn. Mitigations that
+worked: (1) strengthened base-guard with a src writability-probe + toplevel check
+fails closed in ~50s instead of a full 97k-token analysis pass; (2) subprocess/pi
+arm (deterministic `worktree fork` + `env -C`) forked clean on the first try where
+the claude arm could not. Secondary: my worker scope was over-strict — adding a
+field to CatalogEdge compile-forces doctor_checks.rs + relation_query.rs
+(descriptor: None), which the prompt forbade, causing pi to correctly STOP mid-way
+(wasted a cold cargo build). Lesson: enumerate compile-forced caller sites in the
+worker scope up front when adding a struct field.
+
+[dispatch; SL-196-P03-resume]
+Worker (SL-196 PHASE-03) flagged: shared seed helpers `relation_rows`
+(catalog/test_helpers.rs) and `rels_block` emit no `descriptor` cell, so VT-1/VT-3
+tests had to author raw fixture TOML via `write` instead of riding the DRY seam
+(both helpers outside the phase's declared file set → correctly not extended).
+Cost: ~2 hand-authored fixtures. A future chore extending those helpers to carry
+`descriptor` (as they carry `role`) would let concerns-descriptor tests reuse the
+seam. Also: `test_support::doctrine_bin_returns_existing_executable` fails on a
+cold `cargo test` (asserts target/debug/doctrine exists) until `cargo build --bin
+doctrine` runs first — a per-fork cold-start tax on the claude arm, environmental,
+not a phase regression.
+
+[dispatch; SL-196-P04-resume]
+Worker (SL-196 PHASE-04) reported early confusion: twice inspected
+`/workspace/doctrine/src/...` (the primary `edge` tree) instead of its own
+worktree, and a `grep` that appeared to route through an RTK proxy returned
+inconsistent output; self-corrected via `git grep` at-ref vs working-tree. A
+worker in an isolated fork has no cheap signal that a bare path escaped its
+worktree — the confinement jail rewrites Bash but read inspection of the primary
+tree still resolves. Orchestrator cost: nil (delta was correct), but a per-worker
+orientation tax.
+
+[dispatch; SL-196-conclude]
+Funnel/instrumentation collision: the case-notes append instruction writes to
+`.doctrine/rfc/011/case-notes.md`, but the orchestrator's Bash cwd is parked in
+the COORD tree for the whole drive loop. A case-note appended there dirties the
+coord working tree, and `worktree import` fails closed `import-refused:
+tree-unclean` — the RFC instrumentation directly broke the next phase's funnel
+precond. Recovery: relocate the append to the PRIMARY tree's case-notes.md +
+`git restore` the coord copy. Lesson: orchestrator-side instrumentation must
+target the primary/session-root case-notes.md (`-p /workspace/doctrine` semantics),
+never the coord tree the funnel keeps clean.
