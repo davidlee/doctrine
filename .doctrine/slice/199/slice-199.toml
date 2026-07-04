@@ -1,0 +1,64 @@
+id = 199
+slug = "mode-b-confined-orchestrator-driveloop"
+title = "Confined subagent orchestrator drive-loop (Mode B)"
+status = "proposed"
+created = "2026-07-04"
+updated = "2026-07-04"
+tags = []
+
+[relationships]
+needs = ["SL-198"]                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/mcp_server/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".claude/agents/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".claude/skills/dispatch-agent/**"
+intent = "scope-relevant"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-012"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-011"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+
+[[relation]]
+label = "related"
+target = "SL-182"
+
+[[relation]]
+label = "related"
+target = "RSK-225"
+
+[[relation]]
+label = "related"
+target = "SL-198"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
