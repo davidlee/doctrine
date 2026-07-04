@@ -58,6 +58,10 @@ intent = "design-target"
 selector = "install/agents/**"
 intent = "design-target"
 
+[[selector]]
+selector = "src/worktree/gc.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"

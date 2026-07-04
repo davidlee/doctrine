@@ -41,17 +41,20 @@ All 5 findings source-verified. **The reuse is real but the real work moved:**
   (beside jail policy, `JAIL_SUBPATH`, ro to worker) — NOT read from the mutable arming
   slot at commit time (racy, overwritten on re-arm). worker_commit reads that immutable
   base. Touches `src/worktree/create.rs`. **Supersedes D4.**
-- **X1 (RESOLVED by owner ruling 2026-07-04):** MCP server gets **no caller agent_id**
-  (`tools.rs:395`), worker `Read` passes the wall → true caller-auth **unachievable in
-  this harness**. **Ruling:** worker passes an **`agent` id (its worktree name), not a
-  `dir`**; server **looks up** the worktree from the registry (`JAIL_SUBPATH/<agent>.toml`
-  present ⟺ spawned — the target-fence; `dir`/`base`/`branch` derive from that one key).
-  Worker cannot freely specify a path. **Residual accepted (small blast radius):** spoof a
-  *sibling's* registered name → in-scope commit on its branch (attribution confusion,
-  review-caught, **own work not promoted**, no escalation). Seam verified: registry keyed
-  by name at `create.rs:245`, path `<coord>/.worktrees/<agent>` (`WORKTREES_SUBDIR`),
-  branch `dispatch/<agent>`. Composes with X2 (base snapshot beside the same key).
-  Follow-on caller-binding = RSK-226.
+- **X1 (RESOLVED — owner ruling + codex pass-2, 2026-07-04):** MCP server gets **no caller
+  agent_id** (`tools.rs:395`) and root is fixed to **primary** at startup (`mod.rs:26`) —
+  it does NOT know the coord root. **Final mechanism (design §10 pass-2, LOCK-READY):**
+  worker passes an **opaque `agent` id, no path**; server sanitises it (one validator,
+  `create.rs:108`) → `git worktree list --porcelain` (`git.rs:1380`) enumerates live
+  `dispatch/<NNN>` coord trees → probes each for the per-worktree record `jail/<agent>.toml`
+  → **exactly one live hit** (0=`unknown-agent`, >1=`ambiguous-agent`) → validates
+  `{dir,branch,base}` consistent. **No worker path, no new coord registry** (git worktree
+  list IS the primary-readable coord pointer — codex X-1). Record `{name,dir,branch,base,
+  coord}` written by the **trusted create-fork hook**, **deleted at reap/gc** (net-new
+  `gc.rs` step — fixes the stale-oracle; supersedes pass-1 "base beside jail policy" +
+  D4). Residual: spoof a *sibling's* live agent → commit on its branch (own branch stays
+  at B ⇒ own work unpromoted, orchestrator imports the branch it armed via
+  `verify-worker --branch`, `subagent.rs:316`). RSK-226 = caller-binding follow-on.
 - **X3 (adopt):** lint targets `.doctrine/agents/**` + `install/agents/**` (authored),
   NOT `.claude/agents` (installed copy); marker **MANDATORY** (deny-by-default), fixes
   the fail-open R2. design-target selectors updated.

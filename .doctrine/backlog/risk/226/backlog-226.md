@@ -13,19 +13,19 @@ jailed worker's `Read` passes the SL-182 wall
 authentication ("this caller owns this worktree") is not achievable in the current
 harness.**
 
-## Residual accepted by SL-198 (design §10 X1; owner ruling 2026-07-04)
+## Residual accepted by SL-198 (design §10 X1 + pass-2; owner ruling 2026-07-04)
 
-`worker_commit` takes an **`agent` id (the worker's self-reported worktree name)**, never
-a free `dir`, and **looks up** the worktree from the per-worktree registry
-(`JAIL_SUBPATH/<agent>.toml`, present ⟺ legitimately spawned; `dir`, `base`, `branch` all
-derive from that one key). The worker cannot name an arbitrary path — the identifier must
-hit the registry — and the belts (`check commit`, scope vs design-target selectors,
-single-non-merge `C^==B`) bound the rest. **Residual (accepted, small blast radius):** a
-poisoned worker that knows/guesses a **sibling's registered name** can land an in-scope,
-gate-passing commit onto that sibling's `dispatch/<name>` branch — attribution confusion,
-caught by review/audit, **not** a jail escape or escalation; **the poisoner's own work is
-not promoted** (the orchestrator imports the branch it spawned). Consistent with the
-locked RFC-005 threat model ("belts bound blast radius, not intent; intent-preservation
+`worker_commit` takes an **opaque `agent` id (the worker's worktree name), never a path**.
+Resolution is fully server-side: sanitise `agent` → `git worktree list` enumerates live
+`dispatch/<NNN>` coord trees → probe each for the per-worktree record `jail/<agent>.toml`
+→ exactly one live, consistent hit (`{dir,branch,base}`). No worker-supplied path, no new
+registry. Belts (`check commit`, scope, single-non-merge `C^==B`) bound the rest.
+**Residual (accepted, small blast radius):** a poisoned worker that knows a **sibling's
+live `agent`** can land an in-scope, gate-passing commit onto that sibling's
+`dispatch/<name>` branch — attribution confusion, caught by review/audit, **not** a jail
+escape or escalation; **the poisoner's own branch stays at B so its work is not promoted**
+(the orchestrator imports the branch it armed, `verify-worker --branch`). Consistent with
+the locked RFC-005 threat model ("belts bound blast radius, not intent; intent-preservation
 stays with review/audit/human").
 
 ## The follow-on work (why this is a risk, not just a note)

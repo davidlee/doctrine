@@ -829,3 +829,18 @@ arg-shape mismatch.
   positional id (options-only), supersede is ADR-only (refuses backlog kinds).
   Boot spine lists `supersede` under generic relations without the ADR-only
   caveat — mild mis-signal.
+
+[backlog CHR-036; shipped-master-lint-blindspot]
+Authored a shipped signpost master (mem.signpost.doctrine.dispatch) tag-only
+(no paths/globs/commands). `doctrine memory validate` passed clean — it's
+advisory (dangling links / stale verification / draft expiry), does NOT enforce
+the master scope-floor. The floor lives only in `cargo test corpus::` (unit
+test every_embedded_master_lints_clean). So the defect shipped + committed
+clean, then surfaced a full session later as an out-of-context test failure
+("scope floor unmet") the user had to relay. Round trip: ship → later cargo
+run → diagnose panic → fix toml → force re-embed (memory/ not a cargo input, so
+`touch src/corpus.rs`) → rebuild bin → re-sync. Fix cost several tool calls that
+a validate-time (or record-time) floor check would have eliminated. Instrument:
+after authoring any shipped master, the guidance should route to `cargo test
+corpus::`, or `memory validate` should absorb the master-lint so the advisory
+surface and the enforced surface agree.

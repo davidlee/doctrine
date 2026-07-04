@@ -27,19 +27,25 @@ it needs are the serial-dependent capstone (**SL-199**, `needs` this slice). Mod
 
 ## Scope & Objectives
 
-1. **IMP-253 keystone — gated `mcp__doctrine__worker_commit`.** A jailed worker calls
-   it with its **`agent` id (its worktree name), not a path**; the unconfined MCP server
-   **looks up** the target worktree from the per-worktree registry
-   (`JAIL_SUBPATH/<agent>.toml`, present ⟺ legitimately spawned — the target-fence; owner
-   ruling / design §10 X1), then commits the worker's delta with the funnel belts:
-   `doctrine check commit` gate (worker-side, forces fmt — owner-locked); scope belt
-   (reject `.doctrine/`/`.claude/` writes, enforce the slice's design-target selectors);
-   **exactly one non-merge commit with `parent(tip) == B`** (ancestry "descended from B"
-   is too weak — it would accept a `B→C1→C2→C3` stack on a resumed worktree), B read from
-   the immutable per-worktree base snapshot (design §10 X2). The worker's Bash `git
-   commit` is walled (ro `.git`); this is its only self-commit route. Residual: a worker
-   may spoof a *sibling's* registered name (attribution confusion, review-caught, own work
-   not promoted) — accepted, tracked by RSK-226.
+1. **IMP-253 keystone — gated `mcp__doctrine__worker_commit`.** A jailed worker calls it
+   with an **opaque `agent` id (its worktree name), never a path**. The unconfined
+   MCP server (root=primary) resolves the target entirely server-side: sanitise `agent`
+   (one validator) → `git worktree list` enumerate live `dispatch/<NNN>` coord trees →
+   probe each for the per-worktree record `jail/<agent>.toml` → **exactly one live hit**
+   (0 ⇒ `unknown-agent`, >1 ⇒ `ambiguous-agent`) → validate `{dir,branch,base}` consistent
+   (design §10 pass-2). Then commits the worker's delta with cheap-first belts: non-empty
+   pre-fmt in-scope delta → scope belt (reject `.doctrine/`/`.claude/` + undeclared paths)
+   → `HEAD==B` → **exactly one non-merge commit `parent(tip)==B`** (ancestry is too weak —
+   would accept a `B→C1→C2→C3` stack) → then the mutating `doctrine check commit` gate
+   (worker-side, forces fmt — owner-locked). B comes from the record, written by the
+   trusted create-fork hook (not the racy arming slot). The worker's Bash `git commit` is
+   walled (ro `.git`); this is its only self-commit route. Residual: a worker may spoof a
+   *sibling's* live `agent` (attribution confusion, review-caught, **own work not
+   promoted** — orchestrator imports the branch it armed) — accepted, tracked by RSK-226.
+
+   The **per-worktree record** (`{name,dir,branch,base,coord}`, `jail/<name>.toml`) is
+   net-new load-bearing state: create-fork writes it atomically pre-worker; **reap/gc
+   deletes it** (net-new `gc.rs` step — fixes the stale-file oracle).
 
 2. **Retire the import-the-working-tree-**diff** dance — claude arm only.** Today the
    orchestrator reads the Agent footer's `worktreePath`, runs `verify-worker --dir`,

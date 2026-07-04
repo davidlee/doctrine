@@ -67,18 +67,21 @@ worker's own tree; everything cross-boundary stays with the (unchanged) orchestr
 
 ```
  worker (jailed, cwd=worktree, .git RO)
-   │  calls mcp__doctrine__worker_commit { agent, message }   # agent = self-reported worktree name
+   │  calls mcp__doctrine__worker_commit { agent, message }   # agent = OPAQUE id (worktree name), NO path
    ▼
- doctrine MCP server (UNCONFINED, cwd=primary, .git RW)
-   │  resolve agent→registry (jail/<name>.toml) → dir + base B + branch  (NOT a worker path)
+ doctrine MCP server (UNCONFINED, root=PRIMARY, .git RW)
+   │  sanitise(agent) → git worktree list --porcelain → filter live dispatch/<NNN> coord trees
+   │  → probe each <coord>/…/jail/<agent>.toml → EXACTLY ONE live hit ⇒ record {dir,branch,base,coord}
    │  belt: check commit (in dir) → scope classify → one non-merge commit parent==B
    ▼
  worker worktree HEAD advances B → C   (C = one commit, C^ == B)
    │  (worker returns)
    ▼
  orchestrator (main thread, unchanged actor)
-      verify-worker --dir (C descends B) → run_import FORK path (commit, not diff)
-      → commit onto dispatch/<slice> → reap
+      learns name post-return via basename(worktreePath) (create.rs:70)
+      verify-worker --dir --branch (C descends B ∧ branch==dispatch/<name> it armed)
+      → run_import FORK path (commit, not diff) → commit onto dispatch/<slice>
+      → reap (DELETES the per-worktree record)
 ```
 
 ### 5.2 Interfaces & Contracts
@@ -92,17 +95,31 @@ input:  { agent: string (required),    # worker's own agent-id / worktree name (
 returns: { "Committed": { oid: string, base: string } }   # or a typed refusal
 ```
 
-Handler (imperative shell; unconfined; resolves its target from the registry), in order:
-1. **Resolve target from the registry — NOT a worker-supplied path (owner ruling, X1).**
-   The worker passes its `agent` id (its worktree name, `agent-<hex>`), never a `dir`.
-   The server recovers the coord root, then **requires** a per-worktree jail record
-   `<coord>/.doctrine/state/dispatch/jail/<agent>.toml` (`JAIL_SUBPATH`, provisioned ro
-   at `create-fork`, `create.rs:245`) — its presence **is** the target-fence (a
-   legitimately-spawned worktree; absent ⇒ refuse `unknown-agent`). From that one key,
-   derive: worktree `dir = <coord>/.worktrees/<agent>` (`WORKTREES_SUBDIR`), branch
-   `dispatch/<agent>`, and the immutable per-worktree **base B** snapshotted beside the
-   jail record (X2). A worker cannot name a path — only an `agent` that must hit the
-   registry; the residual is spoofing a *sibling's* registered name (X1).
+Handler (imperative shell; unconfined; **opaque-id resolution, no worker-supplied path**),
+in order (codex pass-2 shape, §10):
+1. **Resolve target from an OPAQUE agent-id (owner ruling, X1 — final).** The worker
+   passes only `agent` (its worktree name); it **cannot** name a path. Resolution is
+   entirely server-side from the **primary** root:
+   a. **Sanitise** `agent` through the *same* validator `create-fork` uses (`sanitise_name`,
+      `create.rs:101/108`) — rejects traversal / illegal forms before any path join (fix
+      finding X-4).
+   b. **Enumerate** active coord trees: `git worktree list --porcelain` from primary
+      (`git.rs:1380`), filter to **live** coordination worktrees (branch `dispatch/<NNN>`,
+      `!prunable`, `path.exists()` — `inventory.rs:62/192`). No worker input, no new
+      registry — the git worktree list *is* the primary-readable coord pointer (X-1).
+   c. **Probe** each coord for the per-worktree record
+      `<coord>/.doctrine/state/dispatch/jail/<agent>.toml`. Require **exactly one live
+      hit**: zero ⇒ refuse `unknown-agent`; **more than one ⇒ refuse `ambiguous-agent`**
+      (name uniqueness is not source-guaranteed — X-5/#6). The record carries
+      `{name, dir, branch, base=B, coord}` (see §5.3 — written by the trusted create-fork
+      hook, X-2/X-5).
+   d. **Validate consistency** before trusting it: `dir.exists()`, `branch` resolves,
+      worktree `HEAD == base` (pre-commit). Any mismatch ⇒ refuse `stale-record` (a
+      record whose worktree was reaped/moved is not a live target — fixes the stale-oracle,
+      X-2).
+   Residual (accepted, X1): a worker that knows a *sibling's* live `agent` can target its
+   record → commit on the sibling's branch. Attribution confusion, review-caught, **own
+   work unpromoted**, no escalation. RSK-226 tracks a true caller-binding follow-on.
 2. **Gate belt — `check commit`.** Run the resolved `commit` tier
    (`resolve_check(Commit)`) in `dir`. fmt mutates the tree *first*, then lint/validate/
    test/build. Red ⇒ refuse `commit-gate-red` (report captured output). (Replaces a
@@ -126,11 +143,23 @@ servers required.
 
 ### 5.3 Data, State & Ownership
 
-- `worker_commit` **writes only** the worker's own worktree HEAD (its own branch/detached
-  HEAD). It never touches `dispatch/<slice>`, `.doctrine/` authored state, or any shared
-  ref — sole-writer + ADR-012 preserved.
-- Base **B** is *read* from the arming slot (owned by the orchestrator at arm time); the
-  tool does not write it.
+- **Per-worktree dispatch record (NET-NEW, load-bearing — X-2/X-5).** `create-fork`
+  (trusted, pre-worker, harness-invoked hook) writes an atomic record at
+  `<coord>/.doctrine/state/dispatch/jail/<name>.toml` carrying
+  `{name, dir=<coord>/.worktrees/<name>, branch=dispatch/<name>, base=B, coord}`. It
+  already knows all of these at the fork point (`create.rs:276`) and already has
+  `write_atomic` (`create.rs:257`); it already reads `base` from the arming slot to fork.
+  This **supersedes D4** (base from the live arming slot at commit time — racy) and the
+  earlier "beside the jail *policy*" framing: the record is the single source of truth
+  `worker_commit` consumes, and `create.rs:205`'s "GC'd with teardown" comment becomes
+  *true* only once reap deletes it (below).
+- **Record lifecycle (fixes the stale-oracle, X-2 / finding #2).** create-fork **writes**
+  it; **reap/gc deletes** it when removing the worker worktree (net-new deletion step in
+  `gc.rs` — today `gc.rs:36/203` reap worktree+branch only). Presence-plus-consistency,
+  not presence alone, is the target-fence (§5.2 step 1d).
+- `worker_commit` **writes only** the resolved agent's worktree HEAD (B→C on its
+  `dispatch/<name>`). It never touches `dispatch/<slice>`, `.doctrine/` authored state, or
+  any shared ref — sole-writer + ADR-012 preserved.
 - The lint is pure static analysis of authored agent-def files; no runtime state.
 
 ### 5.4 Lifecycle, Operations & Dynamics
@@ -145,6 +174,11 @@ servers required.
   `run_import`'s **fork/commit** path — the worker HEAD is now a commit. Reuse the
   existing branch; no new projection code. `run_verify_worker`'s expectation relaxes
   from `HEAD==B` to `HEAD is one non-merge commit, HEAD^==B` (exact delta → plan).
+  The orchestrator imports the branch **it armed** (`--branch dispatch/<name>`,
+  `subagent.rs:316`) — this is what makes the X1 residual bounded: a poisoner who spoofed
+  a sibling's `agent` committed to the *sibling's* branch and left **its own** branch at
+  B, so the orchestrator (importing the branch it spawned) promotes nothing of the
+  poisoner's (finding X-3).
 - **Subprocess arm** keeps `--from-worktree` + its stdio-jail import; no change.
 - **CLAUDE.md `# orchestration`** note updated: worker self-commits (claude arm); the
   import-the-diff dance is retired *there*, retained for the subprocess arm + as the
@@ -158,6 +192,10 @@ servers required.
   cannot bypass a belt by not running it.
 - **INV-3 (lint).** A marked worker/orchestrator def exposes no writable MCP surface
   beyond `worker_commit`.
+- **INV-4 (resolution).** `worker_commit` accepts only an opaque, sanitised `agent` id;
+  the target is resolved server-side and refuses on `unknown-agent` (0 hits),
+  `ambiguous-agent` (>1 live hit — name uniqueness not assumed), or `stale-record`
+  (record ↔ worktree inconsistent). No worker-supplied path enters a filesystem join.
 - **Edge — empty delta.** Worker made no in-scope change ⇒ refuse `empty-delta` (no
   empty commit).
 - **Edge — gate mutates then still red.** fmt reformats but lint/test fails ⇒ refuse;
@@ -336,3 +374,42 @@ plumbing** (X1/X2) + a **non-fail-open lint** (X3).
 per-worktree base read (X2), (2) `worker_commit` MCP tool with the reordered cheap-first
 belts over that base + reused `classify_import`/fork-import (X1/X4/X5), (3) a mandatory,
 correctly-targeted conformance lint (X3). The "import-path switch" is the *small* part.
+
+### External adversarial pass 2 (codex / GPT-5.5, 2026-07-04) — X1 resolution hardened
+
+Pass-1's X1 resolution (worker passes `agent`, server "recovers the coord root") **hand-waved
+the coord-root seam** and left the record lifecycle/namespace loose. Pass-2 attacked exactly
+that; all claims re-verified against source. Outcome — the X1 mechanism is now concrete and
+**achieves the owner ruling literally** (opaque id, no worker path). This block **supersedes**
+the loose parts of pass-1 X1/X2 (§5.2 step 1, §5.3); the finding numbers below are pass-2's.
+
+- **X-1 (BLOCKER → resolved) — the server has no coord root; my §5.2 hand-waved it.** MCP
+  `root` is fixed at startup to the **primary** tree (`mcp_server/mod.rs:26`), tools/call gets
+  no cwd/agent_id (`tools.rs:395/408`); the coord tree ≠ primary. **But** an existing
+  primary-readable pointer already enumerates coord trees: `git worktree list --porcelain`
+  (`git.rs:1380`) → filter live `dispatch/<NNN>` (`inventory.rs:62/192`). **No new coord
+  registry needed** (my proposed setup-written registry is redundant). Server discovers coord
+  trees itself, then probes each for `jail/<agent>.toml`. (X-2's "orchestrator/setup registers
+  coord" and pass-1's worker-supplied anchor are both **dropped** in favour of this.)
+- **X-2 (BLOCKER → adopt, supersedes pass-1 X2/D4) — one trusted per-worktree record with a
+  real lifecycle.** create-fork (trusted, pre-worker) writes `jail/<name>.toml` =
+  `{name, dir, branch, base=B, coord}` atomically (`create.rs:257/276`); **reap/gc deletes
+  it** (net-new `gc.rs` step — today `gc.rs:36/203` reap worktree+branch only). Presence
+  **plus** consistency (`dir.exists()`, branch resolves, `HEAD==base`) is the fence — kills
+  the stale-file oracle. Base moves *into* this record (was arming-slot-only, `dispatch.rs:445`).
+- **X-3 (MAJOR → adopt) — bound the residual with `--branch`.** The "own work unpromoted"
+  claim now cites its seam: the orchestrator imports the branch **it armed**
+  (`verify-worker --branch dispatch/<name>`, `subagent.rs:316`), so a poisoner's own branch
+  (left at B) promotes nothing. §5.4 updated.
+- **X-4 (MAJOR → adopt) — one name validator, no traversal.** `agent` is sanitised through
+  the *same* `sanitise_name` create-fork uses (`create.rs:101/108`) before any path join.
+- **X-5 (MAJOR → adopt) — refuse on ambiguity, not assume uniqueness.** "Globally unique
+  name" is **not** source-proven (`create.rs:213` says only "unique slug"); >1 live hit ⇒
+  refuse `ambiguous-agent`. Cross-slice concurrent coords make this real (`dispatch.rs:3099`);
+  same-slice duplication already refused (`coordinate.rs:67/163`). Subprocess arm unaffected —
+  `worker_commit` is claude-arm-only; subprocess keeps `--from-worktree` (`mod.rs:243/249`).
+
+**Verdict:** codex — **LOCK-READY-WITH-THIS.** Net new `design-target`: `src/worktree/gc.rs`
+(record deletion). Plan consequences unchanged in shape; step (1) now = "create-fork writes the
+`{name,dir,branch,base,coord}` record + gc deletes it", step (2)'s resolver = git-worktree-list
+enumerate → probe → one-live-hit → validate.
