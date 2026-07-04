@@ -48,3 +48,58 @@ make-work. A stretch goal: skip prose citation scanning in terminal-status slice
 - `doctrine doctor` on a clean corpus produces zero Prose Citation warnings from
   `glossary.md` and `rfc/` paths
 - Existing doctor tests still pass; new tests cover the suppression paths
+
+## Design decisions (2026-07-04)
+
+### `--verbose` flag
+
+Add a `--verbose` flag to `doctor`. Non-verbose (default) shows only **actionable**
+findings; `--verbose` restores today's full dump. `--json` is unaffected (always
+emits the full dataset).
+
+### Non-verbose behaviour
+
+| Category | Severity | Treatment |
+|---|---|---|
+| IdIntegrity, RelationIntegrity, SpecFk, MemoryHealth, AgentConformance | Error | Always show (build-breaking) |
+| RawLabel | Warning | **Single count line**: `384 memory edges use raw labels (expected)` |
+| ProseCite — glossary.md | Warning | **Skip file** (exemplar placeholders) |
+| ProseCite — .doctrine/rfc/ | Warning | **Skip directory** (runtime notes, gitignored) |
+| ProseCite — active docs | Warning | Show normally (actionable) |
+| Lifecycle | Warning | Show normally (actionable) |
+| TomlParse | Warning | Show normally (actionable) |
+
+### Closed-slice noise
+
+The ~100 ProseCite warnings from terminal-status slice design docs (DEC-00x,
+ASM-x, EVD-x, placeholder SL-998+) are out of scope for this item. A follow-up
+could skip prose scanning in closed/archived slices — a cross-cutting change
+(the prose scanner currently operates over files blindly, not entity status).
+
+### Aggregation vs. suppression
+
+- **RawLabel**: aggregate to a count line (in the summary section, below
+  category blocks). Not a category header — just an informational postscript.
+- **ProseCite path exclusions**: skip `glossary.md` and `.doctrine/rfc/**`
+  entirely during the file walk (in `prose_cite_findings`). No per-token
+  filtering needed.
+
+### Output sketch
+
+```
+$ doctrine doctor
+[Prose Citation]
+  warning: unresolved citation: RFC-035  (in active doc)
+[Lifecycle]
+  warning: stale draft ...
+Raw Label: 384 memory edges use raw labels (expected)
+4 finding(s)
+
+$ doctrine doctor --verbose
+[Raw Label]
+  warning: raw label: related
+  ... (384 lines) ...
+[Prose Citation]
+  ... (121 lines, no exclusions) ...
+506 finding(s)
+```

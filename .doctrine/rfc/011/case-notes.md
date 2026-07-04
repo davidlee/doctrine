@@ -100,3 +100,58 @@ authored writes that are legitimately guard-refused inside a worker fork). More
 generally: `worker_commit`'s gate should either run marker-aware (exclude
 authored-write goldens) or the goldens should be hermetic to the marker — else
 every claude-arm self-commit trips the same wire.
+
+---
+
+[dispatch; SL-199-phase01-vt5-b73bbb93]
+
+INCIDENT: PHASE-01's design (EX-3 one-shot consume: the create-fork Fork arm
+unlinks the arming `base` slot BEFORE fork_core) had a knock-on the plan never
+flagged — it broke a PRE-EXISTING e2e test in a DIFFERENT file
+(tests/e2e_worktree_create_fork.rs::name_collision_refuses_on_both_arms, VT-5).
+That test armed ONCE then Forked TWICE from the same arming dir, asserting the
+2nd Fork hits fork_core's `fork-refused`. Under one-shot consume the 2nd Fork
+finds base=None → positional-¬base → `missing-base`, never reaching fork_core.
+
+WHY IT SURFACED LATE: the worker was scoped to a SINGLE file (src/worktree/
+create.rs, its lone design-target). It could not touch the e2e test — correctly.
+So the phase's own delta broke a test the worker was structurally unable to fix.
+The funnel VERIFY beat (`check regression diff --base B`) caught it as
+`new: unknown::name_collision_refuses_on_both_arms` — a HALT. The gate worked:
+the worker's advisory self-report (61 unit tests green) said nothing about the
+cross-file e2e suite; only the coord-tree regression diff (markerless, full
+suite) is honest.
+
+RESOLUTION (no orchestrator-inline edit, no fresh spawn): widened scope by one
+file + RESUMED the existing worker via SendMessage (agentId == fork suffix,
+retains full phase context, ~100k tok / 36s vs a cold re-spawn). Worker re-armed
+between the two Fork probes (one arm per Fork under one-shot), suite 6/6. Re-
+imported the fork's whole working-tree delta via `--from-worktree`.
+
+BELT WRINKLE: the import scope belt (`--slice N`) keys on DESIGN-TARGET selectors
+ONLY (`import --help`: "design-target selectors scope the import belt";
+scope-relevant does NOT count, and neither does conformance). A consequential
+TEST file broken by a phase is not a design target in the intuitive sense, yet
+must be a design-target selector to (a) pass `--slice` import and (b) be
+conformant at audit (`slice conformance` checks touched [B..S] paths against
+design-target selectors → undeclared otherwise). Two shapes work: declare the
+test as design-target FIRST then `import --slice`, or omit `--slice` +
+manually verify the exact delta + declare-after. Took the latter (selector
+didn't exist in coord at import time), then declared it → conformance
+undeclared(0). LESSON: when a phase touches a pre-existing test, add that test
+as a design-target selector up front in the plan's selector set — every phase
+that edits tests hits this.
+
+[quick-fix; SL-201-map-focus-2]
+Two runtime bugs behind SL-201's onboard/memory-title feature, both invisible to
+the unit suite because the coupling lived across the SVG DOM boundary:
+- Graph click/focus nav extracted node ids from the *visible* `<text>` label, not
+  the `<title>` (DOT node name). Fine while label==id (numbered entities); broke the
+  moment memory labels became human titles. Cost: had to render a live DOT→SVG to
+  discover Graphviz emits both `<title>`(id) and `<text>`(label). No test could have
+  caught it — the id-extraction closure was inline in render.ts, untested.
+- Onboard deep-link redirected to default: boot guard keyed off `state.focusId`
+  (always null at boot) instead of whether the URL hash carried a focus. Latent for
+  all deep-links; SL-201 was the first feature to load a focus from the URL.
+Incidental friction: `localhost` vs `127.0.0.1` flaky under the jail; `pkill` absent
+from nix PATH; map serve has no `--no-open`/`--port` on the `onboard` subcommand.
