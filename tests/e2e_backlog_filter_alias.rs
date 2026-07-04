@@ -22,11 +22,16 @@ fn bin() -> std::path::PathBuf {
     common::doctrine_bin()
 }
 
-/// Create a backlog issue with the given title under `dir`.
+/// Create a backlog issue with the given title under `dir`. `DOCTRINE_WORKER` is
+/// explicitly UNSET — `backlog new` is an authored write the worker-mode guard
+/// refuses under it, and this suite runs inside the worker_commit gate (which
+/// exports `DOCTRINE_WORKER=1`). The `-p` target is a plain tempdir, so only the
+/// env leg can trip; clearing it lets the write proceed (mem.pattern.dispatch.worker-verify-unset).
 fn new_issue(dir: &Path, title: &str) {
     let out = Command::new(bin())
         .args(["backlog", "new", "issue", title, "-p"])
         .arg(dir)
+        .env_remove("DOCTRINE_WORKER")
         .output()
         .expect("spawn doctrine");
     assert!(
@@ -39,7 +44,11 @@ fn new_issue(dir: &Path, title: &str) {
 /// Run `backlog list` with the given extra args, returning stdout.
 fn list(dir: &Path, extra: &[&str]) -> String {
     let mut cmd = Command::new(bin());
-    cmd.args(["backlog", "list"]).args(extra).arg("-p").arg(dir);
+    cmd.args(["backlog", "list"])
+        .args(extra)
+        .arg("-p")
+        .arg(dir)
+        .env_remove("DOCTRINE_WORKER");
     let out = cmd.output().expect("spawn doctrine");
     assert!(
         out.status.success(),
