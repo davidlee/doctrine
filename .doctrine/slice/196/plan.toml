@@ -107,8 +107,10 @@ and role's guard at hydrate.rs:140 is the precedent; without it every edge gains
 `descriptor: null`. Populate it in the hydrate loop beside `role`: `descriptor:
 edge.descriptor.clone()` (:273) — the raw RelationEdge is already the loop element
 (scan.rs:122), no re-scan (R3 resolved). Render descriptor on the OUTBOUND edge
-row in inspect/show (relation_query.rs edge display, :74 `references(concerns)
-SL-x — "…"`). NO inbound render, NO inbound_descriptor_index (design D3 — verbose
+row in inspect/show (relation_graph.rs `render_outbound`, via a `descriptor` field
+on `RelationTargetView` parallel to `degree` — `references(concerns) SL-x — "…"`;
+the `relation_query.rs:74` edge-label helper is the shared label token only, NOT the
+render seam). NO inbound render, NO inbound_descriptor_index (design D3 — verbose
 prose, diverge from degree). Design VTs covered: 8 (render outbound/absent
 inbound), 12 (serde omission), part of 9 (CatalogEdge populated).
 """
@@ -122,7 +124,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "hydrate copies the authored descriptor onto CatalogEdge.descriptor.", test_file = "src/catalog/hydrate.rs", keywords = ["descriptor", "CatalogEdge"] },
   { id = "VT-2", expects = "serde omission: a CatalogEdge with descriptor None serializes with no `descriptor` key.", test_file = "src/catalog/hydrate.rs", keywords = ["descriptor", "skip_serializing_if"] },
-  { id = "VT-3", expects = "Outbound render shows the descriptor on references(concerns); inbound render omits it.", test_file = "src/relation_query.rs", keywords = ["descriptor", "concerns"] },
+  { id = "VT-3", expects = "Outbound render shows the descriptor on references(concerns); inbound render omits it.", test_file = "src/relation_graph.rs", keywords = ["descriptor", "concerns"] },
 ]
 specs        = []
 requirements = []

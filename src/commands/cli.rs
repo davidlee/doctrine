@@ -596,6 +596,10 @@ pub(crate) enum Command {
         /// Only valid for the `fulfils` label; refused for all others.
         #[arg(long)]
         degree: Option<String>,
+        /// A free-text descriptor stating what the edge is about (SL-196). Only valid
+        /// on a `references --role concerns` edge; refused for all others. Non-empty.
+        #[arg(long)]
+        descriptor: Option<String>,
         /// The target — a canonical ref (`ADR-010`) for validated labels, free text
         /// for `drift`.
         target: String,
@@ -1338,6 +1342,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             label,
             role,
             degree,
+            descriptor,
             target,
             path,
         } => crate::commands::relation::run_link(
@@ -1346,6 +1351,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             &label,
             role.as_deref(),
             degree.as_deref(),
+            descriptor.as_deref(),
             &target,
         ),
         Command::Config { command } => {

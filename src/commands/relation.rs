@@ -26,14 +26,16 @@ fn resolve_link_path(
     label: &str,
     role: Option<crate::relation::Role>,
     degree: Option<crate::relation::Degree>,
+    descriptor: Option<&str>,
 ) -> anyhow::Result<(PathBuf, &'static crate::relation::RelationRule)> {
     let (kref, id) = crate::integrity::parse_resolvable_ref(root, source)?;
     // SL-149 PHASE-04c: the parsed `--role` flows into the legality gate. `validate_link`
     // yields `MissingRole` (a roleful `references` with no role), `RoleNotApplicable`
     // (a role on a label-only label), or `IllegalRole` (a role outside the source's
     // legal set); SL-176 PHASE-02: `DegreeNotApplicable` for degree on a non-`fulfils`
+    // label; SL-196: `DescriptorNotApplicable` for a descriptor on a non-`concerns`
     // label. The surviving `rule` is the `(source, label, role)` row.
-    let rule = crate::relation::validate_link(kref.kind, label, role, degree)?;
+    let rule = crate::relation::validate_link(kref.kind, label, role, degree, descriptor)?;
     let toml_path = crate::entity::id_path(root, kref.kind, id, crate::entity::Ext::Toml);
     Ok((toml_path, rule))
 }
@@ -64,6 +66,15 @@ fn parse_degree(degree: Option<&str>) -> anyhow::Result<Option<crate::relation::
         .transpose()
 }
 
+/// Validate the optional `--descriptor <TEXT>` flag (SL-196 §5.2): raw free text, no
+/// enum parse (unlike [`parse_degree`]) — rejected only when empty/all-whitespace via
+/// [`crate::relation::validate_descriptor`]. `None` ⇒ no flag given.
+fn parse_descriptor(descriptor: Option<&str>) -> anyhow::Result<Option<&str>> {
+    descriptor
+        .map(crate::relation::validate_descriptor)
+        .transpose()
+}
+
 /// `doctrine link <SOURCE-ID> <LABEL> <TARGET>` (SL-048 §5.4) — author a tier-1
 /// `[[relation]]` edge. Validates the source/label ([`resolve_link_path`]) then the
 /// forward target (§5.5 — `Unvalidated` `drift` is free text; every other label's
@@ -76,6 +87,7 @@ pub(crate) fn run_link(
     label: &str,
     role: Option<&str>,
     degree: Option<&str>,
+    descriptor: Option<&str>,
     target: &str,
 ) -> anyhow::Result<()> {
     use anyhow::Context;
@@ -83,15 +95,21 @@ pub(crate) fn run_link(
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let role = parse_role(role)?;
     let degree = parse_degree(degree)?;
+    let descriptor = parse_descriptor(descriptor)?;
 
     // Memory branch — detect mem_<uid> / mem.<key> / mem_<prefix> sources
     // and route to memory.toml relations (SL-090 §PHASE-03). Memory edges are
     // label-only (no role taxonomy), so `--role` on a memory source is refused
-    // up front rather than silently dropped (SL-149 PHASE-04c).
+    // up front rather than silently dropped (SL-149 PHASE-04c); `--descriptor` is
+    // likewise refused (SL-196 — memory→entity descriptors deferred).
     if let Ok(mref) = crate::memory::MemoryRef::parse(source) {
         anyhow::ensure!(
             role.is_none(),
             "memory relations do not take a role; remove `--role`"
+        );
+        anyhow::ensure!(
+            descriptor.is_none(),
+            "memory relations do not take a descriptor; remove `--descriptor`"
         );
         let toml_path = crate::memory::resolve_memory_toml_path(&root, &mref)?;
         // Best-effort target validation: if target looks like an entity ref,
@@ -116,7 +134,7 @@ pub(crate) fn run_link(
         return Ok(());
     }
 
-    let (toml_path, rule) = resolve_link_path(&root, source, label, role, degree)?;
+    let (toml_path, rule) = resolve_link_path(&root, source, label, role, degree, descriptor)?;
     // Forward-edge validation (§5.5): free-text labels skip both gates; validated
     // labels must resolve AND be of a legal target kind.
     if !matches!(rule.target, crate::relation::TargetSpec::Unvalidated) {
@@ -124,7 +142,9 @@ pub(crate) fn run_link(
         let (skref, _sid) = crate::integrity::parse_resolvable_ref(&root, source)?;
         crate::relation::check_target_kind(rule, skref.kind, tkref.kind.prefix)?;
     }
-    let outcome = crate::relation::append_edge(&toml_path, rule.label, rule.role, degree, target)?;
+    let outcome = crate::relation::append_edge(
+        &toml_path, rule.label, rule.role, degree, descriptor, target,
+    )?;
     match outcome {
         crate::relation::AppendOutcome::Wrote => {
             writeln!(std::io::stdout(), "linked: {source} {label} {target}")?;
@@ -367,7 +387,9 @@ pub(crate) fn run_unlink(
         return Ok(());
     }
 
-    let (toml_path, rule) = resolve_link_path(&root, source, label, role, None)?;
+    // Unlink matches `(label, role, target)` — descriptor is excluded from identity
+    // (SL-196), so no `--descriptor` participates in removal.
+    let (toml_path, rule) = resolve_link_path(&root, source, label, role, None, None)?;
     let outcome = crate::relation::remove_edge(&toml_path, rule.label, rule.role, target)?;
     match outcome {
         crate::relation::RemoveOutcome::Removed => {
@@ -452,6 +474,7 @@ mod tests {
             "related",
             None,
             None,
+            None,
             "ADR-002",
         )
         .unwrap();
@@ -471,6 +494,7 @@ mod tests {
             Some(root.to_path_buf()),
             MEM_TEST_UID,
             "related",
+            None,
             None,
             None,
             "SL-001",
@@ -498,6 +522,7 @@ mod tests {
             "related",
             None,
             None,
+            None,
             "SL-001",
         )
         .unwrap();
@@ -506,6 +531,7 @@ mod tests {
             Some(root.to_path_buf()),
             MEM_TEST_UID,
             "related",
+            None,
             None,
             None,
             "SL-001",
@@ -531,6 +557,7 @@ mod tests {
             Some(root.to_path_buf()),
             MEM_TEST_UID,
             "related",
+            None,
             None,
             None,
             "SL-001",
@@ -572,6 +599,7 @@ mod tests {
             "related",
             None,
             None,
+            None,
             "SL-999",
         );
         assert!(result.is_err());
@@ -589,6 +617,7 @@ mod tests {
             Some(root.to_path_buf()),
             MEM_TEST_UID,
             "related",
+            None,
             None,
             None,
             "https://example.com",
@@ -614,6 +643,7 @@ mod tests {
             "related",
             None,
             None,
+            None,
             "SL-002",
         )
         .unwrap();
@@ -634,6 +664,7 @@ mod tests {
             Some(root.to_path_buf()),
             "mem.fact.cli.skinny",
             "related",
+            None,
             None,
             None,
             "SL-001",
@@ -688,6 +719,7 @@ mod tests {
             "SL-001",
             "references",
             Some("implements"),
+            None,
             None,
             "SPEC-001",
         )
@@ -754,6 +786,7 @@ mod tests {
             "references",
             Some("concerns"),
             None,
+            None,
             "SL-002",
         )
         .unwrap();
@@ -805,6 +838,7 @@ mod tests {
             "references",
             None,
             None,
+            None,
             "SPEC-001",
         );
         let err = result.unwrap_err().to_string();
@@ -828,6 +862,7 @@ mod tests {
             "SL-001",
             "governed_by",
             Some("implements"),
+            None,
             None,
             "ADR-001",
         );
@@ -855,6 +890,7 @@ mod tests {
             "references",
             Some("concerns"),
             None,
+            None,
             "SL-002",
         )
         .unwrap();
@@ -866,6 +902,7 @@ mod tests {
             "SL-001",
             "references",
             Some("implements"),
+            None,
             None,
             "SL-002",
         );
@@ -884,6 +921,7 @@ mod tests {
             "SL-001",
             "references",
             Some("realises"),
+            None,
             None,
             "SPEC-001",
         );

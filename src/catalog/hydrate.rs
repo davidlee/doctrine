@@ -139,6 +139,13 @@ pub(crate) struct CatalogEdge {
     /// overlay count is unchanged.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) role: Option<Role>,
+    /// The free-text descriptor on a `references:concerns` edge (SL-196 §5.2), copied
+    /// from the raw [`RelationEdge`] payload. `None` on every edge without one; guarded
+    /// with `skip_serializing_if` so a descriptorless edge serializes byte-identically to
+    /// the pre-slice /api/graph contract (no `descriptor: null` key). Inbound never
+    /// carries a descriptor (design D3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) descriptor: Option<String>,
     pub(crate) target: EdgeTarget,
     /// Where this edge was authored (which entity file, which field).
     pub(crate) origin: EdgeOrigin,
@@ -276,6 +283,7 @@ impl Catalog {
                     // The typed role rides as edge payload (SL-149 F1) — `Some` on a
                     // `references` edge, `None` on every label-only edge.
                     role: edge.role,
+                    descriptor: edge.descriptor.clone(),
                     target,
                     origin,
                 });
@@ -348,6 +356,7 @@ impl Catalog {
                     // A `Raw` (free-text / unvalidated memory) edge carries no typed role
                     // — the role dimension is only on the validated `references` label.
                     role: None,
+                    descriptor: None,
                     target,
                     origin: EdgeOrigin {
                         file: record.path.join("memory.toml"),
@@ -1142,6 +1151,67 @@ mod tests {
         assert!(
             !json.contains("\"body\""),
             "JSON should omit body key when None"
+        );
+    }
+
+    // == SL-196 VT-1: hydrate copies the authored descriptor onto CatalogEdge ==
+
+    /// SL-196 PHASE-03: a `references:concerns` edge authored with a free-text
+    /// `descriptor` hydrates that descriptor onto the resulting `CatalogEdge.descriptor`
+    /// (the /api/graph payload). Mirrors the `role` payload path.
+    #[test]
+    fn hydrate_copies_concerns_descriptor_onto_catalog_edge() {
+        let dir = tmp();
+        let root = dir.path();
+        // SL-001 references(concerns) REQ-005, bearing a descriptor.
+        crate::catalog::test_helpers::write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s1\"\ntitle = \"S1\"\nstatus = \"proposed\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [[relation]]\nlabel = \"references\"\nrole = \"concerns\"\n\
+             descriptor = \"attention burden\"\ntarget = \"REQ-005\"\n",
+        );
+        crate::catalog::test_helpers::write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        seed_requirement(root, 5);
+
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
+        let edge = catalog
+            .edges
+            .iter()
+            .find(|e| e.source.canonical() == "SL-001")
+            .expect("SL-001 edge present");
+        assert_eq!(
+            edge.descriptor.as_deref(),
+            Some("attention burden"),
+            "hydrate copies the authored descriptor onto CatalogEdge"
+        );
+    }
+
+    // == SL-196 VT-2: descriptorless CatalogEdge omits the key (skip_serializing_if) ==
+
+    /// SL-196 PHASE-03: a `CatalogEdge` with `descriptor: None` serializes with NO
+    /// `descriptor` key — the `skip_serializing_if` guard keeps the /api/graph edge
+    /// contract byte-identical to the pre-slice shape (no `descriptor: null`).
+    #[test]
+    fn catalog_edge_descriptor_skipped_in_json_when_none() {
+        let dir = tmp();
+        let root = dir.path();
+        // A plain references(implements) edge — no descriptor authored.
+        seed_slice(root, 1, &[("references(implements)", &["REQ-005"])]);
+        seed_requirement(root, 5);
+
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
+        let edge = catalog
+            .edges
+            .iter()
+            .find(|e| e.source.canonical() == "SL-001")
+            .expect("SL-001 edge present");
+        assert!(edge.descriptor.is_none(), "no descriptor authored");
+        let json = serde_json::to_string(edge).unwrap();
+        assert!(
+            !json.contains("\"descriptor\""),
+            "JSON omits descriptor key when None: {json}"
         );
     }
 }
