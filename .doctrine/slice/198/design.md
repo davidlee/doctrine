@@ -518,3 +518,83 @@ doctrine.toml.example:77 — expected absent). The other half is real and folded
 
 **Verdict:** LOCK-READY-WITH-PINS — pass-3 folds as PIN-1..4 (plan.toml EN-3/EX-5/EX-6, PHASE-03);
 no design-intent change, no reopened decision.
+
+## 11. Reconciliation (RV-247) — as-built truth over the §5 body
+
+Post-implementation audit RV-247 (reconciliation facet, targets SL-198) found **no
+code defect**: the four phases track the *plan* (the later, owner-steered authority),
+while the §5.2/§5.3/§5.4 **body prose** — authored pre-X-pass — was never retro-fitted
+to the X-1..X-5 reframe and the 2026-07-04 owner steers. This section carries the
+as-built truth; per this design's own convention (§10 "Supersedes §5.2…"), a later
+section governs the body where they differ. Each item cites its RV-247 finding.
+
+- **F-1 (lint scope + host — supersedes §5.2 line 165 & the `design-target` set).** The
+  conformance lint scans the **authored** agent-def trees `install/agents/**` +
+  `.doctrine/agents/**` — **not** the installed `.claude/agents/*.md` copy (lint the
+  source, not the generated artefact). Shipped as **doctor check #9 `AgentConformance`**
+  (`src/finding.rs` `Category::AgentConformance`, Error-gated; `src/doctor_checks.rs`
+  `agent_conformance_findings`; `src/commands/doctor.rs` check #9). `design-target`
+  selectors reconcile to: **add** the doctor host (`src/finding.rs`, `src/doctor_checks.rs`,
+  `src/commands/doctor.rs`) and the authored scan roots; **drop/replace** the
+  `.claude/agents/**` selector. (§10 already records the root correction at the X-pass
+  "defs live at .doctrine/agents/** + install/agents/**".)
+- **F-2 (deny-by-default — supersedes §5.2 lint framing, lines 164-170).** The lint is
+  **deny-by-default**, not allow-by-marker: **every** frontmatter agent-def in the scan
+  roots must satisfy the tool-surface assertion, and an **unmarked** def is a **FAILURE**
+  (closes the RSK-225 unmarked-worker-with-writable-token hole). Allowlist = the single
+  token `mcp__doctrine__worker_commit`; no writability introspection of third-party
+  servers. **Owner-ratified (VH-1, 2026-07-04):** breadth applies to every frontmatter def
+  in the roots, including benign downstream non-worker defs — the conservative stance is
+  deliberate (the lint *is* the security mitigation).
+- **F-3 (orchestration-note home — supersedes §5.4 line 210/225 & plan EX-4/EX-5).** The
+  two-arm orchestration note + pre-dispatch ritual ship to the generic RustEmbed asset
+  **`install/dispatch-mechanics.md`** (new section) + **`.doctrine/governance.md`** (pi-arm
+  note + pointer), **not** to project-local `CLAUDE.md # orchestration` (generic doctrine
+  knowledge does not belong in a project-local file).
+- **F-4 (dispatch-record path — supersedes §5.3 line 184 & §5.2 step 1c/1d, lines 74/114/117).**
+  The per-worktree record is built at **`.doctrine/state/dispatch/record/<name>.toml`**, not
+  `jail/<name>.toml`; the path is encapsulated behind `resolve_agent`, an internal detail with
+  no behavioural impact. (The design body's `jail/…` string is stale everywhere it appears.)
+- **F-5 (belt order cheap-first — supersedes §5.2 handler step order, lines 126-157).** The
+  handler belt is **cheap-first** (INV-5 / PIN-3 / X-4 steer): sanitise+resolve → non-empty
+  pre-fmt delta → two-tier scope (`classify_import`) → `HEAD==B` → **then** the mutating
+  `check commit` gate; staging is **by path after fmt** (post-fmt content of the classified
+  paths). The §5.2 numbering that places the gate (step 2) before scope (step 3) is stale;
+  the plan EX-2 ordering governs.
+- **F-6 (X5 reuse, not a code relax — annotates §2 line 28 / §5.4 line 217 / plan PHASE-03
+  EX-2 / VT-1).** X-5 source-verified that `subagent.rs:360` already gates
+  `merge-base --is-ancestor B HEAD`, so the post-commit `HEAD==C` (descends B) case passes
+  **unchanged** — **zero production edit** to `run_verify_worker`. The design/plan phrase
+  "relax `run_verify_worker` (code change)" is superseded by "**reuse** existing is-ancestor
+  semantics — no production change; guard test in `tests/e2e_worktree_verify_worker.rs`."
+  (The PHASE-03 VT-1 `test_file` pin naming `src/worktree/subagent.rs` is an immutable id —
+  annotated here, not renumbered; the guard test landed in the e2e file.)
+- **F-7 (PHASE-01 seam — supersedes the `design-target` set).** The record type + resolver
+  landed in a **new module `src/worktree/dispatch_record.rs`** (`DispatchRecord`,
+  `resolve_agent`, `ResolveRefusal`), with `src/worktree/mod.rs` + `import.rs` promoting
+  prefixes/gather to `pub(crate)`. Add `src/worktree/dispatch_record.rs` to the selectors
+  (and either name `src/worktree/mod.rs` or accept a `src/worktree/**` widening for the
+  re-export seam).
+- **F-8 (drop `src/dispatch.rs` from selectors).** `src/dispatch.rs` was a **context
+  reference** only (arming-slot per-coord source, `dispatch.rs:445`; cross-slice concurrency,
+  `:3099`) — the X-2 redesign moved base **B** into the per-worktree create-fork record
+  (`create.rs`), superseding the mutable arming slot, so `dispatch.rs` needed **no edit**. A
+  context ref mis-promoted to an edit target; drop it from the `design-target` selectors.
+- **F-9 (governance — sanctioned jail-wall exception, note not REV).** `worker_commit` is a
+  **deliberate, lint-guarded exception** to the SL-182 / ADR-008 PreToolUse jail wall: it
+  rides the *pre-existing* unconfined-MCP passthrough (RSK-225, witnessed `7bd21f49`) and
+  structurally un-jails nothing new — the deny-by-default conformance lint **bounds** that
+  surface rather than widening it. Recorded as a note on **ADR-008** (`## Notes`), **not** an
+  ADR REV. The ADR-012 REV + ADR-011 D6 amendment remain **SL-199** (the confined-subagent
+  capstone) scope, not this slice.
+- **F-10 / F-11 (no reconcile write).** F-10 (base-staleness merge conflict, resolved as a
+  union of append-only RFC-011 instrumentation in candidate tip `c89b124a`) and F-11 (absent
+  `phase/198-04` cut ref; PHASE-04 content fully present in the `review/198` bundle — a
+  granularity gap, not content loss) require no slice/design edit. The base-staleness lesson
+  is already in `mem.signpost.doctrine.dispatch-claude-arm-wrong-base`; the "in-thread phase
+  must `record-delta` before `prepare-review`" process lesson is harvested to `notes.md`.
+
+**Standing risks carried (not closed here).** RSK-226 (caller-binding residual — a sibling-name
+spoof commits on another live agent's branch, own work left unpromoted) is accepted and carried
+to SL-199. Base-staleness recurrence is mitigated only by the pre-dispatch `git fetch . edge:main`
+ritual.

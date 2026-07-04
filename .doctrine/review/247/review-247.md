@@ -102,3 +102,31 @@ the PHASE-04 content fully present in the bundle.
   (union of instrumentation appends); no code change.
 - **F-11** — `phase/198-04` ref absent (PHASE-04 delta recorded late); content
   intact in the bundle. Process lesson harvested to `notes.md`.
+
+## Reconciliation Outcome
+
+Reconcile pass complete (2026-07-04). All eleven findings resolved; no REV authored
+(F-9 is a note, per the audit ruling); no half-applied change blocks close.
+
+### Direct edits applied (per-slice)
+- **`design.md` §11 (new) — "Reconciliation (RV-247)"**: records as-built truth over
+  the pre-X-pass §5 body for **F-1..F-8** (lint scope/host + selector set; deny-by-default;
+  orchestration-note home; `record/` not `jail/` path; cheap-first belt order; X5-reuse not
+  code-relax; PHASE-01 `dispatch_record.rs` seam; drop `src/dispatch.rs` context ref). Per
+  the design's own §10 "supersedes §5.2…" convention, the later section governs the body
+  where they differ — the drifted body prose is annotated, not surgically rewritten (keeps
+  the design-evolution trail intact). Covers F-1, F-2, F-3, F-4, F-5, F-6, F-7, F-8.
+
+### Governance note applied (not a REV)
+- **`ADR-008` `## Notes` N1**: records `worker_commit` as a sanctioned, lint-guarded
+  exception to the PreToolUse jail wall — rides the pre-existing RSK-225 MCP passthrough
+  (`7bd21f49`), bounded by deny-by-default doctor check #9; un-jails nothing structurally;
+  changes no ADR-008 decision. ADR-012/ADR-011 amendments remain SL-199. Covers F-9.
+
+### No action (recorded, no write)
+- **F-10** — base-staleness merge conflict resolved in-audit (candidate `c89b124a`, union
+  of append-only instrumentation); no code change.
+- **F-11** — absent `phase/198-04` cut ref is a granularity gap; PHASE-04 content present in
+  the `review/198` bundle; process lesson in `notes.md`.
+
+Reconcile complete — handoff to /close.
