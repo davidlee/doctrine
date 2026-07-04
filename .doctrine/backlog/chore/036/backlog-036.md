@@ -14,12 +14,30 @@ generically reusable by anyone building or operating doctrine's dispatch
 orchestrator, not just knowledge this repo needed to survive. It currently
 lives only as project-local memory (trust/verification varies, written in
 this repo's own CLI vocabulary) and is at risk of being lost or unfound by
-future users/agents who'd benefit from it as shipped reference docs
+future users/agents who'd benefit from it as shipped reference knowledge
 (ADR-005 tiering: skills route, reference docs explain).
 
-Catalog compiled 2026-07-03 by reading all 321 active memory rows and
-pulling full bodies for the 18 strongest candidates. Full agent output
-available in this session's transcript if needed; summary below.
+**Absorbs IMP-216** (closed 2026-07-04 as duplicate). IMP-216 covered the
+same migration with a wider net — dispatch **+ worktree + audit + close**
+traps — and proposed shipping to the *memory* tier (`mem.reference.dispatch.*`
++ a `mem.signpost.doctrine.dispatch`). CHR-036 keeps the dispatch-mechanics
+focus and per-memory triage below, and folds in IMP-216's two contributions:
+the audit/close close-mechanics traps (now a candidate group), and the
+destination split (see **Destination — hybrid**).
+
+### Catalog is a live snapshot, not a freeze
+
+The candidate list below was compiled 2026-07-03 against ~321 active memory
+rows. Corpus is now 326+ and **actively growing** — SL-196 / SL-198 / SL-199
+(confined dispatch orchestrator, Mode B) are minting new dispatch-mechanics
+memories as they land. Recent hits not yet triaged below, for example:
+`mem_019f191431d2` (a `dispatch/` prefix is NOT unique to the coord tree),
+`mem_019f2b670f41` (SL-182 PreToolUse jail walls only Bash/Edit/Write),
+`mem_019f1a5ceef6` (dispatch arming is single-slot).
+
+Treat the catalog as a re-derivable query result, not authored truth — re-run
+`doctrine memory search dispatch` at execution time rather than trusting the
+frozen uids.
 
 ## Candidate memories (grouped by theme)
 
@@ -63,18 +81,88 @@ path-limit-commit convention).
 - `mem_019ec602fe877003ba49f92fabe63a23`, `mem_019ec5f26b7b70d3ab06b7a3ba72ed72` — explicitly RETRACTED 2026-06-14; confirm pruned/unlinked
 - `mem_019ede2f99a179d2968bfadfee2843a9` — pi RPC `set_auto_retry` field name, too implementation-specific, will bitrot
 
-## Scope of this chore
+### Close / audit mechanics (absorbed from IMP-216, silent-data-loss tier)
 
-1. Walk the "ship as-is" and "needs cleanup" lists above; for each, verify
+These are the mid-flight traps IMP-216 flagged Tier-1. They fit the *memory*
+destination (agents hit them during a close/audit and `doctrine memory
+retrieve dispatch`), not narrative docs:
+- `mem_019ee36939ca` fold audit fix-now into journal before close_target
+- `mem_019f06a18bf9` close alt: pre-FF trunk so close_target absorbs repair
+- `mem_019ee41ac4c7` close-integrate on shared trunk races (also above)
+- `mem_019ee4bac059` candidate can't ingest hand-resolved conflict — dead-ends
+- `mem_019f096865xx` candidate worktree detached HEAD — move ref + re-admit
+- `mem_019eb7415390` RV verbs refuse on a worktree fork — drive audit from parent
+- `mem_019f09686501` distrust dispatch green claim — re-run suite in audit
+
+## Destination — hybrid (decided 2026-07-04)
+
+Split by access pattern, not one bucket for all:
+
+- **Narrative mechanics** ("how the funnel forks/imports/lands", arm routing,
+  worktree isolation model) → a shipped reference **doc** — new
+  `install/dispatch-mechanics.md` (per ADR-005 "docs explain"). Read cover-to-
+  cover when onboarding to dispatch.
+- **Sharp mid-op traps** (close-mechanics group above, base-control footguns,
+  candidate-detach) → shipped **reference memories** + a
+  `mem.signpost.doctrine.dispatch` orienting entry. Retrieved *during* an
+  operation via `doctrine memory retrieve dispatch`, not read up front.
+- **Not doctrine-specific at all** (Claude Agent SDK / pi RPC behaviour) →
+  upstream contribution notes, out of scope for the shipped corpus.
+
+## Calibration — ongoing, not one-shot
+
+This is a **recurring** distillation, not a single migration. The dispatch
+surface is still churning (SL-196/198/199). Invest against churn:
+
+1. **First pass, now — high-value + static only.** Ship the generic,
+   well-evidenced, low-churn items: `pi-arm-worker-ops`, the git patch-id
+   landed-oracle, `subagentstart-blocking-but-not-failclosable`,
+   fork-rung3-base, the close-integrate race. These won't move.
+2. **Defer the volatile surface** until SL-196/198/199 close — anything the
+   confined-orchestrator work touches (arm placement, worktree isolation
+   fallback, jail walls) will be re-authored; distilling it now = rework.
+3. **Re-run periodically.** Each subsequent pass re-derives the candidate
+   query, sweeps newly-minted memories, and tops up the shipped doc + signpost.
+
+## Scope of this chore (first pass)
+
+1. Walk the "ship as-is" list; for each **high-value + static** item, verify
    the claim still holds (re-probe if stale-risk), rewrite doctrine-CLI-
-   specific language into generic dispatch/worktree/git-plumbing language
-   where flagged.
+   specific language into generic dispatch/worktree/git-plumbing language.
 2. Merge the noted near-duplicate pairs.
-3. Decide destination: doctrine's own shipped reference docs (per ADR-005
-   tiering — likely `using-doctrine.md` or a new `dispatch-mechanics.md`)
-   vs upstream contribution notes for Claude Agent SDK / pi RPC behavior
-   that isn't doctrine-specific at all.
+3. Stand up `install/dispatch-mechanics.md` (narrative) + a
+   `mem.signpost.doctrine.dispatch` signpost (traps index); route per the
+   **Destination — hybrid** split above.
 4. Confirm the two RETRACTED memories are actually pruned/unlinked from
    the corpus.
 5. Update/retire the source memories once distilled (avoid duplicate
    sources of truth between memory and shipped docs).
+6. Leave the volatile/deferred candidates in place with a note; schedule the
+   next pass after SL-196/198/199 close.
+
+## First-pass progress (2026-07-04)
+
+Shipped the high-value + static core:
+- **`install/dispatch-mechanics.md`** — narrative reference doc (ADR-005 PULL
+  tier), distilled from the static ship-as-is set: explicit fork base `B`,
+  scoped verify, the patch-id landed-oracle + squash blind spot, shared-trunk
+  landing races, worker-identity fencing (accident-fenced not fail-closed),
+  worker self-discard traps, subprocess-arm RPC hygiene. Written in generic
+  dispatch/worktree/git-plumbing language, doctrine-CLI specifics stripped.
+- **`mem.signpost.doctrine.dispatch`** (`mem_019f2b93f5e1`) — shipped global
+  orientation signpost: two-tier map (read the doc up front / retrieve traps
+  mid-op) + a "what to retrieve when" trap-territory table.
+- Wired discoverability into `mem.signpost.doctrine.reference-docs` (domain-doc
+  section). Rebuilt (re-embed) → `memory sync` → boot regen; validation clean.
+
+Source memories distilled this pass (not yet superseded — deferred to keep the
+project-local originals live until the shipped set is proven):
+`mem_019ee40b4c92` (pi-arm-worker-ops), `mem_019ebed87aca` (landed-oracle),
+`mem_019ec166d8bf` (gc-squash blind spot), `mem_019ec0a5bdb2`
+(subagentstart-not-failclosable), `mem_019eb7263a90` (fork-rung3-base),
+`mem_019ee41ac4c7` (close-integrate-shared-trunk-race).
+
+**Deferred (next pass):** promote the Tier-1 trap memories to shipped
+`mem.reference.dispatch.*` (needs cross-project rewrite + re-embed); supersede
+the distilled project-local originals with `--by` links; the volatile
+confined-orchestrator surface (SL-196/198/199) stays local until those close.

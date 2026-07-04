@@ -5,10 +5,10 @@ id = 216
 slug = "migrate-dispatch-edge-cases-to-shipped"
 title = "Migrate project-local dispatch/worktree/audit/close edge-case memories to shipped reference knowledge"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "duplicate"
 created = "2026-06-30"
-updated = "2026-06-30"
+updated = "2026-07-04"
 tags = ["area:audit", "area:dispatch", "area:memory", "area:worktree"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

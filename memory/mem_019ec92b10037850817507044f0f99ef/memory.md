@@ -14,6 +14,14 @@ of truth for command shapes).
   reference forms, and directory layout. Cite entities by their padded id
   (e.g. `<SLICE-ID>`, `<ADR-ID>`, `<REQ-ID>`), never by slug alone.
 
+The two above are the *general* authorities. Doctrine also ships **domain
+reference docs** for specific subsystems, same PULL tier and format:
+
+- **`dispatch-mechanics.md`** — the `/dispatch` fork→verify→import→land funnel:
+  the mental model plus the git-plumbing invariants and failure modes. Pairs
+  with the `mem.signpost.doctrine.dispatch` retrieval index for the sharp
+  mid-operation traps.
+
 These are shipped reference docs (ADR-005 PULL tier) — they install once and
 stay inert unless the installer is re-run. The boot snapshot and shipped
 memories are separate push surfaces; these docs are the pull surface for
