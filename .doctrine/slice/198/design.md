@@ -92,7 +92,10 @@ worker's own tree; everything cross-boundary stays with the (unchanged) orchestr
 name: "worker_commit"
 input:  { agent: string (required),    # worker's own agent-id / worktree name (self-reported)
           message: string (required) } # worker-authored; orchestrator may amend
-returns: { "Committed": { oid: string, base: string } }   # or a typed refusal
+returns: { "Committed": { oid: string, base: string,
+                          undeclared: [string] } }        # or a typed refusal
+                          # undeclared = in-scope-committed src paths outside the
+                          # design-target selectors (soft warn; orchestrator amends)
 ```
 
 Handler (imperative shell; unconfined; **opaque-id resolution, no worker-supplied path**),
@@ -124,9 +127,20 @@ in order (codex pass-2 shape, §10):
    (`resolve_check(Commit)`) in `dir`. fmt mutates the tree *first*, then lint/validate/
    test/build. Red ⇒ refuse `commit-gate-red` (report captured output). (Replaces a
    separate `prove` on this path; `prove` stays for import/integration.)
-3. **Scope belt.** `classify_import` of the staged change-set vs the slice's
-   `design-target` selectors; reject `.doctrine/`/`.claude/` + undeclared paths ⇒
-   `undeclared-scope`.
+3. **Scope belt — two tiers (owner steer 2026-07-04).** `classify_import` of the
+   pre-fmt intended delta vs the slice's `design-target` selectors, split by zone:
+   - **Hard reject (`forbidden-zone`).** Writes to escalation surfaces — `.doctrine/**`,
+     `.claude/**`, `.agents/**`, `install/agents/**` (governance state, plans, selectors,
+     agent-def tool-grants), and build/gate config (`justfile`, `flake.nix`, CI). A worker
+     writing these is always wrong (it could rewrite its own scope, tool-grant, or gate) ⇒
+     refuse the commit. This is the security fence.
+   - **Soft warn (`undeclared`).** Src paths outside the current `design-target` selectors
+     but in no forbidden zone. The planner under-declares (leaves off a file that
+     legitimately needs the change), so this **does not block** — the commit lands and the
+     paths ride back in the result as `undeclared: [paths]`. The orchestrator amends the
+     selectors (bless) or rejects at import; either way it feeds the existing audit-time
+     `slice conformance` delta rather than pre-empting it. Same audit-caught class as the
+     sibling-spoof residual (X1) — within the locked threat model.
 4. **Commit invariant.** Assert worktree `HEAD == B` (pre-commit); if `HEAD != B` the
    tree is resumed/stacked ⇒ refuse `not-at-base`. Stage the in-scope delta; create
    **exactly one non-merge commit** with `message`; the new tip `C` then satisfies
@@ -166,6 +180,12 @@ servers required.
 
 - **Order matters:** gate (fmt mutates) → stage → commit. Committing before fmt would
   bake unformatted trees.
+- **Pre-dispatch fmt-clean trunk (owner steer 2026-07-04).** The orchestrator runs `fmt`
+  on trunk/main **before arming**, so base **B** is fmt-clean at fork. Then `check commit`'s
+  fmt only ever touches worker-changed files and the post-fmt diff equals the in-scope
+  delta — F2 does not arise in normal operation. The "stage only the pre-fmt classified
+  paths" invariant (§5.5) remains the belt-and-suspenders guarantee that holds even if this
+  ritual is skipped. Add to the CLAUDE.md `# orchestration` pre-dispatch ritual.
 - **Warm target.** `check commit` runs `test`+`build` in `dir`; the fork must be
   reflink-prewarmed ([[mem.pattern.dispatch.prewarm-fork-target-reflink]]) or the build
   times out. (Pre-warm is orchestrator setup, already in the funnel; note the
@@ -196,6 +216,15 @@ servers required.
   the target is resolved server-side and refuses on `unknown-agent` (0 hits),
   `ambiguous-agent` (>1 live hit — name uniqueness not assumed), or `stale-record`
   (record ↔ worktree inconsistent). No worker-supplied path enters a filesystem join.
+- **INV-5 (F2 — commit stages the classified set, not the post-fmt diff).** The commit
+  includes exactly the pre-fmt in-scope classified paths. A repo-wide `check commit` fmt
+  that normalises a pre-existing/out-of-scope file cannot drag it into the commit. Holds
+  independently of the pre-fmt-clean-trunk ritual (§5.4) — that ritual makes the case not
+  arise; this invariant makes it safe if it does.
+- **INV-6 (scope tiers).** A write to an escalation zone (`.doctrine/**`, `.claude/**`,
+  `.agents/**`, `install/agents/**`, build/gate config) hard-refuses (`forbidden-zone`).
+  A src write outside the `design-target` selectors but in no forbidden zone commits and
+  is reported as `undeclared` — never silently dropped, never hard-blocked.
 - **Edge — empty delta.** Worker made no in-scope change ⇒ refuse `empty-delta` (no
   empty commit).
 - **Edge — gate mutates then still red.** fmt reformats but lint/test fails ⇒ refuse;

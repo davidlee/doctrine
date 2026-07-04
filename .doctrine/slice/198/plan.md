@@ -105,13 +105,26 @@ Grounding the plan against implementation reality before phases materialise:
   only as a defensive refusal (normally unreachable). The per-worktree record is then read
   from the resolved worktree's coord to supply `{base, coord}` and the consistency check.
 
-- **F2 / scope-after-fmt (PHASE-02) — the real correctness trap.** `check commit` runs
-  `fmt`, which mutates repo-wide and can normalise a *pre-existing, out-of-scope*
-  mis-formatted file. If the commit staged the post-fmt working-tree diff, that file would
-  ride in as an undeclared-scope change *after* the scope belt already passed. Mitigation
-  (EX-5, VT-4): the belt classifies the **pre-fmt** intended delta, and the commit stages
-  **exactly those classified paths** — never the post-fmt diff. This closes F2 without a
-  fork-time "B is fmt-clean" assertion.
+- **F2 / scope-after-fmt (PHASE-02) — two lines of defence (owner steer).** `check commit`
+  runs `fmt`, which mutates repo-wide and can normalise a *pre-existing, out-of-scope*
+  file. (1) **Primary hygiene:** the orchestrator pre-fmts trunk/main **before arming**
+  (PHASE-03 EX-5), so B is fmt-clean at fork and fmt only ever touches worker-changed files
+  — F2 does not arise operationally. (2) **Invariant fallback (EX-5/VT-4):** the belt
+  classifies the **pre-fmt** intended delta and the commit stages **exactly those
+  classified paths** — never the post-fmt diff — so F2 is safe even if the pre-fmt ritual
+  is skipped.
+
+- **Scope belt is two-tier (PHASE-02, owner steer) — don't hard-fail a planner omission.**
+  A hard reject on any out-of-selector write punishes the common case where the planner
+  under-declared `design-target`. Split by zone: **escalation zones** (`.doctrine/**`,
+  `.claude/**`, `.agents/**`, `install/agents/**`, build/gate config) HARD-refuse
+  (`forbidden-zone`) — a worker there could rewrite its own scope/tool-grant/gate; **src
+  paths outside the selectors** but in no forbidden zone COMMIT and return in `undeclared:
+  [paths]` (soft warn) — the orchestrator blesses them into the selectors or rejects at
+  import. The soft tier feeds the *existing* audit-time `slice conformance` delta rather
+  than pre-empting it, and stays within the locked threat model (same audit-caught class as
+  the X1 sibling-spoof residual). The one judgment call folded: build/gate config is
+  hard-fenced (a worker must never edit its own gate).
 
 - **DispatchRecord home + shape.** The record is a **sibling** file to the jail policy,
   not an overload of `<name>.toml` — confinement policy and dispatch-resolution are
