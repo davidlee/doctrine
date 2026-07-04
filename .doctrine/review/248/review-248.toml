@@ -1,0 +1,43 @@
+id    = 248
+slug  = "reconciliation-review-of-sl-201"
+title = "reconciliation review of SL-201"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-201"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Scope ## Context prose names the wrong reuse seam (resolve_inspect_uid + nonexistent build_memory_key_map) — stale vs corrected design"
+detail = 'slice-201.md ## Context still asserts "Key→uid resolution already exists (memory::resolve_inspect_uid + MemoryRef::parse; the scope originally cited a non-existent build_memory_key_map)". design.md § Reuse seam was corrected mid-flight (F1) to collect_all + resolve_memory_from_all because resolve_inspect_uid is items-only and misses the *shipped* onboarding key. The design is corrected; the scope Context prose is not — it names resolve_inspect_uid as the live seam, which is the exact bug the slice hit. Expected: scope narrative points at the delivered seam. Observed: scope names the abandoned one. Per-slice authored-prose drift → reconcile (direct edit).'
+disposition = "verified"
+response = 'Observation confirmed. Remediation delegated to /reconcile (audit is not the write surface for authored truth). Reconciliation brief → Per-slice (direct edit): rewrite slice-201.md ## Context "Key→uid resolution already exists" sentence to name the delivered seam (collect_all + resolve_memory_from_all, items+shipped union) and drop the resolve_inspect_uid claim; keep the build_memory_key_map non-existence note. Finding stays verified; the edit is recorded in the brief, not applied here.'
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "VH-1 browser title-render half not executed — no graphical host in jail"
+detail = 'Plan VH-1 / design VH: "doctrine onboard opens the browser focused on the overview memory, node shows its title (not the uid)". The resolution + error surface was proven headless (map serve --focus mem.signpost.doctrine.overview resolves to uid and serves; --focus mem.nope.key errors before bind). The visual title-on-node half could not run — the jail has no graphical host. Note the render path is pre-existing frontend behaviour (D2: web/map/src untouched); SL-201 only feeds it a resolved uid. Expected vs observed: verification-coverage residue, not a code defect — the untouched frontend already renders entry.title.'
+disposition = "tolerated"
+response = "Accepted verification residue, not a code defect. Rationale: (1) the title-render path is pre-existing frontend behaviour (D2 — web/map/src untouched by SL-201); the slice only feeds it a resolved uid. (2) The new surface — key→uid resolution across items+shipped, and the unknown-ref error-before-bind — was proven headless. (3) The jail has no graphical host, so the visual half cannot run here. Recommend the user run `doctrine onboard` on a graphical host to eyeball the overview node title; captured in synthesis as a standing manual check, not durable work (no backlog item — one-shot confirmation)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Conformance undeclared cell (12) — authored SL-201 edits + foreign shared-tree churn, no code creep"
+detail = "slice conformance 201 undeclared=12. Triaged: (a) SL-201's own authored doctrine edits — .doctrine/slice/201/design.md, slice-201.toml, and the gotcha memory items — expected, design-target selectors are code-only by convention so authored-state edits always land here; (b) foreign churn — .doctrine/adr/008, slice/198/*, slice/199/slice-199.toml, review/247/* — other agents' uncommitted/committed work in the shared edge tree, captured because the record-delta oid range ran to a HEAD that included their commits. Zero undeclared *code* paths; the 3 design-target code files are all conformant. Expected vs observed: no scope creep; the noise is delta-range hygiene, not a touch outside design."
+disposition = "aligned"
+response = "No scope creep. The undeclared cell is (a) authored SL-201 doctrine edits — design-target selectors are code-only by convention, so authored-state edits (design.md, slice-201.toml, gotcha memory) always surface as undeclared and are expected; (b) foreign shared-tree churn from other agents' concurrent work on edge, captured by the record-delta oid range running to a shared HEAD. Zero undeclared code paths; all 3 design-target code files conformant. No remediation — expected behaviour of a code-only design-target under a shared working tree."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
