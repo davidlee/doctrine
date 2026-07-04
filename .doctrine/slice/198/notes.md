@@ -4,9 +4,22 @@ Durable per-slice scratchpad — tracked in git.
 
 ## State (2026-07-04)
 
-- **Lifecycle:** `design`. Design authored + internal (F1–F5) + external codex (X1–X5)
-  adversarial passes done and folded. X1 blocker **resolved by owner ruling** (agent-id
-  registry lookup). **No plan, no phases yet.** Next step: `slice status 198 plan` → `/plan`.
+- **Lifecycle:** `plan`. Design locked (internal F1–F5 + two external codex passes;
+  pass-2 LOCK-READY-WITH-THIS). Plan authored, critically revised, **4 phases materialised**
+  (PHASE-01..04). **NOT flipped to `ready`** — awaiting (a) one more codex pass on the
+  post-pass-2 belt/config additions [PENDING — next task], then (b) owner plan approval.
+- **Post-pass-2 owner steers folded (design §5.2/§5.3/§10, plan PHASE-02/03):**
+  1. **Pre-fmt trunk before arming** (PHASE-03 EX-5) → B fmt-clean at fork, F2 moot
+     operationally; stage-classified-paths (INV-5) is the fallback.
+  2. **Two-tier scope belt.** HARD = `[dispatch].worker-forbidden-writes` **config surface**
+     (gitignore syntax, library matcher — no hand-roll; defaults ship in install template
+     `install/doctrine.toml.example`: `.doctrine/**`, `.claude/**`, `.agents/**`,
+     `install/agents/**`, `flake.nix`; project-negatable) + **code floor `.doctrine/**`
+     fail-closed** (precedence over config). SOFT = `undeclared:[paths]` (src outside
+     selectors commits + is returned; orchestrator blesses or rejects at import). POL-002
+     resolved at root (`justfile`/CI not defaulted — host-project).
+  3. New design-targets: `src/dispatch_config.rs`, `install/doctrine.toml.example`,
+     `src/worktree/gc.rs`.
 - **Not started:** all implementation. This is a scoped+designed slice only.
 - **Gate (`doctrine check gate`):** N/A — no code touched yet.
 
@@ -18,6 +31,11 @@ Durable per-slice scratchpad — tracked in git.
   created (`needs` SL-198, serial-dependent).
 - `9d0eb405` — SL-198 `design.md` (worker_commit + lint) + design-target selectors.
 - `977244ac` — internal adversarial pass F1–F5.
+- codex pass-2 + folds → `1dfd58e6` (auto-committer swept it). Plan: `3a6f6928` (4-phase),
+  `3c428105` (critical pass), `8791676e` (two-tier belt + pre-fmt), `179f8fea` (POL-002),
+  `34a8c343` (worker-forbidden-writes config surface). All `.doctrine` state, no code.
+- **Gate (`doctrine check gate`):** N/A — no code touched. `slice verify-vt 198` parses;
+  PHASE-02 net-new `worker_commit.rs` reads FAIL (expected pre-impl red).
 
 ## The design in one breath
 
