@@ -1,0 +1,34 @@
+id    = 244
+slug  = "audit-sl-196-per-edge-relation-descriptor"
+title = "Audit SL-196 — per-edge relation descriptor"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-196"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "3 undeclared conformance paths — expected only design-target selectors touched; observed supersede.rs, doctor_checks.rs, relation_query.rs edited outside any selector"
+detail = "`slice conformance SL-196` reports undeclared (3): src/commands/supersede.rs (PHASE-01), src/doctor_checks.rs + src/relation_query.rs (PHASE-03). Diff inspection: supersede.rs is a production `append_edge` call gaining the new `descriptor` param (None) — forced by the write-seam signature change design §5.2/R1 declares. doctor_checks.rs and relation_query.rs are test-only `CatalogEdge {…}` struct literals each gaining `descriptor: None` — forced by the struct field add (hydrate.rs). All three are compile-driven coupled-caller migrations; design R1 explicitly names constructor/caller default sites as compile-driven fan-out. Zero behavioural change; each rides an existing seam. undelivered (0), conformant (6, all selectors matched)."
+disposition = "aligned"
+response = "Not drift. All 3 undeclared paths are compile-forced coupled-caller fan-out of the design's declared write-seam signature change (append_edge gained `descriptor: Option<&str>`) and the CatalogEdge struct field add — both explicitly declared in design §5.2 and anticipated by R1 as compile-driven default sites. supersede.rs threads `None`; the two test literals add `descriptor: None`. Zero behavioural change, no new seam. Conformance is necessary-not-sufficient and here confirms clean containment (0 undelivered, 6 conformant). No design or code change needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "with_degree constructor removed — expected (naive R1 reading) it survives; observed read_block now builds via with_descriptor and the orphaned with_degree was deleted"
+detail = "PHASE-02 replaced `RelationEdge::with_degree(label, role, degree, target)` at the read_block site (relation.rs:1026) with `RelationEdge::with_descriptor(label, role, degree, descriptor, target)` — the new constructor carries both facets. The now-dead `with_degree` was removed (`git grep with_degree review/196 -- src/**/*.rs` → empty; zero remaining callers). Design §5.2/R1 mandates read_block build via `with_descriptor`; it references `with_degree` only descriptively in §2 Current State, never as a forward contract. Removal is behaviour-preserving DRY (dead-code elimination), regression-clean per the P02 funnel beat. Flagged by the dispatch handover as a carry-forward to consciously disposition."
+disposition = "aligned"
+response = "Correct as implemented. Design R1/§5.2 mandates read_block construct via `with_descriptor`; that makes `with_degree` an orphan. Removing dead code (zero callers, git grep empty) is the DRY-correct outcome, behaviour-preserving and regression-clean at the P02 funnel beat. The §2 Current-State mention of `with_degree` is a descriptive snapshot, not a forward contract — no design.md edit warranted. Handover carry-forward consciously dispositioned: keep the removal."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
