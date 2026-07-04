@@ -1,0 +1,34 @@
+id    = 246
+slug  = "sl-202-audit-body-wikilinks-as-catalog-edges"
+title = "SL-202 audit — body wikilinks as catalog edges"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-202"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "VA-1 behaviour-preservation: TOML relation pass byte-equivalent, divergence scoped"
+detail = "Expected (design VA-1 / behaviour-preservation gate): extending the shared `Catalog::from_scanned` hydration path for body wikilinks must leave the existing TOML-relation edge behaviour unchanged, with the F-1 divergence (body-pass `UnvalidatedText` warns) strictly scoped to the body pass. Observed (git diff 4ddb5244..SL-202-exec, src/catalog/hydrate.rs): the TOML relation loop's ONLY change is an additive populate-only `seen.insert` after edge construction — no `continue`, no diagnostic mutation, TOML-vs-TOML multiplicity unchanged. `classify_target` and the TOML `:341` UnresolvedRef/UnvalidatedText diagnostic are untouched. Full suite 3089 pass / 0 fail unchanged; `doctrine check gate` exit 0. VT-4 (`unresolved_body_wikilink_warns_while_toml_stays_silent`) asserts a TOML `UnvalidatedText` control target stays silent — the behaviour-preservation proof is a test, not just prose. Invariant holds."
+disposition = "aligned"
+response = "Behaviour-preservation confirmed by diff-read + green suite. The TOML pass change is populate-only (`seen.insert`), the divergence is body-pass-scoped, and VT-4 pins the TOML-stays-silent control as a test. No code change needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Plan EN-2 seed_memory extension over-specified; VT coverage lands at pure altitude"
+detail = "Expected (plan.toml EN-2): VT coverage was planned to extend the `seed_memory` test helper for a scan-level integration path. Observed: VT-1..4 construct `MemoryCatalogRecord { body: Some(..) }` directly and drive the pure `Catalog::from_scanned` — no scan/file layer, so the `seed_memory` extension is unnecessary at this altitude. This is a benign plan-vs-implementation gap: coverage is complete and lands at the correct (pure) altitude, not dropped work. No `seed_memory` scan-level test is required for SL-202's edge-emission behaviour. Plan EN criteria are immutable historical planning artifacts (append-only); the implementation's deviation is more correct and justified (phase-02 sheet A1). No canon correction warranted."
+disposition = "aligned"
+response = "Coverage is complete at the pure `from_scanned` altitude; the planned `seed_memory` extension was unnecessary, not skipped. Plan EN-2 is immutable/historical — no rewrite. No spec/governance/design correction; nothing routes to reconcile."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
