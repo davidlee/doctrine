@@ -635,6 +635,7 @@ mod tests {
             source: CatalogKey::Memory("mem_user123".to_string()),
             label: CatalogEdgeLabel::Raw("references".to_string()),
             role: None,
+            descriptor: None,
             target: EdgeTarget::UnvalidatedText {
                 raw: "some note".to_string(),
             },

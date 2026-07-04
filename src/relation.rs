@@ -361,6 +361,11 @@ pub(crate) struct RelationRule {
     /// exactly the `Fulfils` row; `false` on every other row. `validate_link` reads
     /// this column rather than hardcoding `label == Fulfils`.
     pub(crate) degree_bearing: bool,
+    /// Whether this label's edges carry an optional free-text `descriptor` facet
+    /// (SL-196, design §5.2). True on EXACTLY the `references:concerns` row; `false`
+    /// on every other row. `validate_link` reads this column to gate the write-path
+    /// `--descriptor` flag, mirroring `degree_bearing`.
+    pub(crate) descriptor_bearing: bool,
 }
 
 /// The legal-set vocabulary table (design §5.2 / ADR-010 D2). **Declared in
@@ -391,6 +396,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         // originates_from — widened source/target: any source in {SL + backlog}
@@ -404,6 +410,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         // concerns — work → any numbered entity (aboutness/relevance). One wide
@@ -421,6 +428,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: true,
     },
     // supersedes — two rules at one slot: SL→SL (writable) and gov→same-gov
     // (lifecycle-only, storage-excluded OD-3).
@@ -433,6 +441,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: GOV,
@@ -444,6 +453,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::LifecycleOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: RECORD,
@@ -454,6 +464,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::LifecycleOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[SPEC],
@@ -464,6 +475,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[SPEC, PRD],
@@ -474,6 +486,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[PRD, SPEC],
@@ -484,6 +497,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[SPEC],
@@ -494,6 +508,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[CM],
@@ -504,6 +519,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: RECORD,
@@ -517,6 +533,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: RECORD,
@@ -527,6 +544,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         // SL-145: BACKLOG (ISS/IMP/CHR/RSK/IDE) widened in so a backlog item may be
@@ -544,6 +562,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[PRD],
@@ -554,6 +573,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: GOV,
@@ -564,6 +584,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         // SL-145 (D1): extend this AnyNumbered row — not a new row — so a backlog item may
@@ -576,6 +597,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     // fulfils — SL → backlog: the slice fulfils (completes) the item (design §A.3).
     // SL-only source structurally enforces author-at-slice-end; target is the
@@ -590,6 +612,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: true,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[RV],
@@ -600,6 +623,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[REC],
@@ -610,6 +634,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: BACKLOG,
@@ -620,6 +645,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     RelationRule {
         sources: &[REC],
@@ -630,6 +656,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     // revises (SL-066, ADR-013) — REV → governance/spec truth. Tier-2 typed: the
     // `[[change]]`-row payload IS the edge set (members.toml precedent), authored ONLY
@@ -645,6 +672,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     // originates_from (SL-122) — REV → RFC: a single provenance ref authored at
     // `revision new --originates-from <RFC-NNN>` creation time (NOT a `[[change]]`
@@ -660,6 +688,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::Typed,
         link: LinkPolicy::TypedVerbOnly,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     // supports (SL-159) — EVD → any record: the evidence corroborates the target.
     // Inbound renders `supported_by`.
@@ -672,6 +701,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
     // disputes (SL-159) — EVD → any record: the evidence challenges the target.
     // Inbound renders `disputed_by`.
@@ -684,6 +714,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         tier: Tier::One,
         link: LinkPolicy::Writable,
         degree_bearing: false,
+        descriptor_bearing: false,
     },
 ];
 
@@ -744,6 +775,11 @@ pub(crate) struct RelationEdge {
     /// EXCLUDED from edge identity — idempotency and unlink match on
     /// `(label, role, target)`, never degree.
     pub(crate) degree: Option<Degree>,
+    /// The free-text descriptor on a `references:concerns` edge (SL-196 §5.2). `None`
+    /// when the edge carries no descriptor. ANY non-empty string is legal — no enum
+    /// parse, unlike `degree`. EXCLUDED from edge identity — idempotency and unlink
+    /// match on `(label, role, target)`, never descriptor.
+    pub(crate) descriptor: Option<String>,
 }
 
 /// Edge identity is the `(label, role, target)` triple — degree excluded (§A.5).
@@ -766,6 +802,7 @@ impl RelationEdge {
             role: None,
             target,
             degree: None,
+            descriptor: None,
         }
     }
 
@@ -778,16 +815,21 @@ impl RelationEdge {
             role,
             target,
             degree: None,
+            descriptor: None,
         }
     }
 
-    /// Construct a degree-bearing edge (a `fulfils` edge with a [`Degree`], design
-    /// §A.5). The `(label, role, target)` identity still excludes degree — two edges
-    /// with the same triple Compare equal regardless of degree.
-    pub(crate) fn with_degree(
+    /// Construct a facet-bearing edge from a parsed `[[relation]]` row — the general
+    /// storage-seam constructor [`read_block`] uses. Carries both the `fulfils` [`Degree`]
+    /// (design §A.5) and the `references:concerns` free-text `descriptor` (SL-196 §5.2);
+    /// either is `None` when the row bears no such facet. The `(label, role, target)`
+    /// identity EXCLUDES both facets — two edges with the same triple compare equal
+    /// regardless of degree or descriptor.
+    pub(crate) fn with_descriptor(
         label: RelationLabel,
         role: Option<Role>,
         degree: Option<Degree>,
+        descriptor: Option<String>,
         target: String,
     ) -> Self {
         Self {
@@ -795,6 +837,7 @@ impl RelationEdge {
             role,
             target,
             degree,
+            descriptor,
         }
     }
 }
@@ -862,6 +905,13 @@ struct RelationRow {
     /// degree-free, load-bearing for diff stability. `None` ≡ full.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     degree: Option<String>,
+    /// The free-text descriptor of a `references:concerns` row, authored verbatim
+    /// (SL-196 §5.2). Present ONLY on a `references:concerns` row (`descriptor = "…"`);
+    /// every other label/role carries no `descriptor` key — `skip_serializing_if` keeps
+    /// the serialised shape descriptor-free, load-bearing for diff stability. Unlike
+    /// `degree` there is NO enum parse — ANY non-empty text is legal on read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    descriptor: Option<String>,
     target: String,
 }
 
@@ -965,9 +1015,15 @@ pub(crate) fn read_block(
                 Some(parsed)
             }
         };
+        // Resolve the optional `descriptor` cell (SL-196 §5.2). Unlike `degree` there is
+        // NO enum parse — the descriptor is raw free text, so the cell threads through
+        // verbatim (`None` when no `descriptor` key). The write gate is the sole
+        // enforcement point: a hand-authored descriptor on a non-bearing row parses into
+        // a live edge here — INV-5 read-path parity with a misplaced `degree` cell.
+        let descriptor = row.descriptor.clone();
         legal.push((
             pos,
-            RelationEdge::with_degree(label, role, degree, row.target.clone()),
+            RelationEdge::with_descriptor(label, role, degree, descriptor, row.target.clone()),
         ));
     }
     // Stable sort by canonical position: same-label rows keep authored order (X1).
@@ -1128,28 +1184,40 @@ fn append_relation_row(
     label: RelationLabel,
     role: Option<Role>,
     degree: Option<Degree>,
+    descriptor: Option<&str>,
     target: &str,
 ) -> anyhow::Result<(String, AppendOutcome)> {
     let mut doc = text
         .parse::<toml_edit::DocumentMut>()
         .map_err(|e| anyhow::anyhow!("parse TOML for relation append: {e}"))?;
 
-    // (1) same-triple check — match on (label, role, target), degree-agnostic (§A.5).
-    // Identical (incl. degree) → Noop. Same triple, different degree → hard error.
+    // (1) same-triple check — match on (label, role, target), facet-agnostic (§A.5,
+    // SL-196 §5.2). Identical on BOTH facets (degree AND descriptor) → Noop. Same
+    // triple, differing on EITHER facet → hard error naming the differing facet.
     if let Some(existing) = relation_row_find(&doc, label, role, target) {
         let existing_degree = existing
             .get("degree")
             .and_then(toml_edit::Item::as_str)
             .and_then(Degree::from_name);
-        if existing_degree == degree {
+        let existing_descriptor = existing.get("descriptor").and_then(toml_edit::Item::as_str);
+        if existing_degree == degree && existing_descriptor == descriptor {
             return Ok((text.to_string(), AppendOutcome::Noop));
         }
-        // Same triple, different degree — no upsert (codex F1).
+        // Same triple, differing facet — no upsert (codex F1). Name the facet that
+        // differs so the user knows which to unlink+relink to change.
+        if existing_degree != degree {
+            anyhow::bail!(
+                "already {} {} with degree={}; unlink to change",
+                label.name(),
+                target,
+                existing_degree.map_or("full", |d| d.name()),
+            );
+        }
         anyhow::bail!(
-            "already {} {} with degree={}; unlink to change",
+            "already {} {} with descriptor={}; unlink to change",
             label.name(),
             target,
-            existing_degree.map_or("full", |d| d.name()),
+            existing_descriptor.unwrap_or(""),
         );
     }
 
@@ -1185,6 +1253,14 @@ fn append_relation_row(
     // `degree` key — load-bearing for diff stability (§A.5).
     if let Some(d) = degree {
         row.insert("degree", toml_edit::value(d.name()));
+    }
+    // The `descriptor` cell rides ONLY when the edge carries a descriptor (SL-196
+    // §5.2): a `references:concerns` row serialises `descriptor = "…"`; a descriptor-
+    // free edge carries NO `descriptor` key — load-bearing for diff stability. It
+    // sits after `degree` and before `target`, so the on-disk order reads
+    // `label / role? / degree? / descriptor? / target` (`target` stays the anchor).
+    if let Some(desc) = descriptor {
+        row.insert("descriptor", toml_edit::value(desc));
     }
     row.insert("target", toml_edit::value(target));
 
@@ -1284,15 +1360,18 @@ pub(crate) fn append_edge(
     label: RelationLabel,
     role: Option<Role>,
     degree: Option<Degree>,
+    descriptor: Option<&str>,
     target: &str,
 ) -> anyhow::Result<AppendOutcome> {
     let text = std::fs::read_to_string(toml_path)
         .map_err(|e| anyhow::anyhow!("read {} for relation append: {e}", toml_path.display()))?;
     // SL-176 PHASE-02: the public shell threads the caller's `degree` straight to the
     // pure seam. `link --degree partial` passes `Some(Partial)` for a fulfils edge;
-    // every other label passes `None` (≡ Full). Degree excluded from idempotency: the
-    // pure layer matches `(label, role, target)`, then checks degree-conflict.
-    let (next, outcome) = append_relation_row(&text, label, role, degree, target)?;
+    // every other label passes `None` (≡ Full). SL-196: `descriptor` threads the same
+    // way (`link --descriptor "…"` on a `references:concerns` edge). Both facets are
+    // excluded from idempotency: the pure layer matches `(label, role, target)`, then
+    // checks the facet-conflict.
+    let (next, outcome) = append_relation_row(&text, label, role, degree, descriptor, target)?;
     if outcome == AppendOutcome::Wrote {
         crate::fsutil::write_atomic(toml_path, next.as_bytes())
             .with_context(|| format!("write {} after relation append", toml_path.display()))?;
@@ -1376,12 +1455,15 @@ fn owning_verb_for(rule: &RelationRule) -> &'static str {
 /// - `IllegalRole` — `role` is `Some` but not in `legal_roles(source, label)`;
 /// - `DegreeNotApplicable` — `degree` is `Some` but the rule is NOT `degree_bearing`
 ///   (design §A.6); no `MissingDegree` — absent ≡ full is legal;
+/// - `DescriptorNotApplicable` — `descriptor` is `Some` but the rule is NOT
+///   `descriptor_bearing` (SL-196 §5.2); admissible only on `references:concerns`;
 /// - the row is real but `link ≠ Writable` ⇒ error naming the owning verb.
 pub(crate) fn validate_link(
     source_kind: &Kind,
     label_str: &str,
     role: Option<Role>,
     degree: Option<Degree>,
+    descriptor: Option<&str>,
 ) -> anyhow::Result<&'static RelationRule> {
     let legal = || writable_labels_for(source_kind).join(", ");
     let label = RelationLabel::from_name(label_str).ok_or_else(|| {
@@ -1447,7 +1529,25 @@ pub(crate) fn validate_link(
     if degree.is_some() && !rule.degree_bearing {
         anyhow::bail!("`{label_str}` does not take a degree; remove `--degree`");
     }
+    // Descriptor gate (SL-196 design §5.2): a descriptor on a non-descriptor_bearing
+    // label is refused with a home-hint, mirroring the degree gate. Admissible on
+    // EXACTLY the `references:concerns` row (the only `descriptor_bearing` rule).
+    if descriptor.is_some() && !rule.descriptor_bearing {
+        anyhow::bail!(
+            "`{label_str}` does not take a descriptor; descriptors are for \
+             `references --role concerns` edges"
+        );
+    }
     Ok(rule)
+}
+
+/// Validate a `--descriptor <TEXT>` flag value (SL-196 §5.2): raw free text, no enum
+/// parse (unlike [`Degree::from_name`]), rejected only when **empty or all-whitespace**.
+/// Returns the value verbatim on success (round-trip fidelity — trimming is for the
+/// non-empty check only). PURE — the CLI shell maps this over the `Option`.
+pub(crate) fn validate_descriptor(raw: &str) -> anyhow::Result<&str> {
+    anyhow::ensure!(!raw.trim().is_empty(), "descriptor must be non-empty");
+    Ok(raw)
 }
 
 /// The forward-edge legal-KIND check (design §5.5, R2-M1 — NEW code). Given a `rule`
@@ -2209,7 +2309,8 @@ mod tests {
     fn append_relation_row_appends_and_preserves() {
         let text = "# a comment\nid = 1\ntitle = \"x\"\n";
         let (next, outcome) =
-            append_relation_row(text, RelationLabel::GovernedBy, None, None, "ADR-010").unwrap();
+            append_relation_row(text, RelationLabel::GovernedBy, None, None, None, "ADR-010")
+                .unwrap();
         assert_eq!(outcome, AppendOutcome::Wrote);
         assert!(next.contains("# a comment"), "comment preserved");
         assert!(next.contains("[[relation]]"));
@@ -2234,10 +2335,18 @@ mod tests {
     fn append_relation_row_is_idempotent() {
         let text = "id = 1\n";
         let (once, o1) =
-            append_relation_row(text, RelationLabel::GovernedBy, None, None, "ADR-010").unwrap();
+            append_relation_row(text, RelationLabel::GovernedBy, None, None, None, "ADR-010")
+                .unwrap();
         assert_eq!(o1, AppendOutcome::Wrote);
-        let (twice, o2) =
-            append_relation_row(&once, RelationLabel::GovernedBy, None, None, "ADR-010").unwrap();
+        let (twice, o2) = append_relation_row(
+            &once,
+            RelationLabel::GovernedBy,
+            None,
+            None,
+            None,
+            "ADR-010",
+        )
+        .unwrap();
         assert_eq!(o2, AppendOutcome::Noop);
         assert_eq!(once, twice, "a no-op append leaves the text byte-identical");
     }
@@ -2253,7 +2362,7 @@ mod tests {
         let trap = "id = 1\n\
                     [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"PRD-010\"\n\
                     [relationships]\ntags = [\"x\"]\n";
-        let err = append_relation_row(trap, RelationLabel::GovernedBy, None, None, "ADR-010")
+        let err = append_relation_row(trap, RelationLabel::GovernedBy, None, None, None, "ADR-010")
             .unwrap_err();
         let msg = err.to_string();
         assert!(
@@ -2266,6 +2375,7 @@ mod tests {
             trap,
             RelationLabel::References,
             Some(Role::Implements),
+            None,
             None,
             "PRD-010",
         )
@@ -2281,7 +2391,7 @@ mod tests {
     fn append_relation_row_escapes_target() {
         let text = "id = 1\n";
         let (next, _) =
-            append_relation_row(text, RelationLabel::Drift, None, None, "a\"b").unwrap();
+            append_relation_row(text, RelationLabel::Drift, None, None, None, "a\"b").unwrap();
         // Parses cleanly (no broken literal) and the target round-trips verbatim.
         let doc = RelationDoc::parse(&next).unwrap();
         let (edges, _illegal) = read_block(&ISSUE_KIND, &doc);
@@ -2298,13 +2408,21 @@ mod tests {
         // Build up: governed_by → related → another governed_by.
         // After first two: [governed_by, related]
         let (text, _) =
-            append_relation_row(text, RelationLabel::GovernedBy, None, None, "ADR-001").unwrap();
+            append_relation_row(text, RelationLabel::GovernedBy, None, None, None, "ADR-001")
+                .unwrap();
         let (text, _) =
-            append_relation_row(&text, RelationLabel::Related, None, None, "SL-099").unwrap();
+            append_relation_row(&text, RelationLabel::Related, None, None, None, "SL-099").unwrap();
         // Now append a second governed_by — should land adjacent to the first,
         // NOT after related.
-        let (text, _) =
-            append_relation_row(&text, RelationLabel::GovernedBy, None, None, "ADR-002").unwrap();
+        let (text, _) = append_relation_row(
+            &text,
+            RelationLabel::GovernedBy,
+            None,
+            None,
+            None,
+            "ADR-002",
+        )
+        .unwrap();
 
         let edges = tier1_edges(&SLICE_KIND, &text).unwrap();
         let pairs = edge_pairs(&edges);
@@ -2323,9 +2441,15 @@ mod tests {
     /// — a second remove is `Absent`, the text byte-unchanged (VT-6 double-unlink).
     #[test]
     fn remove_relation_row_round_trips_and_is_idempotent() {
-        let (with, _) =
-            append_relation_row("id = 1\n", RelationLabel::GovernedBy, None, None, "ADR-010")
-                .unwrap();
+        let (with, _) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::GovernedBy,
+            None,
+            None,
+            None,
+            "ADR-010",
+        )
+        .unwrap();
         let (without, o1) =
             remove_relation_row(&with, RelationLabel::GovernedBy, None, "ADR-010").unwrap();
         assert_eq!(o1, RemoveOutcome::Removed);
@@ -2353,6 +2477,7 @@ mod tests {
             "id = 1\n",
             RelationLabel::References,
             Some(Role::Implements),
+            None,
             None,
             "SPEC-018",
         )
@@ -2398,9 +2523,15 @@ mod tests {
         assert!(tier1_edges(&SLICE_KIND, &without).unwrap().is_empty());
 
         // A label-only edge (`governed_by`) serialises with NO role key.
-        let (gb, _) =
-            append_relation_row("id = 1\n", RelationLabel::GovernedBy, None, None, "ADR-010")
-                .unwrap();
+        let (gb, _) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::GovernedBy,
+            None,
+            None,
+            None,
+            "ADR-010",
+        )
+        .unwrap();
         assert!(
             !gb.contains("role ="),
             "a label-only row carries no role key: {gb}"
@@ -2422,6 +2553,7 @@ mod tests {
             RelationLabel::References,
             Some(Role::Concerns),
             None,
+            None,
             "SL-002",
         )
         .unwrap();
@@ -2431,6 +2563,7 @@ mod tests {
             &once,
             RelationLabel::References,
             Some(Role::Concerns),
+            None,
             None,
             "SL-002",
         )
@@ -2442,6 +2575,7 @@ mod tests {
             &once,
             RelationLabel::References,
             Some(Role::Implements),
+            None,
             None,
             "SL-002",
         )
@@ -2604,7 +2738,7 @@ mod tests {
     fn validate_link_gates_source_label_and_policy() {
         // Writable: SL governed_by → ok, returns the GovernedBy rule. (`RelationRule`
         // has no Debug — it holds `&Kind` — so match rather than `.unwrap()`.)
-        match validate_link(&SLICE_KIND, "governed_by", None, None) {
+        match validate_link(&SLICE_KIND, "governed_by", None, None, None) {
             Ok(rule) => assert_eq!(rule.label, RelationLabel::GovernedBy),
             Err(e) => panic!("governed_by should be writable for a slice: {e}"),
         }
@@ -2612,7 +2746,7 @@ mod tests {
         // `RelationRule` has no Debug, so `.unwrap_err()` (which Debug-formats Ok) won't
         // compile — extract the refusal message by hand.
         let refusal = |src: &Kind, label: &str| -> String {
-            match validate_link(src, label, None, None) {
+            match validate_link(src, label, None, None, None) {
                 Ok(_) => panic!("expected `{label}` to be refused for {}", src.prefix),
                 Err(e) => e.to_string(),
             }
@@ -2623,17 +2757,17 @@ mod tests {
         assert!(e.contains("governed_by"), "lists legal labels: {e}");
 
         // A slice CAN author `related` (SL-095) — returns the Related rule.
-        match validate_link(&SLICE_KIND, "related", None, None) {
+        match validate_link(&SLICE_KIND, "related", None, None, None) {
             Ok(rule) => assert_eq!(rule.label, RelationLabel::Related),
             Err(e) => panic!("related should be writable for a slice (SL-095): {e}"),
         }
 
         // SL-145: a backlog item CAN author `governed_by` and `related` (source widened).
-        match validate_link(&ISSUE_KIND, "governed_by", None, None) {
+        match validate_link(&ISSUE_KIND, "governed_by", None, None, None) {
             Ok(rule) => assert_eq!(rule.label, RelationLabel::GovernedBy),
             Err(e) => panic!("governed_by should be writable for a backlog item (SL-145): {e}"),
         }
-        match validate_link(&ISSUE_KIND, "related", None, None) {
+        match validate_link(&ISSUE_KIND, "related", None, None, None) {
             Ok(rule) => assert_eq!(rule.label, RelationLabel::Related),
             Err(e) => panic!("related should be writable for a backlog item (SL-145): {e}"),
         }
@@ -2662,7 +2796,7 @@ mod tests {
                 Err(e) => panic!("expected a writable rule: {e}"),
             }
         };
-        let gov_by = unwrap_rule(validate_link(&SLICE_KIND, "governed_by", None, None));
+        let gov_by = unwrap_rule(validate_link(&SLICE_KIND, "governed_by", None, None, None));
         // SL-003 (a slice) is NOT a legal governed_by target — refused.
         assert!(check_target_kind(gov_by, &SLICE_KIND, "SL").is_err());
         // ADR/POL/STD all pass.
@@ -2671,7 +2805,7 @@ mod tests {
         }
 
         // SameKind: gov `related` from an ADR accepts an ADR target, refuses a POL.
-        let related = unwrap_rule(validate_link(&ADR_KIND.kind, "related", None, None));
+        let related = unwrap_rule(validate_link(&ADR_KIND.kind, "related", None, None, None));
         assert!(check_target_kind(related, &ADR_KIND.kind, "ADR").is_ok());
         assert!(
             check_target_kind(related, &ADR_KIND.kind, "POL").is_err(),
@@ -2679,7 +2813,7 @@ mod tests {
         );
 
         // SL-095: slice `related` targets AnyNumbered — any kind accepted.
-        let sl_related = unwrap_rule(validate_link(&SLICE_KIND, "related", None, None));
+        let sl_related = unwrap_rule(validate_link(&SLICE_KIND, "related", None, None, None));
         assert!(check_target_kind(sl_related, &SLICE_KIND, "ADR").is_ok());
         assert!(check_target_kind(sl_related, &SLICE_KIND, "SPEC").is_ok());
         assert!(check_target_kind(sl_related, &SLICE_KIND, "RV").is_ok());
@@ -2687,7 +2821,7 @@ mod tests {
         // SL-145: a backlog source widens `governed_by`/`related` but the TARGET gate is
         // unchanged. `governed_by` still enforces Kinds(GOV) — a slice target refused,
         // ADR/POL/STD pass; `related` stays AnyNumbered — any kind accepted.
-        let bk_gov = unwrap_rule(validate_link(&ISSUE_KIND, "governed_by", None, None));
+        let bk_gov = unwrap_rule(validate_link(&ISSUE_KIND, "governed_by", None, None, None));
         assert!(
             check_target_kind(bk_gov, &ISSUE_KIND, "SL").is_err(),
             "backlog governed_by still refuses a non-GOV target"
@@ -2695,7 +2829,7 @@ mod tests {
         for p in ["ADR", "POL", "STD"] {
             assert!(check_target_kind(bk_gov, &ISSUE_KIND, p).is_ok());
         }
-        let bk_related = unwrap_rule(validate_link(&ISSUE_KIND, "related", None, None));
+        let bk_related = unwrap_rule(validate_link(&ISSUE_KIND, "related", None, None, None));
         assert!(check_target_kind(bk_related, &ISSUE_KIND, "SL").is_ok());
         assert!(check_target_kind(bk_related, &ISSUE_KIND, "ADR").is_ok());
     }
@@ -2714,7 +2848,7 @@ mod tests {
         assert_eq!(rule.inbound_name, "revises");
 
         // `doctrine link … revises …` is refused (TypedVerbOnly), naming the typed verb.
-        match validate_link(&REV_KIND, "revises", None, None) {
+        match validate_link(&REV_KIND, "revises", None, None, None) {
             Ok(_) => panic!("`link … revises …` must be refused (TypedVerbOnly)"),
             Err(e) => assert!(e.to_string().contains("typed verb"), "names the verb: {e}"),
         }
@@ -2954,7 +3088,7 @@ mod tests {
     #[test]
     fn validate_link_role_taxonomy() {
         let refusal = |src: &Kind, label: &str, role: Option<Role>| -> String {
-            match validate_link(src, label, role, None) {
+            match validate_link(src, label, role, None, None) {
                 Ok(_) => panic!(
                     "expected `{label}` (role {role:?}) refused for {}",
                     src.prefix
@@ -2972,7 +3106,13 @@ mod tests {
 
         // SL-176 §A.2 widening: a backlog item MAY author references(originates_from)
         // (source set widened to {SL + backlog kinds}). The rule now admits it.
-        match validate_link(&ISSUE_KIND, "references", Some(Role::OriginatesFrom), None) {
+        match validate_link(
+            &ISSUE_KIND,
+            "references",
+            Some(Role::OriginatesFrom),
+            None,
+            None,
+        ) {
             Ok(rule) => {
                 assert_eq!(rule.label, RelationLabel::References);
                 assert_eq!(rule.role, Some(Role::OriginatesFrom));
@@ -2985,7 +3125,13 @@ mod tests {
         assert!(e.contains("does not take a role"), "RoleNotApplicable: {e}");
 
         // A legal references(implements) for a slice validates and returns the rule.
-        match validate_link(&SLICE_KIND, "references", Some(Role::Implements), None) {
+        match validate_link(
+            &SLICE_KIND,
+            "references",
+            Some(Role::Implements),
+            None,
+            None,
+        ) {
             Ok(rule) => {
                 assert_eq!(rule.label, RelationLabel::References);
                 assert_eq!(rule.role, Some(Role::Implements));
@@ -3006,6 +3152,7 @@ mod tests {
             "references",
             Some(Role::Implements),
             None,
+            None,
         ));
         assert!(check_target_kind(impl_rule, &SLICE_KIND, "IMP").is_err());
         for p in ["SPEC", "PRD", "REQ"] {
@@ -3016,12 +3163,14 @@ mod tests {
             "references",
             Some(Role::Concerns),
             None,
+            None,
         ));
         assert!(check_target_kind(conc_rule, &SLICE_KIND, "IMP").is_ok());
         let scoped_rule = unwrap_rule(validate_link(
             &SLICE_KIND,
             "references",
             Some(Role::OriginatesFrom),
+            None,
             None,
         ));
         assert!(check_target_kind(scoped_rule, &SLICE_KIND, "IMP").is_ok());
@@ -3114,6 +3263,7 @@ mod tests {
             RelationLabel::Fulfils,
             None,
             Some(Degree::Partial),
+            None,
             "IMP-001",
         )
         .unwrap();
@@ -3131,8 +3281,15 @@ mod tests {
         assert_eq!(edges[0].target, "IMP-001");
 
         // A degree-absent fulfils edge serialises with NO `degree` key (≡ full).
-        let (text_full, _) =
-            append_relation_row("id = 1\n", RelationLabel::Fulfils, None, None, "IMP-002").unwrap();
+        let (text_full, _) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::Fulfils,
+            None,
+            None,
+            None,
+            "IMP-002",
+        )
+        .unwrap();
         assert!(
             !text_full.contains("degree ="),
             "a degree-absent edge serialises with no degree key: {text_full}"
@@ -3148,6 +3305,7 @@ mod tests {
             RelationLabel::GovernedBy,
             None,
             Some(Degree::Full),
+            None,
             "ADR-010",
         )
         .unwrap();
@@ -3188,6 +3346,7 @@ mod tests {
             RelationLabel::Fulfils,
             None,
             Some(Degree::Partial),
+            None,
             "IMP-001",
         )
         .unwrap();
@@ -3199,6 +3358,7 @@ mod tests {
             RelationLabel::Fulfils,
             None,
             Some(Degree::Partial),
+            None,
             "IMP-001",
         )
         .unwrap();
@@ -3209,6 +3369,7 @@ mod tests {
         let err = append_relation_row(
             &once,
             RelationLabel::Fulfils,
+            None,
             None,
             None, // full (the row has partial)
             "IMP-001",
@@ -3236,7 +3397,7 @@ mod tests {
     #[test]
     fn degree_not_applicable_on_non_degree_bearing_label() {
         // fulfils IS degree_bearing — a degree is accepted.
-        match validate_link(&SLICE_KIND, "fulfils", None, Some(Degree::Partial)) {
+        match validate_link(&SLICE_KIND, "fulfils", None, Some(Degree::Partial), None) {
             Ok(rule) => {
                 assert!(rule.degree_bearing);
                 assert_eq!(rule.label, RelationLabel::Fulfils);
@@ -3245,7 +3406,13 @@ mod tests {
         }
 
         // governed_by is NOT degree_bearing — a degree is refused.
-        let err = match validate_link(&SLICE_KIND, "governed_by", None, Some(Degree::Partial)) {
+        let err = match validate_link(
+            &SLICE_KIND,
+            "governed_by",
+            None,
+            Some(Degree::Partial),
+            None,
+        ) {
             Ok(_) => panic!("governed_by with degree should be refused"),
             Err(e) => e.to_string(),
         };
@@ -3255,14 +3422,19 @@ mod tests {
         );
 
         // Absent degree (None) is always legal — no MissingDegree error.
-        match validate_link(&SLICE_KIND, "fulfils", None, None) {
+        match validate_link(&SLICE_KIND, "fulfils", None, None, None) {
             Ok(rule) => assert_eq!(rule.label, RelationLabel::Fulfils),
             Err(e) => panic!("fulfils without degree should be legal: {e}"),
         }
 
         // Widened originates_from target gate: SL target IS now legal (PHASE-01 widened).
-        let rule = match validate_link(&SLICE_KIND, "references", Some(Role::OriginatesFrom), None)
-        {
+        let rule = match validate_link(
+            &SLICE_KIND,
+            "references",
+            Some(Role::OriginatesFrom),
+            None,
+            None,
+        ) {
             Ok(rule) => rule,
             Err(e) => panic!("originates_from should validate: {e}"),
         };
@@ -3279,7 +3451,13 @@ mod tests {
             "originates_from still refuses SPEC target"
         );
         // A backlog item MAY author originates_from (source widened PHASE-01).
-        match validate_link(&ISSUE_KIND, "references", Some(Role::OriginatesFrom), None) {
+        match validate_link(
+            &ISSUE_KIND,
+            "references",
+            Some(Role::OriginatesFrom),
+            None,
+            None,
+        ) {
             Ok(rule) => {
                 assert_eq!(rule.label, RelationLabel::References);
                 assert_eq!(rule.role, Some(Role::OriginatesFrom));
@@ -3299,6 +3477,314 @@ mod tests {
         let (_edges, illegal) = read_block(&SLICE_KIND, &doc);
         assert_eq!(illegal.len(), 1, "expected one illegal finding");
         assert_eq!(illegal[0].reason, IllegalReason::IllegalDegree);
+    }
+
+    // -- SL-196 PHASE-01: per-edge descriptor (write path) ------------------
+
+    /// SL-196 VT ["descriptor_bearing","does not take a descriptor","concerns"]:
+    /// `validate_link` refuses a descriptor on every non-`descriptor_bearing` row
+    /// with a home-hint, and accepts it on EXACTLY `references --role concerns`.
+    #[test]
+    fn validate_link_descriptor_gate() {
+        // references:concerns IS descriptor_bearing — a descriptor is accepted.
+        match validate_link(
+            &SLICE_KIND,
+            "references",
+            Some(Role::Concerns),
+            None,
+            Some("frames estimation as attention burden"),
+        ) {
+            Ok(rule) => {
+                assert!(
+                    rule.descriptor_bearing,
+                    "concerns row is descriptor_bearing"
+                );
+                assert_eq!(rule.role, Some(Role::Concerns));
+            }
+            Err(e) => panic!("references:concerns should accept a descriptor: {e}"),
+        }
+
+        // Every non-bearing row refuses a descriptor with the home-hint. The sibling
+        // references:implements row is NOT descriptor_bearing (per-role granularity),
+        // and the label-only `related` / `fulfils` rows likewise.
+        let non_bearing = [
+            ("references", Some(Role::Implements)),
+            ("related", None),
+            ("fulfils", None),
+        ];
+        for (label, role) in non_bearing {
+            let err = match validate_link(&SLICE_KIND, label, role, None, Some("x")) {
+                Ok(_) => panic!("`{label}` with a descriptor should be refused"),
+                Err(e) => e.to_string(),
+            };
+            assert!(
+                err.contains("does not take a descriptor") && err.contains("concerns"),
+                "DescriptorNotApplicable home-hint for `{label}`: {err}"
+            );
+        }
+
+        // Absent descriptor (None) is always legal on a non-bearing row.
+        match validate_link(&SLICE_KIND, "related", None, None, None) {
+            Ok(rule) => assert_eq!(rule.label, RelationLabel::Related),
+            Err(e) => panic!("related without a descriptor should be legal: {e}"),
+        }
+    }
+
+    /// SL-196 VT ["append_relation_row","descriptor =","target ="]: the descriptor cell
+    /// serialises in on-disk order `label / role? / degree? / descriptor? / target`, and
+    /// a descriptor-absent edge serialises with NO `descriptor` key.
+    #[test]
+    fn append_relation_row_writes_descriptor_cell_in_order() {
+        // A row carrying role + degree + descriptor pins the full facet order (the pure
+        // seam is gate-agnostic — validity is `validate_link`'s job, mirrored on degree).
+        let (text, outcome) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::References,
+            Some(Role::Concerns),
+            Some(Degree::Partial),
+            Some("frames estimation as attention burden"),
+            "SL-128",
+        )
+        .unwrap();
+        assert_eq!(outcome, AppendOutcome::Wrote);
+        assert!(text.contains("label = \"references\""));
+        assert!(text.contains("role = \"concerns\""));
+        assert!(text.contains("degree = \"partial\""));
+        assert!(text.contains("descriptor = \"frames estimation as attention burden\""));
+        assert!(text.contains("target = \"SL-128\""));
+        let label_at = text.find("label =").unwrap();
+        let role_at = text.find("role =").unwrap();
+        let degree_at = text.find("degree =").unwrap();
+        let descriptor_at = text.find("descriptor =").unwrap();
+        let target_at = text.find("target =").unwrap();
+        assert!(
+            label_at < role_at
+                && role_at < degree_at
+                && degree_at < descriptor_at
+                && descriptor_at < target_at,
+            "row reads label / role / degree / descriptor / target on disk: {text}"
+        );
+
+        // A descriptor-absent edge serialises with NO `descriptor` key.
+        let (plain, _) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::References,
+            Some(Role::Concerns),
+            None,
+            None,
+            "SL-128",
+        )
+        .unwrap();
+        assert!(
+            !plain.contains("descriptor ="),
+            "a descriptor-absent edge serialises with no descriptor key: {plain}"
+        );
+    }
+
+    /// SL-196 VT ["descriptor","non-empty"]: `validate_descriptor` rejects empty /
+    /// all-whitespace text and accepts any non-empty text, returning it verbatim.
+    #[test]
+    fn validate_descriptor_rejects_empty_whitespace() {
+        for bad in ["", "   ", "\t\n "] {
+            let err = validate_descriptor(bad).unwrap_err().to_string();
+            assert!(
+                err.contains("descriptor must be non-empty"),
+                "empty/whitespace descriptor rejected: {err}"
+            );
+        }
+        // Non-empty accepted, returned verbatim (surrounding whitespace preserved).
+        assert_eq!(validate_descriptor("hi").unwrap(), "hi");
+        assert_eq!(validate_descriptor("  padded  ").unwrap(), "  padded  ");
+    }
+
+    /// SL-196 VT ["descriptor","unlink to change","Noop"]: the same-triple conflict
+    /// compares BOTH facets. Identical (degree AND descriptor) → `Noop`; a differing
+    /// descriptor OR a differing degree hard-rejects, naming the differing facet.
+    #[test]
+    fn append_descriptor_conflict_compares_both_facets() {
+        // Seed a concerns edge carrying a descriptor.
+        let (once, o1) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::References,
+            Some(Role::Concerns),
+            None,
+            Some("first note"),
+            "SL-128",
+        )
+        .unwrap();
+        assert_eq!(o1, AppendOutcome::Wrote);
+
+        // Identical triple + BOTH facets → Noop, byte-identical.
+        let (again, o2) = append_relation_row(
+            &once,
+            RelationLabel::References,
+            Some(Role::Concerns),
+            None,
+            Some("first note"),
+            "SL-128",
+        )
+        .unwrap();
+        assert_eq!(o2, AppendOutcome::Noop);
+        assert_eq!(once, again, "identical append is byte-identical");
+
+        // Same triple, DIFFERENT descriptor → hard error naming the descriptor facet.
+        let err_desc = append_relation_row(
+            &once,
+            RelationLabel::References,
+            Some(Role::Concerns),
+            None,
+            Some("second note"),
+            "SL-128",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err_desc.contains("descriptor=first note") && err_desc.contains("unlink to change"),
+            "descriptor conflict names the existing descriptor: {err_desc}"
+        );
+
+        // Same triple + same descriptor, DIFFERENT degree → error names the degree
+        // facet (the differing facet wins).
+        let err_deg = append_relation_row(
+            &once,
+            RelationLabel::References,
+            Some(Role::Concerns),
+            Some(Degree::Partial),
+            Some("first note"),
+            "SL-128",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err_deg.contains("degree=") && err_deg.contains("unlink to change"),
+            "degree conflict names the degree facet: {err_deg}"
+        );
+    }
+
+    /// SL-196 VT ["descriptor_bearing","degree_bearing"]: `descriptor_bearing` is true
+    /// on EXACTLY the `references:concerns` rows and false everywhere else; it is
+    /// disjoint from `degree_bearing` (no rule bears both facets).
+    #[test]
+    fn descriptor_bearing_true_exactly_on_references_concerns() {
+        for rule in RELATION_RULES {
+            let is_concerns =
+                rule.label == RelationLabel::References && rule.role == Some(Role::Concerns);
+            assert_eq!(
+                rule.descriptor_bearing, is_concerns,
+                "descriptor_bearing is true iff references:concerns (label {:?}, role {:?})",
+                rule.label, rule.role
+            );
+            assert!(
+                !(rule.descriptor_bearing && rule.degree_bearing),
+                "descriptor_bearing and degree_bearing are disjoint (label {:?})",
+                rule.label
+            );
+        }
+    }
+
+    // -- SL-196 PHASE-02: per-edge descriptor (read / deserialize path) ------
+
+    /// SL-196 VT ["descriptor","tier1_edges","Some"]: storage round-trip — a
+    /// `references:concerns` row with a `descriptor` serialises the cell and reads back
+    /// via `tier1_edges`/`read_block` with `RelationEdge.descriptor = Some(text)`; a
+    /// descriptor-absent edge serialises NO `descriptor =` key and reads back `None`
+    /// (absent ⟹ None ⟹ prior behaviour byte-identical).
+    #[test]
+    fn descriptor_storage_round_trip() {
+        // Author a references:concerns edge carrying a descriptor.
+        let (text, outcome) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::References,
+            Some(Role::Concerns),
+            None,
+            Some("frames estimation as attention burden"),
+            "SL-128",
+        )
+        .unwrap();
+        assert_eq!(outcome, AppendOutcome::Wrote);
+        assert!(text.contains("descriptor = \"frames estimation as attention burden\""));
+
+        // Reads back with the descriptor recovered on the edge.
+        let edges = tier1_edges(&SLICE_KIND, &text).unwrap();
+        assert_eq!(edges.len(), 1);
+        assert_eq!(edges[0].label, RelationLabel::References);
+        assert_eq!(edges[0].role, Some(Role::Concerns));
+        assert_eq!(
+            edges[0].descriptor.as_deref(),
+            Some("frames estimation as attention burden")
+        );
+        assert_eq!(edges[0].target, "SL-128");
+
+        // A descriptor-absent concerns edge serialises NO `descriptor` key and reads
+        // back `None` — absent ⟹ None, prior behaviour byte-identical.
+        let (plain, _) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::References,
+            Some(Role::Concerns),
+            None,
+            None,
+            "SL-128",
+        )
+        .unwrap();
+        assert!(
+            !plain.contains("descriptor ="),
+            "a descriptor-absent edge serialises with no descriptor key: {plain}"
+        );
+        let edges_plain = tier1_edges(&SLICE_KIND, &plain).unwrap();
+        assert_eq!(edges_plain[0].descriptor, None, "absent descriptor ⟹ None");
+    }
+
+    /// SL-196 VT ["descriptor","tier1_edges"] (INV-5): a hand-authored `descriptor` cell
+    /// on a NON-`descriptor_bearing` row parses into a LIVE edge on read — NOT rejected,
+    /// EXACT parity with a misplaced `degree` cell. The write gate (PHASE-01) is the
+    /// sole enforcement point; `read_block` adds no read-path placement rejection.
+    #[test]
+    fn descriptor_on_non_bearing_row_parses_into_live_edge() {
+        // governed_by is legal for a slice but NOT descriptor_bearing; a hand-authored
+        // descriptor cell still parses into a live edge carrying the descriptor.
+        let doc = RelationDoc::parse(
+            "[[relation]]\nlabel = \"governed_by\"\ndescriptor = \"misplaced note\"\ntarget = \"ADR-010\"\n",
+        )
+        .unwrap();
+        let (edges, illegal) = read_block(&SLICE_KIND, &doc);
+        assert!(
+            illegal.is_empty(),
+            "a misplaced descriptor is NOT a read-path finding: {illegal:?}"
+        );
+        assert_eq!(edges.len(), 1, "one live edge");
+        assert_eq!(edges[0].label, RelationLabel::GovernedBy);
+        assert_eq!(edges[0].descriptor.as_deref(), Some("misplaced note"));
+    }
+
+    /// SL-196 VT ["unlink","descriptor"] (INV-1): `unlink` matches the
+    /// `(label, role, target)` triple and IGNORES descriptor (identity exclusion) —
+    /// removing a descriptor-bearing edge does not require naming the descriptor.
+    #[test]
+    fn unlink_ignores_descriptor() {
+        let (once, o1) = append_relation_row(
+            "id = 1\n",
+            RelationLabel::References,
+            Some(Role::Concerns),
+            None,
+            Some("some note"),
+            "SL-128",
+        )
+        .unwrap();
+        assert_eq!(o1, AppendOutcome::Wrote);
+
+        // Unlink names only (label, role, target); the descriptor is not supplied.
+        let (removed, o_rm) = remove_relation_row(
+            &once,
+            RelationLabel::References,
+            Some(Role::Concerns),
+            "SL-128",
+        )
+        .unwrap();
+        assert_eq!(o_rm, RemoveOutcome::Removed);
+        assert!(
+            tier1_edges(&SLICE_KIND, &removed).unwrap().is_empty(),
+            "the descriptor-bearing edge is gone after unlink"
+        );
     }
 
     // -- SL-176 PHASE-04 migration faithfulness oracle (VT-1 / VT-2) --------

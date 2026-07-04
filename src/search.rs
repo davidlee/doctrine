@@ -121,11 +121,21 @@ impl KindSelector {
 
 // ── entity_lex_doc ────────────────────────────────────────────────────────
 
-pub(crate) fn entity_lex_doc(entity: &CatalogEntity) -> LexDoc {
-    let text = match &entity.body {
+/// Build the BM25 lexical document for one entity. `descriptors` are the
+/// free-text descriptors of the entity's outbound `references:concerns` edges
+/// (SL-196 PHASE-04) — each is appended to the doc `text` so the entity is
+/// findable by its edge's descriptor prose. When `descriptors` is empty the
+/// `text` is byte-identical to the pre-slice title / title+body (EX-2 / VT-2
+/// non-regression), so a descriptorless entity's lex doc never changes.
+pub(crate) fn entity_lex_doc(entity: &CatalogEntity, descriptors: &[&str]) -> LexDoc {
+    let mut text = match &entity.body {
         Some(body) => format!("{}\n{}", entity.title, body),
         None => entity.title.clone(),
     };
+    for descriptor in descriptors {
+        text.push('\n');
+        text.push_str(descriptor);
+    }
     LexDoc {
         id: match &entity.key {
             CatalogKey::Numbered(k) => k.canonical(),
@@ -332,8 +342,29 @@ pub(crate) fn run(mut args: SearchArgs, render: RenderOpts) -> Result<()> {
         })
         .collect();
 
+    // Index each edge's descriptor by its source entity, so an entity is
+    // findable by the prose on its `references:concerns` edges (SL-196 PHASE-04).
+    // A pure projection off the already-hydrated catalog — no re-parse (design R2).
+    let mut descriptors_by_source: BTreeMap<&CatalogKey, Vec<&str>> = BTreeMap::new();
+    for edge in &catalog.edges {
+        if let Some(descriptor) = &edge.descriptor {
+            descriptors_by_source
+                .entry(&edge.source)
+                .or_default()
+                .push(descriptor.as_str());
+        }
+    }
+
     // Build LexDocs
-    let docs: Vec<LexDoc> = matching.iter().map(|e| entity_lex_doc(e)).collect();
+    let docs: Vec<LexDoc> = matching
+        .iter()
+        .map(|e| {
+            let descriptors = descriptors_by_source
+                .get(&e.key)
+                .map_or(&[][..], Vec::as_slice);
+            entity_lex_doc(e, descriptors)
+        })
+        .collect();
 
     if docs.is_empty() {
         writeln!(std::io::stdout(), "No results.")?;
@@ -565,7 +596,7 @@ mod tests {
             .find(|ce| matches!(&ce.key, CatalogKey::Numbered(k) if k.id == 1))
             .unwrap();
 
-        let doc = entity_lex_doc(e);
+        let doc = entity_lex_doc(e, &[]);
         assert_eq!(doc.id, "SL-001");
         assert!(doc.text.contains("S1"));
         assert!(doc.text.contains("scope"));
@@ -583,9 +614,90 @@ mod tests {
             .find(|ce| matches!(&ce.key, CatalogKey::Numbered(k) if k.id == 1))
             .unwrap();
 
-        let doc = entity_lex_doc(e);
+        let doc = entity_lex_doc(e, &[]);
         assert_eq!(doc.id, "SL-001");
         assert_eq!(doc.text, "S1");
+    }
+
+    // SL-196 PHASE-04 VT-1: an entity's `references:concerns` descriptor joins
+    // into its lex doc, so a BM25 query matching the descriptor prose finds it.
+    #[test]
+    fn entity_lex_doc_joins_descriptor_and_is_findable() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[]);
+        let catalog = scan_catalog(root, ScanMode::include_bodies()).unwrap();
+        let e = catalog
+            .entities
+            .iter()
+            .find(|ce| matches!(&ce.key, CatalogKey::Numbered(k) if k.id == 1))
+            .unwrap();
+
+        // The descriptor prose is joined into the doc text alongside title/body.
+        let doc = entity_lex_doc(e, &["attention burden"]);
+        assert_eq!(doc.id, "SL-001");
+        assert!(doc.text.contains("S1"), "title retained: {:?}", doc.text);
+        assert!(
+            doc.text.contains("attention burden"),
+            "descriptor joined into lex doc: {:?}",
+            doc.text
+        );
+
+        // End-to-end: the entity is BM25-findable by a descriptor token that
+        // appears nowhere in its title or body.
+        let docs = vec![doc];
+        let ids: Vec<&str> = docs.iter().map(|d| d.id.as_str()).collect();
+        let corpus = LexicalCorpus::Raw(&docs);
+        let scored = Bm25Ranker.score(Some("attention"), &corpus, &ids);
+        let positive: Vec<_> = scored.iter().filter(|(_, s)| *s > 0).collect();
+        assert_eq!(
+            positive.len(),
+            1,
+            "descriptor token 'attention' finds SL-001: {scored:?}"
+        );
+    }
+
+    // SL-196 PHASE-04 VT-2: non-regression — the empty-descriptor path is
+    // byte-identical to the pre-slice title / title+body text.
+    #[test]
+    fn entity_lex_doc_empty_descriptors_byte_identical() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_slice(root, 1, &[]);
+
+        // With body: byte-identical to the pre-slice `title\nbody` formula.
+        let with_body = scan_catalog(root, ScanMode::include_bodies()).unwrap();
+        let e = with_body
+            .entities
+            .iter()
+            .find(|ce| matches!(&ce.key, CatalogKey::Numbered(k) if k.id == 1))
+            .unwrap();
+        let body = e.body.as_ref().expect("seeded slice has a body");
+        let expected = format!("{}\n{}", e.title, body);
+        assert_eq!(
+            entity_lex_doc(e, &[]).text,
+            expected,
+            "empty-descriptor text is the unchanged title+body"
+        );
+        // A non-empty descriptor DOES change it — the guard is meaningful.
+        assert_ne!(
+            entity_lex_doc(e, &["x"]).text,
+            expected,
+            "a descriptor must alter the lex doc"
+        );
+
+        // Without body: byte-identical to the bare title.
+        let no_body = scan_catalog(root, ScanMode::default()).unwrap();
+        let e2 = no_body
+            .entities
+            .iter()
+            .find(|ce| matches!(&ce.key, CatalogKey::Numbered(k) if k.id == 1))
+            .unwrap();
+        assert_eq!(
+            entity_lex_doc(e2, &[]).text,
+            e2.title,
+            "empty-descriptor text is the unchanged bare title"
+        );
     }
 
     // ── snippet tests ─────────────────────────────────────────────────────
@@ -668,7 +780,7 @@ mod tests {
                 CatalogKey::Memory(_) => false,
             })
             .collect();
-        let docs: Vec<LexDoc> = matching.iter().map(|e| entity_lex_doc(e)).collect();
+        let docs: Vec<LexDoc> = matching.iter().map(|e| entity_lex_doc(e, &[])).collect();
         let ids: Vec<&str> = docs.iter().map(|d| d.id.as_str()).collect();
         let corpus = LexicalCorpus::Raw(&docs);
         let ranker = Bm25Ranker;
@@ -696,7 +808,7 @@ mod tests {
                 CatalogKey::Memory(_) => false,
             })
             .collect();
-        let docs: Vec<LexDoc> = matching.iter().map(|e| entity_lex_doc(e)).collect();
+        let docs: Vec<LexDoc> = matching.iter().map(|e| entity_lex_doc(e, &[])).collect();
         let ids: Vec<&str> = docs.iter().map(|d| d.id.as_str()).collect();
         let corpus = LexicalCorpus::Raw(&docs);
         let ranker = Bm25Ranker;
@@ -770,7 +882,7 @@ mod tests {
                 CatalogKey::Memory(_) => false,
             })
             .collect();
-        let docs: Vec<LexDoc> = matching.iter().map(|e| entity_lex_doc(e)).collect();
+        let docs: Vec<LexDoc> = matching.iter().map(|e| entity_lex_doc(e, &[])).collect();
         let ids: Vec<&str> = docs.iter().map(|d| d.id.as_str()).collect();
         let corpus = LexicalCorpus::Raw(&docs);
         let ranker = Bm25Ranker;
