@@ -11,7 +11,7 @@ updated = "2026-06-17"
 [scope]
 paths = ["plugins/doctrine/skills/"]
 globs = []
-commands = ["doctrine skills list", "doctrine claude install"]
+commands = ["doctrine skills list", "doctrine install"]
 tags = []
 workspace = "default"
 repo = "github.com/davidlee/doctrine"

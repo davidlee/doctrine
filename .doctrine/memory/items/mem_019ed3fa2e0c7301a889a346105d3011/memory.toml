@@ -3,7 +3,7 @@ schema_version = 1
 memory_type = "pattern"
 status = "active"
 title = "Routing row must follow install: install skill before adding to routing-process.md"
-summary = "When adding a skill to the routing table, install the skill (doctrine claude install) BEFORE adding the routing row — otherwise the boot snapshot points at a deferred skill, violating ADR-009 F14 shipped-not-reachable."
+summary = "When adding a skill to the routing table, install the skill (doctrine install) BEFORE adding the routing row — otherwise the boot snapshot points at a deferred skill, violating ADR-009 F14 shipped-not-reachable."
 created = "2026-06-17"
 updated = "2026-06-17"
 

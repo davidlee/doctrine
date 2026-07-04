@@ -1,8 +1,7 @@
 # Doctrine file map and layout
 
 Where things live — use this to *locate*. The authoritative layout block is in
-`CLAUDE.md`; the evergreen internals are in `doc/*`. This signpost points; it
-does not restate them.
+`CLAUDE.md`. This signpost points; it does not restate it.
 
 - `.doctrine/slice/nnn/` — one dir per slice: `slice-nnn.{toml,md}` (metadata +
   scope), `design.md`, `plan.{toml,md}`, `notes.md`, `audit.md`, and the
@@ -36,12 +35,8 @@ does not restate them.
   boot snapshot. See [[mem.concept.doctrine.boot-snapshot]].
 - `.doctrine/using-doctrine.md` and `.doctrine/glossary.md` — shipped reference
   docs (ADR-005 PULL tier). See [[mem.signpost.doctrine.reference-docs]].
-- `doc/*` — evergreen, authoritative specs (`slices-spec.md`, `memory-spec.md`,
-  `skills-spec.md`, `entity-model.md`, …). Learn internals here.
 - `install/` — sources copied into `.doctrine` by the installer. See
   [[mem.signpost.doctrine.install]].
-- `src/` — the Rust shell (e.g. `src/git.rs`, the impure capture seam;
-  `src/boot.rs`, the snapshot generator).
 
 What is committed vs disposable is the storage tiers:
 [[mem.fact.doctrine.storage-tiers]] and [[mem.concept.doctrine.storage-model]]. The

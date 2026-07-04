@@ -9,8 +9,8 @@ created = "2026-06-05"
 updated = "2026-06-24"
 
 [scope]
-paths = ["plugins/doctrine/skills/"]
-globs = ["plugins/doctrine/skills/**"]
+paths = []
+globs = [".doctrine/skills/**"]
 commands = []
 tags = []
 workspace = "default"

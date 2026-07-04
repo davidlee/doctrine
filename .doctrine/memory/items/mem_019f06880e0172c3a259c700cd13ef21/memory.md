@@ -1,7 +1,7 @@
 # Shipped skills carry no repo-local couplings
 
 Authored skills under `plugins/` (RustEmbed `#[folder = "plugins/"]`,
-`src/skills.rs`) are **the product**: `doctrine claude install` materialises
+`src/skills.rs`) are **the product**: `doctrine install` materialises
 them into arbitrary client projects. POL-002 therefore binds them — a shipped
 skill must never load-bear on a convention or entity that only exists in *this*
 repo.

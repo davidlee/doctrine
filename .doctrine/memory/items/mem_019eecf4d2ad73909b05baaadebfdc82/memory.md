@@ -27,16 +27,16 @@ Shipped memories are a **separate namespace** with a separate write path:
    ```
 
 3. **Sync into the repo**: `doctrine memory sync` materializes the embedded
-   corpus into `.doctrine/memory/shipped/`. `doctrine claude install` also
-   calls this (analogous to how `claude install` refreshes skills).
+   corpus into `.doctrine/memory/shipped/`. `doctrine install` also
+   calls this (analogous to how it refreshes skills).
 
-4. **Clients get it** on their next `doctrine claude install` (or on a
+4. **Clients get it** on their next `doctrine install` (or on a
    `SessionStart` hook if `memory sync install` was run).
 
 ## Do NOT edit `.doctrine/memory/shipped/` directly
 
 Edits to `shipped/` are **ephemeral** — overwritten on next `memory sync`
-or `claude install`. The shipped/ directory is gitignored; only the source
+or `doctrine install`. The shipped/ directory is gitignored; only the source
 in `memory/` is authored and committed.
 
 ## Tool behaviour with shipped memories
@@ -50,7 +50,7 @@ in `memory/` is authored and committed.
 
 ## Related
 
-- Skills follow the same pattern: `plugins/` → `touch src/skills.rs` → `cargo build` → `doctrine claude install`
+- Skills follow the same pattern: `plugins/` → `touch src/skills.rs` → `cargo build` → `doctrine install`
   (`mem.pattern.build.rust-embed-no-rerun`)
 - The memory model concept: `mem.concept.doctrine.memory-model`
 - IMP-148 tracks the resolve_show fallback bug and MCP tool help gaps

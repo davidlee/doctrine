@@ -99,7 +99,7 @@ Module layering (ADR-001): leaf ← engine ← command, no cycles.
   snapshot. Check with `doctrine boot --check`.
 - **Memory sync:** after editing shipped memories (`memory/`), run `cargo
   build` (to re-embed via RustEmbed), then `doctrine memory sync` to
-  materialize, then `doctrine claude install` to refresh installed skills.
+  materialize, then `doctrine install` to refresh installed skills.
 
 ## Further Reading
 
