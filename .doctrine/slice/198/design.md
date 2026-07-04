@@ -129,11 +129,15 @@ in order (codex pass-2 shape, §10):
    separate `prove` on this path; `prove` stays for import/integration.)
 3. **Scope belt — two tiers (owner steer 2026-07-04).** `classify_import` of the
    pre-fmt intended delta vs the slice's `design-target` selectors, split by zone:
-   - **Hard reject (`forbidden-zone`).** Writes to escalation surfaces — `.doctrine/**`,
-     `.claude/**`, `.agents/**`, `install/agents/**` (governance state, plans, selectors,
-     agent-def tool-grants), and build/gate config (`justfile`, `flake.nix`, CI). A worker
-     writing these is always wrong (it could rewrite its own scope, tool-grant, or gate) ⇒
-     refuse the commit. This is the security fence.
+   - **Hard reject (`forbidden-zone`).** Writes to doctrine-platform escalation surfaces —
+     `.doctrine/**` (governance state, plans, selectors — universal platform), and the
+     agent-def / tool-grant dirs `.claude/**`, `.agents/**`, `install/agents/**` (the
+     jail-completeness surface — a worker there could rewrite its own scope or tool grant)
+     ⇒ refuse the commit. This is the security fence. **Not build/gate config** (`justfile`,
+     `flake.nix`, CI): those are **host-project** state, and hard-coding their names into a
+     platform belt violates POL-002 (the gate command is already config-driven via
+     `resolve_check`/`[verification]`). A worker neutering its own gate is instead caught by
+     the soft tier + audit (doctrine cannot presume the gate's file).
    - **Soft warn (`undeclared`).** Src paths outside the current `design-target` selectors
      but in no forbidden zone. The planner under-declares (leaves off a file that
      legitimately needs the change), so this **does not block** — the commit lands and the
@@ -221,10 +225,11 @@ servers required.
   that normalises a pre-existing/out-of-scope file cannot drag it into the commit. Holds
   independently of the pre-fmt-clean-trunk ritual (§5.4) — that ritual makes the case not
   arise; this invariant makes it safe if it does.
-- **INV-6 (scope tiers).** A write to an escalation zone (`.doctrine/**`, `.claude/**`,
-  `.agents/**`, `install/agents/**`, build/gate config) hard-refuses (`forbidden-zone`).
-  A src write outside the `design-target` selectors but in no forbidden zone commits and
-  is reported as `undeclared` — never silently dropped, never hard-blocked.
+- **INV-6 (scope tiers).** A write to a doctrine-platform escalation zone (`.doctrine/**`,
+  `.claude/**`, `.agents/**`, `install/agents/**`) hard-refuses (`forbidden-zone`).
+  Build/gate config (`justfile`, `flake.nix`, CI) is **not** in the hard tier — host-project
+  state, POL-002. A src write outside the `design-target` selectors but in no forbidden zone
+  commits and is reported as `undeclared` — never silently dropped, never hard-blocked.
 - **Edge — empty delta.** Worker made no in-scope change ⇒ refuse `empty-delta` (no
   empty commit).
 - **Edge — gate mutates then still red.** fmt reformats but lint/test fails ⇒ refuse;

@@ -116,15 +116,18 @@ Grounding the plan against implementation reality before phases materialise:
 
 - **Scope belt is two-tier (PHASE-02, owner steer) — don't hard-fail a planner omission.**
   A hard reject on any out-of-selector write punishes the common case where the planner
-  under-declared `design-target`. Split by zone: **escalation zones** (`.doctrine/**`,
-  `.claude/**`, `.agents/**`, `install/agents/**`, build/gate config) HARD-refuse
-  (`forbidden-zone`) — a worker there could rewrite its own scope/tool-grant/gate; **src
+  under-declared `design-target`. Split by zone: **doctrine-platform escalation zones**
+  (`.doctrine/**`, `.claude/**`, `.agents/**`, `install/agents/**`) HARD-refuse
+  (`forbidden-zone`) — a worker there could rewrite its own scope or tool-grant; **src
   paths outside the selectors** but in no forbidden zone COMMIT and return in `undeclared:
   [paths]` (soft warn) — the orchestrator blesses them into the selectors or rejects at
   import. The soft tier feeds the *existing* audit-time `slice conformance` delta rather
   than pre-empting it, and stays within the locked threat model (same audit-caught class as
-  the X1 sibling-spoof residual). The one judgment call folded: build/gate config is
-  hard-fenced (a worker must never edit its own gate).
+  the X1 sibling-spoof residual). **Build/gate config (`justfile`, `flake.nix`, CI) is NOT
+  hard-fenced — POL-002:** those are host-project state, and the gate command is already
+  config-driven (`resolve_check`/`[verification]`), so doctrine cannot presume the gate's
+  file. A worker neutering its own gate is caught by the soft tier + audit, not a
+  platform-baked path.
 
 - **DispatchRecord home + shape.** The record is a **sibling** file to the jail policy,
   not an overload of `<name>.toml` — confinement policy and dispatch-resolution are
