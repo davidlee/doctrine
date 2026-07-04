@@ -1,7 +1,7 @@
 id = 198
 slug = "mode-b-confined-orchestrator"
 title = "Confined dispatch orchestrator (Mode B)"
-status = "reconcile"
+status = "done"
 created = "2026-07-04"
 updated = "2026-07-04"
 tags = []
