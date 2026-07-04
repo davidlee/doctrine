@@ -1,0 +1,189 @@
+# Implementation plan for SL-199 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-199"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# SLICE-LEVEL PRECONDITION (all phases): SL-198 landed on the execution base.
+# Verified 2026-07-04 as NOT present on edge — no worker_commit, no --branch
+# coherence belt on run_import_fork, no agent-def tool-surface lint, no per-worktree
+# dispatch record / coord resolver. SL-199 `needs` SL-198; execution is gated on it.
+# The plan is authored against the post-SL-198 world (scope: "consumed, not rebuilt").
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "create-fork confined discriminator + one-shot arm (§A)"
+objective = """
+Decouple Fork discrimination from the spawner's transient cwd so a CONFINED \
+orchestrator can arm a nested worker. classify_create (pure, create.rs:166) gains \
+an additive second Fork trigger — cwd_is_coord_root ∧ coord_in_dispatch ∧ base — \
+leaving the main-thread positional path (cwd_is_arming_dir) unchanged; both arms \
+run the same act_on_create::Fork -> fork_core + provision_jail_policy (no second \
+impl). The shell gather (run_create_fork, create.rs:338) computes the two new \
+inputs from payload.cwd/root and the coord branch. The arm is ONE-SHOT: the hook \
+CONSUMES (deletes) the base file the moment it Forks, so an orchestrator crash \
+mid-spawn cannot leave a stale arm that mis-forks the next benign spawn (ext-review \
+F4). base is read from the SAME location for both arms — <root>/ARMING_SUBPATH/base \
+— only the trigger differs (design §A)."""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-199 design locked + externally reviewed (codex 2026-07-04, F1/F2/F3/F4/F6 integrated). classify_create (create.rs:166), run_create_fork positional gather (create.rs:362-372), provision_jail_policy (create.rs:244), ARMING_SUBPATH (create.rs:197) confirmed present on the current tree." },
+  { id = "EN-2", text = "OS1 resolved: whether a coordination worktree is ALWAYS on a dispatch/<NNN> branch (never detached mid-op) is confirmed — dispatch setup does not detach. If it can, the coord_in_dispatch branch check is replaced by a state-file marker before this phase implements (design R1)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "classify_create Forks on the confined trigger (cwd_is_coord_root ∧ coord_in_dispatch ∧ base present/plausible) AND on the unchanged positional trigger (cwd_is_arming_dir); Passthrough otherwise. Both Fork arms provision the jail record via the single existing act_on_create::Fork path — no forked classification or provisioning logic." },
+  { id = "EX-2", text = "The confined trigger's inputs are gathered in the thin shell (run_create_fork): cwd_is_coord_root = (root == payload.cwd); coord_in_dispatch = coord branch matches ^dispatch/[0-9]+$ (or the OS1 marker); base read from <root>/ARMING_SUBPATH/base whenever either Fork condition is live. The pure classifier takes no clock/git/disk." },
+  { id = "EX-3", text = "One-shot arm: on any Fork, the hook deletes <root>/ARMING_SUBPATH/base atomically at the fork point (before returning), so a second WorktreeCreate with no re-arm classifies Passthrough. Consumption is atomic w.r.t. the fork decision (no window where the fork happens but base survives)." },
+  { id = "EX-4", text = "Benign-spawn safety: a plain isolation:worktree spawn from an armed coord root with NO base (already consumed / never armed) takes Passthrough; a spawn from a non-dispatch-branch coord root with base takes Passthrough. The branch guard is hygiene (design §A): a loose guard at worst spuriously Forks (debris, not escape); a jailed worker cannot arm (spawn dir + shared .git are RO to it)." },
+]
+verification = [
+  { id = "VT-1", expects = "Pure classify_create table: positional cases unchanged -> Fork (regression); confined coord_root ∧ dispatch-branch ∧ base -> Fork; benign coord_root ∧ dispatch-branch ∧ ¬base -> Passthrough; coord_root ∧ ¬dispatch-branch ∧ base -> Passthrough; coord_root ∧ base ∧ bad-sha -> BadBase.", test_file = "src/worktree/create.rs", keywords = ["classify_create", "cwd_is_coord_root", "coord_in_dispatch", "Passthrough"] },
+  { id = "VT-2", expects = "One-shot consume: after a Fork the hook has deleted base; a re-invocation with no re-arm classifies Passthrough (no double-fork off a stale base).", test_file = "src/worktree/create.rs", keywords = ["one-shot", "base"] },
+  { id = "VT-3", expects = "Both Fork arms reach the SAME act_on_create::Fork -> provision_jail_policy: the jail record is written for the confined trigger exactly as for the positional trigger.", test_file = "src/worktree/create.rs", keywords = ["provision_jail_policy", "Fork"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Server-side commit-on-behalf + coord-by-slice resolver (§B transactional core)"
+objective = """
+The trusted git-write primitive the confined funnel rests on. (1) coord-by-slice \
+resolver: given a slice-id, resolve the ONE live coordination worktree on \
+dispatch/<NNN> via SL-198's enumerate seam (git worktree list --porcelain) -> \
+typed refusal on 0 / >1 / stale. Sibling of SL-198's worker-by-agent resolver, \
+sharing the enumerate step (design D-B2). (2) commit-on-behalf: the UNCONFINED \
+MCP server commits a staged delta onto the coord branch (the confined orchestrator \
+cannot reach coord .git — RO-walled), with a DEFINED provenance contract \
+(author/message), returning the new coord tip. This is the seam dispatch_import and \
+dispatch_conclude_phase (PHASE-03) both ride — built and tested once here, before \
+the tool surface (ext-review F1/F6)."""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-198 landed: the per-worktree dispatch record {name,dir,branch,base,coord}, resolve_agent + refusal table, and the git worktree list --porcelain enumerate seam (worktree_for_ref / live_worktree_for_ref) exist and are green on the execution base." },
+  { id = "EN-2", text = "Reuse seams confirmed on the post-SL-198 base: the enumerate step is a shared helper (not inlined in resolve_agent); a git-commit helper exists or the commit path is identified (server writes coord .git directly, as worker_commit does for the worker branch)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "resolve_coord(slice) returns the live coordination worktree root for dispatch/<NNN> on exactly one live consistent hit; typed refusals: unknown-slice (0 live), ambiguous (>1 — defensive, per-branch invariant normally precludes), stale (dir absent / branch unresolved). No caller-supplied path enters resolution (mirrors SL-198 X1)." },
+  { id = "EX-2", text = "commit_on_behalf(coord_root, message) commits the currently-staged delta onto the coord branch from the unconfined server and returns the new tip oid. Fails typed if nothing is staged, or if the tree is not the coord branch's checkout." },
+  { id = "EX-3", text = "Provenance contract DEFINED and asserted (ext-review R4/F6): the server-side commit records a stable, documented author identity and a message convention that names the acting slice/phase and marks it a funnel commit — so the committer-of-record is unambiguous when the server commits on the confined orchestrator's behalf. Same contract reused by import (code) and conclude (metadata)." },
+  { id = "EX-4", text = "The primitive is behaviour-preserving w.r.t. existing git helpers: it composes them, does not fork them; the main-thread funnel + existing suites stay green unchanged." },
+]
+verification = [
+  { id = "VT-1", expects = "resolve_coord refusal table (unknown-slice, ambiguous, stale) + a happy single-hit resolve to the dispatch/<NNN> worktree root; no path parameter.", test_file = "src/mcp_server/dispatch.rs", keywords = ["resolve_coord", "unknown-slice", "stale"] },
+  { id = "VT-2", expects = "commit_on_behalf stages-nothing refusal; happy path lands exactly one commit on the coord branch, returns the new tip; the coord tip advances by exactly that commit.", test_file = "src/mcp_server/dispatch.rs", keywords = ["commit_on_behalf", "tip"] },
+  { id = "VT-3", expects = "Provenance: the commit-on-behalf author + message match the documented contract (funnel marker + slice/phase); asserted on the produced commit object.", test_file = "src/mcp_server/dispatch.rs", keywords = ["provenance", "author"] },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "The dispatch funnel MCP tools — import / conclude-phase / reap (§B surface)"
+objective = """
+Register the confined orchestrator's write surface in the MCP server, each tool \
+resolving the coord tree server-side by slice-id (PHASE-02) and riding an existing \
+run_* belt — one seam, two doors, no forked logic. dispatch_import: run_import fork \
+arm THEN commit_on_behalf (code commit); the classify_import scope belt is a HARD \
+PRE-COMMIT gate (import.rs:136 UndeclaredScope) — a violation lands NOTHING and \
+report-and-halts (not advisory; ext-review F2/F5). dispatch_conclude_phase: \
+run_phase(completed) + run_record_boundary folded into ONE atomic commit_on_behalf \
+(metadata) — the phase never reaches completed in committed history without its true \
+(B, coord_tip) boundary in the same commit (ext-review F1/F3). dispatch_reap: run_gc, \
+patch-id landed-oracle belt intact. Pin nothing here beyond registration — the \
+tool-surface lint is PHASE-04."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: resolve_coord + commit_on_behalf + provenance contract exist and are green." },
+  { id = "EN-2", text = "SL-198's import-a-commit switch landed: run_import_fork accepts the committed worker branch (--branch coherence belt) so dispatch_import imports the branch the confined arm spawned, not a working-tree diff. classify_import (import.rs:106) + run_gc landed-oracle (git cherry) + run_record_boundary (dispatch.rs:718) + run_phase (slice.rs:881) confirmed reusable as-is." },
+  { id = "EN-3", text = "MCP tools/call entrypoint (tools.rs:408 call_tool) + tool registration (tools.rs:25 tools) confirmed; root is server-resolved, never caller-supplied." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch_import{slice,name}: resolve coord -> run_import fork arm (base=coord tip, fork=dispatch/<name>) -> commit_on_behalf; returns {coord_tip}. An undeclared-scope delta is HARD-refused BEFORE any apply/commit (classify_import), nothing lands, returns a typed report-and-halt refusal. No post-commit bless path (the confined orchestrator cannot git reset)." },
+  { id = "EX-2", text = "dispatch_conclude_phase{slice,phase,code_start,code_end,note?}: flip completed + record the true boundary + ONE atomic commit_on_behalf. Atomicity: a fault before the commit leaves NEITHER the completed flip NOR the boundary in committed history (all-or-nothing); the phase is never completed-without-boundary in committed state. Boundary UPSERT-by-phase (last-writer-wins) is harmless here — the solo-bind clobber is suppressed in coord context (state.rs:542 arm-guard)." },
+  { id = "EX-3", text = "dispatch_reap{slice,name}: resolve coord -> run_gc; the patch-id landed-oracle (git cherry) refuses to delete a fork whose patch is not yet in coord history. Inherited unchanged." },
+  { id = "EX-4", text = "Confined-arm undeclared response is report-and-halt, by construction: unlike the main-thread orchestrator (which amends selectors + commits — SL-198 EX-6), the confined orchestrator cannot amend+commit from inside the jail, so dispatch_import's hard scope refusal surfaces to the main thread. Documented as the funnel's undeclared boundary." },
+  { id = "EX-5", text = "Belt reuse, not fork: dispatch_import and the CLI import agree on the scope verdict for the same change-set (classify_import shared); dispatch_reap and the CLI gc agree on the landed verdict (run_gc shared); existing suites stay green (behaviour-preservation gate)." },
+]
+verification = [
+  { id = "VT-1", expects = "dispatch_import happy path: in-scope worker branch -> coord tip advances by one commit, returns {coord_tip}. Undeclared path in the delta -> HARD refuse before commit, coord tip UNCHANGED, typed report-and-halt refusal.", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_import", "UndeclaredScope", "coord_tip"] },
+  { id = "VT-2", expects = "dispatch_conclude_phase atomicity: happy path lands flip+boundary in ONE commit with the true (B,coord_tip) range; a simulated fault before the commit leaves neither the completed flip nor the boundary in committed history (completed-without-boundary is unreachable).", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_conclude_phase", "atomic", "boundary"] },
+  { id = "VT-3", expects = "dispatch_reap: a not-yet-landed fork is refused by the patch-id oracle; a landed fork is reaped (worktree+branch gone); shares run_gc with the CLI verb.", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_reap", "run_gc", "cherry"] },
+  { id = "VA-1", expects = "Belt reuse is genuine (not token presence): an agent reads the wiring and confirms dispatch_import calls classify_import and dispatch_reap calls run_gc — no forked scope/landed logic." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "dispatch-orchestrator agent-def + conformance-lint allowlist row (§C)"
+objective = """
+Author .claude/agents/dispatch-orchestrator.md (doctrine-role: orchestrator; tools: \
+Read/Edit/Write/Bash/Grep/Glob/Agent + the PHASE-03 funnel MCP tools, nothing else \
+writable) and extend SL-198's tool-surface conformance lint with the orchestrator \
+allowlist ROW — data, not new parsing (SL-198 already parses the marker + tools: \
+list). The lint asserts the def's mcp__* tokens ⊆ the orchestrator allowlist (the §B \
+funnel set); any other mcp__* (second server, bare mcp__doctrine grant, worker_commit) \
+fails. Per STD-001 the allowlist references the SAME named constants §B defines for \
+the tool names — no second literal. The orchestrator's reads go raw (in-jail doctrine \
+CLI); only git-boundary writes go MCP, so the tight allowlist is sufficient (design §C)."""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-198's conformance lint landed: it scans .claude/agents/*.md (+ install trees, SL-198 X3), parses doctrine-role + the tools: list, and enforces a per-role MCP allowlist with the worker -> {worker_commit} row. The marker key and tools: frontmatter schema (list vs comma-string, SL-198 F5) are confirmed." },
+  { id = "EN-2", text = "PHASE-03 tool names exist as named constants (STD-001) the allowlist can reference." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch-orchestrator.md exists with doctrine-role: orchestrator and tools: granting exactly Read/Edit/Write/Bash/Grep/Glob/Agent + the funnel MCP tools (dispatch_import, dispatch_conclude_phase, dispatch_reap, + a start-flip tool iff PHASE-03 shipped one) and no other writable MCP token." },
+  { id = "EX-2", text = "The lint gains the orchestrator allowlist row referencing the §B tool-name constants; a def granting any extra mcp__* / a bare mcp__doctrine grant / worker_commit fails with a message naming the offender; the sanctioned def passes. The lint iterates ALL marked defs (a client project's second orchestrator-marked def is covered) — confirm ceiling-vs-floor (OS-C1: ceiling only) and iterate-all (OS-C2)." },
+  { id = "EX-3", text = "Placement contract documented in the def/role guidance: the orchestrator is spawned into a PRE-EXISTING coord tree (created by dispatch setup) with the main thread's cwd parked there -> Jail(coord); a primary-tree cwd is Reject-ed on first raw Bash/Edit. No SubagentStart provision hook, no name<->Rust-constant drift pin (matched by the marker, not a hook)." },
+]
+verification = [
+  { id = "VT-1", expects = "Lint: the sanctioned dispatch-orchestrator def passes; a def adding an extra writable mcp__* token / a bare mcp__doctrine grant / worker_commit fails, message names the offending token.", test_file = "src/conformance.rs", keywords = ["orchestrator", "dispatch_import", "allowlist"] },
+  { id = "VA-1", expects = "An agent confirms the def's tools: list contains exactly the sanctioned set and that the allowlist row references the §B named constants (no second string literal, STD-001)." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-05"
+name      = "Drive-loop wiring + shipped docs + end-to-end (§D/§E)"
+objective = """
+The confined orchestrator's operating instructions + the shipped-doc deltas, then \
+prove the whole loop. Author the drive-loop cadence (the dispatch-orchestrator's \
+skill/prompt guidance): arm-spawn --path . -> spawn nested dispatch-worker (create-fork \
+consumes the arm one-shot) -> worker self-commits (worker_commit) -> dispatch_import \
+-> dispatch_conclude_phase -> dispatch_reap; auto-disarm; conflict-judgement + trunk \
+ops (refresh-base / candidate / integrate) report-and-halt to the main thread (they \
+write trunk, outside the jail). Add the install/dispatch-mechanics.md Mode B section \
+(confined arm: MCP funnel, import folds the commit, conclude is atomic, reads-raw/ \
+writes-MCP split, undeclared -> report-and-halt) and check tech-spec-021 for a REQ \
+delta on the confined-orchestrator actor class. Then a live end-to-end (VH)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 (discriminator), PHASE-03 (funnel tools), PHASE-04 (agent-def + lint) complete and green. SL-198 landed (worker_commit + jail record + resolver)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The dispatch-orchestrator drive-loop guidance is authored (skill/prompt): the per-phase cadence, the one-shot arm, the report-and-halt boundary (trunk ops + hard scope refusals + red worker verify), and the reads-raw/writes-MCP split. It never attempts a trunk-facing verb or a raw coord .git write." },
+  { id = "EX-2", text = "install/dispatch-mechanics.md carries a Mode B section describing the confined arm; it does not reproduce doctrine --help. tech-spec-021 REQ delta authored or explicitly deemed unnecessary (recorded either way)." },
+  { id = "EX-3", text = "Live end-to-end on the claude arm (VH): a confined dispatch-orchestrator drives a real slice phase — arm -> nested worker forks WITH its dispatch/<name> branch + jail record (the §A linchpin the probe proved positional arming could not produce) -> worker self-commits -> orchestrator imports -> concludes (flip+boundary, one commit) -> reaps — while its own raw Bash to shared .git stays walled. Nested worker confinement holds (Jail(cwd), depth-agnostic)." },
+  { id = "EX-4", text = "Main-thread dispatch remains available as the MCP-down fallback (R2); the subprocess (pi) arm stays green. No regression to the existing funnel." },
+]
+verification = [
+  { id = "VH-1", expects = "Human-witnessed end-to-end: a confined dispatch-orchestrator drives one real phase fork->land->conclude->reap; the worker forks with branch+jail record; the orchestrator's raw .git writes are walled; nested confinement holds." },
+  { id = "VA-1", expects = "An agent reads the drive-loop guidance and confirms it never issues a trunk-facing verb or a raw coord .git write, and that its undeclared/conflict response is report-and-halt." },
+  { id = "VT-1", expects = "dispatch-mechanics.md Mode B section is present and describes the confined arm (MCP funnel, atomic conclude, import-commits, undeclared->halt).", test_file = "install/dispatch-mechanics.md", keywords = ["Mode B", "conclude", "report-and-halt"] },
+]
+specs        = []
+requirements = []
