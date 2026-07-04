@@ -8,7 +8,7 @@ import type { ConceptMap, CmEdge, CmCell, CmEditOp, CmEditingCell } from './type
 import { cmNeighbourhood, buildNodeLabelList, buildRelLabelList } from './model';
 import { cmGraphToDot } from './dot';
 import { renderDot } from './api';
-import { injectHitRects, wireHandlers, type SvgHandlerOpts } from './svg';
+import { injectHitRects, wireHandlers, extractNodeId, type SvgHandlerOpts } from './svg';
 import { mountZoomPan } from './zoompan';
 import { escapeHtml, escapeAttr } from './render';
 import DOMPurify from 'dompurify';
@@ -185,11 +185,7 @@ export function renderDiagram(opts: CmDiagramOpts): void {
       if (svgEl !== null) {
         injectHitRects(svgEl);
         const handlerOpts: SvgHandlerOpts = {
-          extractId: (g: SVGGElement): string | null => {
-            const t = g.querySelector('title');
-            if (t === null) return null;
-            return t.textContent.trim();
-          },
+          extractId: extractNodeId,
           onClick: opts.onClick ?? ((_key: string): void => { void _key; }),
           onHoverEnter: (key: string): void => {
             renderCmHoverPane(key, cmData);

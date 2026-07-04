@@ -6,7 +6,7 @@ import type { Graph, CatalogNode, Edge, Neighbourhood, ActionabilityView, RawEdg
 import { neighbourhood, compareEdgesBySource } from './model';
 import { graphToDot } from './dot';
 import { renderDot, fetchMarkdown } from './api';
-import { injectHitRects, wireHandlers, dimLegend, type SvgHandlerOpts } from './svg';
+import { injectHitRects, wireHandlers, dimLegend, extractNodeId, type SvgHandlerOpts } from './svg';
 import { type GraphViewport } from './viewport';
 import { mountZoomPan } from './zoompan';
 import { buildHash } from './router';
@@ -693,11 +693,7 @@ export function graphPane(opts: GraphPaneOpts): void {
         // ── SVG internals: hit-rects, handlers, legend (unchanged) ──────────
         injectHitRects(svgEl);
         const handlerOpts: SvgHandlerOpts = {
-          extractId: (g: SVGGElement): string | null => {
-            const textEl = g.querySelector('text');
-            const tc = textEl?.textContent ?? null;
-            return tc?.trim() ?? null;
-          },
+          extractId: extractNodeId,
           onClick: opts.onNodeClick,
           onHoverEnter: opts.onNodeHoverEnter,
           onHoverLeave: opts.onNodeHoverLeave as unknown as () => void,

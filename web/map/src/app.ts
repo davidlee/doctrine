@@ -9,7 +9,7 @@ import { elements, el, cacheElements, escapeHtml, focusHeader, setPageMode, rela
 import { renderFilteredEntities, wireFilters, wireSearch, wireDepthButtons, wireRefresh } from './search'
 import { renderDiagram, renderEdgeTable, renderAddEdgeForm, renderDiagnostics, cmEditOp, cmCellEndpoint } from './concept-map'
 import { renderGraph } from './priority'
-import { applyFocusHighlight } from './svg'
+import { applyFocusHighlight, extractNodeId } from './svg'
 
 // ---------------------------------------------------------------------------
 // safeStorage — localStorage wrapper (module-private)
@@ -251,10 +251,12 @@ function bootstrap(): void {
 
     if (aview !== null) setActionabilityView(aview)
 
-    if (state.focusId === null && state.graph.nodes.size > 0) {
-      state.focusId = resolveFocus(null, state.graph)
-      if (state.focusId !== null) {
-        setFocus(state.focusId, state.depth)
+    // Seed a focus before the first render. Honour a deep-link / onboard hash;
+    // only inject the default when the URL carries no focus of its own (SL-201).
+    if (state.graph.nodes.size > 0 && parseHash().id === null) {
+      const def = resolveFocus(null, state.graph)
+      if (def !== null) {
+        setFocus(def, state.depth)
         return
       }
     }
@@ -496,14 +498,7 @@ function renderView(): void {
     if (focusChanged && !depthChanged && state.focusId !== null) {
       const svgEl = graphArea.querySelector('svg')
       if (svgEl !== null) {
-        applyFocusHighlight(svgEl, state.focusId, prevFocusId, (g) => {
-          const t = g.querySelector('text')
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          if (t !== null) return (t.textContent ?? '').trim()
-          const ti = g.querySelector('title')
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          return ti !== null ? (ti.textContent ?? '').trim() : ''
-        })
+        applyFocusHighlight(svgEl, state.focusId, prevFocusId, (g) => extractNodeId(g) ?? '')
       }
     }
 

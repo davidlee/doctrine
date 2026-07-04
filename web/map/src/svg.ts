@@ -10,6 +10,15 @@ export interface SvgHandlerOpts {
   onHoverLeave: () => void;
 }
 
+// Extract the real entity id from a Graphviz node <g>. The DOT node name lands
+// in the <title> element; the visible <text> is only the label, which for a
+// memory node is its human title, not its id. Always read <title>.
+export function extractNodeId(g: SVGGElement): string | null {
+  const title = g.querySelector('title');
+  const text = title?.textContent.trim();
+  return text !== undefined && text !== '' ? text : null;
+}
+
 // Inject transparent hit-rect as first child of every <g class="node">.
 // Idempotent — skips nodes that already have a hit-rect child.
 export function injectHitRects(svgEl: SVGSVGElement): void {
