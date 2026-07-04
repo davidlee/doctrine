@@ -202,6 +202,243 @@ mod tests {
         assert!(!vt.waived);
         assert_eq!(vt.waived_reason, None);
     }
+}
+
+// ---------------------------------------------------------------------------
+// VT shape check — `doctrine check plan <id>` (IMP-209)
+// ---------------------------------------------------------------------------
+
+/// A finding from [`check_vt_shape`] — one per flagged verification criterion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VtShapeFinding {
+    pub phase_id: String,
+    pub vt_id: String,
+    pub problem: VtShapeProblem,
+}
+
+/// The reason a VT row was flagged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum VtShapeProblem {
+    /// `test_file` is `None` — nothing to grep; the VT is UNCHECKABLE at runtime.
+    BareTestFile,
+    /// `test_file` is set but `keywords` is empty — vacuous pass at runtime.
+    BareKeywords,
+    /// `waived` is true but `waived_reason` is `None` — opaque waiver.
+    MissingWaiverReason,
+}
+
+/// Check every VT-mode row in the plan for structured mandate completeness.
+///
+/// Returns findings for:
+/// - non-waived VTs without `test_file` (`BareTestFile`)
+/// - non-waived VTs with `test_file` but empty `keywords` (`BareKeywords` —
+///   vacuous pass)
+/// - waived VTs without `waived_reason` (`MissingWaiverReason` — opaque)
+///
+/// VA/VH rows are skipped entirely.
+pub(crate) fn check_vt_shape(plan: &Plan) -> Vec<VtShapeFinding> {
+    let mut findings = Vec::new();
+    for ph in &plan.phases {
+        for vt in &ph.verification {
+            // Skip non-VT rows.
+            if !vt.id.starts_with("VT-") {
+                continue;
+            }
+            if vt.waived {
+                if vt.waived_reason.is_none() {
+                    findings.push(VtShapeFinding {
+                        phase_id: ph.id.clone(),
+                        vt_id: vt.id.clone(),
+                        problem: VtShapeProblem::MissingWaiverReason,
+                    });
+                }
+                continue;
+            }
+            // Non-waived VT — must have a structured mandate.
+            if vt.test_file.is_none() {
+                findings.push(VtShapeFinding {
+                    phase_id: ph.id.clone(),
+                    vt_id: vt.id.clone(),
+                    problem: VtShapeProblem::BareTestFile,
+                });
+            } else if vt.keywords.is_empty() {
+                findings.push(VtShapeFinding {
+                    phase_id: ph.id.clone(),
+                    vt_id: vt.id.clone(),
+                    problem: VtShapeProblem::BareKeywords,
+                });
+            }
+        }
+    }
+    findings
+}
+
+#[cfg(test)]
+mod vt_shape_tests {
+    use super::*;
+
+    #[test]
+    fn bare_test_file_flag() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VT-1", expects = "just prose" },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].vt_id, "VT-1");
+        assert_eq!(findings[0].phase_id, "PHASE-01");
+        assert_eq!(findings[0].problem, VtShapeProblem::BareTestFile);
+    }
+
+    #[test]
+    fn bare_keywords_flag() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VT-1", test_file = "src/foo.rs", keywords = [] },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].problem, VtShapeProblem::BareKeywords);
+    }
+
+    #[test]
+    fn structured_vt_passes() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VT-1", test_file = "src/foo.rs", keywords = ["fn"] },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn waived_with_reason_passes() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VT-1", waived = true, waived_reason = "manual only" },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn waived_without_reason_warns() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VT-1", waived = true },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].problem, VtShapeProblem::MissingWaiverReason);
+    }
+
+    #[test]
+    fn va_rows_skipped() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VA-1", expects = "agent reviews" },
+              { id = "VH-1", expects = "human signs off" },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn multi_phase_multi_finding() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VT-1", test_file = "src/foo.rs", keywords = ["fn"] },
+              { id = "VT-2", expects = "bare prose" },
+            ]
+            [[phase]]
+            id = "PHASE-02"
+            verification = [
+              { id = "VT-3", test_file = "src/bar.rs", keywords = [] },
+              { id = "VT-4", waived = true },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert_eq!(findings.len(), 3);
+        assert_eq!(findings[0].vt_id, "VT-2");
+        assert_eq!(findings[0].problem, VtShapeProblem::BareTestFile);
+        assert_eq!(findings[1].vt_id, "VT-3");
+        assert_eq!(findings[1].problem, VtShapeProblem::BareKeywords);
+        assert_eq!(findings[2].vt_id, "VT-4");
+        assert_eq!(findings[2].problem, VtShapeProblem::MissingWaiverReason);
+    }
+
+    #[test]
+    fn empty_phases_no_findings() {
+        let text = "";
+        let plan = Plan::parse(text).unwrap();
+        assert!(plan.phases.is_empty());
+        let findings = check_vt_shape(&plan);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn waived_overrides_bare_shape() {
+        // A waived VT without test_file should NOT report BareTestFile — the
+        // waiver short-circuits; only MissingWaiverReason if reason is absent.
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VT-1", waived = true, waived_reason = "N/A" },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn waived_overrides_bare_shape_no_reason() {
+        let text = r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              { id = "VT-1", waived = true },
+            ]
+        "#;
+        let plan = Plan::parse(text).unwrap();
+        let findings = check_vt_shape(&plan);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].problem, VtShapeProblem::MissingWaiverReason);
+        // NOT BareTestFile — waiver short-circuits.
+    }
+}
+
+#[cfg(test)]
+mod tests_rejects {
+    use super::*;
 
     #[test]
     fn plan_parse_rejects_duplicate_phase_ids() {

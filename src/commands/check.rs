@@ -56,6 +56,21 @@ pub(crate) enum CheckCommand {
         #[command(subcommand)]
         command: RegressionCommand,
     },
+    /// Check a slice plan's VT rows carry structured mandates (IMP-209).
+    ///
+    /// Reads the authored `plan.toml`, flags every non-waived VT without
+    /// `test_file` (`BareTestFile`) or with empty `keywords` (`BareKeywords`),
+    /// and warns on waived VTs with no `waived_reason` (`MissingWaiverReason`).
+    /// VA/VH rows are skipped; exit non-zero iff any bare VT exists.
+    Plan {
+        /// Slice id, e.g. 209. Accepts `SL-209` or bare `209`.
+        #[arg(value_parser = crate::slice::parse_cli_id)]
+        id: u32,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 /// `doctrine check regression {capture|diff}` — the S1 gate verbs. `--base <B>` is
@@ -89,9 +104,10 @@ pub(crate) enum RegressionCommand {
 /// or proxy-spawn the resolved argv (diverging via [`run_proxy`]).
 pub(crate) fn dispatch(cmd: CheckCommand) -> anyhow::Result<()> {
     use std::io::Write;
-    // `regression` is a real handler (runs the suite + caches), not a cadence proxy.
+    // `regression` and `plan` are real handlers, not cadence proxies.
     let (kind, path) = match cmd {
         CheckCommand::Regression { command } => return dispatch_regression(command),
+        CheckCommand::Plan { id, path } => return run_check_plan(path, id),
         CheckCommand::Quick { path } => (CheckKind::Quick, path),
         CheckCommand::Commit { path } => (CheckKind::Commit, path),
         CheckCommand::Gate { path } => (CheckKind::Gate, path),
@@ -141,6 +157,87 @@ fn dispatch_regression(cmd: RegressionCommand) -> anyhow::Result<()> {
             }
         }
     }
+}
+
+/// `doctrine check plan <id>` — read the authored `plan.toml` and flag bare VT
+/// rows (IMP-209). Pure check: no fs reads beyond the single `plan.toml`.
+/// Renders a per-phase table; exits non-zero iff any non-waived VT lacks
+/// `test_file` or has empty `keywords` (`MissingWaiverReason` is a soft warning).
+fn run_check_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
+    use std::io::Write;
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(".doctrine/slice");
+    let plan = crate::slice::read_plan(&slice_root, id)?;
+    let findings = crate::plan::check_vt_shape(&plan);
+
+    if findings.is_empty() {
+        writeln!(
+            std::io::stdout(),
+            "SL-{id:03}: all VT rows carry structured mandates"
+        )?;
+        return Ok(());
+    }
+
+    let bare_count = findings
+        .iter()
+        .filter(|f| !matches!(f.problem, crate::plan::VtShapeProblem::MissingWaiverReason))
+        .count();
+    let opaque_count = findings.len() - bare_count;
+
+    if bare_count > 0 {
+        writeln!(
+            std::io::stdout(),
+            "SL-{id:03}: {bare_count} bare VT(s) found"
+        )?;
+    }
+    if opaque_count > 0 {
+        writeln!(
+            std::io::stdout(),
+            "  ({opaque_count} opaque waiver(s) — add waived_reason)"
+        )?;
+    }
+    writeln!(std::io::stdout())?;
+
+    let mut lines: Vec<String> = Vec::new();
+    for f in &findings {
+        let (label, detail) = match f.problem {
+            crate::plan::VtShapeProblem::BareTestFile => (
+                "BareTestFile",
+                "no test_file — VT is UNCHECKABLE at runtime",
+            ),
+            crate::plan::VtShapeProblem::BareKeywords => {
+                ("BareKeywords", "keywords empty — vacuous pass at runtime")
+            }
+            crate::plan::VtShapeProblem::MissingWaiverReason => (
+                "MissingWaiverReason",
+                "waived but no reason recorded — opaque",
+            ),
+        };
+        lines.push(format!(
+            "  {:<12} {:<8} {:<24} — {detail}",
+            f.phase_id, f.vt_id, label
+        ));
+    }
+    // Sort by phase then VT id for stable output.
+    lines.sort();
+    for line in &lines {
+        writeln!(std::io::stdout(), "{line}")?;
+    }
+
+    if bare_count > 0 {
+        writeln!(
+            std::io::stdout(),
+            "\nAdd `test_file` + `keywords` to each bare VT row. Re-run until clean."
+        )?;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "check plan exits non-zero on bare VTs (IMP-209)"
+        )]
+        {
+            std::process::exit(1);
+        }
+    }
+    Ok(())
 }
 
 /// Proxy-spawn `argv` with `cwd == root`, INHERITING stdio (live stream; not piped)
