@@ -1,0 +1,64 @@
+# Implementation plan for SL-202 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-202"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Body on the memory catalog record"
+objective = "Carry the memory `.md` body on `MemoryCatalogRecord` and populate it during the scan-layer read, tolerantly (missing body → None), with no change to edge output yet. This isolates the impure I/O so PHASE-02 consumes pure record data."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (SL-202); `MemoryCatalogRecord` (src/memory.rs) and `read_catalog_record` present with the shape the design cites." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`MemoryCatalogRecord` gains `body: Option<String>`; `read_catalog_record` reads the sibling `memory.md` (mirroring corpus.rs:370 `.ok()` idiom) and sets `body`; a missing/unreadable `.md` yields `None`, never an error." },
+  { id = "EX-2", text = "All existing `read_catalog_record_*` tests stay green; `just check` clean." },
+]
+verification = [
+  { id = "VT-1", expects = "read_catalog_record populates `body` from a present memory.md, and yields None when the sibling .md is absent.", test_file = "src/memory.rs", keywords = ["read_catalog_record", "memory.md", "body"] },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Body wikilinks as deduped catalog edges"
+objective = "In `Catalog::from_scanned`, emit a `Raw(\"related\")` edge per resolved body wikilink alongside the existing TOML-relation edges — reusing `extract_wikilinks`/`classify_target` — deduped on the resolved `CatalogKey`, with a dangling `Warning` on unresolved links. Label and origin marker are named constants (STD-001)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `MemoryCatalogRecord.body` available to `from_scanned`." },
+  { id = "EN-2", text = "Test helper writes a memory `.md` body (seed_memory today writes only memory.toml — build/extend a fixture helper first)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The memory loop in from_scanned runs a body-wikilink pass: `extract_wikilinks(body)` → `classify_target` → push `CatalogEdge` with `label = Raw(MEMORY_WIKILINK_EDGE_LABEL)`, `role = None`, origin `{ file: memory.md, field: MEMORY_WIKILINK_ORIGIN_FIELD }`." },
+  { id = "EX-2", text = "Dedup: a per-record `seen: BTreeSet<CatalogKey>` populated by the TOML pass suppresses a body-wikilink edge to an already-linked resolved target; unresolved links are never deduped." },
+  { id = "EX-3", text = "Unresolved body wikilink emits one edge AND one dangling-reference `Warning` diagnostic (parity with the TOML relation path)." },
+  { id = "EX-4", text = "`MEMORY_WIKILINK_EDGE_LABEL = \"related\"` and `MEMORY_WIKILINK_ORIGIN_FIELD = \"body\"` are named constants (STD-001); no inline literals at the edge site." },
+  { id = "EX-5", text = "Existing TOML-edge and CLI-backlink suites stay green unchanged (behaviour-preservation); `just gate` clean." },
+]
+verification = [
+  { id = "VT-1", expects = "A memory whose only cross-reference is a body [[mem.<key>]] wikilink draws exactly one resolved edge with label \"related\" and origin field \"body\".", test_file = "src/catalog/hydrate.rs", keywords = ["related", "body", "extract_wikilinks"] },
+  { id = "VT-2", expects = "A body wikilink and a TOML relation to the SAME target draw one edge, not two (dedup on resolved CatalogKey).", test_file = "src/catalog/hydrate.rs", keywords = ["dedup", "related"] },
+  { id = "VT-3", expects = "Two identical body wikilinks to the same target draw one edge.", test_file = "src/catalog/hydrate.rs", keywords = ["related"] },
+  { id = "VT-4", expects = "An unresolved body wikilink emits an edge plus a dangling-reference Warning diagnostic.", test_file = "src/catalog/hydrate.rs", keywords = ["Warning", "dangling", "body"] },
+  { id = "VA-1", expects = "Behaviour-preservation: the pre-existing memory TOML-relation edge tests and CLI backlink tests pass unchanged — confirmed by an agent reading the diff, not only a green run." },
+]
+specs             = []
+requirements      = []
