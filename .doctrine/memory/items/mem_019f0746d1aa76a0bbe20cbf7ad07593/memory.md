@@ -5,16 +5,17 @@ uniform across legs**. Do not assume an integrate advance is FF-safe.
 
 **Per leg (`src/dispatch.rs`):**
 
-- `advance_row` (:1786) → `advance_pure_ref` (:1821) for a not-checked-out target:
+- `advance_row` → `advance_pure_ref` for a not-checked-out target:
   **plain `git::update_ref_cas`, no `is_ancestor` check.** The CAS guards only
   concurrency (refuses a *moved* target via `expected_old`), NOT ancestry.
-- `advance_checked_out` (:1856) for a checked-out target: FF-gated at advance time
-  (`git::is_ancestor(expected_old, planned)`, :1863) → `merge --ff-only`.
-- Trunk projection rows FF-gate at **plan** time: `plan_trunk_row` (:1980) /
-  `plan_candidate_trunk_row` (:2020) `ensure!(is_ancestor(...))`.
-- **Edge** projection rows do **NOT** FF-gate at plan time: `plan_edge_row` (:1990)
-  and `plan_candidate_edge_row` (:2036) are explicitly commented *"Not ff-gated"*
-  (a standing aggregate of local work).
+- `advance_checked_out` for a checked-out target: FF-gated at advance time
+  (`git::is_ancestor(expected_old, planned)`) → `merge --ff-only`.
+- Trunk projection rows FF-gate at **plan** time: `plan_trunk_row` /
+  `plan_candidate_trunk_row` `ensure!(is_ancestor(...))`.
+- **Edge** projection rows do **NOT** FF-gate at plan time: `plan_edge_row`
+  and `plan_candidate_edge_row` are explicitly commented *"Not ff-gated"*
+  (a standing aggregate of local work). (Line numbers drift with the file —
+  anchor on function names, not offsets.)
 
 **Consequence:** the `--edge` integrate leg can advance the edge ref to a tree that
 is **not a descendant** of the current edge tip. No FF guard blocks a corpus/content

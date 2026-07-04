@@ -48,3 +48,7 @@ ref = "SL-179"
 kind = "review"
 ref = "RV-198"
 
+[[relation]]
+label = "related"
+target = "mem.signpost.doctrine.audit"
+

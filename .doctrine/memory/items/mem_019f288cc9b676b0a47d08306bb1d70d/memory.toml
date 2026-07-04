@@ -6,7 +6,7 @@ status = "active"
 title = "Jail RO-bind of a mutable binary goes stale after in-session reinstall; bind the immutable store path instead"
 summary = "bwrap RO-binds a specific inode at jail creation; cargo install atomic-renames over the path so the bind goes stale and hooks/MCP hard-break till reload. Bind the immutable nix store output over the cargo path instead."
 created = "2026-07-03"
-updated = "2026-07-03"
+updated = "2026-07-04"
 
 [scope]
 paths = ["flake.nix"]
@@ -25,12 +25,12 @@ tree = "ad5825133164bc49574fd1f05770d3ef7124fc77"
 ref_name = "refs/heads/edge"
 checkout_state_id = ""
 base_commit = "35fa22a1d182b1e8ab8abdd3b3cdc1b1e9357b9a"
-verified_sha = "5fdef4171b2d02c8488182dcfc3db7b53ca42ad4"
+verified_sha = "37058aa4d945647b3368d5b66bb63330a01ed018"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-07-03"
+reviewed = "2026-07-04"
 review_by = ""
 
 [trust]

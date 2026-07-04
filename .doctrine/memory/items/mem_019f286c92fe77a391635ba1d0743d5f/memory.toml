@@ -40,3 +40,7 @@ trust_level = "high"
 severity = "medium"
 weight = 0
 
+[[relation]]
+label = "related"
+target = "mem.pattern.dispatch.prepare-review-rerun-not-idempotent-until-gate"
+

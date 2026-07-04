@@ -30,3 +30,6 @@ then, some live only in the originating repo's local corpus.
 
 Related shipped decisions: ADR-006 (worktree posture), ADR-008 (jail
 isolation), ADR-011 (harness-agnostic spawn), ADR-012 (integration topology).
+
+See [[mem.signpost.doctrine.dispatch-claude-arm-wrong-base]] for the claude-arm
+wrong-base trap under shared-clone contention.
