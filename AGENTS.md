@@ -90,6 +90,8 @@ These are the project-specific additions.)
   commands unless you know why you need them instead, or you'll hurt yourself.
 - **no parallel implementation** — ride existing seams; find duplication before writing.
 
+prefer mermaid for diagrams, but d2 & graphviz are available.
+
 ## environment
 
 ### worktrees

@@ -64,6 +64,9 @@
           sccache
 
           graphviz
+          d2
+          mermaid-cli
+
           doctrine
         ];
 
