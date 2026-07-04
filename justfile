@@ -1,6 +1,6 @@
 mod? doctrine '.doctrine/doctrine.just'
 
-default: lint test nix-install
+default: lint test nix-build
 
 setup: web-build build
 
@@ -85,7 +85,7 @@ smoke: web-build
   scripts/smoke.sh ./target/debug/doctrine
 
 # Catches source-filter / asset-embed gaps `cargo build` can't (it reads the real
-# web/map/dist on disk; the nix sandbox builds the frontend hermetically). Slow
+# web/map/dist on disk; the ix sandbox builds the frontend hermetically). Slow
 # first run, crane-cached after. Host-real; a genuine failure exits non-zero, but
 # skipped with a notice where nix is absent (bubblewrap jails).
 # Validate the hermetic nix flake build.
