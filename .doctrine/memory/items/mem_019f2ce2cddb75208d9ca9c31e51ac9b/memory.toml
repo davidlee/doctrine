@@ -1,0 +1,46 @@
+memory_uid = "mem_019f2ce2cddb75208d9ca9c31e51ac9b"
+memory_key = "mem.fact.memory.key-resolution-items-vs-shipped"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "resolve_inspect_uid is items-only; use collect_all + resolve_memory_from_all to resolve a memory key across items+shipped"
+summary = "resolve_inspect_uid misses shipped memories; the items+shipped union seam is collect_all + resolve_memory_from_all"
+created = "2026-07-04"
+updated = "2026-07-04"
+
+[scope]
+paths = ["src/memory.rs", "src/commands/map.rs"]
+globs = []
+commands = []
+tags = ["area:memory", "area:cli"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "cee12119e76632a76a70438f3a6cd6814a923ec7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "59656036e5740e9b843b0a41646e9ac2f630ec7cb91364cb77037ec635c9840a"
+base_commit = "c63c1397e921107bc74d6691dddfdac328a1918f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-201"
+
