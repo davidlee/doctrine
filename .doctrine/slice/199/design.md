@@ -210,11 +210,16 @@ plan detail; the load-bearing sequence is import → conclude → reap.)
   `run_record_boundary`'s live-file write) would leave a **poisoned, unrecoverable**
   dirty tree on any fault, and sweep pre-existing residue into the next commit. The
   fix rides plumbing the repo already has: `commit_on_behalf` composes the commit
-  **working-tree-free** — stage into a **scratch `GIT_INDEX_FILE`** (`filter_tree`
-  kit, git.rs:677-732), `write-tree`, `commit_tree` (git.rs:828), `update-ref` — so
-  the live coord index+worktree stay **byte-unchanged** until the ref moves; a fault
-  leaves nothing to reset. `dispatch_import` applies the worker delta into the scratch
-  index; `dispatch_conclude_phase` reuses `run_record_boundary`'s **pure** `BoundaryRow`
+  **working-tree-free** — a tree-level compose (`merge_tree --write-tree`, git.rs:846,
+  `working-tree-free, object-db only`; `commit_tree`, git.rs:828) or a **scratch
+  `GIT_INDEX_FILE`** (`filter_tree` kit, git.rs:677-732) applied `--cached`,
+  `write-tree`, `commit_tree`, `update-ref` — so the live coord index+worktree stay
+  **byte-unchanged** until the ref moves; a fault leaves nothing to reset. **Working-
+  tree-free bar (2nd-pass new finding):** `git apply --index` writes the WORKING TREE
+  — only `--cached` is index-only — so `dispatch_import` composes the committed worker
+  branch onto the coord tip TREE-LEVEL (`merge_tree`/`commit_tree`), or if any apply
+  path is used it is `--cached` against the scratch index, NEVER `--index`.
+  `dispatch_conclude_phase` reuses `run_record_boundary`'s **pure** `BoundaryRow`
   compute (NOT its live-file write) and hands the new `boundaries.toml` blob to the same
   primitive. The **completed-flip** stays gitignored runtime (`.doctrine/state/`,
   disposable, re-established on retry); the **committed boundary** on `dispatch/<NNN>`
