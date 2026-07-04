@@ -550,6 +550,10 @@ pub(crate) enum Command {
         /// Emit findings as a JSON array.
         #[arg(long)]
         json: bool,
+
+        /// Show all findings including expected noise (raw labels, reference-doc exemplars).
+        #[arg(long)]
+        verbose: bool,
     },
 
     /// Renumber an entity's canonical id.
@@ -1305,7 +1309,11 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Worktree { command } => crate::worktree::dispatch(command),
         Command::Dispatch { command } => crate::dispatch::dispatch(command, color),
         Command::Validate { path } => crate::commands::validate::run_validate(path),
-        Command::Doctor { path, json } => crate::commands::doctor::run_doctor(path, json),
+        Command::Doctor {
+            path,
+            json,
+            verbose,
+        } => crate::commands::doctor::run_doctor(path, json, verbose),
         Command::Reseat {
             reference,
             to,

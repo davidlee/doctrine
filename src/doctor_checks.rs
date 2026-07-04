@@ -140,7 +140,7 @@ fn is_facet_diagnostic(d: &CatalogDiagnostic) -> bool {
 ///
 /// Emits a `ProseCite` Warning for each known-prefix 2-part citation that does
 /// not resolve to an entity on disk.
-pub(crate) fn prose_cite_findings(root: &Path) -> Vec<Finding> {
+pub(crate) fn prose_cite_findings(root: &Path, verbose: bool) -> Vec<Finding> {
     let mut findings = Vec::new();
 
     // Anchor to the authored corpus (design §5.5/§7 D11): scan only
@@ -170,6 +170,11 @@ pub(crate) fn prose_cite_findings(root: &Path) -> Vec<Finding> {
             continue;
         }
         if is_disposable_prose_d11(&entry) {
+            continue;
+        }
+        // Non-verbose path exclusions: glossary.md exemplar placeholders and
+        // .doctrine/rfc/ runtime instrumentation are never actionable citations.
+        if !verbose && is_non_verbose_prose_skip(&entry) {
             continue;
         }
 
@@ -248,6 +253,16 @@ fn is_disposable_prose_d11(path: &Path) -> bool {
     }
     let path_str = path.to_string_lossy();
     path_str.contains("/research/") || path_str.contains(".doctrine/review/")
+}
+
+/// Non-verbose prose-cite skip: glossary.md (exemplar placeholders like POL-123,
+/// STD-123) and `.doctrine/rfc/` (runtime instrumentation, gitignored).
+fn is_non_verbose_prose_skip(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if name == "glossary.md" {
+        return true;
+    }
+    path.to_string_lossy().contains(".doctrine/rfc/")
 }
 
 /// Return the line's text regions outside inline backtick code spans.
@@ -477,7 +492,7 @@ mod tests {
         let file = root.join(".doctrine/slice/099/slice-099.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, prose).unwrap();
-        prose_cite_findings(root)
+        prose_cite_findings(root, true)
     }
 
     /// Root with SL-001 seeded so `SL-001` resolves.
@@ -889,7 +904,7 @@ mod tests {
         let file = root.join(".doctrine/slice/001/audit.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root);
+        let findings = prose_cite_findings(root, true);
         assert!(
             findings.is_empty(),
             "audit.md should be skipped: {findings:?}"
@@ -903,7 +918,7 @@ mod tests {
         let file = root.join(".doctrine/slice/001/inquisition.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root);
+        let findings = prose_cite_findings(root, true);
         assert!(
             findings.is_empty(),
             "inquisition.md should be skipped: {findings:?}"
@@ -917,7 +932,7 @@ mod tests {
         let file = root.join(".doctrine/slice/001/notes.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root);
+        let findings = prose_cite_findings(root, true);
         assert!(
             findings.is_empty(),
             "notes.md should be skipped: {findings:?}"
@@ -931,7 +946,7 @@ mod tests {
         let file = root.join(".doctrine/research/notes/some.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root);
+        let findings = prose_cite_findings(root, true);
         assert!(
             findings.is_empty(),
             "research/ should be skipped: {findings:?}"
@@ -945,7 +960,7 @@ mod tests {
         let file = root.join(".doctrine/review/042/summary.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root);
+        let findings = prose_cite_findings(root, true);
         assert!(
             findings.is_empty(),
             ".doctrine/review/ should be skipped: {findings:?}"
@@ -959,7 +974,7 @@ mod tests {
         let file = root.join(".doctrine/slice/002/slice-002.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root);
+        let findings = prose_cite_findings(root, true);
         assert_eq!(
             findings.len(),
             1,
@@ -975,7 +990,7 @@ mod tests {
         let file = root.join(".doctrine/slice/001/handover.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root);
+        let findings = prose_cite_findings(root, true);
         assert!(
             findings.is_empty(),
             "handover.md should be skipped via is_disposable_prose: {findings:?}"
@@ -989,11 +1004,73 @@ mod tests {
         let file = root.join(".doctrine/state/slice/001/phase-01.md");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, "dangling SL-999 here\n").unwrap();
-        let findings = prose_cite_findings(root);
+        let findings = prose_cite_findings(root, true);
         assert!(
             findings.is_empty(),
             ".doctrine/state should be skipped via is_disposable_prose: {findings:?}"
         );
+    }
+
+    // --- ProseCite path exclusions (IMP-252) ---
+
+    #[test]
+    fn prose_cite_skips_glossary_md_when_not_verbose() {
+        let dir = root_with_sl001();
+        let root = dir.path();
+        let file = root.join(".doctrine/glossary.md");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "dangling POL-123 here\n").unwrap();
+        let findings = prose_cite_findings(root, false);
+        assert!(
+            findings.is_empty(),
+            "glossary.md should be skipped when not verbose: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn prose_cite_shows_glossary_md_when_verbose() {
+        let dir = root_with_sl001();
+        let root = dir.path();
+        let file = root.join(".doctrine/glossary.md");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "dangling POL-123 here\n").unwrap();
+        let findings = prose_cite_findings(root, true);
+        assert_eq!(
+            findings.len(),
+            1,
+            "glossary.md should be scanned when verbose: {findings:?}"
+        );
+        assert!(findings[0].message.contains("POL-123"));
+    }
+
+    #[test]
+    fn prose_cite_skips_rfc_dir_when_not_verbose() {
+        let dir = root_with_sl001();
+        let root = dir.path();
+        let file = root.join(".doctrine/rfc/011/case-notes.md");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "dangling RV-217 here\n").unwrap();
+        let findings = prose_cite_findings(root, false);
+        assert!(
+            findings.is_empty(),
+            "rfc/ should be skipped when not verbose: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn prose_cite_shows_rfc_when_verbose() {
+        let dir = root_with_sl001();
+        let root = dir.path();
+        let file = root.join(".doctrine/rfc/011/case-notes.md");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "dangling RV-217 here\n").unwrap();
+        let findings = prose_cite_findings(root, true);
+        assert_eq!(
+            findings.len(),
+            1,
+            "rfc/ should be scanned when verbose: {findings:?}"
+        );
+        assert!(findings[0].message.contains("RV-217"));
     }
 
     // ------------------------------------------------------------------

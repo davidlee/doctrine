@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use crate::finding::{Category, Finding};
 
-pub(crate) fn run_doctor(path: Option<PathBuf>, json: bool) -> anyhow::Result<()> {
+pub(crate) fn run_doctor(path: Option<PathBuf>, json: bool, verbose: bool) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
 
     let mut findings: Vec<Finding> = Vec::new();
@@ -46,7 +46,13 @@ pub(crate) fn run_doctor(path: Option<PathBuf>, json: bool) -> anyhow::Result<()
     findings.extend(crate::doctor_checks::toml_parse_findings(&root));
 
     // #8 — Prose Citation (Warning)
-    findings.extend(crate::doctor_checks::prose_cite_findings(&root));
+    // IMP-252: JSON mode always gets the full dataset; path exclusions only
+    // apply to non-JSON, non-verbose terminal output.
+    let prose_verbose = json || verbose;
+    findings.extend(crate::doctor_checks::prose_cite_findings(
+        &root,
+        prose_verbose,
+    ));
 
     // #9 — Agent Conformance (Error) — SL-198 RSK-225: worker tool-surface is a
     // jail wall; scan authored agent-defs under install/agents + .doctrine/agents.
@@ -58,7 +64,7 @@ pub(crate) fn run_doctor(path: Option<PathBuf>, json: bool) -> anyhow::Result<()
         let json_out = crate::listing::json_envelope("doctor", &findings)?;
         writeln!(std::io::stdout(), "{json_out}")?;
     } else {
-        let rendered = crate::finding::render_findings(&findings);
+        let rendered = crate::finding::render_findings(&findings, verbose);
         writeln!(std::io::stdout(), "{rendered}")?;
     }
 

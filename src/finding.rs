@@ -198,7 +198,10 @@ impl Finding {
 
 /// Group findings by category (ordinal order), render each non-empty group
 /// with a bracketed header, then a summary line.
-pub(crate) fn render_findings(findings: &[Finding]) -> String {
+///
+/// When `verbose` is false, `RawLabel` findings are aggregated into a single
+/// informational count line rather than rendered per-item.
+pub(crate) fn render_findings(findings: &[Finding], verbose: bool) -> String {
     let mut by_category: [Vec<&Finding>; 9] = [
         Vec::new(),
         Vec::new(),
@@ -220,6 +223,7 @@ pub(crate) fn render_findings(findings: &[Finding]) -> String {
 
     let mut out = String::new();
     let mut total: usize = 0;
+    let mut raw_label_count: usize = 0;
 
     for cat in &CATEGORIES_BY_ORDINAL {
         let idx = usize::from(cat.ordinal());
@@ -229,6 +233,11 @@ pub(crate) fn render_findings(findings: &[Finding]) -> String {
         if group.is_empty() {
             continue;
         }
+        // IMP-252: in non-verbose mode, aggregate RawLabel into a count line.
+        if !verbose && *cat == Category::RawLabel {
+            raw_label_count = group.len();
+            continue;
+        }
         let _header = writeln!(out, "[{}]", cat.display_name());
         for f in group {
             let _line = writeln!(out, "  {}: {}", f.category.severity(), f.message);
@@ -236,7 +245,18 @@ pub(crate) fn render_findings(findings: &[Finding]) -> String {
         }
     }
 
-    if total == 0 {
+    // RawLabel count line (non-verbose only).
+    if raw_label_count > 0 {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        let _line = writeln!(
+            out,
+            "Raw Label: {raw_label_count} memory edge(s) use raw labels (expected)"
+        );
+    }
+
+    if total == 0 && raw_label_count == 0 {
         out.push_str(CORPUS_CLEAN);
     } else {
         let _summary = write!(out, "{total} finding(s)");
@@ -276,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_render_empty() {
-        let out = render_findings(&[]);
+        let out = render_findings(&[], true);
         assert!(out.contains(CORPUS_CLEAN));
         assert!(!out.contains('['));
     }
@@ -293,7 +313,7 @@ mod tests {
             entity: None,
             message: "stale draft".into(),
         };
-        let out = render_findings(&[f1, f2]);
+        let out = render_findings(&[f1, f2], true);
         assert!(out.contains(CATEGORY_NAME_ID_INTEGRITY));
         assert!(out.contains(CATEGORY_NAME_LIFECYCLE));
         assert!(out.contains("2 finding(s)"));
@@ -309,10 +329,84 @@ mod tests {
                 message: format!("test {cat}"),
             })
             .collect();
-        let out = render_findings(&findings);
+        let out = render_findings(&findings, true);
         for cat in &CATEGORIES_BY_ORDINAL {
             assert!(out.contains(cat.display_name()), "missing category: {cat}");
         }
         assert!(out.contains("9 finding(s)"));
+    }
+
+    // --- IMP-252: verbose/non-verbose RawLabel rendering ---
+
+    #[test]
+    fn render_non_verbose_aggregates_raw_labels() {
+        let findings: Vec<Finding> = (0..5)
+            .map(|i| Finding {
+                category: Category::RawLabel,
+                entity: Some(format!("mem_{i}")),
+                message: format!("raw label: rel{i}"),
+            })
+            .collect();
+        let out = render_findings(&findings, false);
+        assert!(
+            !out.contains("[Raw Label]"),
+            "non-verbose must not show RawLabel header"
+        );
+        assert!(
+            out.contains("Raw Label: 5 memory edge(s) use raw labels (expected)"),
+            "non-verbose must show RawLabel count line: {out}"
+        );
+        // Summary line counts only non-RawLabel findings (0 in this case).
+        assert!(
+            out.contains("corpus clean") || out.contains("0 finding(s)"),
+            "summary should not count RawLabel findings: {out}"
+        );
+    }
+
+    #[test]
+    fn render_verbose_shows_raw_labels_individually() {
+        let findings: Vec<Finding> = (0..3)
+            .map(|i| Finding {
+                category: Category::RawLabel,
+                entity: Some(format!("mem_{i}")),
+                message: format!("raw label: rel{i}"),
+            })
+            .collect();
+        let out = render_findings(&findings, true);
+        assert!(
+            out.contains("[Raw Label]"),
+            "verbose must show RawLabel header"
+        );
+        assert!(
+            out.contains("raw label: rel0"),
+            "verbose must show individual findings: {out}"
+        );
+        assert!(
+            out.contains("3 finding(s)"),
+            "verbose summary must count all findings: {out}"
+        );
+    }
+
+    #[test]
+    fn render_non_verbose_mixed_raw_and_error() {
+        let raw = Finding {
+            category: Category::RawLabel,
+            entity: Some("mem_a".into()),
+            message: "raw label: test".into(),
+        };
+        let err = Finding {
+            category: Category::IdIntegrity,
+            entity: Some("SL-001".into()),
+            message: "bad id".into(),
+        };
+        let out = render_findings(&[raw, err], false);
+        // Error category still shows.
+        assert!(out.contains("[Id Integrity]"));
+        assert!(out.contains("bad id"));
+        // RawLabel aggregated.
+        assert!(!out.contains("[Raw Label]"));
+        assert!(out.contains("Raw Label: 1 memory edge(s) use raw labels (expected)"));
+        // Summary counts only non-RawLabel.
+        assert!(out.contains("1 finding(s)"));
     }
 }
