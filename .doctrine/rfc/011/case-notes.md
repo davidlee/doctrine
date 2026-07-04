@@ -805,3 +805,27 @@ the operator. Subprocess-arm half needed no live probe — bwrap child-namespace
 inheritance + `pi-spawn-confined.sh` (`--ro-bind / /`, `--no-extensions`) is
 dispositive; live-probing it would have burnt tokens confirming a definitional
 property.
+
+[audit; SL-196-RV244]
+`dispatch candidate admit` flag/hint mismatch. The `candidate status` "next"
+hint reads `--id <candidate-id>`, but the actual flag is `--candidate` and it
+wants the branch REF (`refs/heads/candidate/196/review-001`), not the id
+(`cand-196-review-001`). Passing the id fails with an opaque "does not resolve
+to a committed tip" — reads like a provenance/commit error, not an arg-form
+error. Two probes burned (id → --candidate id → --candidate ref). Fix: align the
+hint to `--candidate <ref>`, or accept the id form, or make the error name the
+arg-shape mismatch.
+
+[backlog dedup; IMP-216/CHR-036 sess-f8a7]
+- `doctrine link IMP-216 related CHR-036` refused: "typed table `[value]` is
+  authored AFTER the [[relation]] array (F1)". The source item's TOML layout
+  blocked the append; reverse-direction `link CHR-036 related IMP-216` worked
+  (reciprocity is derived, ADR-004, so semantically equivalent). Cost: one
+  failed call + reasoning to pick the other direction. A user/agent without the
+  ADR-004 "reciprocity derived" fact would be stuck, since the error only says
+  "re-home [value]" (a hand-edit the backlog skill forbids). The link verb could
+  auto-pick the writable endpoint, or the error could suggest reversing.
+- `relation census <ID>` and `supersede` both surprised: census takes no
+  positional id (options-only), supersede is ADR-only (refuses backlog kinds).
+  Boot spine lists `supersede` under generic relations without the ADR-only
+  caveat — mild mis-signal.
