@@ -30,6 +30,14 @@ intent = "scope-relevant"
 selector = ".claude/skills/dispatch-agent/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/worktree/create.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
