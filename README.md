@@ -163,6 +163,8 @@ doctrine memory find ...
 
 Doctrine ships with self-documenting agent memories. 
 
+You can view them yourself with `doctrine onboard`.
+
 The agent should be able to steer while you get used to
 the default workflow.
 
@@ -264,13 +266,14 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [SPEC-020 — Estimation facet](.doctrine/spec/tech/020/spec-020.md) — `active`
 - [SPEC-021 — Dispatch orchestrator process](.doctrine/spec/tech/021/spec-021.md) — `active`
 - [SPEC-022 — Git interaction model](.doctrine/spec/tech/022/spec-022.md) — `active`
+- [SPEC-023 — Prompt cascade](.doctrine/spec/tech/023/spec-023.md) — `active`
 
 ### Architecture Decision Records
 
 - [ADR-001 — Module layering: leaf ← engine ← command, no cycles](.doctrine/adr/001/adr-001.md) — `accepted`
 - [ADR-002 — Global orientation memory class: repo-empty, unanchored, evergreen](.doctrine/adr/002/adr-002.md) — `accepted`
 - [ADR-003 — Canonical change loop: slice-first, observe, reconcile, close](.doctrine/adr/003/adr-003.md) — `accepted`
-- [ADR-004 — Relations stored outbound-only; reciprocity is derived](.doctrine/adr/004/adr-004.md) — `superseded`
+- [ADR-004 — Relations stored outbound-only; reciprocity is derived](.doctrine/adr/004/adr-004.md) — `accepted`
 - [ADR-005 — Shipped knowledge is tiered by access pattern; skills route, reference docs explain](.doctrine/adr/005/adr-005.md) — `accepted`
 - [ADR-006 — Worktree posture: policy-agnostic framework, orchestrator-sole-writer dispatch](.doctrine/adr/006/adr-006.md) — `accepted`
 - [ADR-007 — Adversarial review as a first-class kind with turn-based ledger coordination](.doctrine/adr/007/adr-007.md) — `accepted`
