@@ -85,3 +85,12 @@ the baseline, no evidence of harm). Prefer, in order:
    split the command tier.
 
 Relates to ADR-001 (the gate) and SL-112 (where the residual was scoped out).
+
+## Artifacts
+
+`graph/` — the command-tier coupling map: portable generator (`gen.py`),
+captured input (`edges.txt`), DOT + rendered SVG (`cmd_neato.svg`), and a
+self-contained diagnostic page (`coupling-map.html`). `graph/REGEN.md` documents
+rebuild from the `dump_real_graph` diagnostic. Confirms: two SCCs (a 23-node
+core + a `{commands, mcp_server}` 2-cycle), `integrity` a symmetric 13/13 nexus,
+and **35 of 149** same-tier edges acyclic → uncounted by the ratchet.
