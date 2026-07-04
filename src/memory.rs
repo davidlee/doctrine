@@ -1286,6 +1286,11 @@ pub(crate) struct MemoryCatalogRecord {
     pub(crate) memory_type: String,
     pub(crate) relations: Vec<RawRelation>,
     pub(crate) path: PathBuf,
+    /// Prose body from the sibling `memory.md`, read transiently for catalog
+    /// edge extraction (body `[[mem.…]]` wikilinks — SL-202). `None` when the
+    /// `.md` is absent/unreadable; mirrors the `corpus.rs:370` `.ok()` seam.
+    /// Consumed by the body-wikilink pass in `Catalog::from_scanned`.
+    pub(crate) body: Option<String>,
 }
 
 pub(crate) fn read_catalog_record(toml_path: &Path) -> Result<MemoryCatalogRecord> {
@@ -1306,6 +1311,7 @@ pub(crate) fn read_catalog_record(toml_path: &Path) -> Result<MemoryCatalogRecor
         raw.title
     };
 
+    let dir = toml_path.parent().unwrap_or(Path::new("."));
     Ok(MemoryCatalogRecord {
         uid: raw.memory_uid,
         key: raw.memory_key,
@@ -1313,7 +1319,9 @@ pub(crate) fn read_catalog_record(toml_path: &Path) -> Result<MemoryCatalogRecor
         status: raw.status,
         memory_type: raw.memory_type,
         relations: raw.relations,
-        path: toml_path.parent().unwrap_or(Path::new(".")).to_path_buf(),
+        // Tolerant sibling read: absent/unreadable `.md` → `None` (corpus.rs:370 idiom).
+        body: std::fs::read_to_string(dir.join("memory.md")).ok(),
+        path: dir.to_path_buf(),
     })
 }
 
@@ -4476,6 +4484,28 @@ to = "mem_018e000000000000000000000000000b"
             record.relations[1].target,
             "mem_018e000000000000000000000000000c"
         );
+    }
+
+    #[test]
+    fn read_catalog_record_populates_body_from_sibling_memory_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        let uid = "mem_00000000000000000000000000000005";
+        let path = write_catalog_toml(tmp.path(), &full_toml().replace(UID, uid));
+        fs::write(tmp.path().join("memory.md"), "# Body\n\nSee [[mem.x.y.z]].").unwrap();
+
+        let record = read_catalog_record(&path).unwrap();
+        assert_eq!(record.body.as_deref(), Some("# Body\n\nSee [[mem.x.y.z]]."));
+    }
+
+    #[test]
+    fn read_catalog_record_body_is_none_when_memory_md_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let uid = "mem_00000000000000000000000000000006";
+        let path = write_catalog_toml(tmp.path(), &full_toml().replace(UID, uid));
+        // no sibling memory.md written
+
+        let record = read_catalog_record(&path).unwrap();
+        assert!(record.body.is_none());
     }
 
     // -- VT-3: MemoryRef ----------------------------------------------------
