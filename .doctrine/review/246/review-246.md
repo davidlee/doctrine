@@ -88,3 +88,12 @@ finding touches design, spec, or governance.
 - None.
 
 `/reconcile` confirms the clean audit and advances the slice; no write surface is opened.
+
+## Reconciliation Outcome
+
+**No-op.** Both findings (F-1 behaviour-preservation, F-2 plan EN-2 over-spec)
+are `aligned`/`verified` with no write needed. The Reconciliation Brief is empty
+— no per-slice edit, no governance/spec REV, no tolerated drift. Implementation
+matches `design.md` §5.4/§5.5 as written; no authored-truth diverged.
+
+Reconcile pass complete — handoff to /close.
