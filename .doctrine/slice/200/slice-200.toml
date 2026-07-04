@@ -1,7 +1,7 @@
 id = 200
 slug = "memory-wikilink-relink"
 title = "Memory wikilink resolver complains; corpus relinked"
-status = "started"
+status = "done"
 created = "2026-07-04"
 updated = "2026-07-04"
 tags = []
