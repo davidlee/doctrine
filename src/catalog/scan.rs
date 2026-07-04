@@ -440,12 +440,22 @@ fn title_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<
 // ---------------------------------------------------------------------------
 
 /// Scan memory entities from `MEMORY_ITEMS_DIR` and `MEMORY_SHIPPED_DIR`.
+///
+/// Returns the deduped records plus a `key→uid` map spanning BOTH corpora
+/// (ISS-213): built from each record's authored `memory_key`, not from
+/// `items/` key symlinks (shipped dirs carry none). The shipped→items loop
+/// order gives collision precedence for free — a local `items/` key overrides
+/// a shipped key of the same name.
 pub(crate) fn scan_memory_entities(
     root: &Path,
     diagnostics: &mut Vec<CatalogDiagnostic>,
-) -> anyhow::Result<Vec<crate::memory::MemoryCatalogRecord>> {
+) -> anyhow::Result<(
+    Vec<crate::memory::MemoryCatalogRecord>,
+    BTreeMap<String, String>,
+)> {
     use crate::memory::{MEMORY_ITEMS_DIR, MEMORY_SHIPPED_DIR};
     let mut records: BTreeMap<String, crate::memory::MemoryCatalogRecord> = BTreeMap::new();
+    let mut key_map: BTreeMap<String, String> = BTreeMap::new();
     for (dir, fail_on_error) in [(MEMORY_SHIPPED_DIR, false), (MEMORY_ITEMS_DIR, true)] {
         let base = root.join(dir);
         let names = match entity::scan_named(&base) {
@@ -470,6 +480,9 @@ pub(crate) fn scan_memory_entities(
                         });
                         continue;
                     }
+                    if let Some(k) = &rec.key {
+                        key_map.insert(k.clone(), rec.uid.clone());
+                    }
                     records.insert(rec.uid.clone(), rec);
                 }
                 Err(e) => {
@@ -484,7 +497,7 @@ pub(crate) fn scan_memory_entities(
             }
         }
     }
-    Ok(records.into_values().collect())
+    Ok((records.into_values().collect(), key_map))
 }
 
 // ---------------------------------------------------------------------------
@@ -699,7 +712,7 @@ mod tests {
         );
 
         let mut diags = Vec::new();
-        let records = scan_memory_entities(root, &mut diags).unwrap();
+        let (records, _key_map) = scan_memory_entities(root, &mut diags).unwrap();
 
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].uid, "mem_11111111112222222222333333333344");
@@ -741,11 +754,75 @@ mod tests {
         );
 
         let mut diags = Vec::new();
-        let records = scan_memory_entities(root, &mut diags).unwrap();
+        let (records, _key_map) = scan_memory_entities(root, &mut diags).unwrap();
 
         assert_eq!(records.len(), 1, "items should override shipped");
         assert_eq!(records[0].title, "Items Version");
         assert!(diags.is_empty());
+    }
+
+    // == ISS-213: key→uid map spans shipped corpus (no key symlinks there) ==
+
+    #[test]
+    fn scan_memory_entities_key_map_includes_shipped_keys() {
+        let dir = tmp();
+        let root = dir.path();
+
+        let uid = "mem_11111111112222222222333333333344";
+        let key = "mem.signpost.doctrine.lifecycle-start";
+        seed_memory(
+            root,
+            "shipped",
+            uid,
+            &format!(
+                "memory_uid = \"{uid}\"\n\
+                 memory_key = \"{key}\"\n\
+                 memory_type = \"signpost\"\n\
+                 status = \"active\"\n\
+                 title = \"Shipped\"\n"
+            ),
+        );
+
+        let mut diags = Vec::new();
+        let (_records, key_map) = scan_memory_entities(root, &mut diags).unwrap();
+
+        assert_eq!(key_map.get(key), Some(&uid.to_string()));
+        assert!(diags.is_empty());
+    }
+
+    // == ISS-213: on a key collision, a local items/ entry overrides shipped ==
+
+    #[test]
+    fn scan_memory_entities_key_map_items_override_shipped_on_collision() {
+        let dir = tmp();
+        let root = dir.path();
+
+        let key = "mem.signpost.doctrine.overview";
+        let shipped_uid = "mem_11111111112222222222333333333344";
+        let items_uid = "mem_aaaaaaaaaabbbbbbbbbbcccccccccccc";
+        for (tree, uid) in [("shipped", shipped_uid), ("items", items_uid)] {
+            seed_memory(
+                root,
+                tree,
+                uid,
+                &format!(
+                    "memory_uid = \"{uid}\"\n\
+                     memory_key = \"{key}\"\n\
+                     memory_type = \"signpost\"\n\
+                     status = \"active\"\n\
+                     title = \"{tree}\"\n"
+                ),
+            );
+        }
+
+        let mut diags = Vec::new();
+        let (_records, key_map) = scan_memory_entities(root, &mut diags).unwrap();
+
+        assert_eq!(
+            key_map.get(key),
+            Some(&items_uid.to_string()),
+            "local items/ key must override the shipped key"
+        );
     }
 
     // == VT-3: uid != dirname → Error diagnostic, excluded ==
@@ -770,7 +847,7 @@ mod tests {
         );
 
         let mut diags = Vec::new();
-        let records = scan_memory_entities(root, &mut diags).unwrap();
+        let (records, _key_map) = scan_memory_entities(root, &mut diags).unwrap();
 
         // The record is excluded (uid mismatch).
         assert!(records.is_empty());
@@ -798,7 +875,7 @@ mod tests {
         seed_memory(root, "items", uid, "this is not valid toml at all[[[\n");
 
         let mut diags = Vec::new();
-        let records = scan_memory_entities(root, &mut diags).unwrap();
+        let (records, _key_map) = scan_memory_entities(root, &mut diags).unwrap();
 
         assert!(records.is_empty());
         assert_eq!(diags.len(), 1);
@@ -818,7 +895,7 @@ mod tests {
         let root = dir.path();
 
         let mut diags = Vec::new();
-        let records = scan_memory_entities(root, &mut diags).unwrap();
+        let (records, _key_map) = scan_memory_entities(root, &mut diags).unwrap();
 
         assert!(records.is_empty());
         assert!(diags.is_empty());
@@ -836,7 +913,7 @@ mod tests {
         std::fs::create_dir_all(root.join(".doctrine/memory/items")).unwrap();
 
         let mut diags = Vec::new();
-        let records = scan_memory_entities(root, &mut diags).unwrap();
+        let (records, _key_map) = scan_memory_entities(root, &mut diags).unwrap();
 
         assert!(records.is_empty());
         assert!(diags.is_empty());

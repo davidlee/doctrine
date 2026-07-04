@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use crate::entity;
 use crate::integrity;
-use crate::memory::{self, MEMORY_ITEMS_DIR, MemoryCatalogRecord};
+use crate::memory::{self, MemoryCatalogRecord};
 use crate::relation::{RelationLabel, Role};
 
 use super::diagnostic::{CatalogDiagnostic, Severity};
@@ -429,14 +429,14 @@ fn classify_target(
 /// Scan the full entity corpus, hydrate into a `Catalog`.
 ///
 /// Calls `scan_entities` (the fail-fast KINDS walk) and `scan_memory_entities`
-/// (the memory walk), then `Catalog::from_scanned` (pure projection). Also builds
-/// a memory key→UID map from items/ symlinks so that memory→memory edge targets
-/// resolve to their canonical UID nodes.
+/// (the memory walk), then `Catalog::from_scanned` (pure projection). The memory
+/// walk also yields a key→UID map spanning both corpora (shipped + items) so that
+/// memory→memory edge targets authored by readable key resolve to their canonical
+/// UID nodes regardless of corpus (ISS-213).
 pub(crate) fn scan_catalog(root: &Path, mode: ScanMode) -> anyhow::Result<Catalog> {
     let mut diagnostics = Vec::new();
     let scanned = super::scan::scan_entities(root, &mut diagnostics, mode)?;
-    let memory = super::scan::scan_memory_entities(root, &mut diagnostics)?;
-    let mem_key_map = build_memory_key_map(root);
+    let (memory, mem_key_map) = super::scan::scan_memory_entities(root, &mut diagnostics)?;
     let units = resolve_units(root)?;
     let mut catalog = Catalog::from_scanned(root, &scanned, &memory, &mem_key_map, units);
     catalog.diagnostics.extend(diagnostics);
@@ -459,41 +459,6 @@ fn resolve_units(root: &Path) -> anyhow::Result<Units> {
         estimation: crate::estimate::resolve_unit(&cfg.estimation),
         value: crate::value::resolve_unit(&cfg.value),
     })
-}
-
-/// Build a map of memory keys → UIDs by reading symlinks from `items/`.
-/// Key symlinks are `mem.<type>.<domain>.<subject> -> mem_<uid>`.
-fn build_memory_key_map(root: &Path) -> BTreeMap<String, String> {
-    let items = root.join(MEMORY_ITEMS_DIR);
-    let mut map = BTreeMap::new();
-    let Ok(entries) = std::fs::read_dir(&items) else {
-        return map;
-    };
-    for entry in entries.flatten() {
-        let Ok(ft) = entry.file_type() else {
-            continue;
-        };
-        if !ft.is_symlink() {
-            continue;
-        }
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if !name_str.starts_with("mem.") {
-            continue;
-        }
-        // Read the symlink target — it's the UID directory name.
-        let Ok(target) = std::fs::read_link(entry.path()) else {
-            continue;
-        };
-        let Some(uid_os) = target.file_name() else {
-            continue;
-        };
-        let uid = uid_os.to_string_lossy().to_string();
-        if memory::is_uid(&uid) {
-            map.insert(name_str.to_string(), uid);
-        }
-    }
-    map
 }
 
 // ---------------------------------------------------------------------------
@@ -817,6 +782,66 @@ mod tests {
         .unwrap();
     }
 
+    /// Seed a SHIPPED memory (corpus dir carries no key symlinks — the whole
+    /// point of ISS-213) with an authored `memory_key` and optional relations.
+    fn seed_shipped_memory(
+        root: &Path,
+        uid: &str,
+        key: &str,
+        title: &str,
+        relations: &[(&str, &str)],
+    ) {
+        use crate::memory::MEMORY_SHIPPED_DIR;
+        let ship_dir = root.join(MEMORY_SHIPPED_DIR).join(uid);
+        std::fs::create_dir_all(&ship_dir).unwrap();
+        let rels: Vec<String> = relations
+            .iter()
+            .map(|(l, t)| format!("[[relation]]\nlabel = \"{l}\"\ntarget = \"{t}\"\n"))
+            .collect();
+        std::fs::write(
+            ship_dir.join("memory.toml"),
+            format!(
+                "schema = \"{SCHEMA_MEMORY}\"\nversion = 1\nmemory_uid = \"{uid}\"\nmemory_key = \"{key}\"\ntitle = \"{title}\"\nstatus = \"active\"\nmemory_type = \"signpost\"\n{}",
+                rels.concat()
+            ),
+        )
+        .unwrap();
+    }
+
+    /// ISS-213: a shipped memory whose relation targets another shipped memory
+    /// **by readable key** resolves to a drawn edge (previously dangled as
+    /// `UnvalidatedText` because the key→uid map ignored the shipped corpus).
+    #[test]
+    fn shipped_to_shipped_key_relation_resolves() {
+        let dir = tmp();
+        let root = dir.path();
+
+        let src_uid = "mem_11111111112222222222333333333344";
+        let dst_uid = "mem_aaaaaaaaaabbbbbbbbbbcccccccccccc";
+        let dst_key = "mem.signpost.doctrine.lifecycle-start";
+        seed_shipped_memory(root, dst_uid, dst_key, "Lifecycle Start", &[]);
+        seed_shipped_memory(
+            root,
+            src_uid,
+            "mem.signpost.doctrine.overview",
+            "Overview",
+            &[("see-also", dst_key)],
+        );
+
+        let catalog = scan_catalog(root, ScanMode::default()).unwrap();
+
+        let edge = catalog
+            .edges
+            .iter()
+            .find(|e| e.source == CatalogKey::Memory(src_uid.to_string()))
+            .expect("source memory edge present");
+        assert_eq!(
+            edge.target,
+            EdgeTarget::Resolved(CatalogKey::Memory(dst_uid.to_string())),
+            "key-form shipped→shipped target must resolve to the dst UID node"
+        );
+    }
+
     /// RV-051 F-7: integration test for memory-edge target resolution pipeline.
     #[test]
     fn memory_edge_pipeline_resolves_and_diagnoses() {
@@ -1015,6 +1040,7 @@ mod tests {
 
         let record = MemoryCatalogRecord {
             uid: "mem_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            key: None,
             title: "M".to_string(),
             status: "active".to_string(),
             memory_type: "pattern".to_string(),

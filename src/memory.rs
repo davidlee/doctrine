@@ -1277,6 +1277,10 @@ pub(crate) struct Memory {
 
 pub(crate) struct MemoryCatalogRecord {
     pub(crate) uid: String,
+    /// Canonical readable key (`mem.<type>.<domain>.<subject>`), if authored.
+    /// Feeds the catalog key→uid map so key-form relation targets resolve
+    /// regardless of corpus (shipped or items) — ISS-213.
+    pub(crate) key: Option<String>,
     pub(crate) title: String,
     pub(crate) status: String,
     pub(crate) memory_type: String,
@@ -1304,6 +1308,7 @@ pub(crate) fn read_catalog_record(toml_path: &Path) -> Result<MemoryCatalogRecor
 
     Ok(MemoryCatalogRecord {
         uid: raw.memory_uid,
+        key: raw.memory_key,
         title,
         status: raw.status,
         memory_type: raw.memory_type,
