@@ -52,6 +52,38 @@ toolchain will smuggle format churn into every slice.
 Scope it: lint + test + a `--check`-only formatter over the touched files. Prove
 the phase, don't reformat the world.
 
+## Two ways a worker returns its delta: gated self-commit vs working-tree diff
+
+The worker cannot run raw `git commit` — the linked worktree's `.git` is
+read-only (jail wall). Two arms clear that wall differently:
+
+- **claude arm — gated server-side self-commit.** The worker calls the
+  `worker_commit` MCP tool, passing only its own opaque `agent` id (its worktree
+  name — **never a path**). The *unconfined* server resolves that id to the
+  worker's worktree and lands the commit on its behalf, so the jailed worker never
+  touches `.git` directly. This is a deliberate, single-purpose bypass of the jail
+  wall — therefore the tool's **belts are the security boundary**, not the wall:
+  non-empty pre-fmt delta → two-tier scope (a HARD forbidden-zone that hard-refuses
+  any write under `.doctrine/`, `.claude/`, or the configured
+  `[dispatch].worker-forbidden-writes`, plus a SOFT undeclared-path report) →
+  `HEAD == B` → the `check commit` gate → exactly one non-merge commit `C`
+  (`C^ == B`) on the worker's own `dispatch/<agent>` branch. A spoofed sibling id
+  commits to the *sibling's* branch and leaves its own at `B`.
+- **subprocess (pi) arm — working-tree diff.** The worker cannot self-commit at
+  all; it hands the tree back and the orchestrator captures the working-tree diff
+  (`import --from-worktree`). This is also the fallback when the MCP server is down.
+
+The orchestrator then imports. On the claude arm it imports the **commit**
+(`import --fork <C> --branch dispatch/<agent>`); the `--branch` coherence belt
+binds the import to the branch the orchestrator *armed*, so it promotes nothing of
+a poisoner who committed to a sibling's branch. `verify-worker` accepts the
+post-commit `HEAD` because it tests `merge-base --is-ancestor B HEAD` (a
+descendant), not `HEAD == B`. Either arm's import is **non-committing** (next
+section) — the delta is diff-applied, and the orchestrator commits separately.
+
+Ask `doctrine worktree --help` / `doctrine mcp` for exact flags and the tool's
+refusal tokens.
+
 ## The import severs ancestry — so "did it land?" needs a patch-id oracle
 
 The funnel imports a worker's delta with a non-committing 3-way apply onto `B`,

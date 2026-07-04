@@ -289,3 +289,44 @@ fn coherent_branch_verifies_ok() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+// SL-198 PHASE-03 VT-1: the post-`worker_commit` world. Once the gated MCP
+// self-commit lifts the ro-`.git` wall, a claude-arm worker lands ONE non-merge
+// commit above B on its branch S — so its HEAD is C (C^==B), no longer ==B.
+// verify-worker --branch MUST accept it: `merge-base --is-ancestor B HEAD` holds
+// for a descendant (X5's reuse claim — NOT a HEAD==B equality), and HEAD==tip(S)
+// keeps the coherence belt green. This test is the guard: a regression that
+// tightened the base check back to HEAD==B would fail here loud.
+#[test]
+fn committed_worker_one_commit_above_base_verifies_ok() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = init_repo(tmp.path());
+    let base = git(root, &["rev-parse", "HEAD"]);
+
+    // Isolated, stamped worker checked out ON branch S at B.
+    let wt = tmp.path().join("wt-committed");
+    add_worktree_on_branch(root, &wt, "s");
+    stamp_marker(&wt);
+
+    // The worker self-commits ONE non-merge commit in its worktree: HEAD and the
+    // branch tip S advance together to C, with C^ == B. (Explicit path add so the
+    // withheld marker is not swept into the commit — irrelevant to the belt, but
+    // keeps the fixture honest about what the worker changed.)
+    std::fs::write(wt.join("worker.txt"), "worker delta").unwrap();
+    git(&wt, &["add", "worker.txt"]);
+    git(&wt, &["commit", "-q", "-m", "worker_commit"]);
+    let c = git(&wt, &["rev-parse", "HEAD"]);
+    assert_ne!(c, base, "worker HEAD must have advanced one commit above B");
+    assert_eq!(
+        git(&wt, &["rev-parse", "HEAD^"]),
+        base,
+        "the worker commit must be exactly one non-merge commit above B (C^==B)"
+    );
+
+    let out = verify_worker(&base, &wt, Some("s"));
+    assert!(
+        out.status.success(),
+        "worker one commit above B on a coherent branch must verify OK; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

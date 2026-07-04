@@ -126,6 +126,90 @@ correctly-targeted lint (X3).** The import switch is the small part.
   `HEAD==B` (my call, D4). message worker-supplied, orchestrator may amend.
 - Default reviewer: codex (GPT-5.5).
 
+## Execution (2026-07-04) — PHASE-01/02/03 landed via claude-arm dispatch
+
+Driven on coord tree `dispatch/198` (`.dispatch/SL-198`). Base B walked:
+`5a1a06e8` (P01 tip) → `617129ff` (orchestrator pre-added `ignore` dep, P02 base)
+→ `c6fb7c8a` (P02 tip) → `02645cb4` (P03 tip) → `49032c3f` (RFC-011 case-note).
+
+- **PHASE-01 — per-worktree dispatch record + resolver** (`5a1a06e8`, prior session).
+  `src/worktree/dispatch_record.rs`: `resolve_agent` + `DispatchRecord{name,dir,branch,
+  base,coord}` + `ResolveRefusal`. Record at `.doctrine/state/dispatch/record/<name>.toml`
+  (built path is `record/`, NOT design §5.3's `jail/` → **F-record-path**, encapsulated
+  by `resolve_agent`).
+- **PHASE-02 — keystone `worker_commit` MCP tool** (`c6fb7c8a`, 9 files +792/−12).
+  Confined claude-arm worker (`agent-ae991b01…`) forked at B=`617129ff`, built it TDD,
+  handed back a working-tree delta; orchestrator funnelled it: verify-worker (HEAD==B) →
+  `import --from-worktree` → **markerless-coord gate** → regression diff vs B clean →
+  branch-point stationary → one path-limited commit → boundary → reaped.
+  - `dispatch_config.rs` (`worker-forbidden-writes` + `ForbiddenWrites` matcher, `.doctrine/`
+    floor fail-closed w/ precedence, PIN-2); `mcp_server/worker_commit.rs` (new handler,
+    cheap-first belts, two-tier scope reusing import prefixes + `undeclared_paths`, PIN-4);
+    tools.rs registration 18→19; agent-def pin; install template defaults.
+  - **Worker false-negative caught (durable lesson).** Worker reported unit-green (3101)
+    and claimed its gate `test`-step red was "all environmental" (worker-marker refusals).
+    Distrusted → ran full markerless suite → ONE real failure hid in the noise:
+    `vt2_tools_list` (e2e twin of the tool-count assert) still hardcoded 18. The
+    worker-marker turns real e2e failures into authored-write refusals that look identical
+    to env noise. Orchestrator fixed the 2-line e2e assert (T3 completion). → candidate
+    memory (below).
+  - **Seam promotions (worker-disclosed):** `import.rs` `DOCTRINE_PREFIX`/`CLAUDE_PREFIX`/
+    `gather_worktree_delta_paths` → `pub(crate)`; `worktree/mod.rs` re-exports of P01.
+    `worktree/mod.rs` is `src/worktree/**` **scope-relevant, not design-target** →
+    **F-seam-promotion** (imported w/o `--slice`; the byte-for-byte belt still HARD-rejects
+    `.doctrine/`/`.claude/`).
+- **PHASE-03 — commit-import switch = PURE REUSE** (`02645cb4`, in-thread, owner-approved
+  approach a). Design **X5 verified in source**: `run_import` `--fork` path already takes a
+  detached worker-HEAD oid (import.rs:274); `run_verify_worker` already gates
+  `merge-base --is-ancestor B HEAD` (subagent.rs:362), not `HEAD==B` → a worker one
+  non-merge commit above B verifies green **unchanged**. Zero new production code.
+  - `tests/e2e_worktree_verify_worker.rs` VT-1 **guard test** (worker one commit above B on
+    a coherent branch verifies OK — locks the is-ancestor semantics; regression to `HEAD==B`
+    fails loud). `classify_worker_verify` already fully unit-tested (mod.rs:1156-1219).
+  - **Note home corrected (owner steer):** generic two-arm mechanics → shipped
+    `install/dispatch-mechanics.md` (new section); `.doctrine/governance.md` narrowed to the
+    pi-arm note + pointer. Plan/design said "CLAUDE.md # orchestration" but no such section
+    exists and the note is generic doctrine knowledge → **F-note-home** (shipped, not
+    project-local; not CLAUDE.md).
+  - EX-6/PIN-4: import-time `UndeclaredScope` (import.rs:73/135) preserved, no change.
+
+### Reconcile carries (harvest at `/reconcile`)
+- **F-order** — design §5.2 gate/scope step-numbering vs plan EX-2 cheap-first; plan
+  correct per INV-5 (pre-fmt snapshot precedes mutating fmt).
+- **F-record-path** — §5.3 `jail/<name>.toml` vs built `record/<name>.toml`.
+- **F-seam-promotion** — `worktree/mod.rs` re-exports touched (scope-relevant, not
+  design-target); precise-selector or accept.
+- **F-x5-holds** — P03 objective text implies a code relax X5 already obviated; switch is
+  operational + documented, not coded.
+- **F-note-home** — orchestration note is shipped-generic (`dispatch-mechanics.md`), not
+  `CLAUDE.md`; update design §5.4 / plan EX-4/EX-5 wording.
+
+### Boundaries / gate / deferred
+- `boundaries.toml`: PHASE-01/02/03 recorded (contiguous, provenance `funnel`).
+- **Gate:** P03 `doctrine check commit` **green** (exit 0) at last code change; regression
+  vs B clean. All `.doctrine`/code committed promptly, path-limited.
+- **Deferred to close:** (a) `doctrine boot` regen (governance.md edited — needs `/clear`
+  to reload the inlined snapshot); (b) `cargo build` re-embed + `doctrine install`
+  (`install/dispatch-mechanics.md` is a RustEmbed asset — installed copy inert until
+  re-embedded); (c) VA-1 live end-to-end (jailed worker calls `worker_commit`) needs the
+  new binary installed — natural at audit.
+
+### Remaining
+- **PHASE-04** — worker tool-surface conformance lint (RSK-225), `src/commands/doctor.rs`,
+  wired into `just validate`. Real code → **worker-dispatch** (unlike P03). VH-1: owner
+  confirms allowlist semantics before close.
+- Then: `dispatch refresh-base` (trunk moved ahead of fork-point) → `slice verify-vt` →
+  prepare-review → `/audit` → `/reconcile` (carry the 5 F-items) → `/close`.
+
+### Candidate memory (run `/record-memory` before close)
+- **Confined-worker gate-green ≠ coord-green.** A dispatch worker's in-jail gate masks real
+  e2e failures: the worker-mode marker makes authored-write verbs refuse, so genuine e2e
+  failures surface as marker-refusals indistinguishable from environmental noise. The
+  orchestrator MUST re-run the full gate in the **markerless coord tree** post-import and
+  enumerate the **complete** failure set (`--no-fail-fast`) — never trust the worker's
+  blanket "environmental" verdict. (Sharpens `dispatch-mechanics.md` "never trust the
+  worker's self-reported success".)
+
 ## Related durable knowledge (already memories — don't re-derive)
 
 - [[mem.fact.dispatch.pretooluse-wall-mediates-write-tools-only]] — the witnessed bypass.

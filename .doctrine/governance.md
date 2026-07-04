@@ -40,8 +40,10 @@ with `[skill being used; a session-unique identifier]\n`
 # orchestration
 
 pi dispatch under claude code - use: ./scripts/pi-spawn-confined.sh
-note: worker CANNOT self-commit (ro .git for linked worktrees) → 
-orchestrator must import the working-tree diff. Worthwhile trade.
+note: on the **subprocess (pi) arm** the worker CANNOT self-commit (ro .git for
+linked worktrees) → orchestrator imports the working-tree diff. Worthwhile trade.
+(The **claude arm** now self-commits via the gated `worker_commit` MCP tool —
+generic mechanics in the shipped `dispatch-mechanics.md`.)
 
 cargo --bin doctrine memory # focused tests; don't use --lib
 

@@ -49,6 +49,11 @@ pub(crate) use marker::{
 
 mod coordinate;
 mod create;
+// SL-198 PHASE-01: per-worktree dispatch record + lifecycle (ENGINE tier, sibling to
+// the jail policy). create-fork writes it, gc/reap deletes it, `resolve_agent` maps an
+// opaque sanitised agent-id → the record on one live consistent hit. PHASE-02
+// `worker_commit` is the consumer.
+mod dispatch_record;
 mod fork;
 mod gc;
 mod import;
@@ -62,9 +67,14 @@ mod subagent;
 
 pub(crate) use coordinate::{coordinate, run_branch_point_check, run_coordinate};
 pub(crate) use create::{ARMING_JAIL_FILE, ARMING_SUBPATH, run_create_fork};
+// SL-198 PHASE-02: the PHASE-01 resolver + the import scope seams `worker_commit`
+// (`crate::mcp_server::worker_commit`) reuses — the resolver maps an opaque agent-id
+// to its record; the prefix consts + delta-gather are the shared scope belt (DRY —
+// no forked copy, so the two callers cannot diverge, design §8 R3 / VT-3).
+pub(crate) use dispatch_record::{DispatchRecord, resolve_agent};
 pub(crate) use fork::run_fork;
 pub(crate) use gc::run_gc;
-pub(crate) use import::run_import;
+pub(crate) use import::{CLAUDE_PREFIX, DOCTRINE_PREFIX, gather_worktree_delta_paths, run_import};
 pub(crate) use inventory::run_list;
 pub(crate) use land::run_land;
 pub(crate) use provision::{run_check_allowlist, run_provision};
@@ -80,6 +90,13 @@ pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land, no_such_fork
 pub(crate) use subagent::{
     Stamp, StampRefusal, WorkerVerify, WorkerVerifyRefusal, classify_stamp, classify_worker_verify,
 };
+// SL-198 PHASE-02 (test-only): the shared import belt + the record provisioner that
+// `worker_commit`'s tests cross-check against (VT-3 belt-agreement; integration
+// fixtures that stand up a live per-worktree record).
+#[cfg(test)]
+pub(crate) use dispatch_record::provision_dispatch_record;
+#[cfg(test)]
+pub(crate) use import::{Apply, Refusal, classify_import};
 
 #[cfg(test)]
 mod test_helpers;

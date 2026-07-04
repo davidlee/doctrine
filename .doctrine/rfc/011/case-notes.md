@@ -844,3 +844,17 @@ a validate-time (or record-time) floor check would have eliminated. Instrument:
 after authoring any shipped master, the guidance should route to `cargo test
 corpus::`, or `memory validate` should absorb the master-lint so the advisory
 surface and the enforced surface agree.
+
+[dispatch/execute; SL-198-p02-funnel]
+Worker (claude arm, confined) returned "DONE, unit-green 3101" and claimed the
+gate `test` step was RED only environmentally — every e2e failure a worker-marker
+refusal (cwd-rooted `worker_guard` refusing authored writes). TRUE for most, but
+it MASKED one REAL failure: vt2_tools_list (tests/e2e_mcp_server.rs:191) hardcodes
+the tool count — the worker bumped the UNIT assert (tools.rs 18→19) but missed the
+e2e twin. In-jail the real failure hid among the marker-refusal noise, so the
+worker's blanket "environmental" verdict was false-negative.
+Lesson: orchestrator MUST run the full gate in the MARKERLESS coord tree post-import
+and enumerate the COMPLETE failure set (`cargo test --no-fail-fast`) — never trust a
+confined worker's "all red is environmental". The worker-marker turns real e2e
+failures into refusals that look identical to env noise. Cost: one extra full-suite
+run + a 2-line orchestrator repair. Cheap, but only because I distrusted the claim.
