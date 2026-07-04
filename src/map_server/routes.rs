@@ -260,7 +260,7 @@ async fn entity_markdown(
         if !node_exists {
             return Err(MapServerError::EntityNotFound(id));
         }
-        let body = markdown::read_memory_markdown(&state.root, &id).await?;
+        let body = markdown::read_memory_markdown_linked(&state.root, &id).await?;
         return Ok((
             [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
             body,

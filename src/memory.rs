@@ -1934,7 +1934,7 @@ pub(crate) struct ShowWikilink {
     resolved_uid: Option<String>,
 }
 
-fn known_link_maps(memories: &[Memory]) -> (BTreeSet<String>, BTreeMap<String, String>) {
+pub(crate) fn known_link_maps(memories: &[Memory]) -> (BTreeSet<String>, BTreeMap<String, String>) {
     let known_uids = memories.iter().map(|m| m.uid.clone()).collect();
     let key_to_uid = memories
         .iter()

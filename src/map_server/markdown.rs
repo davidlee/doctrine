@@ -49,6 +49,35 @@ pub(crate) async fn read_memory_markdown(root: &Path, uid: &str) -> Result<Strin
     Err(MapServerError::EntityNotFound(uid.to_string()))
 }
 
+/// Read a memory body and rewrite its resolvable `[[mem.…]]` wikilinks into
+/// map-router focus anchors (`#/focus/<uid>`), so inline references are
+/// clickable in the web view (IMP-264).
+///
+/// `collect_all` is a disk scan; markdown fetches are user-paced (one per node
+/// focus), so the cost is acceptable — cache if it ever bites.
+pub(crate) async fn read_memory_markdown_linked(
+    root: &Path,
+    uid: &str,
+) -> Result<String, MapServerError> {
+    let body = read_memory_markdown(root, uid).await?;
+    // Wikilink resolution is best-effort — a corpus-scan hiccup must not fail a
+    // body fetch. On error, serve the body with its links unrewritten.
+    let Ok(all) = crate::memory::collect_all(root) else {
+        return Ok(body);
+    };
+    let (known_uids, key_to_uid) = crate::memory::known_link_maps(&all);
+    let title_by_uid: std::collections::BTreeMap<String, String> = all
+        .iter()
+        .map(|m| (m.uid.clone(), m.title.clone()))
+        .collect();
+    Ok(crate::links::linkify_wikilinks(
+        &body,
+        &known_uids,
+        &key_to_uid,
+        &title_by_uid,
+    ))
+}
+
 /// Derive the `.md` file path for an entity key.
 ///
 /// Known kinds use the catalog convention: `<kind.dir>/<nnn>/<stem>.md`.
@@ -224,6 +253,73 @@ mod tests {
             }
             other => panic!("expected EntityNotFound, got {:?}", other),
         }
+    }
+
+    /// Seed a minimal memory (`memory.toml` + `memory.md`) under items/.
+    fn seed_memory(root: &Path, uid: &str, key: Option<&str>, title: &str, body: &str) {
+        let key_line = key.map_or(String::new(), |k| format!("memory_key = \"{k}\"\n"));
+        let dir = root.join(format!(".doctrine/memory/items/{uid}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("memory.toml"),
+            format!(
+                "memory_uid = \"{uid}\"\n\
+                 {key_line}\
+                 schema_version = 1\n\
+                 memory_type = \"pattern\"\n\
+                 status = \"active\"\n\
+                 title = \"{title}\"\n\
+                 summary = \"summary\"\n\
+                 created = \"2026-01-01\"\n\
+                 updated = \"2026-01-01\"\n\
+                 [scope]\n\
+                 workspace = \"default\"\n\
+                 [git]\n\
+                 repo = \"repo\"\n\
+                 [trust]\n\
+                 level = \"medium\"\n\
+                 [ranking]\n\
+                 severity = \"none\"\n\
+                 weight = 0\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join("memory.md"), body).unwrap();
+    }
+
+    #[tokio::test]
+    async fn linked_reader_resolves_wikilink_to_focus_anchor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let target_uid = "mem_00000000000000000000000000000001";
+        let source_uid = "mem_00000000000000000000000000000002";
+        seed_memory(
+            root,
+            target_uid,
+            Some("mem.pattern.target"),
+            "Target Mem",
+            "target body\n",
+        );
+        seed_memory(
+            root,
+            source_uid,
+            Some("mem.pattern.source"),
+            "Source Mem",
+            "see [[mem.pattern.target]] and [[mem.pattern.missing]]\n",
+        );
+
+        let out = read_memory_markdown_linked(root, source_uid).await.unwrap();
+
+        // Resolvable key → focus anchor with the target's title as label.
+        assert!(
+            out.contains(&format!("[Target Mem](#/focus/{target_uid})")),
+            "expected focus anchor, got: {out}"
+        );
+        // Unresolvable key stays literal — no dead link.
+        assert!(
+            out.contains("[[mem.pattern.missing]]"),
+            "unresolved link mangled: {out}"
+        );
     }
 
     #[tokio::test]
