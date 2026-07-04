@@ -34,6 +34,17 @@ no branch, `jail/` dir absent**. Confinement itself held (orchestrator write
 inside coord OK, escape to `/workspace/doctrine` denied read-only) — the wall is
 fine; the *arming discriminator* is the break.
 
+**Doc-confirmed, and no override exists (checked `./docs/claude` 2026-07-04).**
+`subagents.md:263`: *"Within a subagent, `cd` commands do not persist between Bash
+or PowerShell tool calls … A subagent starts in the main conversation's current
+working directory."* So the reset is inherent subagent behaviour, not a jail
+artifact. The **only** lever on a subagent's start cwd is the spawner's cwd at
+spawn — and there is **no** spawn-time cwd override: the full frontmatter field
+list (`subagents-reference.md:229`) has no `cwd`/`workingDirectory`, the `Agent`
+tool takes no cwd param, and the `WorktreeCreate` hook return (`worktreePath`,
+`hooks.md:2394`) sets the *worker's* dir, not the arming discriminator. Negative
+result recorded so nobody re-hunts.
+
 ## How to apply (SL-199 design consequence)
 
 The main-thread **positional-cwd arming does NOT port to a confined subagent
