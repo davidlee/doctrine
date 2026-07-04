@@ -58,6 +58,23 @@ fn stderr(out: &Output) -> String {
     String::from_utf8(out.stderr.clone()).expect("utf8 stderr")
 }
 
+/// `adr status` goldens exercise an authored write (`doctrine adr status`) as a
+/// child process, which inherits `DOCTRINE_WORKER` from this process's env.
+/// Inside a marked worker fork that write is CORRECTLY guard-refused
+/// (`src/commands/guard.rs`), so the golden's write/no-write assertions no
+/// longer hold — not a regression, just the wrong place to run this golden.
+/// Skip rather than false-negative; the coord-tree unmarked run is authoritative.
+fn skip_under_worker_marker(test_name: &str) -> bool {
+    if std::env::var("DOCTRINE_WORKER").is_ok() {
+        eprintln!(
+            "{test_name}: DOCTRINE_WORKER set — skipping (authored write, guard-refused by design)"
+        );
+        true
+    } else {
+        false
+    }
+}
+
 // --- fixtures -------------------------------------------------------------
 
 /// ADR-001: accepted, a non-empty `related` + `tags` axis, and a hand-added
@@ -190,6 +207,9 @@ fn adr_show_missing_id_errors_with_stable_text() {
 
 #[test]
 fn adr_status_transition_prints_exact_and_preserves_edits() {
+    if skip_under_worker_marker("adr_status_transition_prints_exact_and_preserves_edits") {
+        return;
+    }
     let dir = tmp();
     // Seed at `proposed` with a comment + non-empty rels to prove edit-preservation.
     let toml = adr001_toml().replace("status = \"accepted\"", "status = \"proposed\"");
@@ -224,6 +244,9 @@ fn adr_status_transition_prints_exact_and_preserves_edits() {
 
 #[test]
 fn adr_status_no_op_prints_but_writes_nothing() {
+    if skip_under_worker_marker("adr_status_no_op_prints_but_writes_nothing") {
+        return;
+    }
     let dir = tmp();
     seed(
         dir.path(),
@@ -244,6 +267,9 @@ fn adr_status_no_op_prints_but_writes_nothing() {
 
 #[test]
 fn adr_status_on_malformed_toml_refuses_and_leaves_file_untouched() {
+    if skip_under_worker_marker("adr_status_on_malformed_toml_refuses_and_leaves_file_untouched") {
+        return;
+    }
     let dir = tmp();
     // Missing `status` key → the tail-insert-into-[relationships] corruption trap;
     // set_adr_status must REFUSE, not append.

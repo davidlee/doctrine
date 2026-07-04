@@ -67,3 +67,36 @@ condition for the fork. A worker in the coord tree almost always means the flag 
 omitted, not that the hook is broken. Suggestion: `dispatch arm-spawn` (or a
 pre-spawn lint) could emit a reminder that the very next Agent spawn MUST carry
 `isolation: worktree`, since the arming ritual is inert without it.
+
+---
+
+[dispatch; SL-199-phase01-b1]
+
+PHASE-01 worker (claude arm, `isolation: worktree` present) forked cleanly at
+B and produced a correct single-file delta (`src/worktree/create.rs`; focused
+suite 61 pass, clippy clean). But its `worker_commit` self-commit REFUSED with
+`commit-gate-red`: the gate runs the FULL `check commit` e2e suite from INSIDE
+the worker-marked fork (`.doctrine/state/dispatch/worker` present), and three
+non-hermetic ADR goldens (`adr_status_*` in `tests/e2e_adr_cli_golden.rs`)
+invoke `doctrine adr status` — an authored write the worker-write guard
+(`src/commands/guard.rs`) correctly refuses under the marker
+(`worker fork (signal: marker): refusing authored write`). So `worker_commit`'s
+own gate is self-incompatible with the marker it sets: the confined self-commit
+path cannot pass a gate that includes marker-hostile authored-write goldens.
+
+IMPACT: the claude-arm self-commit path (the newer mechanic) false-negatives;
+no commit lands. RECOVERY was cheap and correct: the orchestrator fell back to
+the documented `worktree import --from-worktree <fork>` claude-arm path (help
+string: "since ro-.git blocks the worker's self-commit and the tree persists
+post-return"), scope-belted with `--slice 199` (create.rs is a design-target),
+then ran the AUTHORITATIVE `check regression diff --base B` verify in the COORD
+tree — which has NO worker marker, so those same ADR goldens PASS there. Worker
+self-reports are advisory; the funnel verify beat is the honest gate. Net: the
+false-negative cost one import-fallback decision, not a phase.
+
+ROOT-FIX (user-flagged, deferred to a backlog item, not this phase): the
+`adr_status_*` e2e goldens should skip under `DOCTRINE_WORKER=1` (they exercise
+authored writes that are legitimately guard-refused inside a worker fork). More
+generally: `worker_commit`'s gate should either run marker-aware (exclude
+authored-write goldens) or the goldens should be hermetic to the marker — else
+every claude-arm self-commit trips the same wire.
