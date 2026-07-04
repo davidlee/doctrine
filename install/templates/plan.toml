@@ -27,6 +27,11 @@ name      = ""
 objective = ""
 entrance_criteria = []           # [{ id = "EN-1", text = "…" }]
 exit_criteria     = []           # [{ id = "EX-1", text = "…" }]
-verification      = []           # [{ id = "VT-1", expects = "…" }] — VT/VA/VH by mode
+verification      = []           # VT/VA/VH by mode. Every VT row MUST carry a structured mandate:
+                                 #   { id = "VT-1", expects = "…",
+                                 #     test_file = "src/foo.rs", keywords = ["fn_name", "struct_name"],
+                                 #     patterns = ["^\\s*pub fn"], waived = false }
+                                 # test_file = path that must exist, keywords = raw substrings that must
+                                 # appear in it. Without a mandate verify-vt reports UNCHECKABLE (inert).
 specs             = []           # per-phase narrowing of the plan's specs
 requirements      = []

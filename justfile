@@ -1,6 +1,6 @@
 mod? doctrine '.doctrine/doctrine.just'
 
-default: lint test install
+default: lint test nix-install
 
 setup: web-build build
 
@@ -97,6 +97,7 @@ nix-build:
   else
     echo "nix-build: nix not on PATH (jail) — skipped" >&2
   fi
+  direnv reload
 
 # Root package only — fast.
 test:

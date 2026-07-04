@@ -45,13 +45,37 @@ Inputs:
       agent, `VH-n` by human — use `VA`/`VH` when a test cannot judge the
       criterion, so it is still checked downstream rather than silently skipped.
       These ids are local to the phase and equally immutable.
-    - For each `VT-n` row, populate the structured mandate so the S3 gate can
-      check it: `test_file` (path that must exist) + `keywords` (raw substrings
-      that must appear in it). `doctrine slice verify-vt <id>` gates every VT
-      carrying a mandate; one lacking it renders `UNCHECKABLE` (visible,
-      non-halting) at the dispatch handover. Optional `patterns` are line-anchored
-      regex for a stronger language-agnostic shape assertion. Matching is raw
-      substring — no host-language comment/string stripping (POL-002).
+    - **Structured VT mandate (NON-NEGOTIABLE).** Every `VT-n` row MUST carry
+      at minimum `test_file` + `keywords` so the S3 gate has signal. Without
+      them `verify-vt` reports `UNCHECKABLE` — the gate is inert project-wide
+      (IMP-209). Write the mandate in the TOML row, not prose:
+
+      ```toml
+      { id = "VT-1",
+        expects = "round-trip unit: the new fn parses, renders, and re-parses",
+        test_file = "src/plan.rs",
+        keywords = ["Plan::parse", "PlanPhase"],
+        patterns = ["^\\s*pub fn"],   # optional: stronger line-anchored shape
+        waived = false }
+      ```
+
+      - `test_file` — the ONE file where the keywords will actually appear
+        (the production source or a test file the phase touches). The mandate
+        carries a single `test_file`; all keywords must live in that one file.
+        Pick the file that the phase changes, or the test file that exercises
+        it — not both. This must be a path that will exist after the phase
+        lands, not a future file.
+      - `keywords` — raw substrings that MUST appear in that file after the
+        phase lands. They are the proportionate floor: plain substring match
+        over the raw source (POL-002 — no comment/string stripping).
+      - `patterns` (optional) — line-anchored regex for a stronger
+        language-agnostic shape assertion. The author owns the regex.
+      - `waived` — escape valve with a mandatory `waived_reason`.
+
+      `doctrine slice verify-vt <id>` gates every VT mandate at dispatch
+      conclude/handover (S6), not at audit. A `test_file` with no keywords
+      passes vacuously — the keyword floor is what gives the gate teeth, not
+      the file alone.
     - `specs` / `requirements` stay empty in v1 (no registry yet). When a slice
       does carry relations, they are written with `doctrine link` (not typed keys
       here) — see `using-doctrine.md` § Relating entities.
