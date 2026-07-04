@@ -11,6 +11,15 @@ harness the **Bash-tool cwd persists across tool calls**, and `cd` shifts it —
 the orchestrator can park its cwd anywhere and every subsequent
 `isolation:worktree` spawn carries that path as payload `cwd`.
 
+> **CAVEAT — MAIN-THREAD ONLY (SL-199 probe, Claude Code 2.1.198, 2026-07-04).**
+> The "Bash-tool cwd persists across tool calls" property holds for the **main
+> thread** but **NOT for a confined subagent**: a jailed subagent's Bash cwd
+> **resets to its assigned worktree root every call** (a `cd` sticks only within
+> the same call). So the positional-arming trick below does **not** port to a
+> confined subagent orchestrator — it can only ever present coord-root as a
+> nested spawn's payload `cwd`, forcing `create-fork` Passthrough. See
+> [[mem.fact.dispatch.confined-subagent-cwd-resets-breaks-positional-arming]].
+
 Empirics: spawn from `/workspace/doctrine` → payload `cwd=/workspace/doctrine`;
 after `cd .dispatch/SL-123`, next spawn → payload
 `cwd=/workspace/doctrine/.dispatch/SL-123`. Payload stays thin:

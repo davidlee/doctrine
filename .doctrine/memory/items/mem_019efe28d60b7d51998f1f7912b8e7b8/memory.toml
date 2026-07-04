@@ -4,9 +4,9 @@ schema_version = 1
 memory_type = "fact"
 status = "active"
 title = "WorktreeCreate payload cwd is an orchestrator-controlled per-spawn channel"
-summary = "WorktreeCreate payload cwd follows the orchestrator's Bash cwd (a per-spawn channel); footer carries worktreePath. Proven 2.1.181."
+summary = """WorktreeCreate payload cwd follows the orchestrator's Bash cwd (a per-spawn channel); footer carries worktreePath. Proven 2.1.181. CAVEAT (2026-07-04): the "cwd persists across tool calls" property is MAIN-THREAD-only — a confined subagent's Bash cwd RESETS to its assigned worktree root every call, so this positional channel does NOT port to a confined orchestrator (mem.fact.dispatch.confined-subagent-cwd-resets-breaks-positional-arming)."""
 created = "2026-06-25"
-updated = "2026-06-25"
+updated = "2026-07-04"
 
 [scope]
 paths = []

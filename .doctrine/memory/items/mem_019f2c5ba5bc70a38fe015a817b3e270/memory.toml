@@ -1,0 +1,42 @@
+memory_uid = "mem_019f2c5ba5bc70a38fe015a817b3e270"
+memory_key = "mem.fact.dispatch.confined-subagent-cwd-resets-breaks-positional-arming"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Confined subagent Bash cwd resets between calls — breaks positional-arming fork discrimination for a confined dispatch orchestrator"
+summary = "A jailed subagent's Bash cwd resets to its assigned worktree root every call, so a confined orchestrator can only present coord-root as a nested worker's WorktreeCreate payload cwd — create-fork takes Passthrough, never Fork, and writes no jail record."
+created = "2026-07-04"
+updated = "2026-07-04"
+
+[scope]
+paths = []
+globs = ["src/worktree/create.rs", ".claude/skills/dispatch-agent/**", "src/dispatch.rs"]
+commands = []
+tags = ["dispatch", "claude-arm", "confinement", "sl-199", "rfc-005", "arming"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ec83587def8eaa39b2a5f4fbd194b91bd6fe25e7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "882d6ce8d16062fdcd17d3cd2ea60b4163fad48377860b56597cf1319f477490"
+base_commit = "0d28ac8482ce3e0d260a319293579e80f9a4cf11"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
