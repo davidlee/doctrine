@@ -1,0 +1,115 @@
+id    = 247
+slug  = "sl-198-reconciliation-mode-b-foundation-worker-commit-tool-surface-lint-vs-designplanadr-008"
+title = "SL-198 reconciliation: Mode B foundation — worker_commit + tool-surface lint vs design/plan/ADR-008"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-198"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design §5.2 lint scope/host stale: declared .claude/agents scan; shipped authored install/agents + .doctrine/agents via doctor #9"
+detail = "Expected (design §5.2): the tool-surface lint scans the installed .claude/agents/*.md copy. Observed: X3 owner-steer folded into plan EX-1 scans the AUTHORED trees install/agents/** + .doctrine/agents/** (lint the source, not the generated copy); implemented as doctor check #9 AgentConformance in src/finding.rs + src/doctor_checks.rs (agent_conformance_findings, +283) + src/commands/doctor.rs. Conformance: .claude/agents/** UNDELIVERED; src/finding.rs, src/doctor_checks.rs, src/commands/doctor.rs UNDECLARED (no selector names the doctor host — OQ-1 never resolved into the selector set). Implementation correct and owner-confirmed (VH-1); design §5.2 prose + design-target selectors are stale. Carry F-lint-scope."
+disposition = "verified"
+response = "Confirmed — implementation correct and VH-1-ratified. Delegated to /reconcile as a per-slice design edit: design §5.2 must scan authored install/agents/** + .doctrine/agents/** (not .claude/agents), and the design-target selectors must add the doctor host src/finding.rs + src/doctor_checks.rs + src/commands/doctor.rs (drop/replace the .claude/agents selector)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "design §5.2 allow-by-marker vs shipped deny-by-default (unmarked def = FAILURE)"
+detail = "Expected (design §5.2 text): allow-by-marker — an unmarked agent-def is skipped. Observed: plan EX-2 mandates deny-by-default — an unmarked frontmatter def in the scan roots is a lint FAILURE (closes the RSK-225 unmarked-worker-with-writable-token hole). Shipped deny-by-default; VH-1 owner-confirmed 2026-07-04 (breadth: applies to EVERY frontmatter def in the roots; allowlist = mcp__doctrine__worker_commit only, no third-party writability introspection). Design §5.2 text stale. Carry F-lint-marker."
+disposition = "verified"
+response = "Confirmed — deny-by-default shipped per plan EX-2, owner-ratified (VH-1). Delegated to /reconcile as a per-slice design edit: design §5.2 change allow-by-marker to deny-by-default (unmarked frontmatter def in scan roots = FAILURE; allowlist = mcp__doctrine__worker_commit only)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "two-arm orchestration note home: design/plan said CLAUDE.md # orchestration; shipped to install/dispatch-mechanics.md + .doctrine/governance.md"
+detail = "Expected (design §5.4, plan PHASE-03 EX-4/EX-5): update the CLAUDE.md # orchestration note + pre-dispatch ritual. Observed: no such generic section belongs in project-local CLAUDE.md — the note is generic doctrine knowledge, so it shipped to the RustEmbed asset install/dispatch-mechanics.md (new section) with .doctrine/governance.md narrowed to the pi-arm note + pointer. Conformance: CLAUDE.md UNDELIVERED; install/dispatch-mechanics.md + .doctrine/governance.md UNDECLARED. Correct home; design §5.4 / plan EX-4/EX-5 wording stale. Carry F-note-home."
+disposition = "verified"
+response = "Confirmed — note homed correctly in the shipped install/dispatch-mechanics.md + .doctrine/governance.md. Delegated to /reconcile as a per-slice design edit: design §5.4 / plan PHASE-03 EX-4/EX-5 wording change CLAUDE.md # orchestration to install/dispatch-mechanics.md (generic) + governance.md (pi-arm note)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "DispatchRecord path: design §5.3 jail/<name>.toml vs built record/<name>.toml"
+detail = "Expected (design §5.3): the per-worktree record at .doctrine/state/dispatch/jail/<name>.toml (beside jail policy). Observed: built at .doctrine/state/dispatch/record/<name>.toml, encapsulated behind resolve_agent so the path is an internal detail. No behavioural impact. Design §5.3 path string stale. Carry F-record-path."
+disposition = "verified"
+response = "Confirmed — path is an encapsulated internal detail (resolve_agent). Delegated to /reconcile as a per-slice design edit: design §5.3 correct the record path jail/<name>.toml to record/<name>.toml."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "belt step-ordering: design §5.2 gate-then-scope numbering vs plan EX-2 cheap-first (scope pre-fmt, then mutating gate)"
+detail = "Expected (design §5.2 numbered belt): scope belt described after the check-commit gate. Observed: plan EX-2 + INV-5/PIN-3 order belts cheap-first — sanitise+resolve, non-empty pre-fmt delta, two-tier scope (classify_import), HEAD==B, THEN the mutating check commit; staging by path AFTER fmt (post-fmt content of classified paths). X4 owner-steer. Plan ordering is correct; design §5.2 prose numbering stale. Carry F-order."
+disposition = "verified"
+response = "Confirmed — plan EX-2 cheap-first ordering (INV-5/PIN-3, X4 steer) is the correct sequencing. Delegated to /reconcile as a per-slice design edit: design §5.2 renumber the belt prose to scope-pre-fmt then mutating gate, stage-by-path after fmt."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "X5 reuse: subagent.rs run_verify_worker relax was unnecessary (already is-ancestor); undelivered + VT-1 test landed in e2e file"
+detail = "Expected (design line 28, plan PHASE-03 EX-2): relax run_verify_worker from base==B to accept HEAD one non-merge commit above B (HEAD^==B), editing src/worktree/subagent.rs. Observed (X5 source-verified): subagent.rs:360 already gates merge-base --is-ancestor B HEAD, so the post-commit HEAD==C descends-B case passes UNCHANGED — zero production edit. subagent.rs UNDELIVERED. PHASE-03 VT-1 test_file pins src/worktree/subagent.rs but the guard test landed in tests/e2e_worktree_verify_worker.rs. No code defect (the switch is operational + a guard test); design/plan EX-2 imply a code relax that reuse obviated. Carry F-x5-holds."
+disposition = "verified"
+response = 'Confirmed — X5 source-verified that subagent.rs:360 already gates is-ancestor, so no production relax was needed; the switch is operational + guard-tested. Delegated to /reconcile as a per-slice design/plan edit: soften design line 28 / PHASE-03 EX-2 from "relax run_verify_worker (code change)" to "reuse existing is-ancestor semantics (no code change; guard test in tests/e2e_worktree_verify_worker.rs)"; note the VT-1 test_file pin landed in the e2e file (immutable id — append, do not renumber).'
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "PHASE-01 new module + seam promotions undeclared: src/worktree/dispatch_record.rs, worktree/mod.rs re-exports"
+detail = "Expected: design-targets for PHASE-01 named src/worktree/create.rs + gc.rs (record write/reap). Observed: the record type + resolver landed in a NEW module src/worktree/dispatch_record.rs (DispatchRecord, resolve_agent, ResolveRefusal), and src/worktree/mod.rs + import.rs promoted prefixes/gather to pub(crate). Both scope-relevant to src/worktree/** but neither named as a selector → UNDECLARED. Legitimate placement; selectors want tightening (name dispatch_record.rs) or an accepted src/worktree/** widening. Carry F-seam-promotion."
+disposition = "verified"
+response = "Confirmed — dispatch_record.rs + mod.rs/import.rs promotions are legitimate PHASE-01 placement. Delegated to /reconcile as a per-slice design edit: add src/worktree/dispatch_record.rs to the design-target selectors (and either name worktree/mod.rs or accept a src/worktree/** widening for the re-export seam)."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "src/dispatch.rs declared but undelivered — stale context-as-target attribution (SL-190 F-1 class)"
+detail = "Expected: src/dispatch.rs is a design-target selector. Observed: design references dispatch.rs only as CONTEXT (arming-slot per-coord source at dispatch.rs:445; cross-slice concurrency at :3099). The X2 redesign moved base B into the per-worktree create-fork record (create.rs), superseding the mutable arming-slot source → dispatch.rs needed NO edit. Declared-but-not-delivered = design attribution error (a context ref mis-promoted to an edit target), not dropped work. Drop dispatch.rs from selectors at reconcile."
+disposition = "verified"
+response = "Confirmed — dispatch.rs was a context reference (arming slot), superseded by the X2 per-worktree create.rs record; no edit was ever required. Delegated to /reconcile as a per-slice design edit: drop src/dispatch.rs from the design-target selectors (context ref, not an edit site)."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "governance: sanctioned worker MCP write is a deliberate lint-guarded exception to SL-182/ADR-008 jail wall — needs a NOTE not a REV"
+detail = "Expected: SL-198 either amends or leaves the SL-182/ADR-008 jail model untouched. Observed: worker_commit lets a jailed worker perform ONE privileged write via the unconfined MCP server — a deliberate hole in the PreToolUse wall, made safe by the mandatory conformance lint (deny-by-default, allowlist=worker_commit). It un-jails nothing structurally (rides the witnessed MCP passthrough; RSK-225 discharged commit 7bd21f49) so it is NOT an ADR REV/amendment — the ADR-012/ADR-011 amendments belong to the SL-199 capstone. Reconcile should record a NOTE on ADR-008 (and/or SL-182) documenting the sanctioned exception + its lint mitigation. VH-1 semantics owner-confirmed 2026-07-04. Carry F4."
+disposition = "verified"
+response = "Confirmed — a sanctioned, lint-guarded jail exception that structurally un-jails nothing (rides witnessed passthrough, RSK-225 discharged 7bd21f49). Delegated to /reconcile as a governance NOTE (not a REV): record on ADR-008 (and/or SL-182) that worker_commit is a deliberate PreToolUse-wall exception made safe by the mandatory conformance lint; the ADR-012/ADR-011 amendments remain SL-199 scope. VH-1 semantics owner-confirmed."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "base-staleness integration conflict resolved in-audit: candidate 3-way merge onto main (26 commits ahead) conflicted only on append-only case-notes.md"
+detail = "Expected: dispatch candidate create is a clean 3-way merge. Observed: review/198 forked at 68accfa2; main advanced 26 commits (tip fd49b976, through close SL-202) → candidate create conflicted. Sole conflict: .doctrine/rfc/011/case-notes.md (concurrent RFC-011 instrumentation appends). Resolved as a UNION in candidate tip c89b124a; the candidate builds clean and doctrine check gate exits 0. SL-198 code did not overlap the 26 trunk commits (only the shared append log). Known base-staleness class (mem.signpost.doctrine.dispatch-claude-arm-wrong-base; pre-dispatch git fetch . edge:main ritual). No SL-198 code defect."
+disposition = "fix-now"
+response = "Resolved within audit scope. The base-staleness conflict was a union of concurrent append-only instrumentation entries in .doctrine/rfc/011/case-notes.md — no SL-198 code touched; resolved in candidate tip c89b124a, which builds clean and passes doctrine check gate (exit 0). The durable base-staleness lesson is already captured (mem.signpost.doctrine.dispatch-claude-arm-wrong-base); no new memory needed."
+
+[[finding]]
+id = "F-11"
+status = "verified"
+severity = "minor"
+title = "phase/198-04 ref not cut at prepare-review (PHASE-04 delta recorded late); content present in bundle"
+detail = "Expected: prepare-review cuts phase/<slice>-NN for each completed phase. Observed: PHASE-04 executed in-thread and its source-delta was recorded late (record-delta --commit a8c0f530 at audit time); boundaries.toml carried only P01-03 at prepare-review, so refs cut were phase/198-01..03 with NO phase/198-04. PHASE-04 content IS in the review/198 bundle (verified: src/finding.rs AgentConformance x7, src/doctor_checks.rs agent_conformance_findings +283, src/commands/doctor.rs #9). Granularity gap only, no content loss. Process note: an in-thread phase must record its delta before prepare-review to earn a phase-cut ref."
+disposition = "verified"
+response = "Confirmed, nil slice/design remediation — PHASE-04 content is fully present in the review/198 bundle and the merged candidate (finding.rs/doctor_checks.rs/doctor.rs verified); only the phase/198-04 cut ref is absent, which is cosmetic. Durable process lesson (an in-thread phase must record-delta BEFORE prepare-review to earn a phase-cut ref) harvested to notes.md; not a reconcile write."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
