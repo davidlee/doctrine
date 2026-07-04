@@ -40,7 +40,7 @@ F4). base is read from the SAME location for both arms — <root>/ARMING_SUBPATH
 — only the trigger differs (design §A)."""
 entrance_criteria = [
   { id = "EN-1", text = "SL-199 design locked + externally reviewed (codex 2026-07-04, F1/F2/F3/F4/F6 integrated). classify_create (create.rs:166), run_create_fork positional gather (create.rs:362-372), provision_jail_policy (create.rs:244), ARMING_SUBPATH (create.rs:197) confirmed present on the current tree." },
-  { id = "EN-2", text = "OS1 resolved: whether a coordination worktree is ALWAYS on a dispatch/<NNN> branch (never detached mid-op) is confirmed — dispatch setup does not detach. If it can, the coord_in_dispatch branch check is replaced by a state-file marker before this phase implements (design R1)." },
+  { id = "EN-2", text = "OS1 RESOLVED at plan (design R1 closed): the coordination worktree is ALWAYS on the dispatch/<NNN> branch — coordinate() creates it with `git worktree add -b dispatch/<NNN> <dir> <trunk>` (Create) or `git worktree add <dir> <branch>` (Resume), never --detach (coordinate.rs:212-227). The coord_in_dispatch branch check is sound; no state-file marker needed. Re-confirm only if setup's worktree-add changes." },
 ]
 exit_criteria = [
   { id = "EX-1", text = "classify_create Forks on the confined trigger (cwd_is_coord_root ∧ coord_in_dispatch ∧ base present/plausible) AND on the unchanged positional trigger (cwd_is_arming_dir); Passthrough otherwise. Both Fork arms provision the jail record via the single existing act_on_create::Fork path — no forked classification or provisioning logic." },
@@ -50,7 +50,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "Pure classify_create table: positional cases unchanged -> Fork (regression); confined coord_root ∧ dispatch-branch ∧ base -> Fork; benign coord_root ∧ dispatch-branch ∧ ¬base -> Passthrough; coord_root ∧ ¬dispatch-branch ∧ base -> Passthrough; coord_root ∧ base ∧ bad-sha -> BadBase.", test_file = "src/worktree/create.rs", keywords = ["classify_create", "cwd_is_coord_root", "coord_in_dispatch", "Passthrough"] },
-  { id = "VT-2", expects = "One-shot consume: after a Fork the hook has deleted base; a re-invocation with no re-arm classifies Passthrough (no double-fork off a stale base).", test_file = "src/worktree/create.rs", keywords = ["one-shot", "base"] },
+  { id = "VT-2", expects = "One-shot consume: after a Fork the hook has deleted base; a re-invocation with no re-arm classifies Passthrough (no double-fork off a stale base).", test_file = "src/worktree/create.rs", keywords = ["consume", "Passthrough", "base"] },
   { id = "VT-3", expects = "Both Fork arms reach the SAME act_on_create::Fork -> provision_jail_policy: the jail record is written for the confined trigger exactly as for the positional trigger.", test_file = "src/worktree/create.rs", keywords = ["provision_jail_policy", "Fork"] },
 ]
 specs        = []
@@ -84,7 +84,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "resolve_coord refusal table (unknown-slice, ambiguous, stale) + a happy single-hit resolve to the dispatch/<NNN> worktree root; no path parameter.", test_file = "src/mcp_server/dispatch.rs", keywords = ["resolve_coord", "unknown-slice", "stale"] },
   { id = "VT-2", expects = "commit_on_behalf stages-nothing refusal; happy path lands exactly one commit on the coord branch, returns the new tip; the coord tip advances by exactly that commit.", test_file = "src/mcp_server/dispatch.rs", keywords = ["commit_on_behalf", "tip"] },
-  { id = "VT-3", expects = "Provenance: the commit-on-behalf author + message match the documented contract (funnel marker + slice/phase); asserted on the produced commit object.", test_file = "src/mcp_server/dispatch.rs", keywords = ["provenance", "author"] },
+  { id = "VT-3", expects = "Provenance: the commit-on-behalf author + message match the documented contract (funnel marker + slice/phase); asserted on the produced commit object.", test_file = "src/mcp_server/dispatch.rs", keywords = ["author", "message"] },
 ]
 specs        = []
 requirements = []
@@ -119,7 +119,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "dispatch_import happy path: in-scope worker branch -> coord tip advances by one commit, returns {coord_tip}. Undeclared path in the delta -> HARD refuse before commit, coord tip UNCHANGED, typed report-and-halt refusal.", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_import", "UndeclaredScope", "coord_tip"] },
-  { id = "VT-2", expects = "dispatch_conclude_phase atomicity: happy path lands flip+boundary in ONE commit with the true (B,coord_tip) range; a simulated fault before the commit leaves neither the completed flip nor the boundary in committed history (completed-without-boundary is unreachable).", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_conclude_phase", "atomic", "boundary"] },
+  { id = "VT-2", expects = "dispatch_conclude_phase atomicity: happy path lands flip+boundary in ONE commit with the true (B,coord_tip) range; a simulated fault before the commit leaves neither the completed flip nor the boundary in committed history (completed-without-boundary is unreachable).", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_conclude_phase", "boundary", "completed"] },
   { id = "VT-3", expects = "dispatch_reap: a not-yet-landed fork is refused by the patch-id oracle; a landed fork is reaped (worktree+branch gone); shares run_gc with the CLI verb.", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_reap", "run_gc", "cherry"] },
   { id = "VA-1", expects = "Belt reuse is genuine (not token presence): an agent reads the wiring and confirms dispatch_import calls classify_import and dispatch_reap calls run_gc — no forked scope/landed logic." },
 ]
@@ -147,7 +147,8 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "dispatch-orchestrator.md exists with doctrine-role: orchestrator and tools: granting exactly Read/Edit/Write/Bash/Grep/Glob/Agent + the funnel MCP tools (dispatch_import, dispatch_conclude_phase, dispatch_reap, + a start-flip tool iff PHASE-03 shipped one) and no other writable MCP token." },
   { id = "EX-2", text = "The lint gains the orchestrator allowlist row referencing the §B tool-name constants; a def granting any extra mcp__* / a bare mcp__doctrine grant / worker_commit fails with a message naming the offender; the sanctioned def passes. The lint iterates ALL marked defs (a client project's second orchestrator-marked def is covered) — confirm ceiling-vs-floor (OS-C1: ceiling only) and iterate-all (OS-C2)." },
-  { id = "EX-3", text = "Placement contract documented in the def/role guidance: the orchestrator is spawned into a PRE-EXISTING coord tree (created by dispatch setup) with the main thread's cwd parked there -> Jail(coord); a primary-tree cwd is Reject-ed on first raw Bash/Edit. No SubagentStart provision hook, no name<->Rust-constant drift pin (matched by the marker, not a hook)." },
+  { id = "EX-3", text = "Placement contract documented in the def: the orchestrator is spawned into a PRE-EXISTING coord tree (created by dispatch setup) with the main thread's cwd parked there -> Jail(coord); a primary-tree cwd is Reject-ed on first raw Bash/Edit. No SubagentStart provision hook, no name<->Rust-constant drift pin (matched by the marker, not a hook)." },
+  { id = "EX-4", text = "File-boundary with PHASE-05: this phase owns the def's frontmatter (name, doctrine-role, tools:) and the lint that pins it — the STRUCTURE. PHASE-05 authors the drive-loop operating guidance (the cadence BODY), whether in this def's role-guidance section or a companion skill. No overlap: PHASE-04 does not author cadence prose; PHASE-05 does not touch the tools: surface." },
 ]
 verification = [
   { id = "VT-1", expects = "Lint: the sanctioned dispatch-orchestrator def passes; a def adding an extra writable mcp__* token / a bare mcp__doctrine grant / worker_commit fails, message names the offending token.", test_file = "src/conformance.rs", keywords = ["orchestrator", "dispatch_import", "allowlist"] },

@@ -86,12 +86,14 @@ A hard serial spine 01 → 02 → 03 → 05, with 04 hanging off 03:
   only response is to surface the refusal to the main thread. This is a clean, intended
   boundary — not a gap — captured in PHASE-03 EX-4.
 
+- **OS1 resolved at plan** (design R1 closed): `coordinate()` always checks the coord
+  worktree out on `dispatch/<NNN>` (`worktree add -b …` / `add <dir> <branch>`), never
+  `--detach` (coordinate.rs:212-227) — the `coord_in_dispatch` guard is sound.
+
 - **Open questions carried into phase-plan** (resolve just before the owning phase):
-  OS1 — is a coord tree always on `dispatch/<NNN>` (never detached mid-op)? Gates
-  PHASE-01's branch guard vs a state-file marker (EN-2). Commit provenance — the exact
-  author/message contract (PHASE-02 EX-3). Start-`in_progress` flip — does the funnel
-  need a separate tool or does the flip ride `conclude` only (PHASE-03)? Lint
-  ceiling-vs-floor and iterate-all (PHASE-04 EX-2).
+  commit provenance — the exact author/message contract (PHASE-02 EX-3); start-
+  `in_progress` flip — does the funnel need a separate tool or does the flip ride
+  `conclude` only (PHASE-03)?; lint ceiling-vs-floor and iterate-all (PHASE-04 EX-2).
 
 - **Behaviour-preservation gate** applies throughout: every funnel tool composes the
   existing `run_*` seams rather than forking them; the main-thread funnel and the

@@ -395,10 +395,11 @@ confined-orchestrator actor class. Both land in-slice; sized at reconcile/plan.
 
 ## 8. Risks (initial)
 
-- **R1 — OS1 (coord-tree branch assumption).** If a coord tree can be detached
-  mid-op, the `coord_in_dispatch` branch guard misfires → benign spawns Passthrough
-  when they should Fork (drive stalls, not a breach). Mitigation: verify at plan;
-  fall back to a state-file marker.
+- **R1 — OS1 (coord-tree branch assumption). RESOLVED at plan.** `coordinate()`
+  always `git worktree add -b dispatch/<NNN>` (Create) / `add <dir> <branch>`
+  (Resume), never `--detach` (coordinate.rs:212-227) — the coord tree is always on
+  `dispatch/<NNN>`, so the `coord_in_dispatch` branch guard is sound; no state-file
+  marker needed. Residual: re-confirm only if `dispatch setup`'s worktree-add changes.
 - **R2 — MCP soft-dependency (load-bearing on this arm).** A confined orchestrator
   has no raw-git fallback; MCP-server health is a dispatch-stopper. Mitigation:
   main-thread dispatch remains the MCP-down fallback; document.
