@@ -12,7 +12,7 @@ after = [{ to = "SL-200", rank = 0 }]                      # slice→work soft s
 
 [[selector]]
 selector = "src/commands/map.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/map_server/**"
@@ -21,6 +21,14 @@ intent = "scope-relevant"
 [[selector]]
 selector = ".agents/skills/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

@@ -21,10 +21,11 @@ onboarding view:
    one-liner that opens the map focused on the onboarding memory; the URL requires
    knowing the opaque `mem_<hex>` uid.
 
-The key→uid map already exists server-side (`build_memory_key_map`, the `items/`
-symlinks). Node titles already render readable. This slice exposes memory refs to
-`--focus` and adds the onboarding command — nodes stay human-readable, the URL
-keeps the uid.
+Key→uid resolution already exists (`memory::resolve_inspect_uid` +
+`MemoryRef::parse`; the scope originally cited a non-existent
+`build_memory_key_map` — see design.md § Reuse seam). Node titles already render
+readable. This slice exposes memory refs to `--focus` and adds the onboarding
+command — nodes stay human-readable, the URL keeps the uid.
 
 ## Scope & Objectives
 
@@ -70,15 +71,12 @@ graph around the memory is sparse. Ordering is a value hint, not a hard block.
 
 ## Risks / Assumptions / Open Questions
 
-- **OQ-1 (design call).** Command surface: a doctrine skill (`.agents/skills/`,
-  matches the existing custom-command pattern) vs a first-class CLI verb (e.g.
-  `doctrine onboard --map`) vs both. Where should the onboarding entry live, and
-  is the entry memory hard-coded or configurable?
-- **OQ-2.** Does initial focus seed via a server-emitted initial hash, or a
-  `--focus` query the frontend reads on load? Determines whether `web/map/src`
-  is touched. Prefer server-side to keep the frontend untouched.
-- **Assumption:** `mem_<hex>` uid validation can reuse `memory::is_uid`; key
-  validation reuses the `items/` symlink map. No new parsing.
+- **OQ-1 — RESOLVED (design.md D1):** first-class CLI verb `doctrine onboard`,
+  no flags, entry memory hard-coded as a named constant. Skill entry dropped.
+- **OQ-2 — RESOLVED (design.md D2):** server/CLI-side; focus already reaches the
+  hash untouched, so `web/map/src` and `src/map_server/` are not touched.
+- **Assumption:** ref validation reuses `MemoryRef::parse` (classifier) and
+  `memory::resolve_inspect_uid` (resolution). No new parsing.
 - **Risk:** `--focus` on a non-existent memory key should error clearly at CLI
   time (before serving), matching the existing `validate_focus` error ergonomics.
 
