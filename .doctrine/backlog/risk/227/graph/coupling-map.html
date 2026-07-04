@@ -1,0 +1,1366 @@
+<title>RSK-227 · Intra-tier coupling the layering gate can't see</title>
+<style>
+  :root{
+    --ground:#0b0e14; --panel:#12161f; --panel2:#161b26;
+    --ink:#e6edf3; --muted:#8b949e; --faint:#5c6675; --line:#222835;
+    --tangle:#dc2626; --acyclic:#3b82f6; --engine:#d97706; --leaf:#65a30d;
+    --hot:#b91c1c;
+    --mono:ui-monospace,"SF Mono",Menlo,"Cascadia Code",Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;margin:0;-webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(1200px 600px at 70% -10%,#141a26 0%,transparent 60%);}
+  .wrap{max-width:960px;margin:0 auto;padding:64px 28px 96px}
+  .col{max-width:66ch}
+  a{color:#8ab4ff}
+  code,.m{font-family:var(--mono)}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+  h1{font-family:var(--mono);font-weight:600;font-size:clamp(28px,5vw,42px);
+    line-height:1.12;letter-spacing:-.01em;margin:0 0 18px;text-wrap:balance}
+  h1 .em{color:var(--tangle)}
+  .lede{font-size:19px;color:#c7d0da;margin:0;max-width:60ch}
+  .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;
+    font-family:var(--mono);font-size:12.5px;color:var(--faint)}
+  .meta b{color:var(--muted);font-weight:500}
+
+  h2{font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--muted);margin:0 0 20px;
+    padding-bottom:10px;border-bottom:1px solid var(--line)}
+  section{margin-top:64px}
+  p{margin:0 0 16px}
+  .col p{max-width:66ch}
+
+  /* stat row */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:40px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:18px 18px 16px;position:relative;overflow:hidden}
+  .stat .n{font-family:var(--mono);font-size:34px;font-weight:600;
+    font-variant-numeric:tabular-nums;line-height:1}
+  .stat .k{font-size:12.5px;color:var(--muted);margin-top:9px}
+  .stat.tangle .n{color:var(--tangle)} .stat.acyclic .n{color:var(--acyclic)}
+  .stat .rail{position:absolute;left:0;top:0;bottom:0;width:3px}
+  .stat.tangle .rail{background:var(--tangle)} .stat.acyclic .rail{background:var(--acyclic)}
+  .stat.hub .rail{background:var(--engine)} .stat.gate .rail{background:var(--faint)}
+
+  .verdict{display:inline-flex;align-items:center;gap:9px;margin-top:26px;
+    font-family:var(--mono);font-size:13px;background:#1a1206;color:#e8b06a;
+    border:1px solid #4a3410;border-radius:999px;padding:7px 15px}
+  .verdict .dot{width:8px;height:8px;border-radius:50%;background:var(--engine);
+    box-shadow:0 0 0 3px #d9770633}
+
+  /* graph */
+  .graph{background:#070a0f;border:1px solid var(--line);border-radius:12px;
+    padding:8px;margin-top:4px;overflow:auto}
+  .graph svg{display:block;width:100%;height:auto;min-width:640px}
+  .legend{display:flex;flex-wrap:wrap;gap:20px 26px;margin-top:18px;
+    font-size:13px;color:var(--muted)}
+  .legend .row{display:flex;align-items:center;gap:9px}
+  .swatch{width:26px;height:0;border-top-width:2.5px;border-top-style:solid;flex:none}
+  .sw-tangle{border-color:var(--tangle)}
+  .sw-acyclic{border-color:var(--acyclic);border-top-style:dashed}
+  .chip{width:13px;height:13px;border-radius:50%;flex:none}
+  .c-hot{background:var(--hot)} .c-eng{background:var(--engine)} .c-leaf{background:var(--leaf)}
+  .legend b{color:var(--ink);font-weight:500;font-family:var(--mono)}
+
+  /* blind-spot cards */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px 22px}
+  .card .tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--faint)}
+  .card h3{font-family:var(--mono);font-size:16px;font-weight:600;margin:8px 0 12px;color:var(--ink)}
+  .card p{font-size:14.5px;color:#b8c0cb;margin:0}
+  .card .hit{color:var(--tangle);font-family:var(--mono)}
+
+  /* table */
+  .tbl{width:100%;border-collapse:collapse;font-size:14px;margin-top:4px}
+  .tbl th{text-align:left;font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--faint);font-weight:500;
+    padding:8px 12px;border-bottom:1px solid var(--line)}
+  .tbl td{padding:9px 12px;border-bottom:1px solid #191e29;font-variant-numeric:tabular-nums}
+  .tbl td.u{font-family:var(--mono);color:var(--ink)}
+  .tbl td.num{font-family:var(--mono);text-align:right;color:#c7d0da}
+  .tbl tr:hover td{background:#10141d}
+  .pill{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:5px}
+  .pill.scc{background:#2a0f0f;color:#f0787a;border:1px solid #4a1a1a}
+  .pill.acy{background:#0d1b33;color:#7fa9f0;border:1px solid #1c3157}
+  .bar{height:7px;border-radius:3px;background:var(--tangle);opacity:.85}
+  .barcell{width:120px}
+
+  .takeaway{background:linear-gradient(180deg,#12161f,#0e121a);
+    border:1px solid var(--line);border-left:3px solid var(--engine);
+    border-radius:10px;padding:24px 26px;margin-top:8px}
+  .takeaway p:last-child{margin-bottom:0}
+  .takeaway strong{color:var(--ink)}
+  ol.steps{margin:0;padding-left:0;list-style:none;counter-reset:s}
+  ol.steps li{position:relative;padding:14px 0 14px 44px;border-bottom:1px solid var(--line);counter-increment:s}
+  ol.steps li:last-child{border-bottom:0;padding-bottom:0}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:12px;
+    width:28px;height:28px;border-radius:7px;background:var(--panel2);
+    border:1px solid var(--line);font-family:var(--mono);font-size:13px;
+    color:var(--engine);display:grid;place-items:center;font-weight:600}
+  ol.steps b{font-family:var(--mono);color:var(--ink);font-weight:600}
+  .steps .s{color:#b8c0cb;font-size:14.5px}
+
+  footer{margin-top:72px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:12px;color:var(--faint);line-height:1.7}
+  footer .warn{color:#c99a5a}
+
+  @media(max-width:680px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .cards{grid-template-columns:1fr}
+    .barcell{display:none}
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">ADR-001 · architecture layering gate · RSK-227</p>
+  <h1>The intra-tier tangle the <span class="em">scalar can't see</span></h1>
+  <p class="lede">The gate governs same-tier coupling with a single number per tier
+    — <code>count_tangle_edges ≤ baseline</code>. Concentration, fan-out, and every
+    acyclic edge fall through it. Here is the command tier, drawn from the real graph.</p>
+  <div class="meta">
+    <span><b>tier</b> command · 35 units</span>
+    <span><b>source</b> dump_real_graph</span>
+    <span><b>severity</b> low · latent</span>
+    <span><b>status</b> documented residual (SL-112 D9)</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="rail"></span><div class="n">149</div><div class="k">same-tier edges (command↔command)</div></div>
+    <div class="stat acyclic"><span class="rail"></span><div class="n">35</div><div class="k">acyclic — <b>uncounted</b> by the ratchet</div></div>
+    <div class="stat hub"><span class="rail"></span><div class="n">3</div><div class="k">mega-hubs carry the coupling</div></div>
+    <div class="stat gate"><span class="rail"></span><div class="n">1</div><div class="k">integer — the gate's whole intra-tier vocabulary</div></div>
+  </div>
+  <div class="verdict"><span class="dot"></span>Benign today · rot could accrue unseen</div>
+
+  <section>
+    <h2>The command tier, drawn to scale</h2>
+    <div class="graph"><svg width="1514pt" height="1510pt"
+ viewBox="0.00 0.00 1514.09 1510.27" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 1506.27)">
+<title>cmd</title>
+<!-- adr -->
+<g id="node1" class="node">
+<title>adr</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="699.68" cy="-1071.52" rx="51.84" ry="51.84"/>
+<text text-anchor="middle" x="699.68" y="-1074.77" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">adr</text>
+<text text-anchor="middle" x="699.68" y="-1062.02" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/6</text>
+</g>
+<!-- governance -->
+<g id="node10" class="node">
+<title>governance</title>
+<ellipse fill="#65a30d" stroke="#000000" stroke-opacity="0.133333" cx="88.35" cy="-351.95" rx="56.52" ry="56.52"/>
+<text text-anchor="middle" x="88.35" y="-355.2" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">governance</text>
+<text text-anchor="middle" x="88.35" y="-342.45" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">1/8</text>
+</g>
+<!-- adr&#45;&gt;governance -->
+<g id="edge1" class="edge">
+<title>adr&#45;&gt;governance</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M651.85,-1050.89C589.65,-1022.21 480.36,-965.37 407.49,-891.12 262.95,-743.86 157.38,-518.78 112.39,-412.08"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="114.34,-411.28 110.08,-406.56 110.46,-412.9 114.34,-411.28"/>
+</g>
+<!-- install -->
+<g id="node11" class="node">
+<title>install</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="420.4" cy="-467.01" rx="112.68" ry="112.68"/>
+<text text-anchor="middle" x="420.4" y="-470.26" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">install</text>
+<text text-anchor="middle" x="420.4" y="-457.51" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">3/18</text>
+</g>
+<!-- adr&#45;&gt;install -->
+<g id="edge2" class="edge">
+<title>adr&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M693.66,-1019.58C683.25,-944.92 656.96,-804.86 597.52,-701.1 569.21,-651.67 531.86,-600.79 498.76,-559.14"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="500.4,-557.83 495.02,-554.46 497.12,-560.46 500.4,-557.83"/>
+</g>
+<!-- backlog -->
+<g id="node2" class="node">
+<title>backlog</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="894.24" cy="-323.92" rx="56.52" ry="56.52"/>
+<text text-anchor="middle" x="894.24" y="-327.17" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">backlog</text>
+<text text-anchor="middle" x="894.24" y="-314.42" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">4/5</text>
+</g>
+<!-- catalog -->
+<g id="node4" class="node">
+<title>catalog</title>
+<ellipse fill="#b91c1c" stroke="#000000" stroke-opacity="0.133333" cx="502.51" cy="-796.11" rx="122.04" ry="122.04"/>
+<text text-anchor="middle" x="502.51" y="-799.36" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">catalog</text>
+<text text-anchor="middle" x="502.51" y="-786.61" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">14/9</text>
+</g>
+<!-- backlog&#45;&gt;catalog -->
+<g id="edge3" class="edge">
+<title>backlog&#45;&gt;catalog</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M839.23,-310.05C834.72,-309.34 830.86,-308.98 828.17,-309.15 764.55,-313.29 603.6,-366.07 560.86,-413.37 542.81,-433.34 530.08,-502.64 524.94,-529.06 523.53,-536.3 518.01,-601.9 512.8,-666.25"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="510.73,-665.83 512.34,-671.98 514.91,-666.17 510.73,-665.83"/>
+</g>
+<!-- backlog&#45;&gt;install -->
+<g id="edge4" class="edge">
+<title>backlog&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M839.08,-337.05C795.04,-347.81 731.86,-363.87 677.22,-380.17 630.21,-394.19 578.92,-411.19 534.61,-426.42"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="533.99,-424.41 529,-428.35 535.35,-428.38 533.99,-424.41"/>
+</g>
+<!-- integrity -->
+<g id="node12" class="node">
+<title>integrity</title>
+<ellipse fill="#b91c1c" stroke="#000000" stroke-opacity="0.133333" cx="677.22" cy="-529.73" rx="136.08" ry="136.08"/>
+<text text-anchor="middle" x="677.22" y="-532.98" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">integrity</text>
+<text text-anchor="middle" x="677.22" y="-520.23" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">13/13</text>
+</g>
+<!-- backlog&#45;&gt;integrity -->
+<g id="edge5" class="edge">
+<title>backlog&#45;&gt;integrity</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M849.43,-358.94C828.34,-377.65 802.29,-401.75 776.89,-425.91"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="775.57,-424.27 772.68,-429.93 778.47,-427.31 775.57,-424.27"/>
+</g>
+<!-- relation_graph -->
+<g id="node24" class="node">
+<title>relation_graph</title>
+<ellipse fill="#ea580c" stroke="#000000" stroke-opacity="0.133333" cx="233.7" cy="-431" rx="65.88" ry="65.88"/>
+<text text-anchor="middle" x="233.7" y="-434.25" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">relation_graph</text>
+<text text-anchor="middle" x="233.7" y="-421.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">8/3</text>
+</g>
+<!-- backlog&#45;&gt;relation_graph -->
+<g id="edge6" class="edge">
+<title>backlog&#45;&gt;relation_graph</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M839.06,-309.96C836.16,-309.54 833.27,-309.19 830.45,-308.93 738.89,-300.47 506.9,-308.21 417.14,-328.14 372.21,-338.11 327.06,-363.2 292.8,-386.1"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="291.64,-384.35 287.85,-389.45 293.99,-387.82 291.64,-384.35"/>
+</g>
+<!-- boot -->
+<g id="node3" class="node">
+<title>boot</title>
+<ellipse fill="#ea580c" stroke="#000000" stroke-opacity="0.133333" cx="357.76" cy="-987.39" rx="56.52" ry="56.52"/>
+<text text-anchor="middle" x="357.76" y="-990.64" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">boot</text>
+<text text-anchor="middle" x="357.76" y="-977.89" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">6/3</text>
+</g>
+<!-- boot&#45;&gt;adr -->
+<g id="edge7" class="edge">
+<title>boot&#45;&gt;adr</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M413.07,-1001C475.73,-1016.42 577.41,-1041.44 641.31,-1057.16"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="640.52,-1059.13 646.85,-1058.52 641.52,-1055.05 640.52,-1059.13"/>
+</g>
+<!-- boot&#45;&gt;governance -->
+<g id="edge8" class="edge">
+<title>boot&#45;&gt;governance</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M335.59,-935.12C285.92,-817.96 165.93,-534.94 113.53,-411.35"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="115.59,-410.82 111.31,-406.11 111.72,-412.46 115.59,-410.82"/>
+</g>
+<!-- boot&#45;&gt;install -->
+<g id="edge9" class="edge">
+<title>boot&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M357.53,-930.64C357.59,-928.38 357.67,-926.14 357.76,-923.94 360.07,-866.99 361.36,-852.7 368.14,-796.11 376.5,-726.31 388.7,-648.62 399.21,-586.28"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="401.27,-586.72 400.2,-580.45 397.12,-586.02 401.27,-586.72"/>
+</g>
+<!-- memory -->
+<g id="node18" class="node">
+<title>memory</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="937.05" cy="-1166.6" rx="70.56" ry="70.56"/>
+<text text-anchor="middle" x="937.05" y="-1169.85" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">memory</text>
+<text text-anchor="middle" x="937.05" y="-1157.1" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">4/8</text>
+</g>
+<!-- boot&#45;&gt;memory -->
+<g id="edge10" class="edge">
+<title>boot&#45;&gt;memory</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M408.49,-1013.16C474.06,-1045.37 592.54,-1099.91 699.68,-1129.91 751.68,-1144.47 811.82,-1153.69 858.55,-1159.24"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="858.22,-1161.32 864.42,-1159.92 858.7,-1157.14 858.22,-1161.32"/>
+</g>
+<!-- policy -->
+<g id="node19" class="node">
+<title>policy</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="47.16" cy="-578.85" rx="47.16" ry="47.16"/>
+<text text-anchor="middle" x="47.16" y="-582.1" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">policy</text>
+<text text-anchor="middle" x="47.16" y="-569.35" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/5</text>
+</g>
+<!-- boot&#45;&gt;policy -->
+<g id="edge11" class="edge">
+<title>boot&#45;&gt;policy</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M323.33,-942.11C263.26,-863.1 140.06,-701.04 80.65,-622.9"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="82.38,-621.7 77.08,-618.2 79.04,-624.25 82.38,-621.7"/>
+</g>
+<!-- standard -->
+<g id="node34" class="node">
+<title>standard</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="69.8" cy="-700.88" rx="47.16" ry="47.16"/>
+<text text-anchor="middle" x="69.8" y="-704.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">standard</text>
+<text text-anchor="middle" x="69.8" y="-691.38" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/5</text>
+</g>
+<!-- boot&#45;&gt;standard -->
+<g id="edge12" class="edge">
+<title>boot&#45;&gt;standard</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M317.41,-947.25C262.05,-892.16 163.18,-793.79 108.62,-739.5"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="110.4,-738.31 104.66,-735.56 107.43,-741.28 110.4,-738.31"/>
+</g>
+<!-- catalog&#45;&gt;adr -->
+<g id="edge13" class="edge">
+<title>catalog&#45;&gt;adr</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M573.69,-895.54C604.64,-938.76 639.49,-987.46 664.69,-1022.65"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="662.84,-1023.68 668.04,-1027.33 666.26,-1021.23 662.84,-1023.68"/>
+</g>
+<!-- catalog&#45;&gt;backlog -->
+<g id="edge14" class="edge">
+<title>catalog&#45;&gt;backlog</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M513.2,-674.34C519.18,-607.73 525.81,-537.17 527.66,-529.73 533.79,-505.05 553.47,-441.96 571.46,-423.98 613.52,-381.92 758.63,-338.1 829.55,-324.39"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="829.81,-326.48 835.33,-323.33 829.05,-322.35 829.81,-326.48"/>
+</g>
+<!-- catalog&#45;&gt;governance -->
+<g id="edge15" class="edge">
+<title>catalog&#45;&gt;governance</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M411.06,-715.09C344.4,-654.12 253.55,-566.97 181.67,-483.03 160.98,-458.88 140.24,-430.29 123.59,-405.98"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="125.53,-405.1 120.41,-401.33 122.06,-407.47 125.53,-405.1"/>
+</g>
+<!-- catalog&#45;&gt;integrity -->
+<g id="edge16" class="edge">
+<title>catalog&#45;&gt;integrity</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M569.56,-693.88C578.9,-679.63 588.58,-664.88 598.12,-650.33"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="599.8,-651.61 601.33,-645.44 596.28,-649.3 599.8,-651.61"/>
+</g>
+<!-- knowledge -->
+<g id="node13" class="node">
+<title>knowledge</title>
+<ellipse fill="#65a30d" stroke="#000000" stroke-opacity="0.133333" cx="1230.21" cy="-701.74" rx="40.14" ry="40.14"/>
+<text text-anchor="middle" x="1230.21" y="-704.99" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">knowledge</text>
+<text text-anchor="middle" x="1230.21" y="-692.24" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">1/3</text>
+</g>
+<!-- catalog&#45;&gt;knowledge -->
+<g id="edge17" class="edge">
+<title>catalog&#45;&gt;knowledge</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M612.26,-742.59C690.9,-708.15 800.51,-668 902.5,-657.78 1002.88,-647.73 1119.87,-672.2 1183.36,-688.53"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1182.83,-690.56 1189.16,-690.04 1183.89,-686.49 1182.83,-690.56"/>
+</g>
+<!-- catalog&#45;&gt;memory -->
+<g id="edge18" class="edge">
+<title>catalog&#45;&gt;memory</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M591.79,-879.66C675.93,-953.63 799.82,-1058.9 874.08,-1119.25"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="872.59,-1120.75 878.58,-1122.9 875.24,-1117.49 872.59,-1120.75"/>
+</g>
+<!-- catalog&#45;&gt;policy -->
+<g id="edge19" class="edge">
+<title>catalog&#45;&gt;policy</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M391.99,-743.38C298.08,-698.57 167.63,-636.33 97.15,-602.7"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="98.33,-600.94 92.01,-600.25 96.52,-604.73 98.33,-600.94"/>
+</g>
+<!-- rec -->
+<g id="node21" class="node">
+<title>rec</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="405.92" cy="-173.56" rx="51.84" ry="51.84"/>
+<text text-anchor="middle" x="405.92" y="-176.81" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">rec</text>
+<text text-anchor="middle" x="405.92" y="-164.06" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/6</text>
+</g>
+<!-- catalog&#45;&gt;rec -->
+<g id="edge20" class="edge">
+<title>catalog&#45;&gt;rec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M509.66,-673.85C513.47,-628.37 519.19,-576.47 527.66,-529.73 532.81,-501.32 546.49,-495.83 544.64,-467.01 538.62,-373.26 481.6,-277.15 442.57,-221.53"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="444.31,-220.35 439.13,-216.67 440.89,-222.78 444.31,-220.35"/>
+</g>
+<!-- review -->
+<g id="node28" class="node">
+<title>review</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="1136.05" cy="-933.7" rx="56.52" ry="56.52"/>
+<text text-anchor="middle" x="1136.05" y="-936.95" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">review</text>
+<text text-anchor="middle" x="1136.05" y="-924.2" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">4/5</text>
+</g>
+<!-- catalog&#45;&gt;review -->
+<g id="edge21" class="edge">
+<title>catalog&#45;&gt;review</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M589.53,-882.1C665.48,-947.8 782.12,-1027.26 902.5,-1027.83 967.78,-1028.15 1036.37,-996.06 1082.2,-969.27"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1083.16,-971.14 1087.25,-966.28 1081.02,-967.53 1083.16,-971.14"/>
+</g>
+<!-- revision -->
+<g id="node29" class="node">
+<title>revision</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="593.42" cy="-83.7" rx="47.16" ry="47.16"/>
+<text text-anchor="middle" x="593.42" y="-86.95" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">revision</text>
+<text text-anchor="middle" x="593.42" y="-74.2" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">4/3</text>
+</g>
+<!-- catalog&#45;&gt;revision -->
+<g id="edge22" class="edge">
+<title>catalog&#45;&gt;revision</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M509.66,-673.85C513.47,-628.37 519.19,-576.47 527.66,-529.73 532.81,-501.32 539.03,-495.34 544.64,-467.01 567.56,-351.3 582.01,-213.7 588.81,-138.87"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="590.88,-139.22 589.33,-133.06 586.7,-138.85 590.88,-139.22"/>
+</g>
+<!-- rfc -->
+<g id="node30" class="node">
+<title>rfc</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="236.18" cy="-166.44" rx="37.8" ry="37.8"/>
+<text text-anchor="middle" x="236.18" y="-169.69" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">rfc</text>
+<text text-anchor="middle" x="236.18" y="-156.94" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/3</text>
+</g>
+<!-- catalog&#45;&gt;rfc -->
+<g id="edge23" class="edge">
+<title>catalog&#45;&gt;rfc</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M427.1,-699.54C395.57,-656.65 359.98,-604.68 332.55,-554.86 312.17,-517.84 298.14,-509.23 296.16,-467.01 295.38,-450.28 306.97,-447.75 307.28,-431 308.77,-350.1 276.87,-259.88 255.31,-208.46"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="257.32,-207.81 253.04,-203.11 253.45,-209.46 257.32,-207.81"/>
+</g>
+<!-- slice -->
+<g id="node32" class="node">
+<title>slice</title>
+<ellipse fill="#ea580c" stroke="#000000" stroke-opacity="0.133333" cx="1121.96" cy="-573.57" rx="79.92" ry="79.92"/>
+<text text-anchor="middle" x="1121.96" y="-576.82" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">slice</text>
+<text text-anchor="middle" x="1121.96" y="-564.07" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">5/9</text>
+</g>
+<!-- catalog&#45;&gt;slice -->
+<g id="edge24" class="edge">
+<title>catalog&#45;&gt;slice</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M617.57,-754.77C740.01,-710.78 930.72,-642.27 1039.16,-603.31"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1039.58,-605.39 1044.51,-601.39 1038.16,-601.44 1039.58,-605.39"/>
+</g>
+<!-- spec -->
+<g id="node33" class="node">
+<title>spec</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="721.45" cy="-211.64" rx="47.16" ry="47.16"/>
+<text text-anchor="middle" x="721.45" y="-214.89" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">spec</text>
+<text text-anchor="middle" x="721.45" y="-202.14" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/5</text>
+</g>
+<!-- catalog&#45;&gt;spec -->
+<g id="edge25" class="edge">
+<title>catalog&#45;&gt;spec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M506.39,-673.82C509.83,-628.11 516.15,-576.06 527.66,-529.73 555.1,-419.23 636.48,-310.25 684.61,-252.98"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="686.09,-254.48 688.37,-248.54 682.89,-251.76 686.09,-254.48"/>
+</g>
+<!-- catalog&#45;&gt;standard -->
+<g id="edge26" class="edge">
+<title>catalog&#45;&gt;standard</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M382.84,-769.77C298.11,-751.12 188.48,-726.99 123.98,-712.8"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="124.72,-710.81 118.41,-711.57 123.82,-714.91 124.72,-710.81"/>
+</g>
+<!-- commands -->
+<g id="node5" class="node">
+<title>commands</title>
+<ellipse fill="#b91c1c" stroke="#000000" stroke-opacity="0.133333" cx="902.5" cy="-842.81" rx="168.84" ry="168.84"/>
+<text text-anchor="middle" x="902.5" y="-846.06" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">commands</text>
+<text text-anchor="middle" x="902.5" y="-833.31" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">31/2</text>
+</g>
+<!-- commands&#45;&gt;adr -->
+<g id="edge27" class="edge">
+<title>commands&#45;&gt;adr</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M790.41,-969.21C772.13,-989.82 754.32,-1009.9 739.39,-1026.74"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="737.84,-1025.32 735.43,-1031.2 740.98,-1028.11 737.84,-1025.32"/>
+</g>
+<!-- commands&#45;&gt;backlog -->
+<g id="edge28" class="edge">
+<title>commands&#45;&gt;backlog</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M899.81,-673.62C898.26,-576.37 896.4,-459.8 895.27,-388.83"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="897.37,-388.92 895.18,-382.95 893.18,-388.98 897.37,-388.92"/>
+</g>
+<!-- commands&#45;&gt;boot -->
+<g id="edge29" class="edge">
+<title>commands&#45;&gt;boot</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M739.06,-886.19C631.8,-914.66 497.56,-950.28 420.34,-970.78"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="419.89,-968.73 414.63,-972.29 420.97,-972.78 419.89,-968.73"/>
+</g>
+<!-- commands&#45;&gt;catalog -->
+<g id="edge30" class="edge">
+<title>commands&#45;&gt;catalog</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M734.32,-823.17C700.1,-819.18 664.61,-815.03 631.98,-811.23"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="632.5,-809.17 626.3,-810.56 632.02,-813.34 632.5,-809.17"/>
+</g>
+<!-- concept_map -->
+<g id="node6" class="node">
+<title>concept_map</title>
+<ellipse fill="#65a30d" stroke="#000000" stroke-opacity="0.133333" cx="190.52" cy="-1081.96" rx="47.09" ry="47.09"/>
+<text text-anchor="middle" x="190.52" y="-1085.21" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">concept_map</text>
+<text text-anchor="middle" x="190.52" y="-1072.46" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">1/3</text>
+</g>
+<!-- commands&#45;&gt;concept_map -->
+<g id="edge31" class="edge">
+<title>commands&#45;&gt;concept_map</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M747.41,-910.65C639.76,-955.6 492.11,-1013.02 357.76,-1050.84 320.78,-1061.25 278.2,-1069.11 245.26,-1074.33"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="245.23,-1072.21 239.63,-1075.21 245.88,-1076.36 245.23,-1072.21"/>
+</g>
+<!-- corpus -->
+<g id="node7" class="node">
+<title>corpus</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="162.32" cy="-960.94" rx="37.8" ry="37.8"/>
+<text text-anchor="middle" x="162.32" y="-964.19" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">corpus</text>
+<text text-anchor="middle" x="162.32" y="-951.44" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">3/2</text>
+</g>
+<!-- commands&#45;&gt;corpus -->
+<g id="edge32" class="edge">
+<title>commands&#45;&gt;corpus</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M739.54,-888.62C667.55,-906.22 581.49,-923.72 502.51,-930.48 438.34,-935.96 421.99,-919.37 357.76,-923.94 305.28,-927.67 246.05,-940.07 206.68,-949.49"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="206.48,-947.38 201.14,-950.83 207.47,-951.46 206.48,-947.38"/>
+</g>
+<!-- dispatch -->
+<g id="node8" class="node">
+<title>dispatch</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="1470.67" cy="-655.12" rx="35.42" ry="35.42"/>
+<text text-anchor="middle" x="1470.67" y="-658.37" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">dispatch</text>
+<text text-anchor="middle" x="1470.67" y="-645.62" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/1</text>
+</g>
+<!-- commands&#45;&gt;dispatch -->
+<g id="edge33" class="edge">
+<title>commands&#45;&gt;dispatch</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1065.86,-798.19C1118.6,-783 1177.14,-765.33 1230.21,-747.46 1301.7,-723.38 1383.39,-690.94 1430.8,-671.61"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1431.37,-673.64 1436.13,-669.43 1429.79,-669.75 1431.37,-673.64"/>
+</g>
+<!-- doctor_checks -->
+<g id="node9" class="node">
+<title>doctor_checks</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="979.8" cy="-163.35" rx="53.05" ry="53.05"/>
+<text text-anchor="middle" x="979.8" y="-166.6" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">doctor_checks</text>
+<text text-anchor="middle" x="979.8" y="-153.85" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/1</text>
+</g>
+<!-- commands&#45;&gt;doctor_checks -->
+<g id="edge34" class="edge">
+<title>commands&#45;&gt;doctor_checks</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M921.61,-674.85C938.27,-528.4 961.51,-324.15 972.92,-223.83"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="974.99,-224.2 973.59,-218 970.82,-223.73 974.99,-224.2"/>
+</g>
+<!-- commands&#45;&gt;install -->
+<g id="edge35" class="edge">
+<title>commands&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M753.86,-761.85C694.54,-726.51 627.23,-682.44 571.46,-635.49 545.06,-613.27 518.98,-586.45 496.13,-560.82"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="497.95,-559.71 492.4,-556.61 494.81,-562.5 497.95,-559.71"/>
+</g>
+<!-- commands&#45;&gt;integrity -->
+<g id="edge36" class="edge">
+<title>commands&#45;&gt;integrity</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M803.69,-705.49C789.56,-685.86 775.14,-665.82 761.33,-646.63"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="763.12,-645.52 757.91,-641.87 759.71,-647.97 763.12,-645.52"/>
+</g>
+<!-- commands&#45;&gt;knowledge -->
+<g id="edge37" class="edge">
+<title>commands&#45;&gt;knowledge</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1057.72,-775.99C1104.63,-755.8 1152.48,-735.2 1185.85,-720.84"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1186.54,-722.83 1191.22,-718.53 1184.88,-718.97 1186.54,-722.83"/>
+</g>
+<!-- lazyspec -->
+<g id="node14" class="node">
+<title>lazyspec</title>
+<ellipse fill="#ea580c" stroke="#000000" stroke-opacity="0.133333" cx="1315.24" cy="-482.02" rx="42.48" ry="42.48"/>
+<text text-anchor="middle" x="1315.24" y="-485.27" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">lazyspec</text>
+<text text-anchor="middle" x="1315.24" y="-472.52" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">5/1</text>
+</g>
+<!-- commands&#45;&gt;lazyspec -->
+<g id="edge38" class="edge">
+<title>commands&#45;&gt;lazyspec</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1043.66,-749.53C1090.44,-716.06 1141.54,-676.59 1184.73,-636.34 1222.67,-600.98 1260.3,-555.01 1285.34,-522.47"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1286.96,-523.8 1288.94,-517.75 1283.63,-521.24 1286.96,-523.8"/>
+</g>
+<!-- map_server -->
+<g id="node16" class="node">
+<title>map_server</title>
+<ellipse fill="#ea580c" stroke="#000000" stroke-opacity="0.133333" cx="600.83" cy="-1297.39" rx="42.48" ry="42.48"/>
+<text text-anchor="middle" x="600.83" y="-1300.64" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">map_server</text>
+<text text-anchor="middle" x="600.83" y="-1287.89" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">5/1</text>
+</g>
+<!-- commands&#45;&gt;map_server -->
+<g id="edge39" class="edge">
+<title>commands&#45;&gt;map_server</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M818.62,-989.67C794.44,-1030.14 767.42,-1073.66 740.96,-1112.81 705.89,-1164.7 661.66,-1221.74 632.37,-1258.47"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="630.85,-1257.01 628.75,-1263 634.14,-1259.63 630.85,-1257.01"/>
+</g>
+<!-- mcp_server -->
+<g id="node17" class="node">
+<title>mcp_server</title>
+<ellipse fill="#ea580c" stroke="#000000" stroke-opacity="0.133333" cx="1412.77" cy="-904.65" rx="47.16" ry="47.16"/>
+<text text-anchor="middle" x="1412.77" y="-907.9" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">mcp_server</text>
+<text text-anchor="middle" x="1412.77" y="-895.15" font-family="Helvetica,sans-Serif" font-size="10.00" fill="white">6/1</text>
+</g>
+<!-- commands&#45;&gt;mcp_server -->
+<g id="edge40" class="edge">
+<title>commands&#45;&gt;mcp_server</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1071.47,-841.5C1076.89,-841.88 1082.25,-842.31 1087.53,-842.81 1139.24,-847.68 1280.07,-876.51 1358.36,-893.02"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1357.82,-895.05 1364.13,-894.24 1358.69,-890.94 1357.82,-895.05"/>
+</g>
+<!-- commands&#45;&gt;memory -->
+<g id="edge41" class="edge">
+<title>commands&#45;&gt;memory</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M920.43,-1010.87C923.31,-1037.84 926.17,-1064.59 928.68,-1088.11"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="926.56,-1088.11 929.29,-1093.85 930.74,-1087.66 926.56,-1088.11"/>
+</g>
+<!-- commands&#45;&gt;policy -->
+<g id="edge42" class="edge">
+<title>commands&#45;&gt;policy</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M749.88,-770.35C701.37,-747.74 647.37,-722.99 597.52,-701.1 555.67,-682.72 546.35,-674.65 502.51,-661.74 361.24,-620.14 188.85,-595.62 102.32,-585.04"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="102.78,-582.98 96.57,-584.35 102.28,-587.15 102.78,-582.98"/>
+</g>
+<!-- priority -->
+<g id="node20" class="node">
+<title>priority</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="325.25" cy="-1133.12" rx="37.8" ry="37.8"/>
+<text text-anchor="middle" x="325.25" y="-1136.37" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">priority</text>
+<text text-anchor="middle" x="325.25" y="-1123.62" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">3/2</text>
+</g>
+<!-- commands&#45;&gt;priority -->
+<g id="edge43" class="edge">
+<title>commands&#45;&gt;priority</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M751.59,-918.7C622.11,-983.82 444.34,-1073.23 365.59,-1112.83"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="364.96,-1110.8 360.54,-1115.37 366.85,-1114.55 364.96,-1110.8"/>
+</g>
+<!-- commands&#45;&gt;rec -->
+<g id="edge44" class="edge">
+<title>commands&#45;&gt;rec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M886.21,-674.4C870.82,-591.45 840.94,-494.4 782.98,-423.98 692.7,-314.28 541.87,-234.63 461.05,-197.29"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="462.18,-195.5 455.85,-194.91 460.43,-199.32 462.18,-195.5"/>
+</g>
+<!-- reconcile -->
+<g id="node22" class="node">
+<title>reconcile</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="804.76" cy="-37.8" rx="37.8" ry="37.8"/>
+<text text-anchor="middle" x="804.76" y="-41.05" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">reconcile</text>
+<text text-anchor="middle" x="804.76" y="-28.3" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">4/1</text>
+</g>
+<!-- commands&#45;&gt;reconcile -->
+<g id="edge45" class="edge">
+<title>commands&#45;&gt;reconcile</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M877.35,-675.39C862.6,-573.86 844.27,-441.6 830.79,-323.92 821.07,-239.03 812.7,-139.63 808.23,-83.15"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="810.33,-83.13 807.77,-77.32 806.15,-83.46 810.33,-83.13"/>
+</g>
+<!-- regression_run -->
+<g id="node23" class="node">
+<title>regression_run</title>
+<ellipse fill="#9ca3af" stroke="#000000" stroke-opacity="0.133333" cx="1209.08" cy="-1261.79" rx="62.23" ry="62.23"/>
+<text text-anchor="middle" x="1209.08" y="-1265.04" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">regression_run</text>
+<text text-anchor="middle" x="1209.08" y="-1252.29" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">0/1</text>
+</g>
+<!-- commands&#45;&gt;regression_run -->
+<g id="edge46" class="edge">
+<title>commands&#45;&gt;regression_run</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1002.46,-979.42C1058.63,-1056.18 1125.72,-1147.87 1167.87,-1205.47"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1165.99,-1206.46 1171.23,-1210.06 1169.38,-1203.98 1165.99,-1206.46"/>
+</g>
+<!-- commands&#45;&gt;relation_graph -->
+<g id="edge47" class="edge">
+<title>commands&#45;&gt;relation_graph</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M750.03,-769.94C593.52,-694.48 367.96,-583.64 332.55,-554.86 310.89,-537.25 290.86,-514.14 274.58,-492.66"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="276.42,-491.6 271.14,-488.05 273.05,-494.11 276.42,-491.6"/>
+</g>
+<!-- relation_query -->
+<g id="node25" class="node">
+<title>relation_query</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="454.36" cy="-1296.36" rx="53.52" ry="53.52"/>
+<text text-anchor="middle" x="454.36" y="-1299.61" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">relation_query</text>
+<text text-anchor="middle" x="454.36" y="-1286.86" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/1</text>
+</g>
+<!-- commands&#45;&gt;relation_query -->
+<g id="edge48" class="edge">
+<title>commands&#45;&gt;relation_query</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M763.59,-939.46C727.75,-967.03 690.31,-998.3 658.39,-1030.24 590.5,-1098.18 525.37,-1189.08 487.64,-1245.13"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="486.07,-1243.71 484.47,-1249.86 489.56,-1246.05 486.07,-1243.71"/>
+</g>
+<!-- requirement -->
+<g id="node26" class="node">
+<title>requirement</title>
+<ellipse fill="#65a30d" stroke="#000000" stroke-opacity="0.133333" cx="1100.92" cy="-262.35" rx="51.84" ry="51.84"/>
+<text text-anchor="middle" x="1100.92" y="-265.6" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">requirement</text>
+<text text-anchor="middle" x="1100.92" y="-252.85" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">1/7</text>
+</g>
+<!-- commands&#45;&gt;requirement -->
+<g id="edge49" class="edge">
+<title>commands&#45;&gt;requirement</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M957.25,-682.66C998.57,-561.77 1052.88,-402.92 1081.43,-319.37"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1083.39,-320.13 1083.35,-313.78 1079.42,-318.77 1083.39,-320.13"/>
+</g>
+<!-- commands&#45;&gt;review -->
+<g id="edge50" class="edge">
+<title>commands&#45;&gt;review</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1060.22,-904.19C1065.62,-906.29 1070.88,-908.34 1075.95,-910.31"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1074.91,-912.16 1081.27,-912.38 1076.44,-908.25 1074.91,-912.16"/>
+</g>
+<!-- commands&#45;&gt;revision -->
+<g id="edge51" class="edge">
+<title>commands&#45;&gt;revision</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M867.56,-677.36C856.05,-629.31 842.2,-577.06 826.79,-529.73 783.44,-396.72 751.8,-371.58 683.75,-249.35 661.88,-210.07 637.5,-165.3 619.59,-132.21"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="621.58,-131.48 616.87,-127.2 617.88,-133.48 621.58,-131.48"/>
+</g>
+<!-- commands&#45;&gt;rfc -->
+<g id="edge52" class="edge">
+<title>commands&#45;&gt;rfc</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M748.46,-772.54C686.91,-738.32 619.41,-692.19 571.46,-635.49 538.61,-596.65 530.92,-580.51 527.66,-529.73 525.8,-500.91 546.49,-495.83 544.64,-467.01 541.93,-424.84 533.82,-412.81 508.25,-379.17 442.88,-293.16 334.75,-222.84 276.44,-188.74"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="277.66,-187.02 271.41,-185.82 275.55,-190.65 277.66,-187.02"/>
+</g>
+<!-- search -->
+<g id="node31" class="node">
+<title>search</title>
+<ellipse fill="#d97706" stroke="#000000" stroke-opacity="0.133333" cx="788.05" cy="-1291.98" rx="29.85" ry="29.85"/>
+<text text-anchor="middle" x="788.05" y="-1295.23" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">search</text>
+<text text-anchor="middle" x="788.05" y="-1282.48" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">2/1</text>
+</g>
+<!-- commands&#45;&gt;search -->
+<g id="edge53" class="edge">
+<title>commands&#45;&gt;search</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M860.7,-1006.88C837.7,-1097.11 811.12,-1201.44 797.37,-1255.4"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="795.33,-1254.88 795.89,-1261.21 799.4,-1255.92 795.33,-1254.88"/>
+</g>
+<!-- commands&#45;&gt;slice -->
+<g id="edge54" class="edge">
+<title>commands&#45;&gt;slice</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1009.34,-711.74C1028.98,-687.64 1048.75,-663.38 1066.12,-642.07"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1067.69,-643.47 1069.85,-637.49 1064.43,-640.82 1067.69,-643.47"/>
+</g>
+<!-- commands&#45;&gt;spec -->
+<g id="edge55" class="edge">
+<title>commands&#45;&gt;spec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M865.25,-677.63C853.72,-629.71 840.43,-577.45 826.79,-529.73 799.7,-435.01 762.35,-326.39 740.17,-263.73"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="742.24,-263.27 738.25,-258.32 738.28,-264.67 742.24,-263.27"/>
+</g>
+<!-- commands&#45;&gt;standard -->
+<g id="edge56" class="edge">
+<title>commands&#45;&gt;standard</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M758.49,-754.48C684.92,-715.49 592.18,-675.41 502.51,-661.74 366.88,-641.07 205.55,-669.53 123.5,-687.74"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="123.28,-685.63 117.88,-689 124.2,-689.73 123.28,-685.63"/>
+</g>
+<!-- worktree -->
+<g id="node35" class="node">
+<title>worktree</title>
+<ellipse fill="#65a30d" stroke="#000000" stroke-opacity="0.133333" cx="1308.83" cy="-1019.72" rx="42.48" ry="42.48"/>
+<text text-anchor="middle" x="1308.83" y="-1022.97" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">worktree</text>
+<text text-anchor="middle" x="1308.83" y="-1010.22" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">1/5</text>
+</g>
+<!-- commands&#45;&gt;worktree -->
+<g id="edge57" class="edge">
+<title>commands&#45;&gt;worktree</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1033.28,-950.07C1065.05,-970.02 1100.25,-987.58 1136.05,-997.15 1176.39,-1007.94 1223.47,-1013.66 1258.29,-1016.63"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1257.71,-1018.69 1263.86,-1017.09 1258.05,-1014.51 1257.71,-1018.69"/>
+</g>
+<!-- concept_map&#45;&gt;install -->
+<g id="edge58" class="edge">
+<title>concept_map&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M207.05,-1037.73C242.48,-942.97 326.65,-717.81 378.05,-580.32"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="379.9,-581.37 380.03,-575.01 375.96,-579.9 379.9,-581.37"/>
+</g>
+<!-- corpus&#45;&gt;boot -->
+<g id="edge59" class="edge">
+<title>corpus&#45;&gt;boot</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M200,-966.04C226.48,-969.62 262.57,-974.51 293.55,-978.7"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="292.98,-980.74 299.21,-979.47 293.54,-976.58 292.98,-980.74"/>
+</g>
+<!-- corpus&#45;&gt;install -->
+<g id="edge60" class="edge">
+<title>corpus&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M183.06,-929.05C223.3,-859.18 312.54,-689.89 369.44,-576.8"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="371.21,-577.97 372.02,-571.66 367.45,-576.08 371.21,-577.97"/>
+</g>
+<!-- corpus&#45;&gt;memory -->
+<g id="edge61" class="edge">
+<title>corpus&#45;&gt;memory</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M196.48,-977.71C226.85,-992.49 272.57,-1014.37 312.89,-1032.26 498.04,-1114.39 736.9,-1147.72 858.44,-1160.07"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="857.99,-1162.13 864.17,-1160.64 858.41,-1157.95 857.99,-1162.13"/>
+</g>
+<!-- dispatch&#45;&gt;slice -->
+<g id="edge62" class="edge">
+<title>dispatch&#45;&gt;slice</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1435.96,-647C1383.06,-634.63 1280.65,-610.68 1207.16,-593.49"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1207.93,-591.52 1201.61,-592.2 1206.98,-595.61 1207.93,-591.52"/>
+</g>
+<!-- dispatch&#45;&gt;worktree -->
+<g id="edge63" class="edge">
+<title>dispatch&#45;&gt;worktree</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1455.78,-687.71C1436.84,-729.25 1403.23,-803.3 1375.07,-866.95 1359.25,-902.71 1341.65,-943.33 1328.57,-973.69"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1326.73,-972.67 1326.29,-979.01 1330.59,-974.33 1326.73,-972.67"/>
+</g>
+<!-- doctor_checks&#45;&gt;catalog -->
+<g id="edge64" class="edge">
+<title>doctor_checks&#45;&gt;catalog</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M975.93,-216.46C972.77,-248.07 967.23,-288.75 957.69,-323.92 926.03,-440.68 854.62,-564.53 782.98,-635.49 737.01,-681.03 675.55,-718.13 621.87,-745.16"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="621.15,-743.17 616.72,-747.73 623.03,-746.93 621.15,-743.17"/>
+</g>
+<!-- doctor_checks&#45;&gt;integrity -->
+<g id="edge65" class="edge">
+<title>doctor_checks&#45;&gt;integrity</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M937.76,-196.18C910.96,-218.15 876.32,-248.54 849.37,-279.06 814.65,-318.37 780.94,-364.94 752.7,-407.19"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="750.98,-405.98 749.41,-412.14 754.48,-408.31 750.98,-405.98"/>
+</g>
+<!-- governance&#45;&gt;install -->
+<g id="edge66" class="edge">
+<title>governance&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M145.19,-349.46C172.27,-349.44 204.96,-351.14 233.7,-357.42 264.84,-364.23 295.84,-378.55 323.37,-394.67"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="322.25,-396.44 328.48,-397.72 324.4,-392.84 322.25,-396.44"/>
+</g>
+<!-- install&#45;&gt;boot -->
+<g id="edge67" class="edge">
+<title>install&#45;&gt;boot</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M396.05,-577.25C379.15,-655.26 358.71,-753.08 353.25,-794.32 345.69,-851.32 341.58,-866.07 345.33,-923.44 345.33,-923.52 345.34,-923.61 345.34,-923.69"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="343.24,-923.78 345.88,-929.57 347.43,-923.4 343.24,-923.78"/>
+</g>
+<!-- install&#45;&gt;corpus -->
+<g id="edge68" class="edge">
+<title>install&#45;&gt;corpus</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M363.26,-564.4C304.81,-671.87 217.59,-839.96 180.21,-918.21"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="178.33,-917.27 177.66,-923.59 182.13,-919.07 178.33,-917.27"/>
+</g>
+<!-- install&#45;&gt;memory -->
+<g id="edge69" class="edge">
+<title>install&#45;&gt;memory</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M491.26,-555.19C524.79,-598.26 564.6,-651.41 597.52,-701.1 677.25,-821.45 672.85,-867.2 759.63,-982.58 779.57,-1009.1 836.77,-1067.44 880.87,-1111.36"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="879.22,-1112.67 884.95,-1115.42 882.18,-1109.7 879.22,-1112.67"/>
+</g>
+<!-- integrity&#45;&gt;adr -->
+<g id="edge70" class="edge">
+<title>integrity&#45;&gt;adr</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M682.87,-666.1C687.47,-777.13 693.75,-928.57 697.18,-1011.37"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="695.08,-1011.39 697.43,-1017.29 699.28,-1011.21 695.08,-1011.39"/>
+</g>
+<!-- integrity&#45;&gt;backlog -->
+<g id="edge71" class="edge">
+<title>integrity&#45;&gt;backlog</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M780.51,-441.04C805.47,-417.55 830.8,-393.05 851.2,-372.55"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="852.6,-374.13 855.33,-368.39 849.62,-371.17 852.6,-374.13"/>
+</g>
+<!-- integrity&#45;&gt;concept_map -->
+<g id="edge72" class="edge">
+<title>integrity&#45;&gt;concept_map</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M555.18,-590.26C505.32,-619.07 449.6,-656.92 407.49,-701.1 311.88,-801.43 242.49,-951.77 210.41,-1030.18"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="208.53,-1029.23 208.22,-1035.58 212.42,-1030.81 208.53,-1029.23"/>
+</g>
+<!-- integrity&#45;&gt;knowledge -->
+<g id="edge73" class="edge">
+<title>integrity&#45;&gt;knowledge</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M807.57,-570.28C928.52,-607.9 1101.83,-661.81 1183.82,-687.32"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1183.09,-689.29 1189.45,-689.07 1184.34,-685.28 1183.09,-689.29"/>
+</g>
+<!-- integrity&#45;&gt;policy -->
+<g id="edge74" class="edge">
+<title>integrity&#45;&gt;policy</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M546.42,-568.22C506.36,-578.06 461.91,-587.05 420.4,-591.25 307.75,-602.66 175.1,-592.73 102.16,-585.27"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="102.73,-583.21 96.54,-584.68 102.29,-587.39 102.73,-583.21"/>
+</g>
+<!-- integrity&#45;&gt;rec -->
+<g id="edge75" class="edge">
+<title>integrity&#45;&gt;rec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M599.7,-417.62C549.5,-350.1 486.23,-267.86 445.88,-218.15"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="447.58,-216.92 442.17,-213.59 444.33,-219.57 447.58,-216.92"/>
+</g>
+<!-- integrity&#45;&gt;requirement -->
+<g id="edge76" class="edge">
+<title>integrity&#45;&gt;requirement</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M794.05,-458.99C839.52,-431.18 891.93,-398.79 939.1,-368.79 976.85,-344.78 1019.07,-316.98 1050.92,-295.82"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1051.95,-297.65 1055.78,-292.58 1049.63,-294.15 1051.95,-297.65"/>
+</g>
+<!-- integrity&#45;&gt;review -->
+<g id="edge77" class="edge">
+<title>integrity&#45;&gt;review</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M799.36,-589.88C898.76,-639.19 1024.13,-702.4 1033.34,-711.98 1045.44,-724.57 1084.51,-812.8 1110.81,-874.06"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1108.82,-874.76 1113.12,-879.45 1112.68,-873.1 1108.82,-874.76"/>
+</g>
+<!-- integrity&#45;&gt;revision -->
+<g id="edge78" class="edge">
+<title>integrity&#45;&gt;revision</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M658.22,-394.76C643,-308.19 622.22,-200.55 608.17,-137.26"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="610.23,-136.85 606.87,-131.45 606.13,-137.76 610.23,-136.85"/>
+</g>
+<!-- integrity&#45;&gt;rfc -->
+<g id="edge79" class="edge">
+<title>integrity&#45;&gt;rfc</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M576.29,-437.89C554.1,-418.25 530.57,-397.8 508.25,-379.17 425.77,-310.29 325.43,-233.6 272.66,-193.79"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="274.22,-192.33 268.16,-190.39 271.69,-195.68 274.22,-192.33"/>
+</g>
+<!-- integrity&#45;&gt;slice -->
+<g id="edge80" class="edge">
+<title>integrity&#45;&gt;slice</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M813.07,-543.12C884.97,-550.21 971.17,-558.7 1034.21,-564.92"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1033.88,-567 1040.06,-565.49 1034.3,-562.82 1033.88,-567"/>
+</g>
+<!-- integrity&#45;&gt;spec -->
+<g id="edge81" class="edge">
+<title>integrity&#45;&gt;spec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M695.98,-394.84C702.26,-349.66 708.91,-301.81 713.84,-266.36"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="715.89,-266.86 714.64,-260.63 711.73,-266.28 715.89,-266.86"/>
+</g>
+<!-- integrity&#45;&gt;standard -->
+<g id="edge82" class="edge">
+<title>integrity&#45;&gt;standard</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M545.79,-566.76C413.81,-603.95 216.95,-659.42 123.18,-685.84"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="122.76,-683.77 117.56,-687.42 123.9,-687.81 122.76,-683.77"/>
+</g>
+<!-- knowledge&#45;&gt;install -->
+<g id="edge83" class="edge">
+<title>knowledge&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1190.58,-693.45C1129.19,-681.27 1007.24,-659.78 902.5,-657.78 801.94,-655.87 776.69,-694.21 677.22,-679.3 626.91,-671.76 612.98,-664.9 571.46,-635.49 543.15,-615.44 516.39,-589.17 493.49,-563.36"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="495.29,-562.23 489.75,-559.11 492.13,-565 495.29,-562.23"/>
+</g>
+<!-- lazyspec&#45;&gt;adr -->
+<g id="edge84" class="edge">
+<title>lazyspec&#45;&gt;adr</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1291.83,-517.87C1267.63,-555.29 1229.1,-615.85 1197.88,-669.42 1178.53,-702.62 1061.87,-947.9 1033.34,-973.64 956.3,-1043.12 832.33,-1063.43 759.16,-1069.27"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="759.14,-1067.16 753.32,-1069.71 759.46,-1071.35 759.14,-1067.16"/>
+</g>
+<!-- lazyspec&#45;&gt;backlog -->
+<g id="edge85" class="edge">
+<title>lazyspec&#45;&gt;backlog</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1275.25,-467C1201.01,-439.12 1041.51,-379.23 954.27,-346.46"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="955.11,-344.54 948.76,-344.39 953.64,-348.47 955.11,-344.54"/>
+</g>
+<!-- lazyspec&#45;&gt;requirement -->
+<g id="edge86" class="edge">
+<title>lazyspec&#45;&gt;requirement</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1285.44,-451.47C1248.19,-413.3 1184.25,-347.76 1142.28,-304.74"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1144.02,-303.52 1138.33,-300.69 1141.02,-306.45 1144.02,-303.52"/>
+</g>
+<!-- lazyspec&#45;&gt;slice -->
+<g id="edge87" class="edge">
+<title>lazyspec&#45;&gt;slice</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1276.59,-500.32C1254.96,-510.57 1227.17,-523.73 1201.14,-536.06"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1200.45,-534.06 1195.93,-538.53 1202.25,-537.86 1200.45,-534.06"/>
+</g>
+<!-- lazyspec&#45;&gt;spec -->
+<g id="edge88" class="edge">
+<title>lazyspec&#45;&gt;spec</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M1279.48,-458.39C1208.91,-412.89 1045.42,-312.94 894.24,-260.47 854.65,-246.73 808.99,-233.96 774.55,-224.92"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="775.18,-222.92 768.85,-223.44 774.12,-226.98 775.18,-222.92"/>
+</g>
+<!-- main -->
+<g id="node15" class="node">
+<title>main</title>
+<ellipse fill="#65a30d" stroke="#000000" stroke-opacity="0.133333" cx="927.68" cy="-1450.43" rx="28.81" ry="28.81"/>
+<text text-anchor="middle" x="927.68" y="-1453.68" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">main</text>
+<text text-anchor="middle" x="927.68" y="-1440.93" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">1/0</text>
+</g>
+<!-- main&#45;&gt;commands -->
+<g id="edge89" class="edge">
+<title>main&#45;&gt;commands</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M917.38,-1423.14C899.34,-1373.15 863.43,-1263.09 858.4,-1166.6 855.84,-1117.32 860.11,-1064.16 866.86,-1015.43"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="868.9,-1016.01 867.66,-1009.77 864.74,-1015.42 868.9,-1016.01"/>
+</g>
+<!-- map_server&#45;&gt;catalog -->
+<g id="edge90" class="edge">
+<title>map_server&#45;&gt;catalog</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M592.62,-1255.51C578.45,-1183.27 548.87,-1032.48 527.46,-923.32"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="529.57,-923.16 526.35,-917.68 525.45,-923.97 529.57,-923.16"/>
+</g>
+<!-- map_server&#45;&gt;concept_map -->
+<g id="edge91" class="edge">
+<title>map_server&#45;&gt;concept_map</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M561.41,-1280.82C484.32,-1248.34 319.02,-1178.17 294.71,-1163.65 272.71,-1150.52 250.12,-1133.33 231.62,-1118.11"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="233.13,-1116.64 227.18,-1114.43 230.45,-1119.87 233.13,-1116.64"/>
+</g>
+<!-- map_server&#45;&gt;integrity -->
+<g id="edge92" class="edge">
+<title>map_server&#45;&gt;integrity</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M605.08,-1254.74C615.96,-1145.37 645.26,-850.95 662.99,-672.74"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="665.07,-673.09 663.57,-666.91 660.89,-672.67 665.07,-673.09"/>
+</g>
+<!-- map_server&#45;&gt;memory -->
+<g id="edge93" class="edge">
+<title>map_server&#45;&gt;memory</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M640.72,-1281.87C695.63,-1260.51 795.47,-1221.67 863.97,-1195.03"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="864.67,-1197.01 869.5,-1192.87 863.14,-1193.09 864.67,-1197.01"/>
+</g>
+<!-- map_server&#45;&gt;priority -->
+<g id="edge94" class="edge">
+<title>map_server&#45;&gt;priority</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M563.95,-1275.4C511.95,-1244.4 417.49,-1188.1 364.32,-1156.4"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="365.57,-1154.71 359.35,-1153.44 363.42,-1158.32 365.57,-1154.71"/>
+</g>
+<!-- mcp_server&#45;&gt;commands -->
+<g id="edge95" class="edge">
+<title>mcp_server&#45;&gt;commands</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1367.14,-891.97C1291.5,-871.26 1142.93,-832.01 1088.93,-827.87 1086.03,-827.65 1082.61,-827.53 1078.76,-827.51"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1078.98,-825.41 1072.99,-827.55 1079.01,-829.61 1078.98,-825.41"/>
+</g>
+<!-- mcp_server&#45;&gt;memory -->
+<g id="edge96" class="edge">
+<title>mcp_server&#45;&gt;memory</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1371.38,-927.44C1289.59,-972.48 1106.5,-1073.29 1006.13,-1128.56"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1005.14,-1126.7 1000.9,-1131.44 1007.17,-1130.38 1005.14,-1126.7"/>
+</g>
+<!-- retrieve -->
+<g id="node27" class="node">
+<title>retrieve</title>
+<ellipse fill="#65a30d" stroke="#000000" stroke-opacity="0.133333" cx="1442.6" cy="-1468.71" rx="33.56" ry="33.56"/>
+<text text-anchor="middle" x="1442.6" y="-1471.96" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">retrieve</text>
+<text text-anchor="middle" x="1442.6" y="-1459.21" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#111111">1/2</text>
+</g>
+<!-- mcp_server&#45;&gt;retrieve -->
+<g id="edge97" class="edge">
+<title>mcp_server&#45;&gt;retrieve</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1415.26,-951.77C1420.97,-1059.79 1434.94,-1323.86 1440.38,-1426.72"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1438.27,-1426.72 1440.69,-1432.6 1442.47,-1426.5 1438.27,-1426.72"/>
+</g>
+<!-- mcp_server&#45;&gt;review -->
+<g id="edge98" class="edge">
+<title>mcp_server&#45;&gt;review</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1365.51,-909.61C1320.09,-914.38 1251.08,-921.63 1200.61,-926.93"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1200.52,-924.82 1194.78,-927.54 1200.96,-929 1200.52,-924.82"/>
+</g>
+<!-- mcp_server&#45;&gt;slice -->
+<g id="edge99" class="edge">
+<title>mcp_server&#45;&gt;slice</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1392.27,-861.98C1366.77,-811.88 1319.56,-728.19 1262.53,-669.42 1243.72,-650.03 1220.4,-632.26 1198.2,-617.42"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1199.6,-615.83 1193.43,-614.28 1197.29,-619.34 1199.6,-615.83"/>
+</g>
+<!-- mcp_server&#45;&gt;worktree -->
+<g id="edge100" class="edge">
+<title>mcp_server&#45;&gt;worktree</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1381.02,-939.8C1368.9,-953.22 1355.04,-968.56 1342.73,-982.19"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1341.44,-980.48 1338.98,-986.34 1344.56,-983.3 1341.44,-980.48"/>
+</g>
+<!-- memory&#45;&gt;catalog -->
+<g id="edge101" class="edge">
+<title>memory&#45;&gt;catalog</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M886.33,-1117.27C817.62,-1055.56 693.46,-949.21 604.95,-875.88"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="606.5,-874.43 600.54,-872.23 603.82,-877.67 606.5,-874.43"/>
+</g>
+<!-- memory&#45;&gt;install -->
+<g id="edge102" class="edge">
+<title>memory&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M889.71,-1113.63C848.21,-1066.79 791.47,-1001.64 771.67,-973.64 688.44,-855.93 692.48,-810.65 609.83,-692.53 590.89,-665.46 542.81,-608.26 499.84,-558.26"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="501.51,-556.98 496.01,-553.8 498.33,-559.72 501.51,-556.98"/>
+</g>
+<!-- memory&#45;&gt;retrieve -->
+<g id="edge103" class="edge">
+<title>memory&#45;&gt;retrieve</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M975.52,-1226.04C978.08,-1228.85 980.72,-1231.53 983.43,-1234.03 1002.17,-1251.27 1339.33,-1446.98 1401.64,-1471.5"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1400.82,-1473.44 1407.17,-1473.27 1402.1,-1469.44 1400.82,-1473.44"/>
+</g>
+<!-- memory&#45;&gt;worktree -->
+<g id="edge104" class="edge">
+<title>memory&#45;&gt;worktree</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1003.09,-1140.51C1077.33,-1111.18 1196.03,-1064.28 1261.55,-1038.4"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1262.1,-1040.44 1266.91,-1036.28 1260.56,-1036.53 1262.1,-1040.44"/>
+</g>
+<!-- policy&#45;&gt;governance -->
+<g id="edge105" class="edge">
+<title>policy&#45;&gt;governance</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M55.64,-532.11C61.76,-498.44 70.07,-452.61 76.79,-415.6"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="78.82,-416.21 77.82,-409.93 74.68,-415.46 78.82,-416.21"/>
+</g>
+<!-- policy&#45;&gt;install -->
+<g id="edge106" class="edge">
+<title>policy&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M92.55,-565.25C144.85,-549.58 232.78,-523.23 304.42,-501.76"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="305.01,-503.78 310.16,-500.05 303.81,-499.76 305.01,-503.78"/>
+</g>
+<!-- priority&#45;&gt;catalog -->
+<g id="edge107" class="edge">
+<title>priority&#45;&gt;catalog</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M350.36,-1104.51C366.63,-1085.04 387.52,-1058.19 402.62,-1032.26 423.48,-996.44 442.38,-955.43 457.98,-917.75"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="459.74,-919 460.08,-912.65 455.86,-917.4 459.74,-919"/>
+</g>
+<!-- priority&#45;&gt;integrity -->
+<g id="edge108" class="edge">
+<title>priority&#45;&gt;integrity</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M357.2,-1112.08C412.84,-1074 528.22,-988.51 597.52,-891.12 642.45,-827.99 662.73,-744.13 671.62,-673.08"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="673.68,-673.52 672.32,-667.31 669.51,-673.02 673.68,-673.52"/>
+</g>
+<!-- priority&#45;&gt;relation_graph -->
+<g id="edge109" class="edge">
+<title>priority&#45;&gt;relation_graph</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M316.33,-1096.17C309.5,-1066.83 300.28,-1024.68 294.31,-987.39 266.69,-815.06 247.99,-610.64 239.29,-504.01"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="241.41,-504.13 238.83,-498.32 237.22,-504.47 241.41,-504.13"/>
+</g>
+<!-- rec&#45;&gt;install -->
+<g id="edge110" class="edge">
+<title>rec&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M408.49,-225.68C410.15,-259.18 412.37,-304.15 414.44,-346.19"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="412.34,-346.27 414.73,-352.16 416.54,-346.06 412.34,-346.27"/>
+</g>
+<!-- rec&#45;&gt;integrity -->
+<g id="edge111" class="edge">
+<title>rec&#45;&gt;integrity</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M433.72,-217.5C469.13,-267.49 531.94,-350.96 584.91,-419.03"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="583.04,-420.04 588.38,-423.48 586.35,-417.46 583.04,-420.04"/>
+</g>
+<!-- reconcile&#45;&gt;integrity -->
+<g id="edge112" class="edge">
+<title>reconcile&#45;&gt;integrity</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M799.63,-75.72C794.51,-111.13 785.82,-165.32 774.77,-211.64 760.41,-271.86 740.97,-337.4 723.23,-393.26"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="721.25,-392.58 721.43,-398.93 725.25,-393.85 721.25,-392.58"/>
+</g>
+<!-- reconcile&#45;&gt;rec -->
+<g id="edge113" class="edge">
+<title>reconcile&#45;&gt;rec</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M771.93,-56.94C731.36,-79.69 659.59,-117.09 593.42,-137.02 551.15,-149.75 502.14,-159.12 464.83,-165.19"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="464.61,-163.09 459.02,-166.12 465.28,-167.24 464.61,-163.09"/>
+</g>
+<!-- reconcile&#45;&gt;requirement -->
+<g id="edge114" class="edge">
+<title>reconcile&#45;&gt;requirement</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M823.81,-70.97C846.64,-108.17 888.08,-168.17 937.59,-205.57 968.34,-228.79 1009.32,-243 1042.54,-251.4"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1041.71,-253.36 1048.04,-252.75 1042.71,-249.28 1041.71,-253.36"/>
+</g>
+<!-- reconcile&#45;&gt;slice -->
+<g id="edge115" class="edge">
+<title>reconcile&#45;&gt;slice</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M824.12,-70.51C873.87,-154.54 1007.18,-379.7 1077.35,-498.23"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="1075.42,-499.09 1080.29,-503.18 1079.04,-496.95 1075.42,-499.09"/>
+</g>
+<!-- relation_graph&#45;&gt;adr -->
+<g id="edge116" class="edge">
+<title>relation_graph&#45;&gt;adr</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M243.99,-496.43C262.04,-592.65 307.45,-773.59 407.49,-891.12 472.7,-967.73 578.9,-1021.73 643.71,-1049.64"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="642.72,-1051.5 649.07,-1051.92 644.37,-1047.63 642.72,-1051.5"/>
+</g>
+<!-- relation_graph&#45;&gt;backlog -->
+<g id="edge117" class="edge">
+<title>relation_graph&#45;&gt;backlog</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M289.82,-396.4C325.7,-376.36 374.06,-353.11 420.4,-342.78 496.41,-325.84 718.85,-323.63 829.75,-323.63"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="829.41,-325.73 835.41,-323.64 829.42,-321.53 829.41,-325.73"/>
+</g>
+<!-- relation_graph&#45;&gt;catalog -->
+<g id="edge118" class="edge">
+<title>relation_graph&#45;&gt;catalog</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M272.78,-484.09C312.56,-538.12 375.29,-623.32 425.16,-691.05"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="423.44,-692.26 428.69,-695.84 426.82,-689.77 423.44,-692.26"/>
+</g>
+<!-- relation_graph&#45;&gt;governance -->
+<g id="edge119" class="edge">
+<title>relation_graph&#45;&gt;governance</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M175.41,-399.3C165.5,-393.91 155.21,-388.32 145.33,-382.94"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="146.36,-381.11 140.08,-380.09 144.35,-384.8 146.36,-381.11"/>
+</g>
+<!-- relation_graph&#45;&gt;integrity -->
+<g id="edge120" class="edge">
+<title>relation_graph&#45;&gt;integrity</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M268.97,-486.9C285.93,-510.32 307.93,-536.34 332.55,-554.86 366.32,-580.27 378.27,-587.93 420.4,-591.25 460.25,-594.4 502.75,-588.27 541.46,-578.81"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="541.79,-580.89 547.1,-577.39 540.77,-576.82 541.79,-580.89"/>
+</g>
+<!-- relation_graph&#45;&gt;policy -->
+<g id="edge121" class="edge">
+<title>relation_graph&#45;&gt;policy</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M181.74,-472.19C152.97,-494.98 117.64,-522.99 90.4,-544.58"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="89.42,-542.67 86.02,-548.05 92.03,-545.96 89.42,-542.67"/>
+</g>
+<!-- relation_graph&#45;&gt;spec -->
+<g id="edge122" class="edge">
+<title>relation_graph&#45;&gt;spec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M291.87,-399.56C305.14,-392.65 319.26,-385.5 332.55,-379.17 451.72,-322.36 595.07,-262.81 670.04,-232.33"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="670.78,-234.29 675.55,-230.09 669.2,-230.4 670.78,-234.29"/>
+</g>
+<!-- relation_graph&#45;&gt;standard -->
+<g id="edge123" class="edge">
+<title>relation_graph&#45;&gt;standard</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M199.34,-487.58C169.52,-536.68 126.83,-606.97 98.73,-653.25"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="96.94,-652.15 95.62,-658.37 100.53,-654.33 96.94,-652.15"/>
+</g>
+<!-- relation_query&#45;&gt;catalog -->
+<g id="edge124" class="edge">
+<title>relation_query&#45;&gt;catalog</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M459.51,-1242.82C466.75,-1167.63 480.15,-1028.39 490.08,-925.27"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="492.15,-925.59 490.64,-919.42 487.97,-925.19 492.15,-925.59"/>
+</g>
+<!-- relation_query&#45;&gt;integrity -->
+<g id="edge125" class="edge">
+<title>relation_query&#45;&gt;integrity</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M476.13,-1246.99C514.34,-1158.41 593.52,-965.85 636.88,-796.11 647,-756.46 654.92,-712.79 660.96,-672.49"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="663,-673.01 661.8,-666.77 658.85,-672.4 663,-673.01"/>
+</g>
+<!-- requirement&#45;&gt;install -->
+<g id="edge126" class="edge">
+<title>requirement&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1049.01,-256.19C1006.9,-252.54 946.2,-250.38 894.24,-260.47 759.95,-286.55 617.58,-354.8 524.37,-405.76"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="523.57,-403.8 519.32,-408.53 525.59,-407.48 523.57,-403.8"/>
+</g>
+<!-- retrieve&#45;&gt;memory -->
+<g id="edge127" class="edge">
+<title>retrieve&#45;&gt;memory</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1408.64,-1469.42C1406.75,-1469.26 1405.16,-1469.03 1404,-1468.71 1379.57,-1461.95 1048.47,-1259.86 992.85,-1221.76"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="994.36,-1220.26 988.26,-1218.47 991.91,-1223.67 994.36,-1220.26"/>
+</g>
+<!-- review&#45;&gt;install -->
+<g id="edge128" class="edge">
+<title>review&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1122.85,-878.66C1108.42,-829.19 1080.78,-757.51 1033.34,-711.98 987.93,-668.4 964.75,-667.11 902.5,-657.78 803.03,-642.88 776.69,-694.21 677.22,-679.3 626.91,-671.76 612.98,-664.9 571.46,-635.49 543.15,-615.44 516.39,-589.17 493.49,-563.36"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="495.29,-562.23 489.75,-559.11 492.13,-565 495.29,-562.23"/>
+</g>
+<!-- review&#45;&gt;integrity -->
+<g id="edge129" class="edge">
+<title>review&#45;&gt;integrity</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1117.15,-880C1094.21,-815.81 1056.95,-715.19 1044.15,-701.58 1035.1,-691.97 910.48,-634.53 808.96,-588.68"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="809.96,-586.82 803.63,-586.27 808.23,-590.65 809.96,-586.82"/>
+</g>
+<!-- review&#45;&gt;slice -->
+<g id="edge130" class="edge">
+<title>review&#45;&gt;slice</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1138.9,-876.84C1138.55,-818.99 1135.29,-728.56 1131.3,-661.48"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1133.4,-661.4 1130.94,-655.54 1129.2,-661.65 1133.4,-661.4"/>
+</g>
+<!-- review&#45;&gt;worktree -->
+<g id="edge131" class="edge">
+<title>review&#45;&gt;worktree</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1186.95,-959.05C1211.22,-971.13 1240.01,-985.46 1263.51,-997.16"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1262.42,-998.96 1268.73,-999.75 1264.29,-995.2 1262.42,-998.96"/>
+</g>
+<!-- revision&#45;&gt;install -->
+<g id="edge132" class="edge">
+<title>revision&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M573.91,-126.93C548.95,-182.22 504.83,-279.97 470.27,-356.53"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="468.38,-355.61 467.83,-361.94 472.21,-357.33 468.38,-355.61"/>
+</g>
+<!-- revision&#45;&gt;integrity -->
+<g id="edge133" class="edge">
+<title>revision&#45;&gt;integrity</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M597.9,-130.97C607.03,-191.93 626.77,-300.63 644.36,-389.16"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="642.3,-389.57 645.54,-395.04 646.42,-388.74 642.3,-389.57"/>
+</g>
+<!-- revision&#45;&gt;rec -->
+<g id="edge134" class="edge">
+<title>revision&#45;&gt;rec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M550.87,-104.09C523.98,-116.98 488.98,-133.75 460.11,-147.59"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="459.32,-145.64 454.82,-150.12 461.14,-149.43 459.32,-145.64"/>
+</g>
+<!-- revision&#45;&gt;requirement -->
+<g id="edge135" class="edge">
+<title>revision&#45;&gt;requirement</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M637.88,-100.26C709.58,-126.86 855.33,-180.42 979.8,-223.05 1000.57,-230.16 1023.46,-237.67 1043.69,-244.2"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1042.93,-246.16 1049.29,-246 1044.22,-242.16 1042.93,-246.16"/>
+</g>
+<!-- rfc&#45;&gt;governance -->
+<g id="edge136" class="edge">
+<title>rfc&#45;&gt;governance</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M212.43,-196.25C189.84,-224.59 155.41,-267.79 128.55,-301.5"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="127.04,-300.02 124.94,-306.02 130.33,-302.64 127.04,-300.02"/>
+</g>
+<!-- rfc&#45;&gt;install -->
+<g id="edge137" class="edge">
+<title>rfc&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M256.07,-198.89C280.17,-238.21 321.94,-306.37 357.34,-364.12"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="355.37,-364.93 360.29,-368.94 358.95,-362.73 355.37,-364.93"/>
+</g>
+<!-- search&#45;&gt;catalog -->
+<g id="edge138" class="edge">
+<title>search&#45;&gt;catalog</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M769.09,-1268.53C742.56,-1235.11 693.64,-1171.36 658.39,-1112.81 620.2,-1049.36 583.33,-975.24 555.04,-914.66"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="557.06,-914.02 552.62,-909.47 553.25,-915.8 557.06,-914.02"/>
+</g>
+<!-- search&#45;&gt;integrity -->
+<g id="edge139" class="edge">
+<title>search&#45;&gt;integrity</title>
+<path fill="none" stroke="#2563eb" stroke-dasharray="5,2" stroke-opacity="0.600000" d="M784.35,-1261.97C779.04,-1219.5 768.7,-1139.45 758.06,-1071.52 742.08,-969.53 733.09,-944.86 717.48,-842.81 708.98,-787.21 700.82,-725.86 694.1,-672.32"/>
+<polygon fill="#2563eb" fill-opacity="0.600000" stroke="#2563eb" stroke-opacity="0.600000" points="696.22,-672.35 693.39,-666.66 692.05,-672.87 696.22,-672.35"/>
+</g>
+<!-- slice&#45;&gt;governance -->
+<g id="edge140" class="edge">
+<title>slice&#45;&gt;governance</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1048.77,-540.69C980.26,-510.05 874.95,-463.31 782.98,-423.98 736.2,-403.97 726.27,-393.67 677.22,-380.17 566.01,-349.56 535.55,-349.52 420.4,-342.78 327.6,-337.34 220.01,-342.39 153.05,-346.87"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="153.05,-344.76 147.2,-347.27 153.33,-348.95 153.05,-344.76"/>
+</g>
+<!-- slice&#45;&gt;install -->
+<g id="edge141" class="edge">
+<title>slice&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1056.84,-526.56C973.4,-470.89 822.17,-385 677.22,-380.17 626.53,-378.48 573.02,-393.6 528.03,-411.68"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="527.32,-409.7 522.56,-413.92 528.91,-413.59 527.32,-409.7"/>
+</g>
+<!-- slice&#45;&gt;rec -->
+<g id="edge142" class="edge">
+<title>slice&#45;&gt;rec</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1052,-534.48C908.84,-454.51 585.3,-273.77 458.4,-202.87"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="459.53,-201.1 453.27,-200.01 457.48,-204.77 459.53,-201.1"/>
+</g>
+<!-- slice&#45;&gt;requirement -->
+<g id="edge143" class="edge">
+<title>slice&#45;&gt;requirement</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1116.54,-493.42C1112.93,-440.02 1108.27,-370.98 1104.98,-322.32"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1107.08,-322.35 1104.58,-316.51 1102.89,-322.63 1107.08,-322.35"/>
+</g>
+<!-- slice&#45;&gt;review -->
+<g id="edge144" class="edge">
+<title>slice&#45;&gt;review</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1119.37,-653.71C1120.41,-718.72 1124.09,-809.16 1128.21,-869.47"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1126.1,-869.45 1128.62,-875.29 1130.29,-869.16 1126.1,-869.45"/>
+</g>
+<!-- spec&#45;&gt;install -->
+<g id="edge145" class="edge">
+<title>spec&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M685.14,-242.45C642.65,-278.49 570.72,-339.51 512.55,-388.85"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="511.44,-387.04 508.22,-392.52 514.16,-390.24 511.44,-387.04"/>
+</g>
+<!-- spec&#45;&gt;requirement -->
+<g id="edge146" class="edge">
+<title>spec&#45;&gt;requirement</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M768.36,-217.91C837.24,-227.12 965.72,-244.29 1041.23,-254.38"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1040.95,-256.46 1047.17,-255.17 1041.5,-252.29 1040.95,-256.46"/>
+</g>
+<!-- standard&#45;&gt;governance -->
+<g id="edge147" class="edge">
+<title>standard&#45;&gt;governance</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M84.6,-655.67C91.17,-632.91 97.98,-604.72 100.48,-578.85 105.78,-524.02 101.69,-461.51 96.88,-416"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="98.97,-415.84 96.23,-410.1 94.8,-416.29 98.97,-415.84"/>
+</g>
+<!-- standard&#45;&gt;install -->
+<g id="edge148" class="edge">
+<title>standard&#45;&gt;install</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M109.34,-674.5C160,-640.71 249.63,-580.93 319.71,-534.18"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="320.84,-535.95 324.66,-530.88 318.51,-532.46 320.84,-535.95"/>
+</g>
+<!-- worktree&#45;&gt;slice -->
+<g id="edge149" class="edge">
+<title>worktree&#45;&gt;slice</title>
+<path fill="none" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" d="M1292.25,-980.13C1261.78,-907.38 1196.32,-751.1 1156.02,-654.89"/>
+<polygon fill="#b91c1c" fill-opacity="0.666667" stroke="#b91c1c" stroke-width="1.4" stroke-opacity="0.666667" points="1158,-654.17 1153.74,-649.45 1154.12,-655.8 1158,-654.17"/>
+</g>
+</g>
+</svg>
+</div>
+    <div class="legend">
+      <span class="row"><span class="swatch sw-tangle"></span><b>counted</b>&nbsp;edge inside an SCC (tangle)</span>
+      <span class="row"><span class="swatch sw-acyclic"></span><b>free</b>&nbsp;acyclic edge — gate blind to it</span>
+      <span class="row"><span class="chip c-hot"></span>fan-out ≥ 10</span>
+      <span class="row"><span class="chip c-eng"></span>2–9</span>
+      <span class="row"><span class="chip c-leaf"></span>1</span>
+      <span class="row">node size = <b>degree</b> · label = <b>out/in</b></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Two blind spots, distinct in kind</h2>
+    <div class="cards">
+      <div class="card">
+        <span class="tag">Inter-unit · in the ratchet</span>
+        <h3>Acyclic edges are free</h3>
+        <p><code>count_tangle_edges</code> only counts edges inside non-trivial SCCs.
+          <span class="hit">35 of 149</span> command↔command edges are acyclic — they
+          contribute zero. Fan out along any DAG tail and the number never moves.
+          Concentration can also shift silently: drop one SCC edge, add another, stay ≤ baseline.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Intra-unit · below granularity</span>
+        <h3>The collapse hides a whole star</h3>
+        <p><code>extract_edges</code> folds <code>src/commands/*.rs</code> into one unit.
+          <code>commands::cli</code>'s <span class="hit">15-way</span> fan-out over its
+          siblings becomes a dropped self-edge. Sub-module coupling inside <em>any</em>
+          top-level unit is invisible by construction — not a hole in the ratchet, beneath it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where the coupling actually concentrates</h2>
+    <table class="tbl">
+      <thead><tr><th>unit</th><th style="text-align:right">out</th><th style="text-align:right">in</th><th>role</th><th class="barcell">same-tier fan-out</th></tr></thead>
+      <tbody>
+        <tr><td class="u">commands</td><td class="num">31</td><td class="num">2</td><td><span class="pill scc">SCC</span> dispatch source — benign</td><td class="barcell"><div class="bar" style="width:100%"></div></td></tr>
+        <tr><td class="u">catalog</td><td class="num">14</td><td class="num">9</td><td><span class="pill scc">SCC</span> entity hub</td><td class="barcell"><div class="bar" style="width:45%"></div></td></tr>
+        <tr><td class="u">integrity</td><td class="num">13</td><td class="num">13</td><td><span class="pill scc">SCC</span> symmetric nexus — most tangled</td><td class="barcell"><div class="bar" style="width:42%"></div></td></tr>
+        <tr><td class="u">relation_graph</td><td class="num">8</td><td class="num">3</td><td><span class="pill scc">SCC</span></td><td class="barcell"><div class="bar" style="width:26%"></div></td></tr>
+        <tr><td class="u">boot</td><td class="num">6</td><td class="num">3</td><td><span class="pill scc">SCC</span></td><td class="barcell"><div class="bar" style="width:19%"></div></td></tr>
+        <tr><td class="u">mcp_server</td><td class="num">6</td><td class="num">1</td><td><span class="pill scc">SCC</span> 2-cycle with commands</td><td class="barcell"><div class="bar" style="width:19%"></div></td></tr>
+        <tr><td class="u">map_server</td><td class="num">5</td><td class="num">1</td><td><span class="pill acy">acyclic</span> fan-out is <b>free</b></td><td class="barcell"><div class="bar" style="width:16%;background:var(--acyclic)"></div></td></tr>
+        <tr><td class="u">lazyspec</td><td class="num">5</td><td class="num">1</td><td><span class="pill acy">acyclic</span> fan-out is <b>free</b></td><td class="barcell"><div class="bar" style="width:16%;background:var(--acyclic)"></div></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Reading the numbers</h2>
+    <div class="takeaway col">
+      <p><strong>The big numbers are mostly the architecture working.</strong> High out-degree
+        into pure leaves is the thin-shell shape ADR-001 wants, not rot. <code>commands</code>
+        (31/2) is a dispatch source — nothing depends back on it; a router fans out. The healthy
+        sinks confirm the layering: <code>listing</code>, <code>entity</code>, <code>git</code>
+        each pull 25+ inbound with zero outbound.</p>
+      <p><strong>The real signal is what the gate can't measure.</strong> The tangle ratchet is one
+        integer — it can't see that <code>integrity</code> is a symmetric 13/13 nexus, that 35 edges
+        are structurally free, or that a 15-way star hides one collapse below. No active rot today;
+        the risk is that it could accrue while the gate stays green.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>What to do — capture, don't gate</h2>
+    <ol class="steps">
+      <li><b>Baseline &amp; watch.</b> <span class="s">This graph is the reference snapshot. Building a fan-out gate now invites false-positive churn with no evidence of harm.</span></li>
+      <li><b>Define the trigger.</b> <span class="s">Revisit if command tangle stalls near 123 across N slices, or a single unit's same-tier fan-out crosses a threshold — mirroring ADR-001's own "promote engine to a crate when churn settles" escalation.</span></li>
+      <li><b>Cheap visibility if it fires.</b> <span class="s">Promote <code>dump_real_graph</code> from <code>#[ignore]</code> to a committed snapshot with same-tier-filtered degree — a report, not a ratchet.</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    Graph from the <code>#[ignore]</code> <b>dump_real_graph</b> diagnostic · tiers from
+    <code>.doctrine/adr/001/layering.toml</code> · same-tier subgraph, Tarjan SCC.<br>
+    <span class="warn">Caveat:</span> out-degree here spans all targets; the diagnostic's edge set
+    yields ≈114 in-SCC edges vs the gate's authoritative <b>123</b> — same order, not a re-measure of the gate.
+  </footer>
+</div>
