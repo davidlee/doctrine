@@ -1,0 +1,42 @@
+memory_uid = "mem_019f2d1532747d11847bd7498b1f9491"
+memory_key = "mem.pattern.dispatch.close-deadlock-refresh-base-recovery"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Recover a dispatch close deadlocked by trunk-side authored divergence via refresh-base, not a trunk reset"
+summary = "Trunk-side authored divergence deadlocks candidate create; recover with refresh-base re-cut, no trunk reset"
+created = "2026-07-04"
+updated = "2026-07-04"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "close", "candidate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a25e1998b3606b3816dbf264f744af838c20e95f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a806cf9c487d67b9309e8089a637d04af756b08ce79a6935f344791f9b8fa673"
+base_commit = "ede5cda3d6a2158cb94da9c51a9ec11151a49f4e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
