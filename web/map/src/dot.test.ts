@@ -250,6 +250,17 @@ describe('nodeAttrs', () => {
     expect(attrs.label).toBe('REQ-060');
   });
 
+  it('label is the node title for memory nodes (id is an opaque uid)', () => {
+    const node = makeNode({
+      id: 'mem_019e95a992607db3a9805d492e69ff97',
+      title: 'Entity-engine identity + claim seam',
+      kindPrefix: 'MEM',
+    });
+    const attrs = nodeAttrs(node, null);
+
+    expect(attrs.label).toBe('Entity-engine identity + claim seam');
+  });
+
   it('tooltip includes id, title, kindLabel, and status', () => {
     const node = makeNode({
       id: 'SL-001',

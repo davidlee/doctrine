@@ -91,7 +91,7 @@ interface NodeAttrs {
 export function nodeAttrs(node: CatalogNode, focusId: string | null): NodeAttrs {
   const s = NODE_STYLES[node.kindPrefix] ?? DEFAULT_NODE_STYLE;
   return {
-    label: node.id,
+    label: node.kindPrefix === 'MEM' ? node.title : node.id,
     fillcolor: s.fill,
     fontcolor: s.font,
     shape: s.shape,
