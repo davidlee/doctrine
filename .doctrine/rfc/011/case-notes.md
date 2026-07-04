@@ -31,3 +31,12 @@ tokens on two verification detours the plan text should have pre-empted:
   working-tree-free via commit_tree/scratch-index, which the repo already has) once
   the seams were read. The design asserting the mechanism (not just "commits
   server-side") would have pre-answered the reviewer.
+
+[doctor→fix; SL-198-agent-conformance-off-by-one-c3e1b]
+New AgentConformance check (SL-198) silently invisible in rendered doctor
+output: render_findings had a hardcoded 8-bucket array for 9 categories,
+dropping ordinal-8 findings. The error exit happened but the human-readable
+output never showed the category. Root cause: ordinal-to-bucket mapping was
+manually synced with no compile-time tie to CATEGORIES_BY_ORDINAL length.
+Suggestion: the array size should be const-generic off CATEGORIES_BY_ORDINAL
+or a BTreeMap to eliminate the mapping error class entirely.
