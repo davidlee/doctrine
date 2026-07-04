@@ -28,5 +28,18 @@ the gate was unblocked by copying `web/map/dist/` from the main tree (then exit 
   missing, or
 - document the manual copy step in the dispatch/audit skill.
 
+## Scope note (RFC-011 analysis, 2026-07-04)
+
+This is NOT `web/map/dist/`-specific — it is the generic class of "any RustEmbed
+`#[folder]` that points at a gitignored built artifact." Witnessed 3+ times in the
+case notes (SL-193-audit, SL-195, SL-192-audit) and in prior sessions (SL-159-audit,
+SL-171-audit, SL-168-audit). The fix should:
+- Enumerate embed roots by scanning `src/**/assets.rs` for `#[folder]` annotations
+  (or use a config-driven allowlist of known embed dirs).
+- Provision them generically in `worktree fork` / `candidate create`, not hardcode
+  one path.
+- Fail loudly with a provisioning hint if an embed root is missing, rather than a
+  deep `E0599` compile error.
+
 Related memory: `crane-strips-non-rust-embeds` (the nix-flake analogue of the same
 embed-asset class). Surfaced by: RV-172 F-4 (SL-159 audit).

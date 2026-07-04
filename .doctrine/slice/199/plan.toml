@@ -62,29 +62,38 @@ id        = "PHASE-02"
 name      = "Server-side commit-on-behalf + coord-by-slice resolver (§B transactional core)"
 objective = """
 The trusted git-write primitive the confined funnel rests on. (1) coord-by-slice \
-resolver: given a slice-id, resolve the ONE live coordination worktree on \
-dispatch/<NNN> via SL-198's enumerate seam (git worktree list --porcelain) -> \
-typed refusal on 0 / >1 / stale. Sibling of SL-198's worker-by-agent resolver, \
-sharing the enumerate step (design D-B2). (2) commit-on-behalf: the UNCONFINED \
-MCP server commits a staged delta onto the coord branch (the confined orchestrator \
-cannot reach coord .git — RO-walled), with a DEFINED provenance contract \
-(author/message), returning the new coord tip. This is the seam dispatch_import and \
-dispatch_conclude_phase (PHASE-03) both ride — built and tested once here, before \
+resolver: given a slice-id, ENUMERATE worktrees (git worktree list --porcelain via \
+list_worktrees, git.rs:1390 — NOT the single-hit worktree_for_ref/live_worktree_for_ref \
+probes, which cannot surface >1) and filter to the ONE live worktree on dispatch/<NNN> \
+-> typed refusal on 0 / >1 / stale. Sibling of SL-198's worker-by-agent resolver, \
+sharing the enumerate step (design D-B2). (2) commit-on-behalf: the UNCONFINED MCP \
+server composes a commit WORKING-TREE-FREE onto the coord branch and advances the ref \
+— via the repo's existing commit_tree (git.rs:828) over a scratch GIT_INDEX_FILE \
+(filter_tree plumbing, git.rs:677-732/789-802), NEVER `git apply --index` into the live \
+coord index. This is load-bearing: the confined orchestrator cannot reach coord .git \
+(RO-walled) and so cannot `git reset` residue — a fault must therefore leave the live \
+coord index+worktree BYTE-UNCHANGED (ext-review blocker: no poisoned-index window). \
+Provenance is DEFINED by reusing the codebase's GIT_AUTHOR_*/GIT_COMMITTER_* = \
+`<id> <id@doctrine>` convention (git.rs:2157-2160, asserted git.rs:3789), as \
+worker_commit does (slice-198.md:101). This primitive is the seam dispatch_import and \
+dispatch_conclude_phase (PHASE-03) both ride — built and tested once here, index-\
+isolation + no-residue OWNED here (not left as ambient hygiene between phases), before \
 the tool surface (ext-review F1/F6)."""
 entrance_criteria = [
-  { id = "EN-1", text = "SL-198 landed: the per-worktree dispatch record {name,dir,branch,base,coord}, resolve_agent + refusal table, and the git worktree list --porcelain enumerate seam (worktree_for_ref / live_worktree_for_ref) exist and are green on the execution base." },
-  { id = "EN-2", text = "Reuse seams confirmed on the post-SL-198 base: the enumerate step is a shared helper (not inlined in resolve_agent); a git-commit helper exists or the commit path is identified (server writes coord .git directly, as worker_commit does for the worker branch)." },
+  { id = "EN-1", text = "SL-198 landed: the per-worktree dispatch record {name,dir,branch,base,coord}, resolve_agent + refusal table exist and are green. The ENUMERATE seam is list_worktrees (git.rs:1390 — returns Vec<WorktreeRecord>, the true multi-hit enumerator); worktree_for_ref/live_worktree_for_ref (git.rs:1372/1406) are single-hit first-match probes and are NOT the resolver seam (they cannot detect the >1 arm EX-1 promises)." },
+  { id = "EN-2", text = "Working-tree-free commit plumbing confirmed reusable on the post-SL-198 base: commit_tree (git.rs:828, `no working-tree touch`), the scratch-GIT_INDEX_FILE staging kit (filter_tree, git.rs:677-732/789-802), and the GIT_AUTHOR_*/GIT_COMMITTER_* provenance env (git.rs:2157-2160). commit_on_behalf COMPOSES these — it does not fork worker_commit's compose path and does not stage into the live coord index." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "resolve_coord(slice) returns the live coordination worktree root for dispatch/<NNN> on exactly one live consistent hit; typed refusals: unknown-slice (0 live), ambiguous (>1 — defensive, per-branch invariant normally precludes), stale (dir absent / branch unresolved). No caller-supplied path enters resolution (mirrors SL-198 X1)." },
-  { id = "EX-2", text = "commit_on_behalf(coord_root, message) commits the currently-staged delta onto the coord branch from the unconfined server and returns the new tip oid. Fails typed if nothing is staged, or if the tree is not the coord branch's checkout." },
-  { id = "EX-3", text = "Provenance contract DEFINED and asserted (ext-review R4/F6): the server-side commit records a stable, documented author identity and a message convention that names the acting slice/phase and marks it a funnel commit — so the committer-of-record is unambiguous when the server commits on the confined orchestrator's behalf. Same contract reused by import (code) and conclude (metadata)." },
-  { id = "EX-4", text = "The primitive is behaviour-preserving w.r.t. existing git helpers: it composes them, does not fork them; the main-thread funnel + existing suites stay green unchanged." },
+  { id = "EX-1", text = "resolve_coord(slice) ENUMERATES via list_worktrees and filters to the live worktree on dispatch/<NNN>, returning its root on exactly one live consistent hit; typed refusals: unknown-slice (0 live), ambiguous (>1 — a DEFENSIVE assert git's one-branch-one-worktree invariant normally precludes, but reachable only because we enumerate; a single-hit probe could not raise it), stale (dir absent / branch unresolved). No caller-supplied path enters resolution (mirrors SL-198 X1)." },
+  { id = "EX-2", text = "commit_on_behalf(coord_root, tree_or_delta, message) composes ONE commit WORKING-TREE-FREE onto the coord branch (commit_tree over a scratch GIT_INDEX_FILE) and advances the coord ref by exactly that commit, returning the new tip oid. It NEVER `git apply --index`es into the live coord index. Atomicity by construction: on any fault before the ref update the live coord index+worktree are BYTE-UNCHANGED — no dirty residue for the confined orchestrator to reset (it cannot). Fails typed on an empty delta or a lost ref race (coord tip moved under it)." },
+  { id = "EX-3", text = "Provenance contract DECIDED and asserted (ext-review R4/F6), reusing the codebase convention (git.rs:2157-2160 GIT_AUTHOR_*/GIT_COMMITTER_*, asserted git.rs:3789 `<id> <id@doctrine>`): IMPORT (code) preserves the worker commit's AUTHOR (blame points at who wrote the code) with the dispatch identity as COMMITTER; CONCLUDE (metadata) sets author==committer to the dispatch identity. Message convention: a stable funnel marker naming the acting slice/phase (grep-stable committer-of-record). NOTE the patch-id landed-oracle (git cherry) is diff-based ⇒ provenance-IMMUNE — the reap belt survives any author/message choice." },
+  { id = "EX-4", text = "The primitive is behaviour-preserving w.r.t. existing git helpers: it composes commit_tree/filter_tree, does not fork them or worker_commit's compose path; the main-thread funnel + existing suites stay green unchanged." },
 ]
 verification = [
-  { id = "VT-1", expects = "resolve_coord refusal table (unknown-slice, ambiguous, stale) + a happy single-hit resolve to the dispatch/<NNN> worktree root; no path parameter.", test_file = "src/mcp_server/dispatch.rs", keywords = ["resolve_coord", "unknown-slice", "stale"] },
-  { id = "VT-2", expects = "commit_on_behalf stages-nothing refusal; happy path lands exactly one commit on the coord branch, returns the new tip; the coord tip advances by exactly that commit.", test_file = "src/mcp_server/dispatch.rs", keywords = ["commit_on_behalf", "tip"] },
-  { id = "VT-3", expects = "Provenance: the commit-on-behalf author + message match the documented contract (funnel marker + slice/phase); asserted on the produced commit object.", test_file = "src/mcp_server/dispatch.rs", keywords = ["author", "message"] },
+  { id = "VT-1", expects = "resolve_coord enumerates (list_worktrees) and filters: refusal table (unknown-slice, ambiguous, stale) + a happy single-hit resolve to the dispatch/<NNN> worktree root; no path parameter. The ambiguous arm is exercised on a synthetic >1 listing to prove enumeration (a single-hit probe would silently pick the first).", test_file = "src/mcp_server/dispatch.rs", keywords = ["resolve_coord", "unknown-slice", "stale", "list_worktrees"] },
+  { id = "VT-2", expects = "commit_on_behalf empty-delta refusal; happy path lands exactly one commit on the coord branch, returns the new tip; the coord tip advances by exactly that commit.", test_file = "src/mcp_server/dispatch.rs", keywords = ["commit_on_behalf", "tip"] },
+  { id = "VT-3", expects = "Provenance: the commit-on-behalf author + committer + message match the decided contract (import preserves worker author + dispatch committer; conclude author==committer==dispatch id; funnel marker names slice/phase); asserted on the produced commit object.", test_file = "src/mcp_server/dispatch.rs", keywords = ["author", "committer", "message"] },
+  { id = "VT-4", expects = "No-residue / working-tree-free atomicity: a fault injected between tree-compose and ref-update leaves the coord ref AND the live coord index+worktree byte-unchanged (git status --porcelain empty, tip unmoved) — proving commit_on_behalf never dirties the live index the confined orchestrator cannot reset. Also: a pre-existing staged/dirty coord tree is NOT swept into the commit (compose is from the named tree, not the live index).", test_file = "src/mcp_server/dispatch.rs", keywords = ["commit_on_behalf", "GIT_INDEX_FILE", "porcelain"] },
 ]
 specs        = []
 requirements = []

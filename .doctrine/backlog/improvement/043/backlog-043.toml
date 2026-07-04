@@ -17,7 +17,7 @@ after    = [{ to = "ISS-015", rank = 0 }, { to = "ISS-016", rank = 0 }, { to = "
 triggers = []                   # watched source globs: { globs, note? }
 
 [value]
-value = 1.8
+value = 3.0
 
 [estimate]
 lower = 2.5

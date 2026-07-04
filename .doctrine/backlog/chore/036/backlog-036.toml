@@ -29,5 +29,10 @@ lower = 3.5
 upper = 10.0
 
 [[relation]]
+label = "references"
+role = "concerns"
+target = "IMP-254"
+
+[[relation]]
 label = "related"
 target = "IMP-216"

@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 240
-slug = "solo-fork-audit-path"
-title = "Solo-fork audit path: fail-fast review new, runbook or state-carry"
+id = 262
+slug = "supersede-reversal-verb-undo-a-bad-supersede-edge-without-raw-toml-editing"
+title = "Supersede reversal verb: undo a bad supersede edge without raw TOML editing"
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-07-03"
-updated = "2026-07-03"
-tags = ["area:audit", "area:review", "area:worktree"]
+created = "2026-07-04"
+updated = "2026-07-04"
+tags = ["area:governance", "area:relations"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -21,13 +21,14 @@ needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
-[[relation]]
-label = "related"
-target = "IMP-024"
+[estimate]
+lower = 1.7
+upper = 3.3
 
 [value]
-value = 2.5
+value = 2.0
 
-[estimate]
-lower = 2.5
-upper = 5.5
+[[relation]]
+label = "references"
+role = "concerns"
+target = "RFC-011"
