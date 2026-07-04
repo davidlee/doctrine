@@ -886,3 +886,9 @@ incidental-complexity hits, none in the worker — all in orchestrator setup:
    phase` is a status transition; `slice show` is whole-slice). A
    `doctrine slice phase show <id> <PHASE-NN>` (criteria-only) would have
    avoided the raw-file read entirely.
+
+[preflight IMP-209; pfl-001]: Plan skill SKILL.md exists in three locations
+(plugins/, .pi/skills/, and the boot-snapshot's available_skills list). Editing
+all three is redundant ceremony. The installed .pi/skills/ copy is gitignored
+and regenerated via `doctrine install -s plan -y` but the current agent reads it
+directly, so must be manually synced for the edit to take immediate effect.

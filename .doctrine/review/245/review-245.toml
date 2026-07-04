@@ -1,0 +1,43 @@
+id    = 245
+slug  = "inquisition-sl-202-design-intent-body-wikilink-catalog-edges"
+title = "Inquisition: SL-202 design intent — body-wikilink catalog edges"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-202"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Diagnostic 'parity with the TOML path (hydrate.rs:341)' cites a branch a body wikilink can never reach; the unresolved case is UnvalidatedText, which the TOML path does NOT diagnose"
+detail = "EXPECTED (design §5.4): an unresolved body wikilink pushes a dangling-reference Warning, '(parity with the TOML path, hydrate.rs:341)'; §5.5 INV-2 and §9 VT-4 depend on this. OBSERVED (hydrate.rs:389-423): classify_target emits EdgeTarget::UnresolvedRef ONLY in the parse_canonical_ref-SUCCESS branch (line 402). A mem./mem_-prefixed body wikilink ALWAYS fails parse_canonical_ref -> else branch -> Resolved | UnvalidatedText, NEVER UnresolvedRef. The design confesses this itself in §5.5 BOUNDARY ('classify_target's canonical-ref branch is unreachable from this pass') — which makes the UnresolvedRef arm of §5.4 DEAD and self-contradictory. The site actually cited, hydrate.rs:341, diagnoses UnresolvedRef; it does NOT diagnose UnvalidatedText (a TOML relation to a nonexistent mem-key silently draws an UnvalidatedText edge, no warning). So VT-4 requires warning on UnvalidatedText, which is a DELIBERATE DIVERGENCE from the silent TOML path, NOT parity. HERESY: (a) a false factual claim ('parity', wrong branch cited); (b) internal contradiction §5.4 vs §5.5; (c) implementation hazard — a literal reader mirroring hydrate.rs:341 gets zero warnings (VT-4 red forever), while a reader who 'unifies' by hoisting a UnvalidatedText diagnostic into the shared classify site newly warns on TOML UnvalidatedText targets, breaking the behaviour-preservation gate (R2). PENANCE: rewrite §5.4/§5.5-INV-2/§6 to state body-wikilink diagnostics fire on UnvalidatedText ONLY, scoped to the body pass alone (not the shared classify_target site), named explicitly as a divergence justified by the extractor's mem.word.word shape-gate; delete the dead UnresolvedRef arm; strike the 'parity with hydrate.rs:341' citation."
+disposition = "design-wrong-fixed"
+response = "Accepted. Confirmed against classify_target control flow: a mem.-prefixed body wikilink yields UnvalidatedText (parse_canonical_ref fails -> memory branch miss), never UnresolvedRef; hydrate.rs:341 warns only on UnresolvedRef, so 'parity' was false. Rewrote design §5.4/§5.5-INV-2/§6/§9-VT-4: warn on UnvalidatedText only, scoped to the body pass, named a deliberate divergence (not parity), justified by the mem.word.word shape-gate; struck the dead UnresolvedRef arm and the false hydrate.rs:341 citation. classify_target and the shared TOML diagnostic untouched -> TOML UnvalidatedText stays silent (behaviour-preservation). Plan EX-3/VT-4 moved in lockstep."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "INV-1 overclaims a global (source,target) uniqueness the implementation neither provides nor should — two TOML relations to one target still draw two edges"
+detail = "EXPECTED (design §5.5 INV-1): 'at most one edge per (source, resolved-target) pair, regardless of whether the link is authored as TOML relation, body wikilink, or both.' OBSERVED (hydrate.rs:312-366): the TOML relation loop performs NO self-dedup — two [[relation]] rows to the same resolved target (different labels, or even identical) each push an edge (line 353), and the design correctly preserves this under the behaviour-preservation gate. The new 'seen' set is consulted ONLY in the body pass (§5.4 step 2), so it suppresses body-vs-TOML and body-vs-body doubles but leaves TOML-vs-TOML multiplicity intact. HERESY: the invariant is stated too strongly — literally false for the TOML-TOML case — and an implementer who takes INV-1 at its word might wrongly add TOML self-dedup, mutating existing edge output and breaking behaviour-preservation. PENANCE: scope INV-1 to the direction actually enforced — 'the body pass adds no edge to a resolved target already drawn by the TOML pass or an earlier body wikilink in the same record; dedup is one-directional (body defers to TOML); pre-existing TOML-relation multiplicity is unchanged.'"
+disposition = "fixed"
+response = "Accepted. INV-1 overclaimed global (source,resolved-target) uniqueness; the TOML pass (hydrate.rs:312-366) self-dedups nothing, so two TOML relations to one target still draw two edges. Rescoped INV-1 to one-directional dedup: a body-wikilink edge defers to a TOML relation OR a prior body wikilink to the same resolved target; TOML-vs-TOML multiplicity unchanged; dedup enforced only in the body pass. Plan EX-2 already stated this correctly — design now matches the plan."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Field-name collision: MemoryCatalogRecord.body (populated, transient) vs CatalogEntity.body (stays None) live in the same hydration loop"
+detail = "EXPECTED (naming/cohesion, CLAUDE.md 'Naming things well is VERY important'): distinct concepts carry distinct names. OBSERVED (§5.2 adds MemoryCatalogRecord.body = Some(prose), consumed transiently for edge extraction; §5.3/D4 keep the memory CatalogEntity.body = None). Two fields named 'body' with opposite lifecycle read within a few lines of each other in from_scanned. The design distinguishes them in §5.3 prose, so this is a low-stakes reader-trap, not a defect. PENANCE (optional): a one-line comment at the CatalogEntity construction site noting the record body is consumed for edges and deliberately not surfaced on the node; or consciously tolerate given §5.3 already documents it."
+disposition = "fixed"
+response = "Adopted (not merely tolerated). MemoryCatalogRecord.body (populated, transient) and CatalogEntity.body (stays None) coexist in one loop with opposite lifecycles. §5.3 now mandates a one-line disambiguating comment at the site so a reader does not conflate them."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
