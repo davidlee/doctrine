@@ -892,3 +892,28 @@ incidental-complexity hits, none in the worker — all in orchestrator setup:
 all three is redundant ceremony. The installed .pi/skills/ copy is gitignored
 and regenerated via `doctrine install -s plan -y` but the current agent reads it
 directly, so must be manually synced for the edit to take immediate effect.
+
+[execute; SL-202-P01-deadcode]
+Producer/consumer phase split (field added P01, consumed P02) tripped clippy
+`-D unused` dead_code on the new `body` field — the phase's product is legitimately
+dead until the next phase. Cost: 2 extra gate cycles to converge. First `#[expect(dead_code)]`
+failed because the two gate legs disagree: non-test build (field unread → fires) vs
+test build (VT-1 reads it → doesn't fire → expect unfulfilled). Resolved with
+`#[cfg_attr(not(test), expect(dead_code, reason=...))]`. Self-cleaning (P02's prod
+read unfulfils it → forces removal), but the non-obvious test-vs-prod expect split
+cost tokens. A phase-split producing a transiently-dead artifact is a recurring
+doctrine shape; the cfg_attr idiom is worth a memory.
+
+[execute; SL-202-P01-vtgate]
+`slice verify-vt` returns UNATTRIBUTABLE for a VT while its phase is still
+in_progress — attribution range is code_start..code_end and code_end isn't stamped
+until completion. Momentary confusion: a green test reads as "unattributable" pre-completion.
+Flipping the phase to completed resolved it to PASS. (Overlaps active imp-228 vtgate work.)
+
+[audit/close; SL-202-land]
+Solo-fork runtime phase state is per-worktree and gitignored: completing both phases
+in the fork left the primary tree's rollup at 0/2 (phase completions live only in the
+fork's `.doctrine/state/`, lost on gc). Also the fork's case-notes commit append-conflicted
+with edge's concurrent appends → `land-refused: merge-conflict`; resolved by resetting the
+fork to source-only, landing clean, then re-homing the instrumentation on edge. Two frictions
+in the solo isolate→land→close path worth a durable note.
