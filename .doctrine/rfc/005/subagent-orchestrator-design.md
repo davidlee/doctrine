@@ -6,6 +6,42 @@
      Consumes `subagent-orchestrator-probe.md`. Decisions + threat framing locked
      with the owner 2026-07-04; pending codex pass 2 + governance ratification. -->
 
+## Status & next (2026-07-04 handover)
+
+**Where we are.** Design converged through 2 codex adversarial passes. Shape is
+sound; the one empirical gate (RSK-225) is now **DISCHARGED** — see below. Open items
+are execution-time only. No slice yet (scope to be backsolved). Artefacts are
+auto-committed as doctrine state (`a8623e33`, `4dd994b8`).
+
+**Read in this order:** `subagent-orchestrator-probe.md` (evidence) → this file →
+IMP-253 (Mode B keystone) → RSK-225 (gate — now discharged) →
+[[mem.fact.dispatch.pretooluse-wall-mediates-write-tools-only]].
+
+**GATE DISCHARGED (RSK-225, probed 2026-07-04, Claude Code 2.1.198).** An `mcp__*`
+**write** tool (`mcp__doctrine__memory_record`) was driven live through **both** wall
+verdicts on the claude arm and bypassed the wall both times: under **Reject** (Bash +
+Write denied `worktree-jail: cwd-not-a-worktree`) the MCP write landed in primary
+`.doctrine/`; under **Jail** (`isolation: worktree`, primary + `.git` RO to Bash) the
+MCP write's `canonical_path` was in the **primary** tree (verified). Subprocess-arm
+half confirmed architecturally: the claude MCP server is a stdio child of the harness
+(unconfined); a subprocess worker's stdio MCP would be a child of the jailed `pi` and
+inherit `bwrap --ro-bind / /` (no bypass; current pi workers carry no MCP). So **Mode
+B may rest on MCP-mediated writes on the claude arm.** The residual RSK-225 risk (no
+conformance lint pinning worker `tools:`; undecided arm-unification posture) stays open
+as a Mode-B build task, not a design blocker.
+
+**Then:** backsolve the slice(s). Proposed split — a *core* slice (Mode B mechanical
+happy-path funnel + the confined-orchestrator drive-loop, keystone IMP-253) and a
+*follow-on* Mode A knob slice. Governance: ADR-012 REV + ADR-011 D6 amendment,
+ratified at reconcile.
+
+**Owner steers locked:** C (two-mode) · constrained≈adversarial (no hard line —
+injection collapses it; don't rest integrity on trusting the worker) · exfil accepted
+for THIS open-source repo, tighten for others · ADR REV at reconcile · cwd-agnostic
+exemption · GC not per-SubagentStop (resume collision).
+
+---
+
 ## Problem
 
 The SL-182 `PreToolUse` jail confines every subagent (`agent_id` present →
@@ -25,13 +61,13 @@ returns `PassThrough` for every other tool; `Reject`/`Jail` are consulted only i
 a nested subagent and read files). This is simultaneously the enabler of Mode B and a
 latent worker-escape (see §Security invariant).
 
-**Two caveats that gate Mode B (RSK-225):**
-- **MCP-write passthrough is INFERRED, not witnessed.** The probe drove only
-  `Agent`/`Read` through `Reject`. That an `mcp__*` *write* tool bypasses the wall
-  follows from `decide()`'s `PassThrough` branch but has **not** been driven live.
-  **Do not move the design onto MCP-mediated writes until a probe confirms it** on the
-  claude arm (through both `Jail` and `Reject`).
-- **Arm divergence (strong fork).** The passthrough is a **Claude-arm** property — the
+**Two caveats that gated Mode B (RSK-225) — first now discharged:**
+- **MCP-write passthrough — WITNESSED (2026-07-04, was inferred).** A `general-purpose`
+  subagent drove `mcp__doctrine__memory_record` through **both** `Reject` and `Jail`
+  and the write succeeded both times, landing in the primary tree outside the jail cwd
+  (see the GATE DISCHARGED note in §Status). The design may now rest on MCP-mediated
+  writes on the claude arm.
+- **Arm divergence (strong fork) — still holds.** The passthrough is a **Claude-arm** property — the
   MCP server is a separate process reached via the harness, unconfined relative to the
   subagent's bwrap. On the **subprocess arm** (codex/pi), a worker's **stdio** MCP
   server is a *child of the jailed process* → inherits the jail (**no** passthrough).
@@ -67,11 +103,14 @@ single-owner — exfiltration accepted; most projects should tighten).
 
 ---
 
-## Mode B (candidate default — gated on validation, RSK-225): confined orchestrator, privileged writes via MCP
+## Mode B (default — validated on the claude arm, RSK-225 discharged): confined orchestrator, privileged writes via MCP
 
-> **Provisional.** Mode B is the *intended* default but depends on the MCP-write
-> passthrough (unwitnessed) and is claude-arm-shaped (subprocess stdio MCP inherits
-> the jail). Both are RSK-225. Validate before committing the design to it.
+> **Validated (claude arm).** The MCP-write passthrough Mode B depends on is now
+> witnessed (RSK-225 discharged 2026-07-04 — §Status). Mode B is claude-arm-shaped: a
+> subprocess worker's stdio MCP inherits the jail, so the subprocess arm needs either
+> the existing import dance or a persistent (http/sse) MCP outside the jail to unify.
+> The residual open item is enforcement (pin worker `tools:`; conformance lint), not
+> feasibility.
 
 **A fully-confined orchestrator subagent drives the whole funnel** — spawn workers
 (`Agent`, passes the wall), every privileged write via doctrine **MCP tools** (run in

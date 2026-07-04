@@ -42,13 +42,29 @@ attach a normal MCP server to a dispatch project and workers inherit its write t
    diverge on pragmatic grounds**, and must not silently assume the claude-arm shape
    generalizes.
 
-## Empirical gate (before any design depends on it)
+## Empirical gate — DISCHARGED 2026-07-04 (probe witnessed both arms)
 
-The claim "an `mcp__*` **write** tool bypasses the wall" is **inferred from `decide()`,
-not witnessed** — the live probe drove only `Agent`/`Read` through `Reject`. **Do not
-move the RFC-005 design onto MCP-mediated writes until a probe drives an actual MCP
-write tool through both `Jail(cwd)` and `Reject` on the claude arm, and confirms stdio
-MCP is jail-inherited on the subprocess arm.** Until then Mode B is a hypothesis.
+The claim "an `mcp__*` **write** tool bypasses the wall" was inferred from `decide()`;
+it is now **witnessed live** (Claude Code 2.1.198). A `general-purpose` subagent called
+`mcp__doctrine__memory_record` under both wall verdicts:
+- **Reject arm** (cwd = primary): raw Bash + Write denied
+  (`worktree-jail: cwd-not-a-worktree`), MCP write **succeeded** → entity written to
+  primary `.doctrine/memory/items/`.
+- **Jail arm** (`isolation: worktree`): Bash writes to primary + shared `.git` blocked
+  (RO), MCP write **succeeded** with `canonical_path` in the **primary** tree (files
+  verified present in primary, absent in worktree) — escaped the jail cwd.
+
+**Subprocess-arm half confirmed** (not live-driven — architectural): the claude-arm
+MCP server is a stdio child of the top-level harness (outside every subagent bwrap),
+whereas a subprocess worker's stdio MCP would be a child of the jailed `pi` and inherit
+`bwrap --ro-bind / /` (`scripts/pi-spawn-confined.sh`) → no bypass. Current pi workers
+run `--no-extensions` with no MCP at all. Full evidence + the promotion inferred→
+witnessed: [[mem.fact.dispatch.pretooluse-wall-mediates-write-tools-only]].
+
+**Gate result:** RFC-005 Mode B may now rest on MCP-mediated writes **on the claude
+arm**. The risk itself stays **open** — the *enforcement* half (§"Two things", #1) is
+unbuilt: no conformance lint pins worker `tools:`, and the arm-unification posture is
+undecided. Those are the remaining mitigations below.
 
 ## Mitigations (candidate)
 

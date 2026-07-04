@@ -788,3 +788,20 @@ precond. Recovery: relocate the append to the PRIMARY tree's case-notes.md +
 `git restore` the coord copy. Lesson: orchestrator-side instrumentation must
 target the primary/session-root case-notes.md (`-p /workspace/doctrine` semantics),
 never the coord tree the funnel keeps clean.
+
+[rsk225-probe; edge-9a95]
+RSK-225 empirical gate (MCP-write bypasses SL-182 wall) resolved cheaply: two
+parallel general-purpose subagents (Reject arm = plain spawn, Jail arm =
+isolation:worktree), each ~33k tokens, ~30s. Discriminator was clean and
+low-token: a wall-block carries literal prefix `worktree-jail: `; a passthrough
+returns the server result whose `canonical_path` reveals the write landed in the
+primary tree. No need to diff corpus state — the returned path IS the evidence.
+Incidental complexity (minor): `memory_record` via MCP materialises TWO dirs — a
+`mem_<uid>/` dir AND a `mem.<key>` → uid *symlink*; cleaning a throwaway probe
+memory needs both removed or a dangling key-symlink is left behind. A probe that
+drives a *write* MCP tool mutates the real authored corpus (not a dry run), so
+cleanup discipline (rm uid dir + key symlink, verify `git status` clean) is on
+the operator. Subprocess-arm half needed no live probe — bwrap child-namespace
+inheritance + `pi-spawn-confined.sh` (`--ro-bind / /`, `--no-extensions`) is
+dispositive; live-probing it would have burnt tokens confirming a definitional
+property.
