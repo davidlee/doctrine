@@ -40,7 +40,7 @@ exit_criteria = [
   { id = "EX-1", text = "create-fork writes the per-worktree record (name, dir, branch, base=B, coord) atomically beside the jail policy at the fork point, before the worker's first tool call; base sourced at fork time, not the mutable arming slot." },
   { id = "EX-2", text = "reap/gc deletes the record when removing the worker worktree; a record with no live worktree is never left behind (stale-oracle closed)." },
   { id = "EX-3", text = "resolve_agent(agent) returns the record on exactly one live consistent hit; refuses unknown-agent (0 hits), ambiguous-agent (>1 live hit), stale-record (dir absent / branch unresolved / HEAD != base). agent is sanitised via the single sanitise_name validator before any path join." },
-  { id = "EX-4", text = "resolution enumerates coord trees from the primary root via the existing git worktree list --porcelain seam (git.rs:565/1285); no new coord registry, no worker path input." },
+  { id = "EX-4", text = "resolution keys on the worker branch dispatch/<agent> via the existing git worktree list --porcelain seam (worktree_for_ref, git.rs:555/1335): git guarantees at most one worktree per branch, so a valid agent resolves to exactly one worktree with no new coord registry and no worker path input. ambiguous-agent is retained as a defensive refusal (normally unreachable under the per-branch invariant; fires only if git ever reports >1)." },
 ]
 verification = [
   { id = "VT-1", expects = "create-fork writes the record with all five fields; asserted at the fork point.", test_file = "src/worktree/create.rs", keywords = ["DispatchRecord", "coord", "base"] },
@@ -71,9 +71,11 @@ exit_criteria = [
   { id = "EX-2", text = "Belts run cheap-first: sanitise+resolve -> non-empty pre-fmt delta -> scope (classify_import) -> HEAD==B -> check commit gate -> commit. Each belt has a named refusal (unknown-agent/ambiguous-agent/stale-record/empty-delta/undeclared-scope/not-at-base/commit-gate-red)." },
   { id = "EX-3", text = "On success exactly one non-merge commit lands on the worker's dispatch/<agent> branch with C^==B, parents(C)==1; the worker's raw Bash git commit remains walled (ro .git)." },
   { id = "EX-4", text = "dispatch-worker agent-def tools: pinned to add exactly mcp__doctrine__worker_commit and no other writable MCP token." },
+  { id = "EX-5", text = "The commit includes ONLY the pre-fmt in-scope declared paths: a repo-wide check-commit fmt that normalises pre-existing/out-of-scope files does not drag them into the commit (closes F2 — the belt scopes the pre-fmt intended delta, and the commit stages exactly those classified paths, not the post-fmt working-tree diff)." },
 ]
 verification = [
   { id = "VT-1", expects = "Belt refusals each fire: unknown/ambiguous/stale, empty-delta, undeclared-scope (.doctrine/ and out-of-selector), not-at-base (HEAD!=B), commit-gate-red.", test_file = "src/mcp_server/worker_commit.rs", keywords = ["undeclared-scope", "not-at-base", "empty-delta", "commit-gate-red"] },
+  { id = "VT-4", expects = "F2 guard: a worktree with a pre-existing out-of-scope mis-formatted file, plus an in-scope change, yields a commit containing ONLY the in-scope path after the gate's fmt runs.", test_file = "src/mcp_server/worker_commit.rs", keywords = ["fmt"] },
   { id = "VT-2", expects = "Happy path: in-scope, gate-green tree -> one non-merge commit, C^==B, parents==1; returns { oid, base }.", test_file = "src/mcp_server/worker_commit.rs", keywords = ["worker_commit", "parents"] },
   { id = "VT-3", expects = "Belt reuse: worker_commit and the import path agree on the scope verdict for the same change-set (classify_import shared, not forked).", test_file = "src/mcp_server/worker_commit.rs", keywords = ["classify_import"] },
   { id = "VA-1", expects = "Scope belt genuinely rejects a .doctrine/.claude write and an out-of-selector src write; confirmed by an agent reading the belt wiring, not only token presence." },

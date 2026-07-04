@@ -93,3 +93,45 @@ The phases form a hard serial spine 01 → 02 → 03, with 04 hanging off 02:
   touch them, then resolve. PHASE-02's `worker_commit.rs` is net-new (reads `FAIL`
   until created — the expected red). Distinctive keywords (`DispatchRecord`, the
   refusal tokens) are tightened at phase-plan so attribution is meaningful.
+
+## Critical review & mitigations (plan step 7)
+
+Grounding the plan against implementation reality before phases materialise:
+
+- **Resolver mechanism (PHASE-01) — resolve by branch, not name-probe.** git guarantees
+  at most one worktree per branch, so `worktree_for_ref("dispatch/<agent>")` over the
+  primary-root porcelain (`git.rs:555/1335`) is unambiguous by construction — tighter and
+  cheaper than enumerate-all-coords + probe-`jail/<agent>.toml`. `ambiguous-agent` is kept
+  only as a defensive refusal (normally unreachable). The per-worktree record is then read
+  from the resolved worktree's coord to supply `{base, coord}` and the consistency check.
+
+- **F2 / scope-after-fmt (PHASE-02) — the real correctness trap.** `check commit` runs
+  `fmt`, which mutates repo-wide and can normalise a *pre-existing, out-of-scope*
+  mis-formatted file. If the commit staged the post-fmt working-tree diff, that file would
+  ride in as an undeclared-scope change *after* the scope belt already passed. Mitigation
+  (EX-5, VT-4): the belt classifies the **pre-fmt** intended delta, and the commit stages
+  **exactly those classified paths** — never the post-fmt diff. This closes F2 without a
+  fork-time "B is fmt-clean" assertion.
+
+- **DispatchRecord home + shape.** The record is a **sibling** file to the jail policy,
+  not an overload of `<name>.toml` — confinement policy and dispatch-resolution are
+  distinct concerns. The `DispatchRecord` type lives in `src/worktree/` (written by
+  `create.rs`, deleted by `gc.rs`, read by `src/mcp_server/worker_commit.rs`) — command
+  (mcp_server) depends on engine (worktree), respecting ADR-001 layering. TOML, matching
+  the jail policy's format.
+
+- **Behaviour-preservation on shared machinery.** PHASE-01 edits `create.rs`/`gc.rs` (the
+  create-fork + reap paths — shared machinery). The existing create/fork/gc suites are the
+  proof: they must stay green unmodified. Same gate for PHASE-03's `run_verify_worker`
+  relaxation against the subprocess arm.
+
+- **Lint host parser reuse (PHASE-04).** `doctrine doctor` is the host (in `just validate`
+  → check/gate), but it does not parse agent-def frontmatter today. `src/install.rs`
+  already handles agent-defs (it installs them) and is the likely home of a reusable
+  frontmatter/`tools:` reader — ride it, do not fork a second YAML parser. Confirm at
+  phase-plan (EN-2).
+
+- **PHASE-02 sizing watch.** It is the heaviest phase (registration + resolver consumption
+  + six belts + commit + pin). It is cohesive (one tool, one responsibility) and leans on
+  reused seams, so it holds as one phase — but if it sprawls at phase-plan, the natural cut
+  is belts/resolution vs the commit + pin.
