@@ -9,9 +9,9 @@ created = "2026-07-04"
 updated = "2026-07-04"
 
 [scope]
-paths = []
+paths = [".doctrine/dispatch-mechanics.md"]
 globs = []
-commands = []
+commands = ["doctrine memory retrieve dispatch", "doctrine dispatch"]
 tags = ["dispatch", "worktree", "orientation"]
 workspace = "default"
 repo = ""
