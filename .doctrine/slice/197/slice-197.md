@@ -23,9 +23,10 @@ conceptual anchors. Adding `concept` (prefix `CPT`) fills that gap.
   Notes, Distinguish from, Examples, Related — all prose in the md body, not
   structured TOML fields.
 - Seed template (`install/templates/knowledge-concept.toml`).
-- Update all touch sites: supersede policy, relation rules test pins, integrity
-  test pins, kinds test pins, knowledge match arms (kind, as_str, ALL, statuses,
-  hidden, terminal, facet, render, show, json, validate, resolve_ref).
+- Update all touch sites: relation rules + test pins, integrity test pins, kinds
+  test pins, knowledge match arms (kind, as_str, ALL, statuses, hidden, terminal,
+  facet, render, show, json, validate, resolve_ref), partition row. **Not** supersede
+  policy — D4 (`_ => None` already excludes CPT; no `supersede.rs` edit).
 - Tests: round-trip, seed, list, show, relation edges, priority partition.
 
 ## Non-Goals
@@ -43,23 +44,38 @@ conceptual anchors. Adding `concept` (prefix `CPT`) fills that gap.
   in `relation.rs` — a concept can be about things ("concept X concerns SL-YYY").
   This is the concerns source-set literal list, separate from `kinds::RECORD`.
 
-### Open
+All four opened questions resolved in `design.md` (D1–D4):
 
-1. **Status vocabulary**: Neutral concept, not epistemic. Candidates: `draft`,
-   `defined`, `refined`, `retired` — or simpler `active`, `draft`, `retired`.
-2. **ConceptFacet shape**: Empty `#[derive(Default)]` or one `definition: Option<String>` summary field?
-3. **Shapes / Spawns membership**: CPT in RECORD grants Shapes (concept shapes
-   everything) and Spawns (concept spawns backlog items) — semantically loose
-   for a neutral concept. Should CPT be excluded from those?
-4. **Supersede policy**: Concepts evolve; supersession likely inappropriate.
-   `None` (like HYP) is the starting assumption.
+1. **Status vocabulary** → `[draft, active, retired]`, seed `draft`, hidden/terminal
+   `{retired}`. Rejected `refined`/`defined` (no behavioural line vs `active`).
+2. **ConceptFacet** → empty (unit-like, no fields). Sections are prose (IMP-244).
+3. **Shapes/Spawns** → keep via RECORD-ride (permissive edges; DRY the single source).
+4. **Supersede** → None (no `supersede.rs` edit; `_ => None` + `validate_matrix`
+   absence gate it, identical to HYP).
 
-## Summary
+## Scope revision (see design.md §2 — D0)
 
-Mechanical addition following the proven 6-kind pattern. ~15-20 code edits across
-5-6 files + 1 new template. The engine is data-driven; `RecordKind::from_prefix`
-auto-routes many dispatch sites. The design decisions above are small but need
-explicit answers before implementation.
+Scope grew from "bare additive CPT" to **scoped DRY, two phases**. The record-kind
+surface is guarded scatter, not centralised; PHASE-01 closes the unguarded gaps
+(behaviour-preserving, 6 kinds), PHASE-02 adds CPT:
+
+- **PHASE-01** — P2 single-entry the two relation test pins → `RECORD`-derived; P3
+  canary the two unguarded unions (Shapes-target, `governed_by`-sources); P4 derive
+  the two user-facing runtime record-kind-list messages (`dep_seq:84`,
+  `resolve_ref`) from the vocab. Suites green **unchanged**.
+- **PHASE-02** — add CPT (append `RECORD`, fill compiler-forced `knowledge.rs`,
+  `KINDS` row, `partition.rs` row, three relation record-set appends, seed template,
+  clap prose hand-adds).
+
+Excluded (D0): the `RelationRule.sources` table-shape refactor — fights Rust const
+unions, drags the relation behaviour-preservation gate for marginal value.
+Dropped: P1 (derive partition rows from knowledge vocab) — **unsound**,
+partition-terminal ≠ knowledge terminal/hidden (design §2).
+
+Touch-set (design-target selectors): `kinds.rs`, `knowledge.rs`, `integrity.rs`,
+`relation.rs`, `priority/partition.rs`, `commands/dep_seq.rs`, `commands/cli.rs`,
+`install/templates/knowledge-concept.toml`. `supersede.rs` stays scope-fence only
+(not edited — D4).
 
 ## Follow-Ups
 

@@ -52,16 +52,26 @@ not equality. So partition keeps a hand-written CPT row, guarded by that canary.
   literal tails → `[fixed…] ++ RECORD`. A new kind then edits only the rule + `RECORD`.
 - **P3** — add drift canaries for the two unguarded unions: assert the record
   subset of Shapes-target (`:530`) and `governed_by`-sources (`:556`) equals `RECORD`.
+- **P4** — derive the two **runtime** user-facing record-kind-list messages from the
+  vocab, killing an unguarded string-drift class: `dep_seq.rs:84` (needs/after
+  rejection) and `knowledge.rs:968` (`resolve_ref` unknown-prefix error) build their
+  `assumption/decision/…` list from `RecordKind::ALL` (`as_str`/`prefix`), not a
+  literal. A canary pins derived == the current 6-kind string. (Clap **doc-comment**
+  help prose is a compile-time literal — not derivable; handled in PHASE-02.)
 
 The behaviour-preservation gate is the proof: the existing relation/partition
-suites must stay green **unchanged** across PHASE-01.
+suites must stay green **unchanged** across PHASE-01 (P4's derived strings equal the
+current literals for the 6 kinds, so no user-visible change lands in PHASE-01).
 
 ### PHASE-02 — add CPT
 Append `CPT` to `RECORD`; fill the compiler-forced `knowledge.rs` data; add the
 `integrity::KINDS` row, the `partition.rs` row, the three record-set relation
 appends, and the seed template. Every record-bearing site is now compiler-forced,
-`RECORD`-derived, or canary-guarded — including the P3 canaries, which will now
-require the CPT append to Shapes-target and `governed_by`-sources.
+`RECORD`-derived, or canary-guarded — including the P3 canaries (which now require
+the CPT append to Shapes-target and `governed_by`-sources) and the P4 message canary
+(now expects the 7-kind derived string). Hand-add "concept" to the two clap
+doc-comment help lines (`cli.rs:461`, `knowledge.rs:1650`) — editorial only, since
+clap auto-lists the `ValueEnum` variants.
 
 ## 3. Kind-design decisions
 
@@ -90,9 +100,13 @@ require the CPT append to Shapes-target and `governed_by`-sources.
 
 ## 4. Code impact — design-target touch-set
 
-PHASE-01 (`src/relation.rs` only):
-- `:1774`, `:1782` — replace re-spelled record tail with `RECORD`-derived expected set.
-- new canaries — Shapes-target (`:530`) and `governed_by`-sources (`:556`) record subset `== RECORD`.
+PHASE-01:
+- `src/relation.rs` — `:1774`, `:1782` re-spelled record tail → `RECORD`-derived
+  expected set (P2); new canaries: Shapes-target (`:530`) and `governed_by`-sources
+  (`:556`) record subset `== RECORD` (P3).
+- `src/commands/dep_seq.rs` — `:84` message: build the record-kind list from the
+  vocab instead of the literal (P4) + a canary pinning derived == current.
+- `src/knowledge.rs` — `:968` `resolve_ref` error: same vocab-derivation (P4).
 
 PHASE-02:
 - `src/kinds.rs` — `pub(crate) const CPT: &str = "CPT";`; append `CPT` to `RECORD`;
@@ -109,11 +123,16 @@ PHASE-02:
   (`:556`), Shapes-target (`:530`); the P2 pins and P3 canaries then pass with the append.
 - `src/priority/partition.rs` — `KindPartition { prefix: kinds::CPT, workable: &[],
   gating: &["draft", "active"], terminal: &["retired"] }`.
-- `install/templates/knowledge-concept.toml` — new seed (`record_kind = "concept"`,
-  `status = "draft"`, `[facet]` empty, `[evidence]` empty, `[relationships]` empty).
+- `src/commands/cli.rs` — `:461` clap doc-comment prose: hand-add "concept"
+  (editorial). **Coordinate with the concurrent `cli.rs` edit in flight.**
+- `install/templates/knowledge-concept.toml` — new seed. `record_kind = "concept"`,
+  `status = "draft"`, `[evidence]` + `[relationships]` empty, and **no `[facet]`
+  block** (empty facet — nothing to seed; `RawFacet` defaults absent, `format_facet`
+  suppresses the block). `knowledge.rs:1650` clap prose hand-add "concept".
 
 **Not edited:** `src/supersede.rs` (D4) — stays a `scope-relevant` fence, not a
-`design-target`. `catalog/scan.rs`, the combined constants — auto via `RECORD`/`from_prefix`.
+`design-target`. `catalog/scan.rs`, the combined constants, `search.rs`, `tag.rs`,
+`dep_seq::is_record`/`ADMISSIBLE_DEP_TARGETS` — auto via `RECORD`/`from_prefix`.
 
 ## 5. Verification alignment
 
@@ -121,6 +140,9 @@ PHASE-02:
   **unchanged** — the refactor proof.
 - **P3 canaries (VT):** two new tests, record-subset of Shapes-target /
   `governed_by`-sources `== RECORD`. Red before PHASE-02 append if CPT missing.
+- **P4 message canary (VT):** derived record-kind-list string (dep_seq + resolve_ref)
+  == the expected vocab join. In PHASE-01 pins the 6-kind string unchanged; in
+  PHASE-02 tracks CPT automatically.
 - **CPT round-trip (VT):** `knowledge new concept "X"` → `CPT-001`; `show`/`inspect`
   (table+json) render the empty facet as no `[facet]` block; seed status `draft`;
   byte-stable toml round-trip.
@@ -134,16 +156,31 @@ PHASE-02:
 
 - CPT counter independent (`CPT-001` ≠ `ASM-001`); prefix load-bearing in `resolve_ref`.
 - Empty facet: `validate_facet` builds `RecordFacet::Concept(ConceptFacet::default())`
-  from the kind-blind `RawFacet` reading zero fields; `render_facet` emits `\n[facet]\n`
-  with no lines (byte-stable vs the empty template), `format_facet`/`facet_json` emit
-  an empty facet object.
+  from the kind-blind `RawFacet` reading zero fields. VT-1 round-trip (the test-only
+  hand-emit `render_record_toml`): a Concept record renders `\n[facet]\n` with no field
+  lines, parses back to `ConceptFacet::default()`, re-renders identically — byte-stable.
+  This is independent of the seed template (production seed omits `[facet]`; VT-1 checks
+  render→parse→render, not seed==render). `format_facet`/`facet_json`: `show` suppresses
+  the empty `[facet]` block; `facet_json` emits `{}` for the concept facet.
 - CPT never value-bearing (`VALUE_BEARING` excludes `RECORD`) — no value/priority facet.
 - Concept as Shapes/Spawns/Supersedes *target*: admitted structurally via `RECORD`;
   supersede gated off by policy (D4).
 
-## 7. Carried assumptions / open questions
+## 7. Carried assumptions / open questions / notes
 
-- No open design questions. Decisions D0–D4 locked.
+- No open design questions. Decisions D0–D4 + P4 locked.
+- **P3 `governed_by` canary is a new assertion** — it codifies "every record kind is a
+  `governed_by` source" (true today). Deliberate and loud: a future record kind that
+  should NOT be governance-governed would trip it, forcing an explicit carve-out rather
+  than silent divergence.
+- **String-drift class:** internal doc-comments already stale at EVD/HYP
+  (`supersede.rs:11/21/41`, `relation.rs:418/3189`, `integrity.rs:923`, `dep_seq.rs:31/63`,
+  `map_server/markdown.rs:6`) still say `ASM/DEC/QUE/CON`. Out of scope to chase all
+  (cosmetic, non-user-facing); P4 fixes only the two **user-facing runtime** messages.
+  Fixing the rest belongs to the deferred DRY-the-scatter backlog item.
 - Assumption: `seed_knowledge` test helper is data-driven (`record_kind.as_str()`),
   so CPT needs no test-helper edit — verify at execute; add a CPT test-seed only if a
   web/map test needs a concept fixture.
+- Web/map (PRD-015) is a non-goal (IMP-244 defers concept-map/web UI). Verify at execute
+  that no Rust exhaustive `record_kind` match in `map_server` breaks the build; the scan
+  dispatch is data-driven (`from_prefix`), so no break expected.

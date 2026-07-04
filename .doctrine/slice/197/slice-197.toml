@@ -38,6 +38,14 @@ intent = "design-target"
 selector = "src/priority/partition.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/commands/dep_seq.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
 [[relation]]
 label = "references"
 role = "concerns"
