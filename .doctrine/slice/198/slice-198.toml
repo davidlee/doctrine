@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/mcp_server/**"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/**"
@@ -20,7 +20,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/dispatch_config.rs"
@@ -28,11 +28,23 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = ".claude/agents/**"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".agents/skills/dispatch*"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/import.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/subagent.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "CLAUDE.md"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
