@@ -113,6 +113,7 @@ install: web-build
 
 # integrate main into edge
 ff:
+  git merge main
   git fetch . edge:main
 
 promote:
