@@ -7,7 +7,7 @@ status = "active"
 title = "Dispatch integrate --edge advance leg is not FF-gated"
 summary = "Dispatch integrate --edge advance leg is NOT FF-gated: advance_pure_ref is plain CAS, plan_edge_row not ff-gated — only checked-out/trunk legs FF-gate."
 created = "2026-06-27"
-updated = "2026-06-27"
+updated = "2026-07-04"
 
 [scope]
 paths = ["src/dispatch.rs"]
@@ -26,12 +26,12 @@ tree = "eac089341393d052abd92c23b7284ddebeae566c"
 ref_name = "refs/heads/edge"
 checkout_state_id = ""
 base_commit = "6c08e5382b3cc1194216885ab1cdc324e6ecd337"
-verified_sha = "adf22fa0a9f25b0029061c9dea3f72c97b6cbacf"
+verified_sha = "83fc684d78ecd91895b037b9460bb7194cfce292"
 normalizer = ""
 
 [review]
 verification_state = "verified"
-reviewed = "2026-06-27"
+reviewed = "2026-07-04"
 review_by = ""
 
 [trust]
