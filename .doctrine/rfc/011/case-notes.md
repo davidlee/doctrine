@@ -844,3 +844,45 @@ a validate-time (or record-time) floor check would have eliminated. Instrument:
 after authoring any shipped master, the guidance should route to `cargo test
 corpus::`, or `memory validate` should absorb the master-lint so the advisory
 surface and the enforced surface agree.
+
+[quick-path ISS-213; iss213-fix]
+Changing scan_memory_entities to a tuple return triggered a type mismatch at
+one callsite. rustc emitted the full `Index<Idx>` trait impl candidate list —
+~40 lines of `(T0,T1) implements Index<UInt<...>>` boilerplate — repeated near-
+identically for each of the 4 indexed accesses and the .len() call. Same low-
+signal wall re-emitted on every intermediate edit before all callsites were
+fixed. High token cost for a one-line "destructure the tuple" fix. The
+signal (missing field / wrong arity) was one line; the trait candidate dump was
+noise.
+
+---
+
+[dispatch; SL-198-drive-01] Orchestrator drive, PHASE-01, claude arm. Three
+incidental-complexity hits, none in the worker — all in orchestrator setup:
+
+1. `dispatch setup` materialises FRESH phase sheets from plan.toml (objective
+   only); it does NOT carry the primary tree's hand-filled runtime sheet into
+   the coord tree. My filled phase-01.md (Reading list / Tasks T1-T5 / Risks /
+   Decisions) lived in primary `.doctrine/state/...`; coord got a template. Had
+   to `cp` it across by hand. Cost: a confused read ("where did my sheet go") +
+   a manual copy. If sheets are runtime/disposable per-worktree, setup could
+   copy an existing filled sheet, or the skill could say "re-fill in coord".
+
+2. Fresh coord worktree has NO `./target/debug/doctrine` — in-tree target is
+   unbuilt post-setup. Read-only verbs (plan-next, phase show) had to run via
+   the PRIMARY binary by abs-path; the funnel (`check regression`, `check
+   commit`) needs a coord build, so a full `cargo build` in coord is an
+   unavoidable pre-funnel cost. Not signposted by setup output. A one-line
+   "run cargo build in the coord tree before the funnel" in setup stdout would
+   save the rediscovery.
+
+3. Raw `sed -n '/PHASE-01/,/PHASE-02/p' plan.toml` badly misled me: PHASE-01's
+   objective literally contains the text "worker_commit (PHASE-02)", so sed's
+   end-pattern matched INSIDE PHASE-01 and re-opened ranges on later "PHASE-01"
+   text mentions in the PHASE-02 block — stitching PHASE-02's EX/VT criteria
+   under PHASE-01's id. Looked like data corruption; cost a full detour to
+   disprove. Reinforces "read structured, not raw files" — but there is no
+   per-phase criteria view (`slice phases` is the materialise verb; `slice
+   phase` is a status transition; `slice show` is whole-slice). A
+   `doctrine slice phase show <id> <PHASE-NN>` (criteria-only) would have
+   avoided the raw-file read entirely.
