@@ -162,6 +162,18 @@ project-local originals live until the shipped set is proven):
 (subagentstart-not-failclosable), `mem_019eb7263a90` (fork-rung3-base),
 `mem_019ee41ac4c7` (close-integrate-shared-trunk-race).
 
+Scope-item-4 (retracted memories) — **done**: `mem_019ec602fe87` and
+`mem_019ec5f26b7b` are formally in the `retracted` lifecycle state (not just
+body-bannered), superseded-linked to `mem_019ec6142d3b`, and retained for the
+audit trail. They do not surface on `--status active`, so no prune/unlink
+needed — the state is correct as-is.
+
+Doc got an adversarial correctness pass (codex, against the 6 source bodies).
+Two fidelity fixes landed (`76e8a6f9`): the squash blind spot only bites the
+*multi-commit* case (single-commit squash is correctly certified), and the
+fail-closed WorktreeCreate seam is usually payload-starved and deferred, so the
+belt-plus-guard fence is the default — not a readily-available preference.
+
 **Deferred (next pass):** promote the Tier-1 trap memories to shipped
 `mem.reference.dispatch.*` (needs cross-project rewrite + re-embed); supersede
 the distilled project-local originals with `--by` links; the volatile
