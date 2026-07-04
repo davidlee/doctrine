@@ -15,8 +15,10 @@ plan conflict, reconcile via `design.md` first.
 Inputs: the slice folder, any existing `design.md`, and related artifacts,
 source material, and research.
 
-Use lightweight, clearly labelled diagrams (C4, sequence, state, concept maps, etc) 
-liberally to clarify the design intent and expose gaps in reasoning. 
+Use lightweight, clearly labelled diagrams (C4, sequence, state, concept
+maps, etc) liberally to clarify the design intent and expose gaps in
+reasoning. Prefer plain text or mermaid for diagrams unless project
+guidance specifies otherwise.
 
 ## Workflow
 
