@@ -4,10 +4,22 @@ Durable per-slice scratchpad — tracked in git.
 
 ## State (2026-07-04)
 
-- **Lifecycle:** `plan`. Design locked (internal F1–F5 + two external codex passes;
-  pass-2 LOCK-READY-WITH-THIS). Plan authored, critically revised, **4 phases materialised**
-  (PHASE-01..04). **NOT flipped to `ready`** — awaiting (a) one more codex pass on the
-  post-pass-2 belt/config additions [PENDING — next task], then (b) owner plan approval.
+- **Lifecycle:** `ready` (flipped 2026-07-04 after codex pass-3 clean). Design locked
+  (internal F1–F5 + **three** external codex passes; pass-2 LOCK-READY, pass-3
+  LOCK-READY-WITH-PINS). Plan authored, critically revised, **4 phases materialised**
+  (PHASE-01..04).
+- **Codex pass-3 (2026-07-04) — the config-surface delta.** Half STILL-OPEN was a category
+  read of net-new design-target work as "missing source" (discounted). Real signal folded as
+  PIN-1..4 (design §10 pass-3; plan EN-3/EX-5/EX-6, PHASE-03 EX-6):
+  1. **PIN-1** — `allowlist.rs:96` rejects `!` negation → **`ignore` crate forced** (EN-3
+     settled, not deferred; new dep by elimination).
+  2. **PIN-2** — `.doctrine/**` floor is a **separate code check** with precedence, NOT a
+     line in the merged GitignoreBuilder (last-match-wins would fail OPEN on a user `!` line).
+  3. **PIN-3** — INV-5 = stage-by-path **after** fmt (post-fmt content, not a pre-fmt blob).
+  4. **PIN-4** — PHASE-03 preserves the import-time `UndeclaredScope` refusal
+     (import.rs:130/171); the soft tier is bounded only by import staying strict.
+  - **flake.nix ruling:** no legacy installs + POL-002 = "this repo" → stays a
+    block-by-default, negatable template entry (not a floor). Fence altitude unchanged.
 - **Post-pass-2 owner steers folded (design §5.2/§5.3/§10, plan PHASE-02/03):**
   1. **Pre-fmt trunk before arming** (PHASE-03 EX-5) → B fmt-clean at fork, F2 moot
      operationally; stage-classified-paths (INV-5) is the fallback.

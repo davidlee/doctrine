@@ -483,3 +483,38 @@ config surface rather than a hard-coded list:
   itself lives). The template's `.doctrine/**` entry echoes the floor visibly.
 - New `design-target`: `src/dispatch_config.rs` (the config field), `install/doctrine.toml.example`
   (default set). `justfile`/CI are NOT defaulted (host-project, POL-002 — a project may add them).
+
+### External adversarial pass 3 (codex / GPT-5.5, 2026-07-04) — the config-surface delta
+
+Pass-3 attacked the two-tier belt + config surface (added *after* pass-2 LOCK-READY). Half the
+STILL-OPEN verdict is a category read of net-new design-target work as "missing source"
+(the `DispatchConfig` field and template entry are this slice's work, dispatch_config.rs:26,
+doctrine.toml.example:77 — expected absent). The other half is real and folded as PIN-1..4:
+
+- **PIN-1 (EN-3 settled by source).** `allowlist.rs:96` **rejects `!` negation + anchoring** —
+  source-verified it *cannot* express gitignore semantics. So EN-3's "reuse allowlist.rs if it
+  fits" collapses: it does not fit. The **`ignore` crate (`GitignoreBuilder`) is forced** — the
+  new-dep question is answered by elimination, not deferred.
+- **PIN-2 (floor is a separate code check, not a merged list).** Gitignore is last-match-wins;
+  a later user `!.doctrine/carve` line would override an earlier `.doctrine/**` in a **single
+  merged matcher** → fail-OPEN. The §5.2/§5.3 "code constant, precedence over config" floor must
+  therefore be evaluated **independently, before/overriding** the config matcher — never a line
+  fed into the same `GitignoreBuilder`. Design intent unchanged; PHASE-02 implementation pinned.
+- **PIN-3 (INV-5 = stage-by-path AFTER fmt).** The classified path set is computed pre-fmt, but
+  the commit stages those paths **by name after fmt runs** — capturing post-fmt *content* of the
+  in-scope paths, never a pre-fmt blob snapshot (which would commit unformatted content and
+  re-open the gate). Clarifies INV-5.
+- **PIN-4 (soft tier bounded by import staying strict).** `classify_import` returns
+  `UndeclaredScope` and the caller bails (import.rs:130/171). The soft `undeclared` **commit** is
+  only bounded because import still refuses to *promote* it downstream. PHASE-03's commit-import
+  switch **must not relax** that import-time refusal.
+
+- **flake.nix fence altitude — owner ruling (2026-07-04).** Codex flagged "hard-fenced as a
+  default" as a legacy fail-open. Ruling: **no legacy installs exist**, so absent-config repos are
+  not a real population; POL-002's "this repo" scope means flake.nix is doctrine's own dogfood
+  context, not an imposed host convention. It stays a **block-by-default, negatable** template
+  entry — preventative under nixos+jails, harmless otherwise. The only non-negotiable code floor
+  remains `.doctrine/**`; flake.nix is a strong *default*, not a floor. Fence altitude unchanged.
+
+**Verdict:** LOCK-READY-WITH-PINS — pass-3 folds as PIN-1..4 (plan.toml EN-3/EX-5/EX-6, PHASE-03);
+no design-intent change, no reopened decision.
