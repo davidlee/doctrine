@@ -202,6 +202,32 @@ plan detail; the load-bearing sequence is import → conclude → reap.)
   closes it directly: the phase is never `completed` in committed history without its
   true `(B, coord_tip)` boundary in the same commit.
 
+- **D-B4 — the server commit is WORKING-TREE-FREE; provenance reuses the codebase
+  convention** (added — 2nd codex pass, pre-lock plan review 2026-07-04). The load-
+  bearing correction the 2nd review forced: because the confined orchestrator cannot
+  reach coord `.git` (RO-walled) it also cannot `git reset` — so a server commit that
+  staged into the **live** coord index (`git apply --index`, import.rs:346; or
+  `run_record_boundary`'s live-file write) would leave a **poisoned, unrecoverable**
+  dirty tree on any fault, and sweep pre-existing residue into the next commit. The
+  fix rides plumbing the repo already has: `commit_on_behalf` composes the commit
+  **working-tree-free** — stage into a **scratch `GIT_INDEX_FILE`** (`filter_tree`
+  kit, git.rs:677-732), `write-tree`, `commit_tree` (git.rs:828), `update-ref` — so
+  the live coord index+worktree stay **byte-unchanged** until the ref moves; a fault
+  leaves nothing to reset. `dispatch_import` applies the worker delta into the scratch
+  index; `dispatch_conclude_phase` reuses `run_record_boundary`'s **pure** `BoundaryRow`
+  compute (NOT its live-file write) and hands the new `boundaries.toml` blob to the same
+  primitive. The **completed-flip** stays gitignored runtime (`.doctrine/state/`,
+  disposable, re-established on retry); the **committed boundary** on `dispatch/<NNN>`
+  is the durable completion signal. **Provenance** (R4, was open) is now DECIDED by
+  reusing the existing `GIT_AUTHOR_*/GIT_COMMITTER_*` = `<id> <id@doctrine>` convention
+  (git.rs:2157-2160, asserted git.rs:3789), as `worker_commit` does: import preserves
+  the worker's author + dispatch committer; conclude sets author==committer==dispatch
+  id; the message carries a funnel marker naming slice/phase. The `git cherry` patch-id
+  landed-oracle is diff-based ⇒ **provenance-immune** — reap is unaffected. **Resolver
+  seam**: `resolve_coord` ENUMERATES (`list_worktrees`, git.rs:1390), not the single-hit
+  `worktree_for_ref`/`live_worktree_for_ref` probes — only enumeration can raise the
+  defensive `ambiguous(>1)` arm.
+
 **Trust posture.** Called by the confined orchestrator (not a worker), on the
 coord tree it already governs. No new belts — the engine seams' belts come along.
 The orchestrator's tool-surface is pinned by SL-198's conformance lint (the
@@ -405,10 +431,17 @@ confined-orchestrator actor class. Both land in-slice; sized at reconcile/plan.
   main-thread dispatch remains the MCP-down fallback; document.
 - **R3 — belt drift** between the funnel MCP tools and CLI verbs. Mitigation: call
   the same `run_*`; no forked copies (behaviour-preservation gate).
-- **R4 — commit-on-behalf provenance (ext-review F1/F6).** The server now commits
-  *metadata* (conclude) and *code* (import) on the confined orchestrator's behalf. If
-  authorship/message provenance is unspecified, the committer-of-record blurs.
-  Mitigation: fix the provenance contract at plan; assert it (§5.E).
+- **R4 — commit-on-behalf provenance (ext-review F1/F6). RESOLVED at plan (2nd pass).**
+  Provenance is DECIDED (D-B4): reuse the codebase `<id> <id@doctrine>` GIT_AUTHOR_*/
+  GIT_COMMITTER_* convention — import preserves worker author + dispatch committer;
+  conclude author==committer==dispatch id; funnel-marker message names slice/phase.
+  Asserted (§5.E, PHASE-02 VT-3). The patch-id landed-oracle is provenance-immune.
+- **R6 — poisoned-index / server-commit residue (2nd codex pass). CLOSED by design
+  (D-B4).** A server commit staging into the live coord index would strand an
+  unrecoverable dirty tree on fault (the confined orchestrator cannot `git reset`).
+  Closed: `commit_on_behalf` composes working-tree-free via a scratch `GIT_INDEX_FILE`
+  + `commit_tree`, leaving the live tree byte-unchanged until the ref moves. Residual:
+  none for correctness; verify the scratch-index isolation (PHASE-02 VT-4).
 - **R5 — arm crash window (ext-review F4).** Closed by design: the create-fork hook
   consumes `base` one-shot, so an orchestrator crash mid-spawn cannot leave a stale
   arm that mis-forks the next benign spawn. Residual: verify the hook's consume is
@@ -419,3 +452,8 @@ confined-orchestrator actor class. Both land in-slice; sized at reconcile/plan.
 no post-commit bless), F3 (`set_phase_status` suppresses solo-bind in coord context;
 real risk is a missing row), F4 (one-shot arm), F6 (verification) — all verified
 against source and integrated above. Trunk-facing report-and-halt boundary survived.
+**2nd pass (pre-lock plan review, 2026-07-04):** two blockers — live-index commit
+residue the confined actor cannot reset, and conclude atomicity defined only against
+committed history — both verified against source and collapsed to one fix (working-
+tree-free `commit_on_behalf`, D-B4); plus the resolver naming the wrong (single-hit)
+reuse seam and provenance under-decided — all integrated (D-B4, R4/R6, PHASE-02/03).
