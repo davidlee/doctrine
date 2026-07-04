@@ -1,8 +1,15 @@
 mod? doctrine '.doctrine/doctrine.just'
 
-default: lint test nix-build
+# formt, lint, test, build
+default: fmt lint test build
 
+# initial setup for fresh repo
 setup: web-build build
+
+## DOCTRINE CHECKS:
+##
+## doctrine check <type>
+##
 
 quick: fmt lint validate
 
@@ -12,24 +19,17 @@ check: fmt lint lint-js validate test build
 # Full gate for end-of-phase / CI — includes the cordage workspace crate.
 gate: fmt lint lint-js validate test-all build
 
+# non-mutating prove-clean cadence — asserts fmt+lint clean, never fixes
+prove: fmt-check lint
+
+## Sanity Check
+##
+
 validate:
   doctrine prompt check
   doctrine doctor
 
 validate-full: validate
-
-# doctrine + skills reinstall; idempotent
-reinstall:
-  doctrine install -y
-  npx skills add . --agent universal -y
-
-# # list memories
-# list-memories:
-#   @cargo run -q -- memory list
-
-# # Refresh the spec index in README.md from .doctrine/spec/.
-readme-index:
-  @scripts/refresh-readme-index.sh
 
 # format rust code
 fmt:
@@ -39,9 +39,6 @@ fmt:
 fmt-check:
   cargo fmt --check
 
-# non-mutating prove-clean cadence — asserts fmt+lint clean, never fixes
-prove: fmt-check lint
-
 # lint rust (aggressive)
 lint:
   cargo clippy
@@ -49,6 +46,24 @@ lint:
 # lint js (web/map)
 lint-js:
   @if [ -d web/map/node_modules ]; then cd web/map && bun run lint; else echo "lint-js: node_modules not found, skipping (restore with: cd web/map && bun install)"; fi
+
+## Tests
+##
+
+# Root package only — fast.
+test:
+  cargo test
+
+# Whole workspace incl. cordage — slow; used by the end-of-phase gate.
+test-all:
+  cargo test --workspace
+
+fake-darwin:
+  cargo check --target aarch64-apple-darwin
+
+
+## WEB
+##
 
 # Install JS deps (idempotent — fast no-op when already installed).
 web-install:
@@ -70,10 +85,6 @@ web-dev: web-install
 web-check: web-install
   cd web/map && bun run typecheck && bun run lint && bun run test
 
-# cargo build
-build:
-  cargo build
-
 # Embed-integrity smoke gate: build a local binary with a freshly re-embedded
 # web/map/dist, then run scripts/smoke.sh against the actual shipped bytes
 # (--version, the install/ embed, the map embed). Same script the release
@@ -83,6 +94,19 @@ smoke: web-build
   touch src/map_server/assets.rs
   cargo build
   scripts/smoke.sh ./target/debug/doctrine
+
+## Build
+##
+
+# cargo build
+build:
+  cargo build
+
+clean:
+  touch crates/cordage/src/lib.rs
+
+## INSTALL
+##
 
 # Catches source-filter / asset-embed gaps `cargo build` can't (it reads the real
 # web/map/dist on disk; the ix sandbox builds the frontend hermetically). Slow
@@ -99,17 +123,21 @@ nix-build:
   fi
   direnv reload
 
-# Root package only — fast.
-test:
-  cargo test
-
-# Whole workspace incl. cordage — slow; used by the end-of-phase gate.
-test-all:
-  cargo test --workspace
-
 # install with vite stage
 install: web-build
   cargo install --path .
+
+# # list memories
+# list-memories:
+#   @cargo run -q -- memory list
+
+# doctrine + skills reinstall; idempotent
+reinstall:
+  doctrine install -y
+  npx skills add . --agent universal -y
+
+## GIT
+##
 
 # integrate main into edge
 ff:
@@ -130,6 +158,16 @@ commit-doctrine:# readme-index
 # Push local edge and main to origin — works from any branch
 push-upstream:
   git push origin edge:refs/heads/edge main:refs/heads/main
+
+
+
+## RELEASE
+##
+
+# # Refresh the spec index in README.md from .doctrine/spec/.
+readme-index:
+  @scripts/refresh-readme-index.sh
+
 
 # Run before a version bump / tag — this is where flake breakage (a new embed
 # root absent from the crane source graft, a toolchain skew) actually bites.
@@ -168,9 +206,4 @@ release bump: # readme-index
 publish: web-build release-check
   cargo publish --allow-dirty
 
-fake-darwin:
-  cargo check --target aarch64-apple-darwin
-
-clean:
-  touch crates/cordage/src/lib.rs
 
