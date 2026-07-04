@@ -8,7 +8,16 @@
 //! choose the spawn arm; the config is also available programmatically for
 //! validation and display.
 
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Deserialize;
+
+/// The non-negotiable code floor for the worker forbidden-write belt (SL-198
+/// PHASE-02, design §5.3 / PIN-2). A write under `.doctrine/` is ALWAYS a
+/// forbidden zone — evaluated in code, with precedence *over* the gitignore
+/// config matcher, so an absent / emptied / `!`-negated config can never
+/// un-fence doctrine's own state (where the config itself lives). Fail-closed.
+/// STD-001 single-source named constant (no magic strings).
+const DOCTRINE_FLOOR: &str = ".doctrine/";
 
 /// The subprocess harness for dispatch workers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -63,6 +72,16 @@ pub(crate) struct DispatchConfig {
     /// is a g2 false negative (g3 still backstops the advance regardless).
     #[serde(default)]
     pub(crate) authoring_branch: Option<String>,
+    /// The HARD scope tier for `worker_commit` (SL-198 PHASE-02, design §5.3 /
+    /// EX-6). Gitignore-syntax lines (positive + negative globs, precedence)
+    /// compiled into the [`ForbiddenWrites`] matcher: a worker-committed path
+    /// matching a forbidden line is hard-refused (`forbidden-zone`). Defaults ship
+    /// pre-populated in the install template (`install/doctrine.toml.example`),
+    /// NOT as Rust defaults (owner steer) — absent config ⇒ empty here, and only
+    /// the code floor [`DOCTRINE_FLOOR`] blocks. A project negates (`!path`) or
+    /// extends entries as legitimate writes require.
+    #[serde(rename = "worker-forbidden-writes", default)]
+    pub(crate) worker_forbidden_writes: Vec<String>,
 }
 
 impl Default for DispatchConfig {
@@ -72,7 +91,50 @@ impl Default for DispatchConfig {
             claude_force_subprocess_dispatch: false,
             deliver_to: default_deliver_to(),
             authoring_branch: None,
+            worker_forbidden_writes: Vec::new(),
         }
+    }
+}
+
+/// A compiled worker forbidden-write matcher (SL-198 PHASE-02, design §5.3). Built
+/// once from [`DispatchConfig::worker_forbidden_writes`] via the `ignore` crate's
+/// gitignore engine (PIN-1: `allowlist.rs` rejects `!`-negation + anchoring, so it
+/// cannot express gitignore semantics — the `ignore` crate is forced). The
+/// [`DOCTRINE_FLOOR`] code check is applied SEPARATELY, with precedence over the
+/// gitignore matcher (PIN-2: gitignore is last-match-wins, so a user `!.doctrine`
+/// line in a merged list would fail OPEN — the floor is never a matcher line).
+pub(crate) struct ForbiddenWrites {
+    matcher: Gitignore,
+}
+
+impl ForbiddenWrites {
+    /// Whether a repo-relative `path` is a forbidden worker write. The
+    /// [`DOCTRINE_FLOOR`] fail-closed check runs FIRST, overriding the config
+    /// matcher; only then is the gitignore matcher consulted (last-match-wins over
+    /// the config lines).
+    pub(crate) fn is_forbidden(&self, path: &str) -> bool {
+        if path.starts_with(DOCTRINE_FLOOR) {
+            return true;
+        }
+        self.matcher.matched(path, false).is_ignore()
+    }
+}
+
+impl DispatchConfig {
+    /// Compile the [`worker_forbidden_writes`](Self::worker_forbidden_writes) lines
+    /// into a [`ForbiddenWrites`] matcher (design §5.3, EX-6). A line that fails to
+    /// parse is skipped (the matcher never panics); an empty / all-negated config
+    /// still fails closed on the [`DOCTRINE_FLOOR`] via [`ForbiddenWrites::is_forbidden`].
+    pub(crate) fn forbidden_writes(&self) -> ForbiddenWrites {
+        let mut builder = GitignoreBuilder::new("");
+        for line in &self.worker_forbidden_writes {
+            // A malformed glob is dropped rather than aborting the whole belt —
+            // fail-closed relies on the code floor, not on every line compiling. The
+            // bound `_outcome` intentionally consumes the `#[must_use]` Result.
+            let _outcome = builder.add_line(None, line);
+        }
+        let matcher = builder.build().unwrap_or_else(|_| Gitignore::empty());
+        ForbiddenWrites { matcher }
     }
 }
 
@@ -241,5 +303,84 @@ mod tests {
         // Posture off (key absent) ⇒ inert, no error.
         let doc: DispatchConfig = toml::from_str("").unwrap();
         assert!(doc.validate_posture().is_ok());
+    }
+
+    // --- worker-forbidden-writes (SL-198 PHASE-02, VT-6) ---
+
+    #[test]
+    fn worker_forbidden_writes_defaults_empty() {
+        // Owner steer: defaults ship in the install template, NOT as Rust defaults.
+        assert!(DispatchConfig::default().worker_forbidden_writes.is_empty());
+        let doc: DispatchConfig = toml::from_str("").unwrap();
+        assert!(doc.worker_forbidden_writes.is_empty());
+    }
+
+    #[test]
+    fn worker_forbidden_writes_parses_the_kebab_key() {
+        let doc: DispatchConfig = toml::from_str(
+            "worker-forbidden-writes = [\"flake.nix\", \".claude/**\", \"install/agents/**\"]\n",
+        )
+        .unwrap();
+        assert_eq!(
+            doc.worker_forbidden_writes,
+            vec![
+                "flake.nix".to_string(),
+                ".claude/**".to_string(),
+                "install/agents/**".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn forbidden_writes_blocks_a_gitignore_entry_including_flake_nix() {
+        // A configured entry (incl. the project-specific flake.nix) blocks; a
+        // path matching no line is allowed.
+        let doc: DispatchConfig = toml::from_str(
+            "worker-forbidden-writes = [\"flake.nix\", \".claude/**\", \"install/agents/**\"]\n",
+        )
+        .unwrap();
+        let fw = doc.forbidden_writes();
+        assert!(fw.is_forbidden("flake.nix"), "flake.nix is hard-fenced");
+        assert!(fw.is_forbidden(".claude/agents/dispatch-worker.md"));
+        assert!(fw.is_forbidden("install/agents/claude/dispatch-worker.md"));
+        assert!(
+            !fw.is_forbidden("src/main.rs"),
+            "ordinary source is allowed"
+        );
+    }
+
+    #[test]
+    fn forbidden_writes_negation_unblocks_a_defaulted_path() {
+        // Gitignore precedence: a later `!path` line un-blocks an earlier block —
+        // a project carves a legitimate write out of a defaulted zone.
+        let doc: DispatchConfig =
+            toml::from_str("worker-forbidden-writes = [\"flake.nix\", \"!flake.nix\"]\n").unwrap();
+        assert!(
+            !doc.forbidden_writes().is_forbidden("flake.nix"),
+            "a `!` negation un-blocks the defaulted path"
+        );
+    }
+
+    #[test]
+    fn doctrine_floor_blocks_even_when_config_absent_empty_or_negates_it() {
+        // The `.doctrine/**` floor is code-enforced with precedence over config —
+        // fail-closed regardless of what the config says.
+        // 1) config absent (empty table)
+        let absent: DispatchConfig = toml::from_str("").unwrap();
+        assert!(
+            absent
+                .forbidden_writes()
+                .is_forbidden(".doctrine/doctrine.toml")
+        );
+        // 2) config present but forbidden list empty
+        let empty: DispatchConfig = toml::from_str("worker-forbidden-writes = []\n").unwrap();
+        assert!(empty.forbidden_writes().is_forbidden(".doctrine/state/x"));
+        // 3) config actively negates the floor — the floor STILL wins (fail-closed).
+        let negated: DispatchConfig =
+            toml::from_str("worker-forbidden-writes = [\"!.doctrine/carve\"]\n").unwrap();
+        assert!(
+            negated.forbidden_writes().is_forbidden(".doctrine/carve"),
+            "the code floor overrides a config negation (fail-closed, PIN-2)"
+        );
     }
 }

@@ -93,3 +93,20 @@
 # # buffer. Rebased/divergent history, shallow/grafted clones, and multiple
 # # authoring branches are UNSUPPORTED and hard-refuse setup.
 # authoring-branch = "refs/heads/edge"
+# # The HARD scope tier for `worker_commit` (SL-198): a jailed dispatch worker's
+# # server-side self-commit hard-refuses (`forbidden-zone`) any changed path
+# # matching a line below. GITIGNORE SYNTAX — positive + negative globs, with
+# # last-match-wins precedence, so a project NEGATES a defaulted zone with `!path`
+# # or EXTENDS the set as legitimate writes require. These defaults ship here
+# # (visible, editable text — the owner steers), NOT as baked Rust defaults.
+# #
+# # NOTE: `.doctrine/**` is ALSO a non-negotiable CODE floor — it is enforced with
+# # precedence over this config (present, absent, emptied, or `!`-negated), because
+# # this very config lives under it; the entry below is a visible echo of that floor.
+# worker-forbidden-writes = [
+#   ".doctrine/**",       # governance + runtime state (code floor — non-negotiable)
+#   ".claude/**",         # installed agent-defs / tool grants
+#   ".agents/**",         # authored agent/skill definitions
+#   "install/agents/**",  # shipped agent-def + tool-grant surface
+#   "flake.nix",          # jail definition — highest security leverage in the repo
+# ]
