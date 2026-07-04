@@ -21,6 +21,6 @@ Key verbs: `new`, `list`, `show <ID>`, `status`.
 RFCs live under `.doctrine/rfc/nnn/`. Each is a `rfc-nnn.toml` +
 `rfc-nnn.md` pair with optional attachments in the same directory.
 
-See [[signpost.doctrine.adrs]] for the binding-decision counterpart,
-[[signpost.doctrine.revisions]] for the spec/policy change-axis,
-and [[signpost.doctrine.file-map]] for the directory layout.
+See [[mem.signpost.doctrine.adrs]] for the binding-decision counterpart,
+[[mem.signpost.doctrine.revisions]] for the spec/policy change-axis,
+and [[mem.signpost.doctrine.file-map]] for the directory layout.

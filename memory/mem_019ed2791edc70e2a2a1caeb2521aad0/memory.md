@@ -48,6 +48,6 @@ A record belongs in knowledge, not the backlog, when it:
   for architecture-level choices), and not a transient observation (use memory
   for that).
 
-See [[concept.doctrine.storage-model]] for the authored tier where these land,
-[[signpost.doctrine.backlog]] for the work-intake counterpart, and
-[[signpost.doctrine.file-map]] for the `.doctrine/knowledge/nnn/` layout.
+See [[mem.concept.doctrine.storage-model]] for the authored tier where these land,
+[[mem.signpost.doctrine.backlog]] for the work-intake counterpart, and
+[[mem.signpost.doctrine.file-map]] for the `.doctrine/knowledge/nnn/` layout.

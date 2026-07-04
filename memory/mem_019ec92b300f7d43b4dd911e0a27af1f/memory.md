@@ -27,6 +27,6 @@ The descent edge onto a PRD is recorded after scaffold, not at `new` time.
 Enrichment fields (description, acceptance_criteria) are hand-edited in
 `requirement-NNN.toml` — no CLI flags exist for these.
 
-See [[signpost.doctrine.requirements]] for coverage and reconciliation,
-[[signpost.doctrine.revisions]] for the revision change-axis,
-and [[signpost.doctrine.reference-docs]] for the glossary.
+See [[mem.signpost.doctrine.requirements]] for coverage and reconciliation,
+[[mem.signpost.doctrine.revisions]] for the revision change-axis,
+and [[mem.signpost.doctrine.reference-docs]] for the glossary.

@@ -19,6 +19,6 @@ tool-shipped content) are doctrine's to regenerate and yours to leave alone;
 authored trees are yours to write. Putting progress in an authored file or
 hand-editing a managed one breaks that contract.
 
-Related: [[concept.doctrine.storage-model]] for the model and the storage rule,
-[[signpost.doctrine.file-map]] for where each tier lives on disk, and
-[[fact.doctrine.cli-source-of-truth]] for asking the CLI before you guess.
+Related: [[mem.concept.doctrine.storage-model]] for the model and the storage rule,
+[[mem.signpost.doctrine.file-map]] for where each tier lives on disk, and
+[[mem.fact.doctrine.cli-source-of-truth]] for asking the CLI before you guess.

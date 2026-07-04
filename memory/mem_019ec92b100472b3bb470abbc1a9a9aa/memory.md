@@ -40,6 +40,6 @@ subcommands — no hand-editing required:
 - **`doctrine spec interactions remove <TECH> <TECH>`** — remove all
   interaction edges to the target spec.
 
-See [[concept.doctrine.entity-engine]] for the relation model,
-[[fact.doctrine.cli-source-of-truth]] for the CLI authority,
-and [[concept.doctrine.reading-entities]] for the read-via-show rule.
+See [[mem.concept.doctrine.entity-engine]] for the relation model,
+[[mem.fact.doctrine.cli-source-of-truth]] for the CLI authority,
+and [[mem.concept.doctrine.reading-entities]] for the read-via-show rule.

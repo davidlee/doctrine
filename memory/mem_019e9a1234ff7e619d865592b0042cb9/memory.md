@@ -24,8 +24,8 @@ to record status, you are in the wrong tier.
 
 Point of truth: the `## storage model (the storage rule)` section of the repo's
 `CLAUDE.md`, and `doc/entity-model.md` (`## The storage rule`), which generalises
-it across every entity type. See [[fact.doctrine.storage-tiers]] for the tier
-cheat-sheet, [[concept.doctrine.entity-engine]] for the engine that enforces the
-TOML/MD split, and [[signpost.doctrine.file-map]] to locate the directories.
+it across every entity type. See [[mem.fact.doctrine.storage-tiers]] for the tier
+cheat-sheet, [[mem.concept.doctrine.entity-engine]] for the engine that enforces the
+TOML/MD split, and [[mem.signpost.doctrine.file-map]] to locate the directories.
 For the reading consequence of this rule, see
-[[concept.doctrine.reading-entities]].
+[[mem.concept.doctrine.reading-entities]].

@@ -26,6 +26,6 @@ A slice that captures a backlog item references it in its relationships.
 Items that are deferred-but-needed-later must be captured in backlog or a slice
 before closing the current work item out.
 
-See [[signpost.doctrine.lifecycle-start]] for the full lifecycle,
-[[concept.backlog.work-intake-membership]] for the membership test,
-and [[concept.doctrine.routing-gate]] for the route-before-you-act gate.
+See [[mem.signpost.doctrine.lifecycle-start]] for the full lifecycle,
+[[mem.concept.backlog.work-intake-membership]] for the membership test,
+and [[mem.concept.doctrine.routing-gate]] for the route-before-you-act gate.

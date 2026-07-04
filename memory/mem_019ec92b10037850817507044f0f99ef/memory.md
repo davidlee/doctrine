@@ -27,6 +27,6 @@ stay inert unless the installer is re-run. The boot snapshot and shipped
 memories are separate push surfaces; these docs are the pull surface for
 deliberate lookup.
 
-See [[signpost.doctrine.install]] for the installation path,
-[[concept.doctrine.reading-entities]] for why to read via `show` not raw
-files, and [[fact.doctrine.cli-source-of-truth]] for the CLI authority.
+See [[mem.signpost.doctrine.install]] for the installation path,
+[[mem.concept.doctrine.reading-entities]] for why to read via `show` not raw
+files, and [[mem.fact.doctrine.cli-source-of-truth]] for the CLI authority.

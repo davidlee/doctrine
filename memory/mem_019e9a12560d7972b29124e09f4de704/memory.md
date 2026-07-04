@@ -25,7 +25,7 @@ Two habits the model exists to support:
 
 Point of truth: `doc/memory-spec.md` (the umbrella — entity shape, capture +
 provenance, scope-aware retrieval, reserved seams) and the `doctrine memory
---help` surface. See [[concept.doctrine.routing-gate]] for when retrieval is part
-of the gate, [[pattern.doctrine.conventions]] for the "durable knowledge
+--help` surface. See [[mem.concept.doctrine.routing-gate]] for when retrieval is part
+of the gate, [[mem.pattern.doctrine.conventions]] for the "durable knowledge
 lives in doctrine's memory, not the model's head" rule, and
-[[signpost.doctrine.recording-memories]] for the capture-retrieve cycle.
+[[mem.signpost.doctrine.recording-memories]] for the capture-retrieve cycle.

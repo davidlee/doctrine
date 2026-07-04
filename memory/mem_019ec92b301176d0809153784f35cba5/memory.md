@@ -27,6 +27,6 @@ The `doctrine coverage` surface is operational; the project's REQ corpus is
 still being backfilled. Be honest about this when assessing coverage in your
 own project.
 
-See [[signpost.doctrine.specs]] for the spec hierarchy,
-[[signpost.doctrine.audit]] for the audit phase where coverage is reviewed,
-and [[fact.doctrine.cli-source-of-truth]] for the CLI.
+See [[mem.signpost.doctrine.specs]] for the spec hierarchy,
+[[mem.signpost.doctrine.audit]] for the audit phase where coverage is reviewed,
+and [[mem.fact.doctrine.cli-source-of-truth]] for the CLI.

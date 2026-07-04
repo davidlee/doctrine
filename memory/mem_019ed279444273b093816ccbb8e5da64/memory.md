@@ -50,7 +50,7 @@ The RV kind is driven by the audit phase (`/audit`), the design review gate
 (`/inquisition`), and the code review skill (`/code-review`). Closeout expects
 that any RV targeting the slice has no unresolved blockers.
 
-See [[signpost.doctrine.audit]] for the audit phase that uses the RV ledger,
-[[signpost.doctrine.lifecycle-start]] for the full lifecycle,
-[[signpost.doctrine.file-map]] for the `.doctrine/review/nnn/` layout, and
-[[concept.doctrine.reading-entities]] for the read-via-show rule.
+See [[mem.signpost.doctrine.audit]] for the audit phase that uses the RV ledger,
+[[mem.signpost.doctrine.lifecycle-start]] for the full lifecycle,
+[[mem.signpost.doctrine.file-map]] for the `.doctrine/review/nnn/` layout, and
+[[mem.concept.doctrine.reading-entities]] for the read-via-show rule.

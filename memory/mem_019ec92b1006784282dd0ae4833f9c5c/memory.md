@@ -32,6 +32,6 @@ high-severity memories are suppressed. Use `find` (holdback-exempt) to
 inspect what `retrieve` withheld. `show` provides the full body of one
 memory by uid or key.
 
-See [[concept.doctrine.memory-model]] for the two-faces model,
-[[concept.doctrine.storage-model]] for the storage rule,
-and [[fact.doctrine.cli-source-of-truth]] for the CLI.
+See [[mem.concept.doctrine.memory-model]] for the two-faces model,
+[[mem.concept.doctrine.storage-model]] for the storage rule,
+and [[mem.fact.doctrine.cli-source-of-truth]] for the CLI.

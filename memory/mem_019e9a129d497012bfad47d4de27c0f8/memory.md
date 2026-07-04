@@ -18,9 +18,9 @@ lint clean, formatted. Don't flip a phase `completed` over a red bar.
 
 **The existing suites are the proof.** When you touch shared machinery, the already-
 green tests are the behaviour-preservation gate — they must stay green *unchanged*
-(see [[pattern.doctrine.conventions]]). Adding behaviour means adding tests, not
+(see [[mem.pattern.doctrine.conventions]]). Adding behaviour means adding tests, not
 rewriting old ones to fit.
 
 `/execute` owns the per-phase mechanics (flip `in_progress`, implement, end green,
 flip `completed`); this loop is step 5 of that skill, and the inner engine of the
-broader [[pattern.doctrine.core-loop]].
+broader [[mem.pattern.doctrine.core-loop]].

@@ -14,7 +14,7 @@ What the engine gives every entity:
 - **Relations and edges** — typed references between entities live in the small
   sister TOMLs (e.g. `slice-nnn.toml`), never in prose bodies, so a registry can
   parse them cheaply. This is the same TOML/MD split the storage rule mandates
-  ([[concept.doctrine.storage-model]]).
+  ([[mem.concept.doctrine.storage-model]]).
 - **The behaviour-preservation gate** — the engine is shared machinery. When you
   change it, the existing test suites are the proof of correctness: they must
   stay green *unchanged*. Don't rewrite a passing suite to accommodate an engine
@@ -26,8 +26,8 @@ seam and look for duplication first.
 Point of truth: `doc/entity-model.md` (the consolidation direction and the one
 storage rule everywhere) and `doc/relation-index.md` (why relations stay in
 typed sister files and a cache is deferred). The code lives under `src/`. See
-[[signpost.doctrine.file-map]] for the layout and [[pattern.doctrine.conventions]]
+[[mem.signpost.doctrine.file-map]] for the layout and [[mem.pattern.doctrine.conventions]]
 for the pure/imperative split and no-parallel-implementation rules. For the
-relation-authoring surface, see [[signpost.doctrine.relating-entities]].
-The concept map ([[signpost.doctrine.concept-map]]) provides a visual
+relation-authoring surface, see [[mem.signpost.doctrine.relating-entities]].
+The concept map ([[mem.signpost.doctrine.concept-map]]) provides a visual
 overview of these entity relationships.

@@ -31,7 +31,7 @@ Key verbs: new (title is positional), list, show, status.
 ADRs are project-global — they live under `.doctrine/adr/nnn/` as
 `adr-nnn.{toml,md}` pairs. Status lives in the TOML, rationale in the MD.
 
-See [[concept.doctrine.entity-engine]] for the entity model,
-[[signpost.doctrine.rfc]] for RFC governance,
-[[signpost.doctrine.file-map]] for the directory layout,
-and [[signpost.doctrine.policies-standards]] for governance standing rules.
+See [[mem.concept.doctrine.entity-engine]] for the entity model,
+[[mem.signpost.doctrine.rfc]] for RFC governance,
+[[mem.signpost.doctrine.file-map]] for the directory layout,
+and [[mem.signpost.doctrine.policies-standards]] for governance standing rules.

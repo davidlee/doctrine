@@ -35,7 +35,7 @@ snapshot updates.
   already-inlined prefix — regenerate THEN clear.
 
 The snapshot also carries a nudge comment in empty Policies and Standards
-sections pointing to [[signpost.doctrine.policies-standards]].
+sections pointing to [[mem.signpost.doctrine.policies-standards]].
 
-See [[concept.doctrine.routing-gate]] for why the routing table matters,
-and [[signpost.doctrine.file-map]] for where these files live.
+See [[mem.concept.doctrine.routing-gate]] for why the routing table matters,
+and [[mem.signpost.doctrine.file-map]] for where these files live.

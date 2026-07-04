@@ -20,6 +20,6 @@ mem.signpost.doctrine.policies-standards -->`) and `doctrine boot --check`
 emits a warning — a prompt to bed in governance before too much work
 accumulates.
 
-See [[concept.doctrine.boot-snapshot]] for how governance reaches the boot
-snapshot, [[signpost.doctrine.adrs]] for architectural decisions,
-and [[signpost.doctrine.revisions]] for the governance change-axis.
+See [[mem.concept.doctrine.boot-snapshot]] for how governance reaches the boot
+snapshot, [[mem.signpost.doctrine.adrs]] for architectural decisions,
+and [[mem.signpost.doctrine.revisions]] for the governance change-axis.

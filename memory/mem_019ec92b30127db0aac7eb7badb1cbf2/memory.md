@@ -36,11 +36,11 @@ separate evidence. The audit phase may surface findings that warrant code
 review, and vice versa.
 
 For the full review ledger verb surface and coordination protocol, see
-[[signpost.doctrine.review]].
+[[mem.signpost.doctrine.review]].
 
-See [[signpost.doctrine.rec]] for reconciliation records
+See [[mem.signpost.doctrine.rec]] for reconciliation records
 produced by audit.
 
-See [[signpost.doctrine.lifecycle-start]] for the full lifecycle,
-[[signpost.doctrine.requirements]] for coverage reconciliation,
-and [[pattern.doctrine.core-loop]] for the workflow loop.
+See [[mem.signpost.doctrine.lifecycle-start]] for the full lifecycle,
+[[mem.signpost.doctrine.requirements]] for coverage reconciliation,
+and [[mem.pattern.doctrine.core-loop]] for the workflow loop.

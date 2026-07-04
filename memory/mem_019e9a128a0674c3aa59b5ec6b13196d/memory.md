@@ -9,7 +9,7 @@ those for the authoritative wording.
   and often, on `main` (or the slice's worktree branch).
 - **Pure / imperative split.** No clock, rng, git, or disk in the pure layer — pass
   them in as inputs (the date/uid pattern). Impurity lives in a thin shell. See
-  [[concept.doctrine.entity-engine]].
+  [[mem.concept.doctrine.entity-engine]].
 - **Behaviour-preservation gate.** When you change shared machinery (the entity
   engine), the existing suites are the proof: they must stay green *unchanged*. A
   diff to a shared seam that needs its tests rewritten is suspect.
@@ -17,12 +17,12 @@ those for the authoritative wording.
   change. Corrections *append*; never renumber or reword in place.
 - **Ask, don't infer.** Correctness comes first and last. Use the CLI as the source
   of truth for command shapes — don't guess ids, flags, or paths
-  ([[fact.doctrine.cli-source-of-truth]]).
+  ([[mem.fact.doctrine.cli-source-of-truth]]).
 - **No parallel implementation.** Ride existing seams; find duplication before
   writing new code. Lint as you go (zero warnings; your project's lint-and-check gate before commit).
 
 Honour the storage rule when you write artifacts — structured data in TOML, prose in
-MD, never queried/derived data in prose ([[concept.doctrine.storage-model]],
-[[fact.doctrine.storage-tiers]]). These conventions wrap the whole lifecycle
-([[pattern.doctrine.core-loop]]). See [[signpost.doctrine.reference-docs]] for
+MD, never queried/derived data in prose ([[mem.concept.doctrine.storage-model]],
+[[mem.fact.doctrine.storage-tiers]]). These conventions wrap the whole lifecycle
+([[mem.pattern.doctrine.core-loop]]). See [[mem.signpost.doctrine.reference-docs]] for
 the glossary of entity kinds and reference forms.

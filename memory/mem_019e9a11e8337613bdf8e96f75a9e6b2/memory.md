@@ -2,7 +2,7 @@
 
 The ordering an intentional change moves through. The routing table in
 `.doctrine/state/boot.md` is the authority; the per-stage skills carry the
-detail (see [[signpost.doctrine.skill-map]]). No code without an approved plan.
+detail (see [[mem.signpost.doctrine.skill-map]]). No code without an approved plan.
 
 1. **/route** — the mandatory gate. Picks the governing skill before you touch
    anything.
@@ -16,11 +16,11 @@ detail (see [[signpost.doctrine.skill-map]]). No code without an approved plan.
 5. **phase-plan** — expand the next phase's authored entry into its disposable
    runtime sheet, just before executing.
 6. **execute** — flip the phase `in_progress`, implement
-   TDD red/green/refactor (see [[pattern.doctrine.tdd-loop]]), end green, flip
+   TDD red/green/refactor (see [[mem.pattern.doctrine.tdd-loop]]), end green, flip
    `completed`.
 7. **audit** — evidence gathering, conformance checking, and reconciliation
    against the design. Uses the review ledger (RV kind). See
-   [[signpost.doctrine.review]] and [[signpost.doctrine.rec]].
+   [[mem.signpost.doctrine.review]] and [[mem.signpost.doctrine.rec]].
 8. **reconcile** — (ADR-009 closure seam) formal reconciliation of findings,
    coverage, and lifecycle status. Resolves blockers and drift before the close
    gate.
@@ -28,7 +28,7 @@ detail (see [[signpost.doctrine.skill-map]]). No code without an approved plan.
    status, and land a clean final commit.
 
 Authored artifacts land under `.doctrine/slice/nnn/`; runtime phase sheets land
-gitignored under `.doctrine/state/` (see [[concept.doctrine.storage-model]] and
-[[signpost.doctrine.file-map]]). The whole loop in one line:
-[[pattern.doctrine.core-loop]]. Phase ids (`PHASE-NN`) and criteria ids
+gitignored under `.doctrine/state/` (see [[mem.concept.doctrine.storage-model]] and
+[[mem.signpost.doctrine.file-map]]). The whole loop in one line:
+[[mem.pattern.doctrine.core-loop]]. Phase ids (`PHASE-NN`) and criteria ids
 (`EN-/EX-/VT-`) are immutable — edits append, never renumber.

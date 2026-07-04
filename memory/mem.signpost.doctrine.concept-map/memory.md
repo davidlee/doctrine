@@ -18,6 +18,6 @@ The CLI is the source of truth: `doctrine concept-map --help`, never guess.
 Key verbs: `new`, `list`, `show <ID>`, `check`, `add`, `remove`,
 `rename-node`, `export`.
 
-See [[concept.doctrine.entity-engine]] for the underlying relation model,
-[[signpost.doctrine.file-map]] for the directory layout,
-and [[signpost.doctrine.relating-entities]] for CLI relation authoring.
+See [[mem.concept.doctrine.entity-engine]] for the underlying relation model,
+[[mem.signpost.doctrine.file-map]] for the directory layout,
+and [[mem.signpost.doctrine.relating-entities]] for CLI relation authoring.

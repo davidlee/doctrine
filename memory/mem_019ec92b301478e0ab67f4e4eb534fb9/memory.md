@@ -21,6 +21,6 @@ Revisions live under `.doctrine/revision/nnn/`. They are the governance
 counterpart to slices — slices change code; revisions change specs and
 governance.
 
-See [[signpost.doctrine.specs]] for the spec hierarchy,
-[[signpost.doctrine.policies-standards]] for governance standing rules,
-and [[signpost.doctrine.adrs]] for architectural decisions.
+See [[mem.signpost.doctrine.specs]] for the spec hierarchy,
+[[mem.signpost.doctrine.policies-standards]] for governance standing rules,
+and [[mem.signpost.doctrine.adrs]] for architectural decisions.

@@ -22,5 +22,5 @@ RECs live under `.doctrine/rec/nnn/`. Each is a `rec-nnn.toml` +
 `rec-nnn.md` pair (TOML holds the structured status change; MD holds
 the operator note and rationale).
 
-See [[signpost.doctrine.requirements]] for reconciliation targets,
-and [[signpost.doctrine.file-map]] for the directory layout.
+See [[mem.signpost.doctrine.requirements]] for reconciliation targets,
+and [[mem.signpost.doctrine.file-map]] for the directory layout.

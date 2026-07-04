@@ -20,7 +20,7 @@ What it does NOT do:
   snapshot in place.
 
 After install, the boot snapshot (`.doctrine/state/boot.md`) is the authority
-for every session. See [[concept.doctrine.boot-snapshot]] for what it is and
+for every session. See [[mem.concept.doctrine.boot-snapshot]] for what it is and
 how to keep it fresh.
 
 Idempotent — safe to re-run. The CLI is the source of truth:

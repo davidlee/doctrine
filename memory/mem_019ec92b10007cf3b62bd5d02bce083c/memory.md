@@ -20,6 +20,6 @@ relation views).
 
 The CLI is the source of truth for command shapes — `doctrine --help`.
 
-See [[concept.doctrine.storage-model]] for the storage rule,
-[[fact.doctrine.cli-source-of-truth]] for why guessed flags are stale flags,
-and [[signpost.doctrine.reference-docs]] for `using-doctrine.md`.
+See [[mem.concept.doctrine.storage-model]] for the storage rule,
+[[mem.fact.doctrine.cli-source-of-truth]] for why guessed flags are stale flags,
+and [[mem.signpost.doctrine.reference-docs]] for `using-doctrine.md`.

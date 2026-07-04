@@ -8,26 +8,26 @@ thin Rust shell (the `doctrine` CLI).
 
 1. **Slice lifecycle** — intentional change: create a slice, design it, plan it,
    execute phases, audit, reconcile, close.
-   See [[signpost.doctrine.lifecycle-start]].
+   See [[mem.signpost.doctrine.lifecycle-start]].
 2. **Governance** — ADRs, policies, standards, and revisions record *why* and
-   *what rules*. See [[signpost.doctrine.adrs]],
-   [[signpost.doctrine.policies-standards]].
+   *what rules*. See [[mem.signpost.doctrine.adrs]],
+   [[mem.signpost.doctrine.policies-standards]].
 3. **Memory** — durable agent knowledge: record, find, retrieve, show memories.
-   See [[concept.doctrine.memory-model]].
+   See [[mem.concept.doctrine.memory-model]].
 4. **Entity engine** — TOML+MD tiers, relations, read via `doctrine <kind> show <ID>`.
-   See [[concept.doctrine.entity-engine]].
+   See [[mem.concept.doctrine.entity-engine]].
 
 ## Mental model
 
 - **Two-tier storage**: structured data in `.toml`, prose in `.md`. Read via
   `doctrine <kind> show`, never raw files. See
-  [[concept.doctrine.reading-entities]].
+  [[mem.concept.doctrine.reading-entities]].
 - **Three tiers**: authored (committed, diffable), runtime state (gitignored,
-  `rm -rf`-able), derived (regenerated). See [[fact.doctrine.storage-tiers]].
+  `rm -rf`-able), derived (regenerated). See [[mem.fact.doctrine.storage-tiers]].
 - **The CLI is the source of truth**: `doctrine --help` for command shapes,
-  never guess. See [[fact.doctrine.cli-source-of-truth]].
+  never guess. See [[mem.fact.doctrine.cli-source-of-truth]].
 - **Storage rule**: never write queried/derived data in prose; progress in
-  runtime state, not authored files. See [[concept.doctrine.storage-model]].
+  runtime state, not authored files. See [[mem.concept.doctrine.storage-model]].
 
 ## When to retrieve what
 
@@ -73,13 +73,13 @@ thin Rust shell (the `doctrine` CLI).
 - The CLI is the source of truth: `doctrine --help`, never guess.
 - Storage rule: authored (committed), runtime (gitignored), derived (regenerated).
 - Commit often with conventional commits; lint as you go.
-- See [[pattern.doctrine.conventions]] for full detail.
+- See [[mem.pattern.doctrine.conventions]] for full detail.
 
 ## Quick-links
 
 Start here:
-- [[signpost.doctrine.file-map]] — where everything lives
-- [[signpost.doctrine.skill-map]] — which skill for which task
-- [[signpost.doctrine.lifecycle-start]] — the core workflow
-- [[signpost.doctrine.reference-docs]] — glossary and usage guide
-- [[signpost.doctrine.install]] — install doctrine
+- [[mem.signpost.doctrine.file-map]] — where everything lives
+- [[mem.signpost.doctrine.skill-map]] — which skill for which task
+- [[mem.signpost.doctrine.lifecycle-start]] — the core workflow
+- [[mem.signpost.doctrine.reference-docs]] — glossary and usage guide
+- [[mem.signpost.doctrine.install]] — install doctrine
