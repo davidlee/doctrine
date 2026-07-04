@@ -40,3 +40,30 @@ output never showed the category. Root cause: ordinal-to-bucket mapping was
 manually synced with no compile-time tie to CATEGORIES_BY_ORDINAL length.
 Suggestion: the array size should be const-generic off CATEGORIES_BY_ORDINAL
 or a BTreeMap to eliminate the mapping error class entirely.
+
+[dispatch; SL-199-armswitch-a7]
+FINAL ROOT CAUSE (both earlier conclusions in this entry were WRONG — see the
+correction trail as a cautionary tale): the orchestrator (me) spawned the two real
+`dispatch-worker` Agent calls WITHOUT the `isolation: worktree` parameter. Without
+it, the Agent tool runs the subagent IN-PLACE in the orchestrator's current
+worktree (the coord tree) — the `WorktreeCreate` hook never fires, no fork is
+minted, and the doctrine pretooluse confinement jails the subagent to its cwd (the
+arming dir) with src/ read-only → base-guard `src-readonly`, no delta. NOTHING was
+actually broken: the hook fires, the binary forks, the jail is fine, CC 2.1.198 is
+fine, the dispatch-worker agent-def is fine. Proof: three control spawns that DID
+pass `isolation: worktree` ALL forked correctly to `.worktrees/agent-<id>` at
+HEAD==B on `dispatch/<name>` — general-purpose from the primary root (Passthrough,
+detached at primary HEAD), general-purpose from the arming dir (Fork @ B), AND
+dispatch-worker from the arming dir with a trivial prompt (Fork @ B). The isolated
+variable was never agent-type/model/hook/jail — it was the missing flag. The
+dispatch-agent SKILL's spawn template DOES list `isolation: worktree`; I dropped it.
+COST: ~5 wasted worker/probe spawns + a very long multi-hypothesis diagnosis
+(claude-arm-unavailable → stale-hooks → jail → enabledPlugins → agent-def model
+override → agent-type) + TWO wrong case-note conclusions before the real cause. The
+whole detour is avoidable with ONE cheap invariant BEFORE deep diagnosis: on any
+"worker landed in the coord tree / src read-only" symptom, FIRST re-read the Agent
+call and confirm `isolation: worktree` is present — it is the single necessary
+condition for the fork. A worker in the coord tree almost always means the flag was
+omitted, not that the hook is broken. Suggestion: `dispatch arm-spawn` (or a
+pre-spawn lint) could emit a reminder that the very next Agent spawn MUST carry
+`isolation: worktree`, since the arming ritual is inert without it.

@@ -1,0 +1,47 @@
+memory_uid = "mem_019f2d4d50427d61bc562373551d4df3"
+memory_key = "mem.fact.dispatch.claude-arm-spawn-needs-isolation-worktree-flag"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "fact"
+status = "active"
+title = "Claude dispatch-worker Agent spawn requires isolation:worktree — omission runs in-place in the coord tree, no fork"
+summary = "A claude-arm dispatch-worker Agent spawn MUST pass isolation:worktree; without it the worker runs in-place in the coord tree (no fork) and the arming ritual is inert."
+created = "2026-07-04"
+updated = "2026-07-04"
+
+[scope]
+paths = []
+globs = [".claude/skills/dispatch-agent/**", ".agents/skills/dispatch-agent/**"]
+commands = ["dispatch", "doctrine dispatch"]
+tags = ["dispatch", "claude-arm", "worktree", "spawn", "gotcha"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "447c79aa80373bcabdd7804ad69c1fa6ee861c22"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b670a55787258ec3074c419c94a270360f5f76a68bd14369eeadf90c8898f6dc"
+base_commit = "0fceaf720ffbcf5e07e5f9fc60ab326b2e628813"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019f212439687aa1af59e009fec943fd"
+
