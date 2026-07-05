@@ -3,3 +3,9 @@ phase = "PHASE-02"
 code_start_oid = "ca01e81c7cae7a5ab9af9f846a42cdcb2a37867e"
 code_end_oid = "1c246ee9f3ef6c80fb5a1deb3bdbfbbfe97d61e5"
 provenance = "funnel"
+
+[[boundary]]
+phase = "PHASE-03"
+code_start_oid = "b721d10a00a6d9618585da56a85915675bdffa22"
+code_end_oid = "577a2d64c5ff2624f4ba8f45676a1c171b3e42a0"
+provenance = "funnel"
