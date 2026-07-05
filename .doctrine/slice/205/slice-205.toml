@@ -30,6 +30,11 @@ intent = "design-target"
 selector = "src/commands/guard.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/root.rs"
+intent = "design-target"
+note = "PHASE-03 run_surface discovers the doctrine root from the stdin cwd (design §5.4); root::find_from is the DRY cwd-parameterized seam — a parallel walk in the adapter is banned"
+
 [[relation]]
 label = "governed_by"
 target = "POL-002"
