@@ -210,3 +210,89 @@ write suite inside a MARKED fork → marker leg refused ~91 fixtures; fix = clea
 for the trusted gate window + drop the env export. (F3) run_gc prints to fd1 = MCP JSON-RPC
 channel; fix = run_gc_to sink seam. The "operator one-liner" framing in the prior finding
 was an artifact of the fail-fast illusion.
+
+[dispatch/PHASE-04; sess-7992f474]
+worker_commit self-commit STILL blocked on the claude arm after F2 — the gap is
+PROVISIONING, not the gate. F2 (5a722834) fixed the commit-gate's marker leg, but
+the Agent-tool `isolation: worktree` spawn yields a **plain detached** worktree:
+detached HEAD at base, no `dispatch/<name>` branch, no DispatchRecord. worker_commit's
+`resolve_agent` keys on a worktree checked out at `refs/heads/dispatch/<name>` →
+`worktree_hits == 0` → Refused{unknown-agent}. So R1 is NOT dissolved by F2 alone:
+claude-arm self-commit needs create-fork provisioning (branch + DispatchRecord)
+to fire on the Agent spawn — a PHASE-05 wiring concern. PHASE-04 landed via the
+proven `--from-worktree` import path (as P01–03 did).
+
+Corollary token-sink: `worktree gc --fork <branch>` cannot reap a `--from-worktree`
+worktree — it's branchless/commitless (delta was uncommitted, gathered from the live
+tree), and the landed-oracle needs a fork branch to prove landing. Reap of the
+Agent-isolation worktree falls to `git worktree remove --force` (delta provably
+landed in the funnel commit). The funnel's "reap via run_gc" step assumes a committed
+fork (pi arm); the claude `--from-worktree` arm has no branch to gc.
+
+[dispatch/PHASE-05; sess-b73bbb93]
+R1 RECONCILIATION HIT — live create-fork provisioning does not fire on the
+main-thread claude arm, even WITH arming.
+
+Setup: cwd parked at coord-root (.dispatch/SL-199), branch dispatch/199, HEAD=B
+(a2623c2f). Ran `dispatch arm-spawn --path .` (base file written = a2623c2f),
+then Agent isolation:worktree (subagent_type dispatch-worker). All §5.E Fork
+preconditions held: coord_root ∧ dispatch-branch ∧ base-armed.
+
+Result: worker forked DETACHED at a2623c2f, worktreeBranch=undefined, no
+dispatch/<name> branch, no jail record → worker_commit refused {unknown-agent}.
+Identical to §6 probe's positional-arming failure that §5.A's coord-root-cwd
+discriminator was meant to fix. Consistent across P01-P05 (all used --from-worktree).
+
+Hook IS registered: plugin hooks.json wires WorktreeCreate → `doctrine worktree
+create-fork` (session settings hooks:{} is only the empty user layer). So the
+discriminator runs; it took Passthrough. Candidate root causes (untested):
+ (a) WorktreeCreate payload cwd ≠ coord-root (harness passes the NEW worktree
+     path or session root) → discriminator sees ¬coord_root → Passthrough.
+ (b) The base file arm-spawn --path . wrote is not where create-fork reads it.
+ (c) Claude Code's WorktreeCreate hook cannot CREATE+checkout a branch (only
+     veto) — the mechanics:154-166 "payload lacks enough to act on" caveat; then
+     EX-3-as-designed (self-commit via provisioned fork) is harness-infeasible.
+
+REFRAME: my test was the MAIN-THREAD arm (mechanics:39-42 already says the claude
+Agent tool gives no base control here). EX-3 is the CONFINED-ORCHESTRATOR arm —
+UNTESTED this session. The §6 probe found the confined nested spawn forked at the
+armed base (cwd behaves differently for confined subagents). So EX-3's own live
+experiment (nested dispatch-orchestrator subagent arms+spawns) is still owed and
+is exactly VH-1. Token cost: the branchless-worktree reap + selector re-declare +
+baseline re-capture recur every phase on this arm.
+
+[phase-plan; sl199-p05-relock-rewrite]
+Stale-sheet read-tax. phase-05.md existed (8.4K, prior agent) but predated the
+2026-07-05 re-lock: declared "NO Rust", carried F7 (loop-infeasible) — both
+refuted by the re-lock. phase-plan had to detect staleness (cross-read plan.toml
+PHASE-05 vs the sheet), then rewrite wholesale rather than refine. Cost: full sheet
+re-read + full rewrite. Root: a runtime sheet is not invalidated/flagged when the
+authored plan it expands is re-locked underneath it — no "sheet stale vs plan"
+signal. The handover DID carry the six re-locked work items, which is what made the
+staleness detectable cheaply; without it the drift would have been silent.
+
+[dispatch-agent; sl199-p05-mechanic-3way]
+Pre-spawn, hit a 3-way disagreement on the claude-arm return mechanic that cost a
+ground-truth probe before I could write the worker prompt:
+- CLAUDE.md orchestration note: "claude arm self-commits via worker_commit MCP".
+- dispatch-mechanics.md §"Two ways a worker returns": claude=worker_commit→import
+  --fork; pi=--from-worktree. (STALE — this is what T5/EX-2 must rewrite.)
+- dispatch-agent SKILL + `worktree import --help`: claude=--from-worktree (labeled
+  "claude arm, SL-182 PHASE-05"); pi/subprocess=--fork. ← current CODE truth.
+Resolution: code+skill win. Doc lags one refactor (the arms SWAPPED which import
+source they use). Token cost: ~2 probes to disambiguate what a single authoritative
+doc should have stated. Root cause = mechanics doc not updated when SL-182 P05
+flipped the claude arm to live-worktree import; SL-199 T5 inherits the debt.
+
+[dispatch-agent; sl199-p05-tree-unclean-selfinflict]
+import --from-worktree refused `tree-unclean`: I'd appended RFC-011 case-notes to
+the coord tree's TRACKED .doctrine/rfc/011/case-notes.md BETWEEN arm-spawn and
+import. The import belt requires a clean coord tree at B. Committing the notes
+would move HEAD off B (import needs HEAD==B AND computes the worker delta vs B, so
+a moved base would try to REVERT the notes). Fix: set the file aside
+(`git show HEAD:path > path`, backup first — no checkout/restore verb), import,
+then re-apply + commit as a SEPARATE instrumentation commit at the clean post-import
+tip. Lesson: never leave a tracked coord file dirty across an arm->import window;
+hold case-notes in a scratchpad log during a batch, or commit them at a clean
+boundary — don't append into the live coord tree mid-funnel. Token/step cost: one
+failed import + a 4-step non-destructive set-aside dance.

@@ -5,6 +5,7 @@
 //! Zero new crate dependencies — uses only `serde`, `serde_json`, and `tokio`
 //! already in the dependency tree (design D4).
 
+pub(crate) mod dispatch;
 pub(crate) mod protocol;
 pub(crate) mod tools;
 pub(crate) mod transport;

@@ -16,7 +16,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/**"
@@ -44,6 +44,40 @@ intent = "design-target"
 
 [[selector]]
 selector = "install/dispatch-mechanics.md"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_create_fork.rs"
+intent = "design-target"
+note = "VT-5 e2e re-armed for one-shot consume (EX-3); consequential to the create.rs discriminator — landed with PHASE-01"
+
+[[selector]]
+selector = "src/mcp_server/dispatch.rs"
+intent = "design-target"
+note = "§B transactional core — resolve_coord + commit_on_behalf; VT-1..4 test_file; landed PHASE-02"
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+note = "tools/list VT snapshot — consequential to the PHASE-03 tools.rs registration (3 funnel tools); landed PHASE-03"
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+note = "SL-198 AgentConformance lint — role-keyed MCP allowlist (§C); VT-1 test_file"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-orchestrator.md"
+intent = "design-target"
+note = "authored source of the orchestrator agent-def (§C); .claude/ copy is install-derived"
+
+[[selector]]
+selector = "install/hymns/role/orchestrator.md"
+intent = "design-target"
+note = "confined orchestrator drive-loop corpus (§5.D / EX-1); pulled by dispatch-orchestrator agent-def role placeholder — PHASE-05"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-worker.md"
 intent = "design-target"
 
 [[relation]]

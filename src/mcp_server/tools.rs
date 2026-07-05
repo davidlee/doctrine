@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! MCP tool definitions (JSON Schema) and handler dispatch.
 //!
-//! 19 tools: 10 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
+//! 22 tools: 10 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
 //! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`),
-//! and `worker_commit` (the gated dispatch-worker self-commit, SL-198).
+//! `worker_commit` (the gated dispatch-worker self-commit, SL-198), and the SL-199
+//! dispatch funnel write surface (`dispatch_import`, `dispatch_conclude_phase`,
+//! `dispatch_reap`).
 //! Each review tool calls the matching `review::run_*` function,
 //! maps errors through `ReviewError` variant identity (design D8, §5), and
 //! returns JSON text.
@@ -22,7 +24,7 @@ use std::str::FromStr;
 
 // ── Tool definitions (function, not const — json!() is non-const) ─────────
 
-/// Return all 19 tool definitions with JSON Schema parameter descriptions.
+/// Return all 22 tool definitions with JSON Schema parameter descriptions.
 fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -349,6 +351,45 @@ fn tools() -> Vec<McpTool> {
                     }
                 },
                 "required": ["agent", "message"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_IMPORT.to_owned(),
+            description: "Dispatch funnel WRITE SURFACE (SL-199): import a worker's committed fork branch onto the live coordination tip, working-tree-free. Resolves the coord tree SERVER-SIDE by `slice` (never a caller path), runs the shared `classify_import` scope belt as a HARD pre-compose gate (an undeclared-scope path lands NOTHING — the coord tip is unchanged), composes coord-tip ⊕ worker-tip via `merge-tree` (object-db only — the live coord index/worktree are never touched), and lands ONE non-merge commit preserving the worker AUTHOR + the dispatch COMMITTER.\n\nReturns: {\"Imported\": { coord_tip: string }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | head-moved | tree-unclean | multi-commit | doctrine-touch | claude-touch | undeclared-scope | merge-conflict | empty-delta | lost-ref-race.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree (`dispatch/<NNN>`). Resolved server-side." },
+                    "name": { "type": "string", "description": "The committed worker fork branch to import (e.g. `dispatch/<agent>`)." }
+                },
+                "required": ["slice", "name"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_CONCLUDE_PHASE.to_owned(),
+            description: "Dispatch funnel WRITE SURFACE (SL-199): conclude a phase in two kept-separate tiers. (a) Flip the GITIGNORED phase sheet to `completed` (disposable runtime, idempotent on retry, never in committed history); (b) land ONE working-tree-free commit of the `(code_start, code_end)` boundary row (UPSERT-by-phase) on the coordination branch. Atomic by construction: the only fault outcome is a completed sheet with no committed boundary — self-healing on retry.\n\nReturns: {\"Concluded\": { coord_tip: string }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | empty-delta | lost-ref-race.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree. Resolved server-side." },
+                    "phase": { "type": "string", "description": "The PHASE-NN id to conclude." },
+                    "code_start": { "type": "string", "description": "The phase's code-start oid (B)." },
+                    "code_end": { "type": "string", "description": "The phase's code-end oid (the coord tip)." },
+                    "note": { "type": "string", "description": "Optional note recorded on the phase-sheet transition." }
+                },
+                "required": ["slice", "phase", "code_start", "code_end"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_REAP.to_owned(),
+            description: "Dispatch funnel WRITE SURFACE (SL-199): reap a spent worker fork via the CLI gc's landed-oracle, UNCHANGED. Resolves the coord tree SERVER-SIDE by `slice`, then runs `run_gc`: the patch-id oracle (`git cherry`) REFUSES deleting a fork whose patch is not yet in coord history; a landed fork's worktree + branch are removed.\n\nReturns: {\"Reaped\": { fork: string }} or {\"Refused\": { reason: string, detail: string }} (coord refusal); an unlanded fork is a hard gc error (not-landed).".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree. Resolved server-side." },
+                    "name": { "type": "string", "description": "The worker fork branch to reap (e.g. `dispatch/<agent>`)." }
+                },
+                "required": ["slice", "name"]
             }),
         },
     ]
@@ -926,6 +967,48 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
             let out = super::worker_commit::run_worker_commit(root, &agent, &message)?;
             Ok(serde_json::to_string(&out)?)
         }
+        super::dispatch::TOOL_DISPATCH_IMPORT => {
+            // The coord tree is resolved SERVER-SIDE from `slice` (no caller path). `name`
+            // names the committed worker fork branch to import.
+            let slice = require_slice(arguments.get("slice"))?;
+            let fields = ExtractFields::from_value(arguments, &["name"]);
+            let branch = fields.str_field("name");
+            if branch.is_empty() {
+                anyhow::bail!("invalid arguments: name is required");
+            }
+            let out = super::dispatch::dispatch_import(root, slice, &branch)?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        super::dispatch::TOOL_DISPATCH_CONCLUDE_PHASE => {
+            let slice = require_slice(arguments.get("slice"))?;
+            let fields = ExtractFields::from_value(arguments, &["phase", "code_start", "code_end"]);
+            let phase = fields.str_field("phase");
+            let code_start = fields.str_field("code_start");
+            let code_end = fields.str_field("code_end");
+            if phase.is_empty() || code_start.is_empty() || code_end.is_empty() {
+                anyhow::bail!("invalid arguments: phase, code_start, code_end are required");
+            }
+            let note = fields.opt_str_field("note");
+            let out = super::dispatch::dispatch_conclude_phase(
+                root,
+                slice,
+                &phase,
+                &code_start,
+                &code_end,
+                note.as_deref(),
+            )?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        super::dispatch::TOOL_DISPATCH_REAP => {
+            let slice = require_slice(arguments.get("slice"))?;
+            let fields = ExtractFields::from_value(arguments, &["name"]);
+            let branch = fields.str_field("name");
+            if branch.is_empty() {
+                anyhow::bail!("invalid arguments: name is required");
+            }
+            let out = super::dispatch::dispatch_reap(root, slice, &branch)?;
+            Ok(serde_json::to_string(&out)?)
+        }
         _ => anyhow::bail!("Tool not found: {name}"),
     }
 }
@@ -984,6 +1067,16 @@ impl ExtractFields {
     fn opt_bool_field(&self, name: &str) -> Option<bool> {
         self.inner.get(name).and_then(serde_json::Value::as_bool)
     }
+}
+
+/// Extract the required integer `slice` arg as a `u32` (the SL-199 funnel tools key
+/// the coordination worktree on it). The load-bearing "invalid arguments:" prefix
+/// routes a bad value to `-32602` (Invalid params) via the error mapper.
+fn require_slice(value: Option<&Value>) -> anyhow::Result<u32> {
+    let n = value
+        .and_then(serde_json::Value::as_u64)
+        .context("invalid arguments: 'slice' (integer) is required")?;
+    u32::try_from(n).map_err(|_e| anyhow::anyhow!("invalid arguments: 'slice' out of range"))
 }
 
 // ── Argument parse helpers for memory tools ─────────────────────────────
@@ -1320,9 +1413,14 @@ mod tests {
     // VT-3: tool list response contains exactly 10 tools with correct names
 
     #[test]
-    fn tool_list_has_19_tools() {
+    fn tool_list_has_22_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 19);
+        assert_eq!(list.tools.len(), 22);
+        // The SL-199 funnel write surface is registered (named via the STD-001 consts).
+        let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_IMPORT));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_CONCLUDE_PHASE));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_REAP));
     }
 
     #[test]
@@ -1662,7 +1760,7 @@ mod tests {
         let resp = dispatch(&req, &root);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 19);
+        assert_eq!(tools.len(), 22);
     }
 
     #[test]

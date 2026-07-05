@@ -300,6 +300,10 @@ fn name_collision_refuses_on_both_arms() {
             .success(),
         "first fork succeeds"
     );
+    // Re-arm: the first Fork consumed the base one-shot (SL-199 EX-3), so re-write the
+    // base slot before the second Fork probe or it would hit `missing-base` before
+    // reaching fork_core's collision refusal.
+    arm(root.path(), &b);
     // Fork arm collision ⇒ fork_core's `fork-refused` (shared-machinery token).
     assert_refusal(
         &run(&spawn, &payload(&spawn, "agent-dup"), CREATE),

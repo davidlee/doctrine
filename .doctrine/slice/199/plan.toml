@@ -95,7 +95,7 @@ verification = [
   { id = "VT-1", expects = "resolve_coord enumerates (list_worktrees) and filters: refusal table (unknown-slice, ambiguous, stale) + a happy single-hit resolve to the dispatch/<NNN> worktree root; no path parameter. The ambiguous arm is exercised on a synthetic >1 listing to prove enumeration (a single-hit probe would silently pick the first).", test_file = "src/mcp_server/dispatch.rs", keywords = ["resolve_coord", "unknown-slice", "stale", "list_worktrees"] },
   { id = "VT-2", expects = "commit_on_behalf empty-delta refusal; happy path lands exactly one commit on the coord branch, returns the new tip; the coord tip advances by exactly that commit.", test_file = "src/mcp_server/dispatch.rs", keywords = ["commit_on_behalf", "tip"] },
   { id = "VT-3", expects = "Provenance: the commit-on-behalf author + committer + message match the decided contract (import preserves worker author + dispatch committer; conclude author==committer==dispatch id; funnel marker names slice/phase); asserted on the produced commit object.", test_file = "src/mcp_server/dispatch.rs", keywords = ["author", "committer", "message"] },
-  { id = "VT-4", expects = "No-residue / working-tree-free atomicity: a fault injected between tree-compose and ref-update leaves the coord ref AND the live coord index+worktree byte-unchanged (git status --porcelain empty, tip unmoved) — proving commit_on_behalf never dirties the live index the confined orchestrator cannot reset. Also: a pre-existing staged/dirty coord tree is NOT swept into the commit (compose is from the named tree, not the live index).", test_file = "src/mcp_server/dispatch.rs", keywords = ["commit_on_behalf", "GIT_INDEX_FILE", "porcelain"] },
+  { id = "VT-4", expects = "No-residue / working-tree-free atomicity: a fault injected between tree-compose and ref-update leaves the coord ref AND the live coord index+worktree byte-unchanged (git status --porcelain empty, tip unmoved) — proving commit_on_behalf never dirties the live index the confined orchestrator cannot reset. Also: a pre-existing staged/dirty coord tree is NOT swept into the commit (compose is from the named tree, not the live index).", test_file = "src/mcp_server/dispatch.rs", keywords = ["commit_on_behalf", "live_index"] },
 ]
 specs        = []
 requirements = []
@@ -111,9 +111,11 @@ run_* belt — one seam, two doors, no forked logic. dispatch_import: run_import
 arm THEN commit_on_behalf (code commit); the classify_import scope belt is a HARD \
 PRE-COMMIT gate (import.rs:136 UndeclaredScope) — a violation lands NOTHING and \
 report-and-halts (not advisory; ext-review F2/F5). dispatch_conclude_phase: \
-run_phase(completed) + run_record_boundary folded into ONE atomic commit_on_behalf \
-(metadata) — the phase never reaches completed in committed history without its true \
-(B, coord_tip) boundary in the same commit (ext-review F1/F3). dispatch_reap: run_gc, \
+run_phase(completed) writes the GITIGNORED phase sheet (disposable runtime, never \
+committed) while ONE working-tree-free commit_on_behalf lands the (B, coord_tip) \
+boundary row — the boundary commit is the atomic unit; completed-without-committed- \
+boundary is the EXPECTED, retry-self-healing fault, not prevented by folding the flip \
+into the commit (A6; ext-review F1/F3). dispatch_reap: run_gc, \
 patch-id landed-oracle belt intact. Pin nothing here beyond registration — the \
 tool-surface lint is PHASE-04."""
 entrance_criteria = [
@@ -180,9 +182,14 @@ consumes the arm one-shot) -> worker self-commits (worker_commit) -> dispatch_im
 -> dispatch_conclude_phase -> dispatch_reap; auto-disarm; conflict-judgement + trunk \
 ops (refresh-base / candidate / integrate) report-and-halt to the main thread (they \
 write trunk, outside the jail). Add the install/dispatch-mechanics.md Mode B section \
-(confined arm: MCP funnel, import folds the commit, conclude is atomic, reads-raw/ \
+(confined arm: MCP funnel, import folds the commit, conclude = disposable runtime flip \
++ one boundary commit (self-healing), reads-raw/ \
 writes-MCP split, undeclared -> report-and-halt) and check tech-spec-021 for a REQ \
-delta on the confined-orchestrator actor class. Then a live end-to-end (VH)."""
+delta on the confined-orchestrator actor class (frame it HARNESS-NEUTRAL — A11). \
+PHASE-05 delta code (F9-F13): A1 arm-spawn --base defaults to coord HEAD (src/dispatch.rs \
+run_arm_spawn); A2 dispatch-worker def frontmatter isolation:worktree (install/agents/claude \
++ materialized copy); A12 transport-agnostic funnel-tool invariant asserted. Then a live \
+end-to-end (VH)."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 (discriminator), PHASE-03 (funnel tools), PHASE-04 (agent-def + lint) complete and green. SL-198 landed (worker_commit + jail record + resolver)." },
 ]
@@ -191,11 +198,16 @@ exit_criteria = [
   { id = "EX-2", text = "install/dispatch-mechanics.md carries a Mode B section describing the confined arm; it does not reproduce doctrine --help. tech-spec-021 REQ delta authored or explicitly deemed unnecessary (recorded either way)." },
   { id = "EX-3", text = "Live end-to-end on the claude arm (VH): a confined dispatch-orchestrator drives a real slice phase — arm -> nested worker forks WITH its dispatch/<name> branch + jail record (the §A linchpin the probe proved positional arming could not produce) -> worker self-commits -> orchestrator imports -> concludes (flip+boundary, one commit) -> reaps — while its own raw Bash to shared .git stays walled. Nested worker confinement holds (Jail(cwd), depth-agnostic)." },
   { id = "EX-4", text = "Main-thread dispatch remains available as the MCP-down fallback (R2); the subprocess (pi) arm stays green. No regression to the existing funnel." },
+  { id = "EX-5", text = "A1 (delta): `dispatch arm-spawn --base` defaults to the coord-root HEAD when omitted (src/dispatch.rs run_arm_spawn), so the confined recipe arms correct-by-construction from its cwd-pinned coord-root with no LLM-composed sha; an explicit --base is still honored. Documented caveat (A7): off the confined arm the default is NOT self-catching — a misplaced/main-thread arm's wrong base passes worker_commit's C^==record.base AND dispatch_import's merge-base recompute, so a wrong-but-consistent base can land silently; IMP-268's early-catch dispatch-branch guard is the real safety net for that case (deferred, its deferral re-weighed by A7)." },
+  { id = "EX-6", text = "A2 (delta): the dispatch-worker def frontmatter carries `isolation: worktree` (install/agents/claude/dispatch-worker.md AND its materialized .claude/agents copy agree), so a nested spawn forks isolated DETERMINISTICALLY without a per-call Agent isolation arg (F12/F13). Re-materialize (doctrine install/reseat) after the edit so shipped and installed defs match." },
 ]
 verification = [
   { id = "VH-1", expects = "Human-witnessed end-to-end: a confined dispatch-orchestrator drives one real phase fork->land->conclude->reap; the worker forks with branch+jail record; the orchestrator's raw .git writes are walled; nested confinement holds." },
   { id = "VA-1", expects = "An agent reads the drive-loop guidance and confirms it never issues a trunk-facing verb or a raw coord .git write, and that its undeclared/conflict response is report-and-halt." },
-  { id = "VT-1", expects = "dispatch-mechanics.md Mode B section is present and describes the confined arm (MCP funnel, atomic conclude, import-commits, undeclared->halt).", test_file = "install/dispatch-mechanics.md", keywords = ["Mode B", "conclude", "report-and-halt"] },
+  { id = "VT-1", expects = "dispatch-mechanics.md Mode B section is present and describes the confined arm (MCP funnel, two-tier self-healing conclude = disposable flip + one boundary commit, import-commits, undeclared->halt).", test_file = "install/dispatch-mechanics.md", keywords = ["Mode B", "conclude", "report-and-halt"] },
+  { id = "VT-2", expects = "A1: arm-spawn with no --base defaults to the coord-root HEAD (run_arm_spawn writes base=HEAD); an explicit --base <sha> is honored unchanged.", test_file = "src/dispatch.rs", keywords = ["arm_spawn", "base", "HEAD"] },
+  { id = "VT-3", expects = "A2: the dispatch-worker def frontmatter carries `isolation: worktree`; the materialized .claude/agents copy matches the install source (shipped==installed).", test_file = "install/agents/claude/dispatch-worker.md", keywords = ["isolation", "worktree"], patterns = ["^isolation:\\s*worktree"] },
+  { id = "VT-4", expects = "A12 transport-agnostic invariant (D-B5): a funnel tool is driven by its declared args only (slice/name) and resolves the coord tree via resolve_coord — no cwd / agent_id / WorktreeCreate payload — proving the arm split lives in the spawn seam and a future out-of-jail transport reuses the tools unchanged.", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_import", "resolve_coord"] },
 ]
 specs        = []
 requirements = []

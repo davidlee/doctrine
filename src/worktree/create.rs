@@ -28,8 +28,10 @@ use std::path::{Path, PathBuf};
 /// `name` slug is carried in BOTH arms (D-P2) so the shell does not re-sanitise it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CreateAction {
-    /// cwd IS the arming dir and `base` is a plausible sha ⇒ fork off `base` on
-    /// `dispatch/<name>`, provision + worker-mark inside the fork.
+    /// An armed trigger fired with a plausible `base` ⇒ fork off `base` on
+    /// `dispatch/<name>`, provision + worker-mark inside the fork. Reached by EITHER
+    /// the positional arming-dir trigger OR the confined coord-root trigger (SL-199) —
+    /// both converge on this ONE verdict and this ONE act path.
     Fork { base: String, name: String },
     /// cwd is anything else ⇒ a benign detached worktree at `<name>`, provisioned by
     /// the same copier, NOT worker-marked.
@@ -45,9 +47,12 @@ pub(crate) enum CreateRefusal {
     MissingCwd,
     /// The payload `name` failed [`sanitise_name`]; carries the specific reason.
     BadName(NameRefusal),
-    /// cwd IS the arming dir but the `base` file is absent/empty — no commit to fork.
+    /// The POSITIONAL arming dir fired but the `base` file is absent/empty — armed but
+    /// unloaded, no commit to fork. (The confined trigger treats an absent base as a
+    /// benign un-armed spawn ⇒ Passthrough, never this refusal.)
     MissingBase,
-    /// cwd IS the arming dir and `base` is present but not a plausible sha (shape).
+    /// An armed trigger (positional or confined) fired with a `base` that is present but
+    /// not a plausible sha (shape).
     /// The authoritative "is it a commit" check is the shell's `rev-parse` (PHASE-02);
     /// this catches obvious garbage early.
     BadBase,
@@ -148,24 +153,55 @@ fn plausible_sha(base: &str) -> bool {
     (4..=64).contains(&trimmed.len()) && trimmed.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+/// Whether a COORD-tree branch is a dispatch COORDINATION branch — `dispatch/<n>`
+/// with an all-digit slice number (the confined orchestrator's branch, SL-199). A
+/// worker FORK branch (`dispatch/agent-<hex>`) is deliberately NOT matched: its
+/// suffix is never all-digits. PURE, and anchored on the whole `dispatch/` suffix
+/// (a component/shape match, not a loose substring). Empty suffix ⇒ false.
+fn is_dispatch_coord_branch(branch: &str) -> bool {
+    branch
+        .strip_prefix("dispatch/")
+        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// PURE create classifier (no git / disk / env / clock — ADR-001 leaf). Mirror of
 /// [`super::subagent::classify_stamp`]: takes the gathered, already-resolved FACTS and
 /// returns the verdict; the shell resolves the cwd realpath, the arming-dir realpath
-/// compare, and the `base` file read (all impure), then calls this.
+/// compare, the coord-root compare, the coord branch, and the `base` file read (all
+/// impure), then calls this.
+///
+/// Two ADDITIVE Fork triggers (SL-199), sharing ONE base-shape gate and ONE Fork verdict:
+/// * POSITIONAL (main-thread, `cwd_is_arming_dir`) — the orchestrator `cd`s into the
+///   arming dir and the payload cwd IS it (D3/D4, the original discriminator, UNCHANGED).
+/// * CONFINED (`cwd_is_coord_root && coord_in_dispatch`) — a confined orchestrator, whose
+///   Bash cwd is ALWAYS the coord root (never the arming dir), arming a nested worker from
+///   a `dispatch/<n>` coordination branch.
+///
+/// They DIVERGE only on an ABSENT base: positional ⇒ `MissingBase` (armed-but-unloaded);
+/// confined ⇒ `Passthrough` (a plain, un-armed `isolation:worktree` spawn — the normal
+/// case, which must pass through, never refuse).
 ///
 /// * `cwd_resolved` — the payload carried a `cwd` that resolved (canonicalised) on disk.
-/// * `cwd_is_arming_dir` — that resolved cwd IS the arming dir
-///   `<coord>/.doctrine/state/dispatch/spawn` (both realpath'd by the shell). Positional
-///   arming (D3/D4): discrimination is cwd-as-channel, never a payload class tag.
+/// * `cwd_is_arming_dir` — resolved cwd IS `<coord>/.doctrine/state/dispatch/spawn`.
+/// * `cwd_is_coord_root` — resolved cwd IS the coord-tree root itself.
+/// * `coord_in_dispatch` — the coord tree is on a `dispatch/<n>` coordination branch.
 /// * `base` — the arming dir's `base` file contents (`None` if absent/empty).
 /// * `name` — the payload `name`, validated here via [`sanitise_name`].
 ///
-/// Precond order (mirror `classify_stamp`): cwd-resolution → name-validity → (when
-/// armed) base-presence → base-shape. cwd before name so a missing cwd names itself
-/// first; name before base so a bad name is caught on the benign path too.
+/// Precond order (mirror `classify_stamp`): cwd-resolution → name-validity → (when a
+/// trigger is live) base-shape. cwd before name so a missing cwd names itself first;
+/// name before base so a bad name is caught on the benign path too.
+#[expect(
+    clippy::fn_params_excessive_bools,
+    reason = "the four flags are the already-resolved trigger FACTS the pure classifier decides on \
+              (two positional, two confined); folding them into an enum would move the trigger \
+              logic into the shell, breaking the pure/imperative split this fn exists to keep"
+)]
 pub(crate) fn classify_create(
     cwd_resolved: bool,
     cwd_is_arming_dir: bool,
+    cwd_is_coord_root: bool,
+    coord_in_dispatch: bool,
     base: Option<&str>,
     name: &str,
 ) -> Result<CreateAction, CreateRefusal> {
@@ -173,14 +209,20 @@ pub(crate) fn classify_create(
         return Err(CreateRefusal::MissingCwd);
     }
     let slug = sanitise_name(name).map_err(CreateRefusal::BadName)?;
-    if cwd_is_arming_dir {
+    let confined = cwd_is_coord_root && coord_in_dispatch;
+    if cwd_is_arming_dir || confined {
         match base {
-            None => Err(CreateRefusal::MissingBase),
             Some(b) if !plausible_sha(b) => Err(CreateRefusal::BadBase),
             Some(b) => Ok(CreateAction::Fork {
                 base: b.trim().to_string(),
                 name: slug,
             }),
+            // The ONLY divergence between the two triggers: a positional arm with no
+            // base is armed-but-unloaded (refuse); a confined arm with no base is the
+            // ordinary un-armed isolation spawn (benign Passthrough). Positional takes
+            // precedence when both hold.
+            None if cwd_is_arming_dir => Err(CreateRefusal::MissingBase),
+            None => Ok(CreateAction::Passthrough { name: slug }),
         }
     } else {
         Ok(CreateAction::Passthrough { name: slug })
@@ -276,6 +318,11 @@ fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<PathBuf> {
         CreateAction::Fork { base, name } => {
             let dir = root.join(WORKTREES_SUBDIR).join(&name);
             let branch = format!("dispatch/{name}");
+            // One-shot consume (SL-199 EX-3): unlink the arming `base` slot at the fork
+            // point, BEFORE `fork_core`, so a crash between fork and return cannot leave a
+            // stale base that mis-forks the NEXT benign spawn. After consumption a second
+            // WorktreeCreate with no re-arm reads no base ⇒ classifies Passthrough.
+            consume_arming_base(root)?;
             // fork_core owns the dir/branch collision refusal (`fork-refused: …`) —
             // do NOT re-check here (no parallel impl against shared machinery).
             fork_core(root, &base, &branch, &dir, true)?;
@@ -334,6 +381,70 @@ fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<PathBuf> {
     }
 }
 
+/// One-shot consume of the arming `base` slot (SL-199 EX-3): unlink
+/// `<root>/`⟨[`ARMING_SUBPATH`]⟩`/base` so exactly ONE Fork can fire per arm. Absent ⇒
+/// no-op (a benign re-spawn with no re-arm, or a direct `act_on_create` fork whose
+/// coord tree was never armed). Any OTHER io error propagates: leaving a stale base in
+/// place would let the NEXT benign spawn mis-fork, so a failed consume aborts the spawn
+/// fail-closed (called BEFORE `fork_core`, so the abort leaves no partial fork). Impure.
+fn consume_arming_base(root: &Path) -> anyhow::Result<()> {
+    let base = root.join(ARMING_SUBPATH).join("base");
+    match fs::remove_file(&base) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e).with_context(|| format!("consume arming base {}", base.display())),
+    }
+}
+
+/// The impure Fork-trigger facts the classifier consumes, gathered from disk + git.
+#[derive(Debug, Default)]
+struct ForkFacts {
+    /// Resolved cwd IS the arming dir (positional trigger).
+    cwd_is_arming: bool,
+    /// Resolved cwd IS the coord-tree root (confined orchestrator's Bash cwd).
+    cwd_is_coord_root: bool,
+    /// The coord tree is on a `dispatch/<n>` coordination branch.
+    coord_in_dispatch: bool,
+    /// The arming dir's `base` slot contents, read only when a trigger could be live.
+    base: Option<String>,
+}
+
+/// Whether the coord tree at `root` is on a `dispatch/<n>` coordination branch. Any git
+/// error (detached HEAD, not a repo) folds to `false` (fail-closed ⇒ Passthrough). Impure.
+fn coord_on_dispatch_branch(root: &Path) -> bool {
+    git::git_opt(root, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .ok()
+        .flatten()
+        .is_some_and(|branch| is_dispatch_coord_branch(&branch))
+}
+
+/// Gather the impure Fork-trigger facts (design §5.2 step 2, SL-199): the arming-dir
+/// realpath compare, the coord-root compare, the coord branch, and the `base` slot read
+/// (only when EITHER trigger could be live — positional OR confined). Both `root` and
+/// `cwd` are already canonicalised by the shell. Keeps the classifier git/disk-free.
+fn gather_fork_facts(root: &Path, cwd: &Path) -> ForkFacts {
+    // cwd IS the arming dir? Both realpath'd; a MISSING arming dir (the usual benign
+    // case) canonicalises to Err ⇒ folds to false, never propagates.
+    let cwd_is_arming =
+        fs::canonicalize(root.join(ARMING_SUBPATH)).is_ok_and(|arming| arming == cwd);
+    // cwd IS the coord root? For a confined coord-root spawn the git toplevel of the
+    // payload cwd is itself, so `root == cwd` (both canonicalised).
+    let cwd_is_coord_root = root == cwd;
+    let coord_in_dispatch = coord_on_dispatch_branch(root);
+    // Read the `base` slot when EITHER Fork condition could be live (arming OR confined).
+    let base = if cwd_is_arming || (cwd_is_coord_root && coord_in_dispatch) {
+        fs::read_to_string(root.join(ARMING_SUBPATH).join("base")).ok()
+    } else {
+        None
+    };
+    ForkFacts {
+        cwd_is_arming,
+        cwd_is_coord_root,
+        coord_in_dispatch,
+        base,
+    }
+}
+
 /// `doctrine worktree create-fork` — the claude `WorktreeCreate` hook verb. Reads the
 /// `{cwd, name}` payload on stdin, gathers the impure facts, [`classify_create`]s, and
 /// [`act_on_create`]s. stdout carries the created absolute path and NOTHING else
@@ -364,24 +475,22 @@ pub(crate) fn run_create_fork() -> anyhow::Result<()> {
     // Root from the PAYLOAD cwd (G2/I5). None ⇒ cannot act (fail-closed below).
     let root = cwd_canon.as_deref().and_then(resolve_root);
 
-    // cwd IS the arming dir? Both realpath'd; a MISSING arming dir (the usual benign
-    // case) canonicalises to Err ⇒ folds to false (Passthrough), never propagates.
-    let cwd_is_arming = match (root.as_deref(), cwd_canon.as_deref()) {
-        (Some(root), Some(cwd)) => {
-            fs::canonicalize(root.join(ARMING_SUBPATH)).is_ok_and(|arming| arming == cwd)
-        }
-        _ => false,
+    // Gather the impure Fork-trigger facts (arming dir, coord root, dispatch branch,
+    // base slot) — meaningful only when both cwd and root resolved; otherwise the
+    // classifier refuses on cwd/root first regardless.
+    let facts = match (root.as_deref(), cwd_canon.as_deref()) {
+        (Some(root), Some(cwd)) => gather_fork_facts(root, cwd),
+        _ => ForkFacts::default(),
     };
 
-    // The `base` file lives in the arming dir; read it ONLY when armed.
-    let base = if cwd_is_arming {
-        root.as_deref()
-            .and_then(|r| fs::read_to_string(r.join(ARMING_SUBPATH).join("base")).ok())
-    } else {
-        None
-    };
-
-    match classify_create(cwd_resolved, cwd_is_arming, base.as_deref(), &name) {
+    match classify_create(
+        cwd_resolved,
+        facts.cwd_is_arming,
+        facts.cwd_is_coord_root,
+        facts.coord_in_dispatch,
+        facts.base.as_deref(),
+        &name,
+    ) {
         Err(refusal) => {
             // Stable token (`bad-name`), plus the specific sanitiser reason in
             // parens for hook debugging (e.g. `create-refused: bad-name (whitespace)`).
@@ -473,11 +582,11 @@ mod tests {
     fn missing_cwd_refuses_first_regardless_of_everything_else() {
         // cwd unresolved ⇒ missing-cwd even with a valid name, armed, valid base.
         assert_eq!(
-            classify_create(false, true, Some(SHA), "agent-abc123"),
+            classify_create(false, true, false, false, Some(SHA), "agent-abc123"),
             Err(CreateRefusal::MissingCwd)
         );
         assert_eq!(
-            classify_create(false, false, None, ""),
+            classify_create(false, false, false, false, None, ""),
             Err(CreateRefusal::MissingCwd)
         );
         assert_eq!(CreateRefusal::MissingCwd.token(), "missing-cwd");
@@ -487,12 +596,12 @@ mod tests {
     fn bad_name_refuses_before_base_on_both_channels() {
         // Armed + valid base but a bad name ⇒ bad-name (name precedes base).
         assert_eq!(
-            classify_create(true, true, Some(SHA), "a/b"),
+            classify_create(true, true, false, false, Some(SHA), "a/b"),
             Err(CreateRefusal::BadName(NameRefusal::Slash))
         );
         // Benign channel with a bad name ⇒ bad-name too (name checked on both paths).
         assert_eq!(
-            classify_create(true, false, None, ""),
+            classify_create(true, false, false, false, None, ""),
             Err(CreateRefusal::BadName(NameRefusal::Empty))
         );
         assert_eq!(
@@ -504,7 +613,7 @@ mod tests {
     #[test]
     fn armed_without_base_refuses_missing_base() {
         assert_eq!(
-            classify_create(true, true, None, "agent-abc123"),
+            classify_create(true, true, false, false, None, "agent-abc123"),
             Err(CreateRefusal::MissingBase)
         );
         assert_eq!(CreateRefusal::MissingBase.token(), "missing-base");
@@ -514,12 +623,12 @@ mod tests {
     fn armed_with_unparseable_base_refuses_bad_base() {
         // Non-hex garbage ⇒ bad-base.
         assert_eq!(
-            classify_create(true, true, Some("zzz"), "agent-abc123"),
+            classify_create(true, true, false, false, Some("zzz"), "agent-abc123"),
             Err(CreateRefusal::BadBase)
         );
         // Too short (< 4) ⇒ bad-base.
         assert_eq!(
-            classify_create(true, true, Some("ab"), "agent-abc123"),
+            classify_create(true, true, false, false, Some("ab"), "agent-abc123"),
             Err(CreateRefusal::BadBase)
         );
         assert_eq!(CreateRefusal::BadBase.token(), "bad-base");
@@ -530,7 +639,14 @@ mod tests {
         // cwd IS the arming dir ∧ base is a plausible sha ⇒ Fork; the trimmed sha and
         // validated slug are carried in the verdict (D-P2).
         assert_eq!(
-            classify_create(true, true, Some("  68250bcd\n"), "bold-oak-a3f2"),
+            classify_create(
+                true,
+                true,
+                false,
+                false,
+                Some("  68250bcd\n"),
+                "bold-oak-a3f2"
+            ),
             Ok(CreateAction::Fork {
                 base: "68250bcd".to_string(),
                 name: "bold-oak-a3f2".to_string(),
@@ -543,18 +659,78 @@ mod tests {
         // Not the arming dir ⇒ Passthrough regardless of base presence; only the name
         // is validated. Fork is NEVER reached off the arming dir.
         assert_eq!(
-            classify_create(true, false, None, "agent-abc123"),
+            classify_create(true, false, false, false, None, "agent-abc123"),
             Ok(CreateAction::Passthrough {
                 name: "agent-abc123".to_string(),
             })
         );
         // A stray base on the benign channel is ignored (positional discrimination).
         assert_eq!(
-            classify_create(true, false, Some(SHA), "agent-abc123"),
+            classify_create(true, false, false, false, Some(SHA), "agent-abc123"),
             Ok(CreateAction::Passthrough {
                 name: "agent-abc123".to_string(),
             })
         );
+    }
+
+    // --- VT-1: SL-199 confined Fork trigger — the SECOND, additive discriminator ---
+
+    #[test]
+    fn confined_coord_root_fork_trigger_matrix() {
+        // confined = cwd_is_coord_root && coord_in_dispatch. With a plausible base ⇒ Fork.
+        assert_eq!(
+            classify_create(true, false, true, true, Some(SHA), "agent-x"),
+            Ok(CreateAction::Fork {
+                base: SHA.to_string(),
+                name: "agent-x".to_string(),
+            })
+        );
+        // BENIGN divergence: confined but NO base ⇒ Passthrough (an un-armed
+        // isolation:worktree spawn from the coord root is the normal case, NOT a refusal).
+        assert_eq!(
+            classify_create(true, false, true, true, None, "agent-x"),
+            Ok(CreateAction::Passthrough {
+                name: "agent-x".to_string(),
+            })
+        );
+        // coord root but NOT on a dispatch branch ⇒ not confined ⇒ Passthrough, base ignored.
+        assert_eq!(
+            classify_create(true, false, true, false, Some(SHA), "agent-x"),
+            Ok(CreateAction::Passthrough {
+                name: "agent-x".to_string(),
+            })
+        );
+        // confined with a bad-sha base ⇒ BadBase (shares the positional shape gate).
+        assert_eq!(
+            classify_create(true, false, true, true, Some("zzz"), "agent-x"),
+            Err(CreateRefusal::BadBase)
+        );
+        // REGRESSION: the positional arm still forks regardless of the coord flags, and
+        // its absent-base divergence (MissingBase) is UNCHANGED.
+        assert_eq!(
+            classify_create(true, true, false, false, Some(SHA), "agent-x"),
+            Ok(CreateAction::Fork {
+                base: SHA.to_string(),
+                name: "agent-x".to_string(),
+            })
+        );
+        assert_eq!(
+            classify_create(true, true, false, false, None, "agent-x"),
+            Err(CreateRefusal::MissingBase)
+        );
+    }
+
+    #[test]
+    fn dispatch_coord_branch_matches_slice_number_not_worker_fork() {
+        assert!(is_dispatch_coord_branch("dispatch/199"));
+        assert!(is_dispatch_coord_branch("dispatch/1"));
+        // A worker FORK branch is NOT a coordination branch (suffix not all-digits).
+        assert!(!is_dispatch_coord_branch("dispatch/agent-a9c3"));
+        assert!(!is_dispatch_coord_branch("dispatch/"));
+        assert!(!is_dispatch_coord_branch("main"));
+        assert!(!is_dispatch_coord_branch("edge"));
+        // Anchored on the whole suffix, not a loose substring.
+        assert!(!is_dispatch_coord_branch("feature/dispatch/199"));
     }
 
     // ---- VT-1: create-fork provision step (PHASE-04) ---------------------------
@@ -732,5 +908,126 @@ mod tests {
         assert_eq!(ResolveRefusal::UnknownAgent.token(), "unknown-agent");
         assert_eq!(ResolveRefusal::AmbiguousAgent.token(), "ambiguous-agent");
         assert_eq!(ResolveRefusal::StaleRecord.token(), "stale-record");
+    }
+
+    // ---- SL-199 PHASE-01: confined Fork trigger — consume + shared provision -----
+
+    /// Put the coord tree at `root` on a `dispatch/<n>` coordination branch (the
+    /// confined orchestrator's branch) and arm a `base` slot in the arming dir.
+    fn arm_confined(root: &Path, base: &str) {
+        assert!(
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(["checkout", "-q", "-b", "dispatch/199"])
+                .status()
+                .expect("spawn git checkout")
+                .success(),
+            "checkout dispatch/199"
+        );
+        let arming = root.join(ARMING_SUBPATH);
+        fs::create_dir_all(&arming).unwrap();
+        fs::write(arming.join("base"), base).unwrap();
+    }
+
+    // VT-2: a confined Fork consumes the arming base ONE-SHOT at the fork point; a
+    // re-invocation with no re-arm reads no base ⇒ classifies Passthrough (no double
+    // fork off a stale base). Driven through the gather→classify→act seam, not the pure fn.
+    #[test]
+    fn confined_fork_consumes_base_one_shot_then_passes_through() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        arm_confined(&root, &base);
+
+        // Gather from the coord root (cwd == root): the confined trigger is live, base loaded.
+        let facts = gather_fork_facts(&root, &root);
+        assert!(
+            facts.cwd_is_coord_root && facts.coord_in_dispatch,
+            "confined trigger live at the coord root on a dispatch branch"
+        );
+        assert_eq!(facts.base.as_deref(), Some(base.as_str()), "base slot read");
+        let action = classify_create(
+            true,
+            facts.cwd_is_arming,
+            facts.cwd_is_coord_root,
+            facts.coord_in_dispatch,
+            facts.base.as_deref(),
+            "agent-confined",
+        )
+        .expect("confined classify");
+        assert_eq!(
+            action,
+            CreateAction::Fork {
+                base: base.clone(),
+                name: "agent-confined".to_string(),
+            }
+        );
+
+        // Act: the fork CONSUMES the base slot at the fork point (EX-3).
+        act_on_create(&root, action).expect("confined fork");
+        assert!(
+            !root.join(ARMING_SUBPATH).join("base").exists(),
+            "base consumed one-shot at the fork point"
+        );
+
+        // Re-invoke with no re-arm: the consumed slot yields no base ⇒ benign Passthrough.
+        let facts2 = gather_fork_facts(&root, &root);
+        assert_eq!(facts2.base, None, "no base after consume, no re-arm");
+        assert_eq!(
+            classify_create(
+                true,
+                facts2.cwd_is_arming,
+                facts2.cwd_is_coord_root,
+                facts2.coord_in_dispatch,
+                facts2.base.as_deref(),
+                "agent-second",
+            ),
+            Ok(CreateAction::Passthrough {
+                name: "agent-second".to_string(),
+            }),
+            "second spawn off a consumed base passes through — no double fork"
+        );
+    }
+
+    // VT-3: BOTH Fork triggers converge on the identical CreateAction::Fork verdict and
+    // therefore reach the SAME act_on_create::Fork → provision_jail_policy. The jail
+    // record is written for the confined trigger exactly as for the positional.
+    #[test]
+    fn both_fork_triggers_reach_shared_provision_jail_policy() {
+        // The confined trigger and the positional trigger classify to the SAME Fork verdict.
+        let confined = classify_create(true, false, true, true, Some(SHA), "agent-x").unwrap();
+        let positional = classify_create(true, true, false, false, Some(SHA), "agent-x").unwrap();
+        assert_eq!(
+            confined, positional,
+            "both triggers converge on one Fork verdict"
+        );
+
+        // That shared Fork path provisions the jail policy — proven by acting on a coord
+        // tree that declares one. The verdict is trigger-agnostic, so one act suffices.
+        let decl = b"network = false\n";
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        let arming = root.join(ARMING_SUBPATH);
+        fs::create_dir_all(&arming).unwrap();
+        fs::write(arming.join(ARMING_JAIL_FILE), decl).unwrap();
+
+        act_on_create(
+            &root,
+            CreateAction::Fork {
+                base,
+                name: "agent-x".to_string(),
+            },
+        )
+        .expect("shared Fork path");
+
+        let dest = root.join(JAIL_SUBPATH).join("agent-x.toml");
+        assert!(dest.exists(), "shared Fork path provisions the jail policy");
+        assert_eq!(
+            fs::read(&dest).unwrap(),
+            decl,
+            "verbatim declaration for the confined trigger, exactly as positional"
+        );
     }
 }

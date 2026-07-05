@@ -84,6 +84,54 @@ section) — the delta is diff-applied, and the orchestrator commits separately.
 Ask `doctrine worktree --help` / `doctrine mcp` for exact flags and the tool's
 refusal tokens.
 
+## Mode B — the confined-orchestrator arm drives the funnel through MCP
+
+Everything above assumes the **main thread** orchestrates: an unconfined driver
+running raw git by hand. **Mode B** is the other arm — a *confined subagent
+orchestrator* whose cwd is jailed to the coordination tree and whose raw `.git`
+is read-only. It cannot run the funnel by hand; it drives the same fork→land
+pipeline entirely through the dispatch MCP tools. Mode B is the capstone of the
+confined-drive posture; the main-thread arm (this doc's default) stays the
+fallback for when the MCP server is down.
+
+**The fork override.** A confined nested `isolation:worktree` spawn would (per
+"The fork base is explicit", above) fork off the session HEAD — no base control.
+Mode B arms the create-fork one-shot with `arm-spawn` *first*, so the worktree
+hook Forks the worker's `dispatch/<name>` branch at the explicit base `B` with
+its jail record provisioned. That provisioning is what makes the worker's
+`worker_commit` resolvable server-side — without the armed base there is no
+branch for the gated self-commit to land on.
+
+**The funnel folds the by-hand steps.** Where the main-thread arm imports, then
+commits, then flips the phase, then records the boundary as separate manual acts,
+Mode B's MCP tools fold each pair into one server-side act:
+
+- `dispatch_import` **applies AND commits** the delta server-side — the import
+  folds the commit (no separate orchestrator commit step).
+- `dispatch_conclude_phase` is a **two-tier, self-healing conclude**. The
+  `completed` flip is a **disposable runtime write** to the gitignored phase sheet
+  (`.doctrine/state/…`) — it never enters committed history, so it can never be a
+  "completed-without-boundary" hazard. The real completion signal is the
+  **committed `(B, coord_tip)` boundary row**, landed by ONE working-tree-free
+  `commit_on_behalf`. The only fault outcome is a flipped (disposable) sheet with
+  **no committed boundary**; because that sheet is disposable, a retry simply
+  re-composes the boundary — `completed`-WITH-committed-boundary is the only
+  durable success state.
+- an **undeclared-scope delta is hard-refused before anything lands** — the scope
+  belt is server-side, not an orchestrator judgement call.
+
+**reads-raw / writes-MCP split.** The confined orchestrator reads git directly
+(`status`, `diff`, `log`, `rev-parse` — to know the coord tip and inspect a
+worker's commit) but every *write* goes through an MCP tool. It never mutates
+`.git` by hand.
+
+**The boundary — report-and-halt, never auto-merge.** Trunk-facing ops
+(`integrate`, `refresh-base`, candidate) write OUTSIDE the coord jail, which is
+read-only to Mode B — so it **report-and-halt**s them to the main thread rather
+than attempting them. The same boundary catches a red worker verify and a hard
+scope refusal: Mode B returns a structured summary and stops. It never
+auto-merges and never self-unblocks a refusal.
+
 ## The import severs ancestry — so "did it land?" needs a patch-id oracle
 
 The funnel imports a worker's delta with a non-committing 3-way apply onto `B`,

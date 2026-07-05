@@ -91,13 +91,18 @@ pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land, no_such_fork
 pub(crate) use subagent::{
     Stamp, StampRefusal, WorkerVerify, WorkerVerifyRefusal, classify_stamp, classify_worker_verify,
 };
-// SL-198 PHASE-02 (test-only): the shared import belt + the record provisioner that
-// `worker_commit`'s tests cross-check against (VT-3 belt-agreement; integration
-// fixtures that stand up a live per-worktree record).
+// SL-198 PHASE-02 (test-only): the record provisioner that `worker_commit`'s tests
+// cross-check against (VT-3 belt-agreement; integration fixtures that stand up a live
+// per-worktree record).
 #[cfg(test)]
 pub(crate) use dispatch_record::provision_dispatch_record;
+// SL-199 PHASE-03: the shared import scope belt is now a PROD surface — the dispatch
+// funnel's `dispatch_import` MCP tool composes it as its hard pre-compose gate
+// (mcp_server::dispatch), so `Apply`/`classify_import` leave the `#[cfg(test)]` island.
+pub(crate) use import::{Apply, classify_import};
+// `Refusal` is still named only by tests (its `.token()` is called on the value in prod).
 #[cfg(test)]
-pub(crate) use import::{Apply, Refusal, classify_import};
+pub(crate) use import::Refusal;
 
 #[cfg(test)]
 mod test_helpers;
