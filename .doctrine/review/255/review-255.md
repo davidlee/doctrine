@@ -47,3 +47,49 @@ behaviour-preservation gate, the CHR-039 empirical findings
 
 **Reviewer.** codex / GPT-5.5, full workspace-write (may raise on the ledger
 directly). The Inquisitor synthesises the verdict.
+
+## Synthesis
+
+**Judgement.** The accused is *not* a heretic in its bones — the architecture of
+SL-206 stands acquitted. But the written artifact confessed **seven taints** under
+cross-examination (five major, two minor, no blocker), each proven against the
+living code, and each has now been scourged from the design and its penance
+sealed. Prior survival of the architect panel bought no indulgence; the ledger
+found what loose prose had let pass.
+
+**The taints confessed, and their penance (all verified terminal):**
+1. **F-1 — the unshriven conformance gate.** The design would have granted three
+   new tokens to the orchestrator while `allowed_mcp_tokens` (doctor check #9,
+   `src/doctor_checks.rs`) still permitted but three — a false-red upon its own
+   agent-def. Penance: the allowlist authority is now a declared touch-target,
+   grown in lockstep, asserted by test.
+2. **F-2 — the false witness of the source scan.** A static scan of authored
+   templates was paraded as proof of the *live* grant, though ISS-216 (open) holds
+   that `install` cannot reseat a changed def. Penance: the claim is bound to
+   source-conformance + a verified install; phase-0 bears a clean-install
+   precondition and probes the installed copy.
+3. **F-3 — the fabricated tip.** The receipt demanded a `dispatch_tip` even on the
+   coord-refusal path that can bear none. Penance: `PhaseReceiptResult =
+   Resolved | CoordRefused` — truthful by construction.
+4. **F-4 — the dropped states.** `Blocked` and the malformed `Unknown` were cast
+   out of `ReceiptStatus` though the authorities distinguish them. Penance:
+   restored, fail-loud, every branch tested.
+5. **F-5 — the read-only lie** (the sharpest charge). The "read-only" probes were
+   to wear the orchestrator's raw `Edit`/`Write`/`Bash`/`Agent`. Penance: a
+   genuinely shorn `dispatch-probe` role, stripped to `Read`/`Grep`/`Glob` + the
+   three reads.
+6. **F-6 — the ungoverned tongue.** A freehand pile of halt-string literals drove
+   protocol. Penance: a named `HALT` contract + the re-exported `funnel:`/`coord:`
+   closed vocabs.
+7. **F-7 — the lying scope.** "Two new surfaces" where the design bore three.
+   Penance: the scope prose now counts honestly.
+
+**Standing risks (consciously borne, not heresy).** ISS-216 (R6) remains outside
+this slice — SL-206 leans on a manual reseat until it lands. SQ3 (R4) rests on
+SL-199 prior art until phase-0's narrow demo. Batching (R2) is deferred; the
+dumb-zone ceiling ships advisory-only. None gate the close.
+
+**Sentence.** No blocker stands. The design, penance wrought into it (commit to
+follow), is fit to pass to `/plan`. Let the wheel rest; the doctrine is kept.
+
+> **HERESIS URITOR; DOCTRINA MANET**

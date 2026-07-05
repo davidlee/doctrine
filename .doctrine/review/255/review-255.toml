@@ -14,52 +14,66 @@ ref   = "SL-206"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "major"
 title = "design grant-set extension expected to reconcile with the shipped orchestrator MCP allowlist vs design adds three tools but never updates the existing conformance gate"
 detail = "Expected: §5.4/D2's grant-gate story should reconcile with the repo's existing static authority for confined agent MCP surfaces, so adding dispatch_phase_receipt/dispatch_next_ready/dispatch_authored_divergence to the orchestrator is paired with the required conformance-host change. Observed: .doctrine/slice/206/design.md:223-239 and :287-289 extend the orchestrator MCP set to six tools, but the shipped doctor check #9 still allows ROLE_ORCHESTRATOR only the three funnel tokens in src/doctor_checks.rs:361-396. That check is Error-severity conformance on authored agent defs, so the design as written omits a required implementation target and would false-red the agent-def change it relies on. Penance: amend the design to declare the doctor/conformance host explicitly (src/doctor_checks.rs and its owning command path), state that the orchestrator allowlist authority must grow in lockstep with the new read-only tools, and make that part of the declared touch-set and validation story."
+disposition = "fixed"
+response = "Upheld. allowed_mcp_tokens (doctor check #9, src/doctor_checks.rs) added as a declared design-target; §5.4/F1 + D7 state the orchestrator allowlist authority grows in lockstep with the 3 new read-only tools; §9 adds a conformance assertion. Selector added."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "major"
 title = "static allowlist proof expected to establish the live harness grant set vs it inspects authored templates while the harness runs the installed copy and install reseat is known-bad"
 detail = "Expected: §5.4/D2's 'tested artifact' claim should prove the live agent definitions the workflow will actually spawn. Observed: the static check in .doctrine/slice/206/design.md:233-237 and :287-289 inspects only install/agents/claude/{dispatch-orchestrator,dispatch-worker}.md, while the live harness runs .claude/agents/*.md; the repo already carries ISS-216 ('doctrine install cannot reseat a changed agent def') as an open issue, so the design's regeneration assumption is not trustworthy enough to treat the authored template scan as proof of the runtime grant set. The shipped conformance scan in src/doctor_checks.rs:361-404 intentionally targets authored roots only; that is a source lint, not a live-runtime proof. Penance: either narrow the design claim to 'source-conformance only' and add an explicit live installed-copy check/precondition, or make a clean install/reseat guarantee part of phase-0 before the grant-gate story can be trusted."
+disposition = "fixed"
+response = "Upheld. §5.4/F2 narrows the grant claim to source-conformance + a VERIFIED live install; ISS-216 (open, install-reseat gap) made a phase-0 clean-install precondition + installed-copy runtime probe load-bearing. R6 + SL-206 related ISS-216 record the dependency. Never 'source scan => runtime truth'."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "major"
 title = "phase receipt on coord refusal expected to be structurally truthful vs it requires dispatch_tip even when resolve_coord returns no tip at all"
 detail = "Expected: a receipt surfacing resolve_coord refusal should not require fields that the refusal path cannot truthfully produce. Observed: PhaseReceiptCore in .doctrine/slice/206/design.md:113-123 makes dispatch_tip: String mandatory while also carrying coord_error for unknown-slice|ambiguous|stale; but the real resolver returns either CoordTarget{root,tip} or CoordRefusal, and on refusal there is no tip to report (src/mcp_server/dispatch.rs:48-60, 90-120, 123-140). The design therefore forces either a fabricated dispatch_tip sentinel or an impossible schema on the very error path it says is first-class. Penance: make dispatch_tip nullable/optional when coord_error is present, or split the surface into success and refusal variants so the receipt is truthful by construction."
+disposition = "fixed"
+response = "Upheld. Emitter surface split to PhaseReceiptResult = Resolved(core) | CoordRefused(reason) — truthful by construction, no fabricated dispatch_tip on the refusal path. Driver halts on halt_reason='coord:<reason>'. §5.2/§5.4 updated."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "major"
 title = "receipt status contract expected to cover the runtime states the existing readiness/status authorities distinguish vs blocked and unknown are dropped from the design mapping"
 detail = "Expected: a new phase_projection/receipt contract sitting beside dispatch status and compute_next_phases should either preserve the existing non-completed sheet distinctions or explicitly prove they are impossible on this path. Observed: ReceiptStatus in .doctrine/slice/206/design.md:106-111 has only NotStarted|InProgress|Completed|ConcludeIncomplete, while the current authorities distinguish blocked and unknown states materially: read_phase_status can yield blocked or malformed/unknown states (src/state.rs:54, 70-79, 102-115), and compute_next_phases treats blocked as a control-flow boundary distinct from generic incompletion (src/dispatch.rs:3138-3160). The design leaves no defined mapping for blocked or unknown/malformed phase sheets beyond an advisory runtime_status, yet the driver branches on receipt_status, not on runtime_status. Penance: define the mapping explicitly (including malformed/unknown), or state and enforce the invariant that these states cannot reach the workflow path before the receipt is emitted."
+disposition = "fixed"
+response = "Upheld. ReceiptStatus extended to cover Blocked (a real compute_next_phases control-flow boundary + state::PhaseStatus::Blocked) and Unknown (malformed/unreadable sheet, fail-loud). Driver branches on both (§5.4). §9 tests every branch. No non-completed state silently collapses to NotStarted."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "major"
 title = "bootstrap and divergence probes expected to be read-only planner calls vs the design reuses the full dispatch-orchestrator role with raw write authority"
 detail = "Expected: §5.1/§5.4's planner and divergenceProbe agents, described as needing only read-only tools, should be backed by a role whose granted authority is actually read-only enough for that claim to mean something. Observed: the design says these probes are dispatch-orchestrator spawns needing only read-only tools and that the three new MCP reads add 'no write surface' (.doctrine/slice/206/design.md:178-180, 223-231), but the real dispatch-orchestrator agent definition carries raw Edit, Write, Bash, and Agent in addition to its MCP tools (install/agents/claude/dispatch-orchestrator.md:1-24). CHR-039's safety posture is containment by policy, not by MCP-unreachability (.doctrine/rfc/011/chr-039-findings.md:44-55). So reusing dispatch-orchestrator for planner/divergence does broaden authority on those calls even if no new MCP write is added. Penance: either introduce a genuinely read-only planner/probe agent surface, or confess in the design that these calls run with full orchestrator raw-tool authority and justify why that broader capability is acceptable."
+disposition = "fixed"
+response = "Upheld — sharpest safety charge. dispatch-orchestrator carries raw Edit/Write/Bash/Agent, so 'read-only probe' was a lie. New dispatch-probe role (Read/Grep/Glob + the 3 read-only MCP tools ONLY) backs the bootstrap planner + divergence probe; orchestrator keeps raw tools only where it genuinely runs the funnel/tests. §5.4 grant table + install/agents/claude/dispatch-probe.md touch-target."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "STD-001 expected a single-sourced halt-reason vocabulary vs the workflow loop introduces an ungoverned pile of string literals"
 detail = "Expected: under STD-001, the halt/decision vocabulary this design introduces should be named and single-sourced, especially because the loop branches on it as protocol. Observed: the pseudocode in .doctrine/slice/206/design.md:185-199 and :211-218 introduces a freehand string family — budget-exhausted, null-receipt, coord:<reason>, funnel:conclude-incomplete-retryable, anomaly:<status>, verify-red, funnel:<reason> — but only the tuning constants are named; the halt vocabulary itself is still magic-string protocol. Penance: declare the halt-reason vocab as a named contract (enum/table/constant map) rather than scattering interpolated literals through the driver design."
+disposition = "fixed"
+response = "Upheld. Halt vocabulary declared a named contract (§5.4): funnel:<reason>/coord:<reason> re-exported from the Rust closed vocabs (FunnelOutcome::Refused, CoordRefusal); script-local reasons single-sourced in a named HALT table; the loop references members, never inline literals."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "narrow Rust-surface claim expected to match the actual proposed read tools vs the design says two new surfaces then quietly adds a third"
 detail = "Expected: the design's scope/narrowness claim should match the actual proposed Rust surface. Observed: Guiding Principles says 'the only new Rust is a read-only phase-receipt emitter + a next_ready surface' (.doctrine/slice/206/design.md:64-66), but §5.5 later adds a third read-only doctrine tool, dispatch_authored_divergence (.doctrine/slice/206/design.md:253-266). That is not catastrophic, but it is scope prose telling a smaller story than the actual design. Penance: correct the scope statement so the declared Rust surface includes the divergence tool, or explicitly classify it as part of the emitter package rather than an extra late add-on."
+disposition = "fixed"
+response = "Upheld. Guiding Principles corrected: THREE new read-only tools (phase_receipt + next_ready + authored_divergence) as one emitter package, plus the conformance-authority update. Scope prose now matches the actual Rust surface."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
