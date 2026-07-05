@@ -368,3 +368,40 @@ tip. Lesson: never leave a tracked coord file dirty across an arm->import window
 hold case-notes in a scratchpad log during a batch, or commit them at a clean
 boundary — don't append into the live coord tree mid-funnel. Token/step cost: one
 failed import + a 4-step non-destructive set-aside dance.
+
+[close; sl199-close]
+Concluding a **conflicting-merge dispatched slice** through /close hit a chain of
+mutually-blocking gates — the sanctioned candidate→admit→integrate→done rail
+cannot process a slice whose impl bundle 3-way-merges with a moved trunk. Root
+causes are already-open, unbuilt backlog items: IMP-127 (ingest a hand-resolved
+merge) + IMP-236 (direct-land the trunk row); both fired here for real.
+
+Friction ledger (each a forward-pointing error into a path that was itself blocked
+— the main token sink was mapping the whole chain by hitting each wall in turn):
+1. `candidate create` on a genuine conflict refuses clean, or with `--worktree`
+   parks the branch DETACHED at base with `merge_oid=""`, `status="conflicted"`.
+   Manual merge+resolve+commit in that worktree advances *detached HEAD*, NOT the
+   candidate branch ref — had to `git update-ref refs/heads/candidate/199/close-001`
+   by hand before anything downstream could see the resolution.
+2. `candidate admit` reads the frozen record (`status=conflicted`, empty merge_oid),
+   never re-derives from the now-committed tip → "no Doctrine merge to validate".
+   Dead end (IMP-127). No way to bless a hand-resolved merge.
+3. `sync --integrate --trunk` hard-refuses without a close_target admission ("will
+   not fall back to a raw phase ref") — so the moved-trunk ff-projection can't run.
+   Landed main by a manual CAS `git update-ref refs/heads/main <merge> <old>` — the
+   functional equivalent of the ceremony's trunk projection, hand-done.
+4. `slice status done` gate reads the dispatch **journal** trunk row (on
+   `dispatch/<n>`), NOT the actual trunk ref — so a correctly-integrated main still
+   refuses done ("dispatched but no trunk row"). Had to hand-forge the
+   `refs/heads/main` row in `journal.toml` (the manual IMP-236 direct-land) on a
+   throwaway worktree, then done passed + close-verify (a)/(b) held.
+5. Backlog **ID collision across divergent branches**: review/199 carried an
+   orchestrator-trailing-knowledge IMP-270 that add/add-collided with reconcile's
+   trunk IMP-270 — no collision-safe id allocation across branches. Cost: a
+   renumber-in-merge (incoming → IMP-271) with symlink surgery.
+6. `.doctrine/dispatch/` is gitignored, so `git add journal.toml` warns "ignored"
+   and no-ops; `git commit -- <path>` still commits the tracked modification. Works,
+   but the mixed signal (add refused, commit succeeded) costs a verify round.
+
+Net: a conflicting-merge dispatched slice is currently closeable ONLY by hand
+(update-ref main + forge journal trunk row). IMP-127 + IMP-236 are the fix.
