@@ -244,3 +244,41 @@ Inconsistent id parsing across kinds cost a retry: `rfc show 014` and
 PRD-NNN or SPEC-NNN") because two prefixes share the kind. Wasted one
 round-trip + error output. Either accept bare NNN when unambiguous or
 document the asymmetry in --help.
+
+[dispatch; sl199-vh1-witness]
+VH-1 live witness (confined dispatch-orchestrator, SL-205 smoke slice) landed
+green first attempt once the harness was wired. Cost was NOT the run (~3 min,
+31k orchestrator tokens) but the BRING-UP: (1) F8 red-herring diagnosis consumed
+a prior session; (2) no pre-canned witness recipe — had to derive the smoke-slice
+victim + coord-tree + DOCTRINE_BIN-repointed hooks from first principles; (3)
+authoring a throwaway slice (new→plan→selector→phases→status ladder) + edge→main
+promote just to give the orchestrator a phase to drive. A shipped `dispatch
+smoke-witness` fixture (ephemeral slice + one text-delta phase, self-tearing-down)
+would collapse ~15 setup steps to one and make VH-style e2e witnesses cheap and
+repeatable. Also: ~29 stale `dispatch/agent-*` debris branches from prior probe
+runs clutter the coord tree — a `dispatch reap --orphans` sweep is owed.
+
+[dispatch/conclude; sl199-conclude]
+Two conclude-cadence frictions hit while concluding SL-199 post-VH-1:
+
+1. PRIMARY/COORD phase-status split-brain (idea/028). All 5 phase flips landed
+   in the COORD tree runtime during the drive; primary tree showed 0/5. prepare-
+   review's completeness gate reads the completed-set from the PRIMARY tree
+   (dispatch.rs:1873/1901, registry_completeness(&primary,&primary)) → every
+   committed ledger row read as `Extra` ("recorded row for PHASE-01, which is not
+   a completed phase"). The documented fix verb `slice reconcile-phases` REFUSES
+   while a live dispatch/<slice> coord tree exists — but the cadence keeps the
+   coord tree until AFTER prepare-review. Mutually inconsistent for an inline-
+   executed slice. Resolved by manually flipping the 5 primary phase sheets to
+   `completed` (runtime, disposable) with the coord tree still present, then
+   prepare-review passed. Tooling gap: the funnel record beat pushes the registry
+   to primary but not the phase-status sheets.
+
+2. verify-vt run order + tree. Cadence says run `slice verify-vt` IN THE COORD
+   TREE before removal. If run on the PRIMARY tree (on edge, delta not yet
+   integrated) it FAILs with misleading "keyword absent"/"test_file not found" —
+   the gate scans the working tree, and edge has none of the SL-199 delta. Had to
+   spin a throwaway `git worktree add --detach dispatch/199` to validate the gate
+   green. Cadence should either run verify-vt before coord removal (enforced
+   order) or verify-vt should default --path to a delta-bearing ref, not the CWD
+   tree, so a post-removal run doesn't read as a false FAIL.
