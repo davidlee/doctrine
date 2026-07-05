@@ -17,8 +17,8 @@
 
 node_modules
 
-docs/claude/*.md
-docs/claude/*.txt
+docs/claude/**/*.md
+docs/claude/**/*.txt
 
 # for oops
 .spec-driver
