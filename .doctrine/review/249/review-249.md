@@ -59,3 +59,18 @@ No governance or spec changes required. One per-slice direct edit:
 ### Per-slice (direct edit)
 - slice-197.toml: selector for `tests/e2e_list_conformance.rs` added (F-1 —
   undeclared conformance touch, now closed).
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- slice-197.toml: added `tests/e2e_list_conformance.rs` as design-target selector
+  (RV-249 F-1 — undeclared conformance touch from the concept draft-vocab fix).
+
+### REVs completed
+None — no governance/spec changes required.
+
+### Withdrawn / tolerated
+- RV-249 F-1: tolerated — minor scope leak, fix applied during PHASE-02 funnel.
+  Selector added for conformance completeness.
+
+Reconcile pass complete — handoff to /close.
