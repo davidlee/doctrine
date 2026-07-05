@@ -1,0 +1,31 @@
+id    = 256
+slug  = "reconciliation-review-of-sl-205"
+title = "reconciliation review of SL-205"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-205"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design.md self-contradicts on tuning-log write condition; shipped follows F-3 (log only on non-empty delivery)"
+detail = """
+design.md contradicts itself on when `mem-surface.log` is written. §"Tuning log" (L183-185) states it is "Logged **whenever retrieve ran** (any main-thread fire), including when the emit is nothing — the suppression cases are exactly what retunes the floor." But §"Emit ordering & the swallow (F-1, F-3)" (L212-222) and the ASCII funnel (L203-204) state the log append happens "only after a successful, non-empty emit". The RV-254 F-3 penance + plan EX-4 codified the latter, and PHASE-03 (`9e0afeef`) shipped it: `run_surface` appends BOTH the seen-set and the log line only inside the delivered branch (`if emit_surface(...) { … }`).
+
+Expected (design §"Tuning log"): a fire that fetches rows but surfaces nothing (all sub-floor / all-deduped / empty) still writes a funnel line — those suppression rows are the retuning signal.
+Observed (shipped): such a fire writes NO log line — the §"Tuning log" retuning signal for suppression is lost.
+
+Not a fail-open or dedup defect: INV-2 (exit 0 every path) intact; INV-6 (seen-set recorded only after delivery) intact and REQUIRES the seen-set stay delivery-gated. All 9 PHASE-03 VTs green; no VT covers log-on-suppression. Already flagged mid-dispatch and captured as ISS-217 (accepted-as-built for SL-205, 2026-07-06). Remediation is a design-truth reconcile (make design.md self-consistent with shipped) + the deferred split-gate code option tracked in ISS-217."""
+disposition = "tolerated"
+response = 'Shipped behaviour (F-3: log + seen-set append only on a successful non-empty emit) is accepted-as-built for SL-205 — it is the RV-254-hardened, VT-gated contract and preserves INV-2/INV-6. The consciously-accepted drift: suppression/empty fires write no tuning-log line, so the §"Tuning log" retuning signal for the suppression cases is not captured this slice. Rationale for tolerating rather than fixing now: the fix (split the two gates so the log fires on every retrieve while the seen-set stays delivery-gated) is a behavioural change with its own VT, out of scope for a green-phase reopen mid-drive; it is tracked as ISS-217 (recommendation: option 1, split gates), sequenced behind this audit. The remaining audit obligation is design-truth: design.md currently self-contradicts (§"Tuning log" L183-185 vs §"Emit ordering" L212-222 + funnel L203-204). That prose correction is delegated to /reconcile as a per-slice direct edit — see the Reconciliation Brief.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

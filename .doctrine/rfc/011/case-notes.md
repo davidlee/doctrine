@@ -464,3 +464,29 @@ isolation opt; a schema-returned show_toplevel that == coord root is the tell.
 Also: Workflow `args` arrived STRINGIFIED (not a JSON object) despite being
 passed as a literal — `args.foo` was undefined, silently poisoning a JS verdict.
 Reference scripts must `JSON.parse` args defensively.
+
+[dispatch; SL-205-conclude-phase-status-split]
+prepare-review completeness gate failed: "recorded row for PHASE-0N, which is
+not a completed phase" for ALL four phases — despite each flipped completed via
+`slice phase --status completed`. Root cause: those flips wrote the COORD tree's
+runtime tracking (.doctrine/state/slice/205/phases/*.toml), but the conformance
+registry + completeness gate operate on the PRIMARY tree's runtime state, where
+all four still read "planned". record-boundary double-writes the primary-tree
+registry, so the registry rows existed there; the completion status did not.
+Fix: re-flip all four with `-p /workspace/doctrine` (primary root). Cost ~4
+probe turns to locate the tree split. The funnel's per-phase `slice phase
+--status completed` should target the primary root (or record-boundary should
+co-write the primary phase status), else conclude always trips this gate.
+
+[reconcile; SL-205-reconcile-slug-dir-hardlink-aliases]
+`review new` / `backlog new` leave a second, HARDLINKED directory beside the
+canonical id-dir: `.doctrine/review/256/` AND
+`.doctrine/review/256-reconciliation-review-of-sl-205/` share inode 51380789
+(byte-identical, edit one → both change). `doctrine review paths RV-256` reports
+ONLY the canonical `256/`, so the slug-dir is an inert navigation alias, not part
+of the entity — but it surfaces as a second untracked `??` line in `git status`,
+doubling the noise and inviting a spurious `git add` of the alias path. Same
+pattern on RV-255 (another agent) and IMP-272. Cost: a probe turn to confirm
+hardlink-not-copy before committing, plus a manual `rm` of the alias to keep the
+tree clean. A `review new` that emitted only the canonical dir (or a symlink the
+gitignore already drops) would remove the ambiguity.

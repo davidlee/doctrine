@@ -180,9 +180,14 @@ Runtime-tier artifacts (`.doctrine/state/`, gitignored, `rm -rf`-able):
   `{session, surface, key, fetched, admitted, suppressed_sev, surfaced, uids}`.
   The `fetched → admitted → suppressed_sev → surfaced` funnel is the retuning
   data source. `key` truncated (`KEY_LOG_MAX`). Log-write failure never affects
-  the emit. **Logged whenever retrieve ran** (any main-thread fire), including
-  when the emit is nothing — the suppression cases are exactly what retunes the
-  floor. Subagent-skipped fires (INV-3) run no retrieve and log nothing.
+  the emit. **Logged only after a successful, non-empty emit** — the log line and
+  the seen-set append share the delivered branch (F-3; see §"Emit ordering & the
+  swallow"), so a fire that surfaces nothing writes no funnel line.
+  Subagent-skipped fires (INV-3) run no retrieve and log nothing. *Known
+  limitation (ISS-217): the delivery-gated log does not capture the suppression
+  cases (sub-floor / all-deduped / empty) that would retune the floor; accepted
+  as-built for SL-205, the split-gate fix — log on every retrieve while the
+  seen-set stays delivery-gated — is tracked in ISS-217.*
 
 Ownership: the adapter owns both files; the query core owns nothing new.
 
