@@ -11,12 +11,24 @@ needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
-selector = "install/**"
+selector = ".doctrine/slice/205/prototype/**"
 intent = "scope-relevant"
 
 [[selector]]
-selector = ".doctrine/slice/205/prototype/**"
-intent = "scope-relevant"
+selector = "src/memory.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/hooks/hooks.json"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"

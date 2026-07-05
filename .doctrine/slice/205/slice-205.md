@@ -21,44 +21,66 @@ into a decision about what — if anything — doctrine should ship.
 
 ## Scope & Objectives
 
-- Decide **whether and how** doctrine surfaces scoped memories ambiently at
-  tool-call time, and **where that machinery lives** given it is harness-specific.
-- Two proven surfaces:
-  - **Path surface** — `PreToolUse(Read|Edit|Write)` → `retrieve --path-scope
-    <file> --glob <file>`. Relevance comes from *path specificity* (leaf files
-    hit sharp; generic dirs hit fuzzy).
-  - **Command surface** — `PreToolUse(Bash)` → `retrieve --command <cmd>`,
-    admitted by **memory metadata** (`severity ≥ high`), not a host-command
-    allowlist. Relevance comes from the *severity gate*; footgun-grade only.
-- Cross-cutting behaviour proven in the prototype and in scope to formalise:
-  session dedup (shared seen-set), per-fire cap, `⚠stale` caveat flag, injected
-  payload trimmed to `[triage-field] title — uid`.
+Ship ambient memory surfacing as a **binary subcommand + thin `hooks.json`
+glue**, riding the established `doctrine worktree pretooluse` seam (a
+Claude-`PreToolUse`-shaped command living in the binary under the ADR-011
+per-harness altitude). The prototype's bash/jq logic becomes Rust; the neutral
+`retrieve` query is called **in-process**, not re-exec'd.
+
+- **New per-harness adapter** — one binary subcommand (working name `doctrine
+  memory surface`): reads the `PreToolUse` hook envelope on stdin, discriminates
+  the surface on `tool_name`, calls the retrieve query in-process, emits
+  `additionalContext`, `exit 0` always (advisory — never `permissionDecision`).
+- Two surfaces, one command (discriminated on `tool_name`, exactly as
+  `run_pretooluse` discriminates Bash vs Edit|Write):
+  - **Path surface** (`Read|Edit|Write`) → retrieve `path_scope`/`glob` on the
+    file. Relevance from *path specificity* (leaf sharp, generic fuzzy).
+    **Ungated** — a leaf file's none-severity hits are the useful ones.
+  - **Command surface** (`Bash`) → retrieve `command`, admitted by **memory
+    metadata** (`severity ≥ high`), not a host-command allowlist. Footgun-grade.
+- **Audience: main-thread only** (`agent_id.is_none()`) — the inverse of the
+  jail's subagent-only gate. Subagents get their footguns via their spawn prompt.
+- Cross-cutting behaviour to formalise: per-`session_id` dedup (seen-set file
+  under `.doctrine/state/`, auto-fresh per session), per-fire cap, `⚠stale`
+  caveat flag, injected payload trimmed to `[triage-field] title — uid`.
+- Tuning (caps, severity floor) ships as **hardcoded named constants** (STD-001),
+  config knobs deferred.
+- **Tuning log** — a runtime-tier log (`.doctrine/state/`, gitignored) records
+  each fire: surface, scope key, fetched vs admitted vs suppressed (severity),
+  surfaced uids. The data source for retuning the floor/caps over real usage.
 
 ## Non-Goals
 
 - **Not** the read-before-write / scaffold-template token footgun — that is
   **IDE-033** (parked, MCP-authoring direction). Sibling, separate slice.
-- **Not** changing the retrieval engine. `retrieve` and its scope probes already
-  exist and are the sole seam — this slice is glue + placement, no new query
-  code (DRY; ride the existing seam).
-- **Not** blocking or gating tool calls. The surface is purely advisory; it must
-  never deny a call.
-- **Not** a `--tag` or `CwdChanged` surface in v1 (candidate follow-ups, see
-  Follow-Ups).
+- **Not** changing the retrieval engine. `retrieve`'s query already exists and is
+  the sole seam — this slice adds a hook-envelope adapter that calls it, no new
+  query code (DRY; ride the existing seam).
+- **Not** a shipped shell script. The prototype scripts stay as committed design
+  reference; the ship vehicle is the binary subcommand (jail precedent).
+- **Not** blocking or gating tool calls. Advisory only — emits `additionalContext`,
+  never `permissionDecision`; `exit 0` always.
+- **Not** subagent surfacing in v1 (main-thread only; follow-up).
+- **Not** config-driven tuning in v1 (hardcoded constants; follow-up).
+- **Not** a `--tag` or `CwdChanged` surface in v1 (candidate follow-ups).
 
 ## Governing constraints (design must honour)
 
+- **Jail precedent (`doctrine worktree pretooluse`).** A Claude-`PreToolUse`-shaped
+  command already lives in the binary: pure `decide`/`render`, impure shell, `exit
+  0` always. Its module doc claims the ADR-011 per-harness altitude explicitly. The
+  surfacing adapter is the second instance of the same pattern — this is the
+  load-bearing precedent that settles placement.
 - **POL-002 (platform independence).** The command allowlist prototype hard-codes
   host tool names (`git`/`cargo`/`just`) — a load-bearing dependency on host
-  convention, **prohibited**. The shipped admission rule must rest on a
-  doctrine-owned contract (memory `severity`/`scope` metadata), which it now does.
-  Likewise, tuning `doctrine new` stdout to shout "read first" (the IDE-033
-  reject) leaked harness behaviour into the neutral CLI — same violation class.
-- **Harness-agnosticism (ADR-011 precedent).** A `PreToolUse` hook is
-  Claude-Code-specific. Doctrine's neutral core must not bake it in; it belongs
-  as an **opt-in harness supplement** (install template / band / `memory sync
-  install`-style wiring), never as core enforcement. *Where it ships is the
-  central design decision.*
+  convention, **prohibited**. The shipped admission rule rests on a doctrine-owned
+  contract (memory `severity` metadata); the neutral CLI gains no host-command
+  knowledge. Satisfied *structurally*, not by discipline.
+- **Harness-agnosticism (ADR-011 altitude).** The `PreToolUse` envelope is
+  Claude-specific; the retrieve query is neutral. The split is clean: neutral core
+  = the query (untouched); per-harness adapter = the new hook-shaped subcommand,
+  the sanctioned altitude the jail already occupies. Wiring is thin `hooks.json`
+  glue in the shipped `plugins/doctrine/` plugin.
 - **Hooks fail OPEN** (`mem_019f1a5cd5937cf3a0824f52e3ff4724`): only `exit 2`
   blocks; any other failure lets the call proceed. Good for an advisory surface —
   a `retrieve` error simply drops the injection, no harm. Design must preserve
@@ -67,12 +89,22 @@ into a decision about what — if anything — doctrine should ship.
   `retrieve`; the command surface's severity gate composes cleanly with it
   (surfaces high-trust/high-severity, holdback hides low-trust/scary).
 
-## Affected surface (coarse; /design refines)
+## Affected surface (design-refined)
 
-- `install/` — likely home for a shipped, opt-in hook template + wiring docs.
-- `.claude/hooks/` prototype scripts (gitignored here) — source of the template.
-- Possibly the MCP surface / `memory sync install` if wiring is doctrine-driven.
-- No change expected to `src/` retrieval code.
+- `src/memory.rs` — new `MemoryCommand::Surface` (the hook adapter) + pure
+  helpers (admission filter, dedup-diff, block-format) and impure shell (stdin,
+  in-process retrieve, seen-set + log IO, emit).
+- `src/retrieve.rs` — new thin `retrieve_rows` + `SurfaceRow` projection
+  (composes the existing `load_query`/`query`/`check_retrievable` path); expose
+  `severity_rank` `pub(crate)`. Query logic itself unchanged.
+- `src/commands/guard.rs` — classify `MemoryCommand::Surface` as `Read` (the
+  `Command::Memory` match is exhaustive — omission fails to compile).
+- `plugins/doctrine/hooks/hooks.json` — new `PreToolUse` matcher entries
+  (`Read|Edit|Write` + `Bash`) → `${DOCTRINE_BIN} memory surface`. Separate from
+  the jail entries (opposite audience — jail skips main thread, surface fires for
+  it).
+- Behaviour-preservation gate: existing memory + retrieve suites stay green
+  unchanged.
 
 ## Design Inputs (prototype + findings)
 
@@ -96,28 +128,34 @@ Empirical findings from the probe session:
   injected context does **not** satisfy the harness read-bit (relevant to
   IDE-033, not here).
 
-## Risks / Assumptions / Open Questions
+## Open Questions (resolved in /design) / Risks / Assumptions
 
-- **OQ-1** Where does the shipped hook live and how is it wired? (install
-  template the user opts into? `memory sync install` extension? band supplement?)
-- **OQ-2** Dedup is session-scoped via a runtime file. Ship as-is, or is
-  cross-session suppression wanted? Runtime-tier placement (gitignored).
-- **OQ-3** Admission tuning: is `severity ≥ high` the right floor, or include
-  `major`/`medium`? Should the path surface also gate (probably not — its
-  none-severity leaf hits are useful)?
-- **OQ-4** One hook script parameterised by surface, or two? (prototype is two.)
-- **OQ-5** Per-fire cap and total-per-session budget — what bounds context spend?
-- **R-1** Subprocess cost: command surface spawns `retrieve` on *every* Bash.
-  Cheap (silent when no hit) but non-zero; measure.
-- **A-1** Assumes the Claude harness `PreToolUse`/`additionalContext` contract is
-  stable enough to depend on for an opt-in supplement (not core).
+- **OQ-1 → RESOLVED.** Ships as a binary subcommand + `hooks.json` glue (jail
+  precedent), not an install template / band / shell script.
+- **OQ-2 → RESOLVED.** Dedup session-scoped, keyed by the stdin `session_id`
+  (auto-fresh per session); seen-set file under `.doctrine/state/` (gitignored).
+- **OQ-3 → RESOLVED.** Asymmetric: command surface `severity ≥ high`, path
+  surface ungated (leaf none-severity hits are the useful ones). Hardcoded consts.
+- **OQ-4 → RESOLVED.** One command, discriminated on `tool_name` (jail precedent).
+- **OQ-5 → RESOLVED (values pending real-usage tuning).** Per-fire cap hardcoded
+  (path 3, cmd 2); a session budget is a candidate follow-up; the tuning log feeds
+  retuning.
+- **R-1** Hook-process spawn on every main-thread tool call. Retrieve is now
+  in-process (no re-exec); cost is one binary spawn — the same the jail already
+  pays. Measure; silent-when-no-hit keeps it cheap.
+- **A-1** Assumes the Claude `PreToolUse`/`additionalContext` contract is stable
+  enough to depend on for a per-harness adapter (same assumption the jail makes).
 
 ## Verification / Closure intent
 
-- Shipped artifact (template + wiring) surfaces correct scoped memories on a
-  clean install, opt-in, without touching neutral core behaviour.
-- POL-002 and harness-agnosticism conformance argued explicitly.
-- Fail-open preserved (never `exit 2`); advisory-only.
+- Pure helpers (admission filter, dedup-diff, block-format) unit-tested with
+  synthetic rows (VT) — the jail's `decide`/`render` test shape.
+- Hook-shaped command tested with synthetic stdin → emitted `additionalContext`
+  JSON (main-thread fires; subagent `agent_id` present emits nothing; retrieve
+  error emits nothing; `exit 0` always).
+- POL-002 + harness-agnosticism argued: retrieve query untouched; adapter at the
+  ADR-011 altitude; admission on doctrine-owned metadata.
+- Behaviour-preservation: existing memory suites green unchanged.
 - Prototype findings reconciled: what shipped, what was cut, what deferred.
 
 ## Follow-Ups
@@ -129,6 +167,12 @@ Empirical findings from the probe session:
   - **codex** — surface via codex's equivalent seam.
   The neutral core (the `retrieve` scope probes + severity/staleness metadata)
   is shared; only the harness glue differs per port.
+- **Subagent surfacing.** v1 is main-thread only; widening to subagents (with a
+  tighter cap / higher floor to respect their budgets) is a deferrable knob.
+- **Config knobs.** v1 tuning is hardcoded constants; promote caps/floor to
+  `.doctrine/config` once the tuning log yields real-usage data.
+- **Session budget.** A total-per-session surfaced cap (beyond per-fire caps)
+  if the log shows context spend creeping.
 - **Candidate POL-003 — harness-agnostic supplement placement.** Promote the
   ADR-011-precedent principle used here (harness-specific behaviour ships as an
   opt-in supplement resting on doctrine-owned contracts, never baked into neutral
