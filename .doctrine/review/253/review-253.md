@@ -100,3 +100,15 @@ execute-time via `/consult`, ahead of this audit:
 `/reconcile` should confirm the empty brief, advance status, and hand to
 `/close`. All six findings are `verified` (terminal); no `blocker`; the
 close-gate is clear.
+
+## Reconciliation Outcome
+
+Reconciliation brief empty. All six findings terminal (`verified`); no per-slice
+edit, no REV. The sole design/canon divergence (F-EXEC-1: stale `123` baseline +
+`mcp_server` fused into the 23-node core SCC, −4 not −2) was reconciled into canon
+at execute-time via `/consult`, ahead of this audit — design §1 superseding note
+(commit `bd74dfa5`), `mem.pattern.lint.mcp-server-entangled-with-core`, and RSK-228
+were all landed before reconcile. Accepted tradeoffs (F-5 undelivered gate selector,
+F-6 21 undeclared authored paths) tolerated with rationale in their dispositions.
+
+No writes needed. Reconcile pass complete — handoff to /close.
