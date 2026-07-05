@@ -40,6 +40,24 @@
             "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse"
           }
         ]
+      },
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${DOCTRINE_BIN:-doctrine} memory surface"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${DOCTRINE_BIN:-doctrine} memory surface"
+          }
+        ]
       }
     ]
   }

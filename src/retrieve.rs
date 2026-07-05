@@ -417,8 +417,9 @@ fn trust_rank(s: &str) -> u8 {
 }
 
 /// `severity` → bounded ordinal: critical < high < medium < low < none; unknown
-/// ⇒ worst bucket (B12/B13).
-fn severity_rank(s: &str) -> u8 {
+/// ⇒ worst bucket (B12/B13). `pub(crate)` (SL-205 PHASE-01, EX-3) — the future
+/// command-surface holdback gate ranks severity outside this module.
+pub(crate) fn severity_rank(s: &str) -> u8 {
     match s {
         "critical" => 0,
         "high" => 1,
@@ -1009,6 +1010,93 @@ pub(crate) fn check_retrievable(
         );
     }
     (true, None)
+}
+
+// === SL-205 PHASE-01: the ambient-surfacing engine seam =======================
+// The neutral in-process query surface the ambient-memory-surfacing adapter
+// (PHASE-03) composes over — a Rust-level API, not a CLI/MCP-shaped fan. Reuses
+// the PHASE-04 shell verbatim (`load_query` → `query`) and the existing
+// `check_retrievable` holdback gate — no parallel query or holdback logic, and
+// no change to `run_search`/`run_retrieve`/`search_for_mcp` behaviour.
+
+/// The scope probe an ambient-surfacing caller narrows a query with — exactly
+/// the two location shapes PHASE-03's adapter has to offer (a working-tree
+/// path, or a command name), mapped onto `load_query`'s existing `paths`/
+/// `commands` fan (the location-probe model, design §5.5) — no new query type.
+#[derive(Debug, Clone)]
+pub(crate) enum ScopeProbe {
+    /// A working-tree path — becomes the sole element of `QueryContext::paths`.
+    Path(PathBuf),
+    /// A command name — becomes the sole element of `QueryContext::commands`.
+    Command(String),
+}
+
+/// A lean projection of a surviving `Candidate`, for the ambient-surfacing
+/// adapter (PHASE-03) — just enough for a hook-rendered nudge line. `stale` is
+/// read directly off `Staleness` (`matches!(.., Staleness::Stale)`), never a
+/// string compare on `.label()` (landmine F2 — the label is presentation, not
+/// a discriminant).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SurfaceRow {
+    pub(crate) uid: String,
+    pub(crate) title: String,
+    pub(crate) severity: String,
+    pub(crate) stale: bool,
+    pub(crate) trust: String,
+}
+
+impl From<&Candidate<'_>> for SurfaceRow {
+    fn from(c: &Candidate<'_>) -> Self {
+        let m = c.memory;
+        SurfaceRow {
+            uid: m.uid.clone(),
+            title: crate::memory::scrub_line(&m.title),
+            severity: crate::memory::scrub_line(&m.severity),
+            stale: matches!(c.staleness, Staleness::Stale),
+            trust: crate::memory::scrub_line(&m.trust_level),
+        }
+    }
+}
+
+/// The neutral retrieve seam PHASE-03 composes over: `load_query` → `query` →
+/// the existing `check_retrievable` holdback gate (the sole admission gate —
+/// DRY, no parallel holdback logic) → project → truncate to `fetch`. Mirrors
+/// `run_search`'s pipeline (same file, same `Bm25Ranker`); default trust floor,
+/// `include_draft: false` (an ambient nudge is not an explicit
+/// `--include-draft` ask).
+pub(crate) fn retrieve_rows(
+    path: Option<PathBuf>,
+    probe: ScopeProbe,
+    fetch: usize,
+) -> Result<Vec<SurfaceRow>> {
+    let (paths, commands) = match probe {
+        ScopeProbe::Path(p) => (vec![p.to_string_lossy().into_owned()], Vec::new()),
+        ScopeProbe::Command(cmd) => (Vec::new(), vec![cmd]),
+    };
+    let Loaded {
+        root,
+        mems,
+        q,
+        snap,
+    } = load_query(
+        path,
+        paths,
+        Vec::new(),
+        commands,
+        Vec::new(),
+        None,
+        None,
+        None,
+        None,
+    )?;
+    let ranker = Bm25Ranker;
+    let ranked = query(&mems, &q, &snap, false, &root, &ranker);
+    Ok(ranked
+        .iter()
+        .filter(|c| check_retrievable(c.memory, &snap.part, false, None, &snap.today).0)
+        .take(fetch)
+        .map(SurfaceRow::from)
+        .collect())
 }
 
 /// Resolve one memory by reference, apply the full retrieve-admission gate
@@ -3634,6 +3722,158 @@ weight = {weight}
         assert!(
             err.to_string().contains("--limit must be >= 1"),
             "should reject limit=0: {err}"
+        );
+    }
+
+    // ── SL-205 PHASE-01: retrieve_rows + SurfaceRow ─────────────────────────
+
+    /// Seed a temp git+doctrine root with two path-scoped memories: one
+    /// held-back (low trust ∧ critical severity) and one surfaced (medium
+    /// trust, no severity). Both scope to `src/x.rs` so a `ScopeProbe::Path`
+    /// probe admits both pre-holdback (mirrors `temp_project_with_one_memory`'s
+    /// git+record setup — no parallel fixture machinery).
+    fn temp_project_with_holdback_pair() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "-q", "-b", "main"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["config", "user.email", "t@example.com"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["config", "user.name", "Test"])
+            .output()
+            .unwrap();
+        std::fs::create_dir_all(root.path().join(".doctrine")).unwrap();
+        std::fs::write(root.path().join(".doctrine/.keep"), "").unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["add", ".doctrine/.keep"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["commit", "-q", "-m", "base"])
+            .output()
+            .unwrap();
+        let sources: Vec<crate::memory::Provenance> = vec![];
+        let tags: Vec<String> = vec![];
+        let globs: Vec<String> = vec![];
+        let commands: Vec<String> = vec![];
+        let paths: Vec<String> = vec!["src/x.rs".to_owned()];
+        let held_back_args = crate::memory::RecordArgs {
+            title: "Risky memory",
+            memory_type: crate::memory::MemoryType::Fact,
+            key: None,
+            status: crate::memory::Status::Active,
+            summary: None,
+            tags: &tags,
+            repo: None,
+            lifespan: None,
+            review_by: None,
+            sources: &sources,
+            paths: &paths,
+            globs: &globs,
+            commands: &commands,
+            global: false,
+            trust_level: Some("low"),
+            severity: Some("critical"),
+        };
+        crate::memory::run_record(
+            Some(root.path().to_path_buf()),
+            &held_back_args,
+            &mut std::io::sink(),
+        )
+        .unwrap();
+        let surfaced_args = crate::memory::RecordArgs {
+            title: "Surfaced memory",
+            memory_type: crate::memory::MemoryType::Fact,
+            key: None,
+            status: crate::memory::Status::Active,
+            summary: None,
+            tags: &tags,
+            repo: None,
+            lifespan: None,
+            review_by: None,
+            sources: &sources,
+            paths: &paths,
+            globs: &globs,
+            commands: &commands,
+            global: false,
+            trust_level: Some("medium"),
+            severity: Some("none"),
+        };
+        crate::memory::run_record(
+            Some(root.path().to_path_buf()),
+            &surfaced_args,
+            &mut std::io::sink(),
+        )
+        .unwrap();
+        root
+    }
+
+    /// VT-1: a low-trust ∧ high-severity memory is ABSENT from `retrieve_rows`
+    /// output (holdback applied via `check_retrievable`); a surfaced row
+    /// carries `uid`/`title`/`severity`/`stale`(bool)/`trust`.
+    #[test]
+    fn retrieve_rows_drops_held_back_and_projects_surfaced() {
+        let root = temp_project_with_holdback_pair();
+        let rows = retrieve_rows(
+            Some(root.path().to_path_buf()),
+            ScopeProbe::Path(PathBuf::from("src/x.rs")),
+            10,
+        )
+        .unwrap();
+        assert!(
+            rows.iter().all(|r| r.title != "Risky memory"),
+            "held-back (low trust ∧ critical severity) memory must be absent: {rows:?}"
+        );
+        let surfaced = rows
+            .iter()
+            .find(|r| r.title == "Surfaced memory")
+            .expect("surfaced memory present in retrieve_rows output");
+        assert!(!surfaced.uid.is_empty(), "row carries a uid");
+        assert_eq!(surfaced.severity, "none");
+        assert_eq!(surfaced.trust, "medium");
+        assert!(
+            !surfaced.stale,
+            "freshly recorded memory is not stale: {surfaced:?}"
+        );
+    }
+
+    /// VT-2: `severity_rank` is `pub(crate)` (reachable cross-module) and
+    /// preserves the existing scale — lower rank is more severe.
+    #[test]
+    fn pub_crate_severity_rank_orders_critical_before_none() {
+        assert!(severity_rank("critical") < severity_rank("none"));
+    }
+
+    /// `ScopeProbe::Command` threads through `load_query`/`query` the same way
+    /// `Path` does: the seeded memory is unscoped (no command facet), so a
+    /// scope-bearing command probe drops it (D20 — scope-bearing excludes
+    /// unscoped survivors), proving the `commands` fan wiring, not just `paths`.
+    #[test]
+    fn retrieve_rows_accepts_command_probe() {
+        let root = temp_project_with_one_memory();
+        let rows = retrieve_rows(
+            Some(root.path().to_path_buf()),
+            ScopeProbe::Command("nonexistent-cmd".to_owned()),
+            5,
+        )
+        .unwrap();
+        assert!(
+            rows.is_empty(),
+            "unscoped memory must be dropped by a scope-bearing command probe: {rows:?}"
         );
     }
 }

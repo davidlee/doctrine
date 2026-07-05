@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Project-root detection, shared by `install` and `skills`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, bail};
+use anyhow::Context;
 
 /// Default markers that identify a project root when walking up from CWD.
 pub(crate) fn default_markers() -> Vec<String> {
@@ -26,17 +26,27 @@ pub(crate) fn find(explicit: Option<PathBuf>, markers: &[String]) -> anyhow::Res
 
     let cwd = std::env::current_dir().context("Failed to get current working directory")?;
 
-    for ancestor in cwd.ancestors() {
+    find_from(&cwd, markers).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No project root found. Walked up from '{}' looking for any of: {:?}",
+            cwd.display(),
+            markers,
+        )
+    })
+}
+
+/// Walk up from `start` (inclusive) to the first ancestor containing any of
+/// `markers`. Unlike [`find`], this takes an explicit start directory — the
+/// ambient-surfacing hook (SL-205) discovers the root from the stdin `cwd`, not
+/// the process cwd — and returns `None` (rather than an error) when no marker is
+/// found, so the caller can fold a missing root into a fail-open no-op.
+pub(crate) fn find_from(start: &Path, markers: &[String]) -> Option<PathBuf> {
+    for ancestor in start.ancestors() {
         for marker in markers {
             if ancestor.join(marker).exists() {
-                return Ok(ancestor.to_path_buf());
+                return Some(ancestor.to_path_buf());
             }
         }
     }
-
-    bail!(
-        "No project root found. Walked up from '{}' looking for any of: {:?}",
-        cwd.display(),
-        markers,
-    )
+    None
 }
