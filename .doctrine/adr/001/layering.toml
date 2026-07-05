@@ -149,11 +149,17 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 # non-trivial SCC). Measured from the production graph.
 #
 # Engine tangle = 0 (CHR-015 done: conduct↔dtoml cycle broken).
-# Command tangle is large (~32-module SCC) — normal for a CLI verb layer;
-# baselined here, ratcheted by the gate (may not grow).
+# Command tangle is large — normal for a CLI verb layer; baselined here,
+# ratcheted by the gate (may not grow).
+# SL-203: corrected 123→86. The prior 123 was stale (monotone gate never forces
+# tightening; live count had drifted to 90). Severing the mcp_server→commands
+# back edge dropped it 90→86 (−4, not the predicted −2): the back edge had
+# entangled mcp_server WITH the core SCC, so its removal ejects mcp_server plus
+# its core-pointing edges — mcp_server was not a core-separate 2-cycle (correcting
+# RSK-227's model; the precedent SL-204 inherits).
 leaf = 0
 engine = 0
-command = 123
+command = 86
 
 # ── Accepted violations ──────────────────────────────────────────────────
 # Every genuine upward edge (from lower tier to higher tier). Frozen —

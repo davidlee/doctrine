@@ -27,6 +27,10 @@ pub(crate) fn run_serve(args: ServeArgs) -> anyhow::Result<()> {
         let rt = tokio::runtime::Runtime::new().context("failed to create tokio runtime")?;
         rt.block_on(crate::mcp_server::serve(crate::mcp_server::McpConfig {
             path: args.path,
+            // fn-item → fn-ptr coercion supplies the corpus producer; the back
+            // edge into commands::prompt now lives here at the forward-edge
+            // source, not inside mcp_server (SL-203 D-B).
+            model_keys: crate::commands::prompt::model_keys,
         }))
     } else {
         anyhow::bail!("`serve` requires --mcp (other serve modes not yet implemented)");

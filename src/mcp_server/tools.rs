@@ -10,6 +10,7 @@
 //! maps errors through `ReviewError` variant identity (design D8, §5), and
 //! returns JSON text.
 
+use super::ModelKeysFn;
 use super::protocol::{
     Id, JsonRpcRequest, JsonRpcResponse, McpTool, McpToolResult, ToolsListResult,
 };
@@ -406,12 +407,16 @@ pub(crate) fn tool_list() -> ToolsListResult {
 ///
 /// Returns a proper JSON-RPC error response on unknown methods or validation
 /// failures (never an `anyhow::Error` for recoverable dispatch problems).
-pub(crate) fn dispatch(request: &JsonRpcRequest, root: &Path) -> JsonRpcResponse {
+pub(crate) fn dispatch(
+    request: &JsonRpcRequest,
+    root: &Path,
+    model_keys: ModelKeysFn,
+) -> JsonRpcResponse {
     let id = request.id.clone();
     match request.method.as_str() {
         "initialize" => handle_initialize(id),
         "tools/list" => handle_tools_list(id),
-        "tools/call" => handle_tools_call(id, request.params.as_ref(), root),
+        "tools/call" => handle_tools_call(id, request.params.as_ref(), root, model_keys),
         "notifications/initialized" => JsonRpcResponse::success(id, json!({})),
         _ => JsonRpcResponse::error(
             id,
@@ -452,8 +457,13 @@ fn handle_tools_list(id: Option<Id>) -> JsonRpcResponse {
     JsonRpcResponse::success(id, result)
 }
 
-fn handle_tools_call(id: Option<Id>, params: Option<&Value>, root: &Path) -> JsonRpcResponse {
-    match call_tool(id.clone(), params, root) {
+fn handle_tools_call(
+    id: Option<Id>,
+    params: Option<&Value>,
+    root: &Path,
+    model_keys: ModelKeysFn,
+) -> JsonRpcResponse {
+    match call_tool(id.clone(), params, root, model_keys) {
         Ok(out) => {
             let tool_result = McpToolResult::text(out);
             let result_val = serde_json::to_value(&tool_result)
@@ -465,7 +475,12 @@ fn handle_tools_call(id: Option<Id>, params: Option<&Value>, root: &Path) -> Jso
 }
 
 /// Inner function that can use `?` for clean error propagation.
-fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Result<String> {
+fn call_tool(
+    _id: Option<Id>,
+    params: Option<&Value>,
+    root: &Path,
+    model_keys: ModelKeysFn,
+) -> anyhow::Result<String> {
     let params = params.context("params is required for tools/call")?;
 
     let name = params
@@ -950,7 +965,7 @@ fn call_tool(_id: Option<Id>, params: Option<&Value>, root: &Path) -> anyhow::Re
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
             Ok(String::from_utf8(buf)?)
         }
-        "doctrine_onboard" => render_onboard(root),
+        "doctrine_onboard" => render_onboard(root, model_keys),
         "worker_commit" => {
             // Opaque-id resolution: the `agent` comes from the tool INPUT and is resolved
             // server-side (no caller agent_id, no worker-supplied path — INV-4). A belt
@@ -1352,17 +1367,17 @@ const PROMPT_RESOLVE_MODEL_CMD: &str = "doctrine prompt resolve --band model --m
 /// Render the `doctrine_onboard` markdown: mapping table + model-band self-ID
 /// guidance (SL-187). The two-memory onboarding load now rides the cached boot
 /// sector, so it is intentionally absent here.
-fn render_onboard(root: &Path) -> anyhow::Result<String> {
+fn render_onboard(root: &Path, model_keys: ModelKeysFn) -> anyhow::Result<String> {
     Ok(format!(
         "{ONBOARD_MAPPING_TABLE}{}",
-        render_model_band_guidance(root)?
+        render_model_band_guidance(root, model_keys)?
     ))
 }
 
 /// Model-band self-identification guidance: the tool cannot read the agent's
 /// model, so it teaches the agent to identify itself and resolve its own band.
-fn render_model_band_guidance(root: &Path) -> anyhow::Result<String> {
-    let keys = crate::commands::prompt::model_keys(root, None)?;
+fn render_model_band_guidance(root: &Path, model_keys: ModelKeysFn) -> anyhow::Result<String> {
+    let keys = (model_keys)(root, None)?;
     let key_lines = if keys.is_empty() {
         "  (no model keys in corpus)".to_owned()
     } else {
@@ -1448,6 +1463,36 @@ mod tests {
         assert!(names.contains(&"worker_commit"));
     }
 
+    // SL-203 VT-2 (design VT-3) — wiring guard. The model-band section is fed by
+    // an injected `ModelKeysFn`; this proves the injected producer actually drives
+    // the render. It asserts KNOWN key CONTENT (not section-non-emptiness): the
+    // empty-corpus placeholder makes the section always non-empty, so an empty or
+    // mis-wired producer would silently pass a mere presence check (F-1). A wrong
+    // producer fails the content assertion; the empty producer must render the
+    // placeholder, not a key bullet.
+    #[test]
+    fn onboard_wiring() {
+        let (_dir, root) = temp_root();
+
+        let inject: ModelKeysFn = |_r, _h| Ok(vec!["opus-test-key".to_owned()]);
+        let out = render_model_band_guidance(&root, inject).unwrap();
+        assert!(
+            out.contains("- `opus-test-key`"),
+            "injected producer's key must render as a bullet line: {out}"
+        );
+
+        let empty: ModelKeysFn = |_r, _h| Ok(Vec::new());
+        let out_empty = render_model_band_guidance(&root, empty).unwrap();
+        assert!(
+            out_empty.contains("(no model keys in corpus)"),
+            "empty producer must render the placeholder: {out_empty}"
+        );
+        assert!(
+            !out_empty.contains("- `opus-test-key`"),
+            "empty producer must NOT render the injected key: {out_empty}"
+        );
+    }
+
     // ISS-033: review_list must accept its advertised (all-optional) arg shapes —
     // empty `{}` and a `status` filter — rather than rejecting every call -32602.
 
@@ -1455,7 +1500,7 @@ mod tests {
     fn review_list_empty_args_succeeds() {
         let (_dir, root) = temp_root();
         let req = tools_call_req("review_list", json!({}));
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         assert!(
             resp.error.is_none(),
             "review_list {{}} errored: {:?}",
@@ -1468,7 +1513,7 @@ mod tests {
     fn review_list_status_filter_succeeds() {
         let (_dir, root) = temp_root();
         let req = tools_call_req("review_list", json!({ "status": ["done"] }));
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         assert!(
             resp.error.is_none(),
             "review_list status filter errored: {:?}",
@@ -1625,7 +1670,7 @@ mod tests {
     fn unknown_tool_returns_32601() {
         let (_dir, root) = temp_root();
         let req = tools_call_req("nonexistent", json!({}));
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32601);
         assert!(err.message.contains("Tool not found"));
@@ -1640,7 +1685,7 @@ mod tests {
             method: "bad/method".to_owned(),
             params: None,
         };
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32601);
         assert!(err.message.contains("Method not found"));
@@ -1742,7 +1787,7 @@ mod tests {
             method: "notifications/initialized".to_owned(),
             params: None,
         };
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         assert!(resp.id.is_none());
         assert!(resp.error.is_none());
         assert_eq!(resp.result.unwrap(), json!({}));
@@ -1757,7 +1802,7 @@ mod tests {
             method: "tools/list".to_owned(),
             params: None,
         };
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 22);
@@ -1772,7 +1817,7 @@ mod tests {
                 "reference": "1"
             }),
         );
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32602);
     }
@@ -1787,7 +1832,7 @@ mod tests {
                 "memory_type": "nonexistent"
             }),
         );
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.expect("should have error");
         assert_eq!(err.code, -32602);
     }
@@ -1801,7 +1846,7 @@ mod tests {
                 "title": "new title"
             }),
         );
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.expect("should have error");
         assert_eq!(err.code, -32602);
     }
@@ -1815,7 +1860,7 @@ mod tests {
                 "reference": "mem_nonexistent"
             }),
         );
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.expect("should have error");
         assert_eq!(err.code, -32602);
     }
@@ -1899,7 +1944,7 @@ mod tests {
     /// Helper: dispatch a memory tool call and return the result JSON.
     fn memory_dispatch(root: &Path, name: &str, args: Value) -> Value {
         let req = tools_call_req(name, args);
-        let resp = dispatch(&req, root);
+        let resp = dispatch(&req, root, crate::commands::prompt::model_keys);
         resp.result.expect("expected success")
     }
 
@@ -1914,7 +1959,7 @@ mod tests {
                 "min_trust": "banana"
             }),
         );
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32602);
         assert!(err.message.contains("Invalid params"));
@@ -1932,7 +1977,7 @@ mod tests {
                 "query": "test"
             }),
         );
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32602);
         let data = err.data.unwrap();
@@ -1958,7 +2003,7 @@ mod tests {
                 "reference": "nonexistent"
             }),
         );
-        let resp = dispatch(&req, &root);
+        let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         assert!(resp.error.is_some(), "expected error for invalid uid");
     }
 
