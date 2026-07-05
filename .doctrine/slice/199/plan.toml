@@ -162,7 +162,7 @@ exit_criteria = [
   { id = "EX-4", text = "File-boundary with PHASE-05: this phase owns the def's frontmatter (name, doctrine-role, tools:) and the lint that pins it — the STRUCTURE. PHASE-05 authors the drive-loop operating guidance (the cadence BODY), whether in this def's role-guidance section or a companion skill. No overlap: PHASE-04 does not author cadence prose; PHASE-05 does not touch the tools: surface." },
 ]
 verification = [
-  { id = "VT-1", expects = "Lint: the sanctioned dispatch-orchestrator def passes; a def adding an extra writable mcp__* token / a bare mcp__doctrine grant / worker_commit fails, message names the offending token.", test_file = "src/conformance.rs", keywords = ["orchestrator", "dispatch_import", "allowlist"] },
+  { id = "VT-1", expects = "Lint: the sanctioned dispatch-orchestrator def passes; a def adding an extra writable mcp__* token / a bare mcp__doctrine grant / worker_commit fails, message names the offending token.", test_file = "src/doctor_checks.rs", keywords = ["orchestrator", "dispatch_import", "allowlist"] },
   { id = "VA-1", expects = "An agent confirms the def's tools: list contains exactly the sanctioned set and that the allowlist row references the §B named constants (no second string literal, STD-001)." },
 ]
 specs        = []
