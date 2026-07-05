@@ -1,0 +1,43 @@
+id    = 254
+slug  = "design-review-of-sl-205"
+title = "design review of SL-205"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-205"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected fail-open precedent to exit 0 on every hook IO path; observed pretooluse propagates stdout write errors"
+detail = "Design SL-205 claims the worktree hook precedent is  at .doctrine/slice/205/design.md:26-29 and inherits that shape for  at .doctrine/slice/205/design.md:93-95 / :208-209. Actual precedent in src/worktree/pretooluse.rs only swallows stdin parse/read failures; its emit path uses  at src/worktree/pretooluse.rs:433-435, so a stdout/pipe error returns Err through main (src/main.rs:203-210) rather than exit 0. Claude docs confirm only exit 2 blocks, but non-zero hook errors still surface as hook errors (docs/claude/hooks.md:624-626). Minimal penance: design must explicitly forbid copying the precedent's  on emit for SL-205, require stdout write errors to be swallowed as emit-nothing/Ok, and add a VT that injects a failing writer or equivalent shell seam."
+disposition = "fix-now"
+response = "Confirmed against pretooluse.rs:433 (writeln!(...).context(...)?). Design reconciled: INV-2 now forbids propagating the emit write Err (must swallow → emit-nothing/Ok, never ?); §5.4 emit-ordering paragraph states it; VT-12 injects a failing writer and asserts Ok + seen-set untouched."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected absent session_id to have a defined fail-open dedup policy; observed optional key with no missing-session semantics"
+detail = "Design SL-205 declares session_id optional and uses it as the seen-set key at .doctrine/slice/205/design.md:97-102, then defines only the happy path: mem-surface-seen-<session_id>.txt and new session_id means all fresh at .doctrine/slice/205/design.md:168-172. The review brief explicitly names session_id absent as a fail-open path to enumerate (.doctrine/review/254/review-254.md:37-40) and a seen-set/session semantic to prove (.doctrine/review/254/review-254.md:49-51), but INV-2 lists unparseable stdin, retrieve Err, no root, and IO error only (.doctrine/slice/205/design.md:208-209). Claude docs show session_id is normally supplied (docs/claude/hooks.md:584), but the design made it Option, so the missing case is now part of the contract. Minimal penance: state the exact behavior for None or empty session_id, preferably no seen-set persistence and no panic, and add a VT for absent session_id."
+disposition = "fix-now"
+response = "Confirmed: session_id is Option but only the happy path was specified. Design reconciled: §5.3 defines absent/empty session_id ⇒ dedup disabled for that fire (no seen-set IO, no synthetic filename, no panic; still surfaces); INV-2 enumerates it; VT-13 covers it."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected seen-set to record delivered memories; observed design records before emission can fail"
+detail = "Design SL-205 says the runtime log records surfaced uids at .doctrine/slice/205/design.md:173-178 and the one-fire lifecycle appends surfaced uids to the seen-set before emitting additionalContext at .doctrine/slice/205/design.md:193-198. But the same design promises every IO error emits nothing and exits 0 at .doctrine/slice/205/design.md:208-209. Those two rules conflict on stdout/emission failure: a uid can be persisted as seen even though no additionalContext reached Claude, so later fires in the same session suppress a memory that was never surfaced. The actual precedent has an explicit stdout write site at src/worktree/pretooluse.rs:433-435, and the review brief called out impure shell IO ordering as a test adequacy risk (.doctrine/review/254/review-254.md:52-54). Minimal penance: move seen-set append after a successful emit or define that failed emits do not update seen, and add a VT that proves emit failure cannot poison dedup."
+disposition = "fix-now"
+response = "Confirmed ordering bug: append-before-emit poisons dedup on emit failure. Design reconciled: INV-6 (dedup integrity) + §5.4 reorder — seen-set/log append only after a successful non-empty emit; VT-12/VT-14 prove a failed/empty emit leaves the seen-set untouched."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

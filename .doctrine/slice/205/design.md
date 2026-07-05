@@ -169,7 +169,13 @@ Runtime-tier artifacts (`.doctrine/state/`, gitignored, `rm -rf`-able):
 
 - **Seen-set** — `mem-surface-seen-<session_id>.txt`, one file per session. New
   `session_id` → new empty file → all fresh. No active GC v1 (files are tiny;
-  candidate follow-up).
+  candidate follow-up). **Absent or empty `session_id` (F-2):** dedup is
+  **disabled** for that fire — no seen-set file is read or written (no synthetic
+  filename, no panic). The fire still surfaces (subject to admission + cap); it
+  simply cannot dedup against a session it cannot name. This is the safe
+  degradation: over-surface (a repeat) rather than key a shared/at-random file or
+  fault. `session_id` is normally supplied (`docs/claude/hooks.md:584`); this
+  covers the contract the `Option` type admits.
 - **Tuning log** — `mem-surface.log`, one JSONL line per fire:
   `{session, surface, key, fetched, admitted, suppressed_sev, surfaced, uids}`.
   The `fetched → admitted → suppressed_sev → surfaced` funnel is the retuning
@@ -193,20 +199,41 @@ stdin ─▶ parse ─▶ [agent_id.is_some() ⇒ emit nothing, exit 0]     (mai
                         │  PURE:
    admits(·,surface) ─▶ dedup_diff(·,seen) ─▶ cap(·,cap_for(surface)) ─▶ format_block
                         │  IMPURE:
+   emit additionalContext (or nothing) — stdout write Err SWALLOWED, never `?` (F-1)
+                        │  only on a successful non-empty emit:
    append surfaced uids to seen-set · append funnel line to log
                         │
-   emit additionalContext (or nothing) · exit 0
+   exit 0
 ```
 
 Root resolved by the standard cwd-based discovery every memory command uses
 (stdin `cwd`; `CLAUDE_PROJECT_DIR` fallback anchor, as in the jail).
 
+**Emit ordering & the swallow (F-1, F-3).** The seen-set append and the log
+append happen **only after a successful, non-empty emit** — never before. The
+emit itself **must swallow a stdout write `Err`** (fold to emit-nothing/`Ok`),
+**not** copy the precedent's `writeln!(…).context(…)?` (`pretooluse.rs:433` —
+which propagates the error up through `main` to a non-zero exit). Rationale: (a)
+INV-2 promises `exit 0` always, and a propagated write error breaks it; (b) if
+the append ran *before* emit and the emit then failed, a uid would be recorded as
+`seen` though no `additionalContext` reached the harness — later fires in the
+session would suppress a memory that was never surfaced (dedup poisoning). Order
+is therefore: build block → attempt emit (swallow write error) → *iff* emit
+succeeded with a non-empty block, append seen-set + log → `exit 0`.
+
 ### 5.5 Invariants, Assumptions & Edge Cases
 
 - **INV-1 (advisory).** Never emits `permissionDecision`/`updatedInput`; cannot
   block a call.
-- **INV-2 (fail-open).** Every failure (unparseable stdin, retrieve `Err`, no
-  root, IO error) ⇒ emit nothing, `exit 0`. Never `exit 2`.
+- **INV-2 (fail-open).** Every failure — unparseable stdin, retrieve `Err`, no
+  root, seen-set/log IO error, **absent/empty `session_id`**, **stdout write
+  error on emit** — folds to *emit-nothing (or best-effort emit) + `exit 0`*.
+  Never `exit 2`, never a propagated `Err`/non-zero exit, never a panic. The emit
+  write in particular must **swallow** its `Err` (F-1), not `?` it as the
+  precedent does.
+- **INV-6 (dedup integrity).** A uid is recorded in the seen-set **only after**
+  its block was successfully emitted (F-3). A failed or empty emit never mutates
+  the seen-set — dedup can never suppress a memory that was not delivered.
 - **INV-3 (main-thread only, v1).** `agent_id.is_some()` ⇒ emit nothing.
 - **INV-4 (holdback composes).** The retrieve trust-holdback runs in-core before
   the severity gate; surfacing cannot bypass it.
@@ -280,6 +307,13 @@ nothing; VT-9 unparseable stdin ⇒ nothing, exit 0; VT-10 advisory invariant
 Rows helper (`retrieve.rs`): VT-11 `retrieve_rows` — holdback applied (low-trust∧
 high-severity absent); `SurfaceRow` fields projected.
 
+Fail-open / dedup-integrity (external pass RV-254): VT-12 emit-write `Err`
+(failing writer / closed pipe seam) ⇒ `run_surface` returns `Ok`, no propagated
+error, **seen-set unchanged** (F-1 + F-3 together); VT-13 absent/empty
+`session_id` ⇒ no seen-set IO, no panic, block still emitted (F-2); VT-14
+seen-set append happens only after a successful non-empty emit — a no-hit /
+all-deduped fire leaves the seen-set untouched (F-3 ordering).
+
 VA-1 (live battery): install → wire `hooks.json` → restart/`/reload-plugins`;
 main-thread Read of a path-scoped file surfaces, Bash of a footgun-scoped command
 surfaces, a spawned subagent surfaces nothing.
@@ -314,3 +348,27 @@ Confirmed by probing the actual source; all integrated above.
 
 No governance conflicts surfaced (POL-002 satisfied structurally; ADR-011 altitude
 matches the jail precedent; ADR-001 layering respected). No `/consult` trigger.
+
+### External adversarial pass (RV-254, codex/GPT-5.5, inquisitor)
+
+Three charges, all confirmed against source, all disposed **fix-now** and
+integrated above. No blocker; no POL-002/ADR-011/holdback/DRY violation found —
+the reviewer confirmed the neutral/adapter seam clean and the severity scale
+single-sourced. All three struck the same underexposed seam: the emit/IO-failure
+contract.
+
+- **F-1 (major) — stdout write error propagates.** The cited precedent
+  (`pretooluse.rs:433`) uses `writeln!(…).context(…)?`, which returns `Err`
+  through `main` to a non-zero exit — contradicting INV-2's "`exit 0` always".
+  Penance: INV-2 now forbids `?`-ing the emit write (must swallow); VT-12.
+- **F-2 (major) — absent `session_id` undefined.** `Option` type admits `None`,
+  but only the happy path was specified. Penance: §5.3 now defines
+  `None`/empty ⇒ dedup disabled for that fire (no IO, no panic, still surfaces);
+  INV-2 lists it; VT-13.
+- **F-3 (minor) — seen-set poisoning on emit failure.** Append ran before emit;
+  a failed emit would mark a uid seen though undelivered. Penance: INV-6 +
+  §5.4 reorder (append only after successful non-empty emit); VT-12/VT-14.
+
+Verdict recorded by the reviewer: *"not fit to proceed to `/plan` unreconciled"*
+— now reconciled. RV-254 findings verified terminal; synthesis sealed on the
+ledger.
