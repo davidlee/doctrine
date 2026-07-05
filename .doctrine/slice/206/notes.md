@@ -53,9 +53,15 @@ The footgun applies to the workflow `agent()` path, not just the Agent tool.
 
 ### EX-3 — not triggered (both premises PASS; no design revisit).
 
-**VH-1 (human):** confirm from the EX-1 table that fork base == armed base
-(`7fe7e231`), distinct from cwd HEAD. **VA-1 (agent):** ISS-216 workaround =
-direct write to the gitignored `.claude/agents/<name>.md`; recorded above.
+**VH-1 (human): CONFIRMED 2026-07-06** — operator signed off from the EX-1 table
+that fork base == armed base (`7fe7e231`), distinct from cwd HEAD; dispatch
+cleared to drive. **VA-1 (agent): CONFIRMED** — ISS-216 workaround = direct write
+to the gitignored `.claude/agents/<name>.md`; recorded above.
+
+**PHASE-01 outcome:** both premises PASS, EX-3 not triggered. De-risk gate GREEN.
+PHASE-01 is operator-run (no source delta, no code boundary) — it carries no
+conformance-registry row, so the conclude/prepare-review completeness gate must
+treat it as a boundary-less operator phase (waive, not halt).
 
 Scratch teardown (post-sign-off): remove `.dispatch/SL-207` coord tree + branch
 `dispatch/207`, abandon SL-207.
