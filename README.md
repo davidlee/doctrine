@@ -285,6 +285,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-013 — Prompt cascade selection algebra: composable trait categories and disjunction-via-classification](.doctrine/rfc/013/rfc-013.md) — `open`
 - [RFC-014 — Multi-harness fleet: declaration, routing, sandbox backend](.doctrine/rfc/014/rfc-014.md) — `open`
 - [RFC-015 — Governance state on a dedicated ref namespace](.doctrine/rfc/015/rfc-015.md) — `open`
+- [RFC-016 — Zero-rescue dispatch: invariants into verbs, lineage rows](.doctrine/rfc/016/rfc-016.md) — `open`
 
 ### Architecture Decision Records
 

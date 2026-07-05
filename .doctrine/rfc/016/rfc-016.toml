@@ -1,0 +1,68 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 16
+slug = "zero-rescue-dispatch-invariants-into-verbs-lineage-rows"
+title = "Zero-rescue dispatch: invariants into verbs, lineage rows"
+status = "open"
+created = "2026-07-05"
+updated = "2026-07-05"
+tags = ["dispatch", "token-efficiency", "tooling", "zero-rescue"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "SPEC-021"
+
+[[relation]]
+label = "related"
+target = "SPEC-022"
+
+[[relation]]
+label = "related"
+target = "RFC-011"
+
+[[relation]]
+label = "related"
+target = "SL-199"
+
+[[relation]]
+label = "related"
+target = "IMP-043"
+
+[[relation]]
+label = "related"
+target = "IMP-127"
+
+[[relation]]
+label = "related"
+target = "IMP-169"
+
+[[relation]]
+label = "related"
+target = "IMP-194"
+
+[[relation]]
+label = "related"
+target = "IMP-236"
+
+[[relation]]
+label = "related"
+target = "IMP-255"
+
+[[relation]]
+label = "related"
+target = "IMP-257"
+
+[[relation]]
+label = "related"
+target = "IMP-174"
+
+[[relation]]
+label = "related"
+target = "RFC-015"
+
