@@ -7,7 +7,8 @@ set -euo pipefail
 # Source of truth: the authored spec TOML/MD under .doctrine/spec/<subtype>/
 # (the committed, reviewed tier of doctrine's storage model — not runtime state).
 #
-# Subtypes: Product Specifications (PRD-*), Technical Specifications (SPEC-*).
+# Subtypes: Product Specifications (PRD-*), Technical Specifications (SPEC-*),
+# Request for Comments (RFC-*), Architecture Decision Records (ADR-*).
 
 README="README.md"
 SPEC_ROOT=".doctrine/spec"
@@ -60,6 +61,7 @@ add_subtype() {
 
 add_subtype "$SPEC_ROOT/product" PRD "Product Specifications" spec
 add_subtype "$SPEC_ROOT/tech" SPEC "Technical Specifications" spec
+add_subtype ".doctrine/rfc" RFC "Request for Comments" rfc
 add_subtype ".doctrine/adr" ADR "Architecture Decision Records" adr
 
 # Compact slice index: title -> design, "scope" -> scope doc, (rollup) from CLI.

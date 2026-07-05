@@ -268,6 +268,23 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [SPEC-022 — Git interaction model](.doctrine/spec/tech/022/spec-022.md) — `active`
 - [SPEC-023 — Prompt cascade](.doctrine/spec/tech/023/spec-023.md) — `active`
 
+### Request for Comments
+
+- [RFC-001 — Thesis: graph value is gated on consumption surfaces](.doctrine/rfc/001/rfc-001.md) — `open`
+- [RFC-002 — Consumption surfaces program: estimate, value, and scoring outward pipeline](.doctrine/rfc/002/rfc-002.md) — `open`
+- [RFC-003 — Relation model: durable structural shape vs contextual role-intent](.doctrine/rfc/003/rfc-003.md) — `resolved`
+- [RFC-004 — Path-intent selector: role-stamped selector+intent primitive](.doctrine/rfc/004/rfc-004.md) — `open`
+- [RFC-005 — Dispatch funnel integrity: hazard survey and correctness posture](.doctrine/rfc/005/rfc-005.md) — `open`
+- [RFC-006 — Auto-merge non-FF trunk at integrate: reversing the FF-only posture](.doctrine/rfc/006/rfc-006.md) — `open`
+- [RFC-007 — Actionability: legibility and correctness](.doctrine/rfc/007/rfc-007.md) — `open`
+- [RFC-008 — Actionability gating: association vs graph-effect](.doctrine/rfc/008/rfc-008.md) — `resolved`
+- [RFC-009 — Epistemic records as the human-facing relational substrate for design ambiguity](.doctrine/rfc/009/rfc-009.md) — `open`
+- [RFC-010 — Skill improvement sweep](.doctrine/rfc/010/rfc-010.md) — `resolved`
+- [RFC-011 — Dispatch Token Efficiency](.doctrine/rfc/011/rfc-011.md) — `open`
+- [RFC-012 — Parallel Fan-out Safety: Containment, Disjointness, and Shared Responsibility](.doctrine/rfc/012/rfc-012.md) — `open`
+- [RFC-013 — Prompt cascade selection algebra: composable trait categories and disjunction-via-classification](.doctrine/rfc/013/rfc-013.md) — `open`
+- [RFC-014 — Multi-harness fleet: declaration, routing, sandbox backend](.doctrine/rfc/014/rfc-014.md) — `open`
+
 ### Architecture Decision Records
 
 - [ADR-001 — Module layering: leaf ← engine ← command, no cycles](.doctrine/adr/001/adr-001.md) — `accepted`
