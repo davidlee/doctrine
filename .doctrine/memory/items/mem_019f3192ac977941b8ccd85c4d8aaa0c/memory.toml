@@ -1,0 +1,43 @@
+memory_uid = "mem_019f3192ac977941b8ccd85c4d8aaa0c"
+memory_key = "mem.concept.dispatch.funnel-arm-unification-boundary"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "concept"
+status = "active"
+title = "Dispatch funnel arm-unification boundary: shared pure belt, reset-capability-forked impure I/O"
+summary = "Dispatch funnel arms diverge only at impure apply/commit (reset-capable vs confined); pure belt + tools + resolution are shared → convergence is retrofit-cheap."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = []
+globs = ["src/mcp_server/**", "src/worktree/import.rs", "src/worktree/create.rs"]
+commands = ["dispatch"]
+tags = ["dispatch", "unification", "mcp", "arms", "sl-199"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f94a1e20c11a05516fb33e31d099f6dce3042ae7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a6dbfe3ed31f0b570a4567c8a1fed4b9fc45328e5f07330db193023dbf9727f7"
+base_commit = "d79540d0283dd0a68757354c6f08765867542281"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
