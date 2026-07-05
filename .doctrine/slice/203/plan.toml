@@ -1,0 +1,57 @@
+# Implementation plan for SL-203 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-203"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Invert the back edge via ModelKeysFn injection"
+objective = """
+Sever the incidental back edge mcp_server::tools::render_model_band_guidance →
+commands::prompt::model_keys (tools.rs:1365) by dependency inversion: add a
+`ModelKeysFn` fn-pointer type + field on McpConfig (mcp_server/mod.rs), supply
+the real crate::commands::prompt::model_keys at serve-start (serve.rs:28), and
+thread the pointer through the onboard arm (dispatch → handle_tools_call →
+call_tool → render_onboard → render_model_band_guidance) plus all ~13 cfg(test)
+dispatch callers and the memory_dispatch helper (tools.rs:1900). model_keys
+stays in commands::prompt; nothing moves. Ratchet [tangle_baseline] command
+123→121 in layering.toml (the {commands, mcp_server} SCC dissolves; both edges
+leave). Behaviour-identical: doctrine_onboard output byte-for-byte unchanged.
+One atomic compile-unit — the pointer cannot be half-threaded, so a single phase.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; inquisition RV-252 resolved (done, await=none) with all four penances reconciled into canon" },
+  { id = "EN-2", text = "concrete loci verified against the current tree: tools.rs:1365 (back edge), :1386 (#[cfg(test)] mod), :1900 (memory_dispatch); serve.rs:28; prompt.rs:278; mod.rs:18; layering.toml:156; architecture_layering.rs:120/324" },
+]
+exit_criteria     = [
+  { id = "EX-1", text = "INV-1 — mcp_server PRODUCTION code holds zero crate::commands and zero crate::install import/call paths (cfg(test) callers excepted, which pass the real model_keys)" },
+  { id = "EX-2", text = "INV-2 — doctrine_onboard tool output is byte-identical to pre-change" },
+  { id = "EX-3", text = "{commands, mcp_server} SCC dissolved; [tangle_baseline] command = 121 in layering.toml; architecture_layering gate green" },
+  { id = "EX-4", text = "VT-2 wiring guard (design VT-3) exists (red→green) and asserts a KNOWN model key renders as content — not mere section-non-emptiness (F-1 penance); the empty-corpus placeholder must not satisfy it" },
+]
+verification      = [
+  { id = "VT-1", expects = "the command tangle baseline ratchets to 121 (the -2 drop); architecture_layering gate green at command = 121", test_file = ".doctrine/adr/001/layering.toml", keywords = ["command = 121"], patterns = ["^command\\s*=\\s*121"], waived = false },
+  { id = "VT-2", expects = "design VT-3 wiring guard: a red/green test drives render_onboard through an injected ModelKeysFn and asserts a known corpus model key renders as a bullet line (an empty producer, which renders the '(no model keys in corpus)' placeholder, must FAIL it)", test_file = "src/mcp_server/tools.rs", keywords = ["fn onboard_wiring", "ModelKeysFn"], patterns = ["fn onboard_wiring"], waived = false },
+  { id = "VA-1", expects = "behaviour-preservation gate (design VT-2): full suite green with NO edits to existing behavioural assertions; the doctrine_onboard render body is unchanged except the model_keys call target — agent runs the suite and confirms byte-identical onboard output" },
+  { id = "VA-2", expects = "INV-1 structural + conformance: `doctrine slice conformance SL-203` clean against the design-target selectors, and `grep -n 'crate::commands\\|crate::install' src/mcp_server/` shows only cfg(test) references (production is corpus-agnostic)" },
+]
+specs             = []
+requirements      = []
