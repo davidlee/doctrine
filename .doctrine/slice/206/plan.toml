@@ -116,6 +116,7 @@ exit_criteria = [
   { id = "EX-3", text = "dispatch_authored_divergence returns {diverged, compared_ref, drifted_paths?}; compared_ref resolved from the dispatch trunk authority, never hardcoded edge; read-only (no coord mutation)" },
   { id = "EX-4", text = "allowed_mcp_tokens grows: orchestrator gains the 3 read tokens (named consts); a probe role holds exactly the 3 reads; the marker validator accepts worker|orchestrator|probe" },
   { id = "EX-5", text = "All three tools registered in tools.rs; doctor check #9 stays green (ceiling: existing defs' 3 tokens ⊆ grown allowlist)" },
+  { id = "EX-6", text = "Behaviour-preservation: the existing worker/orchestrator agent-conformance tests (doctor #9 is jail-completeness code) pass UNCHANGED — the probe arm and marker extension add cases, never alter the worker/orchestrator verdicts" },
 ]
 verification = [
   { id = "VT-1", expects = "dispatch_phase_receipt: Resolved carries a real dispatch_tip; each resolve_coord refusal yields CoordRefused(reason) with no tip",
