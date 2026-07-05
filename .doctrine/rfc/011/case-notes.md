@@ -179,3 +179,34 @@ parent then re-authored + landed itself. Net: the fork produced a good draft but
 zero direct writes; the delegation was pure overhead vs authoring inline.
 Signal: forking corpus-write work to a jailed worker is a false economy — route
 corpus writes to the unjailed parent, reserve forks for read/analysis.
+
+[dispatch/F2F3; sess-7992f474]
+F2/F3 (worker_commit gate + run_gc stdout) resolution burned tokens on three avoidable confusions:
+
+1. **cargo binary-level fail-fast masked the true blast radius.** The worker_commit
+   gate runs `cargo test` (default fail-fast: stops at the FIRST failing test BINARY).
+   So the operator/agent only ever saw ONE failing binary at a time; fixing it revealed
+   the next. This produced a false "backlog_filter_alias is the sole blocker" narrative
+   across sessions and drove ~3 wrong per-test fixes before `--no-fail-fast` exposed 91
+   victims across ~30 binaries. LESSON: diagnose gate-suite failures with
+   `--no-fail-fast` FIRST; never trust a single-binary failure as the whole story.
+
+2. **A stale code comment sent the diagnosis down the wrong leg.** worker_commit.rs and
+   the marker docs assert the guard "trips on is_linked_worktree alone." The actual code
+   (marker.rs describe_mode) requires `is_linked && marker_present` OR env. Trusting the
+   comment, I chased the env leg (.env_remove) — which the REAL marked fork ignores.
+   Only a direct guard probe (marked vs unmarked fork, env on/off) revealed the truth.
+   LESSON: for guard/refusal mechanics, PROBE the binary in the actual condition; a
+   prose comment about a boolean predicate is not ground truth.
+
+3. **The primary-tree sweep didn't reproduce the fork condition.** Running the suite
+   under `DOCTRINE_WORKER=1` on the (unmarked) primary tree exercised only the env leg,
+   not the marker leg of a real (marked) fork. False confidence that env_remove fixed it.
+   LESSON: reproduce in the actual isolation posture (a marked linked worktree), not a
+   convenient proxy.
+
+Root causes were both design-shaped, not one-liners: (F2) the gate ran the full authored-
+write suite inside a MARKED fork → marker leg refused ~91 fixtures; fix = clear the marker
+for the trusted gate window + drop the env export. (F3) run_gc prints to fd1 = MCP JSON-RPC
+channel; fix = run_gc_to sink seam. The "operator one-liner" framing in the prior finding
+was an artifact of the fail-fast illusion.
