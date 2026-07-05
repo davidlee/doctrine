@@ -58,6 +58,12 @@ worker** — the orchestrator (ADR-006 sole-writer) is the trust boundary.
   prefix-cache (same-session only).
 - No new escalation transport — return-value at the script boundary is the
   contract; a live channel is explicitly out of scope (none exists).
+- **No auto-land** of the fork's authored+code deltas to edge/main — landing
+  stays the existing `/audit → /reconcile → /close` path (IMP-174 unresolved).
+  The driver drives + reports only.
+- **No batching-per-orchestrator** — one orchestrator per phase. The dumb-zone
+  `SOFT_CEILING` ships advisory-only; batching (where it becomes control flow)
+  is a deferred follow-up.
 
 ## Affected surface (coarse — `/design` fixes the touch-set)
 
@@ -84,6 +90,10 @@ worker** — the orchestrator (ADR-006 sole-writer) is the trust boundary.
   the loop can't pace. Assumption: acceptable to no-op the meter when unset.
 - Where does the workflow script live as an **authored, shippable** artifact vs
   a harness-local file? `install/`-templated vs `.claude/workflows/` only.
+- **IMP-174 split-brain** (`related`) — the fork's authored `.doctrine/**` tier
+  can diverge from edge; the driver inherits it at the drive→close handoff.
+  Mitigated by coord-committed-truth reads + no auto-land + a seeded raw
+  divergence advisory; full reconciliation is IMP-174's, not this slice's.
 
 ## Verification / closure intent
 
