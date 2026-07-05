@@ -547,7 +547,7 @@ pub(crate) struct HypothesisFacet {
 /// The concept facet — currently empty (D2, unit struct). Every concept rides
 /// its attributed prose body; the facet exists only to satisfy the kind-scaffold
 /// contract (a `[facet]` header even when empty).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct ConceptFacet {}
 
 /// The shared evidence block (all seven kinds, §9): free-text citations. Never the

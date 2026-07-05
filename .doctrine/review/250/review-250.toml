@@ -1,0 +1,88 @@
+id    = 250
+slug  = "sl-197-code-review-concept-cpt-record-kind"
+title = "SL-197 code-review: Concept (CPT) record kind"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "staff-engineer"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-197"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Dispatch integration failure — implementation branches never merged, slice marked done with zero code change"
+detail = """
+Expected: After audit → reconcile → close, the main branch (HEAD) contains the full CPT implementation from PHASE-01 + PHASE-02. All 12+ source/test/template files reflect the Concept record kind.
+
+Observed: The implementation commits `de418fb8` (PHASE-01, P2–P4 DRY) and `97fa0e96` (PHASE-02, CPT append) live exclusively on `dispatch/197` — an unmerged worktree branch. The `review/197` branch (`8b880cd4`) and `candidate/197/close-001` have the same content; neither was merged. The main line (HEAD = `eef958d4`) has ZERO CPT code — every file (kinds.rs, knowledge.rs, integrity.rs, relation.rs, partition.rs, dep_seq.rs, cli.rs, install/using-doctrine.md, install/templates/knowledge-concept.toml, 3 golden tests) is in its pre-SL-197 state.
+
+Evidence:
+- `git diff 97fa0e96..HEAD --stat` → 12 files, net -240/+51 (pure reversion)
+- `grep -r "CPT" src/` → zero hits on HEAD
+- `git merge-base dispatch/197 HEAD` → `8a14b94d` (pre-implementation baseline)
+- The audit (`dae440c3`), reconciliation (`da805621`), and close (`c1f41fed`, `eef958d4`) commits were performed against `8a14b94d` where no CPT code existed
+- Slice 197 TOML says `status = "done"` but `doctrine slice show SL-197` reads authored metadata, not code — the entity engine cannot detect missing source code
+
+Impact: The slice claims closure, but the code change it exists to deliver was never landed. The "done" state is a false positive. Any agent or user creating a concept record (`doctrine knowledge new concept "X"`) on the installed binary will receive a compile error — the Concept variant doesn't exist in the current binary's RecordKind enum."""
+disposition = "fix-now"
+response = "Confirmed. The implementation on `dispatch/197` (commits `de418fb8` PHASE-01 + `97fa0e96` PHASE-02) was never merged into `main`. Both branches (`dispatch/197`, `review/197`, `candidate/197/close-001`) carry the identical implementation. Fix: merge `dispatch/197` (or `review/197`) into `main`, verify `cargo build && doctrine check commit` passes, confirm the 12 files contain CPT changes, then re-close. The reconciliation findings (RV-249 F-1 about conformance selector) are already addressed in the branch."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Unnecessary Serialize/Deserialize derives on ConceptFacet — inconsistent with other 6 facet structs"
+detail = """
+Expected: The 7 RecordFacet variant structs have an identical derive set — `Debug, Clone, Default, PartialEq, Eq` — as all 6 existing facet structs do. Consistency across the closed set avoids the maintenance surprise of "why does this one differ?"
+
+Observed: On `dispatch/197:src/knowledge.rs`, `ConceptFacet` derives `Serialize, Deserialize` in addition to the standard set. The other 6 (AssumptionFacet, DecisionFacet, QuestionFacet, ConstraintFacet, EvidenceFacet, HypothesisFacet) use only `Debug, Clone, Default, PartialEq, Eq`. Neither `Serialize` nor `Deserialize` has a consumer: the TOML read path uses the kind-blind `RawFacet` (not the typed structs), and the `RecordFacet` enum itself does not derive Serialize/Deserialize. For a unit struct the extra derives are harmless but inconsistent.
+
+Evidence: `dispatch/197:src/knowledge.rs` — 
+ConceptFacet: `#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]`
+All others: `#[derive(Debug, Clone, Default, PartialEq, Eq)]`"""
+disposition = "fix-now"
+response = "Accepted. Remove `Serialize, Deserialize` from the ConceptFacet derive list. The struct should use `#[derive(Debug, Clone, PartialEq, Eq, Default)]` — identical to the other 6 facet structs. The derives have no consumer; dropping them is a zero-behaviour change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Close process failed to detect unmerged implementation — all code on dispatch branches, nothing on main"
+detail = """
+Expected: The close process should verify that the implementation is actually present before marking a slice done — either by detecting unmerged dispatch branches or by verifying the conformance selectors against the current tree.
+
+Observed: The RV-249 audit was conducted against the main tree (`8a14b94d`), which had no CPT code. The selector `[conformance]` in `slice-197.toml` was added in the close commit `c1f41fed` (adding `tests/e2e_list_conformance.rs`). But the close process never verified that the code delivering the conformance was actually present. The `close` transition advanced from `reconcile` to `done` without detecting that `dispatch/197` and `review/197` were unmerged.
+
+Evidence:
+- `git branch --no-merged main | grep -E "dispatch/197|review/197|candidate/197"` — all three branches are unmerged
+- `doctrine slice show SL-197` reports `status: done` with no warning
+- The `candidate/197/close-001` branch has the full implementation but was never merged; the close commits on main have only authored metadata changes (slice TOML, notes.md, review markdown)
+
+This is also a process-level concern: the dispatch/close workflow should have a gate that refuses `close` when dispatch branches for the slice are still unmerged, or the close candidate should be merged rather than prose-patched."""
+disposition = "follow-up"
+response = """Acknowledged. The dispatch/close workflow currently has no gate that verifies implementation branches were merged before allowing the `done` transition. This is a process-level gap that affected SL-197. A `backlog new improvement` should be minted: "close transition gate: refuse done when dispatch branches are unmerged" — this is a non-trivial change requiring design (how to map slice→dispatch branches, stale-branch handling, the candidate-branch merge-then-close flow). Not fixable within SL-197's scope."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "cli.rs doc-comment reverted to stale 4-kind list — missing evidence, hypothesis, concept"
+detail = """
+Expected: The `knowledge.rs:1650` clap doc-comment for `KnowledgeCommand::New` lists all 6 record kinds (assumption/decision/question/constraint/evidence/hypothesis). The `cli.rs:461` top-level `Knowledge` doc-comment should also list all kinds, or at minimum not be stale.
+
+Observed: The `cli.rs:461` top-level doc-comment says `"assumption / decision / question / constraint"` — this is 2 kinds stale (missing evidence, hypothesis, and the planned concept). The SL-197 implementation fixed this to `"assumption / decision / question / constraint / evidence / hypothesis / concept"`, but the reversion in `da805621` restored the pre-fix stale text. 
+
+This is strictly cosmetic (clap auto-lists ValueEnum variants in help output), but the reversion regressed from a correct state to a stale one.
+
+Evidence: `src/commands/cli.rs:461` on HEAD: `/// Capture and survey durable knowledge records (assumption / decision / question / constraint).` vs on `dispatch/197`: `/// Capture and survey durable knowledge records (assumption / decision / question / constraint / evidence / hypothesis / concept).`"""
+disposition = "fix-now"
+response = "Accepted. The clap doc-comment on `cli.rs:461` should list all current record kinds: `assumption / decision / question / constraint / evidence / hypothesis / concept`. This is editorial — clap already lists variants from the ValueEnum, but the prose should match reality. This fix is already applied on `dispatch/197`; the merge will land it."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

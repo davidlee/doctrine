@@ -210,3 +210,18 @@ write suite inside a MARKED fork → marker leg refused ~91 fixtures; fix = clea
 for the trusted gate window + drop the env export. (F3) run_gc prints to fd1 = MCP JSON-RPC
 channel; fix = run_gc_to sink seam. The "operator one-liner" framing in the prior finding
 was an artifact of the fail-fast illusion.
+
+[code-review; F-1-dispatch-integration]
+Token-inefficiency: review required reading the full `git diff 97fa0e96..HEAD`
+(12 files, ~400 lines of diff) to discover the dispatch integration failure.
+No automated signal existed — the RV-249 audit ran against the wrong base
+and produced a clean reconciliation. A pre-close gate that checks "are there
+unmerged dispatch branches?" would have caught this at 2% of the token spend.
+The review then had to reconstruct the git topology (branch --graph, merge-base,
+--contains checks) before it could raise F-1 — all mechanical work that a
+pre-flight dispatch-integrity check would eliminate.
+
+[code-review; F-2-derive-drift]
+Minor: had to cross-reference 7 struct definitions across knowledge.rs to
+spot the inconsistent derive set. A derive-consistency lint on a closed enum's
+variant structs would catch this mechanically.
