@@ -1,0 +1,27 @@
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-207"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "scratch probe phase (throwaway)"
+objective = "Disposable phase for SL-206 PHASE-01 fork-at-base probe. No deliverable."
+entrance_criteria = [
+  { id = "EN-1", text = "coord tree exists" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "probe complete" },
+]
+verification = [
+  { id = "VA-1", expects = "operator confirms probe" },
+]
+specs        = []
+requirements = []
