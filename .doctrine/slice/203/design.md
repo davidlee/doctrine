@@ -12,6 +12,26 @@ severing the one incidental edge, without touching the legitimate forward edge
 and without behaviour change. This is the cheap warm-up (IMP-265) that proves
 the cycle-breaking pattern before the larger integrity refactor (SL-204).
 
+> **⚠ Execute-time correction — F-EXEC-1 (SL-203 PHASE-01, supersedes the SCC
+> topology + count claims below).** The empirical measurement mandated by VT-1
+> (deferred to execute-time per F-4) contradicted two premises this design
+> inherited from RSK-227, and they are corrected here as the durable record:
+> 1. **`{commands, mcp_server}` was NOT a core-*separate* 2-node SCC.** The back
+>    edge entangled `mcp_server` *with* the 23-node core SCC. Measured proof:
+>    restoring the back edge moves the command tangle 86→90 (**+4**), so severing
+>    it ejects `mcp_server` **plus its core-pointing edges** (`→ memory / review /
+>    slice / worktree`…) — a **−4** drop, not the −2 a clean 2-cycle predicts.
+> 2. **The `123` baseline was stale.** The monotone gate never forces tightening,
+>    so the live pre-change count had drifted to **90** (not 123). The correct
+>    tight ratchet is therefore **`command = 86`**, not `121`.
+>
+> The **decision** (D-B fn-pointer injection, §7) is unchanged and validated —
+> the sever is *more* decoupling than designed, not less. Only the numeric/topology
+> narrative was wrong. Every `123`/`121`/`−2`/`core-separate`/`2-cycle` claim
+> below reads under this correction. RSK-227's model is corrected in
+> `mem.pattern.lint.mcp-server-entangled-with-core` and flagged for SL-204
+> (which inherits this precedent) via a backlog note.
+
 ## 2. Current State
 
 The SCC is exactly two edges:

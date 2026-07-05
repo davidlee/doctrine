@@ -1,0 +1,42 @@
+memory_uid = "mem_019f32a08f7a72f1a4c8e4c34b5b872f"
+memory_key = "mem.pattern.lint.mcp-server-entangled-with-core"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = """A back edge can entangle a module with the core SCC — measure the tangle delta, don't trust a coupling map's "separate SCC" claim"""
+summary = "Severing one back edge can drop the tangle by more than 2; a static SCC-separation claim and a monotone baseline both drift — measure empirically."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = [".doctrine/adr/001/layering.toml", "src/mcp_server/tools.rs", "tests/architecture_layering.rs"]
+globs = []
+commands = []
+tags = ["layering", "scc", "tangle", "lint", "adr-001", "rsk-227"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "052f8b31a25cd6f3ff11a36318b43daf35825086"
+ref_name = "refs/heads/edge"
+checkout_state_id = "cf86017b3b2639f47a7f404e0b08a0549742c45b26fce1c9c8453984901fab64"
+base_commit = "b83d1fc4abd699c14880c52c53318184463f54b2"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
