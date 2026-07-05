@@ -36,7 +36,21 @@ All human-in-loop must be **return-value at the script boundary**: worker halts 
 structured "needs decision X" → the script/orchestrator (or the main thread) relays it to the
 user → the answer feeds the next or resumed agent. This fits doctrine's report-and-halt dispatch
 model, but IDE-031 must architect it explicitly (there is no automatic escalation).
+| **SQ4-writes (FS)** — does a fork worker's filesystem write execute? | **YES, unconstrained** | An `isolation:'worktree'` agent wrote `haiku.txt` into its fork with no hook/permission block. FS writes are confined to the fork (import belt captures them). |
+| **SQ4-writes (MCP)** — does a fork worker's MCP governance write land? | **NO — MCP not connected** | From an `isolation:'worktree'` fork, `mcp__doctrine__memory_record` failed at transport: `MCP server "doctrine" is not connected`. It never reached a role/authority gate. **Contrast:** non-isolated SQ4 agents reached doctrine MCP fine. ⇒ **MCP connectivity is context-dependent — present in session/non-isolated agents, ABSENT in `isolation:'worktree'` forks** (the MCP stdio server is session-scoped; the isolated fork env has no pipe to it). |
+| **SQ4-mcp-in-fork** — does an isolated agent EVER get doctrine MCP (e.g. the orchestrator case)? | **PIVOTAL — UNTESTED** | The confined orchestrator (workflow → `agent(isolation:'worktree')` into the coord tree) would be in a fork → likely no MCP → **can't use the `dispatch_import`/`conclude_phase`/`reap` funnel tools**; must run the funnel via CLI (`doctrine dispatch …` in Bash) instead. Confirm before committing IDE-031's orchestrator to an MCP-funnel vs CLI-funnel shape. |
 | SQ5 — `taskBudget:{total}` live in this build? | **UNTESTED** | — |
+
+### Safety posture (operator conclusion)
+**The workflow spawns a confined orchestrator, never a bare worker.** A workflow-spawned worker
+has unsupervised FS-write authority in its fork AND no live human channel (both escalation probes
+negative) — but it also *cannot reach doctrine MCP* from the fork, so it cannot mutate governance
+state directly. The **orchestrator is the trust boundary** (ADR-006 sole-writer; import belt; gated
+`worker_commit`; report-and-halt). IDE-031 shape: **workflow (outer scripted driver) → confined
+dispatch-orchestrator (gated writer) → workers in forks.** The script never needs to Bash-arm
+`base` — it spawns ONE orchestrator, which arms + nested-spawns workers from its own Bash turns
+(dissolves SQ3's no-Bash-in-script constraint). Prior art: `mem.fact.dispatch.confined-orchestrator-driveloop-realizable`.
+OPEN: whether that orchestrator, being itself in a fork, can reach the funnel MCP tools (SQ4-mcp-in-fork) — if not, it drives the funnel via the CLI.
 
 ## Corollary findings
 
