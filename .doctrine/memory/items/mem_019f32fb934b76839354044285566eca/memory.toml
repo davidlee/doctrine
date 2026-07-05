@@ -1,0 +1,42 @@
+memory_uid = "mem_019f32fb934b76839354044285566eca"
+memory_key = "mem.pattern.dispatch.regression-fingerprint-pin-one-binary"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Regression fingerprint pins current_exe — use one binary for capture+diff"
+summary = "INV-8 fingerprint hashes current_exe; mixing nix-PATH and in-tree binaries between capture and diff => phantom cache miss. Pin ./target/debug/doctrine for both; never re-capture with a delta staged."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = ["src/regression_run.rs"]
+globs = []
+commands = ["check regression", "dispatch"]
+tags = ["dispatch", "regression", "fingerprint", "funnel"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1c8db618fee35f953ed9cf5ba4076ff95b78d3de"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5351f546b910b732b46a5bc9e0fe44042137bfa6e532f6eb87c1bec15e8776d7"
+base_commit = "3f9bebeeb0a3be04c127c1806c627651be24747d"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

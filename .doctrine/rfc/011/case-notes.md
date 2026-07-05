@@ -420,3 +420,34 @@ the dispose call site — the CLI could either accept the configured label as an
 alias for its mechanical role, or the error could name the two legal values
 (it does list them, which salvaged it). Minor, but a clean papercut on the
 two-party self-review path.
+
+[plan-review; SL-206-audit-hardening-opus]
+Reviewing a committed plan for audit-readiness cost ~3 grep rounds mostly to
+re-verify design line-cites that had drifted: design §2/§5.2/§5.5 pin symbols to
+dispatch.rs:2896/:3138/:630. Two were merely imprecise (run_status/compute_next_phases
+sit near but not at the cited lines); one (:630 "trunk authority") was semantically
+WRONG — it points at run_show_journal_trunk_oid (a journal-row printer), not a
+reusable trunk_ref resolver. Line-number cites in authored design prose rot fast and
+mislead a downstream reviewer/planner; a symbol name + module is cheaper to verify and
+survives edits. `doctrine slice verify-vt` at plan-time was the single highest-signal
+tool: its UNATTRIBUTABLE vs UNCHECKABLE distinction told me the VT keywords already
+exist in the target files (so the gate bites only once the phase attributes the file),
+which directly surfaced the PHASE-04 VT-1 test_file-attribution gap without reading any
+test code. Selector `list` + `git check-ignore` together resolved the HIGH finding in
+one shot (the /drive-slice home isn't a design-target and .claude/workflows is gitignored).
+
+[dispatch; SL-205-P02-fp-binary]
+PHASE-02 funnel lost ~6 tool-turns to a phantom regression cache miss.
+Root cause: INV-8 fingerprint hashes current_exe. Three doctrine binaries
+coexist in the jail — ./target/debug/doctrine (in-tree, stable path),
+~/.cargo/bin/doctrine (nix-store path, drifts per reinstall), and the
+old-nix path that captured the original 3d3bde baseline (no longer
+reproducible). Capturing with one and diffing with another => phantom
+"no baseline under current fingerprint" (honest cache miss, misleading text).
+Compounding trap: my probe re-captures ran AFTER import with the delta
+staged => post-delta baselines that would cancel a real pass->fail
+regression into a false green. Discipline: pin ONE binary
+(./target/debug/doctrine) for capture AND diff across the whole drive;
+never re-capture with a delta staged (restore to clean B first). The error
+string should name the expected-vs-computed fingerprint + the current_exe
+to make this diagnosable in one look, not three probes.
