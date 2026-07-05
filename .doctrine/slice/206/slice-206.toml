@@ -56,6 +56,11 @@ selector = "tests/e2e_mcp_server.rs"
 intent = "design-target"
 note = "tool-count/name behaviour-lock for the MCP registry PHASE-03 grows"
 
+[[selector]]
+selector = "install/workflows/drive-slice.js"
+intent = "design-target"
+note = "PHASE-04 authored home for /drive-slice reference workflow (OQ-1 resolved); EX-6 selector gate"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-031"
