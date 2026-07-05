@@ -51,6 +51,11 @@ intent = "design-target"
 selector = "install/agents/claude/dispatch-probe.md"
 intent = "design-target"
 
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+note = "tool-count/name behaviour-lock for the MCP registry PHASE-03 grows"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-031"
