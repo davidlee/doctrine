@@ -1,0 +1,202 @@
+# Implementation plan for SL-206 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-206"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-01 — De-risk gate (empirical). Kills or greenlights the whole approach
+# before any receipt code is written. Uses SL-199 machinery as-shipped; no new
+# code. Two unverified premises: SQ3 (RV-255 R4) and ISS-216 install-reseat (R6).
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "De-risk gate: confined fork-at-base from a workflow + install-reseat viability"
+objective = """
+Empirically confirm the two load-bearing harness premises the design rests on, \
+using only shipped SL-199 machinery against a scratch slice — before investing \
+in the receipt plumbing. (1) SQ3: a workflow `agent(isolation:'worktree')` \
+launched from a coord tree on `dispatch/<n>` with an armed `base` mints the fork \
+AT that base on the dispatch branch (not session HEAD). (2) ISS-216: a CHANGED \
+confined agent-def can be made live under `.claude/agents/` (clean reseat or a \
+documented manual placement), so the grant-gate story is trustworthy. A failure \
+here re-enters `/design`, not `/plan`."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked; RV-255 done with no open blocker" },
+  { id = "EN-2", text = "edge promoted to main; a throwaway scratch slice + dispatch coord tree on dispatch/<n> available" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A workflow-spawned isolation:'worktree' agent, driver cwd'd in the coord tree with base armed, mints a fork detached at the armed base on the dispatch branch — evidence (git-common-dir + base sha) logged to the slice notes" },
+  { id = "EX-2", text = "A changed confined agent-def (e.g. an added tool token) is confirmed live under .claude/agents/ via a reseat path OR a documented manual-placement procedure captured in notes; the ISS-216 dependency is characterised, not assumed" },
+  { id = "EX-3", text = "If either premise fails, a design-revisit note is written and the slice returns to design (no phase-02 scaffolding against a dead premise)" },
+]
+verification = [
+  { id = "VH-1", expects = "Human confirms from the logged evidence that the fork base == armed base on the dispatch branch (SQ3), not session HEAD" },
+  { id = "VA-1", expects = "Agent confirms a changed agent-def is readable under .claude/agents/ after the reseat/placement procedure, and records the exact procedure (ISS-216 workaround) in notes" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-02 — The testable core: extract a per-phase projection reader and the
+# durable ReceiptStatus. Behaviour-preserving (D6, R5). No new tool surface yet.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "phase_projection reader extract + ReceiptStatus"
+objective = """
+Extract a read-only per-phase projection over {plan, runtime sheet, committed \
+boundaries} and the durable `ReceiptStatus` enum. `run_status` is refactored to \
+DELEGATE its per-phase row construction to the new projection while keeping ALL \
+slice-global aggregate logic (all_completed, guidance, rendering) unchanged — \
+the existing `dispatch status` suite stays green unchanged (behaviour-preservation \
+gate). `ReceiptStatus` covers every non-completed state the authorities \
+distinguish: NotStarted, InProgress, Blocked (a real compute_next_phases boundary \
++ state::PhaseStatus::Blocked), Completed (⟺ committed boundary row), \
+ConcludeIncomplete (sheet=completed ∧ boundary missing), Unknown (malformed sheet, \
+fail-loud). No silent collapse to NotStarted."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 exit criteria met (approach greenlit)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A read-only phase_projection fn yields one row per planned phase from {plan, sheet, committed boundaries}; run_status delegates to it for phase_rows" },
+  { id = "EX-2", text = "ReceiptStatus enum exists with all six variants; Completed is sourced from the committed boundary row, never the disposable sheet" },
+  { id = "EX-3", text = "Blocked and Unknown are derived and distinct from NotStarted/InProgress; malformed sheets fail loud as Unknown" },
+  { id = "EX-4", text = "Existing dispatch status test suite passes UNCHANGED (behaviour-preservation)" },
+]
+verification = [
+  { id = "VT-1", expects = "phase_projection branch table: boundary-present⇒Completed; sheet-completed∧no-boundary⇒ConcludeIncomplete; sheet-blocked⇒Blocked; malformed⇒Unknown; in_progress/none⇒InProgress/NotStarted",
+    test_file = "src/dispatch.rs", keywords = ["phase_projection", "ReceiptStatus", "ConcludeIncomplete", "Unknown"], waived = false },
+  { id = "VT-2", expects = "run_status delegates per-phase rows to phase_projection and its existing status output is unchanged (behaviour-preservation)",
+    test_file = "src/dispatch.rs", keywords = ["phase_projection", "run_status"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-03 — The three read-only tools + the doctor role/allowlist model.
+# Grow the conformance authority FIRST (ceiling check: 3⊆6 stays green until the
+# defs catch up in PHASE-04). Add the probe role to the marker validator (F1/F5).
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Read-only funnel tools (phase_receipt / next_ready / authored_divergence) + doctor allowlist growth"
+objective = """
+Ship the three read-only doctrine tools over the PHASE-02 projection, each with \
+CLI + MCP surfaces, and grow the doctor #9 conformance authority to match. \
+(a) `dispatch_phase_receipt{slice,phase}` returns `PhaseReceiptResult = \
+Resolved(core) | CoordRefused(reason)` — truthful on the tip-less refusal path \
+(F3), core carries dispatch_tip distinct from boundary.code_end. (b) \
+`dispatch_next_ready{slice}` wraps the existing compute_next_phases authority \
+(no re-derivation). (c) `dispatch_authored_divergence{slice}` computes \
+.doctrine/** divergence trunk_ref..dispatch_tip with trunk_ref from the existing \
+dispatch trunk authority (not hardcoded edge), read-only. Grow \
+`allowed_mcp_tokens`: orchestrator += the three tokens; add a ROLE_PROBE arm \
+holding only the three reads; extend the role-marker validator to accept `probe` \
+(F1/F5). Register all three tools in tools.rs. STD-001: tool tokens are named \
+constants."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed: phase_projection + ReceiptStatus green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch_phase_receipt returns PhaseReceiptResult (Resolved|CoordRefused); every resolve_coord refusal (unknown-slice|ambiguous|stale) surfaces as CoordRefused with no fabricated tip" },
+  { id = "EX-2", text = "dispatch_next_ready returns compute_next_phases output verbatim; no parallel readiness logic" },
+  { id = "EX-3", text = "dispatch_authored_divergence returns {diverged, compared_ref, drifted_paths?}; compared_ref resolved from the dispatch trunk authority, never hardcoded edge; read-only (no coord mutation)" },
+  { id = "EX-4", text = "allowed_mcp_tokens grows: orchestrator gains the 3 read tokens (named consts); a probe role holds exactly the 3 reads; the marker validator accepts worker|orchestrator|probe" },
+  { id = "EX-5", text = "All three tools registered in tools.rs; doctor check #9 stays green (ceiling: existing defs' 3 tokens ⊆ grown allowlist)" },
+]
+verification = [
+  { id = "VT-1", expects = "dispatch_phase_receipt: Resolved carries a real dispatch_tip; each resolve_coord refusal yields CoordRefused(reason) with no tip",
+    test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_phase_receipt", "PhaseReceiptResult", "CoordRefused"], waived = false },
+  { id = "VT-2", expects = "dispatch_next_ready agrees with compute_next_phases on shared fixtures",
+    test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_next_ready", "compute_next_phases"], waived = false },
+  { id = "VT-3", expects = "dispatch_authored_divergence: diverged true iff .doctrine/** differs trunk_ref..dispatch_tip; compared_ref = resolved trunk authority",
+    test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_authored_divergence", "compared_ref"], waived = false },
+  { id = "VT-4", expects = "allowed_mcp_tokens grows orchestrator by 3 reads + adds a probe arm; marker validator accepts probe; doctor #9 green on current defs",
+    test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "allowed_mcp_tokens", "TOOL_DISPATCH_PHASE_RECEIPT"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-04 — Authored agent defs + the /drive-slice reference script. Now the
+# defs can list the new tokens (allowlist already grown ⇒ 6⊆6 green). Ships the
+# install-templated reference workflow with the named HALT contract.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "Agent defs (dispatch-probe + orchestrator allowlist) + /drive-slice reference workflow"
+objective = """
+Author the confined agent defs and the reference driver. (a) New \
+`install/agents/claude/dispatch-probe.md` — doctrine-role: probe, tools: \
+Read/Grep/Glob + the three read-only MCP tokens ONLY (no Write/Edit/Bash/Agent) \
+(F5). (b) `install/agents/claude/dispatch-orchestrator.md` gains the three \
+read-only MCP tokens in its tools: surface. (c) The `/drive-slice` install- \
+templated reference workflow: budget-adaptive phase loop, one dispatch- \
+orchestrator agent() per phase with a PhaseReceipt schema, bootstrap planner + \
+closing divergence probe via the read-only dispatch-probe role, report-and-halt, \
+the named HALT vocabulary contract (funnel:/coord: re-exported from the Rust \
+closed vocabs; script-local reasons single-sourced), never auto-merges. Verified \
+by inspection + doctor conformance; the live e2e drive is PHASE-05."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 landed: tools registered, allowlist grown, probe role known to doctor" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/agents/claude/dispatch-probe.md exists: doctrine-role: probe, MCP tokens = exactly the three reads, NO raw Write/Edit/Bash/Agent" },
+  { id = "EX-2", text = "dispatch-orchestrator.md tools: lists the three new read-only MCP tokens alongside the funnel tokens" },
+  { id = "EX-3", text = "doctor check #9 green on all three defs (worker, orchestrator, probe) — each def's mcp tokens ⊆ its role allowlist" },
+  { id = "EX-4", text = "install/workflows/drive-slice.js (or the agreed home, OQ-1) exists: budget-adaptive loop, per-phase orchestrator with PhaseReceipt schema, named HALT contract, no auto-merge; halt vocabulary references named members not inline literals" },
+  { id = "EX-5", text = "The reference script and defs are seeded by doctrine install (or the documented placement per PHASE-01/ISS-216)" },
+]
+verification = [
+  { id = "VT-1", expects = "doctor conformance: probe + orchestrator + worker defs all pass check #9 with the grown allowlist",
+    test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "agent_conformance_findings"], waived = false },
+  { id = "VA-1", expects = "Agent inspects dispatch-probe.md: doctrine-role probe, exactly the three read MCP tokens, no raw write/bash/agent tools" },
+  { id = "VA-2", expects = "Agent inspects /drive-slice: budget-adaptive loop, PhaseReceipt schema on the per-phase orchestrator agent(), named HALT contract (no inline halt literals), no auto-merge path, probes via dispatch-probe" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-05 — Live e2e acceptance. The full deliverable drives a real multi-phase
+# scratch slice end-to-end; asserts the safety + halt invariants hold in anger.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-05"
+name      = "End-to-end acceptance drive"
+objective = """
+Run the shipped `/drive-slice` against a real multi-phase scratch slice in a \
+dispatch coord tree and assert every load-bearing invariant in anger: phases \
+drive to Completed via typed PhaseReceipts; an injected red verify halts the loop \
+without auto-merge; a forbidden review_*/memory_* write attempted from a spawned \
+agent is refused/absent against the INSTALLED def (grant gate, F2 runtime probe); \
+the authored_divergence advisory emits (never gates); the budget loop paces under \
+a set +Nk target and runs unmetered when total is null."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 landed: defs + reference script live (installed per PHASE-01 procedure)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A multi-phase scratch slice drives to all-Completed via /drive-slice; each phase returns a valid typed PhaseReceipt consumed by the JS loop" },
+  { id = "EX-2", text = "An injected red verify (verify.green=false) halts the loop at that phase; no funnel integrate/auto-merge occurs (SL-199 §D boundary intact)" },
+  { id = "EX-3", text = "A forbidden review_*/memory_* write from a spawned agent is refused/absent against the installed def; granted funnel tools are callable (grant gate proven at runtime, not just source)" },
+  { id = "EX-4", text = "authored_divergence advisory emits in the final report and is never acted on; budget loop paces under +Nk and runs unmetered under null total" },
+]
+verification = [
+  { id = "VH-1", expects = "Human confirms from the drive report: all phases Completed on the happy path; the injected-red run halted at the red phase with no auto-merge" },
+  { id = "VA-1", expects = "Agent confirms the forbidden-write probe was refused/absent against the installed def and the granted funnel tools were callable" },
+  { id = "VH-2", expects = "Human confirms the divergence advisory emitted without gating and the budget loop paced (+Nk) / ran unmetered (null) as designed" },
+]
+specs        = []
+requirements = []
