@@ -20,11 +20,23 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = ".doctrine/adr/001/layering.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/architecture_layering.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/serve.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
