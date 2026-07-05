@@ -1,0 +1,43 @@
+memory_uid = "mem_019f3161168a79e3ac628ed1c2415b55"
+memory_key = "mem.fact.claude.frontmatter-isolation-honored-nested"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Frontmatter isolation honored for nested subagent spawns"
+summary = "Claude Code honors isolation:worktree in subagent-def FRONTMATTER for NESTED spawns (2.1.198); per-call isolation is LLM-unreliable, ride the frontmatter"
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = []
+globs = ["install/agents/**", ".claude/agents/**"]
+commands = []
+tags = ["dispatch", "claude-harness", "subagents", "isolation"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "500bf494d0da7f4bae4dabf8740f75c70bdca068"
+ref_name = "refs/heads/edge"
+checkout_state_id = "92b8761baf1dc5db6a6cb4a013434c2876823c12018c173e7063eb8accf42b5a"
+base_commit = "0c5d96a1a4e9fdcd7276ab0bc4fa77cdfda9b494"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

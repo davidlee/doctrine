@@ -1,0 +1,43 @@
+memory_uid = "mem_019f3161172574d28239642cf0260cff"
+memory_key = "mem.fact.dispatch.confined-orchestrator-driveloop-realizable"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Confined orchestrator drive-loop realizable on claude arm"
+summary = "Confined orchestrator CAN drive nested isolation:worktree workers on claude 2.1.198 (F7 refuted); provisioning needs frontmatter isolation + arm-spawn --base <coord-tip>"
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = []
+globs = ["src/worktree/**", "install/agents/claude/**"]
+commands = ["doctrine dispatch"]
+tags = ["dispatch", "orchestrator"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "500bf494d0da7f4bae4dabf8740f75c70bdca068"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9d35fad22d4574825b80dfacd14f0757170b1414b1c3c2e2c6ff15be7e437b45"
+base_commit = "0c5d96a1a4e9fdcd7276ab0bc4fa77cdfda9b494"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
