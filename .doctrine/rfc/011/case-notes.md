@@ -405,3 +405,8 @@ Friction ledger (each a forward-pointing error into a path that was itself block
 
 Net: a conflicting-merge dispatched slice is currently closeable ONLY by hand
 (update-ref main + forge journal trunk row). IMP-127 + IMP-236 are the fix.
+
+[CHR-039 stage-a; probe-workflow] Workflow tool rejected `run_in_background`
+param (not in schema; workflows always background) — one wasted launch attempt.
+Minor. Otherwise the one-agent worktree probe was clean: 24.6s, 29k subagent
+tokens, structured schema returned exactly the ground-truth fields.
