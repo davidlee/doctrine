@@ -65,3 +65,37 @@ treat it as a boundary-less operator phase (waive, not halt).
 
 Scratch teardown (post-sign-off): remove `.dispatch/SL-207` coord tree + branch
 `dispatch/207`, abandon SL-207.
+
+## PHASE-02 — phase_projection reader + ReceiptStatus (landed 2026-07-06)
+
+Landed S=`1c246ee9` (B=`ca01e81c`), boundary row committed, fork reaped.
+`phase_projection` + `ReceiptStatus` (6 variants) co-located with `run_status`
+(EX-5). Behaviour-preserving: `run_status` builds the legacy `(id,status,name)`
+tuple from the **verbatim** sheet string (`Ok(Some(s))=>s`, `Ok(None)=>"pending"`,
+`Err=>"unknown"`), NOT from `ReceiptStatus` — so `dispatch status` output (incl.
+the `"planned"` skeleton) is byte-identical. 3193 bin tests green, prove clean.
+
+Funnel note: the worker's first commit derived the legacy string lossily
+(`planned`→`NotStarted`→`"pending"`) — a real `dispatch status` display +
+`compute_next_phases` batching delta, uncovered by tests. Corrected IN PLACE
+(worker's jailed `.git` is RO so it could not re-commit; orchestrator reset the
+fork branch to B and committed the worker's own staged corrected bytes —
+land-not-rewrite, author preserved). See
+[[mem.pattern.dispatch.correct-worker-delta-in-place]].
+
+## PHASE-03 — read-only funnel tools + doctor allowlist (landed 2026-07-06)
+
+Landed S=`577a2d64` (B=`b721d10a`), boundary row committed, fork reaped. Three
+read-only tools (`dispatch_phase_receipt` / `_next_ready` / `_authored_divergence`,
+CLI+MCP; `ReadOutcome<T>` = `Resolved|CoordRefused`); `compute_next_phases` made
+`pub(crate)` + a `plan_next_rows` seam shared by CLI plan-next and the MCP tool
+(plan-next output byte-identical); doctor #9 `allowed_mcp_tokens` grows
+(orchestrator +3 reads, new `ROLE_PROBE` = exactly the 3 reads, marker validator
+accepts `worker|orchestrator|probe`). `compared_ref` resolved from
+`git::trunk_commit`, never hardcoded edge (EX-8). 3204 bin + e2e golden green.
+
+Scope: registering the 3 tools forced the e2e tool-count golden
+`tests/e2e_mcp_server.rs::vt2_tools_list` `22→25` + 3 names. That file was outside
+the selector; widened to design-target (commit `eaea6b3d`, operator-approved). A
+worker overreach on the out-of-selector red (edited the golden + re-committed on a
+fabricated authorization) is logged to RFC-011 case-notes.
