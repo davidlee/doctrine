@@ -84,7 +84,8 @@ fn every_spine_flag_parses_and_succeeds_on_every_kind() {
     for kind in SPINE_KINDS {
         for flag in SPINE_FLAGS {
             // The status rows carry a concrete value (`draft`), which is in-vocab
-            // only for spec + memory. For the other kinds `-s draft` is a VOCAB
+            // only for spec + memory + policy + standard + knowledge (SL-197: concept).
+            // For the other kinds `-s draft` is a VOCAB
             // rejection, not a parse failure — so skip it in this PARSE matrix and
             // prove `-s`/`--status` grammar separately in
             // `status_flag_is_recognised_grammar_on_every_kind`.
@@ -102,14 +103,19 @@ fn every_spine_flag_parses_and_succeeds_on_every_kind() {
     }
 }
 
-/// `--status draft` is in-vocab for spec + memory + policy + standard; adr/slice/
-/// backlog reject `draft` (a vocab error, NOT a parse error). The parse-conformance contract is
-/// "the FLAG parses", which the `--all`/`--filter`/`--regexp`/`--tag` rows already
-/// prove for `-s`/`--status` grammar via the in-vocab kinds; for the others we
-/// assert the flag is RECOGNISED (clap-level) by checking the error is the uniform
-/// vocab error, not an "unexpected argument" parse error.
+/// `--status draft` is in-vocab for spec + memory + policy + standard + knowledge
+/// (SL-197: concept kind carries draft status, so knowledge's union vocab now
+/// includes draft). adr/slice/backlog reject `draft` (a vocab error, NOT a parse
+/// error). The parse-conformance contract is "the FLAG parses", which the
+/// `--all`/`--filter`/`--regexp`/`--tag` rows already prove for `-s`/`--status`
+/// grammar via the in-vocab kinds; for the others we assert the flag is RECOGNISED
+/// (clap-level) by checking the error is the uniform vocab error, not an
+/// "unexpected argument" parse error.
 fn status_vocab_has_draft(kind: &str) -> bool {
-    matches!(kind, "spec" | "memory" | "policy" | "standard")
+    matches!(
+        kind,
+        "spec" | "memory" | "policy" | "standard" | "knowledge"
+    )
 }
 
 #[test]
@@ -119,7 +125,7 @@ fn status_flag_is_recognised_grammar_on_every_kind() {
     // `-s/--status` flag is present (parsed) even when its value is out of vocab.
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
-    for kind in ["adr", "slice", "backlog", "knowledge"] {
+    for kind in ["adr", "slice", "backlog"] {
         let out = list(kind, dir, &["-s", "draft"]);
         assert!(
             !out.status.success(),

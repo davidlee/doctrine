@@ -5,18 +5,18 @@
 //! queried metadata), a scaffolded `record-NNN.md` prose body, and an `NNN-slug`
 //! symlink alias — the `backlog.rs` structural twin (design SL-059 §5).
 //!
-//! Six `RecordKind`s ride six `entity::Kind`s over the same kind-blind engine,
+//! Seven `RecordKind`s ride seven `entity::Kind`s over the same kind-blind engine,
 //! each its own tree + reservation namespace (`ASM-001` and `DEC-001` coexist —
 //! the counters are independent). The subtypes diverge in their prefix, status
 //! vocabulary, and the typed `[facet]` they carry.
 //!
-//! This module owns the *knowledge-specific* parts — the six `Kind`s, the
+//! This module owns the *knowledge-specific* parts — the seven `Kind`s, the
 //! per-kind status vocabularies (data, not an enum), the typed facet enum-of-
 //! structs, the shared `Evidence`, the three closed facet value-enums, the
 //! three-layer tolerant parse (`RawRecordToml` + a kind-blind superset `RawFacet`
 //! → `validate` dispatches on `record_kind` → the typed `RecordFacet`, with the
 //! `""`/`[]` → absent seam), and the per-kind scaffold templates. The kind-
-//! agnostic engine is `crate::entity` (unchanged — six new scaffold callers).
+//! agnostic engine is `crate::entity` (unchanged — seven new scaffold callers).
 //!
 //! All phases landed — every production symbol has a real consumer. The only
 //! non-production code is the hand-emit render subtree below (VT-1's byte-stable
@@ -42,12 +42,12 @@ use crate::test_support::SCHEMA_KNOWLEDGE;
 #[cfg(test)]
 use crate::tomlfmt::toml_array_inner;
 
-/// The toml/md file stem — shared by all six kinds (`record-NNN.toml`). Distinct
+/// The toml/md file stem — shared by all seven kinds (`record-NNN.toml`). Distinct
 /// from each `Kind.prefix` (`ASM`/`DEC`/…) and from the per-kind tree dirs.
 const RECORD_STEM: &str = "record";
 
 // ---------------------------------------------------------------------------
-// The discriminator + its six engine `Kind`s
+// The discriminator + its seven engine `Kind`s
 // ---------------------------------------------------------------------------
 
 /// Which knowledge record this is. Closed set; kebab serde (round-trips the
@@ -63,6 +63,7 @@ pub(crate) enum RecordKind {
     Constraint,
     Evidence,
     Hypothesis,
+    Concept,
 }
 
 /// The assumption kind: a working belief held until validated. Own tree +
@@ -114,6 +115,14 @@ pub(crate) const HYPOTHESIS_KIND: Kind = Kind {
     scaffold: |c| record_scaffold(RecordKind::Hypothesis, c),
 };
 
+/// The concept kind: a durable concept definition in the knowledge corpus.
+pub(crate) const CONCEPT_KIND: Kind = Kind {
+    dir: ".doctrine/knowledge/concept",
+    prefix: crate::kinds::CPT,
+    stem: "record",
+    scaffold: |c| record_scaffold(RecordKind::Concept, c),
+};
+
 impl RecordKind {
     /// The engine `Kind` for this record kind — the single source of its tree +
     /// prefix + scaffold.
@@ -125,6 +134,7 @@ impl RecordKind {
             RecordKind::Constraint => &CONSTRAINT_KIND,
             RecordKind::Evidence => &EVIDENCE_KIND,
             RecordKind::Hypothesis => &HYPOTHESIS_KIND,
+            RecordKind::Concept => &CONCEPT_KIND,
         }
     }
 
@@ -144,6 +154,7 @@ impl RecordKind {
             RecordKind::Constraint => "constraint",
             RecordKind::Evidence => "evidence",
             RecordKind::Hypothesis => "hypothesis",
+            RecordKind::Concept => "concept",
         }
     }
 
@@ -180,13 +191,14 @@ impl RecordKind {
 
     /// Every kind in DECLARATION order — the single source for the cross-kind
     /// `list` read (each tree in turn) and the prefix round-trip.
-    pub(crate) const ALL: [RecordKind; 6] = [
+    pub(crate) const ALL: [RecordKind; 7] = [
         RecordKind::Assumption,
         RecordKind::Decision,
         RecordKind::Question,
         RecordKind::Constraint,
         RecordKind::Evidence,
         RecordKind::Hypothesis,
+        RecordKind::Concept,
     ];
 }
 
@@ -214,6 +226,8 @@ pub(crate) const EVIDENCE_STATUSES: &[&str] = &[
 ];
 /// The hypothesis status vocabulary; `proposed` is the seed.
 pub(crate) const HYPOTHESIS_STATUSES: &[&str] = &["proposed", "confirmed", "refuted"];
+/// The concept status vocabulary; `draft` is the seed.
+pub(crate) const CONCEPT_STATUSES: &[&str] = &["draft", "active", "retired"];
 
 /// The default-list HIDE-set (settled states only) — NOT the full vocab, and NOT
 /// the priority partition's terminal set. Drives `listing::retain` (PHASE-03).
@@ -226,6 +240,8 @@ const CONSTRAINT_HIDDEN: &[&str] = &["waived", "superseded", "retired"];
 const EVIDENCE_HIDDEN: &[&str] = &["retracted", "superseded"];
 /// Settled hypothesis — confirmed and refuted both terminal, both hidden.
 const HYPOTHESIS_HIDDEN: &[&str] = &["confirmed", "refuted"];
+/// Settled concept — retired is terminal and hidden.
+const CONCEPT_HIDDEN: &[&str] = &["retired"];
 
 /// The per-kind terminal status sets (D2, SL-097 PHASE-01) — distinct from the
 /// hide-set: `accepted` (decision) is terminal but not hidden. Each is a subset of
@@ -239,6 +255,8 @@ const CONSTRAINT_TERMINAL: &[&str] = &["waived", "superseded", "retired"];
 const EVIDENCE_TERMINAL: &[&str] = &["retracted", "superseded"];
 /// Terminal hypothesis statuses — both confirmed and refuted are terminal.
 const HYPOTHESIS_TERMINAL: &[&str] = &["confirmed", "refuted"];
+/// Terminal concept status — retired is terminal.
+const CONCEPT_TERMINAL: &[&str] = &["retired"];
 
 /// The kind's status vocabulary + known-set — the single source `default_status`,
 /// the PHASE-02 partition, and the PHASE-03 `--status` validator read.
@@ -250,6 +268,7 @@ pub(crate) fn statuses(k: RecordKind) -> &'static [&'static str] {
         RecordKind::Constraint => CONSTRAINT_STATUSES,
         RecordKind::Evidence => EVIDENCE_STATUSES,
         RecordKind::Hypothesis => HYPOTHESIS_STATUSES,
+        RecordKind::Concept => CONCEPT_STATUSES,
     }
 }
 
@@ -270,6 +289,7 @@ const fn hidden(k: RecordKind) -> &'static [&'static str] {
         RecordKind::Constraint => CONSTRAINT_HIDDEN,
         RecordKind::Evidence => EVIDENCE_HIDDEN,
         RecordKind::Hypothesis => HYPOTHESIS_HIDDEN,
+        RecordKind::Concept => CONCEPT_HIDDEN,
     }
 }
 
@@ -283,6 +303,7 @@ const fn terminal(k: RecordKind) -> &'static [&'static str] {
         RecordKind::Constraint => CONSTRAINT_TERMINAL,
         RecordKind::Evidence => EVIDENCE_TERMINAL,
         RecordKind::Hypothesis => HYPOTHESIS_TERMINAL,
+        RecordKind::Concept => CONCEPT_TERMINAL,
     }
 }
 
@@ -456,6 +477,7 @@ pub(crate) enum RecordFacet {
     Constraint(ConstraintFacet),
     Evidence(EvidenceFacet),
     Hypothesis(HypothesisFacet),
+    Concept(ConceptFacet),
 }
 
 /// The assumption facet — `confidence` is assumption-only (§9). Every optional
@@ -522,7 +544,13 @@ pub(crate) struct HypothesisFacet {
     pub(crate) predicts: Option<String>,
 }
 
-/// The shared evidence block (all six kinds, §9): free-text citations. Never the
+/// The concept facet — currently empty (D2, unit struct). Every concept rides
+/// its attributed prose body; the facet exists only to satisfy the kind-scaffold
+/// contract (a `[facet]` header even when empty).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub(crate) struct ConceptFacet {}
+
+/// The shared evidence block (all seven kinds, §9): free-text citations. Never the
 /// queryable relation graph (D5) — three plain `Vec<String>`, `[]` default.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Evidence {
@@ -537,7 +565,7 @@ pub(crate) struct Evidence {
 
 /// The tolerant top layer. `status` stays `String` (validated against
 /// `statuses(kind)` at the CLI seam, PHASE-03 — not here). `[facet]` is read as ONE
-/// kind-blind superset `RawFacet` (every field across all six kinds, each
+/// kind-blind superset `RawFacet` (every field across all seven kinds, each
 /// `#[serde(default)]`), so the read is kind-blind and `validate` is kind-aware.
 /// `[evidence]` defaults empty.
 #[derive(Debug, Deserialize)]
@@ -747,6 +775,10 @@ fn validate_facet(kind: RecordKind, raw: RawFacet) -> anyhow::Result<RecordFacet
             proposition: optional_text(raw.proposition),
             predicts: optional_text(raw.predicts),
         }),
+        RecordKind::Concept => {
+            let _ = raw;
+            RecordFacet::Concept(ConceptFacet::default())
+        }
     })
 }
 
@@ -870,6 +902,7 @@ fn render_facet(facet: &RecordFacet) -> String {
             out.push_str(&opt_text_line("proposition", f.proposition.as_deref()));
             out.push_str(&opt_text_line("predicts", f.predicts.as_deref()));
         }
+        RecordFacet::Concept(_) => {}
     }
     out
 }
@@ -909,6 +942,7 @@ fn render_record_toml_seed(
         RecordKind::Constraint => "templates/knowledge-constraint.toml",
         RecordKind::Evidence => "templates/knowledge-evidence.toml",
         RecordKind::Hypothesis => "templates/knowledge-hypothesis.toml",
+        RecordKind::Concept => "templates/knowledge-concept.toml",
     };
     Ok(crate::install::asset_text(template)?
         .replace("{{id}}", &id.to_string())
@@ -952,6 +986,16 @@ fn record_scaffold(kind: RecordKind, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fi
 // Prefix → kind resolution (FR-004) — the shared `show`/`status` auto-detect
 // ---------------------------------------------------------------------------
 
+/// SL-197 P4: the `RecordKind` prefixes joined with "/" for the `resolve_ref` error
+/// message. When a 7th kind is added in PHASE-02, the message auto-includes it.
+fn record_prefix_list_slash() -> String {
+    RecordKind::ALL
+        .iter()
+        .map(|k| k.prefix())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// Resolve a canonical record ref (`ASM-007` / `dec-3`) into its `(RecordKind, id)`
 /// — the prefix auto-detect shared by `show` and `status` (FR-004, design §6).
 /// Split on the LAST `-`, upper-case the prefix (`dec-3` is tolerated, mirroring
@@ -965,7 +1009,8 @@ fn resolve_ref(reference: &str) -> anyhow::Result<(RecordKind, u32)> {
     })?;
     let kind = RecordKind::from_prefix(&prefix.to_uppercase()).with_context(|| {
         format!(
-            "unknown record prefix `{prefix}` in `{reference}` (expected ASM/DEC/QUE/CON/EVD/HYP)"
+            "unknown record prefix `{prefix}` in `{reference}` (expected {})",
+            record_prefix_list_slash()
         )
     })?;
     let id: u32 = tail
@@ -974,7 +1019,7 @@ fn resolve_ref(reference: &str) -> anyhow::Result<(RecordKind, u32)> {
     Ok((kind, id))
 }
 
-/// The union of all six kinds' status vocabularies — the cross-kind `--status`
+/// The union of all seven kinds' status vocabularies — the cross-kind `--status`
 /// known-set for `knowledge list` (design §6: the validator admits any token that is
 /// in-vocab for ANY kind, so `-s superseded` spans DEC + CON). De-duplicated, in a
 /// stable `RecordKind::ALL` × vocab order.
@@ -1234,6 +1279,7 @@ fn format_facet(facet: &RecordFacet) -> String {
             show_opt_line("predicts", f.predicts.as_deref()),
         ]
         .concat(),
+        RecordFacet::Concept(_) => String::new(),
     };
     if body.is_empty() {
         String::new()
@@ -1354,6 +1400,7 @@ fn facet_json(facet: &RecordFacet) -> serde_json::Value {
             "proposition": f.proposition,
             "predicts": f.predicts,
         }),
+        RecordFacet::Concept(_) => serde_json::json!({}),
     }
 }
 
@@ -1647,7 +1694,7 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum KnowledgeCommand {
-    /// Create a new knowledge record (assumption / decision / question / constraint / evidence / hypothesis).
+    /// Create a new knowledge record (assumption / decision / question / constraint / evidence / hypothesis / concept).
     New {
         kind: RecordKind,
         title: Option<String>,
@@ -1758,6 +1805,18 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::Path;
 
+    /// P4 canary: the resolve_ref error message lists record kind prefixes from the
+    /// RecordKind vocab (not a hand-spelled literal). When a 7th kind is added in
+    /// PHASE-02, this test must be updated to match the new vocab.
+    #[test]
+    fn resolve_ref_error_lists_prefixes_from_vocab() {
+        let msg = record_prefix_list_slash();
+        assert_eq!(
+            msg, "ASM/DEC/QUE/CON/EVD/HYP/CPT",
+            "P4: resolve_ref prefix list must be built from RecordKind vocab"
+        );
+    }
+
     fn ctx_for(kind: RecordKind) -> ScaffoldCtx<'static> {
         let canonical: &'static str = match kind {
             RecordKind::Assumption => "ASM-003",
@@ -1766,6 +1825,7 @@ mod tests {
             RecordKind::Constraint => "CON-003",
             RecordKind::Evidence => "EVD-003",
             RecordKind::Hypothesis => "HYP-003",
+            RecordKind::Concept => "CPT-003",
         };
         ScaffoldCtx {
             id: 3,
@@ -1785,7 +1845,7 @@ mod tests {
         }
         assert_eq!(RecordKind::from_prefix("REQ"), None);
         let prefixes: BTreeSet<&str> = RecordKind::ALL.iter().map(|k| k.prefix()).collect();
-        assert_eq!(prefixes.len(), 6, "the six prefixes are distinct");
+        assert_eq!(prefixes.len(), 7, "the seven prefixes are distinct");
     }
 
     #[test]
@@ -1998,6 +2058,9 @@ mod tests {
                 RecordFacet::Hypothesis(f) => {
                     assert_eq!(f, &HypothesisFacet::default());
                 }
+                RecordFacet::Concept(f) => {
+                    assert_eq!(f, &ConceptFacet::default());
+                }
             }
         }
     }
@@ -2096,6 +2159,7 @@ confidence = \"bogus\"
             RecordKind::Hypothesis => {
                 "\n[facet]\nproposition = \"token TTL is 3600s\"\npredicts = \"requests after 3601s get 401\"\n"
             }
+            RecordKind::Concept => "\n[facet]\n",
         };
         let evidence = "\n[evidence]\nsupports = [\"ADR-001\"]\ncontradicts = []\nnotes = [\"see §5\", \"and §9\"]\n";
         format!("{head}{facet}{evidence}")
