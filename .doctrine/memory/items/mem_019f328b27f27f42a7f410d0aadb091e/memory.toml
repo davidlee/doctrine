@@ -1,0 +1,47 @@
+memory_uid = "mem_019f328b27f27f42a7f410d0aadb091e"
+memory_key = "mem.fact.workflow.no-live-escalation-channel-from-worker"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Background workflow worker has no live escalation channel — human-in-loop is return-value only"
+summary = "A background workflow worker cannot reach the user live (no AskUserQuestion, no skills so /consult is impossible, un-allowlisted MCP runs un-prompted); escalation must be return-value at the script boundary; containment is by policy not by MCP-unreachability."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = []
+globs = ["docs/claude/workflows.md", "install/agents/claude/**", "src/worktree/**"]
+commands = []
+tags = ["workflow", "escalation", "dispatch", "ide-031", "safety", "orchestrator"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "855afca75f0c425ccf144254bac8eab570ab5c79"
+ref_name = "refs/heads/edge"
+checkout_state_id = "91480357d339eb00470553d84164e91b894b85d216d7a4956ea0d25880102e8e"
+base_commit = "dace98a3aec2cea88ebcc0f695f82f953ef6fd28"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.fact.workflow.isolated-fork-reaches-doctrine-mcp"
+

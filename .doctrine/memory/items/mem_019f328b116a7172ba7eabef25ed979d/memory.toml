@@ -1,0 +1,51 @@
+memory_uid = "mem_019f328b116a7172ba7eabef25ed979d"
+memory_key = "mem.fact.workflow.isolated-fork-reaches-doctrine-mcp"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "isolation:worktree forks reach doctrine MCP with a clean binary — MCP-funnel viable for a workflow-spawned orchestrator"
+summary = "No isolation limit: a fork agent reaches doctrine MCP fine when DOCTRINE_BIN is a real binary, so a workflow-spawned confined orchestrator can drive the funnel via its granted dispatch_* MCP tools."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = []
+globs = [".mcp.json", "src/worktree/**", "install/agents/claude/**"]
+commands = ["doctrine dispatch"]
+tags = ["mcp", "workflow", "dispatch", "ide-031", "orchestrator"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "855afca75f0c425ccf144254bac8eab570ab5c79"
+ref_name = "refs/heads/edge"
+checkout_state_id = "12c4c7d4847bbd176d85151a4b772a6ac3a4cf9ed8e650df26d16148794853c7"
+base_commit = "dace98a3aec2cea88ebcc0f695f82f953ef6fd28"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.fact.dispatch.mcp-stdio-shim-breaks-fork-servers"
+
+[[relation]]
+label = "related"
+target = "mem.fact.dispatch.confined-orchestrator-driveloop-realizable"
+

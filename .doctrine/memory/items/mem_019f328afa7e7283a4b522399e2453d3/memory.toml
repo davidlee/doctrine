@@ -1,0 +1,43 @@
+memory_uid = "mem_019f328afa7e7283a4b522399e2453d3"
+memory_key = "mem.fact.dispatch.mcp-stdio-shim-breaks-fork-servers"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "STDIO-shim footgun: wrapping ${DOCTRINE_BIN} serve --mcp breaks fork-spawned MCP servers"
+summary = "A shell shim in DOCTRINE_BIN breaks the stdio JSON-RPC handshake for fork-spawned doctrine MCP servers; main's pre-shim connection masks it, so only forks fail — looks like an isolation limit."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = []
+globs = [".mcp.json", "src/worktree/**", "src/commands/serve.rs"]
+commands = []
+tags = ["mcp", "dispatch", "workflow", "footgun", "doctrine-bin", "stdio"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "855afca75f0c425ccf144254bac8eab570ab5c79"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5b79653298d60e3a407d7a9dee7a85b52b1db59b8b1c35fe059aa093e682d2ee"
+base_commit = "dace98a3aec2cea88ebcc0f695f82f953ef6fd28"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
