@@ -138,11 +138,16 @@ PHASE-02:
 - `src/integrity.rs` — `CONCEPT_KIND` import; `KindRef` row after `HYPOTHESIS_KIND`;
   bump the numbered-kind count pin; add `CPT` to the prefix-collision list.
 - `src/relation.rs` — append `CPT` to concerns-sources (`:422`), `governed_by`-sources
-  (`:556`), Shapes-target (`:530`); the P2 pins and P3 canaries then pass with the append.
+  (`:556`), Shapes-target (`:531`); the P2 pins and P3 canaries then pass with the append.
+  **Also re-pin the existing explicit Shapes-target assertion (`relation.rs:2131`)** —
+  a sorted 19-kind literal list; CPT sorts between `CON` and `DEC`. (`governed_by`-sources
+  has no existing full-list test — only the new P3 canary covers it.)
 - `src/priority/partition.rs` — `KindPartition { prefix: kinds::CPT, workable: &[],
   gating: &["draft", "active"], terminal: &["retired"] }`.
-- `src/commands/cli.rs` — `:461` clap doc-comment prose: hand-add "concept"
-  (editorial). **Coordinate with the concurrent `cli.rs` edit in flight.**
+- `src/commands/cli.rs` — `:461` clap doc-comment prose: already 4-kind stale
+  ("assumption / decision / question / constraint" — missing evd/hyp). Bring to
+  the current set incl "concept" (editorial). **Coordinate with the concurrent
+  `cli.rs` edit in flight.**
 - `install/templates/knowledge-concept.toml` — new seed. `record_kind = "concept"`,
   `status = "draft"`, an **empty `[facet]` header** (header line, zero fields — the
   scaffold-order invariant requires it, D2), `[evidence]` + `[relationships]` empty.

@@ -1,0 +1,97 @@
+# Implementation plan for SL-197 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-197"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ---------------------------------------------------------------------------
+# PHASE-01 — behaviour-preserving DRY (6 kinds; existing suites green UNCHANGED)
+# Closes the unguarded record-kind scatter BEFORE CPT lands, so PHASE-02 is a
+# clean append. No new kind, no user-visible change. Design §2 (P2/P3/P4).
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-01"
+name      = "DRY the record-kind scatter (behaviour-preserving)"
+objective = """
+Close the two unguarded composite-union relation sites and the two user-facing \
+runtime kind-list messages so a new record kind edits one source, not many — \
+without changing any observable behaviour for the current 6 kinds. P2: \
+single-entry the two double-entry relation pins to a RECORD-derived expected \
+set. P3: add drift canaries asserting the RECORD-subset of Shapes-target and \
+governed_by-sources equals kinds::RECORD. P4: derive the dep_seq needs/after \
+rejection message and the resolve_ref unknown-prefix error from RecordKind, \
+pinned by canaries to the current 6-kind strings. The existing relation and \
+partition suites are the proof: they must stay green UNEDITED.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked and current against the tree (SL-197 status ≥ plan; external review integrated, plan re-grep clean)." },
+  { id = "EN-2", text = "baseline: `doctrine check gate` (or cargo test) green before any edit — the behaviour-preservation reference point." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "P2: the concerns/References pin (relation.rs:1774) and the Supersedes pin (relation.rs:1782) compare against a kinds::RECORD-derived expected tail, not a re-spelled string literal." },
+  { id = "EX-2", text = "P3: two new canaries assert the RECORD-subset of the Shapes-target union (relation.rs:531) and the governed_by-sources union (relation.rs:556) each equals kinds::RECORD." },
+  { id = "EX-3", text = "P4: dep_seq.rs:84 and knowledge.rs:968 build their record-kind list from RecordKind (as_str / prefix), not a literal; a canary pins each derived string == the current 6-kind value." },
+  { id = "EX-4", text = "behaviour-preserving: the existing relation and partition test suites pass with ZERO edits to their assertions (the diff touches no existing test body)." },
+]
+verification = [
+  { id = "VT-1", mode = "test", expects = "The concerns and Supersedes double-entry pins compare a git/shipped tail against a RECORD-derived set, so a record-kind change edits only the rule + RECORD.", test_file = "src/relation.rs", keywords = ["sources_match_shipped_accessors", "RECORD"], waived = false },
+  { id = "VT-2", mode = "test", expects = "Two canaries: the RECORD-subset of Shapes-target and of governed_by-sources each == kinds::RECORD. Red if a record kind is dropped from either union.", test_file = "src/relation.rs", keywords = ["shapes_target_record_subset_is_record", "governed_by_sources_record_subset_is_record", "RECORD"], waived = false },
+  { id = "VT-3", mode = "test", expects = "resolve_ref unknown-prefix error is built from RecordKind prefixes; a canary pins it == 'ASM/DEC/QUE/CON/EVD/HYP' in PHASE-01.", test_file = "src/knowledge.rs", keywords = ["resolve_ref_error_lists_prefixes_from_vocab", "RecordKind"], waived = false },
+  { id = "VT-4", mode = "test", expects = "The needs/after rejection message record-kind list is built from RecordKind::as_str; a canary pins it == the current full-word 6-kind list.", test_file = "src/commands/dep_seq.rs", keywords = ["needs_after_message_lists_record_kinds_from_vocab", "RecordKind"], waived = false },
+  { id = "VA-1", mode = "agent", expects = "Behaviour-preservation: the diff for PHASE-01 edits NO existing relation/partition test assertion, and the full suite is green — confirm by inspecting the diff and the run." },
+]
+specs        = []
+requirements = []
+
+# ---------------------------------------------------------------------------
+# PHASE-02 — add the Concept (CPT) record kind
+# Every record-bearing site is now compiler-forced, RECORD-derived, or
+# canary-guarded (incl. the PHASE-01 canaries). Design §1/§3/§4.
+# ---------------------------------------------------------------------------
+[[phase]]
+id        = "PHASE-02"
+name      = "Add the Concept (CPT) record kind"
+objective = """
+Add a seventh RecordKind — Concept (prefix CPT, tree .doctrine/knowledge/concept): \
+a neutral, prose-first record with status vocab [draft, active, retired] (seed \
+draft; hidden/terminal {retired}), an EMPTY ConceptFacet, and no supersede policy \
+(D4 — non-supersedable with zero supersede.rs edits). Append CPT to kinds::RECORD \
+and the four hand-spelled combined constants; fill the compiler-forced knowledge.rs \
+data + match arms; add the integrity KINDS row, the partition row, the three \
+relation record-set appends; ship the seed template with an empty [facet] header; \
+re-pin the goldens and clap/doc prose. The PHASE-01 canaries now REQUIRE the CPT \
+append; the scaffold-order loop stays green unedited.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the DRY landed, all four canaries green at 6 kinds, suites green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "kinds.rs: CPT const; CPT appended to RECORD and to all four combined constants (SEARCH_DEFAULT, ALL_KINDS, TAGGABLE, ADMISSIBLE_DEP_TARGETS) in record-tail position; groupings assertion updated. combined_constants_cover_record green." },
+  { id = "EX-2", text = "knowledge.rs: Concept variant; CONCEPT_KIND; CONCEPT_STATUSES/HIDDEN/TERMINAL; empty ConceptFacet + RecordFacet::Concept; every compiler-forced match arm (kind/as_str/statuses/hidden/terminal/validate_facet/render_facet/format_facet/facet_json/render_record_toml_seed); ALL 6→7; resolve_ref + doc-comments updated. Compiles." },
+  { id = "EX-3", text = "integrity.rs KINDS row + count pin + prefix-collision; partition.rs CPT row (workable [], gating [draft,active], terminal [retired]); relation.rs appends to concerns-sources, governed_by-sources, Shapes-target; relation.rs:2131 explicit Shapes-target list re-pinned with CPT." },
+  { id = "EX-4", text = "seed template install/templates/knowledge-concept.toml with record_kind=concept, status=draft, empty [facet] header, empty [evidence]/[relationships]; the per-kind scaffold-order loop (knowledge.rs:2162) passes UNEDITED for CPT." },
+  { id = "EX-5", text = "goldens re-pinned to 7-kind strings (e2e_validate_byte_exact_golden, e2e_knowledge_cli_golden unknown-prefix); clap prose (cli.rs:461, knowledge.rs:1650) + install/using-doctrine.md brought current." },
+  { id = "EX-6", text = "CPT works end-to-end: `knowledge new concept \"X\"` mints CPT-001; show/inspect render the empty facet as no [facet] block; `link CPT-001 concerns SL-YYY` accepted; supersede rejects CPT as NEW and OLD." },
+]
+verification = [
+  { id = "VT-1", mode = "test", expects = "knowledge new concept mints CPT-001 in .doctrine/knowledge/concept with status draft; show routes the CPT prefix to the concept tree.", test_file = "tests/e2e_knowledge_cli_golden.rs", keywords = ["concept", "CPT-001"], waived = false },
+  { id = "VT-2", mode = "test", expects = "A Concept record renders \\n[facet]\\n with no field lines, parses back to ConceptFacet::default(), re-renders identically (byte-stable); facet_json emits {}.", test_file = "src/knowledge.rs", keywords = ["ConceptFacet", "concept", "facet"], waived = false },
+  { id = "VT-3", mode = "test", expects = "The vocab canaries cover CPT automatically once in RECORD/ALL: combined_constants_cover_record + groupings assertion include CPT; the partition ALL-loop covers CONCEPT_STATUSES.", test_file = "src/kinds.rs", keywords = ["combined_constants_cover_record", "CPT"], waived = false },
+  { id = "VT-4", mode = "test", expects = "Shapes-target explicit assertion (relation.rs:2131) includes CPT; the PHASE-01 record-subset canaries pass with the CPT append.", test_file = "src/relation.rs", keywords = ["CPT"], waived = false },
+  { id = "VT-5", mode = "test", expects = "validate byte-exact scanned-list golden and the unknown-prefix error golden both include CPT (7-kind strings).", test_file = "tests/e2e_validate_byte_exact_golden.rs", keywords = ["CPT"], waived = false },
+  { id = "VT-6", mode = "test", expects = "supersede rejects CPT as NEW and as OLD (validate_matrix absence + _ => None), identical to HYP — zero supersede.rs edits.", test_file = "src/commands/supersede.rs", keywords = ["concept", "CPT"], waived = false },
+]
+specs        = []
+requirements = []
