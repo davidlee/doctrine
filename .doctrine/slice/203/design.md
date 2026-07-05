@@ -53,8 +53,10 @@ Plumbing: `serve()` consumes `McpConfig` at startup, extracts `config.path` into
 - **RustEmbed anchor** — `embedded_hymns`/`embedded_seal_set` bind `Assets`
   (`install.rs:20-22`), the crate-wide embed root; the corpus gather cannot
   leave the command tier.
-- **STD-001** — the ratchet value is a single-sourced named constant in
-  `layering.toml`; the test-header comment must not drift from it.
+- **STD-001** — the ratchet value is single-sourced in `layering.toml`
+  (`command`, read at runtime by the gate); no second authored copy exists. The
+  `120` figures in the test file are historical SL-112 report prose, **not** a
+  mirror of the constant, so they fall outside STD-001's scope (§8 R3).
 
 ## 4. Guiding Principles
 
@@ -143,12 +145,18 @@ without saving any plumbing.
 - **INV-1** — `mcp_server` production code holds zero `crate::commands` and zero
   `crate::install` import paths after the change. Proven structurally by VT-1.
 - **INV-2** — `doctrine_onboard` output is byte-identical (VT-2).
-- **Edge — cfg(test) callers.** The in-module `#[cfg(test)]` tests call
-  `dispatch(&req, &root)` (`tools.rs:1458/1471/1628/1643`); they gain the arg
-  and pass the real `crate::commands::prompt::model_keys`. The layering
-  extractor **excludes `#[cfg(test)]` item/module bodies** (`architecture_
-  layering.rs:120,315,326`), so this reference is invisible to the gate — it
-  can neither mask a failure nor forge a pass.
+- **Edge — cfg(test) callers.** All test callers live in one `#[cfg(test)] mod
+  tests` (opens `tools.rs:1386`): **~13 direct `dispatch(&req, …)` call sites**
+  (`tools.rs:1458/1471/1628/1643/1745/1760/1775/1790/1804/1818/1917/1935/1961`)
+  **plus the `memory_dispatch` helper** (`tools.rs:1900`, itself calling
+  `dispatch`, invoked ~10×). Each direct caller gains the arg passing the real
+  `crate::commands::prompt::model_keys`; the helper gains the param and threads
+  it (or supplies `model_keys` internally). The layering extractor **excludes
+  `#[cfg(test)]` item/module bodies** (`architecture_layering.rs:120` rule;
+  `visit_item_mod` early-return `:324-326`), so all of this is invisible to the
+  gate — it can neither mask a failure nor forge a pass. Mechanical and
+  cfg(test)-confined, but the full surface is **~14 signatures, not four** (a
+  `/plan` scope note — a missed call site is a mid-phase compile failure).
 
 ## 6. Open Questions & Unknowns
 
@@ -192,26 +200,46 @@ All resolved during design:
 
 - **R1 (slice) — extraction sprawl.** Mitigated by choosing D-B (zero module
   moves) over D-A.
-- **R2 — silent mis-wire.** A null/wrong `ModelKeysFn` would compile and pass
-  the structure-only VT-1. Mitigated by the wiring guard (§9): a test that
-  drives `render_onboard` through the injected pointer and asserts the model-key
-  section renders non-empty.
-- **R3 — ratchet drift.** The test-header comment is already stale (120 vs
-  baseline 123, `architecture_layering.rs:11-12`). Fix it to 121 in-slice
-  (STD-001 single-source hygiene) while touching the gate.
+- **R2 — silent mis-wire.** A **wrong same-signature** `ModelKeysFn` (a plain
+  `fn` pointer cannot be null in safe Rust) would compile and pass the
+  structure-only VT-1. Mitigated by the wiring guard (§9 VT-3): a test that
+  drives `render_onboard` through the injected pointer and asserts a **known
+  model key renders** in the section — asserting mere non-emptiness is inert
+  (the empty-corpus placeholder always makes the section non-empty; see §9).
+- **R3 — ratchet drift (non-goal, clarified).** The live baseline is
+  single-sourced at `layering.toml:156` (`command = 123`), read at runtime by
+  the gate — that value legitimately ratchets 123→121 in-slice. The `120`
+  figures in `architecture_layering.rs` (lines 8, 22) are a **historical SL-112
+  `PHASE-01 go/no-go report` snapshot**, not a live constant; STD-001 does not
+  govern a dated narrative comment. **Leave the SL-112 report block untouched**
+  (it is history) — editing it to 121 would make it neither the SL-112 value nor
+  sourced, and there are two occurrences, not one. Not a slice objective.
 
 ## 9. Quality Engineering & Validation
 
 - **VT-1 (primary, structural proof).** `cargo test --test
-  architecture_layering` green with `[tangle_baseline] command = 121`; Tarjan no
-  longer groups `{commands, mcp_server}`. Load-bearing: a surviving production
-  back-edge holds the count at 123 > 121 → RED. Expected exactly −2 (the
-  2-cycle's two edges), since the SCC is core-separate (RSK-227).
+  architecture_layering` green with `[tangle_baseline] command = 121`. What the
+  gate proves is the **scalar ratchet** `count_tangle_edges(command) ≤ 121`
+  (Assertion 4); a surviving production back-edge holds the count at 123 > 121 →
+  RED (load-bearing). The stronger claim that Tarjan no longer *groups*
+  `{commands, mcp_server}` is **inferred** from the −2 drop, or shown explicitly
+  via the `#[ignore] dump_real_graph` diagnostic (`architecture_layering.rs
+  ~:1125`) — the standard gate emits a count, not a membership report. Expected
+  exactly −2 (the 2-cycle's two edges), since the SCC is core-separate
+  (RSK-227); verified empirically at execute-time, never hard-coded blind.
 - **VT-2 (behaviour-preservation).** Full suite green, unchanged.
   `doctrine_onboard` output byte-identical.
-- **VT-3 (wiring guard).** A test drives `dispatch("doctrine_onboard")` /
-  `render_onboard` through the injected `ModelKeysFn` and asserts the model-key
-  section is present and non-empty (R2). Add red/green if none exists.
+- **VT-3 (wiring guard).** A test drives `render_onboard` /
+  `dispatch("doctrine_onboard")` through an injected `ModelKeysFn` and asserts
+  on **actual key content** — a known corpus model key appears as a `` - `…` ``
+  bullet line — **not** merely that the section is present. (Section-non-empty is
+  inert: `render_model_band_guidance` emits the `(no model keys in corpus)`
+  placeholder under the always-present section header, `tools.rs:1366-1375`, so
+  an empty producer would pass.) This proves the injected producer's output
+  reaches the rendered section (R2). The one production supply site —
+  `run_serve` coercing the real `crate::commands::prompt::model_keys` into
+  `McpConfig` (`serve.rs:28`) — rests on compile-time fn-ptr coercion + VA-1, not
+  VT-3; VT-3 proves the *thread*, not the *supply*. Add red/green if none exists.
 - **VA-1.** `doctrine slice conformance SL-203` clean against the design-target
   selectors (§ code-impact).
 
@@ -220,10 +248,10 @@ Code-impact / design-target touch-set:
 | path | change |
 |---|---|
 | `src/mcp_server/mod.rs` | `ModelKeysFn` type; `model_keys` field on `McpConfig`; `serve` threads it into `dispatch` |
-| `src/mcp_server/tools.rs` | +param on `dispatch`/`handle_tools_call`/`call_tool`/`render_onboard`/`render_model_band_guidance`; drop the `crate::commands::prompt::model_keys` static call; cfg(test) `dispatch` callers gain the arg; wiring guard test |
+| `src/mcp_server/tools.rs` | +param on `dispatch`/`handle_tools_call`/`call_tool`/`render_onboard`/`render_model_band_guidance`; drop the `crate::commands::prompt::model_keys` static call; **all ~13 cfg(test) `dispatch` callers + the `memory_dispatch` helper** gain the arg (§5.5); wiring guard test |
 | `src/commands/serve.rs` | supply `model_keys` in the `McpConfig` literal |
 | `.doctrine/adr/001/layering.toml` | ratchet `command = 123 → 121` |
-| `tests/architecture_layering.rs` | fix stale header comment `120 → 121` |
+| `tests/architecture_layering.rs` | **no source edit** — run the gate green at `command = 121` (VT-1); the `120` figures (lines 8, 22) are historical SL-112 report prose, not the live baseline (§8 R3) |
 
 `src/commands/prompt.rs` is **unchanged** (`model_keys` stays put).
 
@@ -247,4 +275,17 @@ Code-impact / design-target touch-set:
 Impl nicety for `/plan`: bind `let model_keys = config.model_keys;` before the
 serve loop (Copy, but reads clearer than repeated `config.` access).
 
-(external adversarial pass — pending user choice)
+**External adversarial pass — RV-252 (inquisition; codex GPT-5.5 + Inquisitor).**
+Core §7 decision (D-B over D-A) **survived** — no new same-tier edge; D-B
+strictly better than D-A on the RSK-227 concentration axis (confirmed
+independently). Four charges raised; all reconciled into this design:
+- **F-1 (blocker)** — VT-3 was inert (asserted section-non-empty, which the
+  empty-corpus placeholder always satisfies). Rewritten to assert on real key
+  content; R2 re-characterised (wrong-fn, not null); supply-site coverage stated
+  (§8 R2, §9 VT-3).
+- **F-2 (major)** — R3/STD-001 misapplied to a historical SL-112 report comment;
+  reframed as a non-goal, the report block left untouched (§3, §8 R3, §9 row).
+- **F-3 (major)** — §5.5 undercounted the cfg(test) edit surface (4 → ~13
+  callers + `memory_dispatch`); corrected (§5.5, §9 row).
+- **F-4 (minor)** — VT-1 conflated ratchet-count with SCC-membership proof;
+  tightened (§9 VT-1).

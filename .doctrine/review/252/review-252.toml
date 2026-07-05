@@ -1,0 +1,52 @@
+id    = 252
+slug  = "design-review-of-sl-203"
+title = "design review of SL-203"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "design-author"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-203"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "VT-3 wiring guard is inert: asserts section non-empty, but empty producer still renders a non-empty placeholder"
+detail = "EXPECTED: a wiring guard that FAILS when the injected ModelKeysFn is mis-wired (the §8 R2 risk). OBSERVED: VT-3 (design.md:212-214) asserts the model-key section is 'present and non-empty'. But render_model_band_guidance (tools.rs:1366-1373) emits a non-empty placeholder '(no model keys in corpus)' when keys.is_empty(), under the always-present ONBOARD_MODEL_SECTION_HEADER (tools.rs:1346,1375). So the assertion passes even when the producer returns an empty Vec — the guard does not guard. Two further gaps: (a) the 'null ModelKeysFn' framing (§8 R2, §9 R2) is not a real safe-Rust failure mode for a plain fn pointer — the true risk is a wrong same-signature function; (b) VT-3 drives an injected fn through render_onboard/dispatch, proving local plumbing but NOT that run_serve (serve.rs:28) wires the real crate::commands::prompt::model_keys into McpConfig — the one production supply site is left unverified by VT-3. PENANCE: VT-3 must assert on actual key CONTENT (a known corpus key, or the '- `' bullet-line form), not section-non-empty; re-characterize R2 as wrong-fn, not null; and either cover the run_serve supply site or state explicitly why serve.rs:28 rests on VA-1/compile-only. On a precedent-setting slice the primary wiring guard must actually bite."
+disposition = "fix-now"
+response = "Accepted. VT-3 rewritten (§9): asserts a known corpus model key renders as a bullet line, not section-non-empty; explicitly notes the empty-corpus placeholder (tools.rs:1366-1375) makes section-non-empty inert. R2 re-characterised (§8): 'wrong same-signature fn', a plain fn-ptr cannot be null in safe Rust. Supply-site gap stated: run_serve/serve.rs:28 rests on compile-time coercion + VA-1; VT-3 proves the thread, not the supply."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "R3/STD-001 misapplied: '120' header is a historical SL-112 report snapshot, not a live constant; editing to 121 corrupts it and misses a 2nd occurrence"
+detail = "EXPECTED: STD-001 (single-source named constants) invoked only where a value is duplicated as an un-sourced constant; remediation improves single-sourcing. OBSERVED: the tangle baseline is ALREADY single-sourced at layering.toml:156 (command=123) and read at runtime by the gate (architecture_layering.rs parses [tangle_baseline]). The '120' in architecture_layering.rs is a HISTORICAL SL-112 'PHASE-01 go/no-go report' snapshot (lines 8 and 22, under the SL-112 report header at line 3), documenting the count AT THAT TIME — not a live constant. STD-001 does not apply to a dated narrative comment. Editing it to '121' yields a value that is neither the SL-112 historical figure (120) nor sourced, corrupting the report's internal consistency ('Decision: GO' was for a 120-edge state). Design §8 R3 names a single 'header comment' but there are TWO occurrences (lines 8, 22). PENANCE: drop the STD-001 justification. Leave the SL-112 report block untouched (it is history); or if updating, update BOTH occurrences and annotate as post-SL-203, never silently overwrite. Do NOT conflate this cosmetic comment with the ratchet in layering.toml:156 — THAT is the real single source and DOES legitimately change 123→121 in-slice."
+disposition = "fix-now"
+response = "Accepted. STD-001 justification dropped. R3 reframed as a non-goal (§8): the live baseline single-sources at layering.toml:156 and ratchets 123->121; the '120' at architecture_layering.rs lines 8 & 22 is historical SL-112 PHASE-01 report prose, left untouched. §3 STD-001 force corrected; §9 touch-set row changed to 'no source edit — run the gate green at 121'."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "§5.5 understates cfg(test) edit surface: names 4 dispatch callers, actual is ~13 + a memory_dispatch wrapper"
+detail = "EXPECTED: the design's edit-surface accounting matches the code the plan will touch. OBSERVED: §5.5 (design.md:146) and the §9 tools.rs touch-set row name four cfg(test) dispatch callers (1458/1471/1628/1643). Actual count is 13 direct dispatch() call sites — add tools.rs:1745,1760,1775,1790,1804,1818,1917,1935,1961 — PLUS a memory_dispatch wrapper (tools.rs:1900) that itself calls dispatch and is invoked ~10 times; that wrapper must gain the ModelKeysFn param too (or supply model_keys internally). The gate-exclusion claim HOLDS: all sit inside one #[cfg(test)] mod tests (opens tools.rs:1386), and extract_edges prunes cfg(test) module bodies (architecture_layering.rs:120 rule; visit_item_mod early-return at :324-326). So this is not a correctness break — but the understated surface will mislead /plan's scope/effort and a missed call site becomes a compile failure mid-phase. PENANCE: correct §5.5 and the §9 tools.rs row to read 'all ~13 in-module dispatch callers + the memory_dispatch helper gain the arg'; note the mechanical, cfg(test)-confined, gate-invisible nature so /plan budgets it."
+disposition = "fix-now"
+response = "Accepted. §5.5 corrected: ~13 direct dispatch callers (enumerated) + the memory_dispatch helper (tools.rs:1900), all in one #[cfg(test)] mod tests (opens :1386); helper gains the param and threads it. Gate-exclusion re-cited (:120 rule, visit_item_mod :324-326) — invisible to the gate, holds. §9 tools.rs row updated; ~14-signature scope noted for /plan."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "VT-1 conflates ratchet-count proof with SCC-membership proof"
+detail = "EXPECTED: VT-1's stated evidence matches what the standard gate actually asserts. OBSERVED: VT-1 (design.md:205-209) claims 'cargo test --test architecture_layering green ... Tarjan no longer groups {commands, mcp_server}'. The standard Assertion 4 proves only count_tangle_edges(command) <= baseline (architecture_layering.rs:691-; layering.toml:156) — a scalar. The −2 count drop (123→121) is CONSISTENT with the SCC dissolving, but the gate emits no membership report; explicit SCC-membership evidence lives in the #[ignore] dump_real_graph diagnostic (architecture_layering.rs ~:1125). Both adversaries agree deferring the empirical −2 to execute-time is ACCEPTABLE at design lock (RSK-227 already grounds the split at backlog-227.md:94; the sole production back-edge is tools.rs:1365) — so this is not blocking. But on a precedent-setting slice VT-1 should distinguish 'ratchet passes at 121' (what the gate proves) from 'SCC gone' (inferred, or shown via the diagnostic). PENANCE: tighten VT-1 — either run the dump_real_graph diagnostic at execute-time and cite it for membership, or state plainly the membership claim is inferred from the count drop."
+disposition = "fix-now"
+response = "Accepted. VT-1 tightened (§9): the standard gate proves only the scalar ratchet count_tangle_edges(command) <= 121 (Assertion 4); the 'Tarjan no longer groups {commands,mcp_server}' membership claim is inferred from the -2 drop or shown via the #[ignore] dump_real_graph diagnostic (~:1125). Execute-time deferral of the empirical -2 confirmed acceptable by both adversaries."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
