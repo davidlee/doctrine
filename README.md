@@ -284,6 +284,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-012 — Parallel Fan-out Safety: Containment, Disjointness, and Shared Responsibility](.doctrine/rfc/012/rfc-012.md) — `open`
 - [RFC-013 — Prompt cascade selection algebra: composable trait categories and disjunction-via-classification](.doctrine/rfc/013/rfc-013.md) — `open`
 - [RFC-014 — Multi-harness fleet: declaration, routing, sandbox backend](.doctrine/rfc/014/rfc-014.md) — `open`
+- [RFC-015 — Governance state on a dedicated ref namespace](.doctrine/rfc/015/rfc-015.md) — `open`
 
 ### Architecture Decision Records
 
