@@ -1,7 +1,7 @@
 id = 203
 slug = "dissolve-commandsmcp-server-dependency-cycle"
 title = "Dissolve commands↔mcp_server dependency cycle"
-status = "started"
+status = "reconcile"
 created = "2026-07-04"
 updated = "2026-07-05"
 tags = []

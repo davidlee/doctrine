@@ -1,0 +1,70 @@
+id    = 253
+slug  = "reconciliation-review-of-sl-203"
+title = "reconciliation review of SL-203"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-203"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "EX-1/VA-2 INV-1: mcp_server production corpus-agnostic — expected zero crate::commands|crate::install in prod, observed all 10 hits under #[cfg(test)] (line 1401+); prod render path uses injected ModelKeysFn"
+detail = "grep src/mcp_server/ shows crate::commands::prompt::model_keys only at 1503+ inside 'mod tests' (starts 1401). render_onboard(1370)/render_model_band_guidance(1379) take model_keys: ModelKeysFn and call (model_keys)(root,None). INV-1 satisfied."
+disposition = "aligned"
+response = "Confirmed: production import-free of crate::commands/crate::install; injected ModelKeysFn drives the render path. INV-1 holds."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "EX-3/VT-1 tangle ratchet: expected command=86 + architecture_layering green, observed command=86 (layering.toml:162), check gate exit 0"
+detail = "F-EXEC-1 topology correction (123 stale, live 90, -4 drop, mcp_server fused with core SCC) ALREADY reconciled into canon at execute-time: design.md §1 superseding note, RSK-228 (open, flags SL-204), mem.pattern.lint.mcp-server-entangled-with-core. Nothing left for reconcile."
+disposition = "aligned"
+response = "baseline=86, gate exit 0. F-EXEC-1 topology correction already reconciled into canon at execute-time (design §1, RSK-228, memory) — no reconcile write outstanding."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "EX-4/VT-2 wiring guard: expected red/green onboard_wiring driving render_onboard via injected ModelKeysFn asserting known key renders, empty producer FAILS — observed fn onboard_wiring at tools.rs:1467, inject(1477) vs empty(1484)"
+detail = "Test injects ModelKeysFn returning 'opus-test-key' and asserts it renders as content; empty producer (renders placeholder) must fail. F-1 penance teeth present — not mere section-non-emptiness."
+disposition = "aligned"
+response = "onboard_wiring present with F-1-penance teeth (inject renders / empty fails). EX-4/VT-2 met."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "EX-2/VA-1 behaviour preservation: expected doctrine_onboard byte-identical + full suite green with no edited behavioural assertions — observed suite green (3191), render body unchanged except call indirection"
+detail = "render_model_band_guidance now calls injected (model_keys)(root,None) bound at serve-start to the same crate::commands::prompt::model_keys — byte-identity by construction. VA-1 full suite green, gate exit 0."
+disposition = "aligned"
+response = "byte-identity by construction (same fn, call indirection only); full suite green, no edited behavioural assertion. EX-2/VA-1 met."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "VA-2 conformance undelivered: design-target selector tests/architecture_layering.rs matched no edit — declared-possibly-affected, confirmed-unaffected (baseline change is data-only in layering.toml; gate mechanism reused, not modified)"
+detail = "Not scope-drop. The gate test file was scoped as verification surface; the -4 ratchet lives entirely in layering.toml [tangle_baseline]. Selector retained preserves design-intent traceability. Standing undelivered=1 is benign (non-blocking)."
+disposition = "tolerated"
+response = "Conscious accept: gate test file scoped as verification surface but change is data-only (layering.toml baseline); selector retained to preserve design-intent traceability. undelivered=1 is benign/non-blocking. No selector-registry edit — trimming would misrepresent design scope."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "VA-2 conformance undeclared-21: all authored .doctrine artifacts (5 memories, backlog-228, design/plan/slice-203 toml edits), zero code — not scope creep"
+detail = "design-target selectors are code-only by construction; the memory harvest + canon corrections + RSK-228 from the execute-time /consult sit intentionally outside the code touch-set. No undeclared code path touched."
+disposition = "aligned"
+response = "Authored .doctrine artifacts (memory/backlog/canon) sit outside the code-only design-target by construction; not scope creep. No undeclared code path."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
