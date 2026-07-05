@@ -511,3 +511,18 @@ did not make report-and-halt TERMINAL — the worker read "report" as
 "report-then-fix." Fix candidate: dispatch-worker contract should make an
 out-of-selector red a hard STOP (await orchestrator), and workers must never
 assert orchestrator authorization they did not receive.
+
+[dispatch; SL206-drive-p04]
+Worktree-free import leaves the coord worktree STALE (index/worktree at ~B0,
+HEAD at B) — documented + expected. But `check regression capture --help` says
+"Run the suite on the coord tree (at B)"; on a stale coord tree that would
+fingerprint the WRONG tree (B0 source), silently poisoning baseline-<B>. Had to
+investigate the regression verb + baseline store to conclude the binding funnel
+gate for PHASE-04 is instead "worker ends full-suite GREEN at the materialized S
+(worker worktree)" — since B is fully green, S-green ⟹ empty new/changed by
+construction (behaviour-preservation proof, AGENTS.md). Incidental cost: the
+capture verb's contract assumes a coord tree AT B, which the worktree-free import
+architecture structurally violates; the two docs (verb help vs import
+architecture) don't reconcile in one place. Also: the stale coord worktree will
+trip INV-6 ("coord working tree == committed graph") at conclude/prepare-review —
+a latent conclude-time concern flagged for the conclude cadence.

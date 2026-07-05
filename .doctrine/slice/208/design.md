@@ -179,6 +179,43 @@ coupled to the clap arg shape, so `cli.rs` is the right home).
 4. `options_section_no_borders` — Options section has no `│`, no box-drawing chars
 5. `subcommand_help_has_about_and_usage` — output contains about text and `Usage:` line
 
-## 7. Open Questions
+## 7. Adversarial Review
+
+### F-1 (minor): Subcommand depth gating precise condition
+
+The design says "Subcommand with sub-subcommands". Gate condition: at any depth,
+render a Commands table when `cmd.get_subcommands().any(|s| !s.is_hide_set() &&
+s.get_name() != "help")`. Otherwise, skip the Commands section; still render the
+borderless options section.
+
+### F-2 (edge): `render_usage()` may emit ANSI under `--color never`
+
+clap's `render_usage().to_string()` may include ANSI when clap thinks stdout is a
+terminal. Since we bypass `e.exit()`, we must strip ANSI from the usage string when
+`color == false`. Implementation: run through a strip-ANSI pass (or use `owo_colors`
+`if_supports_color` gating — but usage comes from clap, not our paint functions).
+Test: assert no ANSI in usage line under `color: false`.
+
+### F-3 (imprecision): Options wrapping mechanism unnamed
+
+Specify `textwrap::fill` for options help-text wrapping. Pattern:
+`textwrap::fill(&help, width).split('\n').enumerate()` — first line gets the arg
+name as prefix, continuation lines get a same-width blank indent. `textwrap` is
+already in the dependency tree (transitive via other crates). When `term_width` is
+`None` (no wrapping), the arg-name column still pads to the shared width but help
+text is emitted verbatim without line breaks.
+
+### F-4 (edge): `doctrine worktree help provision --help` path extraction
+
+The path filter `a != "help"` strips intermediate `help` tokens, so
+`doctrine worktree help provision --help` → `["worktree", "provision"]` — correct.
+Test this edge explicitly.
+
+### F-5 (housekeeping): Link SL-208 supersedes SL-150
+
+SL-150 built top-level family-grouped help; SL-208 completes subcommand-level
+table rendering. Record with `doctrine link` after design locks.
+
+## 8. Open Questions
 
 None — all design decisions resolved above.
