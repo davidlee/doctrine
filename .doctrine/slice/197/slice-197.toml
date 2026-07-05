@@ -1,7 +1,7 @@
 id = 197
 slug = "concept-knowledge-kind"
 title = "Add concept (CPT) as a knowledge record kind"
-status = "plan"
+status = "audit"
 created = "2026-07-03"
 updated = "2026-07-05"
 tags = []
@@ -56,6 +56,10 @@ intent = "design-target"
 
 [[selector]]
 selector = "install/using-doctrine.md"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_list_conformance.rs"
 intent = "design-target"
 
 [[relation]]

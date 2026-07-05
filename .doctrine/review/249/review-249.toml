@@ -1,0 +1,25 @@
+id    = 249
+slug  = "sl-197-audit-concept-cpt-record-kind-reconciliation"
+title = "SL-197 Audit: Concept (CPT) record kind reconciliation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-197"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Undeclared touch: tests/e2e_list_conformance.rs"
+detail = """`slice conformance` reports `tests/e2e_list_conformance.rs` as undeclared — it was not in the design-target selectors. The concept kind's "draft" status joined knowledge's union vocab, which caused `status_flag_is_recognised_grammar_on_every_kind` to fail because it assumed no knowledge record kind had "draft" status. Fixed during the PHASE-02 funnel: `status_vocab_has_draft` now includes "knowledge", and "knowledge" was removed from the out-of-vocab assertion loop. The file should be added as a `design-target` selector for completeness."""
+disposition = "tolerated"
+response = """The undeclared touch was scope leakage from a downstream test that was not anticipated by the design. The fix is correct — knowledge's union vocab now includes "draft" via concept — and was applied during the PHASE-02 funnel before the commit landed. The design-target selector should be updated to include `tests/e2e_list_conformance.rs` to close the conformance gap."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
