@@ -57,6 +57,15 @@ baseline (F-2 penance, design §8 R3). The only ratchet edit is `layering.toml`.
 
 ## Notes
 
+**Deferred-measurement branch (VT-1).** VT-1 expects the baseline to land at
+exactly `121` (the −2 drop). This is high-confidence — RSK-227 grounds the
+`{commands, mcp_server}` SCC as core-separate (`backlog-227.md:94`) and the sole
+production back-edge is `tools.rs:1365` — but it is confirmed *empirically at
+execute-time*, not proven at design lock (F-4). **If the measured drop is not −2**
+(baseline ≠ 121 after severing the edge), STOP and `/consult`: it signals an
+unexpected SCC-membership shift, not a keyword to quietly retarget. Do not edit
+the VT-1 mandate to match a surprise.
+
 Inquisition trail: RV-252 (design facet) reconciled four findings into `design.md`
 before this plan. The plan carries the F-1/F-3/F-4 penances into verification
 (VT-2 content assertion; ~14-signature edit surface; VT-1 count-vs-membership
