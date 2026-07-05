@@ -225,3 +225,16 @@ pre-flight dispatch-integrity check would eliminate.
 Minor: had to cross-reference 7 struct definitions across knowledge.rs to
 spot the inconsistent derive set. A derive-consistency lint on a closed enum's
 variant structs would catch this mechanically.
+
+[design; sl199-p05-delta-d42a1734]
+Delta on a LOCKED monolithic design doc (design.md, 465 lines) to amend ~6
+spots cost a full re-read of the doc + two dense state briefs (~1000 lines
+combined) before a single edit. Inherent to a delta on a dense locked artifact,
+but: a section-addressable design (edit §5.D without loading §5.A/§5.B) would
+cut the read tax. Second: the F7→refutation that triggered this consult burned a
+whole cycle because a scaffold confound (orchestrator LLM omitting the per-call
+isolation:worktree arg) masqueraded as a harness ceiling ("2.1.198 doesn't honor
+nested isolation"). A cheap discriminator probe (frontmatter-isolation vs
+call-param) up front would have localised it in one step instead of a
+multi-finding (F7→F9→F10→F11→F12) unwind. Lesson logged as the fix itself:
+deterministic config rides the frontmatter/tool surface, never a per-call LLM arg.
