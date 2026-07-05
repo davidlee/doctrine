@@ -312,8 +312,12 @@ exists — D2):
   authored_divergence = { diverged: bool, compared_ref: string, drifted_paths?: string[] }
   ```
   computed `git diff --name-only <trunk_ref>..<dispatch_tip> -- .doctrine/**`,
-  where `trunk_ref` is resolved from the **existing dispatch trunk authority**
-  (`src/dispatch.rs:630`), NOT hardcoded `edge`, and recorded in `compared_ref`
+  where `trunk_ref` is resolved from the **existing trunk authority** —
+  `git::trunk_commit` (`src/git.rs`) or the `[dispatch] deliver_to` ref
+  (`run_deliver_to`, `src/dispatch.rs`) — NOT the journal-row printer
+  `run_show_journal_trunk_oid` (`src/dispatch.rs:630`; that prints a committed
+  integrate-journal row, not a reusable trunk ref) and NOT hardcoded `edge`,
+  recorded in `compared_ref`
   so the signal is not repo-local folklore. IMP-174 owns the partition /
   refuse-loud semantics. **Because the script has no shell**, this is a
   **read-only doctrine tool** (`dispatch_authored_divergence{slice}`, granted to
@@ -425,13 +429,29 @@ exists — D2):
 
 **Static / conformance:**
 - Design-target agent-def files (recorded as selectors):
-  `install/agents/claude/dispatch-orchestrator.md`, `dispatch-worker.md`, and the
-  new `install/agents/claude/dispatch-probe.md` — asserted (via doctor check #9)
-  to grant exactly the intended tool sets. This proves the **authored source**
-  grant only. The **live** grant under `.claude/agents/` requires a clean
-  install/reseat, which ISS-216 (open) does not currently guarantee (F2) — so
-  phase-0 carries an explicit clean-install precondition + a runtime probe against
-  the installed copy, and the claim is never "source scan ⇒ runtime truth".
+  `install/agents/claude/dispatch-orchestrator.md` (gains the three read tokens)
+  and the new `install/agents/claude/dispatch-probe.md` — asserted (via doctor
+  check #9) to grant exactly the intended tool sets. `dispatch-worker.md` is a
+  **scope-relevant** selector, NOT a design-target: no phase modifies it; it is a
+  behaviour-preservation assertion (doctor #9 stays green unchanged), and a
+  design-target with no source delta invites a false under-delivery flag at audit.
+  This proves the **authored source** grant only. The **live** grant under
+  `.claude/agents/` requires a clean install/reseat, which ISS-216 (open) does not
+  currently guarantee (F2) — so phase-0 carries an explicit clean-install
+  precondition + a runtime probe against the installed copy, and the claim is
+  never "source scan ⇒ runtime truth".
+
+**Declared touch-set (selector accuracy, post-RV-255 correction).** The Rust
+design-targets are `src/dispatch.rs` (phase_projection + ReceiptStatus),
+`src/mcp_server/dispatch.rs` (the three emitter tools), `src/mcp_server/tools.rs`
+(MCP registration), and `src/doctor_checks.rs` (check #9 allowlist/marker growth).
+The `/drive-slice` authored home is **not yet a design-target**: no selector
+covers `install/workflows/**`, and `.claude/workflows/**` is scope-relevant AND
+gitignored (the installed copy only). When OQ-1 fixes the committed home, that
+path MUST be registered `--intent design-target` before the script is committed,
+else conformance reds it as undeclared. `src/install.rs` (probe asset + workflows
+seeding leg, if the "seeded by install" claim is kept) rides the broad
+`src/**` scope-relevant selector — touched but not audit-red.
 
 **Phase-0 e2e (manual, doubles as the SQ3 demo + the `/drive-slice` inspection
 verification):** one real `/drive-slice` against a scratch slice — confined fork
@@ -458,3 +478,12 @@ narrowed to source-conformance + verified install (ISS-216 dependency); F3
 `dispatch-probe` role; F6 named halt vocabulary; F7 scope prose corrected. No
 blocker — the approach held; the gaps were artifact completeness/accuracy. Verdict
 + penance sealed in RV-255 `## Synthesis`.
+
+**Post-seal accuracy corrections (plan-review pass, no architecture change).** Two
+factual fixes folded back from the SL-206 plan review: (1) §5.5 trunk authority
+re-pointed from the mis-cited `run_show_journal_trunk_oid` (`dispatch.rs:630`,
+a journal-row printer) to the real resolver `git::trunk_commit` / `[dispatch]
+deliver_to`; (2) §9 selector accuracy — `dispatch-worker.md` reclassified
+design-target→scope-relevant, the Rust design-targets enumerated, and the
+`/drive-slice` home flagged as an unregistered selector pending OQ-1. Both are
+completeness/accuracy corrections, not architecture — the sealed verdict stands.
