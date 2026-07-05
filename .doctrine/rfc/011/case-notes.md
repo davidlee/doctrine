@@ -410,3 +410,13 @@ Net: a conflicting-merge dispatched slice is currently closeable ONLY by hand
 param (not in schema; workflows always background) — one wasted launch attempt.
 Minor. Otherwise the one-agent worktree probe was clean: 24.6s, 29k subagent
 tokens, structured schema returned exactly the ground-truth fields.
+
+[inquisition; RV-252-SL-203] `doctrine review dispose --as` rejects the
+raiser/responder *display labels* set at `review new` (`--raiser inquisitor
+--responder design-author`) and accepts only the mechanical roles `raiser` /
+`responder`. Passing `--as design-author` errored `unknown --as role`; cost one
+failed batch of 4 dispose calls + a re-run. The label↔role split is invisible at
+the dispose call site — the CLI could either accept the configured label as an
+alias for its mechanical role, or the error could name the two legal values
+(it does list them, which salvaged it). Minor, but a clean papercut on the
+two-party self-review path.
