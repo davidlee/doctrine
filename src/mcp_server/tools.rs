@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! MCP tool definitions (JSON Schema) and handler dispatch.
 //!
-//! 22 tools: 10 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
+//! 25 tools: 10 review, 8 memory (`memory_search`, `memory_retrieve`, `memory_show`,
 //! `memory_list`, `memory_validate`, `memory_record`, `memory_edit`, `doctrine_onboard`),
-//! `worker_commit` (the gated dispatch-worker self-commit, SL-198), and the SL-199
+//! `worker_commit` (the gated dispatch-worker self-commit, SL-198), the SL-199
 //! dispatch funnel write surface (`dispatch_import`, `dispatch_conclude_phase`,
-//! `dispatch_reap`).
+//! `dispatch_reap`), and the SL-206 dispatch funnel read surface
+//! (`dispatch_phase_receipt`, `dispatch_next_ready`, `dispatch_authored_divergence`).
 //! Each review tool calls the matching `review::run_*` function,
 //! maps errors through `ReviewError` variant identity (design D8, §5), and
 //! returns JSON text.
@@ -25,7 +26,7 @@ use std::str::FromStr;
 
 // ── Tool definitions (function, not const — json!() is non-const) ─────────
 
-/// Return all 22 tool definitions with JSON Schema parameter descriptions.
+/// Return all 25 tool definitions with JSON Schema parameter descriptions.
 fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -391,6 +392,40 @@ fn tools() -> Vec<McpTool> {
                     "name": { "type": "string", "description": "The worker fork branch to reap (e.g. `dispatch/<agent>`)." }
                 },
                 "required": ["slice", "name"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_PHASE_RECEIPT.to_owned(),
+            description: "Dispatch funnel READ SURFACE (SL-206): project a single phase's receipt over three tiers — the plan, the disposable runtime sheet, and the COMMITTED boundaries ledger. Resolves the coord SERVER-SIDE by `slice` (never a caller path); read-only (no coord mutation). Every coord refusal (unknown-slice | ambiguous | stale) surfaces as `CoordRefused` with NO fabricated tip. On resolution the core carries the LIVE `dispatch_tip` (the coord branch tip — distinct from the boundary `code_end`) and, when a committed boundary backs the phase, the `(code_start, code_end)` oids.\n\nReturns: {\"Resolved\": { slice: int, phase: string, status: string, dispatch_tip: string, code_start?: string, code_end?: string }} or {\"CoordRefused\": { reason: string }} — status ∈ not-started | in-progress | blocked | completed | conclude-incomplete | unknown; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree. Resolved server-side." },
+                    "phase": { "type": "string", "description": "The PHASE-NN id to project a receipt for." }
+                },
+                "required": ["slice", "phase"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_NEXT_READY.to_owned(),
+            description: "Dispatch funnel READ SURFACE (SL-206): report the next actionable phase(s) for a slice — the EXISTING readiness authority (`compute_next_phases`) verbatim, the SAME value `dispatch plan-next` renders (no parallel readiness logic). Resolves the coord SERVER-SIDE by `slice`; read-only. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { next: [string], phases: [{ id: string, status: string, name: string }] }} or {\"CoordRefused\": { reason: string }} — reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree. Resolved server-side." }
+                },
+                "required": ["slice"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE.to_owned(),
+            description: "Dispatch funnel READ SURFACE (SL-206): report whether the coordination worktree's `.doctrine/**` authored tree has diverged from the trunk over `trunk_ref..dispatch_tip`. Resolves the coord SERVER-SIDE by `slice`; read-only (a name-only diff, no mutation). The trunk `compared_ref` is resolved from the REAL trunk authority (`git::trunk_commit` — the peeled ladder DOCTRINE_TRUNK_REF / origin/HEAD / main / master), never a hardcoded branch. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { diverged: bool, compared_ref: string, drifted_paths?: [string] }} or {\"CoordRefused\": { reason: string }} — `drifted_paths` present only when non-empty; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree. Resolved server-side." }
+                },
+                "required": ["slice"]
             }),
         },
     ]
@@ -1024,6 +1059,26 @@ fn call_tool(
             let out = super::dispatch::dispatch_reap(root, slice, &branch)?;
             Ok(serde_json::to_string(&out)?)
         }
+        super::dispatch::TOOL_DISPATCH_PHASE_RECEIPT => {
+            let slice = require_slice(arguments.get("slice"))?;
+            let fields = ExtractFields::from_value(arguments, &["phase"]);
+            let phase = fields.str_field("phase");
+            if phase.is_empty() {
+                anyhow::bail!("invalid arguments: phase is required");
+            }
+            let out = super::dispatch::dispatch_phase_receipt(root, slice, &phase)?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        super::dispatch::TOOL_DISPATCH_NEXT_READY => {
+            let slice = require_slice(arguments.get("slice"))?;
+            let out = super::dispatch::dispatch_next_ready(root, slice)?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE => {
+            let slice = require_slice(arguments.get("slice"))?;
+            let out = super::dispatch::dispatch_authored_divergence(root, slice)?;
+            Ok(serde_json::to_string(&out)?)
+        }
         _ => anyhow::bail!("Tool not found: {name}"),
     }
 }
@@ -1428,14 +1483,18 @@ mod tests {
     // VT-3: tool list response contains exactly 10 tools with correct names
 
     #[test]
-    fn tool_list_has_22_tools() {
+    fn tool_list_has_25_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 22);
+        assert_eq!(list.tools.len(), 25);
         // The SL-199 funnel write surface is registered (named via the STD-001 consts).
         let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_IMPORT));
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_CONCLUDE_PHASE));
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_REAP));
+        // The SL-206 funnel READ surface is registered (STD-001 consts).
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_PHASE_RECEIPT));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_NEXT_READY));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE));
     }
 
     #[test]
@@ -1461,6 +1520,9 @@ mod tests {
         assert!(names.contains(&"memory_edit"));
         assert!(names.contains(&"doctrine_onboard"));
         assert!(names.contains(&"worker_commit"));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_PHASE_RECEIPT));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_NEXT_READY));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE));
     }
 
     // SL-203 VT-2 (design VT-3) — wiring guard. The model-band section is fed by
@@ -1805,7 +1867,7 @@ mod tests {
         let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 22);
+        assert_eq!(tools.len(), 25);
     }
 
     #[test]
