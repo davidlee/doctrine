@@ -218,12 +218,39 @@ pub(crate) fn landed_against(root: &Path, target: &str, fork: &str) -> anyhow::R
 ///    entry via `git worktree prune`. The fork's in-tree `target/` dies with the
 ///    worktree dir (SL-156 — no separate reap). Finally stderr-WARN the
 ///    `CARGO_MANIFEST_DIR`-baked-test-binary recompile.
+///
+/// The CLI entry: the reap report goes to STDOUT. A programmatic caller that runs
+/// over the MCP stdio JSON-RPC channel (fd 1) must use [`run_gc_to`] with a non-stdout
+/// sink instead, or the report corrupts the wire (SL-199 F3).
 pub(crate) fn run_gc(
     path: Option<PathBuf>,
     fork: &str,
     superseded_head: Option<&str>,
     force: bool,
     dry_run: bool,
+) -> anyhow::Result<()> {
+    run_gc_to(
+        path,
+        fork,
+        superseded_head,
+        force,
+        dry_run,
+        &mut io::stdout().lock(),
+    )
+}
+
+/// The gc machine with an INJECTED report sink (SL-199 F3). Identical to [`run_gc`]
+/// except the human-readable reap/dry-run report is written to `out` rather than the
+/// process stdout — so an MCP tool (`dispatch_reap`) can pass [`io::sink`] and keep the
+/// JSON-RPC channel clean. The stderr recompile warning is untouched (stderr is not the
+/// MCP wire).
+pub(crate) fn run_gc_to(
+    path: Option<PathBuf>,
+    fork: &str,
+    superseded_head: Option<&str>,
+    force: bool,
+    dry_run: bool,
+    out: &mut dyn io::Write,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let root =
@@ -308,15 +335,11 @@ pub(crate) fn run_gc(
                     };
                     format!("NOT landed — reap authorised by {how} (oracle override)")
                 };
-                writeln!(
-                    io::stdout(),
-                    "{fork}: {basis} — would reap ({})",
-                    reap_targets(plan)
-                )?;
+                writeln!(out, "{fork}: {basis} — would reap ({})", reap_targets(plan))?;
             }
             GcVerdict::Refuse(GcRefusal::NotLanded) => {
                 writeln!(
-                    io::stdout(),
+                    out,
                     "{fork}: not-landed — `--force` to reap, or `--superseded-head <SHA>` if spent-and-abandoned. If you squash-merged, re-land via `worktree land` (--no-ff)."
                 )?;
             }
@@ -391,10 +414,7 @@ pub(crate) fn run_gc(
         io::stderr(),
         "warning: test binaries baked with the reaped fork's CARGO_MANIFEST_DIR are now stale — recompile before trusting a RED"
     )?;
-    writeln!(
-        io::stdout(),
-        "gc {fork}: reaped (worktree/branch as present)"
-    )?;
+    writeln!(out, "gc {fork}: reaped (worktree/branch as present)")?;
     Ok(())
 }
 
@@ -566,6 +586,42 @@ mod tests {
             resolve_agent(&coord, name),
             Err(ResolveRefusal::UnknownAgent),
             "post-reap resolve of the same agent yields unknown-agent"
+        );
+    }
+
+    // --- SL-199 F3: the reap report is redirectable off stdout -------------------
+    // `run_gc_to` writes the human report to the injected sink (never the process
+    // stdout), so an MCP tool driving over the stdio JSON-RPC channel keeps fd 1 clean.
+    #[test]
+    fn run_gc_to_writes_the_report_to_the_injected_sink() {
+        use super::run_gc_to;
+
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "0", "base");
+        let coord = std::fs::canonicalize(repo.path()).unwrap();
+        let name = "agent-feed";
+        let branch = format!("dispatch/{name}");
+        let dir = coord.join(".worktrees").join(name);
+        repo.git(&[
+            "worktree",
+            "add",
+            "-b",
+            &branch,
+            &dir.to_string_lossy(),
+            &base,
+        ]);
+
+        let mut sink: Vec<u8> = Vec::new();
+        run_gc_to(Some(coord.clone()), &branch, None, true, false, &mut sink).expect("gc reap");
+
+        let report = String::from_utf8(sink).expect("utf8 report");
+        assert!(
+            report.contains(&format!("gc {branch}: reaped")),
+            "the reap report lands in the injected sink, not stdout: {report:?}"
+        );
+        assert!(
+            !repo.path().join(".worktrees").join(name).exists(),
+            "the fork worktree is actually reaped (side effects unchanged)"
         );
     }
 }
