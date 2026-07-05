@@ -110,6 +110,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             | MemoryCommand::List { .. }
             | MemoryCommand::Search { .. }
             | MemoryCommand::Retrieve { .. }
+            // Surface reads memories and writes only runtime-tier state
+            // (seen-set + tuning log under .doctrine/state) — a Read op (SL-205).
+            | MemoryCommand::Surface
             | MemoryCommand::ResolveLinks { .. }
             | MemoryCommand::Backlinks { .. }
             | MemoryCommand::Paths { .. } => Read,
@@ -410,4 +413,22 @@ pub(crate) fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
         "worker fork (signal: {}): refusing authored write `{verb}` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator.",
         mode.cause_token()
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::MemoryCommand;
+
+    /// VT-8 (SL-205): `memory surface` classifies as `Read`. It reads memories
+    /// and writes only runtime-tier state (seen-set + tuning log under
+    /// `.doctrine/state`), so the exhaustive `Command::Memory` match places it in
+    /// the `Read` group and the worker-mode guard passes it through.
+    #[test]
+    fn memory_surface_classifies_as_read() {
+        let cmd = Command::Memory {
+            command: MemoryCommand::Surface,
+        };
+        assert!(matches!(write_class(&cmd), WriteClass::Read));
+    }
 }
