@@ -229,4 +229,22 @@ Code-impact / design-target touch-set:
 
 ## 10. Review Notes
 
-(pending adversarial pass)
+**Internal adversarial pass (design author).** No blocking flaws. Confirmed:
+
+- `crate::commands::prompt::model_keys` (`pub(crate)`) coerces to `ModelKeysFn`;
+  higher-ranked elided lifetimes match the fn-ptr type.
+- `root::find(config.path, …)` moves only `config.path`; `config.model_keys`
+  (Copy) stays accessible after the partial move.
+- The back edge is a **single** import path (`grep crate::commands
+  src/mcp_server/` → only `tools.rs:1365`); no transitive reach. `mcp_server`
+  never imported `install`, so INV-1's corpus-agnostic claim is already-true
+  for `install` and newly-true for `commands`.
+- The −2 ratchet is an *expectation*, verified empirically by the extractor at
+  execute-time (VT-1), never hard-coded blind.
+- cfg(test) callers of `dispatch` are excluded from the gate graph, so they can
+  reference the real `model_keys` without masking/forging VT-1.
+
+Impl nicety for `/plan`: bind `let model_keys = config.model_keys;` before the
+serve loop (Copy, but reads clearer than repeated `config.` access).
+
+(external adversarial pass — pending user choice)
