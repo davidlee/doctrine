@@ -1,7 +1,7 @@
 id = 205
 slug = "ambient-memory-hooks"
 title = "Ambient memory surfacing via harness hooks"
-status = "plan"
+status = "ready"
 created = "2026-07-05"
 updated = "2026-07-05"
 tags = []

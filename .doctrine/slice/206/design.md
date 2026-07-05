@@ -61,9 +61,12 @@ not by MCP-unreachability.
 
 ## 4. Guiding Principles
 
-- **Rust-primary, narrow.** The only new Rust is a **read-only** phase-receipt
-  emitter + a `next_ready` surface; the `/drive-slice` script is an
-  install-templated reference, not `cargo test`-able.
+- **Rust-primary, narrow.** The only new Rust is **three read-only** doctrine
+  tools — the phase-receipt emitter (`dispatch_phase_receipt`), the readiness
+  surface (`dispatch_next_ready`), and the divergence probe
+  (`dispatch_authored_divergence`) — plus the conformance-authority update they
+  force (§5.4/F1). The `/drive-slice` script is an install-templated reference,
+  not `cargo test`-able. **No new write surface.**
 - **DRY over the readiness/status authorities** — no parallel state machine in
   JS; consume `compute_next_phases` and a single per-phase projection.
 - **Durable truth over disposable truth** — receipt status is sourced from the
@@ -102,12 +105,22 @@ the funnel via its narrow grant.
 - MCP: `dispatch_phase_receipt{slice, phase}` (granted to `dispatch-orchestrator`)
 
 ```rust
+// The surface is truthful-by-construction: a coord refusal has no tip to report
+// (F3), so refusal is a DISTINCT variant, not a core with a fabricated sentinel.
+enum PhaseReceiptResult {
+    Resolved(PhaseReceiptCore),
+    CoordRefused(CoordRefusal),          // resolve_coord failed — no dispatch_tip exists
+}
+enum CoordRefusal { UnknownSlice, Ambiguous, Stale }
+
 // durable, boundary-ledger-backed — the receipt's load-bearing truth
 enum ReceiptStatus {
     NotStarted,          // no sheet progress, no boundary row
     InProgress,          // sheet in_progress, no boundary row
+    Blocked,             // sheet=blocked — a control-flow boundary (state::PhaseStatus::Blocked, F4)
     Completed,           // boundary row exists for the phase on dispatch_tip (DURABLE)
     ConcludeIncomplete,  // sheet=completed ∧ boundary missing — retryable funnel fault (§5.4)
+    Unknown,             // sheet malformed / unreadable — fail-loud, never silently "incomplete" (F4)
 }
 
 struct PhaseReceiptCore {
@@ -115,18 +128,21 @@ struct PhaseReceiptCore {
     phase: String,                       // PHASE-NN (immutable id)
     receipt_status: ReceiptStatus,       // durable, boundary-backed
     runtime_status: Option<SheetStatus>, // advisory, sheet-derived, nullable
-    dispatch_tip: String,                // dispatch branch HEAD (NOT a code oid)
+    dispatch_tip: String,                // dispatch branch HEAD (NOT a code oid) — always present in Resolved
     boundary: Option<Boundary>,          // Some ⟺ boundary row exists
-    coord_error: Option<CoordRefusal>,   // unknown-slice | ambiguous | stale (resolve_coord)
 }
 struct Boundary { code_start: String, code_end: String }  // code-range OIDs, distinct from dispatch_tip
-enum CoordRefusal { UnknownSlice, Ambiguous, Stale }
 ```
 
 `ReceiptStatus` is a **new** enum, NOT `state::PhaseStatus` (that is a sheet
 lifecycle; reusing it would let callers infer durable guarantees from advisory
-`runtime_status`). `dispatch_tip` and `boundary.code_end` are **named by role**
-— both are commit OIDs but different tips; never a generic `coord_tip`.
+`runtime_status`). It **must, however, cover every non-completed state the
+existing authorities distinguish** (F4): `Blocked` is a real control-flow
+boundary in `compute_next_phases` (`src/dispatch.rs:3138`) and
+`state::PhaseStatus::Blocked` (`src/state.rs`); a malformed/unreadable sheet maps
+to `Unknown` (fail-loud), never a silent `NotStarted`. `dispatch_tip` and
+`boundary.code_end` are **named by role** — both are commit OIDs but different
+tips; never a generic `coord_tip`.
 
 **Readiness (new Rust, read-only, slice-global).**
 `dispatch_next_ready{slice}` → `{ next_ready: Vec<String> }` — a thin wrapper
@@ -139,12 +155,16 @@ orchestrator grafts its runtime facts onto the emitter core; the `schema:` on
 the `agent()` call forces the shape and the harness validates it:
 
 ```
-PhaseReceipt = PhaseReceiptCore                        // (from dispatch_phase_receipt)
+PhaseReceipt = PhaseReceiptCore                        // (from dispatch_phase_receipt Resolved; ABSENT on CoordRefused)
   + worker_branch : string                             // orchestrator armed/spawned it (ephemeral, reaped)
   + verify        : { green: bool, failures: string[] }// orchestrator RAN the tests
-  + halt_reason?  : string                             // set on any stop
+  + halt_reason?  : string                             // set on any stop — incl. "coord:<reason>" when the emitter returned CoordRefused
   + next_ready    : string[]                           // slice-global adjunct (from dispatch_next_ready) — labelled, not part of the durable core
 ```
+
+On a `CoordRefused` emitter result the orchestrator emits a **minimal** receipt
+(`halt_reason="coord:<reason>"`, no core fields) — the driver halts on
+`halt_reason`, so the refusal path needs no fabricated core (F3).
 
 `worker_branch` + `verify` are orchestrator-supplied because coord state cannot
 know them (the fork branch is reaped; verify comes from running tests).
@@ -191,18 +211,30 @@ while (ready.length) {
   report.phases.push(r);
   log(`phase ${phase}: ${lastActual/1000|0}k; soft-ceiling headroom ~${((SOFT_CEILING-lastActual)/1000)|0}k`); // advisory
 
-  if (!r)                                { report.halted={reason:'null-receipt', phase}; break; }
-  if (r.coord_error)                     { report.halted={reason:`coord:${r.coord_error}`, phase}; break; }
-  if (r.halt_reason)                     { report.halted={reason:r.halt_reason, phase}; break; }
-  if (r.receipt_status === 'ConcludeIncomplete') { report.halted={reason:'funnel:conclude-incomplete-retryable', phase}; break; }
-  if (r.receipt_status !== 'Completed')  { report.halted={reason:`anomaly:${r.receipt_status}`, phase}; break; }
-  if (!r.verify.green)                   { report.halted={reason:'verify-red', phase}; break; }
+  // Halt vocabulary is a NAMED, single-sourced contract — see HALT in §5.4 (F6).
+  if (!r)                                { report.halted={reason:HALT.NULL_RECEIPT, phase}; break; }
+  if (r.halt_reason)                     { report.halted={reason:r.halt_reason, phase}; break; } // incl. coord:<reason> (F3), funnel:<reason>
+  if (r.receipt_status === 'ConcludeIncomplete') { report.halted={reason:HALT.CONCLUDE_INCOMPLETE, phase}; break; }
+  if (r.receipt_status === 'Blocked')    { report.halted={reason:HALT.PHASE_BLOCKED, phase}; break; }  // (F4)
+  if (r.receipt_status !== 'Completed')  { report.halted={reason:`${HALT.ANOMALY}:${r.receipt_status}`, phase}; break; } // Unknown lands here (F4)
+  if (!r.verify.green)                   { report.halted={reason:HALT.VERIFY_RED, phase}; break; }
 
   ready = r.next_ready;                                // consume authority, NEVER re-derive
 }
 report.divergence = await divergenceProbe(slice);  // agent() → read-only divergence tool (§5.5); NOT raw JS git
 return report;
 ```
+
+**Halt-reason vocabulary (named contract, F6).** The loop branches on halt
+reasons *as protocol* — so the vocabulary is a **closed, single-sourced set**,
+not scattered literals. Two families:
+- **Derived from Rust closed vocabs** (re-exported, not re-invented): `funnel:<reason>`
+  from `FunnelOutcome::Refused.reason`; `coord:<reason>` from `CoordRefusal`. The
+  design does not mint these strings — it forwards the authored enums.
+- **Script-local** — a named `HALT` table in `/drive-slice` (the driver's only
+  authored vocabulary): `{ NULL_RECEIPT, CONCLUDE_INCOMPLETE, PHASE_BLOCKED,
+  ANOMALY, VERIFY_RED, BUDGET_EXHAUSTED }`. Single source; the loop references
+  members, never inline literals (STD-001 in the JS reference).
 
 - **null `total` → unmetered**: `budget.total &&` short-circuits; the loop runs
   all ready phases (D4-a).
@@ -220,24 +252,48 @@ return report;
 
 **Grant boundary (the real safety gate).**
 
-| Subagent type          | MCP grant (exhaustive)                                                             |
-|------------------------|-----------------------------------------------------------------------------------|
-| `dispatch-orchestrator`| `dispatch_import`, `dispatch_conclude_phase`, `dispatch_reap`, `dispatch_phase_receipt`*, `dispatch_next_ready`*, `dispatch_authored_divergence`* |
-| `dispatch-worker`      | `worker_commit`                                                                   |
-| workflow script        | *(none — JS, no MCP)*                                                             |
+| Subagent type          | MCP grant (exhaustive)                                | Raw tools |
+|------------------------|-------------------------------------------------------|-----------|
+| `dispatch-orchestrator`| `dispatch_import`, `dispatch_conclude_phase`, `dispatch_reap`, `dispatch_phase_receipt`*, `dispatch_next_ready`*, `dispatch_authored_divergence`* | Read, Edit, Write, Bash, Grep, Glob, Agent (needs them to run the funnel + tests) |
+| **`dispatch-probe`** (new) | `dispatch_next_ready`*, `dispatch_authored_divergence`*, `dispatch_phase_receipt`* | **Read, Grep, Glob only** — no Write/Edit/Bash/Agent |
+| `dispatch-worker`      | `worker_commit`                                       | Read, Edit, Write, Bash, Grep, Glob |
+| workflow script        | *(none — JS, no MCP)*                                 | *(none)* |
 
-(* new, read-only.) The bootstrap planner + closing divergence probe are
-`dispatch-orchestrator` spawns (they need only the read-only tools). The three
-new tools add **no write surface**. The gate is
-checked two mechanically-real ways (no runtime grant-readback API exists — D2):
-- **Static** — phase-0 inspects the authored subagent-definition tool allowlists
-  (`install/agents/claude/dispatch-orchestrator.md`,
-  `install/agents/claude/dispatch-worker.md` — exact files in §9) for exactly the
-  intended set. These files are in the design-target selectors, so `slice
-  conformance` holds them.
-- **Runtime** — phase-0 has the orchestrator attempt a forbidden
-  `review_*`/`memory_*` write → confirmed absent/refused; and confirms positive
-  callability of the granted funnel tools.
+(* new, read-only MCP tools.)
+
+**F5 — the read-only probes get a genuinely read-only role.** The bootstrap
+planner + closing divergence probe do NOT reuse `dispatch-orchestrator`: that role
+carries raw `Edit`/`Write`/`Bash`/`Agent` (`install/agents/claude/dispatch-orchestrator.md`),
+so "read-only" would be a lie even though no new *MCP* write is added (CHR-039:
+containment is by policy, not MCP-unreachability). A new **`dispatch-probe`** role
+holds only the read-only MCP tools + `Read/Grep/Glob` — no raw write, no nested
+spawn. The orchestrator retains its raw tools (it legitimately runs the funnel and
+tests); only the standalone probe calls are narrowed.
+
+**F1 — the conformance authority must grow in lockstep.** Granting the three new
+MCP tools to `dispatch-orchestrator` (and the read set to `dispatch-probe`) is NOT
+free: `allowed_mcp_tokens(role)` in `src/doctor_checks.rs` (doctor check #9,
+**Error-severity** conformance on authored agent defs) currently allows the
+orchestrator only the three funnel tokens. Adding tools without updating it
+**false-reds** the very agent-def change this design depends on. ⇒ `src/doctor_checks.rs`
+is a **declared touch-target** (§9 selectors); the role→allowlist authority grows
+with the tools, and a test asserts the new set.
+
+**The gate is checked two mechanically-real ways** (no runtime grant-readback API
+exists — D2):
+- **Static (source-conformance ONLY, F2)** — doctor check #9 + phase-0 inspect the
+  **authored** allowlists (`install/agents/claude/dispatch-orchestrator.md`,
+  `dispatch-worker.md`, and the new `dispatch-probe.md` — exact files in §9). This
+  proves the *source* grant, NOT the *live* one: the harness runs the installed
+  copy under `.claude/agents/`, and **ISS-216 (open) — `doctrine install` cannot
+  reseat a changed agent def** — means the source scan is not proof of the runtime
+  surface. So phase-0 carries an explicit **precondition**: a clean install/reseat
+  of the changed defs (or a manual placement) BEFORE the grant story is trusted;
+  the design claim is narrowed to "source-conformance + a verified live install",
+  never "source scan ⇒ runtime truth".
+- **Runtime** — phase-0 has the orchestrator attempt a forbidden `review_*`/`memory_*`
+  write → confirmed absent/refused against the **installed** def; and confirms
+  positive callability of the granted funnel tools.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -261,9 +317,9 @@ checked two mechanically-real ways (no runtime grant-readback API exists — D2)
   so the signal is not repo-local folklore. IMP-174 owns the partition /
   refuse-loud semantics. **Because the script has no shell**, this is a
   **read-only doctrine tool** (`dispatch_authored_divergence{slice}`, granted to
-  the closing probe agent), not raw JS `git` — it rides the same coord-resolution
-  + trunk authority as the emitter. (Adds a third read-only tool; no write
-  surface — folded into the same grant-gate story as §5.4.)
+  the read-only `dispatch-probe` role — §5.4/F5), not raw JS `git` — it rides the
+  same coord-resolution + trunk authority as the emitter. (The third read-only
+  tool; no write surface — folded into the same grant-gate story as §5.4.)
 - **`resolve_coord` refusals are workflow halt states**, not noise: `stale`
   (torn-down/prunable coord) and `ambiguous` are plausible from the primary tree
   and must halt loudly.
@@ -303,6 +359,19 @@ checked two mechanically-real ways (no runtime grant-readback API exists — D2)
   committed boundaries}; all slice-global aggregate logic stays in `run_status`
   (behaviour-preserving). A wholesale reader merge would bleed slice-global policy
   into the emitter — rejected.
+- **D7 — RV-255 inquisition integrations.** (F1) the role→MCP allowlist authority
+  `allowed_mcp_tokens` (`src/doctor_checks.rs`, check #9) grows in lockstep with
+  the new tools — a declared touch-target, not an afterthought. (F2) the static
+  grant claim is **source-conformance + a verified live install**, never "source
+  scan ⇒ runtime truth" — ISS-216 (install-reseat gap) makes phase-0's clean-
+  install precondition load-bearing. (F3) the emitter surface is
+  `PhaseReceiptResult = Resolved(core) | CoordRefused` — truthful by construction,
+  no fabricated tip on refusal. (F4) `ReceiptStatus` covers `Blocked` + `Unknown`
+  — every non-completed state the existing authorities distinguish, fail-loud on
+  malformed. (F5) standalone read-only probes get a genuinely read-only
+  `dispatch-probe` role, not the raw-tool-bearing orchestrator. (F6) the halt
+  vocabulary is a named contract (`HALT` + re-exported `funnel:`/`coord:` closed
+  vocabs). (F7) scope prose corrected to three read-only tools.
 
 ## 8. Risks & Mitigations
 
@@ -325,29 +394,44 @@ checked two mechanically-real ways (no runtime grant-readback API exists — D2)
 - **R5 — behaviour-preservation regression** in `run_status`. *Mitigation*: the
   extract is delegate-only; existing dispatch suites must stay green unchanged
   (the gate).
+- **R6 — ISS-216 install-reseat gap (RV-255 F2).** The changed agent defs
+  (`dispatch-orchestrator`, new `dispatch-probe`) may not reseat into
+  `.claude/agents/` via `doctrine install`, so the live grant surface can lag the
+  authored one. *Mitigation*: phase-0's clean-install precondition + a runtime
+  probe against the **installed** def; do not trust the source scan alone.
+  Residual: ISS-216 itself is out of scope (its own issue) — SL-206 depends on a
+  manual reseat until it lands.
 
 ## 9. Quality Engineering & Validation
 
 **Unit (Rust, TDD red/green/refactor):**
-- `phase_projection` — per-phase status derivation: boundary-present ⇒
+- `phase_projection` — per-phase status derivation over every branch: boundary-present ⇒
   `Completed`; sheet-completed ∧ boundary-missing ⇒ `ConcludeIncomplete`;
+  sheet-blocked ⇒ `Blocked`; malformed/unreadable ⇒ `Unknown` (fail-loud);
   in_progress/none ⇒ `InProgress`/`NotStarted`. Table-driven over fixture coord
   trees (ride existing dispatch test rig).
-- `dispatch_phase_receipt` — `coord_error` surfaced for each `resolve_coord`
-  refusal; `dispatch_tip` vs `boundary.code_end` distinctness.
+- `dispatch_phase_receipt` — returns `CoordRefused(<reason>)` for each
+  `resolve_coord` refusal (no fabricated tip — F3); `Resolved` carries a real
+  `dispatch_tip` distinct from `boundary.code_end`.
 - `dispatch_next_ready` — agrees with `compute_next_phases` on the same fixtures.
 - `dispatch_authored_divergence` — `diverged` true iff `.doctrine/**` differs
   `trunk_ref..dispatch_tip`; `compared_ref` = the resolved trunk authority (not
   hardcoded `edge`); read-only, no coord mutation.
+- **`allowed_mcp_tokens` (doctor check #9, F1)** — asserts the orchestrator set
+  grows to include the three read-only tools and the new `dispatch-probe` role
+  holds exactly the read set; the check stays green on the updated agent defs.
 - **Behaviour-preservation**: existing `dispatch status` suite green **unchanged**
   after the `phase_projection` extract.
 
 **Static / conformance:**
-- The subagent-def allowlist files (exact paths, recorded as design-target
-  selectors): `install/agents/claude/dispatch-orchestrator.md`,
-  `install/agents/claude/dispatch-worker.md` — asserted to grant exactly the
-  intended tool sets (+ the two new read-only tools on the orchestrator). The
-  installed instance under `.claude/agents/` is regenerated by `doctrine install`.
+- Design-target agent-def files (recorded as selectors):
+  `install/agents/claude/dispatch-orchestrator.md`, `dispatch-worker.md`, and the
+  new `install/agents/claude/dispatch-probe.md` — asserted (via doctor check #9)
+  to grant exactly the intended tool sets. This proves the **authored source**
+  grant only. The **live** grant under `.claude/agents/` requires a clean
+  install/reseat, which ISS-216 (open) does not currently guarantee (F2) — so
+  phase-0 carries an explicit clean-install precondition + a runtime probe against
+  the installed copy, and the claim is never "source scan ⇒ runtime truth".
 
 **Phase-0 e2e (manual, doubles as the SQ3 demo + the `/drive-slice` inspection
 verification):** one real `/drive-slice` against a scratch slice — confined fork
@@ -365,4 +449,12 @@ gains `ConcludeIncomplete`; `coord_tip`→`dispatch_tip` role-named;
 `resolve_coord` refusals first-class; divergence ref de-hardcoded to the trunk
 authority; grant gate reframed to static+runtime probes; `next_ready` split to a
 separate slice-global surface). Panel reported no residual stop-ship blocker.
-Offer `/inquisition` or an external hostile pass before `/plan`.
+
+**RV-255 (formal inquisition, GPT-5.5 on the written artifact).** 7 findings
+(5 major, 2 minor, 0 blocker), all confirmed against real code and integrated
+(§7 D7): F1 doctor-check-#9 allowlist authority now a touch-target; F2 grant claim
+narrowed to source-conformance + verified install (ISS-216 dependency); F3
+`PhaseReceiptResult` refusal variant; F4 `Blocked`/`Unknown` states; F5 read-only
+`dispatch-probe` role; F6 named halt vocabulary; F7 scope prose corrected. No
+blocker — the approach held; the gaps were artifact completeness/accuracy. Verdict
++ penance sealed in RV-255 `## Synthesis`.

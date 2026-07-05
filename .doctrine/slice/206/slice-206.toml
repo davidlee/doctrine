@@ -42,6 +42,14 @@ intent = "design-target"
 selector = "install/agents/claude/dispatch-worker.md"
 intent = "design-target"
 
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-probe.md"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-031"
@@ -66,6 +74,10 @@ target = "SL-199"
 [[relation]]
 label = "related"
 target = "IMP-174"
+
+[[relation]]
+label = "related"
+target = "ISS-216"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
