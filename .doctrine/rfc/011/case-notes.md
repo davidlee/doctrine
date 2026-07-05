@@ -238,3 +238,9 @@ nested isolation"). A cheap discriminator probe (frontmatter-isolation vs
 call-param) up front would have localised it in one step instead of a
 multi-finding (F7→F9→F10→F11→F12) unwind. Lesson logged as the fix itself:
 deterministic config rides the frontmatter/tool surface, never a per-call LLM arg.
+[walkthrough; fable-wt-83ce40e3]
+Inconsistent id parsing across kinds cost a retry: `rfc show 014` and
+`slice paths 199` accept bare numbers, `spec show 021` refuses ("expected
+PRD-NNN or SPEC-NNN") because two prefixes share the kind. Wasted one
+round-trip + error output. Either accept bare NNN when unambiguous or
+document the asymmetry in --help.
