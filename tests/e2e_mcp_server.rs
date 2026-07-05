@@ -167,7 +167,7 @@ fn vt1_initialize_handshake() {
     kill(child);
 }
 
-// ── VT-2: tools/list returns 18 tools ────────────────────────────────────
+// ── VT-2: tools/list returns 22 tools ────────────────────────────────────
 
 #[test]
 fn vt2_tools_list() {
@@ -188,7 +188,7 @@ fn vt2_tools_list() {
         "tools/list should not error: {resp:?}"
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 19, "expected 19 tools, got {tools:?}");
+    assert_eq!(tools.len(), 22, "expected 22 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -211,6 +211,10 @@ fn vt2_tools_list() {
         "memory_edit",
         "doctrine_onboard",
         "worker_commit",
+        // SL-199 PHASE-03 dispatch funnel write surface.
+        "dispatch_import",
+        "dispatch_conclude_phase",
+        "dispatch_reap",
     ] {
         assert!(
             names.contains(expected),

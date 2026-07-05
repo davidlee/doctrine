@@ -121,6 +121,26 @@ worker env channel and cannot consume it.
 | OS confinement | nested bwrap (ADR-008 D-B3, marker ro-overlay *after* the rw worktree bind; never ro-bind `settings.local.json`) | none — `Agent` is not a subprocess to wrap |
 | Fail-closability | full mechanism floor | SubagentStart is a **read-only event** — the stamp is **not fail-closable**; an unstamped worker is contained by the marker-absent fail-closed privilege rule + the `import` belt, not by the hook |
 
+Both columns above are **main-thread** altitudes — the orchestrator holds direct
+write authority over the coordination `.git` and runs the funnel through the CLI.
+A third, **harness-neutral** tier (FR-007, REQ-335) drops that authority: a
+**confined orchestrator** runs *inside* the coordination worktree under a
+cwd-confining jail with the shared object store **read-only**, so it cannot
+compose the coordination commit itself. It lands every worker delta and
+coordination write through a **gated write-funnel** of mediated tools — `import`
+(folds the worker's committed delta) → `conclude` (disposable runtime flip + one
+boundary commit, self-healing) → `reap` — never a direct `.git` write, and
+reads authored/runtime state raw while performing all mutation through the funnel
+(the reads-raw/writes-mediated **wall**). Trunk-facing verbs
+(`refresh-base`/`candidate`/`integrate`) write **outside** the jail, so this tier
+**cannot** perform them — it **reports-and-halts** them to the delegating parent.
+The funnel tools route by their **declared args alone** (D-B5, VT-4:
+`resolve_coord`, cwd/agent-id/payload-independent), so the tier is a property of
+the **mediated-write contract**, not of any single harness: the claude nested-`Agent`
+spawn is today's realization, but an out-of-jail transport reuses the same tools
+unchanged. The trust-bearing core stays harness-identical; the confined tier adds
+a *lower* write-authority altitude, not a new mechanism.
+
 ### Two-stage, audit-gated integration projection
 
 The coordination branch is the funnel's SSoT; the sync verb reads the completed

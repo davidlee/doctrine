@@ -81,7 +81,12 @@ and performs every boundary-crossing write through doctrine MCP tools.
   the probe: `arm-spawn` (writing `base` into the coord jail) **works** (cwd-safe file
   write); **positional spawn-discrimination BROKE** (cwd reset → payload cwd =
   coord-root → Passthrough). Resolved by §A's additive Fork trigger, not positional
-  cwd. Live-confirmed at feasibility gate 2026-07-04.
+  cwd. Live-confirmed at feasibility gate 2026-07-04. **PHASE-05 delta:** both the
+  arm base and worker isolation are now **deterministic** — `arm-spawn --base`
+  defaults to coord-root `HEAD` (A1), and `isolation: worktree` rides the
+  `dispatch-worker` def frontmatter, not a per-call arg (A2) — so neither depends on
+  the orchestrator LLM. Interim F7 ("nested isolation not honored / §D infeasible")
+  refuted (F9–F12): it was these two recipe/def defects, since fixed.
 - **OS1 (→ plan) — coord tree always on `dispatch/<NNN>`?** §A's `coord_in_dispatch`
   branch guard assumes it; if `dispatch setup` can detach mid-op the guard needs a
   state-file marker instead. Verify at plan (R1).
@@ -120,3 +125,7 @@ subagent that drives the funnel via MCP tools (built here) atop SL-198's
 - Mode A coordinator-exemption knob (raw-git orchestration alternative).
 - Governance ratified at reconcile: ADR-012 REV + ADR-011 D6 amendment + SL-182 note.
 - Persistent http/sse MCP for arm unification; exfil tightening for downstream repos.
+- **IMP-268** — early-catch dispatch-branch guard on the `arm-spawn` default base
+  (do only if the late base-miss wastes tokens in practice; PHASE-05 A1).
+- **IMP-269** — `/fork` subagents write-rejected outside a worktree jail; broader
+  non-dispatch subagent write-policy question, out of SL-199 scope (PHASE-05 A5).

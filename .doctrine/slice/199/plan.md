@@ -56,11 +56,14 @@ A hard serial spine 01 → 02 → 03 → 05, with 04 hanging off 03:
   corrections live here and are the phase's sharpest exit criteria: undeclared scope
   is a **hard pre-commit refusal** (nothing lands, report-and-halt — not an advisory
   the orchestrator blesses, which it could not, having no `git reset` inside the
-  jail); and the phase-conclusion is **atomic** (flip + boundary + one commit), so a
-  fault never leaves a phase `completed` in committed history without its boundary.
-  The atomic `conclude_phase` is a partial reversal of the design's earlier
-  "all-discrete tools" position — earned by the review, because two independent
-  commits can split across a crash.
+  jail); and the phase-conclusion keeps **two tiers** (A6) — the `completed` flip is a
+  gitignored, disposable runtime sheet (never committed), while the `(B, coord_tip)`
+  boundary lands as one working-tree-free commit. The **boundary commit is the atomic
+  unit**; a crash leaves a completed sheet with no committed boundary, which
+  **self-heals** on retry (the sheet is disposable; the boundary re-composes). This
+  reconciles the design's earlier "flip + boundary in one atomic commit" phrasing to
+  the shipped two-tier code — the durable completion signal is the committed boundary,
+  never the flip.
 
 - **PHASE-04 (agent-def + lint allowlist row) hangs off PHASE-03** and SL-198's lint
   mechanism. It is deliberately small: the def is authored and the lint gains one
@@ -103,3 +106,25 @@ A hard serial spine 01 → 02 → 03 → 05, with 04 hanging off 03:
   `src/mcp_server/dispatch.rs`) that do not exist on the current base; they are the
   intended homes, checked at the dispatch handover after implementation, not at plan
   time.
+
+- **PHASE-05 is oversized — sequence it in `/phase-plan`, do not split the id.** It
+  composes four unlike kinds of work: (1) small code (A1 `run_arm_spawn` default-base
+  dispatch.rs:450, A2 worker-def `isolation`, A12 invariant test), (2) authored
+  drive-loop guidance, (3) shipped docs + a harness-neutral tech-spec-021 REQ delta,
+  (4) a live human-witnessed integration (VH-1). Recommended order: land the testable
+  code first (it stands against the current tree, VT-2/3/4 gate it), then the authored
+  guidance/docs, then clear F8, then VH-1 last. VH-1 is **externally gated on F8**
+  (coord base is `commit-gate-red`, ~600 doctor findings) — that clearance can balloon;
+  scope it before committing to the live run.
+
+- **Materialization gap (found at plan re-grep).** The `dispatch-orchestrator` def
+  ships at `install/agents/claude/dispatch-orchestrator.md` but is NOT materialized to
+  `.claude/agents/` in the coord tree; likewise A2's worker `isolation` edit must be
+  re-materialized (`doctrine install`/reseat) so shipped==installed before VH-1 spawns
+  a real confined orchestrator + isolated worker. EX-6/VT-3 assert the worker copy;
+  confirm the orchestrator copy too at phase-plan.
+
+- **Design line-refs have drifted** (e.g. `classify_create` is create.rs:200, design
+  cites :166) as PHASE-01–04 code landed. The symbols resolve; the line numbers are
+  stale but harmless — do not chase them. Every concrete PHASE-05 premise was
+  re-grepped against the current tree at plan time and resolves.

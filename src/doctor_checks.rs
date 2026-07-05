@@ -13,6 +13,9 @@ use crate::catalog::diagnostic::CatalogDiagnostic;
 use crate::catalog::hydrate::{CatalogEdgeLabel, CatalogKey};
 use crate::catalog::scan::{self, ScanMode};
 use crate::finding::{Category, Finding};
+use crate::mcp_server::dispatch::{
+    TOOL_DISPATCH_CONCLUDE_PHASE, TOOL_DISPATCH_IMPORT, TOOL_DISPATCH_REAP,
+};
 
 // ---------------------------------------------------------------------------
 // RawLabel — #6 catalog-scan check
@@ -363,10 +366,34 @@ const AGENT_SCAN_ROOTS: [&str; 2] = ["install/agents", ".doctrine/agents"];
 const ROLE_MARKER_KEY: &str = "doctrine-role";
 const ROLE_WORKER: &str = "worker";
 const ROLE_ORCHESTRATOR: &str = "orchestrator";
-/// The single MCP token a confined dispatch agent may hold — its only sanctioned
+/// The single MCP token a confined **worker** may hold — its only sanctioned
 /// jail-wall bypass (SL-198 keystone). Any other `mcp__*` token is an escape.
 const TOOL_ALLOWED: &str = "mcp__doctrine__worker_commit";
 const MCP_TOKEN_PREFIX: &str = "mcp__";
+/// The `mcp__<server>__` prefix the funnel tokens carry once fully qualified.
+/// STD-001: the orchestrator allowlist is COMPOSED from this prefix and the §B
+/// bare-name constants ([`TOOL_DISPATCH_IMPORT`] …), never re-typed here.
+const MCP_DOCTRINE_PREFIX: &str = "mcp__doctrine__";
+
+/// The fully-qualified MCP tokens a confined agent of `role` may hold — the
+/// role-keyed allowlist. A `worker` holds only [`TOOL_ALLOWED`]; an
+/// `orchestrator` holds only the three funnel tokens (composed from the §B
+/// [`crate::mcp_server::dispatch`] bare-name constants). Any other role yields
+/// the empty set (no `mcp__*` token permitted).
+fn allowed_mcp_tokens(role: &str) -> Vec<String> {
+    match role {
+        ROLE_WORKER => vec![TOOL_ALLOWED.to_string()],
+        ROLE_ORCHESTRATOR => [
+            TOOL_DISPATCH_IMPORT,
+            TOOL_DISPATCH_CONCLUDE_PHASE,
+            TOOL_DISPATCH_REAP,
+        ]
+        .iter()
+        .map(|bare| format!("{MCP_DOCTRINE_PREFIX}{bare}"))
+        .collect(),
+        _ => Vec::new(),
+    }
+}
 
 /// #9 — Worker tool-surface conformance lint (SL-198, RSK-225).
 ///
@@ -380,9 +407,12 @@ const MCP_TOKEN_PREFIX: &str = "mcp__";
 ///    `name:` field) MUST declare `doctrine-role: worker|orchestrator`. An
 ///    unmarked def is a failure, not a doc gap — an unmarked worker granting a
 ///    writable MCP token would otherwise slip an allow-by-marker lint.
-/// 2. **Tool allowlist.** A marked def's `tools:` may contain no `mcp__*` token
-///    except [`TOOL_ALLOWED`] — this also rejects a bare `mcp__doctrine` server
-///    grant (it is `mcp__`-prefixed and not the allowed token).
+/// 2. **Role-keyed tool allowlist.** A marked def's `tools:` may contain no
+///    `mcp__*` token outside its role's sanctioned set ([`allowed_mcp_tokens`]):
+///    a `worker` may hold only [`TOOL_ALLOWED`]; an `orchestrator` only the three
+///    funnel tokens. This also rejects a bare `mcp__doctrine` server grant (it is
+///    `mcp__`-prefixed and in no role's set). Ceiling, not floor — extras are
+///    rejected, but the set's tokens need not all be present.
 ///
 /// Absent scan roots yield zero findings (downstream projects without an
 /// `install/` tree are clean).
@@ -425,9 +455,10 @@ fn collect_agent_def_findings(dir: &Path, root: &Path, findings: &mut Vec<Findin
             .display()
             .to_string();
 
-        // Rule 1 — marker mandatory (deny-by-default).
-        match fm_scalar(fm, ROLE_MARKER_KEY) {
-            Some(role) if role == ROLE_WORKER || role == ROLE_ORCHESTRATOR => {}
+        // Rule 1 — marker mandatory (deny-by-default). Thread the validated role
+        // out into Rule 2's role-keyed allowlist.
+        let role = match fm_scalar(fm, ROLE_MARKER_KEY) {
+            Some(role) if role == ROLE_WORKER || role == ROLE_ORCHESTRATOR => role,
             Some(role) => {
                 findings.push(Finding {
                     category: Category::AgentConformance,
@@ -446,16 +477,20 @@ fn collect_agent_def_findings(dir: &Path, root: &Path, findings: &mut Vec<Findin
                 });
                 continue;
             }
-        }
+        };
 
-        // Rule 2 — tool allowlist (marked defs only).
+        // Rule 2 — role-keyed tool allowlist (marked defs only). Ceiling, not
+        // floor: reject any `mcp__*` token outside the role's set; do NOT require
+        // the set's tokens to be present.
+        let allowed = allowed_mcp_tokens(role);
         for tok in fm_tool_tokens(fm) {
-            if tok.starts_with(MCP_TOKEN_PREFIX) && tok != TOOL_ALLOWED {
+            if tok.starts_with(MCP_TOKEN_PREFIX) && !allowed.iter().any(|a| a == &tok) {
                 findings.push(Finding {
                     category: Category::AgentConformance,
                     entity: Some(rel.clone()),
                     message: format!(
-                        "forbidden MCP token `{tok}` — a confined agent may hold only `{TOOL_ALLOWED}`"
+                        "forbidden MCP token `{tok}` — a `{role}` agent-def may hold only [{}]",
+                        allowed.join(", ")
                     ),
                 });
             }
@@ -1315,6 +1350,72 @@ mod tests {
             "bare mcp__doctrine server grant must fail"
         );
         assert!(findings[0].message.contains("mcp__doctrine"));
+    }
+
+    #[test]
+    fn agent_conformance_passes_orchestrator_with_only_funnel_tokens() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/dispatch-orchestrator.md",
+            "---\nname: dispatch-orchestrator\ndoctrine-role: orchestrator\ntools: Read, Bash, Agent, mcp__doctrine__dispatch_import, mcp__doctrine__dispatch_conclude_phase, mcp__doctrine__dispatch_reap\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert!(
+            findings.is_empty(),
+            "sanctioned orchestrator (three funnel tokens) should pass the allowlist: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn agent_conformance_fails_orchestrator_with_extra_mcp_token() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/rogue-orchestrator.md",
+            "---\nname: rogue-orchestrator\ndoctrine-role: orchestrator\ntools: Read, mcp__doctrine__dispatch_import, mcp__github__create_pr\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(
+            findings.len(),
+            1,
+            "an orchestrator's extra writable MCP token must fail the allowlist"
+        );
+        assert!(findings[0].message.contains("mcp__github__create_pr"));
+    }
+
+    #[test]
+    fn agent_conformance_fails_orchestrator_with_bare_server_grant() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/bare-orchestrator.md",
+            "---\nname: bare-orchestrator\ndoctrine-role: orchestrator\ntools: Read, mcp__doctrine\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(
+            findings.len(),
+            1,
+            "a bare mcp__doctrine grant is in no role's allowlist and must fail"
+        );
+        assert!(findings[0].message.contains("mcp__doctrine"));
+    }
+
+    #[test]
+    fn agent_conformance_fails_orchestrator_holding_worker_commit() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/overreaching-orchestrator.md",
+            "---\nname: overreaching-orchestrator\ndoctrine-role: orchestrator\ntools: Read, mcp__doctrine__dispatch_import, mcp__doctrine__worker_commit\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(
+            findings.len(),
+            1,
+            "the worker's token is NOT in the orchestrator's allowlist and must fail"
+        );
+        assert!(findings[0].message.contains("mcp__doctrine__worker_commit"));
     }
 
     #[test]

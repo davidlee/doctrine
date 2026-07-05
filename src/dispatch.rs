@@ -216,8 +216,9 @@ pub(crate) enum DispatchCommand {
         /// The base commit B every spawn in this batch forks at — `dispatch setup`'s
         /// stdout `base=<dispatch_tip>` (the same tip the subprocess arm feeds
         /// `fork --base`). Must be a 4..=64-char hex oid (the reader's accepted form).
+        /// Optional: omitted ⇒ defaults to the coord-root `HEAD` (A1).
         #[arg(long)]
-        base: String,
+        base: Option<String>,
 
         /// The slice being dispatched (bare number) — diagnostic only; the arming dir
         /// is per-coord-tree, not per-slice (cross-slice partition is by coord tree).
@@ -431,7 +432,7 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
             extra_rw,
             no_network,
             path,
-        } => run_arm_spawn(path, &base, slice, extra_rw, no_network),
+        } => run_arm_spawn(path, base.as_deref(), slice, extra_rw, no_network),
     }
 }
 
@@ -449,19 +450,35 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
 /// never pair with a fresh `base` (design §5.3).
 fn run_arm_spawn(
     path: Option<PathBuf>,
-    base: &str,
+    base: Option<&str>,
     slice: Option<u32>,
     extra_rw: Vec<PathBuf>,
     no_network: bool,
 ) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+
+    // A1: an omitted `--base` defaults to the coord-root HEAD; an explicit base is
+    // honored unchanged. Resolve through the crate's shared git shell (same helper
+    // `run_refresh_base` uses), never a hand-rolled Command.
+    //
+    // A7 caveat: the DEFAULTED base is NOT self-catching on a confined arm. This
+    // resolves against the root this process sees; if that is the wrong-but-consistent
+    // tree, a wrong base can land silently — there is no cross-check here. The deferred
+    // spawn-time guard (IMP-268) is the real net for that, not this default; do not
+    // mistake this resolution for one.
+    let resolved = match base {
+        Some(b) => b.trim().to_string(),
+        None => git::git_text(&root, &["rev-parse", "HEAD"])?,
+    };
+
     // Fail closed on a base outside the reader's accepted envelope (4..=64 hex), so a
-    // bad base surfaces at arm time, not silently as a no-fork at spawn time.
-    let b = base.trim();
+    // bad base surfaces at arm time, not silently as a no-fork at spawn time. Applied to
+    // the RESOLVED base, so an explicit bad `--base` still fails exactly as before.
+    let b = resolved.as_str();
     if !(4..=64).contains(&b.len()) || !b.bytes().all(|c| c.is_ascii_hexdigit()) {
-        bail!("bad-base: `{base}` is not a 4..=64-char hex oid");
+        bail!("bad-base: `{b}` is not a 4..=64-char hex oid");
     }
 
-    let root = root::find(path, &root::default_markers())?;
     let spawn = root.join(crate::worktree::ARMING_SUBPATH);
     std::fs::create_dir_all(&spawn)
         .with_context(|| format!("create arming dir {}", spawn.display()))?;
@@ -3381,7 +3398,7 @@ mod tests {
 
         run_arm_spawn(
             Some(repo.path().to_path_buf()),
-            "68250bcd",
+            Some("68250bcd"),
             None,
             vec![PathBuf::from("/nix/store")],
             true, // --no-network
@@ -3408,7 +3425,7 @@ mod tests {
         // First arm declares a policy ⇒ jail.toml present.
         run_arm_spawn(
             Some(repo.path().to_path_buf()),
-            "68250bcd",
+            Some("68250bcd"),
             None,
             vec![PathBuf::from("/nix/store")],
             false,
@@ -3420,7 +3437,7 @@ mod tests {
         // cleared so it cannot pair with the fresh base (F-4 hygiene).
         run_arm_spawn(
             Some(repo.path().to_path_buf()),
-            "abcd1234",
+            Some("abcd1234"),
             None,
             vec![],
             false,
@@ -3430,6 +3447,41 @@ mod tests {
         assert!(
             !decl.exists(),
             "stale jail.toml cleared on a Default re-arm"
+        );
+    }
+
+    // ---- A1 / VT-2: an omitted --base defaults to the coord-root HEAD ---------------
+
+    #[test]
+    fn arm_spawn_defaults_base_to_head_when_omitted() {
+        let repo = tempfile::tempdir().unwrap();
+        init_repo(repo.path());
+        let spawn = repo.path().join(crate::worktree::ARMING_SUBPATH);
+
+        // base = None ⇒ the arming `base` file equals the repo's `git rev-parse HEAD`.
+        run_arm_spawn(Some(repo.path().to_path_buf()), None, None, vec![], false).unwrap();
+        let head = git(repo.path(), &["rev-parse", "HEAD"]);
+        let written = std::fs::read_to_string(spawn.join("base")).unwrap();
+        assert_eq!(
+            written.trim(),
+            head,
+            "defaulted base is the coord-root HEAD"
+        );
+
+        // base = Some(<explicit sha>) ⇒ that sha is written unchanged.
+        run_arm_spawn(
+            Some(repo.path().to_path_buf()),
+            Some("abcd1234"),
+            None,
+            vec![],
+            false,
+        )
+        .unwrap();
+        let explicit = std::fs::read_to_string(spawn.join("base")).unwrap();
+        assert_eq!(
+            explicit.trim(),
+            "abcd1234",
+            "explicit base honored unchanged"
         );
     }
 
