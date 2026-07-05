@@ -24,9 +24,8 @@ fn bin() -> std::path::PathBuf {
 
 /// Create a backlog issue with the given title under `dir`. `DOCTRINE_WORKER` is
 /// explicitly UNSET — `backlog new` is an authored write the worker-mode guard
-/// refuses under it, and this suite runs inside the worker_commit gate (which
-/// exports `DOCTRINE_WORKER=1`). The `-p` target is a plain tempdir, so only the
-/// env leg can trip; clearing it lets the write proceed (mem.pattern.dispatch.worker-verify-unset).
+/// refuses under a leaked env leg; strip it so the write proceeds regardless of the
+/// caller's shell (the established `mem.pattern.dispatch.worker-verify-unset` idiom).
 fn new_issue(dir: &Path, title: &str) {
     let out = Command::new(bin())
         .args(["backlog", "new", "issue", title, "-p"])

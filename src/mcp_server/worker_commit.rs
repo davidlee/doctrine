@@ -135,16 +135,30 @@ fn run_commit_gate(dir: &Path, cfg: &VerificationConfig) -> anyhow::Result<GateO
     let (program, rest) = argv
         .split_first()
         .ok_or_else(|| anyhow::anyhow!("worker_commit: resolved commit-gate argv is empty"))?;
-    // The gate runs in the fork worktree — a LINKED worktree, so the authored-write
-    // guard (`is_linked_worktree`, marker.rs) trips on its own. DOCTRINE_WORKER-keyed
-    // test skips (the `adr status` goldens) fire only if the gate child sees that env,
-    // so export it here: the two worker-mode signals (guard vs test-skip) must agree.
-    let output = std::process::Command::new(program)
+    // The gate runs the TRUSTED verification suite (`cargo test`) in the fork. The fork
+    // carries the worker marker (`create-fork` stamps it, create.rs), so every e2e test
+    // that spawns an authored-write `doctrine` fixture (`backlog new`, `install`, …)
+    // resolves its root to the fork cwd and is REFUSED by the worker-mode guard's marker
+    // leg — collateral damage, not the worker agent writing authored state (the agent is
+    // blocked awaiting this MCP call, so no write can race the cleared window). Clear the
+    // marker for the gate so the suite runs as on a normal tree, and do NOT export
+    // DOCTRINE_WORKER (its env leg would re-trip the same guard). Restore the marker
+    // afterwards so worker-agent protection survives past this call. See SL-199 F2.
+    let had_marker = crate::worktree::marker_present(dir);
+    if had_marker {
+        crate::worktree::remove_marker(dir).context("clear worker marker for the commit gate")?;
+    }
+    let spawned = std::process::Command::new(program)
         .args(rest)
         .current_dir(dir)
-        .env("DOCTRINE_WORKER", "1")
+        .env_remove("DOCTRINE_WORKER")
         .output()
-        .with_context(|| format!("spawning the worker commit gate: {}", argv.join(" ")))?;
+        .with_context(|| format!("spawning the worker commit gate: {}", argv.join(" ")));
+    if had_marker {
+        crate::worktree::write_marker(dir)
+            .context("restore worker marker after the commit gate")?;
+    }
+    let output = spawned?;
     if output.status.success() {
         Ok(GateOutcome::Green)
     } else {
@@ -420,6 +434,9 @@ mod tests {
             fs::write(&path, body).unwrap();
         }
         fs::write(primary.join("seed"), "base\n").unwrap();
+        // Mirror production: `.doctrine/state/**` is runtime/gitignored, so a stamped
+        // worker marker never enters the worker's tracked/untracked commit delta.
+        fs::write(primary.join(".gitignore"), ".doctrine/state/\n").unwrap();
         git_run(&primary, &["add", "-A"]);
         git_run(&primary, &["commit", "-q", "-m", "base"]);
         let base = git_run(&primary, &["rev-parse", "HEAD^{commit}"]);
@@ -490,33 +507,43 @@ mod tests {
     }
 
     #[test]
-    fn worker_commit_gate_child_sees_doctrine_worker_env() {
-        // The gate runs cargo test in a LINKED worktree; the authored-write guard trips
-        // on `is_linked_worktree` alone, so DOCTRINE_WORKER-keyed test skips (the adr_status
-        // goldens) only fire if the gate child inherits that env. A gate that passes iff
-        // DOCTRINE_WORKER==1 lands the commit only when the env is exported.
-        let gate = r#"["sh", "-c", "test \"$DOCTRINE_WORKER\" = 1"]"#;
+    fn worker_commit_gate_clears_marker_and_unsets_env_then_restores() {
+        // SL-199 F2: the gate runs the trusted suite in the MARKED fork. It must clear the
+        // worker marker AND leave DOCTRINE_WORKER unset so authored-write test fixtures are
+        // not refused by the worker-mode guard. A gate that passes IFF the marker file is
+        // absent AND the env is unset lands the commit only when both hold; the marker is
+        // then restored past the gate.
+        let gate = r#"["sh", "-c", "test ! -f .doctrine/state/dispatch/worker && test -z \"$DOCTRINE_WORKER\""]"#;
         let (_tmp, primary, wt, agent, base) = worker_fixture(gate, &[]);
+        // Stamp the marker exactly as `create-fork` does on the real fork.
+        crate::worktree::write_marker(&wt).unwrap();
         fs::write(wt.join("seed"), "worker change\n").unwrap();
         let out = run_worker_commit(&primary, &agent, "msg").unwrap();
         match out {
             WorkerCommitOutput::Committed { base: out_base, .. } => assert_eq!(out_base, base),
-            other => panic!("gate child must see DOCTRINE_WORKER=1 and pass; got {other:?}"),
+            other => panic!("gate must see a cleared marker + unset env and pass; got {other:?}"),
         }
+        // Protection restored: the marker is back after the gate window.
+        assert!(
+            crate::worktree::marker_present(&wt),
+            "the worker marker must be restored after the gate"
+        );
     }
 
     #[test]
     fn worker_commit_forbidden_zone_refuses() {
-        // VT-1: a `.doctrine/` write hard-refuses forbidden-zone (before the gate runs).
+        // VT-1: an AUTHORED `.doctrine/` write hard-refuses forbidden-zone (before the gate).
+        // Runtime `.doctrine/state/**` is gitignored (never in the delta); the belt guards
+        // authored state (`adr`/`slice`/…), which IS tracked — use one of those paths.
         let (_tmp, primary, wt, agent, base) = worker_fixture("[\"true\"]", &[]);
-        fs::create_dir_all(wt.join(".doctrine/state")).unwrap();
-        fs::write(wt.join(".doctrine/state/x"), "sneaky\n").unwrap();
+        fs::create_dir_all(wt.join(".doctrine/adr")).unwrap();
+        fs::write(wt.join(".doctrine/adr/x"), "sneaky\n").unwrap();
         let out = run_worker_commit(&primary, &agent, "msg").unwrap();
         match out {
             WorkerCommitOutput::Refused { reason, detail } => {
                 assert_eq!(reason, FORBIDDEN_ZONE);
                 assert!(
-                    detail.contains(".doctrine/state/x"),
+                    detail.contains(".doctrine/adr/x"),
                     "names the path: {detail}"
                 );
             }
