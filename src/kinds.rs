@@ -30,6 +30,7 @@ pub(crate) const QUE: &str = "QUE";
 pub(crate) const CON: &str = "CON";
 pub(crate) const EVD: &str = "EVD";
 pub(crate) const HYP: &str = "HYP";
+pub(crate) const CPT: &str = "CPT";
 
 // --- dispatch ref-name prefixes (STD-001) ----------------------------------
 
@@ -53,29 +54,29 @@ pub(crate) const BACKLOG: &[&str] = &[ISS, IMP, CHR, RSK, IDE];
 /// membership. Sites that combine RECORD with other kinds should cite this
 /// constant in a comment so a reader can trace back. The
 /// `combined_constants_cover_record` test guards drift.
-pub(crate) const RECORD: &[&str] = &[ASM, DEC, QUE, CON, EVD, HYP];
+pub(crate) const RECORD: &[&str] = &[ASM, DEC, QUE, CON, EVD, HYP, CPT];
 
 // --- Combined groups (RECORD-complete; keep in sync with RECORD) ------------
 
 /// All kinds surfaced by default in `doctrine search`.
 pub(crate) const SEARCH_DEFAULT: &[&str] = &[
-    SL, ADR, PRD, SPEC, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON, EVD, HYP,
+    SL, ADR, PRD, SPEC, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON, EVD, HYP, CPT,
 ];
 /// Every numbered kind (the census).
 pub(crate) const ALL_KINDS: &[&str] = &[
     SL, ADR, POL, STD, PRD, SPEC, REQ, ISS, IMP, CHR, RSK, IDE, RV, REC, ASM, DEC, QUE, CON, EVD,
-    HYP, CM, REV, RFC,
+    HYP, CPT, CM, REV, RFC,
 ];
 /// All taggable kinds.
 pub(crate) const TAGGABLE: &[&str] = &[
-    SL, ADR, POL, STD, RFC, ISS, IMP, CHR, RSK, IDE, ASM, CM, DEC, QUE, CON, EVD, HYP, PRD, SPEC,
-    REQ, REC, REV, RV,
+    SL, ADR, POL, STD, RFC, ISS, IMP, CHR, RSK, IDE, ASM, CM, DEC, QUE, CON, EVD, HYP, CPT, PRD,
+    SPEC, REQ, REC, REV, RV,
 ];
 /// Work-like kinds — can author dep/seq edges.
 pub(crate) const WORK_LIKE: &[&str] = &[SL, ISS, IMP, CHR, RSK, IDE, REV];
 /// Work-like ∪ RECORD — admissible dep/seq targets (SL-158 D2).
 pub(crate) const ADMISSIBLE_DEP_TARGETS: &[&str] = &[
-    SL, ISS, IMP, CHR, RSK, IDE, REV, ASM, DEC, QUE, CON, EVD, HYP,
+    SL, ISS, IMP, CHR, RSK, IDE, REV, ASM, DEC, QUE, CON, EVD, HYP, CPT,
 ];
 
 /// Value-bearing kinds (SL-089 D2): a slice plus the five backlog kinds — the set
@@ -104,7 +105,7 @@ mod tests {
     fn groupings_match_documented_membership() {
         assert_eq!(GOV, &[ADR, POL, STD]);
         assert_eq!(BACKLOG, &[ISS, IMP, CHR, RSK, IDE]);
-        assert_eq!(RECORD, &[ASM, DEC, QUE, CON, EVD, HYP]);
+        assert_eq!(RECORD, &[ASM, DEC, QUE, CON, EVD, HYP, CPT]);
     }
 
     /// IMP-184: every combined constant that claims to cover RECORD must
@@ -136,7 +137,7 @@ mod tests {
             "REV is work-like for dep/seq but NOT value-bearing"
         );
         // Governance and records are neither.
-        for &prefix in &[ADR, POL, STD, ASM, DEC, QUE, CON, EVD, HYP] {
+        for &prefix in &[ADR, POL, STD, ASM, DEC, QUE, CON, EVD, HYP, CPT] {
             assert!(
                 !is_value_bearing(prefix),
                 "{prefix} must NOT be value-bearing"

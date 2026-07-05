@@ -276,8 +276,8 @@ use anyhow::Context;
 
 use crate::entity::Kind;
 use crate::kinds::{
-    ADR, ASM, BACKLOG, CHR, CM, CON, DEC, EVD, GOV, HYP, IDE, IMP, ISS, POL, PRD, QUE, REC, RECORD,
-    REQ, REV, RFC, RSK, RV, SL, SPEC, STD,
+    ADR, ASM, BACKLOG, CHR, CM, CON, CPT, DEC, EVD, GOV, HYP, IDE, IMP, ISS, POL, PRD, QUE, REC,
+    RECORD, REQ, REV, RFC, RSK, RV, SL, SPEC, STD,
 };
 
 /// What an outbound label's target ref is allowed to resolve to — the forward-edge
@@ -419,7 +419,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         //
         // The record-kind tail (ASM..HYP) must stay in sync with kinds::RECORD.
         sources: &[
-            SL, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON, EVD, HYP,
+            SL, RFC, ISS, IMP, CHR, RSK, IDE, ASM, DEC, QUE, CON, EVD, HYP, CPT,
         ],
         label: RelationLabel::References,
         role: Some(Role::Concerns),
@@ -528,7 +528,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         inbound_name: "shaped_by",
         target: TargetSpec::Kinds(&[
             PRD, SPEC, REQ, SL, ISS, IMP, CHR, RSK, IDE, ADR, POL, STD, RFC, ASM, DEC, QUE, CON,
-            EVD, HYP,
+            EVD, HYP, CPT,
         ]),
         tier: Tier::One,
         link: LinkPolicy::Writable,
@@ -553,7 +553,7 @@ pub(crate) const RELATION_RULES: &[RelationRule] = &[
         //
         // The record-kind entries (ASM..HYP) must stay in sync with kinds::RECORD.
         sources: &[
-            SL, PRD, SPEC, CM, ASM, DEC, QUE, CON, EVD, HYP, ISS, IMP, CHR, RSK, IDE,
+            SL, PRD, SPEC, CM, ASM, DEC, QUE, CON, EVD, HYP, CPT, ISS, IMP, CHR, RSK, IDE,
         ],
         label: RelationLabel::GovernedBy,
         role: None,
@@ -1772,14 +1772,14 @@ mod tests {
                 // record-kind tail must stay in sync with kinds::RECORD
                 &[
                     "SL", "RFC", "ISS", "IMP", "CHR", "RSK", "IDE", "ASM", "DEC", "QUE", "CON",
-                    "EVD", "HYP",
+                    "EVD", "HYP", "CPT",
                 ],
             ),
             (
                 RelationLabel::Supersedes,
                 // record-kind tail must stay in sync with kinds::RECORD
                 &[
-                    "SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON", "EVD", "HYP",
+                    "SL", "ADR", "POL", "STD", "ASM", "DEC", "QUE", "CON", "EVD", "HYP", "CPT",
                 ],
             ),
             (RelationLabel::DescendsFrom, &["SPEC"]),
@@ -1818,7 +1818,62 @@ mod tests {
                 got, want,
                 "RELATION_RULES source set for {label:?} diverged from the shipped accessor"
             );
+            // P2 single-entry pins: the record-kind tail is kinds::RECORD, not a
+            // hand-spelled literal. When RECORD grows in PHASE-02 this catches
+            // the drift before the equality body does.
+            if matches!(label, RelationLabel::References | RelationLabel::Supersedes) {
+                let tail = &want_prefixes[want_prefixes.len() - RECORD.len()..];
+                let mut tail_sorted = tail.to_vec();
+                tail_sorted.sort_unstable();
+                let mut record: Vec<&str> = RECORD.to_vec();
+                record.sort_unstable();
+                assert_eq!(
+                    tail_sorted, record,
+                    "{label:?} record-tail must equal kinds::RECORD"
+                );
+            }
         }
+    }
+
+    /// P3 canary: the Shapes rule's target set filtered to RECORD members equals
+    /// kinds::RECORD. Guards against forgetting to add a new record kind to the
+    /// hand-spelled Shapes target literal.
+    #[test]
+    fn shapes_target_record_subset_is_record() {
+        use crate::knowledge::ASSUMPTION_KIND;
+        let rule = lookup(&ASSUMPTION_KIND, RelationLabel::Shapes, None)
+            .expect("Shapes rule for record kinds");
+        let TargetSpec::Kinds(targets) = rule.target else {
+            panic!("Shapes target must be Kinds");
+        };
+        let mut record_members: Vec<&&str> =
+            targets.iter().filter(|p| RECORD.contains(p)).collect();
+        record_members.sort();
+        let mut record: Vec<&&str> = RECORD.iter().collect();
+        record.sort();
+        assert_eq!(
+            record_members, record,
+            "P3: Shapes target RECORD-subset must equal kinds::RECORD"
+        );
+    }
+
+    /// P3 canary: the GovernedBy rule's source set filtered to RECORD members equals
+    /// kinds::RECORD. Guards against forgetting to add a new record kind to the
+    /// hand-spelled GovernedBy sources literal.
+    #[test]
+    fn governed_by_sources_record_subset_is_record() {
+        use crate::knowledge::ASSUMPTION_KIND;
+        let rule = lookup(&ASSUMPTION_KIND, RelationLabel::GovernedBy, None)
+            .expect("GovernedBy rule for record kinds");
+        let mut record_members: Vec<&&str> =
+            rule.sources.iter().filter(|p| RECORD.contains(p)).collect();
+        record_members.sort();
+        let mut record: Vec<&&str> = RECORD.iter().collect();
+        record.sort();
+        assert_eq!(
+            record_members, record,
+            "P3: GovernedBy sources RECORD-subset must equal kinds::RECORD"
+        );
     }
 
     /// VT-3 (R2-M3): `inbound_name == name()` for EVERY pre-existing label; the ONLY
@@ -2128,8 +2183,8 @@ mod tests {
             assert_eq!(
                 got,
                 [
-                    "ADR", "ASM", "CHR", "CON", "DEC", "EVD", "HYP", "IDE", "IMP", "ISS", "POL",
-                    "PRD", "QUE", "REQ", "RFC", "RSK", "SL", "SPEC", "STD"
+                    "ADR", "ASM", "CHR", "CON", "CPT", "DEC", "EVD", "HYP", "IDE", "IMP", "ISS",
+                    "POL", "PRD", "QUE", "REQ", "RFC", "RSK", "SL", "SPEC", "STD"
                 ]
             );
         } else {

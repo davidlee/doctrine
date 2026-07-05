@@ -33,7 +33,7 @@ fn validate_byte_exact_golden() {
     // Run this test ONCE to capture the real output, then paste it as the expected string.
     // This is the byte-exact golden — ANY change to validate output will fail this test.
     let expected = concat!(
-        "validate: scanned SL, ADR, POL, STD, PRD, SPEC, REQ, ISS, IMP, CHR, RSK, IDE, RV, REC, ASM, DEC, QUE, CON, EVD, HYP, CM, REV, RFC\n",
+        "validate: scanned SL, ADR, POL, STD, PRD, SPEC, REQ, ISS, IMP, CHR, RSK, IDE, RV, REC, ASM, DEC, QUE, CON, EVD, HYP, CPT, CM, REV, RFC\n",
         "validate: corpus clean",
     );
 

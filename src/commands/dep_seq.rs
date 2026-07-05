@@ -35,6 +35,16 @@ pub(crate) fn is_admissible_dep_target(kind: &'static crate::entity::Kind) -> bo
     is_work_like(kind) || is_record(kind)
 }
 
+/// SL-197 P4: the `RecordKind` vocabulary joined with "/" for the `dep_seq` error
+/// message. When a 7th kind is added in PHASE-02, the message auto-includes it.
+fn record_kind_list_slash() -> String {
+    crate::knowledge::RecordKind::ALL
+        .iter()
+        .map(|k| k.as_str())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// Resolve a dep/seq source to its TOML path. Validates: canonical-ref parse,
 /// work-like kind (slice or backlog). Returns the resolved path.
 fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Result<PathBuf> {
@@ -81,8 +91,9 @@ fn resolve_dep_seq_src(
     let (tkref, tid) = crate::integrity::parse_resolvable_ref(root, target)?;
     anyhow::ensure!(
         is_admissible_dep_target(tkref.kind),
-        "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item) or a knowledge record (assumption/decision/question/constraint/evidence/hypothesis); governance docs are excluded",
-        tkref.kind.prefix
+        "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item) or a knowledge record ({}); governance docs are excluded",
+        tkref.kind.prefix,
+        record_kind_list_slash(),
     );
     anyhow::ensure!(
         !(skref.kind.prefix == tkref.kind.prefix && sid == tid),
@@ -258,6 +269,18 @@ mod tests {
     use super::*;
     use crate::integrity;
     use crate::slice;
+
+    /// P4 canary: the dep_seq error message lists record kinds from the RecordKind
+    /// vocab (not a hand-spelled literal). When a 7th kind is added in PHASE-02, this
+    /// test must be updated to match the new vocab.
+    #[test]
+    fn needs_after_message_lists_record_kinds_from_vocab() {
+        let msg = record_kind_list_slash();
+        assert_eq!(
+            msg, "assumption/decision/question/constraint/evidence/hypothesis/concept",
+            "P4: dep_seq record-kind list must be built from RecordKind vocab"
+        );
+    }
 
     /// SL-060 / SL-066 §PHASE-04: the work-like membership predicate is the ONE
     /// widen-later guard — exactly { slice } ∪ { the 5 backlog kinds } ∪ { revision },

@@ -46,9 +46,9 @@ Four homes, told apart by what the record *is* — do not conflate them:
   (`open|triaged|started|resolved|closed`), it is **not** a backlog item. A
   `risk` is admitted only as *unresolved work-risk* — uncertain future harm that
   may need mitigation, acceptance, or expiry — never as a general epistemic note.
-- **knowledge_record (PRD-010) = epistemic / governance records** — six kinds:
+- **knowledge_record (PRD-010) = epistemic / governance records** — seven kinds:
   assumptions (ASM), decisions (DEC), questions (QUE), constraints (CON),
-  evidence (EVD), and hypotheses (HYP); each with its own held→validated
+  evidence (EVD), hypotheses (HYP), and concepts (CPT); each with its own held→validated
   lifecycle. EVD and HYP carry `supports`/`disputes` evidentiary edges for
   tracing provenance. Not work; not the backlog.
 - **ADR = high-impact architectural decisions** (`doctrine adr new`) — a chosen

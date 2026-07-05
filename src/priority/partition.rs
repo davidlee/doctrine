@@ -212,6 +212,12 @@ const PARTITION: &[KindPartition] = &[
         gating: &["proposed"],
         terminal: &["confirmed", "refuted"],
     },
+    KindPartition {
+        prefix: kinds::CPT,
+        workable: &[],
+        gating: &["draft", "active"],
+        terminal: &["retired"],
+    },
 ];
 
 /// The shared backlog workable set (the five backlog prefixes partition identically).
