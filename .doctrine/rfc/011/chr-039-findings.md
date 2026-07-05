@@ -37,20 +37,23 @@ structured "needs decision X" → the script/orchestrator (or the main thread) r
 user → the answer feeds the next or resumed agent. This fits doctrine's report-and-halt dispatch
 model, but IDE-031 must architect it explicitly (there is no automatic escalation).
 | **SQ4-writes (FS)** — does a fork worker's filesystem write execute? | **YES, unconstrained** | An `isolation:'worktree'` agent wrote `haiku.txt` into its fork with no hook/permission block. FS writes are confined to the fork (import belt captures them). |
-| **SQ4-writes (MCP)** — does a fork worker's MCP governance write land? | **NO — MCP not connected** | From an `isolation:'worktree'` fork, `mcp__doctrine__memory_record` failed at transport: `MCP server "doctrine" is not connected`. It never reached a role/authority gate. **Contrast:** non-isolated SQ4 agents reached doctrine MCP fine. ⇒ **MCP connectivity is context-dependent — present in session/non-isolated agents, ABSENT in `isolation:'worktree'` forks** (the MCP stdio server is session-scoped; the isolated fork env has no pipe to it). |
-| **SQ4-mcp-in-fork** — does an isolated agent EVER get doctrine MCP (e.g. the orchestrator case)? | **PIVOTAL — UNTESTED** | The confined orchestrator (workflow → `agent(isolation:'worktree')` into the coord tree) would be in a fork → likely no MCP → **can't use the `dispatch_import`/`conclude_phase`/`reap` funnel tools**; must run the funnel via CLI (`doctrine dispatch …` in Bash) instead. Confirm before committing IDE-031's orchestrator to an MCP-funnel vs CLI-funnel shape. |
-| SQ5 — `taskBudget:{total}` live in this build? | **UNTESTED** | — |
+| **SQ4-mcp-in-fork** — can an `isolation:'worktree'` fork reach doctrine MCP? | **YES (clean binary)** | An isolated fork agent's `mcp__doctrine__memory_retrieve` returned 5/335 cleanly. ⇒ **no isolation limit** — the confined orchestrator (workflow → `agent(isolation:'worktree')` into the coord tree) CAN use the `dispatch_import`/`conclude_phase`/`reap` funnel MCP tools, subject to grant (dispatch-orchestrator subagent type already grants them). **MCP-funnel is viable; CLI-funnel not forced.** |
+| ~~SQ4-writes (MCP) "not connected"~~ — **RETRACTED, shim artifact** | **retracted** | The earlier "MCP not connected from a fork" (writegate `memory_record`, first grant-test `memory_retrieve`) was a probe-rig artifact: the `DOCTRINE_BIN` shim wrapped `${DOCTRINE_BIN} serve --mcp`, breaking the stdio JSON-RPC handshake for the fork's OWN server. Main's pre-shim connection masked it (non-isolated agents inherit main's live pipe). Re-probed with a clean binary → forks connect. See the stdio-shim footgun below. |
+| **SQ5** — is the workflow token `budget` live? | **plumbing live, unset** | The `budget` global exists and its methods ran (`budget.total`/`.remaining()` — no throw), but `total` was `null` (no `+Nk` directive this turn). A workflow CAN read `budget.remaining()` to pace a sub-orchestrator once a target is set. |
 
 ### Safety posture (operator conclusion)
 **The workflow spawns a confined orchestrator, never a bare worker.** A workflow-spawned worker
-has unsupervised FS-write authority in its fork AND no live human channel (both escalation probes
-negative) — but it also *cannot reach doctrine MCP* from the fork, so it cannot mutate governance
-state directly. The **orchestrator is the trust boundary** (ADR-006 sole-writer; import belt; gated
-`worker_commit`; report-and-halt). IDE-031 shape: **workflow (outer scripted driver) → confined
-dispatch-orchestrator (gated writer) → workers in forks.** The script never needs to Bash-arm
-`base` — it spawns ONE orchestrator, which arms + nested-spawns workers from its own Bash turns
-(dissolves SQ3's no-Bash-in-script constraint). Prior art: `mem.fact.dispatch.confined-orchestrator-driveloop-realizable`.
-OPEN: whether that orchestrator, being itself in a fork, can reach the funnel MCP tools (SQ4-mcp-in-fork) — if not, it drives the funnel via the CLI.
+has unsupervised FS-write authority in its fork, no live human channel (both escalation probes
+negative), AND — corrected — **can reach doctrine MCP** from its fork. So containment is **by
+policy, not by MCP-unreachability**: the worker is held in check only by the orchestrator-sole-writer
+model (ADR-006), the gated `worker_commit`, the import belt, report-and-halt, and by granting workers
+a **narrow** MCP tool surface (the dispatch-worker subagent type grants only `worker_commit`). The
+**orchestrator is the trust boundary.** IDE-031 shape: **workflow (outer scripted driver) → confined
+dispatch-orchestrator (gated writer, drives the funnel via its granted MCP tools) → workers in forks.**
+The script never needs to Bash-arm `base` — it spawns ONE orchestrator, which arms + nested-spawns
+workers from its own Bash turns (dissolves SQ3's no-Bash-in-script constraint). Prior art (SL-199,
+verified live): `mem.fact.dispatch.confined-orchestrator-driveloop-realizable`,
+`mem.fact.dispatch.confined-subagent-cwd-resets-breaks-positional-arming`.
 
 ## Corollary findings
 
@@ -58,10 +61,19 @@ OPEN: whether that orchestrator, being itself in a fork, can reach the funnel MC
   `WorktreeCreate` hook exec env AND the workflow agent's own env. (The stale
   ambient `DOCTRINE_BIN` in the launching shell — a deleted SL-199 dispatch
   binary — did NOT leak into hook exec; hooks get the settings env.)
-- **MCP path ignores config-env `DOCTRINE_BIN`** (operator-reported, unverified
-  here) — a dev/custom doctrine for the driver's MCP writes would need the value
-  passed via the claude invocation env, not `settings.local.json`. Matters if the
-  autonomous driver ever runs against an unreleased binary.
+- **The doctrine MCP server IS launched via `DOCTRINE_BIN`.** `.mcp.json` command =
+  `${DOCTRINE_BIN:-doctrine} serve --mcp`. So a dev/custom binary CAN front the MCP
+  server through `settings.local.json env.DOCTRINE_BIN` (corrects the earlier
+  operator belief that the MCP path ignores config-env). Caveat: the value is read
+  at server-launch; a fork spawns its OWN server via this command in the fork's env.
+- **STDIO-SHIM FOOTGUN (probe-rig lesson).** Wrapping `${DOCTRINE_BIN} serve --mcp`
+  with a shell shim (even a transparent `exec "$REAL" "$@"`) **breaks fork-spawned
+  MCP servers** — the stdio JSON-RPC handshake is intolerant of any wrapper
+  buffering/latency. The main session's server, launched clean before the shim was
+  set, keeps working — so non-isolated agents pass and ONLY forks fail, masquerading
+  as an "isolation limit." Set `DOCTRINE_BIN` to a real binary, never a wrapper, when
+  MCP is in play. (This invalidated an entire round of write-gate probing; caught by
+  the operator, re-probed clean.)
 - **Passthrough posture** — the harness mints `.worktrees/wf_<runid>-N` nested
   under the cwd's tree, **detached at that tree's HEAD, no branch** (`worktree.
   baseRef = "head"`). Fork base tracks the session tree HEAD, not hard-pinned to
