@@ -77,10 +77,8 @@ exit_criteria = [
   { id = "EX-4", text = "Existing dispatch status test suite passes UNCHANGED (behaviour-preservation)" },
 ]
 verification = [
-  { id = "VT-1", expects = "phase_projection branch table: boundary-present⇒Completed; sheet-completed∧no-boundary⇒ConcludeIncomplete; sheet-blocked⇒Blocked; malformed⇒Unknown; in_progress/none⇒InProgress/NotStarted",
-    test_file = "src/dispatch.rs", keywords = ["phase_projection", "ReceiptStatus", "ConcludeIncomplete", "Unknown"], waived = false },
-  { id = "VT-2", expects = "run_status delegates per-phase rows to phase_projection and its existing status output is unchanged (behaviour-preservation)",
-    test_file = "src/dispatch.rs", keywords = ["phase_projection", "run_status"], waived = false },
+  { id = "VT-1", expects = "phase_projection branch table: boundary-present⇒Completed; sheet-completed∧no-boundary⇒ConcludeIncomplete; sheet-blocked⇒Blocked; malformed⇒Unknown; in_progress/none⇒InProgress/NotStarted", test_file = "src/dispatch.rs", keywords = ["phase_projection", "ReceiptStatus", "ConcludeIncomplete", "Unknown"], waived = false },
+  { id = "VT-2", expects = "run_status delegates per-phase rows to phase_projection and its existing status output is unchanged (behaviour-preservation)", test_file = "src/dispatch.rs", keywords = ["phase_projection", "run_status"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -119,14 +117,10 @@ exit_criteria = [
   { id = "EX-6", text = "Behaviour-preservation: the existing worker/orchestrator agent-conformance tests (doctor #9 is jail-completeness code) pass UNCHANGED — the probe arm and marker extension add cases, never alter the worker/orchestrator verdicts" },
 ]
 verification = [
-  { id = "VT-1", expects = "dispatch_phase_receipt: Resolved carries a real dispatch_tip; each resolve_coord refusal yields CoordRefused(reason) with no tip",
-    test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_phase_receipt", "PhaseReceiptResult", "CoordRefused"], waived = false },
-  { id = "VT-2", expects = "dispatch_next_ready agrees with compute_next_phases on shared fixtures",
-    test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_next_ready", "compute_next_phases"], waived = false },
-  { id = "VT-3", expects = "dispatch_authored_divergence: diverged true iff .doctrine/** differs trunk_ref..dispatch_tip; compared_ref = resolved trunk authority",
-    test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_authored_divergence", "compared_ref"], waived = false },
-  { id = "VT-4", expects = "allowed_mcp_tokens grows orchestrator by 3 reads + adds a probe arm; marker validator accepts probe; doctor #9 green on current defs",
-    test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "allowed_mcp_tokens", "TOOL_DISPATCH_PHASE_RECEIPT"], waived = false },
+  { id = "VT-1", expects = "dispatch_phase_receipt: Resolved carries a real dispatch_tip; each resolve_coord refusal yields CoordRefused(reason) with no tip", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_phase_receipt", "PhaseReceiptResult", "CoordRefused"], waived = false },
+  { id = "VT-2", expects = "dispatch_next_ready agrees with compute_next_phases on shared fixtures", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_next_ready", "compute_next_phases"], waived = false },
+  { id = "VT-3", expects = "dispatch_authored_divergence: diverged true iff .doctrine/** differs trunk_ref..dispatch_tip; compared_ref = resolved trunk authority", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_authored_divergence", "compared_ref"], waived = false },
+  { id = "VT-4", expects = "allowed_mcp_tokens grows orchestrator by 3 reads + adds a probe arm; marker validator accepts probe; doctor #9 green on current defs", test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "allowed_mcp_tokens", "TOOL_DISPATCH_PHASE_RECEIPT"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -162,8 +156,7 @@ exit_criteria = [
   { id = "EX-5", text = "The reference script and defs are seeded by doctrine install (or the documented placement per PHASE-01/ISS-216)" },
 ]
 verification = [
-  { id = "VT-1", expects = "doctor conformance: probe + orchestrator + worker defs all pass check #9 with the grown allowlist",
-    test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "agent_conformance_findings"], waived = false },
+  { id = "VT-1", expects = "doctor conformance: probe + orchestrator + worker defs all pass check #9 with the grown allowlist", test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "agent_conformance_findings"], waived = false },
   { id = "VA-1", expects = "Agent inspects dispatch-probe.md: doctrine-role probe, exactly the three read MCP tokens, no raw write/bash/agent tools" },
   { id = "VA-2", expects = "Agent inspects /drive-slice: budget-adaptive loop, PhaseReceipt schema on the per-phase orchestrator agent(), named HALT contract (no inline halt literals), no auto-merge path, probes via dispatch-probe" },
 ]
