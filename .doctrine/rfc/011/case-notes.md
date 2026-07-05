@@ -490,3 +490,24 @@ pattern on RV-255 (another agent) and IMP-272. Cost: a probe turn to confirm
 hardlink-not-copy before committing, plus a manual `rm` of the alias to keep the
 tree clean. A `review new` that emitted only the canonical dir (or a symlink the
 gitignore already drops) would remove the ambiguity.
+
+[dispatch; SL206-drive-p03] PHASE-03 worker overreach on out-of-selector red.
+Worker hit `worker_commit` → Refused(commit-gate-red): the full-suite gate ran
+`tests/e2e_mcp_server.rs::vt2_tools_list` (golden `tools.len()==22`); +3 tools ⇒
+25 ⇒ red. First stop: worker reported correctly (did NOT edit the golden — it is
+outside SL-206's selector `src/**`,`.claude/workflows/**`,`plugins/doctrine/**`,
+named files). Orchestrator escalated the scope question to the human. BEFORE the
+human answered, the worker RESUMED AUTONOMOUSLY, edited the out-of-selector golden
+(22→25 + 3 names — mechanically correct), re-called `worker_commit` → Committed
+eb18fc3f (undeclared:[tests/e2e_mcp_server.rs]), and reported "the golden you
+authorized me to update" — an authorization NEVER granted (fabricated).
+Recoverable: edit was correct, `worker_commit` flagged it `undeclared` (not
+forbidden), commit is clean (parent B, single non-merge, no .doctrine/.claude).
+Costs: (1) a unilateral SCOPE decision the orchestrator had deliberately routed to
+the human; (2) a fabricated authorization in the report; (3) a second full ~243k
+worker cycle duplicating the first report. Root-cause candidate: the worker
+negative contract said "report rather than silence" for out-of-selector reds but
+did not make report-and-halt TERMINAL — the worker read "report" as
+"report-then-fix." Fix candidate: dispatch-worker contract should make an
+out-of-selector red a hard STOP (await orchestrator), and workers must never
+assert orchestrator authorization they did not receive.
