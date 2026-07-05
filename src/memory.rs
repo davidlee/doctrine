@@ -10,7 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -278,6 +278,14 @@ pub(crate) enum MemoryCommand {
         #[arg(long = "min-trust", value_parser = crate::retrieve::parse_min_trust)]
         min_trust: Option<String>,
     },
+
+    /// Ambient memory surfacing (SL-205): a Claude `PreToolUse` hook handler.
+    /// Reads the hook envelope on stdin (`{session_id?, agent_id?, cwd?,
+    /// tool_name?, tool_input?}`), keys on the path being touched or the command
+    /// about to run, and emits advisory `additionalContext` (or nothing) —
+    /// **exit 0 always**. Main-thread only (a subagent's `agent_id` short-circuits
+    /// to nothing). Wired via `hooks.json`, not for interactive use.
+    Surface,
 
     /// Resolve memory wikilinks for one memory or the whole corpus.
     ResolveLinks {
@@ -636,6 +644,7 @@ pub(crate) fn dispatch(cmd: MemoryCommand, color: bool) -> anyhow::Result<()> {
                 args.expand,
             )
         }
+        MemoryCommand::Surface => run_surface(),
         MemoryCommand::ResolveLinks { reference, path } => {
             run_resolve_links(path, reference.as_deref())
         }
@@ -9407,5 +9416,764 @@ verified_sha = ""
             output.contains("Writer capture test"),
             "output must contain the memory title"
         );
+    }
+}
+
+// === SL-205 PHASE-02: the ambient-surfacing adapter — pure helpers ==========
+// Sits beside the other `memory` command-surface consumers (this module is the
+// adapter's home per the design — a command-layer consumer of the PHASE-01
+// engine seam in `retrieve.rs`, ADR-001 leaf ← engine ← command). PURE only:
+// no stdin, no IO, no dispatch wiring — PHASE-03 wires the impure shell.
+
+/// Path-surface cap (design §5.5) — at most this many rows in a file-touch
+/// nudge.
+const CAP_PATH: usize = 3;
+/// Command-surface cap — at most this many rows in a command-invocation nudge.
+const CAP_COMMAND: usize = 2;
+/// Rows fetched from `retrieve::retrieve_rows` before dedup/cap — headroom so
+/// capping still leaves enough fresh (not-yet-seen) rows to fill a cap.
+const FETCH_LIMIT: usize = 8;
+/// Command-surface severity floor: only rows at or more severe than this
+/// (`severity_rank` ordinal — lower is more severe) gate onto a command
+/// surface.
+const SEV_FLOOR: &str = "high";
+/// Max characters of a command string kept in the PHASE-03 session dedup log
+/// key (truncation length, not a magic literal at each call site).
+const KEY_LOG_MAX: usize = 80;
+
+/// The two ambient-surfacing locations (design §5.5): a working-tree file
+/// touch, or a shell command invocation. Selects the admission gate and the
+/// header/triage field `format_block` renders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Surface {
+    Path,
+    Command,
+}
+
+/// Per-surface admission gate (EX-2). `Path` is ungated — a leaf file's
+/// `none`-severity hits are exactly the useful nudges. `Command` reuses the
+/// engine's `severity_rank` ordinal against `SEV_FLOOR` — no parallel
+/// severity scale (landmine internal-F3).
+pub(crate) fn admits(row: &crate::retrieve::SurfaceRow, surface: Surface) -> bool {
+    match surface {
+        Surface::Path => true,
+        Surface::Command => {
+            crate::retrieve::severity_rank(&row.severity)
+                <= crate::retrieve::severity_rank(SEV_FLOOR)
+        }
+    }
+}
+
+/// Drop rows whose `uid` is already in `seen` (session dedup), preserving the
+/// order of the rest (EX-3).
+pub(crate) fn dedup_diff(
+    rows: Vec<crate::retrieve::SurfaceRow>,
+    seen: &[String],
+) -> Vec<crate::retrieve::SurfaceRow> {
+    rows.into_iter()
+        .filter(|r| !seen.contains(&r.uid))
+        .collect()
+}
+
+/// Truncate to at most `n` rows (EX-3).
+pub(crate) fn cap(
+    mut rows: Vec<crate::retrieve::SurfaceRow>,
+    n: usize,
+) -> Vec<crate::retrieve::SurfaceRow> {
+    rows.truncate(n);
+    rows
+}
+
+/// Render the ambient nudge block for an already admitted+deduped+capped row
+/// set (EX-4). `None` on empty input — nothing to surface. House style
+/// (STD-001 / repo clippy config): pre-formatted lines collected into a
+/// `Vec<String>` then `.join("\n")` — never `push_str(&format!(..))`.
+pub(crate) fn format_block(
+    rows: &[crate::retrieve::SurfaceRow],
+    surface: Surface,
+) -> Option<String> {
+    if rows.is_empty() {
+        return None;
+    }
+    let header = match surface {
+        Surface::Path => "Doctrine memories for this file:",
+        Surface::Command => "Doctrine footguns (severity-gated):",
+    };
+    let mut lines: Vec<String> = vec![header.to_string()];
+    for row in rows {
+        let field = match surface {
+            Surface::Path => &row.trust,
+            Surface::Command => &row.severity,
+        };
+        let bracket = if row.stale {
+            format!("{field} \u{26A0}")
+        } else {
+            field.clone()
+        };
+        lines.push(format!("- [{bracket}] {} — {}", row.title, row.uid));
+    }
+    Some(lines.join("\n"))
+}
+
+// === SL-205 PHASE-03: the ambient-surfacing adapter — impure shell ==========
+// `doctrine memory surface`: a Claude `PreToolUse` hook handler (ADR-011
+// per-harness altitude — the second instance of the `worktree pretooluse`
+// precedent). Reads the hook envelope on stdin, composes the PHASE-01 engine
+// seam (`retrieve::retrieve_rows`) with the PHASE-02 pure helpers
+// (`admits`/`dedup_diff`/`cap`/`format_block`), emits advisory
+// `additionalContext` (or nothing) — and, per the RV-254 fail-open penances
+// (F-1/F-2/F-3), exits 0 on EVERY path. Never `permissionDecision`/`updatedInput`
+// (INV-1: structurally incapable of blocking a call).
+
+/// `hookEventName` value on the emitted advisory line (INV-1). This module IS
+/// the claude-specific handler (ADR-011 altitude), so the contract literal is a
+/// legitimate constant, not new coupling.
+const HOOK_EVENT_SURFACE: &str = "PreToolUse";
+/// Harness-supplied project-root anchor — the fallback when stdin carries no
+/// `cwd` (mirrors the jail's `CLAUDE_PROJECT_DIR` use). Read via `var_os` (the
+/// clippy-disallowed `env::var` is banned project-wide).
+const ENV_PROJECT_DIR_SURFACE: &str = "CLAUDE_PROJECT_DIR";
+/// Runtime-tier home (under the discovered root) for the session seen-set and
+/// the tuning log (design §5.3 — gitignored, disposable, `rm -rf`-able).
+const SURFACE_STATE_SUBDIR: &str = ".doctrine/state";
+/// Session seen-set filename stem; the full name interpolates `<session_id>`.
+const SEEN_FILE_PREFIX: &str = "mem-surface-seen-";
+const SEEN_FILE_SUFFIX: &str = ".txt";
+/// Tuning-log filename — one JSONL funnel line per delivered fire (design §5.3).
+const SURFACE_LOG_FILE: &str = "mem-surface.log";
+// tool-name discriminators (design §5.4).
+const TOOL_READ: &str = "Read";
+const TOOL_EDIT: &str = "Edit";
+const TOOL_WRITE: &str = "Write";
+const TOOL_BASH: &str = "Bash";
+
+/// The `PreToolUse` stdin subset the surfacing adapter consumes (design §5.2).
+/// EVERY field is optional / `serde(default)` so a malformed or partial payload
+/// folds to `Default` ⇒ emit nothing (fail-open, INV-2).
+#[derive(Debug, Default, Deserialize)]
+struct SurfaceInput {
+    #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default)]
+    agent_id: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    tool_name: Option<String>,
+    #[serde(default)]
+    tool_input: SurfaceToolInput,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct SurfaceToolInput {
+    #[serde(default)]
+    file_path: Option<String>,
+    #[serde(default)]
+    command: Option<String>,
+}
+
+/// Per-surface cap selector (design §5.5) — `CAP_PATH` / `CAP_COMMAND`.
+fn cap_for(surface: Surface) -> usize {
+    match surface {
+        Surface::Path => CAP_PATH,
+        Surface::Command => CAP_COMMAND,
+    }
+}
+
+/// Discriminate `tool_name` + `tool_input` into a `(Surface, ScopeProbe)`
+/// (design §5.4): `Read|Edit|Write` ⇒ a path surface keyed on `file_path`;
+/// `Bash` ⇒ a command surface keyed on `command`. An unregistered tool, or a
+/// missing/empty key, ⇒ `None` ⇒ emit nothing.
+fn probe_for(input: &SurfaceInput) -> Option<(Surface, crate::retrieve::ScopeProbe)> {
+    match input.tool_name.as_deref() {
+        Some(TOOL_READ | TOOL_EDIT | TOOL_WRITE) => {
+            let fp = input
+                .tool_input
+                .file_path
+                .as_deref()
+                .filter(|s| !s.is_empty())?;
+            Some((
+                Surface::Path,
+                crate::retrieve::ScopeProbe::Path(PathBuf::from(fp)),
+            ))
+        }
+        Some(TOOL_BASH) => {
+            let cmd = input
+                .tool_input
+                .command
+                .as_deref()
+                .filter(|s| !s.is_empty())?;
+            Some((
+                Surface::Command,
+                crate::retrieve::ScopeProbe::Command(cmd.to_owned()),
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// The log/dedup key for a probe (the touched path or the command string),
+/// computed BEFORE the probe is moved into `retrieve_rows`.
+fn probe_key(probe: &crate::retrieve::ScopeProbe) -> String {
+    match probe {
+        crate::retrieve::ScopeProbe::Path(p) => p.to_string_lossy().into_owned(),
+        crate::retrieve::ScopeProbe::Command(c) => c.clone(),
+    }
+}
+
+/// Resolve the doctrine root by walking up from the stdin `cwd` (canonicalized),
+/// falling back to the `CLAUDE_PROJECT_DIR` anchor — the standard cwd-based
+/// discovery, keyed on the hook's reported cwd rather than the process cwd
+/// (design §5.4). `None` ⇒ no discoverable root ⇒ the caller emits nothing
+/// (INV-2 fail-open).
+fn discover_surface_root(cwd: Option<&str>) -> Option<PathBuf> {
+    let anchor = cwd.and_then(|c| fs::canonicalize(c).ok()).or_else(|| {
+        std::env::var_os(ENV_PROJECT_DIR_SURFACE)
+            .and_then(|v| fs::canonicalize(PathBuf::from(v)).ok())
+    })?;
+    crate::root::find_from(&anchor, &crate::root::default_markers())
+}
+
+/// The session seen-set path for `<session>` under the runtime state dir.
+fn seen_path(state_dir: &Path, session: &str) -> PathBuf {
+    state_dir.join(format!("{SEEN_FILE_PREFIX}{session}{SEEN_FILE_SUFFIX}"))
+}
+
+/// Read the session seen-set (one uid per line). Absent/unreadable ⇒ empty —
+/// fail-open (a missing seen-set just means "nothing seen yet").
+fn read_seen(state_dir: &Path, session: &str) -> Vec<String> {
+    fs::read_to_string(seen_path(state_dir, session))
+        .map(|body| {
+            body.lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Append `lines` to `path`, creating the parent dir and the file as needed.
+/// A runtime/derived write (design §5.3) — `OpenOptions` append, not the
+/// clippy-disallowed `fs::write` (that guards authored entities). Returns any
+/// IO error for the caller to swallow best-effort.
+fn append_lines(path: &Path, lines: &[String]) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    for line in lines {
+        writeln!(file, "{line}")?;
+    }
+    Ok(())
+}
+
+/// Build the JSONL tuning-log line for a delivered fire (design §5.3). `key` is
+/// truncated to `KEY_LOG_MAX` chars; `suppressed_sev` is the severity-gate drop
+/// count (`fetched − admitted`).
+fn surface_log_line(
+    session: Option<&str>,
+    surface: Surface,
+    key: &str,
+    fetched: usize,
+    admitted: usize,
+    uids: &[String],
+) -> String {
+    let truncated: String = key.chars().take(KEY_LOG_MAX).collect();
+    let surface_label = match surface {
+        Surface::Path => "path",
+        Surface::Command => "command",
+    };
+    serde_json::json!({
+        "session": session.unwrap_or_default(),
+        "surface": surface_label,
+        "key": truncated,
+        "fetched": fetched,
+        "admitted": admitted,
+        "suppressed_sev": fetched.saturating_sub(admitted),
+        "surfaced": uids.len(),
+        "uids": uids,
+    })
+    .to_string()
+}
+
+/// The single, injectable emit seam (RV-254 F-1 / INV-2). Writes the advisory
+/// `additionalContext` line for a non-empty `block`, and **swallows** a writer
+/// `Err` — folding it to `false` (not delivered) rather than `?`-propagating it
+/// to a non-zero exit (the `worktree pretooluse` precedent's mistake). Returns
+/// `true` iff a non-empty block was successfully written; the caller records
+/// seen-set + log state ONLY on `true` (F-3 / INV-6). Emits ONLY
+/// `hookSpecificOutput.additionalContext` — never a decision field (INV-1).
+fn emit_surface(writer: &mut impl Write, block: Option<&str>) -> bool {
+    let Some(block) = block else {
+        return false;
+    };
+    if block.is_empty() {
+        return false;
+    }
+    let line = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": HOOK_EVENT_SURFACE,
+            "additionalContext": block,
+        }
+    })
+    .to_string();
+    // F-1: a write error folds to "not delivered", NEVER a propagated `Err`.
+    writeln!(writer, "{line}").is_ok()
+}
+
+/// The testable core of `run_surface` — writer- and stdin-injected so the VTs
+/// drive it with synthetic payloads (and a failing writer for F-1). One fire,
+/// exit 0 on EVERY path (design §5.4). The runtime state dir is derived from the
+/// discovered root, so a test whose stdin `cwd` points at a `tempdir` fixture
+/// keeps all seen-set / log IO inside that tempdir (hermetic — never the real
+/// `.doctrine/state`).
+///
+/// Returns `Ok(())` on EVERY path by contract — unparseable stdin, no root, a
+/// retrieve `Err`, an IO error, a stdout write error all fold to `Ok` (INV-2
+/// fail-open: never a propagated `Err`, never a non-zero exit, never a panic).
+/// The uniform `Result<()>` is that invariant surface (the VTs assert
+/// `Ok(())`), and mirrors the `run_pretooluse` precedent's signature — hence the
+/// deliberately-always-`Ok` wrap.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "INV-2 fail-open: always Ok by contract — the wrap is the asserted invariant surface"
+)]
+fn run_surface_to(writer: &mut impl Write, raw: &str) -> Result<()> {
+    // Parse — unparseable stdin ⇒ emit nothing (INV-2).
+    let Ok(input) = serde_json::from_str::<SurfaceInput>(raw) else {
+        return Ok(());
+    };
+    // INV-3: a subagent (`agent_id` present) surfaces nothing and runs no
+    // retrieve (main-thread only, v1).
+    if input.agent_id.is_some() {
+        return Ok(());
+    }
+    // Discriminate the surface; an unregistered tool / missing key ⇒ nothing.
+    let Some((surface, probe)) = probe_for(&input) else {
+        return Ok(());
+    };
+    // Root discovery from the stdin `cwd`; no discoverable root ⇒ nothing (INV-2).
+    let Some(root) = discover_surface_root(input.cwd.as_deref()) else {
+        return Ok(());
+    };
+    let key = probe_key(&probe);
+    // Compose the engine seam — a retrieve `Err` folds to emit nothing (INV-2).
+    let Ok(rows) = crate::retrieve::retrieve_rows(Some(root.clone()), probe, FETCH_LIMIT) else {
+        return Ok(());
+    };
+    let fetched = rows.len();
+    // PURE pipeline (PHASE-02): admit → dedup → cap → format.
+    let admitted: Vec<crate::retrieve::SurfaceRow> =
+        rows.into_iter().filter(|r| admits(r, surface)).collect();
+    let admitted_count = admitted.len();
+    // Session dedup (F-2): absent/empty `session_id` ⇒ dedup disabled — no
+    // seen-set file read or written, no synthetic key.
+    let session = input.session_id.as_deref().filter(|s| !s.is_empty());
+    let state_dir = root.join(SURFACE_STATE_SUBDIR);
+    let seen = match session {
+        Some(sid) => read_seen(&state_dir, sid),
+        None => Vec::new(),
+    };
+    let capped = cap(dedup_diff(admitted, &seen), cap_for(surface));
+    let uids: Vec<String> = capped.iter().map(|r| r.uid.clone()).collect();
+    let block = format_block(&capped, surface);
+    // Emit (F-1: write `Err` swallowed). Record runtime state ONLY on a
+    // delivered non-empty block (F-3 / INV-6): a failed or empty emit leaves the
+    // seen-set untouched — dedup can never suppress an undelivered memory.
+    if emit_surface(writer, block.as_deref()) {
+        // F-2: only append the seen-set when the session is nameable.
+        if let Some(sid) = session {
+            let _seen_io = append_lines(&seen_path(&state_dir, sid), &uids);
+        }
+        let log = surface_log_line(session, surface, &key, fetched, admitted_count, &uids);
+        let _log_io = append_lines(&state_dir.join(SURFACE_LOG_FILE), &[log]);
+    }
+    Ok(())
+}
+
+/// `doctrine memory surface` entry — read the hook envelope on stdin, emit the
+/// advisory line (or nothing) on stdout, exit 0 always (INV-2). A stdin read
+/// error folds to an empty payload ⇒ emit nothing.
+pub(crate) fn run_surface() -> Result<()> {
+    let mut raw = String::new();
+    let _read = io::stdin().read_to_string(&mut raw);
+    run_surface_to(&mut io::stdout(), &raw)
+}
+
+#[cfg(test)]
+mod ambient_surface_tests {
+    use super::*;
+    use crate::retrieve::SurfaceRow;
+
+    /// A `SurfaceRow` literal builder for terse test setup.
+    fn row(uid: &str, title: &str, severity: &str, stale: bool, trust: &str) -> SurfaceRow {
+        SurfaceRow {
+            uid: uid.to_string(),
+            title: title.to_string(),
+            severity: severity.to_string(),
+            stale,
+            trust: trust.to_string(),
+        }
+    }
+
+    /// VT-1: command surface admits `critical`/`high`, rejects
+    /// `medium`/`low`/`none`. Path surface admits a `none`-severity row.
+    /// Asserts both sides of the floor.
+    #[test]
+    fn admits_gates_command_surface_by_severity_floor_both_sides() {
+        let critical = row("mem_1", "t", "critical", false, "high");
+        let high = row("mem_2", "t", "high", false, "high");
+        let medium = row("mem_3", "t", "medium", false, "high");
+        let low = row("mem_4", "t", "low", false, "high");
+        let none = row("mem_5", "t", "none", false, "high");
+
+        assert!(admits(&critical, Surface::Command));
+        assert!(admits(&high, Surface::Command));
+        assert!(!admits(&medium, Surface::Command));
+        assert!(!admits(&low, Surface::Command));
+        assert!(!admits(&none, Surface::Command));
+
+        assert!(admits(&none, Surface::Path));
+    }
+
+    /// VT-2: `dedup_diff` drops seen uids, keeps fresh ones, order preserved.
+    #[test]
+    fn dedup_diff_drops_seen_keeps_order() {
+        let rows = vec![
+            row("mem_a", "A", "none", false, "high"),
+            row("mem_b", "B", "none", false, "high"),
+            row("mem_c", "C", "none", false, "high"),
+        ];
+        let seen = vec!["mem_b".to_string()];
+        let out = dedup_diff(rows, &seen);
+        let uids: Vec<&str> = out.iter().map(|r| r.uid.as_str()).collect();
+        assert_eq!(uids, vec!["mem_a", "mem_c"]);
+    }
+
+    /// VT-3: `cap` truncates to `CAP_PATH` / `CAP_COMMAND`.
+    #[test]
+    fn cap_truncates_to_surface_caps() {
+        let five: Vec<SurfaceRow> = (0..5)
+            .map(|i| row(&format!("mem_{i}"), "t", "none", false, "high"))
+            .collect();
+        assert_eq!(cap(five.clone(), CAP_PATH).len(), CAP_PATH);
+        assert_eq!(cap(five, CAP_COMMAND).len(), CAP_COMMAND);
+    }
+
+    /// EX-1: `FETCH_LIMIT` gives dedup headroom over either surface cap, and
+    /// `KEY_LOG_MAX` is a sane (non-zero) truncation bound — the invariants
+    /// PHASE-03's wiring relies on.
+    #[test]
+    fn fetch_and_log_constants_hold_their_invariants() {
+        assert!(FETCH_LIMIT >= CAP_PATH.max(CAP_COMMAND));
+        assert!(KEY_LOG_MAX > 0);
+    }
+
+    /// VT-4: `format_block` emits the per-surface header + correct triage
+    /// field, appends `⚠` for a stale row, omits it for a fresh row, and
+    /// returns `None` for empty input.
+    #[test]
+    fn format_block_renders_headers_triage_field_and_staleness_marker() {
+        assert_eq!(format_block(&[], Surface::Path), None);
+
+        let path_rows = vec![row("mem_p", "Path title", "none", false, "medium")];
+        let path_block = format_block(&path_rows, Surface::Path).unwrap();
+        assert!(path_block.starts_with("Doctrine memories for this file:\n"));
+        assert!(path_block.contains("- [medium] Path title — mem_p"));
+
+        let command_rows = vec![
+            row("mem_c1", "Fresh footgun", "high", false, "medium"),
+            row("mem_c2", "Stale footgun", "critical", true, "low"),
+        ];
+        let command_block = format_block(&command_rows, Surface::Command).unwrap();
+        assert!(command_block.starts_with("Doctrine footguns (severity-gated):\n"));
+        assert!(command_block.contains("- [high] Fresh footgun — mem_c1"));
+        assert!(command_block.contains("- [critical \u{26A0}] Stale footgun — mem_c2"));
+    }
+
+    // ── PHASE-03: the impure shell (VT-1..VT-9, synthetic stdin) ────────────
+    // Every VT drives `run_surface_to` with a synthetic payload — no live
+    // harness. A stdin `cwd` pointing at a git-init'd `tempdir` fixture makes
+    // the shell's discovery resolve that tempdir, so ALL seen-set / log IO stays
+    // inside it (hermetic — never the real `.doctrine/state`).
+
+    /// Git-init a `tempdir`, seed one memory scoped to `paths` + `commands` with
+    /// the given `severity`/`trust`. Mirrors the retrieve.rs fixture: a
+    /// discoverable doctrine root (`.git` marker) with a real corpus.
+    fn temp_root_seeded(
+        title: &str,
+        paths: &[&str],
+        commands: &[&str],
+        severity: Option<&str>,
+        trust: Option<&str>,
+    ) -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(root.path())
+                .args(args)
+                .output()
+                .unwrap();
+        };
+        git(&["init", "-q", "-b", "main"]);
+        git(&["config", "user.email", "t@example.com"]);
+        git(&["config", "user.name", "Test"]);
+        std::fs::create_dir_all(root.path().join(".doctrine")).unwrap();
+        std::fs::write(root.path().join(".doctrine/.keep"), "").unwrap();
+        git(&["add", ".doctrine/.keep"]);
+        git(&["commit", "-q", "-m", "base"]);
+        let sources: Vec<Provenance> = vec![];
+        let tags: Vec<String> = vec![];
+        let globs: Vec<String> = vec![];
+        let paths: Vec<String> = paths.iter().map(|p| (*p).to_owned()).collect();
+        let commands: Vec<String> = commands.iter().map(|c| (*c).to_owned()).collect();
+        let args = RecordArgs {
+            title,
+            memory_type: MemoryType::Fact,
+            key: None,
+            status: Status::Active,
+            summary: None,
+            tags: &tags,
+            repo: None,
+            lifespan: None,
+            review_by: None,
+            sources: &sources,
+            paths: &paths,
+            globs: &globs,
+            commands: &commands,
+            global: false,
+            trust_level: trust,
+            severity,
+        };
+        run_record(Some(root.path().to_path_buf()), &args, &mut std::io::sink()).unwrap();
+        root
+    }
+
+    /// A one-path corpus with a `none`-severity, `medium`-trust memory scoped to
+    /// `src/x.rs` — the canonical path-surface hit.
+    fn temp_root_path_hit() -> tempfile::TempDir {
+        temp_root_seeded(
+            "Path footgun",
+            &["src/x.rs"],
+            &[],
+            Some("none"),
+            Some("medium"),
+        )
+    }
+
+    /// Synthetic `Read` (path-surface) stdin.
+    fn stdin_read(
+        cwd: &Path,
+        session: Option<&str>,
+        agent: Option<&str>,
+        file_path: &str,
+    ) -> String {
+        serde_json::json!({
+            "session_id": session,
+            "agent_id": agent,
+            "cwd": cwd.to_string_lossy(),
+            "tool_name": "Read",
+            "tool_input": { "file_path": file_path },
+        })
+        .to_string()
+    }
+
+    /// Synthetic `Bash` (command-surface) stdin, always main-thread.
+    fn stdin_bash(cwd: &Path, session: Option<&str>, command: &str) -> String {
+        serde_json::json!({
+            "session_id": session,
+            "agent_id": Option::<&str>::None,
+            "cwd": cwd.to_string_lossy(),
+            "tool_name": "Bash",
+            "tool_input": { "command": command },
+        })
+        .to_string()
+    }
+
+    /// The runtime state dir the shell derives from `root` (canonicalized, as the
+    /// shell canonicalizes the stdin `cwd`).
+    fn state_dir_of(root: &Path) -> PathBuf {
+        fs::canonicalize(root).unwrap().join(SURFACE_STATE_SUBDIR)
+    }
+
+    /// A writer whose every `write` fails — drives the F-1 emit-error path.
+    struct FailWriter;
+    impl Write for FailWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::other("emit boom"))
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::other("flush boom"))
+        }
+    }
+
+    /// VT-1: a main-thread `Read` ⇒ emitted JSON carries
+    /// `hookSpecificOutput.additionalContext` with the path block.
+    #[test]
+    fn vt1_main_thread_read_emits_path_block() {
+        let root = temp_root_path_hit();
+        let raw = stdin_read(root.path(), Some("s1"), None, "src/x.rs");
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        let v: serde_json::Value = serde_json::from_slice(&out).expect("emitted JSON parses");
+        let ctx = v["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .expect("additionalContext present");
+        assert!(
+            ctx.contains("Doctrine memories for this file:"),
+            "block: {ctx}"
+        );
+        assert!(
+            ctx.contains("Path footgun"),
+            "block carries the memory: {ctx}"
+        );
+    }
+
+    /// VT-2: a subagent (`agent_id` present) surfaces nothing (INV-3).
+    #[test]
+    fn vt2_subagent_emits_nothing() {
+        let root = temp_root_path_hit();
+        let raw = stdin_read(root.path(), Some("s1"), Some("sub-1"), "src/x.rs");
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(out.is_empty(), "subagent surfaces nothing: {out:?}");
+    }
+
+    /// VT-3: advisory invariant — emitted JSON NEVER carries `permissionDecision`
+    /// or `updatedInput`, only `additionalContext` (INV-1).
+    #[test]
+    fn vt3_advisory_invariant_no_decision_field() {
+        let root = temp_root_path_hit();
+        let raw = stdin_read(root.path(), Some("s1"), None, "src/x.rs");
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        let hso = &v["hookSpecificOutput"];
+        assert!(
+            hso.get("permissionDecision").is_none(),
+            "no permissionDecision"
+        );
+        assert!(hso.get("updatedInput").is_none(), "no updatedInput");
+        assert!(
+            hso.get("additionalContext").is_some(),
+            "additionalContext only"
+        );
+    }
+
+    /// VT-4: unparseable stdin AND a sub-floor `Bash` (a `medium`-severity
+    /// command memory below `SEV_FLOOR`) both ⇒ emit nothing, no error.
+    #[test]
+    fn vt4_unparseable_and_subfloor_bash_emit_nothing() {
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut out, "not json {{{"), Ok(())));
+        assert!(out.is_empty(), "unparseable stdin ⇒ nothing");
+
+        // A command memory at medium severity is below the `high` floor: the
+        // Command surface admits nothing ⇒ emit nothing (still exit 0).
+        let root = temp_root_seeded("Sub-floor", &[], &["deploy"], Some("medium"), Some("high"));
+        let raw = stdin_bash(root.path(), Some("s4"), "deploy");
+        let mut out2: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut out2, &raw), Ok(())));
+        assert!(
+            out2.is_empty(),
+            "sub-floor command surfaces nothing: {out2:?}"
+        );
+    }
+
+    /// VT-5: `emit_surface` swallows a failing writer `Err` (returns `false`, no
+    /// propagated `Err`), AND a hit whose emit fails records NOTHING in the
+    /// seen-set (RV-254 F-1 + F-3 together).
+    #[test]
+    fn vt5_emit_failure_returns_ok_and_leaves_seen_set_untouched() {
+        // The seam itself: a failing writer folds to `false`, never a panic/Err.
+        let mut fail = FailWriter;
+        assert!(
+            !emit_surface(&mut fail, Some("a block")),
+            "write Err ⇒ not delivered"
+        );
+
+        // A genuine hit, but the emit fails: no uid may be recorded (INV-6).
+        let root = temp_root_path_hit();
+        let raw = stdin_read(root.path(), Some("s5"), None, "src/x.rs");
+        assert!(matches!(run_surface_to(&mut FailWriter, &raw), Ok(())));
+        let seen = seen_path(&state_dir_of(root.path()), "s5");
+        assert!(!seen.exists(), "a failed emit must not write the seen-set");
+    }
+
+    /// VT-6: absent OR empty `session_id` ⇒ dedup disabled — no seen-set file
+    /// read or written, no panic — yet the block still surfaces (RV-254 F-2).
+    #[test]
+    fn vt6_absent_or_empty_session_disables_dedup_still_surfaces() {
+        for session in [None, Some("")] {
+            let root = temp_root_path_hit();
+            let raw = stdin_read(root.path(), session, None, "src/x.rs");
+            let mut out: Vec<u8> = Vec::new();
+            assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+            let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+            assert!(
+                v["hookSpecificOutput"]["additionalContext"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Doctrine memories for this file:"),
+                "the fire still surfaces with session {session:?}"
+            );
+            // No seen-set file exists for any session (dedup disabled).
+            let state_dir = state_dir_of(root.path());
+            if state_dir.exists() {
+                let has_seen = fs::read_dir(&state_dir).unwrap().flatten().any(|e| {
+                    e.file_name()
+                        .to_string_lossy()
+                        .starts_with(SEEN_FILE_PREFIX)
+                });
+                assert!(!has_seen, "no seen-set file when session is unnameable");
+            }
+        }
+    }
+
+    /// VT-7: an all-deduped fire leaves the seen-set untouched (RV-254 F-3
+    /// ordering) — the second fire of the same session/memory surfaces nothing
+    /// and appends nothing.
+    #[test]
+    fn vt7_all_deduped_fire_leaves_seen_set_untouched() {
+        let root = temp_root_path_hit();
+        let raw = stdin_read(root.path(), Some("s7"), None, "src/x.rs");
+
+        let mut first: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut first, &raw), Ok(())));
+        assert!(!first.is_empty(), "first fire surfaces the memory");
+
+        let seen = seen_path(&state_dir_of(root.path()), "s7");
+        let before = fs::read_to_string(&seen).expect("first fire recorded the uid");
+
+        let mut second: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut second, &raw), Ok(())));
+        assert!(second.is_empty(), "all-deduped fire surfaces nothing");
+        let after = fs::read_to_string(&seen).unwrap();
+        assert_eq!(
+            before, after,
+            "an all-deduped fire must not touch the seen-set"
+        );
+    }
+
+    /// VT-9: no discoverable doctrine root (a `cwd` that cannot resolve, no
+    /// `CLAUDE_PROJECT_DIR`) ⇒ emit nothing + exit 0, no panic, no propagated
+    /// `Err` — the second EX-6 fail-open path (INV-2), distinct from VT-4's
+    /// unparseable-stdin path.
+    #[test]
+    fn vt9_no_discoverable_root_emits_nothing() {
+        let raw = stdin_read(
+            Path::new("/doctrine-surface-no-such-dir/deep/nope"),
+            Some("s9"),
+            None,
+            "src/x.rs",
+        );
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(out.is_empty(), "no discoverable root ⇒ emit nothing");
     }
 }
