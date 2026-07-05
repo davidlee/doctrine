@@ -72,3 +72,25 @@ ever blocked. A regression here is a blocker, not a nit.
   `flake.nix` `srcWithDist` graft is needed (hooks.json is not a new embed root).
   This is the design-target completeness the RV-254 reviewer cleared, restated as
   a build note so PHASE-04 doesn't rediscover it.
+- **`emit_surface` gates the record (C3).** The seen-set/log append MUST be
+  conditioned on `emit_surface`'s success result — not an inline `writeln!`
+  followed by an unconditional append. Shape it so a test can assert "emit failed
+  ⇒ zero uids recorded" (e.g. `emit_surface` returns whether a non-empty block was
+  delivered, and the shell appends only then). Without this seam VT-5/VT-7 cannot
+  be written.
+- **PHASE-04 execution landmines (C2) — resolve at `/phase-plan`, not by
+  surprise:**
+  - **`DOCTRINE_BIN`.** The shipped hook calls `${DOCTRINE_BIN:-doctrine}`. In the
+    jail the PATH `doctrine` (`~/.cargo/bin`, readonly) is the *old* binary with no
+    `memory surface` verb. VA-1 must point `DOCTRINE_BIN` at the freshly-built
+    `./target/debug/doctrine`, or install the new binary first — else the hook
+    invokes a command that does not exist and (fail-open) silently does nothing,
+    which would read as a false "no surfacing" failure.
+  - **Tear down the prototype probes.** The two prototype hooks are still live in
+    the gitignored `.claude/settings.local.json`. Remove them before VA-1, or the
+    shipped path and the prototype double-fire and confound the observation.
+  - **Registration may need a full restart.** `mem.fact.claude.reload-plugins-registers-pretooluse`
+    is low-trust and contradicted on macOS; do not trust `/reload-plugins` alone —
+    budget for a session restart (or fresh-session handoff) to observe live firing,
+    and confirm the hook actually fires (a log line in `mem-surface.log`), never the
+    "N hooks" count.

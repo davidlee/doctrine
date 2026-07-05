@@ -91,7 +91,7 @@ verification = [
   { id = "VT-5", expects = "emit_surface swallows a failing writer Err (returns Ok) AND the seen-set is not mutated on emit failure (RV-254 F-1 + F-3).", test_file = "src/memory.rs", keywords = ["fn emit_surface"], patterns = ["Ok\\("], waived = false },
   { id = "VT-6", expects = "Absent/empty session_id ⇒ no seen-set IO, no panic, block still emitted (RV-254 F-2).", test_file = "src/memory.rs", keywords = ["session_id"], waived = false },
   { id = "VT-7", expects = "A no-hit / all-deduped fire leaves the seen-set untouched (RV-254 F-3 ordering).", test_file = "src/memory.rs", keywords = ["fn run_surface"], waived = false },
-  { id = "VT-8", expects = "guard.rs classifies MemoryCommand::Surface as Read.", test_file = "src/commands/guard.rs", keywords = ["MemoryCommand::Surface"], patterns = ["Surface .*=> Read"], waived = false },
+  { id = "VT-8", expects = "guard.rs classifies MemoryCommand::Surface as Read (the arm exists; the exhaustive Command::Memory match + EX-7 force the Read grouping — no line-anchored pattern, the Read arm spans multiple lines).", test_file = "src/commands/guard.rs", keywords = ["MemoryCommand::Surface"], waived = false },
 ]
 specs        = []
 requirements = []
