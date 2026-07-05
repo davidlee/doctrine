@@ -1,7 +1,7 @@
 id = 197
 slug = "concept-knowledge-kind"
 title = "Add concept (CPT) as a knowledge record kind"
-status = "reconcile"
+status = "done"
 created = "2026-07-03"
 updated = "2026-07-05"
 tags = []

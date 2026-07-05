@@ -1,5 +1,7 @@
 # IMP-244: Add concept entity and descriptor facet
 
+> **Part 1 complete** — SL-197 delivered the Concept (CPT) record kind (2026-07-05).
+
 Backlog these as two small, separate items:
 
 ## 1. Add `concept` as a knowledge kind
