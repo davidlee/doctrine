@@ -28,4 +28,6 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
 
 ## Reviewer
 - default reviewer: codex mcp — use default (GPT-5.5) for external adversarial reviews.
+  Note: using readonly isolation prevents it raising an inquisitorial review ledger; GPT
+  has pretty good adherence so that's a poor tradeoff.
 - Opus sub-agent is also useful for variety on subsequent passes.
