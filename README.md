@@ -286,6 +286,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-014 — Multi-harness fleet: declaration, routing, sandbox backend](.doctrine/rfc/014/rfc-014.md) — `open`
 - [RFC-015 — Governance state on a dedicated ref namespace](.doctrine/rfc/015/rfc-015.md) — `open`
 - [RFC-016 — Zero-rescue dispatch: invariants into verbs, lineage rows](.doctrine/rfc/016/rfc-016.md) — `open`
+- [RFC-017 — Human onboarding docs: tour, quickstart, mental model](.doctrine/rfc/017/rfc-017.md) — `open`
 
 ### Architecture Decision Records
 

@@ -1,0 +1,28 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 17
+slug = "human-onboarding-docs-tour-quickstart-mental-model"
+title = "Human onboarding docs: tour, quickstart, mental model"
+status = "open"
+created = "2026-07-05"
+updated = "2026-07-05"
+tags = ["docs", "onboarding"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "RFC-011"
+
+[[relation]]
+label = "related"
+target = "RFC-016"
+
+[[relation]]
+label = "related"
+target = "SL-199"
+
