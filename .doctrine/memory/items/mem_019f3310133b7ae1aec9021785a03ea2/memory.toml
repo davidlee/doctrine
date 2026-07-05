@@ -1,0 +1,42 @@
+memory_uid = "mem_019f3310133b7ae1aec9021785a03ea2"
+memory_key = "mem.fact.install.changed-agent-def-reseat-manual-placement"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Changed confined agent-def is made live by direct write to gitignored .claude/agents/<name>.md — doctrine install cannot reseat (no --force)"
+summary = "ISS-216 workaround: install is skip-if-exists (no --force/--reseat); .claude/agents/*.md is gitignored derived — overwrite the live-read file directly to reseat a changed def."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = ["install/agents/claude", ".claude/agents"]
+globs = []
+commands = ["install"]
+tags = ["install", "agent-def", "iss-216", "reseat", "sl-206"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1a5361428db91aa1bbd119696c65c682a8cc15be"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1744dae33801a9421af607ece126aef0b5d9ff2d8ffc1ecba474bc9e5247e5cb"
+base_commit = "1fadff605cb2c8f7784553eb9ab4984b093442a7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

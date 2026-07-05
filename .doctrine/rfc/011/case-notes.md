@@ -451,3 +451,16 @@ regression into a false green. Discipline: pin ONE binary
 never re-capture with a delta staged (restore to clean B first). The error
 string should name the expected-vs-computed fingerprint + the current_exe
 to make this diagnosable in one look, not three probes.
+
+[dispatch; SL-206-P01-forkprobe-3f9b]
+PHASE-01 EX-1 operator probe: first workflow run omitted `isolation:'worktree'`
+on the agent() call → agent ran IN-PLACE in the coord tree (no fork), burning a
+full probe cycle (~29k subagent tokens) before the miss was caught. The footgun
+memory (mem_019f2d4d…: "claude dispatch-worker Agent spawn requires
+isolation:worktree — omission runs in-place") applies verbatim to the *workflow*
+agent() path too, not just the Agent tool. Cheap guard the /drive-slice reference
+script (PHASE-04) should encode: never call the fork-spawning agent() without the
+isolation opt; a schema-returned show_toplevel that == coord root is the tell.
+Also: Workflow `args` arrived STRINGIFIED (not a JSON object) despite being
+passed as a literal — `args.foo` was undefined, silently poisoning a JS verdict.
+Reference scripts must `JSON.parse` args defensively.

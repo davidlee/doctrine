@@ -1,0 +1,42 @@
+memory_uid = "mem_019f331005d776c1a65c65bfe59581bf"
+memory_key = "mem.fact.workflow.confined-fork-mints-at-armed-base"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Workflow agent(isolation:worktree) mints the confined fork AT the armed base (positional arming), not cwd HEAD — SQ3 demonstrated"
+summary = "A dynamic-Workflow agent(isolation:worktree), Bash cwd parked at the coord tree's arming dir with base armed, forks at the armed base file — proven ≠ cwd HEAD."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = ["src/worktree/create.rs"]
+globs = []
+commands = ["dispatch"]
+tags = ["dispatch", "workflow", "fork", "arming", "rfc-011", "sl-206"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1a5361428db91aa1bbd119696c65c682a8cc15be"
+ref_name = "refs/heads/edge"
+checkout_state_id = "70c2119c5f15379ca776e0f2a0555ef1afbe09b7f6c56ba210226de4c3754897"
+base_commit = "1fadff605cb2c8f7784553eb9ab4984b093442a7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
