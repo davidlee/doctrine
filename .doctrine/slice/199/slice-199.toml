@@ -1,7 +1,7 @@
 id = 199
 slug = "mode-b-confined-orchestrator-driveloop"
 title = "Confined subagent orchestrator drive-loop (Mode B)"
-status = "audit"
+status = "reconcile"
 created = "2026-07-04"
 updated = "2026-07-05"
 tags = []
@@ -16,7 +16,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/**"
@@ -39,11 +39,43 @@ selector = "src/mcp_server/tools.rs"
 intent = "design-target"
 
 [[selector]]
-selector = ".claude/agents/dispatch-orchestrator.md"
+selector = "install/dispatch-mechanics.md"
 intent = "design-target"
 
 [[selector]]
-selector = "install/dispatch-mechanics.md"
+selector = "src/mcp_server/dispatch.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worktree_create_fork.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-orchestrator.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/agents/claude/dispatch-worker.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/hymns/role/orchestrator.md"
 intent = "design-target"
 
 [[relation]]

@@ -12,5 +12,41 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-199"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Gate red under just validate is a stale-installed-binary false positive, not a slice defect"
+detail = "Expected: clean gate on the merged candidate. Observed: 4 [Agent Conformance] errors — 'forbidden MCP token mcp__doctrine__dispatch_import|dispatch_conclude_phase|dispatch_reap — a confined agent may hold only mcp__doctrine__worker_commit'. Root cause: just validate calls bare 'doctrine doctor' → PATH /home/david/.cargo/bin/doctrine v0.15.7, built from main (pre-SL-199), carrying the OLD role-blind agent_conformance check. SL-199 PHASE-04 upgraded that check to role-keyed (src/doctor_checks.rs:378-419: worker→worker_commit, orchestrator→3 funnel tokens) WITH a passing unit test (agent_conformance_passes_orchestrator_with_only_funnel_tokens, :1356). Proof: the SL-199-built binary's doctor against the candidate tree = exit 0, agent-conformance clean. Self-tightening-check bootstrap: the slice that tightens a doctor check also ships the artifact the tightened check blesses; the stale installed check can't see its own upgrade until integrate + reinstall. Same class as T7. Resolves on integrate + cargo build + doctrine install."
+disposition = "tolerated"
+response = "Measurement artifact, not a slice defect. The SL-199-built doctor is exit-0 clean (agent-conformance passes the orchestrator per its own unit test). The gate red is the pre-SL-199 installed binary applying its OLD role-blind check to the NEW artifact. Resolves deterministically on integrate + cargo build + doctrine install (refreshes ~/.cargo/bin). Operational follow-up recorded in synthesis; no code change owed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Undeclared code paths: selector registry did not declare real deliverables"
+detail = "slice conformance 199 reports undeclared: src/dispatch.rs, src/doctor_checks.rs, src/mcp_server/dispatch.rs (the 1384-line funnel MCP server — core deliverable), src/mcp_server/mod.rs, src/worktree/mod.rs, tests/e2e_mcp_server.rs, tests/e2e_worktree_create_fork.rs, install/agents/claude/dispatch-orchestrator.md, install/agents/claude/dispatch-worker.md, install/hymns/role/orchestrator.md. Each is a legitimate SL-199 deliverable that matched no design-target selector. Not scope creep — a selector-registry gap. Load-bearing remediation is 'slice selector add' (registry drives conformance, reads slice-199.toml), with design.md §6 as the human mirror."
+disposition = "verified"
+response = "Confirmed selector-registry gap. Delegated to /reconcile: 'slice selector add' the undeclared deliverable paths (src/**, tests/e2e_*, install/agents/claude/*, install/hymns/role/orchestrator.md), design.md §6 mirror. Per-slice direct-edit surface (slice-199.toml)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Undelivered .claude/agents/dispatch-orchestrator.md selector mis-targets the installed mirror"
+detail = "slice conformance 199 reports undelivered: .claude/agents/dispatch-orchestrator.md. The work landed on the SOURCE path install/agents/claude/dispatch-orchestrator.md (added, +31 lines); .claude/agents/ is a materialized copy produced by 'doctrine install', never authored. The selector declared the installed path, so it reads as declared-but-undelivered. Remediation: 'slice selector rm .claude/agents/dispatch-orchestrator.md' (or repoint to install/agents/claude/dispatch-orchestrator.md), mirror in design §6."
+disposition = "verified"
+response = "Confirmed selector mis-target. Delegated to /reconcile: 'slice selector rm .claude/agents/dispatch-orchestrator.md' (materialized copy, not authored) or repoint to install/agents/claude/dispatch-orchestrator.md; design.md §6 mirror."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Authored-governance paths appear as undeclared conformance noise (registry granularity)"
+detail = "slice conformance 199 undeclared also lists authored governance: .doctrine/slice/199/{design.md,plan.md,plan.toml,slice-199.*,inquisition-phase05.md} and .doctrine/rfc/011/case-notes.md. These rode the recorded code_start→code_end commit ranges because the orchestrator committed authored deltas onto dispatch/199 interleaved with code; the conformance algebra flags any path in-range. Not scope creep — design-target selectors never declare a slice's own authored files. Registry-granularity artifact of record-boundary capturing commit ranges rather than path-filtered code. Accept as-is."
+disposition = "tolerated"
+response = "Accepted registry-granularity artifact. record-boundary captures commit ranges, not path-filtered code, so authored governance committed on the fork appears in-range. Design-targets never declare a slice's own authored files; conformance is a lead-generator, not a gate. No change owed."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
