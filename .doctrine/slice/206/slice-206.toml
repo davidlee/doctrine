@@ -40,7 +40,8 @@ intent = "design-target"
 
 [[selector]]
 selector = "install/agents/claude/dispatch-worker.md"
-intent = "design-target"
+intent = "scope-relevant"
+note = "behaviour-preservation assertion only (doctor #9 stays green unchanged); not a modification target"
 
 [[selector]]
 selector = "src/doctor_checks.rs"

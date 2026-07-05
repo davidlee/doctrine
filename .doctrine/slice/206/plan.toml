@@ -75,6 +75,7 @@ exit_criteria = [
   { id = "EX-2", text = "ReceiptStatus enum exists with all six variants; Completed is sourced from the committed boundary row, never the disposable sheet" },
   { id = "EX-3", text = "Blocked and Unknown are derived and distinct from NotStarted/InProgress; malformed sheets fail loud as Unknown" },
   { id = "EX-4", text = "Existing dispatch status test suite passes UNCHANGED (behaviour-preservation)" },
+  { id = "EX-5", text = "phase_projection (the fn) AND the ReceiptStatus enum — including the ConcludeIncomplete and Unknown variants — are DEFINED in src/dispatch.rs, co-located with run_status, so VT-1's keyword floor resolves in the declared test_file (not stranded in a different module)" },
 ]
 verification = [
   { id = "VT-1", expects = "phase_projection branch table: boundary-present⇒Completed; sheet-completed∧no-boundary⇒ConcludeIncomplete; sheet-blocked⇒Blocked; malformed⇒Unknown; in_progress/none⇒InProgress/NotStarted", test_file = "src/dispatch.rs", keywords = ["phase_projection", "ReceiptStatus", "ConcludeIncomplete", "Unknown"], waived = false },
@@ -98,9 +99,13 @@ CLI + MCP surfaces, and grow the doctor #9 conformance authority to match. \
 Resolved(core) | CoordRefused(reason)` — truthful on the tip-less refusal path \
 (F3), core carries dispatch_tip distinct from boundary.code_end. (b) \
 `dispatch_next_ready{slice}` wraps the existing compute_next_phases authority \
-(no re-derivation). (c) `dispatch_authored_divergence{slice}` computes \
-.doctrine/** divergence trunk_ref..dispatch_tip with trunk_ref from the existing \
-dispatch trunk authority (not hardcoded edge), read-only. Grow \
+— made `pub(crate)`, with the slice→rows readiness seam factored value-returning \
+out of run_plan_next so both CLI and MCP share it (no re-derivation; plan-next \
+output unchanged). (c) `dispatch_authored_divergence{slice}` computes \
+.doctrine/** divergence trunk_ref..dispatch_tip; trunk_ref is resolved from the \
+real trunk authority — `git::trunk_commit` (src/git.rs) / the `[dispatch] \
+deliver_to` ref (run_deliver_to) — NOT the journal-row printer at dispatch.rs:630 \
+that design §5.5 loosely cites, and never hardcoded edge; read-only. Grow \
 `allowed_mcp_tokens`: orchestrator += the three tokens; add a ROLE_PROBE arm \
 holding only the three reads; extend the role-marker validator to accept `probe` \
 (F1/F5). Register all three tools in tools.rs. STD-001: tool tokens are named \
@@ -115,6 +120,8 @@ exit_criteria = [
   { id = "EX-4", text = "allowed_mcp_tokens grows: orchestrator gains the 3 read tokens (named consts); a probe role holds exactly the 3 reads; the marker validator accepts worker|orchestrator|probe" },
   { id = "EX-5", text = "All three tools registered in tools.rs; doctor check #9 stays green (ceiling: existing defs' 3 tokens ⊆ grown allowlist)" },
   { id = "EX-6", text = "Behaviour-preservation: the existing worker/orchestrator agent-conformance tests (doctor #9 is jail-completeness code) pass UNCHANGED — the probe arm and marker extension add cases, never alter the worker/orchestrator verdicts" },
+  { id = "EX-7", text = "compute_next_phases is pub(crate) and a value-returning readiness seam is factored out of run_plan_next; dispatch_next_ready and dispatch plan-next both consume it (behaviour-preservation: plan-next CLI output unchanged)" },
+  { id = "EX-8", text = "dispatch_authored_divergence resolves compared_ref from git::trunk_commit / the [dispatch] deliver_to ref — never the journal-row printer (dispatch.rs:630), never hardcoded edge" },
 ]
 verification = [
   { id = "VT-1", expects = "dispatch_phase_receipt: Resolved carries a real dispatch_tip; each resolve_coord refusal yields CoordRefused(reason) with no tip", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_phase_receipt", "PhaseReceiptResult", "CoordRefused"], waived = false },
@@ -144,7 +151,11 @@ orchestrator agent() per phase with a PhaseReceipt schema, bootstrap planner + \
 closing divergence probe via the read-only dispatch-probe role, report-and-halt, \
 the named HALT vocabulary contract (funnel:/coord: re-exported from the Rust \
 closed vocabs; script-local reasons single-sourced), never auto-merges. Verified \
-by inspection + doctor conformance; the live e2e drive is PHASE-05."""
+by inspection + doctor conformance; the live e2e drive is PHASE-05. NOTE: the \
+real-tree conformance assertion (agent_conformance_findings over install/agents/ \
+now that dispatch-probe.md exists) is ADDED to src/doctor_checks.rs IN THIS PHASE \
+— so VT-1's declared test_file is attributed to PHASE-04's delta, not left \
+UNATTRIBUTABLE (the synthetic-fixture cases stay in PHASE-03)."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 landed: tools registered, allowlist grown, probe role known to doctor" },
 ]
@@ -154,6 +165,8 @@ exit_criteria = [
   { id = "EX-3", text = "doctor check #9 green on all three defs (worker, orchestrator, probe) — each def's mcp tokens ⊆ its role allowlist" },
   { id = "EX-4", text = "install/workflows/drive-slice.js (or the agreed home, OQ-1) exists: budget-adaptive loop, per-phase orchestrator with PhaseReceipt schema, named HALT contract, no auto-merge; halt vocabulary references named members not inline literals" },
   { id = "EX-5", text = "The reference script and defs are seeded by doctrine install (or the documented placement per PHASE-01/ISS-216)" },
+  { id = "EX-6", text = "SELECTOR GATE (audit-clean): the moment OQ-1 fixes the /drive-slice authored home, that committed path is registered as a design-target selector — `doctrine slice selector add SL-206 <home> --intent design-target` — BEFORE the script is committed. The 7 current design-targets do NOT cover install/workflows/**; .claude/workflows/** is scope-relevant AND gitignored (installed copy only), so an unregistered committed script reds conformance as undeclared" },
+  { id = "EX-7", text = "The 'seeded by doctrine install' claim (EX-5) is made real OR explicitly waived — no hand-wave: either src/install.rs grows a dispatch-probe agent-def asset registration + a workflows seeding leg (install enumerates hardcoded assets today; covered by the scope-relevant src/** selector), or EX-5 is narrowed to the documented manual placement (PHASE-01/ISS-216) and the install claim struck" },
 ]
 verification = [
   { id = "VT-1", expects = "doctor conformance: probe + orchestrator + worker defs all pass check #9 with the grown allowlist", test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "agent_conformance_findings"], waived = false },

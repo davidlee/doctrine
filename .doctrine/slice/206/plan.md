@@ -59,6 +59,38 @@ runtime leg), the divergence advisory emitting without gating, the budget loop
 pacing — only prove out in a real drive. This phase overlaps PHASE-01's SQ3 demo
 but now exercises the full deliverable, not shipped machinery alone.
 
+## Declared touch-set (audit-clean)
+
+The 7 `design-target` selectors are `src/dispatch.rs`, `src/mcp_server/dispatch.rs`,
+`src/mcp_server/tools.rs`, `src/doctor_checks.rs`, and the three
+`install/agents/claude/*.md` defs (orchestrator, worker, probe). Two accuracy
+corrections carried into `plan.toml`:
+
+- **`/drive-slice` home is not yet a design-target** (PHASE-04 EX-6). No selector
+  covers `install/workflows/**`; `.claude/workflows/**` is scope-relevant *and
+  gitignored* (installed copy only). The authored script's committed home must be
+  registered `--intent design-target` the instant OQ-1 fixes it, or audit
+  conformance reds it as undeclared. This is the one HIGH gap.
+- **`dispatch-worker.md` reclassified to `scope-relevant`.** No phase modifies it;
+  it is a behaviour-preservation assertion target (doctor #9 stays green
+  unchanged), not a modification target — a `design-target` with no source delta
+  invites an under-delivery flag at audit.
+- **`src/install.rs`** (probe asset registration + a workflows seeding leg, if
+  EX-7 keeps the "seeded by install" claim) rides the broad `src/**`
+  scope-relevant selector — touched but not audit-red.
+- **No flake change for the new `.js`.** `srcWithDist` does `cp -R ./install/.`
+  and RustEmbed `#[folder="install/"]` embeds recursively; a new
+  `install/workflows/*.js` ships without grafting (AGENTS.md nix-embed hazard does
+  not bite here).
+
+## Trunk authority (divergence tool)
+
+`dispatch_authored_divergence`'s `trunk_ref` resolves from the real authority —
+`git::trunk_commit` (`src/git.rs`) or the `[dispatch] deliver_to` ref
+(`run_deliver_to`, `src/dispatch.rs`) — **not** `run_show_journal_trunk_oid`
+(`src/dispatch.rs:630`), the journal-row printer that design §5.5 loosely cites.
+PHASE-03 EX-8 pins this.
+
 ## Notes
 
 - **Verification modes.** PHASE-01/05 are inherently empirical (VH/VA) — harness
