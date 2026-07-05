@@ -1,0 +1,22 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 31
+slug = "workflow-templated-slice-driver-budget-metered-resumable-phase-drive-over-the-confined-orchestrator"
+title = "Workflow-templated slice-driver: budget-metered, resumable phase-drive over the confined orchestrator"
+kind = "idea"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-07-05"
+updated = "2026-07-05"
+tags = ["area:agents", "area:dispatch", "area:mcp", "area:workflow", "token-efficiency"]
+
+# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = ["SL-199", "CHR-039"]                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
