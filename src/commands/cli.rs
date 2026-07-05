@@ -459,7 +459,7 @@ pub(crate) enum Command {
     },
 
     /// Capture and survey durable knowledge records (assumption / decision /
-    /// question / constraint).
+    /// question / constraint / evidence / hypothesis / concept).
     Knowledge {
         #[command(subcommand)]
         command: crate::knowledge::KnowledgeCommand,

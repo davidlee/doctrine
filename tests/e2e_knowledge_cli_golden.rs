@@ -235,6 +235,12 @@ fn knowledge_show_routes_each_prefix_to_its_kind() {
         1,
         &minimal_toml(1, "h", "A H", "hypothesis", "proposed"),
     );
+    seed(
+        dir.path(),
+        "concept",
+        1,
+        &minimal_toml(1, "cpt", "CPT1", "concept", "draft"),
+    );
 
     for (reference, kind, status) in [
         ("ASM-001", "assumption", "held"),
@@ -243,6 +249,7 @@ fn knowledge_show_routes_each_prefix_to_its_kind() {
         ("CON-001", "constraint", "active"),
         ("EVD-001", "evidence", "captured"),
         ("HYP-001", "hypothesis", "proposed"),
+        ("CPT-001", "concept", "draft"),
     ] {
         let out = run(dir.path(), &["show", reference]);
         assert!(out.status.success(), "{reference} stderr: {}", stderr(&out));
@@ -277,7 +284,7 @@ fn knowledge_show_unknown_prefix_errors() {
     assert!(!out.status.success());
     assert_eq!(
         stderr(&out),
-        "Error: unknown record prefix `REQ` in `REQ-001` (expected ASM/DEC/QUE/CON/EVD/HYP)\n"
+        "Error: unknown record prefix `REQ` in `REQ-001` (expected ASM/DEC/QUE/CON/EVD/HYP/CPT)\n"
     );
 }
 
