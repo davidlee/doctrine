@@ -1,0 +1,42 @@
+memory_uid = "mem_019f34799f237b90bf0bee1b06ac274b"
+memory_key = "mem.pattern.dispatch.correct-worker-delta-in-place"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Correct a claude-arm worker delta in place (orchestrator resets fork branch, commits worker's staged bytes) — no re-dispatch"
+summary = "When a claude-arm worker's already-committed delta needs a small fix, the orchestrator lands the worker's corrected working-tree bytes as a fresh single commit instead of rejecting+re-dispatching."
+created = "2026-07-05"
+updated = "2026-07-05"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "worker-commit", "confinement", "correct-in-place"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "35c9c295c189e4309d96e460271b90030e896f13"
+tree = "8dcd2b976b512d84e94460695186c4473646c119"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "35c9c295c189e4309d96e460271b90030e896f13"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
