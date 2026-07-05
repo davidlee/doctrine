@@ -12,11 +12,11 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/main.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/cli.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/listing.rs"
