@@ -429,3 +429,78 @@ orchestrator, because it cannot spawn the worker.
   `target/` caches across worktrees); reclaimed `.dispatch/SL-206/target` +
   `.dispatch/SL-165/target` (regenerable). Watch headroom on re-drive (each worker
   build is ~GB).
+
+---
+
+## 2026-07-06 — P1+P0 RESULTS & current /design fork (compaction prep)
+
+**Supersedes the A/D/B fork above.** That fork is resolved: **A (Agent-tool-spawned
+orchestrator) is validated**; D'/workflow-revival is dead-or-optional; B (new
+`dispatch_spawn_worker` MCP) is unnecessary — nested fork + `worker_commit` already
+work from a subagent. The live design question moved on (see fork below).
+
+### P1 — orchestrator-unjail round-trip: PASS (commits 0048ee75, 9d67a6f4)
+Nomination (SubagentStart→allowlist→pretooluse PassThrough) flips a subagent to
+unconfined end-to-end: `SubagentStart` fired from a child-session main thread, wrote
+the allowlist pre-first-Bash, orchestrator ran Bash **unwrapped**, committed 98835cc.
+Mechanism: the RO `.git` wall is the **bwrap wrap** on a *confined* Bash, not an fs
+perm — PassThrough ⇒ unwrapped ⇒ RW `.git`. Mems: mem_019f363b (child-session fire),
+mem_019f36401b (bwrap-wrap). Rig torn down; patch in scratchpad.
+
+### P0 — nested-spawn probe: RAN (commit 249ddca0)
+Confined orchestrator @ coord SL-209 nest-spawned one worker; observer SubagentStart
++ WorktreeCreate shims (torn down after; logs in scratchpad).
+- **Q1 escalation: LIVE.** Nested (subagent-initiated) `SubagentStart` **fires**;
+  payload has **no spawner id**. Field-diff (checked, commit 939ee08b):
+  session_id/prompt_id/transcript_path IDENTICAL across top-level vs nested; only
+  agent_id/agent_type/cwd differ; cwd is an **isolation artifact**, not lineage; no
+  env in payload. ⇒ a type-match (or cwd) nomination gate is escalatable — an
+  **out-of-jail single-slot intent token** is the only sound discriminator. Mem:
+  mem_019f364eb2a5.
+- **Q2 confined-A2 viability: STRONGLY SUPPORTED.** Confined orchestrator: sealed out
+  of shared `.git` but **wrote its own coord `.doctrine/state/`** (arming feasible);
+  nested `isolation:worktree` **fired WorktreeCreate** + forked at **correct base**;
+  `worker_commit` **resolved + ran the full gate** (refused only at commit-gate-red =
+  pre-existing RED `test` on the SL-209 base, exit 101 — incidental). Mem:
+  mem_019f364ec31e.
+
+### Current /design fork (§5, awaiting operator decision — this is the resume point)
+- **(A) Confined-A2** — orchestrator jailed at coord root, drives via server-side MCP;
+  NO boundary change, NO ADR-008/006 amendment, NO token, NO escalation surface.
+  ADR-008 says confinement is perf-not-trust (trust = import belt), so a confined
+  orchestrator loses no security property.
+- **(B) Unjail** — surface-min; COSTS ADR amendment + `/inquisition` + **mandatory
+  arming token** (P0 Q1) + escalation surface. RFC-011 budget-lever payoff is dead in
+  all A-forms anyway.
+- **(C) Layered** — ship (A), bank (B) as the P1-proven fallback. **My recommendation,
+  biased to A.**
+- **THE ONE OPEN RISK (governs the decision):** the *full* funnel
+  (`dispatch_import → verify → conclude → record`) run **E2E via MCP from a confined
+  orchestrator** — P0 proved every piece, not the whole chain. Mode-B-proven, but
+  untested as one drive. Candidate: a **plan-phase spike** (reuse orchestrator
+  `ae3a5dd36e3ea8c41`-style, drive ONE SL-209 phase to Completed) retires it before
+  locking the fork.
+
+### Loose ends closed (commit 939ee08b)
+mem_019ec84b rewritten as SUPERSEDED (both refuting probe ids); ISS-219 filed
+(worker_commit refusal embeds ~295k-char transcript — RFC-011 token sink); field-diff
+folded into mem_019f364eb2a5.
+
+### Env / rig state at compaction
+- `DOCTRINE_BIN` still repointed → `.dispatch/SL-206-bin/target/debug/doctrine`
+  (pristine pretooluse, post-P1 revert). Repoint-back deferred to rework close.
+- Coord SL-209 @ fa951846 = **RED base** (test exit 101) — needs green before any real
+  drive/spike. Coord SL-206 @ 68743c8b untouched. `main`=fa951846.
+- P0/P1 observer+allowlist rigs fully torn down; `.claude/settings.local.json` back to
+  memory-probe + command-probe only.
+- `/plugins` ghost marketplace fixed (stray `path` in `~/.claude/settings.json`
+  extraKnownMarketplaces.doctrine; backup `settings.json.bak-p0-*`). Reopen /plugins to
+  re-reconcile.
+- PHASE-07 still `in_progress`; VH-1 unsatisfied. RFC-011 case-note appended
+  (uncommitted, matches its dirty-accumulation pattern).
+
+### Resume
+Operator answers the fork (A / B / C, or "spike the residual first") → continue
+`/design` §5 sections (interfaces/state/ADR-impact/verification) → adversarial pass
+(codex GPT-5.5) → `/plan`. If (C)/A: no ADR amendment; if (B): ADR-008 amendment +
+`/inquisition` + arming-token + posture-registry-row spec.
