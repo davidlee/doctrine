@@ -1,0 +1,42 @@
+memory_uid = "mem_019f35b3a7db76e38405b4a2409f40c1"
+memory_key = "mem.pattern.dispatch.confined-orchestrator-placement-not-permission"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Confined dispatch orchestrator is proven-realizable (SL-199 Mode B); RO shared .git is by-design — /drive-slice's defect was PLACEMENT (fresh fork) not permission, and the fix is coord-tree placement, NOT unconfining"
+summary = "Confined orchestrator RO .git is BY DESIGN (SL-199 Mode B, proven): it writes coord .git via server-side MCP tools, never directly. /drive-slice failed on PLACEMENT not permission — isolation:'worktree' forks a fresh tree; the orchestrator must be jailed to the coord tree (cwd=coord-root) so the coord-root arming discriminator fires."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["install/workflows/drive-slice.js"]
+globs = []
+commands = []
+tags = ["dispatch", "orchestrator", "worktree", "confinement", "jail", "funnel", "placement"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8a054ddfb035eee20376eb52e8232afe24a37b04"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a35a646007ee1b25b51eb6246c59e4711edb5e18d543834e24cbea92f7b55b36"
+base_commit = "7ca8068a3457a8c88a05d68b7f3da3334c2cca83"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

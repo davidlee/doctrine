@@ -611,3 +611,25 @@ null-budget unmetered all WORKED. Token/complexity note: three sequential probe 
 + a full slice-binary build + host-disk-full recovery were needed just to reach the
 first real load — the inspection-only verification of PHASE-04 deferred all of this
 cost to acceptance. Feeds ISS-218 family (stale/confined binary + env surface).
+[dispatch; SL206-drive-p05-confined-orchestrator-CORRECTION]
+CORRECTION to the entry [dispatch; SL206-drive-p05-confined-orchestrator] above: its
+root cause is WRONG. It claimed the confined orchestrator "cannot write the funnel"
+because of RO shared `.git`, and that the fix is to run the orchestrator UNCONFINED.
+Both false. SL-199 "Mode B" (slice DONE) designs the confined orchestrator with RO
+`.git` BY DESIGN — it writes coord `.git` via server-side MCP tools running unconfined
+(dispatch_import/conclude/reap, worker_commit), never directly; it arms via a coord-root
+positional discriminator (cwd_is_coord_root, create.rs:200-212, built+sound). SL-199
+proved the primitives but left VH-1 (the live armed loop) OWED — PHASE-05 here was the
+first VH-1 attempt. The REAL defect is PLACEMENT: §5.4 spawns the orchestrator with
+`isolation:'worktree'`, which forks a FRESH worktree instead of jailing it to the
+existing coord tree, so cwd_is_coord_root never fires and arm writes land in the wrong
+tree — the RO-`.git` errors were downstream symptoms of wrong placement, not a proof
+of impossibility. Fix = coord-tree placement (keep the orchestrator confined), NOT
+unconfining. Open spike: can a workflow agent() place a subagent jailed to the existing
+coord tree, or only ever fresh-fork? Process lesson for RFC-011: a token-cheap check of
+the SIBLING SLICE record (SL-199) BEFORE recording the finding would have prevented a
+wrong durable memory + notes finding + this case-note, and the whole re-consult. The
+inspection-only PHASE-04 verification deferred not just execution cost to acceptance but
+also the cross-slice grounding that would have caught the misdiagnosis early. Durable:
+mem.pattern.dispatch.confined-orchestrator-placement-not-permission (supersedes the
+retracted mem.pattern.dispatch.confined-orchestrator-cannot-write-funnel).

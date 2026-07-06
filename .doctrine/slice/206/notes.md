@@ -233,27 +233,60 @@ driving it — no fail-closed guard. Caught + `TaskStop`ped during orient; ZERO 
 `drive-slice.js` must: parse string-args, validate `slice` is a positive integer,
 halt otherwise; probe agents must not guess a slice. (Probe hardened `slice===209`.)
 
-### FINDING 3 — confined orchestrator CANNOT write the funnel (STRUCTURAL, load-bearing)
-With F1+F2 fixed, the drive ran correctly against 209 and produced the decisive
-result. The driver spawns the orchestrator with `agent(..., {isolation:'worktree',
-agentType:'dispatch-orchestrator'})`. That confinement jails the orchestrator to its
-OWN isolated worktree with a **read-only shared `.git`** and no write to the coord
-tree. Every funnel WRITE fails:
-- `dispatch arm-spawn` → "Read-only file system" on `.doctrine/state/dispatch/spawn`;
-- `doctrine worktree fork` / `git update-ref` / `git commit` → "cannot lock ref …
-  Read-only file system".
-So it cannot arm the base, cannot mint/commit a worker fork, cannot import/conclude.
-Phases NEVER reach Completed in-jail. Composed halt:
-`anomaly:coord-tree-and-git-read-only`, coord tip unchanged, no auto-merge.
-**Root:** design §5.4's "one CONFINED dispatch-orchestrator per phase" inverts the
-working claude-arm model — there the orchestrator is the MAIN thread (RW `.git`,
-operates on the coord tree) and it spawns CONFINED WORKERS. drive-slice.js confines
-the orchestrator, the one role that needs RW `.git` + coord write. Worktree-free
-`dispatch_import/conclude/reap` MCP tools would be reachable, but `arm-spawn` (coord
-state write) and worker-fork minting (ref write) are NOT. Likely fix: orchestrator
-runs UNCONFINED (inherits main-tree RW `.git`), reaches coord via absolute paths +
-server-side-resolved dispatch tools, confines only the WORKER it spawns. DESIGN
-change, not a transcription patch.
+### FINDING 3 — orchestrator PLACEMENT defect (was mislabelled "confined orchestrator can't write the funnel")
+
+> **CORRECTION (2026-07-06).** The original text of this finding — retained below
+> under "~~Original (WRONG root cause)~~" — claimed the confined orchestrator
+> "cannot write the funnel / needs RW `.git`". **That root cause is WRONG.** It
+> contradicts the proven, locked SL-199 "Mode B" (slice **done**). Reconciled after
+> reading the SL-199 record. Corrected account first; superseded text preserved for
+> the audit trail.
+
+**The confined orchestrator is proven-realizable; RO `.git` is BY DESIGN.**
+SL-199 designs the orchestrator to sit in `Jail(coord-cwd)` with a **read-only
+shared `.git` on purpose** — it writes coord `.git` via **server-side MCP tools
+running unconfined** (`dispatch_import`/`conclude`/`reap`, and the worker's
+`worker_commit`), never directly ("integrity never rests on the confined
+orchestrator", SL-199 design.md:216). Arming uses a **coord-root positional
+discriminator** (`cwd_is_coord_root ∧ coord_in_dispatch ∧ base`, create.rs:200–212)
+— built and adjudicated sound (SL-199 inquisition-phase05.md). Nested
+`isolation:worktree` IS honored (F7 REFUTED); worker isolation is def-pinned to the
+worker frontmatter, NOT the orchestrator's per-call arg. SL-199 proved the
+primitives but left **VH-1 — the live integrated armed loop — OWED/unwitnessed**
+(inquisition-phase05.md:52). **PHASE-05 here was effectively the first VH-1 attempt.**
+
+**The real defect is PLACEMENT, not permission.** §5.4 spawns the orchestrator with
+`agent(orchestratorPrompt, { isolation:'worktree' })`. `isolation:'worktree'` forks
+a **fresh `.worktrees/agent-<hex>`** off the spawning session's local HEAD — so the
+orchestrator lands jailed to a *fresh fork*, NOT to the coord tree. Consequences:
+`cwd_is_coord_root` never fires; arm writes land in the fork's tree, not the coord
+tree; and (driver cwd unparked) the fork is off the wrong base. The RO-`.git` errors
+I logged were downstream symptoms of the orchestrator being in the wrong tree, not
+proof that a *correctly-placed* confined orchestrator cannot drive.
+
+**Fix direction:** place the orchestrator jailed to the EXISTING coord tree
+(cwd=coord-root, no fresh fork — the SL-199 model); let the worker frontmatter carry
+`isolation`. Do **NOT** unconfine the orchestrator (that contradicts locked, proven
+Mode B). **Open premise to spike first:** can a *workflow* `agent()` place a subagent
+jailed to the existing coord tree, or does the Workflow harness only ever fresh-fork?
+If it cannot, the workflow-driver shape is incompatible with SL-199's placement
+contract → the SL-206 *slice* premise reopens (fallback: main-thread skill
+sequencer), not just §5.4. Durable: [[mem.pattern.dispatch.confined-orchestrator-placement-not-permission]].
+
+<details><summary>~~Original (WRONG root cause) — preserved for audit~~</summary>
+
+> With F1+F2 fixed, the drive ran correctly against 209 and produced the decisive
+> result. The driver spawns the orchestrator with `agent(..., {isolation:'worktree',
+> agentType:'dispatch-orchestrator'})`. That confinement jails the orchestrator to its
+> OWN isolated worktree with a read-only shared `.git` and no write to the coord
+> tree. Every funnel WRITE fails: `dispatch arm-spawn` → RO `.doctrine/state/dispatch/spawn`;
+> `doctrine worktree fork`/`git update-ref`/`git commit` → RO "cannot lock ref". So it
+> cannot arm the base, mint/commit a worker fork, or import/conclude. Phases NEVER
+> reach Completed in-jail. **[Claimed] Root:** §5.4 inverts the working claude-arm
+> model; likely fix: orchestrator runs UNCONFINED. — **RETRACTED: this misread RO
+> `.git` (a by-design posture) as the blocker, and the fix as unconfining. Both wrong.**
+
+</details>
 
 ### What WORKED (positive acceptance)
 - Bootstrap `dispatch-probe` planner: correct slice, `next_ready` = `compute_next_phases`
@@ -269,30 +302,51 @@ change, not a transcription patch.
 
 ### EX coverage
 - EX-1 (all-Completed + typed receipt consumed): **PARTIAL** — receipt plumbing ✓,
-  all-Completed ✗ (FINDING 3 structural).
+  all-Completed ✗ (FINDING 3 — orchestrator PLACEMENT, fixable; not a structural block).
 - EX-2 (injected red halts, no auto-merge): no-auto-merge + halt-on-non-Completed ✓;
   the specific `VERIFY_RED` branch NOT hit (halted on `anomaly` first; worker never ran).
 - EX-3 (grant gate at runtime): **NOT reached** (no worker/forbidden-write attempted).
 - EX-4 (divergence emits/never gates; budget null/+Nk): divergence ✓, null ✓; `+Nk`
   pacing NOT tested (no budget directive injectable through the Workflow tool here).
 
-### Governance fork (operator decision pending)
-Load-bearing FINDING 3 is a DESIGN defect, not cosmetic → recommend `/consult`
-→ **re-open PHASE-04 / revise design §5.4 orchestration model** (orchestrator
-unconfined RW `.git`; workers confined), folding in FINDING 1 (harness contract) +
-FINDING 2 (slice guard). Patch-forward viable ONLY if a spawn variant gives the
-orchestrator RW `.git` + coord reach — unconfirmed. Do NOT self-adapt the landed
-deliverable; route through governance.
+### Governance fork (CORRECTED 2026-07-06 — consulted)
+
+> **SUPERSEDES the earlier recommendation** (preserved below), which said "revise
+> §5.4 to run the orchestrator UNCONFINED, workers confined." That would contradict
+> the locked, proven SL-199 Mode B and is WRONG — see FINDING 3 correction above.
+
+FINDING 3 is a PLACEMENT defect, not an orchestration-model inversion. The
+confined orchestrator is correct and proven (SL-199). Corrected path:
+1. **Spike first** (cheap, against the standing SL-209 rig): can a workflow
+   `agent()` place a subagent jailed to the *existing* coord tree (cwd=coord-root,
+   `cwd_is_coord_root` fires), or does the Workflow harness only ever fresh-fork?
+2. **If yes** → §5.4 fix is small: drop `isolation:'worktree'` from the orchestrator
+   call, place it in the coord tree, worker frontmatter carries isolation. Fold in
+   FINDING 1 (harness contract) + FINDING 2 (slice guard). In-slice `/design` delta
+   (not a Revision — intra-slice defect in its own acceptance phase).
+3. **If no** → the workflow-driver shape is incompatible with SL-199's placement
+   contract → the SL-206 *slice* premise reopens (fallback: main-thread skill
+   sequencer). Do NOT self-adapt the landed deliverable; route through governance.
+
+<details><summary>~~Original (WRONG) recommendation — preserved for audit~~</summary>
+
+> Load-bearing FINDING 3 is a DESIGN defect … re-open PHASE-04 / revise design §5.4
+> orchestration model (orchestrator **unconfined RW `.git`**; workers confined) …
+> — **RETRACTED: unconfining the orchestrator contradicts locked, proven SL-199
+> Mode B. The defect is placement, and the fix keeps the orchestrator confined.**
+
+</details>
 
 ### Stable state / resume
 - Coord 206 `68743c8b` (PHASE-04, untouched); coord 209 `fa951846` (rig, no phase
   driven); `main`=`fa951846`; edge working tree clean; probe isolation worktrees pruned.
 - Corrected/hardened reference at `.dispatch/drive-slice-probe.js` (gitignored):
   the 3 contract fixes + slice guard, drive logic verbatim. Fix template.
-- After the fork decision: (A) redesign orchestration → re-drive SL-209; then exercise
-  EX-2 (inject a regression past the worker gate) + EX-3 (forbidden-write probe). (B)
-  if patch-forward viable, apply fixes to `install/workflows/drive-slice.js` + `.claude`
-  copy, re-drive. Teardown SL-209 + `DOCTRINE_BIN` repoint at PHASE-05 close.
+- Next (corrected): (1) spike coord-tree placement of a workflow-spawned agent
+  against SL-209; (2) if viable, patch §5.4 placement + FINDING 1/2, re-drive SL-209,
+  then exercise EX-2 (inject a regression past the worker gate) + EX-3 (forbidden-write
+  probe); (3) if not viable, reopen the slice premise. Teardown SL-209 + `DOCTRINE_BIN`
+  repoint at PHASE-05 close.
 - NOTE (infra): host disk `/dev/nvme0n1p2` hit 100% mid-session (accumulated dispatch
   `target/` caches across worktrees); reclaimed `.dispatch/SL-206/target` +
   `.dispatch/SL-165/target` (regenerable). Watch headroom on re-drive (each worker

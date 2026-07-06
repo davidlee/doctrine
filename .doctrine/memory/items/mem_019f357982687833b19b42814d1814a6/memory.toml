@@ -2,9 +2,9 @@ memory_uid = "mem_019f357982687833b19b42814d1814a6"
 memory_key = "mem.pattern.dispatch.confined-orchestrator-cannot-write-funnel"
 schema_version = 1
 memory_type = "pattern"
-status = "active"
-title = "A workflow-confined (isolation:worktree) agent gets a READ-ONLY shared .git in the jail — it cannot drive the dispatch funnel; the orchestrator role needs RW .git"
-summary = "isolation:worktree confinement gives RO shared .git → arm-spawn/worktree-fork/update-ref/commit all fail; the dispatch orchestrator must run unconfined (main-thread RW .git) and confine only the workers it spawns."
+status = "superseded"
+title = "[RETRACTED — WRONG ROOT CAUSE] Confined orchestrator RO .git is by-design, not a blocker — superseded by …-placement-not-permission"
+summary = "SUPERSEDED/WRONG. Original claim (orchestrator needs RW .git / cannot drive) is false: SL-199 Mode B proves RO .git is by-design (server-side MCP writes coord .git). The /drive-slice defect was PLACEMENT (isolation:'worktree' fresh fork), not permission. Read mem.pattern.dispatch.confined-orchestrator-placement-not-permission."
 created = "2026-07-06"
 updated = "2026-07-06"
 
@@ -37,6 +37,10 @@ review_by = ""
 trust_level = "high"
 
 [ranking]
-severity = "high"
+severity = "none"
 weight = 0
+
+[[relation]]
+label = "superseded_by"
+target = "mem_019f35b3a7db76e38405b4a2409f40c1"
 
