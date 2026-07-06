@@ -18,6 +18,11 @@ only describes is a worse `cat`.
 Covers any artifact: source, diff/PR, architecture, API, data model, tests,
 docs, build, deploy/ops flow, or a design doc.
 
+Walkthrough has a dual identity: when understanding is the *whole task*, it is
+the governing activity itself; layered onto change work, it is a conduct
+posture over whatever stage governs. Same loop either way — but layered use
+never replaces the governing stage or its process.
+
 ## Dials
 
 Set by the user, else inferred, else defaults:
@@ -26,7 +31,7 @@ Set by the user, else inferred, else defaults:
 /walkthrough audience=expert depth=deep
 ```
 
-- **audience** — `expert` · `mixed` (default) · `learner` — the spine dial.
+- **audience** — `expert` · `mixed` (default) · `learner` — the governing dial.
   - *expert*: start from architecture, invariants, risk, deltas. Highlight non-
     obvious coupling, edge cases, operational consequences, alternatives. Compact.
     Assume they resolve local syntax/framework details themselves. Lead with
@@ -42,6 +47,9 @@ Set by the user, else inferred, else defaults:
 ## Loop
 
 1. **Orient** — artifact, the user's goal, audience, what they already know.
+   Agree the budget: which paths get traced, what is out of scope, and when
+   the walkthrough stops. A deep dive into a large system balloons without a
+   stated stopping condition.
 2. **Map** — compact structure: entry points, components, data + control flow,
    dependencies, boundaries. The mental model before the details.
 3. **Trace** — walk the important path at the chosen depth. Prefer *causal*
@@ -51,7 +59,11 @@ Set by the user, else inferred, else defaults:
 5. **Challenge** — see below.
 6. **Check understanding** — *only when learning is a goal* (see below).
 7. **Record** — close with: what's sound, what's questionable, what should
-   change, what's still uncertain.
+   change, what's still uncertain. Then route what must outlive the session:
+   changes worth making → the change process (below); durable gotchas and
+   patterns → project memory; follow-up work → the backlog. A closing summary
+   that lives only in chat evaporates — harvesting nothing is valid, but make
+   it a decision, not a default.
 
 ## Challenge
 
@@ -90,4 +102,7 @@ pair *within* the resulting phase. A walkthrough must not become a governance by
 Portable; ignore elsewhere. Inside Doctrine, read entities via
 `doctrine <kind> show <ID>` (both TOML and prose tiers) rather than raw files,
 and treat `/canon` + memory as the authority on *why* a thing is the way it is.
-Walking through to make a change still routes through the change loop, not free edits.
+Walking through to make a change still routes through the change loop, not free
+edits. Harvest targets: durable gotchas → `/record-memory`; follow-up work →
+`backlog new`; closure-grade findings on a reviewable artifact → `/code-review`
+and its RV ledger.
