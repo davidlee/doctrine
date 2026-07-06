@@ -83,6 +83,10 @@ label = "governed_by"
 target = "ADR-012"
 
 [[relation]]
+label = "governed_by"
+target = "ADR-008"
+
+[[relation]]
 label = "references"
 role = "originates_from"
 target = "SL-199"
