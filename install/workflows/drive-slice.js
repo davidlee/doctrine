@@ -214,14 +214,18 @@ function hopPrompt(sliceId, phase, prep, forkTip) {
     `    runtime_status?, dispatch_tip, boundary? } + verify + halt_reason?.`,
     ``,
     `PREP the next worker (only iff dispose was accepted, i.e. no fixup and no halt):`,
-    `  - Consult dispatch_next_ready{slice:${sliceId}} and emit \`prep\`:{ phase, arm,`,
-    `    base_B, worker_prompt (EMBED the base-guard reminder), worker_fork } for the`,
+    `  - Consult dispatch_next_ready{slice:${sliceId}} and emit \`prep\`:{ phase,`,
+    `    arm:"${arm}" (the drive arm — PINNED; do NOT choose your own, or the driver`,
+    `    spawns the wrong worker path), base_B (the CURRENT coord tip after this`,
+    `    phase's conclude — NOT the old base), worker_prompt (EMBED the base-guard`,
+    `    reminder; for arm "claude" the worker SELF-COMMITS its delta via worker_commit`,
+    `    (B) — for "pi" it leaves the worktree diff for import), worker_fork } for the`,
     `    next ready phase. If NO phase is ready, return prep:null.`,
     `  - On a HARD prep failure (distill error, pi git-worktree-add failure) set`,
     `    halt_reason ("coord:"/"funnel:") rather than a silent null.`,
     ``,
     `Always include next_ready. \`fixup\` and \`prep\` are MUTUALLY EXCLUSIVE — emit at`,
-    `most one (the schema enforces it).`,
+    `most one (the driver enforces it: a hop with both halts RECEIPT_AMBIGUOUS).`,
   ].join('\n');
 }
 
