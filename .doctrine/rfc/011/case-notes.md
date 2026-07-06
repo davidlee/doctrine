@@ -734,3 +734,12 @@ worker self-commits via worker_commit MCP; orchestrator lands via dispatch_impor
 → dispatch_conclude_phase → dispatch_reap. Cost: orchestrator must re-derive the
 real cadence from tool schemas + memories each session (~2-3k tokens) and risks
 mis-instructing the worker prompt. Skill needs a rewrite pass post-SL-206.
+
+[dispatch-agent rewrite; IMP-276-manual-install]
+Manual (no-`doctrine install`) refresh of the live worker def has two frictions:
+`.claude/agents/dispatch-worker.md` is a symlink into `.doctrine/agents/` (edit
+tool refuses write-through-symlink; must resolve target first), and the installed
+def has the role hymn BAKED IN (template resolved), so a plain cp of the
+`install/agents/` source would regress it to unresolved `{{ prompt resolve }}`
+syntax — edits must be applied twice, once per tier. ~1k tokens of discovery per
+session that touches installed defs.
