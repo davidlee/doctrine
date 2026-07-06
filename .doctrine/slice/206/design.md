@@ -78,6 +78,16 @@ not by MCP-unreachability.
 
 ## 5. Proposed Design
 
+> **⚠ POST-PHASE-07 — the workflow-spawn model in §5.1/§5.4 is SUPERSEDED pending
+> a POC.** PHASE-07 proved a Workflow `agent()` leaf cannot drive committing
+> dispatch in the jail (three structural walls: no `Agent`, RO `.git`+no
+> `DispatchRecord`, `worktree-jail` deny). The replacement direction — an
+> **Agent-orchestrated** driver with an **orchestrator-unjail nomination** via
+> `SubagentStart` — plus its reasoning chain, evidence, and the gating POC, is in
+> **[`unjail-direction.md`](./unjail-direction.md)**. Do not treat §5.1/§5.4 below
+> as current until the POC lands and this design is re-opened via `/design`. See
+> also `notes.md` FINDING 4/5.
+
 ### 5.1 System Model
 
 ```
