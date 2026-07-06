@@ -1,0 +1,42 @@
+memory_uid = "mem_019f34fec5777b81803e17caf115eca0"
+memory_key = "mem.pattern.dispatch.worker-commit-stale-path-false-red"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "worker_commit false-reds on a stale PATH doctrine binary when a phase depends on an earlier unpromoted phase's binary-level change — land-not-rewrite"
+summary = "The worker_commit gate belt runs `doctrine doctor` via PATH ~/.cargo/bin/doctrine, which lags in-flight dispatch branches; when a later phase's authored content depends on an earlier phase's not-yet-promoted binary-level change, the gate false-reds. Land-not-rewrite with fresh-binary verification is the remedy."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["src/worktree/import.rs", "src/doctor_checks.rs"]
+globs = []
+commands = ["dispatch", "worker_commit", "dispatch_import"]
+tags = ["dispatch", "worker_commit", "false-red", "stale-binary", "land-not-rewrite", "multi-phase"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "178adb9276588ec88d5de2fee753d561c72bf740"
+tree = "a8a4189f631bf4231192b40b8512b316b472ad41"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "178adb9276588ec88d5de2fee753d561c72bf740"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
