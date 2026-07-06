@@ -133,3 +133,30 @@ no-isolation subagent inherits the driver's coord-root cwd — the fix.
   integrated at `/close`. It is a shipped script, edited by the sole writer, not
   driven through a worker (which would also mean repairing the machinery with the
   machinery under repair). OQ-1 (script home) thereby resolves to `dispatch/206`.
+
+### GPT hostile pass (2026-07-06, post-PHASE-06 authoring)
+
+An external adversarial review (GPT-5.5) over the §5.4 delta + PHASE-06/07 plan +
+the authored driver returned four findings; disposition:
+
+- **BLOCKER (padding) — FIXED in-band (`9ba5c0a6`).** The coord-root entry-assert
+  interpolated unpadded `SL-${slice}`/`dispatch/${slice}`; the Rust coord authority
+  is zero-padded 3-digit everywhere (`.dispatch/SL-{slice:03}`, `dispatch/{slice:03}`
+  — `src/dispatch.rs:583`, `src/worktree/coordinate.rs:156`,
+  `src/mcp_server/dispatch.rs:136`). Any 1-2 digit slice would false-halt. Now pads.
+  Worked for 206/209 only by accident.
+- **MAJOR (arming ≠ placement) — FIXED + criterion added.** The assert proves
+  cwd/branch, not that the worker forked at the armed base; `classify_create` needs
+  `base=Some`, else the same location degrades to `Passthrough` (fresh fork),
+  replaying the never-completes defect with a green assert. Driver now instructs an
+  arming check (`boundary.code_start == B`, else `halt_reason="funnel:unarmed-fork"`);
+  PHASE-07 **EX-5 / VA-2** verify it empirically.
+- **MAJOR (forbidden-write probe not in the drive) — scope corrected.** EX-3/VA-1
+  read as if the happy-path drive proves the grant boundary; it does not (the loop
+  performs no `review_*`/`memory_*` write). PHASE-07 **EX-6** makes the probe an
+  explicit standalone step against the installed def — the design's phase-0 grant
+  test, run here — not an emergent property of a clean drive.
+- **MINOR (VT-1 substring floor is weak) — accepted by design.** Keyword presence
+  cannot judge semantics or an absence; that is why VA-1 (isolation absent, meta
+  literal, no `run` export) is the real gate. Standard doctrine VT-floor + VA split;
+  no change.

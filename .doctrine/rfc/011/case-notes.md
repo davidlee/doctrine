@@ -633,3 +633,17 @@ inspection-only PHASE-04 verification deferred not just execution cost to accept
 also the cross-slice grounding that would have caught the misdiagnosis early. Durable:
 mem.pattern.dispatch.confined-orchestrator-placement-not-permission (supersedes the
 retracted mem.pattern.dispatch.confined-orchestrator-cannot-write-funnel).
+
+[phase-plan/execute; SL206-drive-p06-coord-tree-misframe]
+Over-cautious bail cost: on re-entering PHASE-06 I found the coord worktree
+.dispatch/SL-206 carrying a large staged index-vs-HEAD delta and framed it as a
+"catastrophic reversal / foreign-tampering crime scene," halting to consult +
+running heavy read-only diff investigation. Wrong model: a linked worktree's
+index/working tree is DISPOSABLE coordination scaffolding (dispatch setup rebuilds
+it) and cannot touch the dispatch/206 ref — the branch tip (68743c8b) was the
+durable truth and was intact. Correct move was a one-line `git reset --hard HEAD`.
+Token cost: an extra investigate-and-consult round before the trivial reset. Root:
+conflating the primary-tree "never discard uncommitted work" guardrail (about
+durable work) with a coord worktree's ephemeral import state. Lesson for the
+dispatch skill: name coord-tree dirty-index as expected/disposable, distinct from
+primary-tree uncommitted work, so an orchestrator resets rather than freezes.

@@ -267,10 +267,14 @@ exit_criteria = [
   { id = "EX-2", text = "An injected red verify halts the loop at that phase; NO funnel integrate/auto-merge occurs; coord-209 tip unchanged (SL-199 §D boundary intact)" },
   { id = "EX-3", text = "A forbidden review_*/memory_* write from a spawned agent is refused/absent against the installed def; granted funnel tools are callable" },
   { id = "EX-4", text = "authored_divergence advisory emits in the final report and is never acted on; the null-budget loop runs unmetered (+Nk pacing best-effort if injectable)" },
+  # ── Appended post-GPT-review (immutable ids; EX-1..4 untouched) ──
+  { id = "EX-5", text = "Arming PROVEN, not just placement: the happy-path PhaseReceipt boundary.code_start equals the coord tip B captured pre-arm — the worker forked at the ARMED base, not a silent Passthrough fresh-fork. (GPT MAJOR: the coord-root assert proves cwd/branch but classify_create also needs base=Some; without it the same location degrades to Passthrough, replaying the never-completes defect with a green assert. funnel:unarmed-fork guards the negative in the driver.)" },
+  { id = "EX-6", text = "The EX-3 forbidden-write refusal is exercised by an EXPLICIT STANDALONE probe run during PHASE-07 — spawn an agent under the INSTALLED dispatch-orchestrator def, attempt a review_*/memory_* write, confirm refused/absent — NOT inferred from the happy-path drive. (GPT MAJOR: the /drive-slice loop performs no such write; a clean happy-path report is NOT evidence the grant boundary holds. The probe is the design's phase-0 grant test, run here against the installed def.)" },
 ]
 verification = [
   { id = "VH-1", expects = "Human confirms from the live drive report: SL-209 reached all-Completed on the happy path with typed receipts consumed, AND the injected-red run halted at the red phase with no auto-merge and coord tip intact — the owed SL-199 armed-loop witness" },
   { id = "VA-1", expects = "Agent confirms from the drive artifacts: the forbidden-write probe was refused/absent against the installed def, granted funnel tools were callable, and the divergence advisory emitted without gating" },
+  { id = "VA-2", expects = "Agent confirms arming fired from the drive receipts: the happy-path boundary.code_start == the pre-arm coord tip B (not a Passthrough fresh-fork); EX-5. Absent a code_start match, the run is a placement-green/arming-failed replay and PHASE-07 is NOT satisfied" },
 ]
 specs        = []
 requirements = []
