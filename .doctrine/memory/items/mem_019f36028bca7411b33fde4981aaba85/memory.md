@@ -10,13 +10,21 @@ list declares. This is a property of the *spawn primitive*, not the def.
 Same `dispatch-orchestrator` def, spawned two ways, each asked only to introspect
 its own toolset:
 
-| Spawn path | `Agent` tool? | tools returned |
-|---|---|---|
-| Main-thread **Agent tool** (`subagent_type`) | **YES** | Read, Edit, Write, Bash, **Agent**, +6 dispatch MCP |
-| **Workflow** `agent({agentType})` | **NO** | Read, Edit, Write, Bash, +6 dispatch MCP, `StructuredOutput` (no `Agent`, no Grep/Glob) |
+| Spawn path | def | `Agent` tool? | tools returned |
+|---|---|---|---|
+| Main-thread **Agent tool** (`subagent_type`) | `dispatch-orchestrator` | **YES** | Read, Edit, Write, Bash, **Agent**, +6 dispatch MCP |
+| **Workflow** `agent({agentType})` | `dispatch-orchestrator` | **NO** | Read, Edit, Write, Bash, +6 dispatch MCP, `StructuredOutput` (no `Agent`, no Grep/Glob) |
+| **Workflow** `agent()` (default) | `general-purpose` (`Tools: *`) | **NO** | Artifact, Bash, Edit, Read, ReportFindings, SendUserFile, Skill, ToolSearch, Write, `StructuredOutput` — no `Agent`; `ToolSearch select:Agent` → "no matching deferred tools" |
 
-The workflow path also **strips Grep/Glob** and **injects `StructuredOutput`** —
-it applies its own tool profile, overriding the def's `tools:`.
+The third row is **decisive**: even a `Tools: *` (wildcard) def gets `Agent`
+stripped in a workflow — so the strip is NOT an allowlist intersection against
+the def, it is the workflow runtime **unconditionally** withholding `Agent`. Task
+primitives (`TaskCreate`, `SendMessage`) are present but none accept a
+`subagent_type`, so they cannot spawn a subagent either. Nesting is capped at one
+level — this matches the documented `workflow()` "one level only" rule, now
+confirmed for the `Agent` tool too. The workflow path also **strips Grep/Glob**
+and **injects `StructuredOutput`** — it applies its own tool profile, overriding
+the def's `tools:`.
 
 Docs confirm the *general* subagent rule but never promise it for workflow agents:
 `docs/claude/subagents.md:376` (listing `Agent` in `tools` grants nest-spawn),
