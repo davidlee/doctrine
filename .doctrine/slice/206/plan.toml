@@ -278,3 +278,389 @@ verification = [
 ]
 specs        = []
 requirements = []
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UNJAIL REWORK — PHASE-08..16 (appended 2026-07-06 after the §5 unjail re-open).
+# PHASE-01..07 are FROZEN as the confined-model historical record: PHASE-06/07's
+# coord-root PLACEMENT fix is RETIRED by design §5.4 (the confined orchestrator is
+# superseded by the nominated-UNJAIL orchestrator; unjail-direction.md P1/P3/P4).
+# None of the confined design-targets landed — the Rust emitter, ROLE_PROBE,
+# dispatch-probe.md, and install/workflows/drive-slice.js do NOT exist; the
+# confined POC lived only in gitignored .claude/+.dispatch copies. So PHASE-08..16
+# build the unjail design from the Rust down. Ordering: derisk → projection →
+# read-only tools+allowlist → nomination hook config → conformance checks that
+# validate it → agent defs → the alternating-unjail driver → ADR-008 amendment →
+# e2e acceptance. Rationale + the confined→unjail why in plan.md.
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-08 — De-risk gate (UNJAIL). Kills or greenlights the unjail approach
+# before any code is written, against a scratch slice with shipped machinery +
+# the nomination hooks. Supersedes the confined PHASE-01. A failure re-enters
+# /design, not /plan.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-08"
+name      = "De-risk gate (unjail): worker fork-at-base + P5 handoff + Workflow-seam gate + revive-base"
+objective = """
+Empirically confirm the load-bearing UNJAIL harness premises before investing in \
+the receipt plumbing, against a throwaway scratch slice. (1) R4: a workflow \
+`agent(isolation:'worktree')` WORKER leaf (not a nested confined orchestrator) \
+mints its fork AT the armed base on `dispatch/<n>`. (2) OQ-3/P5: prove which \
+handoff mode a claude-arm worker leaf runs — a successful `worker_commit` landing \
+a non-null `fork_tip` (mode B, target), OR an explicit recorded fall-to-(A) with \
+the P5 failure reason; a silent degrade is a FAILURE. (3) OQ-4 Workflow-seam: a \
+jailed subagent attempting a privileged `agent()`/`Workflow` spawn is DENIED \
+(caller-identity gate if the seam carries it, else the blanket subagent-deny \
+default §5.6). (4) OQ-6: probe whether the `WorktreeCreate` arming hook can \
+redirect a revive worktree's fork BASE ref to an existing `fork_tip` (mechanism 1) \
+or only cwd (falls to mechanism 2, worker-side reset + `worker_commit` re-stamp). \
+(5) R6/ISS-216: a CHANGED agent-def is confirmed live under `.claude/agents/` via \
+reseat or documented manual placement. Uses shipped SL-199 machinery + the \
+nomination/spawn-gate hooks; no receipt code. A failure re-enters `/design`."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (unjail §5); RV-258 done with no open blocker" },
+  { id = "EN-2", text = "edge promoted to main; a throwaway scratch slice + dispatch coord tree on dispatch/<n> available" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A workflow-spawned isolation:'worktree' WORKER leaf mints a fork at the armed base on the dispatch branch — evidence (git-common-dir + base sha == armed base, not session HEAD) logged to slice notes" },
+  { id = "EX-2", text = "P5 pinned: the claude-arm worker leaf either lands a successful worker_commit with non-null fork_tip (mode B), OR an explicit recorded fall-to-(A) naming the P5 failure reason — a silent degrade is a phase FAILURE" },
+  { id = "EX-3", text = "Workflow-seam escalation DENIED live: a jailed subagent attempting a privileged agent()/Workflow spawn is refused (identity-gate or blanket subagent-deny) and no privileged leaf spawns" },
+  { id = "EX-4", text = "OQ-6 characterised: whether the WorktreeCreate arming hook can point a revive worktree's fork base ref at an existing fork_tip (mechanism 1) or only cwd (mechanism 2 floor) — recorded, deciding which revive path ships in PHASE-14" },
+  { id = "EX-5", text = "A changed agent-def is confirmed live under .claude/agents/ via a reseat path OR a documented manual-placement procedure captured in notes (ISS-216 workaround characterised, not assumed)" },
+  { id = "EX-6", text = "If any load-bearing premise (EX-1/EX-2/EX-3) fails, a design-revisit note is written and the slice returns to /design — no downstream scaffolding against a dead premise" },
+]
+verification = [
+  { id = "VH-1", expects = "Human confirms from logged evidence: the worker fork base == armed base on the dispatch branch (R4), not session HEAD" },
+  { id = "VA-1", expects = "Agent confirms P5 disposition (mode B worker_commit+fork_tip OR recorded fall-to-A) and the Workflow-seam denial both hold from the drive artifacts; records the OQ-6 finding + ISS-216 reseat procedure in notes" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-09 — Testable Rust core: per-phase projection reader + durable
+# ReceiptStatus. Behaviour-preserving (D6, R5). Unchanged by unjail — carried
+# from the retired PHASE-02 verbatim (never executed). No new tool surface yet.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-09"
+name      = "phase_projection reader extract + ReceiptStatus"
+objective = """
+Extract a read-only per-phase projection over {plan, runtime sheet, committed \
+boundaries} and the durable `ReceiptStatus` enum. `run_status` is refactored to \
+DELEGATE its per-phase row construction to the new projection while keeping ALL \
+slice-global aggregate logic (all_completed, guidance, rendering) byte-unchanged \
+— the existing `dispatch status` suite stays green UNCHANGED (behaviour-preservation \
+gate, R5). `ReceiptStatus` covers every non-completed state the authorities \
+distinguish: NotStarted, InProgress, Blocked (a real compute_next_phases boundary \
++ state::PhaseStatus::Blocked, src/state.rs:45), Completed (⟺ committed boundary \
+row, DURABLE — never the disposable sheet), ConcludeIncomplete (sheet=completed ∧ \
+boundary missing), Unknown (malformed sheet, fail-loud). No silent collapse to \
+NotStarted. phase_projection + ReceiptStatus are DEFINED in src/dispatch.rs, \
+co-located with run_status, so the VT keyword floor resolves in the test_file."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-08 exit criteria met (unjail approach greenlit)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A read-only phase_projection fn yields one row per planned phase from {plan, sheet, committed boundaries}; run_status delegates to it for phase_rows" },
+  { id = "EX-2", text = "ReceiptStatus enum exists with all six variants; Completed is sourced from the committed boundary row, never the disposable sheet" },
+  { id = "EX-3", text = "Blocked and Unknown are derived and distinct from NotStarted/InProgress; malformed sheets fail loud as Unknown" },
+  { id = "EX-4", text = "Existing dispatch status test suite passes UNCHANGED (behaviour-preservation)" },
+  { id = "EX-5", text = "phase_projection AND the ReceiptStatus enum (incl. ConcludeIncomplete and Unknown) are defined in src/dispatch.rs, co-located with run_status" },
+]
+verification = [
+  { id = "VT-1", expects = "phase_projection branch table: boundary-present⇒Completed; sheet-completed∧no-boundary⇒ConcludeIncomplete; sheet-blocked⇒Blocked; malformed⇒Unknown; in_progress/none⇒InProgress/NotStarted", test_file = "src/dispatch.rs", keywords = ["phase_projection", "ReceiptStatus", "ConcludeIncomplete", "Unknown"], waived = false },
+  { id = "VT-2", expects = "run_status delegates per-phase rows to phase_projection; its existing status output is unchanged (behaviour-preservation)", test_file = "src/dispatch.rs", keywords = ["phase_projection", "run_status"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-10 — The three read-only tools + the doctor role/allowlist growth. Grow
+# the conformance ceiling FIRST (3⊆6 green until the defs catch up in PHASE-13).
+# Add the probe role to the marker validator (F1/F5). Unchanged by unjail —
+# carried from the retired PHASE-03.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-10"
+name      = "Read-only funnel tools (phase_receipt / next_ready / authored_divergence) + doctor allowlist growth"
+objective = """
+Ship the three read-only doctrine tools over the PHASE-09 projection, each with \
+CLI + MCP surfaces, and grow the doctor #9 conformance authority to match. \
+(a) `dispatch_phase_receipt{slice,phase}` returns `PhaseReceiptResult = \
+Resolved(core) | CoordRefused(reason)` — truthful on the tip-less refusal path \
+(F3); core carries dispatch_tip distinct from boundary.code_end. (b) \
+`dispatch_next_ready{slice}` wraps the existing compute_next_phases authority \
+(made pub(crate); the slice→rows readiness seam factored value-returning out of \
+run_plan_next so CLI + MCP share it; plan-next output unchanged). (c) \
+`dispatch_authored_divergence{slice}` computes .doctrine/** divergence \
+trunk_ref..dispatch_tip; trunk_ref resolves from the real authority — \
+`git::trunk_commit` (src/git.rs:1219) / the `[dispatch] deliver_to` ref \
+(run_deliver_to, src/dispatch.rs:669) — NOT the journal-row printer \
+run_show_journal_trunk_oid (src/dispatch.rs:637), never hardcoded edge; read-only. \
+Grow `allowed_mcp_tokens`: orchestrator += the three tokens; add a ROLE_PROBE arm \
+holding only the three reads; extend the role-marker validator to accept `probe`. \
+Register all three tools in tools.rs. STD-001: tool tokens are named constants."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-09 landed: phase_projection + ReceiptStatus green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch_phase_receipt returns PhaseReceiptResult (Resolved|CoordRefused); every resolve_coord refusal (unknown-slice|ambiguous|stale) surfaces as CoordRefused with no fabricated tip" },
+  { id = "EX-2", text = "dispatch_next_ready returns compute_next_phases output verbatim; no parallel readiness logic" },
+  { id = "EX-3", text = "dispatch_authored_divergence returns {diverged, compared_ref, drifted_paths?}; compared_ref resolved from the dispatch trunk authority, never hardcoded edge; read-only (no coord mutation)" },
+  { id = "EX-4", text = "allowed_mcp_tokens grows: orchestrator gains the 3 read tokens (named consts); a probe role holds exactly the 3 reads; the marker validator accepts worker|orchestrator|probe" },
+  { id = "EX-5", text = "All three tools registered in tools.rs; doctor check #9 stays green (ceiling: existing defs' 3 tokens ⊆ grown allowlist)" },
+  { id = "EX-6", text = "Behaviour-preservation: the existing worker/orchestrator agent-conformance tests pass UNCHANGED — the probe arm + marker extension add cases, never alter the worker/orchestrator verdicts" },
+  { id = "EX-7", text = "compute_next_phases is pub(crate); a value-returning readiness seam is factored out of run_plan_next; dispatch_next_ready and dispatch plan-next both consume it (plan-next CLI output unchanged)" },
+  { id = "EX-8", text = "dispatch_authored_divergence resolves compared_ref from git::trunk_commit / the [dispatch] deliver_to ref — never run_show_journal_trunk_oid (dispatch.rs:637), never hardcoded edge" },
+]
+verification = [
+  { id = "VT-1", expects = "dispatch_phase_receipt: Resolved carries a real dispatch_tip; each resolve_coord refusal yields CoordRefused(reason) with no tip", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_phase_receipt", "PhaseReceiptResult", "CoordRefused"], waived = false },
+  { id = "VT-2", expects = "dispatch_next_ready agrees with compute_next_phases on shared fixtures", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_next_ready", "compute_next_phases"], waived = false },
+  { id = "VT-3", expects = "dispatch_authored_divergence: diverged true iff .doctrine/** differs trunk_ref..dispatch_tip; compared_ref = resolved trunk authority", test_file = "src/mcp_server/dispatch.rs", keywords = ["dispatch_authored_divergence", "compared_ref"], waived = false },
+  { id = "VT-4", expects = "allowed_mcp_tokens grows orchestrator by 3 reads + adds a probe arm; marker validator accepts probe; doctor #9 green on current defs", test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "allowed_mcp_tokens", "TOOL_DISPATCH_PHASE_RECEIPT"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-11 — Nomination + spawn-gate hook config (the UNJAIL security machinery,
+# §5.6). Ships the config DATA + install seeding FIRST, so PHASE-12's I1
+# doctor check has real config to green against (grow-then-conform, mirrors F1).
+# I2: config lives outside every jail. NEW under unjail — no confined analogue.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-11"
+name      = "Nomination + spawn-gate hook config (SubagentStart allowlist / PreToolUse gate / SubagentStop hygiene)"
+objective = """
+Author the closed-loop nomination + spawn-gate hook config that makes the \
+orchestrator safely nominated-unjailed (§5.6), and seed it. (1) NOMINATE: a \
+`SubagentStart(dispatch-orchestrator)` command hook writes the spawned agent_id \
+to a PassThrough allowlist at a FIXED, out-of-jail path ($CLAUDE_PROJECT_DIR- \
+resolved, never cwd-relative — the hook cwd is the spawned tree); sync-blocking so \
+the entry lands before the orchestrator's first PreToolUse. (2) GATE: a PreToolUse \
+matcher over BOTH spawn seams (Agent AND Workflow) DENIES a spawn iff `caller \
+agent_id present ∧ caller ∉ allowlist ∧ subagent_type ∈ privileged deny-set` — the \
+deny-set IS the one authored nomination-eligible list (I1, single source). Until \
+OQ-4 proves the Workflow seam carries caller identity, the Workflow matcher denies \
+Workflow to ANY caller with a present agent_id (blanket subagent-deny, fail-safe). \
+(3) HYGIENE: a SubagentStop matcher removes the entry (fires awaited, tree-intact). \
+(4) I2: the allowlist + hook config live at a main-thread-only-writable path, \
+outside every worktree jail. Fail-safe: a missed SubagentStart leaves the \
+orchestrator JAILED (visible functional failure, never an escape). Seed the config \
+via `doctrine install` (or the documented ISS-216 placement from PHASE-08)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-08 EX-3 held (Workflow-seam denial proven live) + EX-5 (reseat/placement characterised)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SubagentStart(dispatch-orchestrator) hook writes the spawned agent_id to the PassThrough allowlist at a fixed $CLAUDE_PROJECT_DIR-resolved out-of-jail path; sync-blocking (lands before first PreToolUse)" },
+  { id = "EX-2", text = "A PreToolUse matcher covers BOTH the Agent and Workflow seams and denies caller-agent_id-present ∧ caller∉allowlist ∧ type∈deny-set; the deny-set is the single authored nomination-eligible list (I1)" },
+  { id = "EX-3", text = "The Workflow-seam matcher denies Workflow to any caller with a present agent_id (blanket subagent-deny, fail-safe) until OQ-4 relaxes it to the identity-gate" },
+  { id = "EX-4", text = "A SubagentStop matcher removes the agent_id entry (awaited, tree-intact); an absent allowlist entry never grants PassThrough" },
+  { id = "EX-5", text = "I2: the allowlist + hook config path is writable only by the main thread, outside every worktree jail (worktree-jail Bash deny + import R-5 belt on .claude/); a worker cannot nominate" },
+  { id = "EX-6", text = "The config is seeded by doctrine install OR the documented manual-placement procedure (PHASE-08/ISS-216); the live path is confirmed present" },
+]
+verification = [
+  { id = "VA-1", expects = "Agent inspects the shipped hook config: SubagentStart writes agent_id to the fixed out-of-jail path; PreToolUse deny-gate covers Agent AND Workflow with the single deny-set; Workflow blanket-denies present-agent_id callers; SubagentStop removes the entry; I2 path is outside every jail" },
+  { id = "VH-1", expects = "Human confirms (from PHASE-08 evidence + the seeded config) the fail-safe posture: a missed nomination leaves the orchestrator jailed, never escalated; the config seats live" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-12 — Conformance that MECHANIZES the unjail invariants (RV-258 F-1/F-5).
+# The I1 seam-symmetry doctor check (validates PHASE-11's config) + the wrong-base
+# revive rejection test. NEW under unjail. "Containment by grant, CHECKED" (§4).
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-12"
+name      = "I1 seam-symmetry doctor check + wrong-base revive rejection test"
+objective = """
+Mechanize the two unjail safety invariants so they cannot silently rot. \
+(1) I1 SEAM-SYMMETRY (a doctor #9-sibling over the shipped hook config, \
+Error-severity, RV-258 F-1): fails on EITHER (a) a `SubagentStart` nomination \
+`subagent_type` NOT in the PreToolUse gate deny-set (nomination ⊄ gate), OR \
+(b) a known spawn seam in the seam registry (SEAM_REGISTRY = Agent, Workflow) with \
+NO PreToolUse matcher at all — because nomination ⊆ gate is NECESSARY, not \
+SUFFICIENT; an ungated seam bypasses the deny-set entirely. Introduce \
+`check_spawn_seam_symmetry` + `SEAM_REGISTRY` in src/doctor_checks.rs. \
+(2) WRONG-BASE REVIVE REJECTION (RV-258 F-5): a revive whose delta does NOT descend \
+from the re-stamped `fork_tip` base is rejected BEFORE any tip moves — under (B) by \
+`worker_commit`'s existing HEAD==base ∧ single-parent==base check \
+(src/mcp_server/worker_commit.rs:109,263) exercised with a revive-base case; the \
+guarantee lives in the base-check, never in prompt obedience. No architecture \
+change — both checks assert what already exists or ships as data in PHASE-11."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-11 landed: the nomination + spawn-gate hook config exists for the seam check to read" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "check_spawn_seam_symmetry (a doctor #9-sibling) reds Error on (a) nomination ⊄ gate and (b) any SEAM_REGISTRY seam lacking a PreToolUse matcher; the shipped hook config passes BOTH conditions" },
+  { id = "EX-2", text = "SEAM_REGISTRY enumerates Agent and Workflow; a future seam added without a matcher reds the check (gated-not-forgotten)" },
+  { id = "EX-3", text = "A wrong-base revive (delta not descending from the re-stamped fork_tip) is rejected before any tip moves — proven by worker_commit's HEAD==base ∧ single-parent==base check, exercised with a revive-base test case; no test relies on the worker obeying a reset prompt" },
+]
+verification = [
+  { id = "VT-1", expects = "seam-symmetry check: a nomination with no gate entry reds (a); a SEAM_REGISTRY seam with no matcher reds (b); the shipped config passes both", test_file = "src/doctor_checks.rs", keywords = ["check_spawn_seam_symmetry", "SEAM_REGISTRY", "Workflow"], waived = false },
+  { id = "VT-2", expects = "worker_commit rejects a revive commit whose single parent != the re-stamped fork_tip base, before any tip moves", test_file = "src/mcp_server/worker_commit.rs", keywords = ["fork_tip", "base"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-13 — Authored agent defs + install seeding. Defs can now list the new
+# tokens (allowlist grown in PHASE-10 ⇒ 6⊆6 green). New dispatch-probe.md doubles
+# as the claude-arm bootstrap O₀ (read-only, no nomination — least privilege).
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-13"
+name      = "Agent defs (dispatch-probe + orchestrator allowlist) + install seeding"
+objective = """
+Author the agent defs the unjail driver spawns, and make them installable. \
+(a) New `install/agents/claude/dispatch-probe.md` — doctrine-role: probe; tools: \
+Read/Grep/Glob + the three read-only MCP tokens ONLY (no Write/Edit/Bash/Agent) \
+(F5). It serves BOTH the closing divergence probe AND the claude-arm bootstrap O₀ \
+(prep-only, read-only ⇒ no nomination, one fewer privileged spawn per drive). \
+(b) `install/agents/claude/dispatch-orchestrator.md` gains the three read-only MCP \
+tokens alongside the funnel tokens (nominated-unjailed; NO Agent tool — the \
+workflow is spawn authority). (c) src/install.rs seeds the new dispatch-probe \
+asset + the workflows leg (install enumerates hardcoded assets today; the broad \
+src/** scope-relevant selector covers it). doctor check #9 stays green on all \
+three defs (each def's mcp tokens ⊆ its role allowlist)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-10 landed: tools registered, allowlist grown, probe role known to doctor" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/agents/claude/dispatch-probe.md exists: doctrine-role: probe, MCP tokens = exactly the three reads, NO raw Write/Edit/Bash/Agent" },
+  { id = "EX-2", text = "dispatch-orchestrator.md tools: lists the three new read-only MCP tokens alongside the funnel tokens; no Agent tool" },
+  { id = "EX-3", text = "doctor check #9 green on all three defs (worker, orchestrator, probe) — each def's mcp tokens ⊆ its role allowlist" },
+  { id = "EX-4", text = "src/install.rs seeds the dispatch-probe agent-def asset + the install/workflows/ seeding leg (or EX-4 is narrowed to the documented manual placement and the install claim struck)" },
+]
+verification = [
+  { id = "VT-1", expects = "doctor conformance: probe + orchestrator + worker defs all pass check #9 with the grown allowlist", test_file = "src/doctor_checks.rs", keywords = ["ROLE_PROBE", "agent_conformance"], waived = false },
+  { id = "VT-2", expects = "src/install.rs registers the dispatch-probe agent-def asset (and the workflows seeding leg)", test_file = "src/install.rs", keywords = ["dispatch-probe"], waived = false },
+  { id = "VA-1", expects = "Agent inspects dispatch-probe.md: doctrine-role probe, exactly the three read MCP tokens, no raw write/bash/agent tools" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-14 — The /drive-slice UNJAIL driver. Replaces the retired confined POC.
+# Alternating orchestrator/worker two-job loop, WorkReceipt/HopReceipt schemas
+# (fixup XOR prep), bounded revive-on-fork, named HALT vocab, budget loop.
+# Authored home install/workflows/drive-slice.js — a design-target selector.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-14"
+name      = "/drive-slice unjail driver (alternating O/W two-job loop, HopReceipt/WorkReceipt, bounded revive)"
+objective = """
+Author `install/workflows/drive-slice.js` — the durable serial loop that is the \
+sole spawn authority, alternating nominated-unjailed orchestrators + jailed workers \
+(§5.1/§5.4). No two orchestrators back-to-back: each interior O does TWO jobs in \
+ONE agent — DISPOSE W_i (import→verify→commit→conclude→reap; a fixable defect emits \
+a fixup verdict) then PREP W_{i+1}. Boundaries degenerate: O₀ preps-only (claude \
+arm = read-only dispatch-probe, no nomination; pi arm = nominated-unjailed for \
+`git worktree add`), terminal O disposes-only. Schemas (harness `schema:`): \
+`WorkReceipt {fork_tip:string|null, summary}`; `HopReceipt` = dispose half \
+(PhaseReceiptCore + verify + halt_reason? + fixup?) + prep half + next_ready, with \
+`fixup` XOR `prep` enforced by the schema oneOf. Bounded revive-on-fork \
+(MAX_FIXUP=2): fresh worker agent() re-committing via worker_commit re-stamped to \
+fork_tip (mechanism 2 floor; mechanism 1 iff PHASE-08 OQ-6 proved it); the (A) \
+import path adds a disposing-O parent-chain verify (coord:revive-wrong-base). \
+Named HALT vocab (funnel:/coord: re-exported from Rust closed vocabs; script-local \
+HALT table incl. PREP_INCOMPLETE — the A1 belt: null prep ∧ non-empty next_ready \
+⇒ halt). Budget loop degrades gracefully on null total. Never auto-merges (SL-199 \
+§D). F1 harness contract: pure-literal meta, top-level body, scriptPath invoke. \
+F2: parse args (may be JSON string), validate positive-integer slice, halt \
+fail-closed. Register the committed home as a design-target selector BEFORE commit."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-13 landed: dispatch-probe + orchestrator defs live; PHASE-11 nomination hooks seated; PHASE-10 read-only tools callable" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/workflows/drive-slice.js exists: alternating O/W two-job loop (one O between two workers, dispose + prep), O₀ preps-only, terminal O disposes-only — never two orchestrators back-to-back" },
+  { id = "EX-2", text = "WorkReceipt + HopReceipt schemas present; fixup XOR prep enforced by the schema oneOf (harness rejects a receipt carrying both); the loop assumes the exclusivity the schema guarantees" },
+  { id = "EX-3", text = "Bounded revive-on-fork (MAX_FIXUP): revive re-commits via worker_commit re-stamped to fork_tip (mechanism 2 floor; mechanism 1 iff OQ-6); the (A) path verifies the parent chain (coord:revive-wrong-base). Base ENFORCED, never prompt-obeyed" },
+  { id = "EX-4", text = "Named HALT contract: funnel:/coord: re-exported from the Rust closed vocabs; script-local HALT table (incl. PREP_INCOMPLETE, FIXUP_EXHAUSTED); loop references members, no inline literals. The A1 belt fires: null prep ∧ non-empty next_ready ⇒ HALT.PREP_INCOMPLETE" },
+  { id = "EX-5", text = "Budget-adaptive loop degrades gracefully under null total; never auto-merges. F1 (pure-literal meta, top-level body) + F2 (positive-integer slice guard, fail-closed) hold" },
+  { id = "EX-6", text = "SELECTOR GATE: install/workflows/drive-slice.js is registered `doctrine slice selector add SL-206 install/workflows/drive-slice.js --intent design-target` BEFORE the script is committed, so conformance reds any drift and does not flag the deliverable undeclared" },
+]
+verification = [
+  { id = "VT-1", expects = "drive-slice.js carries the unjail topology + schemas + revive + HALT contract as source substrings", test_file = "install/workflows/drive-slice.js", keywords = ["HopReceipt", "WorkReceipt", "PREP_INCOMPLETE", "MAX_FIXUP", "Number.isInteger"], waived = false },
+  { id = "VA-1", expects = "Agent confirms by reading the file: alternating O/W two-job loop (O between two workers), fixup XOR prep oneOf, bounded revive re-committing via worker_commit (not prompt-obeyed reset), named HALT (no inline literals), no auto-merge path, pure-literal meta + top-level body, positive-integer slice guard" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-15 — ADR-008 amendment. Governance authoring: the orchestrator-unjail
+# exception + the three amendment-ledger clauses (§5.6, §7 D8). Carries the
+# cost-trajectory memory. In slice scope (slice-206.md Affected surface).
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-15"
+name      = "ADR-008 amendment (orchestrator-unjail exception + seam-symmetry price + steered-O residual)"
+objective = """
+Author the ADR-008 amendment recording the nominated-unjail orchestrator as a \
+sanctioned exception to worker/orchestrator confinement (§5.6, §7 D8). The \
+amendment records three clauses beyond the grant: (a) the CONFINED orchestrator \
+(Mode-B) as a REVERSIBLE escape hatch — no functional loss under Workflow (import \
+already routes via the shipped MCP), revert if seam-symmetry proves unmaintainable; \
+(b) the SEAM-SYMMETRY obligation as the standing price — I1 binds every harness \
+spawn seam to the one deny-set, a permanent duty while the orchestrator runs \
+unjailed, one-time ONLY while conformance-checked (the PHASE-12 doctor check), else \
+re-paid per harness release; (c) the STEERED-ORCHESTRATOR blast radius named out \
+loud — P1/P3/P4 bound jailed→O escalation, NOT O-steered; the worker diff is the \
+attacker-shaped input (fork→O); a nominated-unjailed O has main-thread reach, \
+residual ≈ hand-run /dispatch, mitigated by trusted def + narrow prompt + \
+structured inputs (diffs + typed receipts, not free-form). Draws on \
+mem.concept.dispatch.confinement-posture-cost-trajectory."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-12 landed: the I1 seam-symmetry doctor check exists (the conformance the amendment's clause (b) leans on)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The ADR-008 amendment is recorded against ADR-008 (append, not renumber) and carries all three clauses: (a) confined = reversible escape hatch; (b) seam-symmetry price, conformance-checked; (c) steered-O blast radius named" },
+  { id = "EX-2", text = "The amendment cites the proof provenance honestly: P1/P3/P4 bound jailed→O, not O-steered; no overclaim that the escalation proof covers steering" },
+]
+verification = [
+  { id = "VA-1", expects = "Agent confirms the ADR-008 amendment records the three clauses and the honest proof-scope sentence (jailed→O proven, O-steered residual stated)" },
+  { id = "VH-1", expects = "Human (operator) accepts the ADR-008 amendment — the confinement-posture decision is operator-reserved" },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-16 — Live e2e acceptance (unjail). The full deliverable drives a real
+# multi-phase scratch slice end-to-end; asserts the unjail safety + halt
+# invariants in anger. Supersedes the confined PHASE-05/07.
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-16"
+name      = "End-to-end acceptance drive (unjail)"
+objective = """
+Run the shipped `/drive-slice` against a real multi-phase scratch slice in a \
+dispatch coord tree and assert every load-bearing UNJAIL invariant in anger: \
+phases drive to Completed via typed HopReceipts consumed by the JS loop; the \
+alternating O/W topology holds (one O between two workers, two jobs); an injected \
+red verify halts the loop without auto-merge (SL-199 §D intact, coord tip \
+unchanged); a forbidden review_*/memory_* write attempted from a spawned agent is \
+refused/absent against the INSTALLED def (grant gate runtime probe, F2), exercised \
+as an EXPLICIT standalone step (not inferred from a clean happy-path); the \
+Workflow-seam escalation attempt is denied; the authored_divergence advisory emits \
+(never gates); the budget loop paces under +Nk and runs unmetered under null total. \
+Arming PROVEN: the happy-path boundary.code_start == the pre-arm coord tip B (the \
+worker forked at the armed base, not a Passthrough fresh-fork)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-14 landed (driver live, reseated) + PHASE-13 defs installed; a multi-phase scratch rig on dispatch/<n>; DOCTRINE_BIN serves the slice binary" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A multi-phase scratch slice drives to all-Completed via /drive-slice; each hop returns a valid typed HopReceipt consumed by the JS loop; the alternating O/W two-job topology is witnessed" },
+  { id = "EX-2", text = "An injected red verify (verify.green=false) halts the loop at that phase; NO funnel integrate/auto-merge occurs; the coord tip is unchanged (SL-199 §D boundary intact)" },
+  { id = "EX-3", text = "A forbidden review_*/memory_* write from a spawned agent is refused/absent against the INSTALLED def — exercised as an explicit standalone probe, not inferred from the drive; granted funnel tools are callable" },
+  { id = "EX-4", text = "The Workflow-seam escalation attempt (a jailed subagent spawning a privileged leaf) is denied; no privileged leaf spawns" },
+  { id = "EX-5", text = "authored_divergence advisory emits in the final report and is never acted on; the budget loop paces under +Nk and runs unmetered under null total" },
+  { id = "EX-6", text = "Arming proven: the happy-path HopReceipt boundary.code_start == the pre-arm coord tip B (armed fork, not a Passthrough fresh-fork); a mismatch is funnel:unarmed-fork and PHASE-16 is NOT satisfied" },
+]
+verification = [
+  { id = "VH-1", expects = "Human confirms from the drive report: all phases Completed on the happy path via typed receipts; the injected-red run halted at the red phase with no auto-merge and coord tip intact; arming fired (boundary.code_start == pre-arm B)" },
+  { id = "VA-1", expects = "Agent confirms: the standalone forbidden-write probe was refused/absent against the installed def; granted funnel tools callable; the Workflow-seam escalation denied; the divergence advisory emitted without gating; the budget loop paced (+Nk) / ran unmetered (null)" },
+]
+specs        = []
+requirements = []

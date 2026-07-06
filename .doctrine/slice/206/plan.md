@@ -8,11 +8,22 @@ authored in the TOML. Use this for the plan's rationale and sequencing.
 
 ## Overview
 
-Five phases. The deliverable is Rust-primary (three read-only doctrine tools +
-a projection reader + a conformance-authority update) plus an install-templated
-`/drive-slice` reference workflow. The design (`design.md`, RV-255-hardened) is
-canon; this plan sequences it so each phase ends green and the risky premises
-are proven before code depends on them.
+> **↻ UNJAIL REWORK (2026-07-06). PHASE-01..07 below are FROZEN as the confined-model
+> historical record; the live plan is PHASE-08..16 (§ Unjail rework, end of file).**
+> The §5 design re-opened from a *confined* orchestrator to a *nominated-unjailed*
+> one (`unjail-direction.md` P1/P3/P4); PHASE-06/07's coord-root PLACEMENT fix is
+> RETIRED by design §5.4. None of the confined design-targets landed — the Rust
+> emitter, `ROLE_PROBE`, `dispatch-probe.md`, and `install/workflows/drive-slice.js`
+> do not exist (the POC lived only in gitignored copies). PHASE-08..16 build the
+> unjail design from the Rust down. Read 01-07 for the *why* (confined→unjail); read
+> 08-16 for the *what*.
+
+The deliverable is Rust-primary (three read-only doctrine tools + a projection
+reader + a conformance-authority update + the I1 seam-symmetry check) plus the
+nomination/spawn-gate hook config and an install-templated `/drive-slice`
+reference workflow. The design (`design.md`, RV-255 + RV-258-hardened) is canon;
+this plan sequences it so each phase ends green and the risky premises are proven
+before code depends on them.
 
 ## Sequencing & Rationale
 
@@ -160,3 +171,94 @@ the authored driver returned four findings; disposition:
   cannot judge semantics or an absence; that is why VA-1 (isolation absent, meta
   literal, no `run` export) is the real gate. Standard doctrine VT-floor + VA split;
   no change.
+
+## Unjail rework — PHASE-08..16 (the live plan)
+
+The §5 design re-opened from confined to nominated-unjail after PHASE-06/07 proved
+a Workflow `agent()` leaf cannot drive committing dispatch (three walls: no `Agent`
+tool, RO `.git` + no `DispatchRecord`, worktree-jail deny). The confined *placement*
+fix (drop `isolation`, coord-root assert) was the last confined attempt; the
+replacement is a durable workflow loop spawning **alternating nominated-unjailed
+orchestrators + jailed workers**, escalation closed at the `PreToolUse` spawn seam
+(P1/P3/P4). PHASE-01..07 are frozen: they carry the confined criteria and the
+executed 06/07 status, and they are the legible record of *why* unjail. Nothing
+from them landed as shipped code, so 08..16 rebuild from the Rust down.
+
+**Why PHASE-08 first (empirical gate, unjail premises).** The unjail design rests
+on premises confined PHASE-01 never tested: a *worker* leaf (not a nested confined
+orchestrator) forks at the armed base; P5 — which handoff mode a claude worker leaf
+runs (B `worker_commit` vs A import); the **Workflow-seam** escalation is denied
+(OQ-4); the revive-base mechanism (OQ-6). All cheap to test with shipped machinery
++ the nomination hooks; a failure in a load-bearing premise (fork-at-base, P5,
+seam-denial) sends the work back to `/design`, not forward. No receipt code.
+
+**Why the Rust core (09/10) is unchanged and precedes everything else.** The
+projection reader + `ReceiptStatus` (PHASE-09) and the three read-only tools +
+doctor allowlist growth (PHASE-10) are *identical* under confined or unjail — they
+read committed coord truth and add no write surface. They carry the
+behaviour-preservation gate (R5: `run_status` output byte-identical) and the
+conformance-ceiling ordering proof (grow `allowed_mcp_tokens` to 6 first, so the
+defs' 3 tokens stay `3 ⊆ 6` green until PHASE-13 lists them — reverse it and the
+def false-reds against a stale allowlist, RV-255 F1).
+
+**Why the security machinery splits into PHASE-11 (config) then PHASE-12 (checks).**
+The nomination + spawn-gate hook config is *data* (SubagentStart allowlist, a
+PreToolUse deny-gate over both the `Agent` and `Workflow` seams, SubagentStop
+hygiene, the I2 out-of-jail path). The I1 seam-symmetry doctor check is *code* that
+reads that config and reds if nomination ⊄ gate **or** a seam registry entry lacks
+a matcher (RV-258 F-1: nomination ⊆ gate is necessary, not sufficient). Config
+lands first so the check has a real shipped config to green against — the same
+grow-then-conform discipline as the allowlist. PHASE-12 also pins the wrong-base
+revive rejection (RV-258 F-5): the guarantee lives in `worker_commit`'s existing
+`HEAD==base` ∧ single-parent-`==base` check exercised with a revive-base case, never
+in a worker obeying a `git reset` prompt.
+
+**Why the driver (PHASE-14) waits on defs + hooks + tools.** `/drive-slice` spawns
+`dispatch-probe` (bootstrap O₀ + closing divergence probe) and `dispatch-orchestrator`
+(nominated-unjailed), calls the three read-only tools, and relies on the nomination
+hooks to flip the orchestrator to `PassThrough`. So it lands after PHASE-13 (defs),
+PHASE-11 (hooks), and PHASE-10 (tools). It is the one authored `.js` deliverable and
+its home `install/workflows/drive-slice.js` is registered `--intent design-target`
+before commit (else audit reds it undeclared — the drift RV-258 F-4 flagged).
+
+**Why the ADR-008 amendment is its own phase (PHASE-15).** The confinement-posture
+change is governance the operator reserves; it carries three clauses (reversible
+escape hatch, seam-symmetry price conformance-checked, steered-O blast radius named)
+and leans on the PHASE-12 doctor check for clause (b)'s "conformance-checked, not
+prose". Isolating it keeps the governance authoring — and its `VH` operator
+acceptance — a clean gate, unmixed with the driver's mechanics. Draws on
+`mem.concept.dispatch.confinement-posture-cost-trajectory`.
+
+**Why PHASE-16 is a separate live acceptance.** The unjail safety claims —
+halt-on-red without auto-merge, a forbidden write refused against the *installed*
+def (F2 runtime leg, exercised as an explicit standalone probe, not inferred from a
+clean drive — RV-258/GPT residual), the Workflow-seam escalation denied, arming
+proven (`boundary.code_start == pre-arm B`), the budget loop pacing — only prove out
+in a real drive of the full deliverable.
+
+### Touch-set delta under unjail
+
+- **`install/workflows/drive-slice.js` IS now a design-target** (OQ-1 resolved,
+  RV-258 F-4) — registered before the PHASE-14 commit, so conformance reds any
+  drift from the alternating-unjail topology.
+- **New design-target work in `src/doctor_checks.rs`** beyond the allowlist growth:
+  `check_spawn_seam_symmetry` + `SEAM_REGISTRY` (PHASE-12). Already a selector.
+- **New non-Rust surface** — the nomination/spawn-gate hook config (PHASE-11) and
+  its seeding leg in `src/install.rs`; the hook config's authored home is registered
+  when it lands, out of every jail (I2). `src/install.rs` rides the `src/**`
+  scope-relevant selector.
+- **`dispatch-worker.md` stays scope-relevant** (behaviour-preservation, doctor #9
+  green unchanged) — unjail does not touch the worker's confinement.
+
+### Verification modes
+
+- **PHASE-08/16 empirical** (VH/VA) — harness fork mechanics, live grant + seam
+  enforcement, no-auto-merge, arming are not unit-testable.
+- **PHASE-09/10/12 carry the structured VT floor** (the testable Rust core +
+  conformance checks).
+- **PHASE-11 is VA/VH** — the hook config is JS/JSON, not cargo-testable; its
+  mechanical gate is the PHASE-12 doctor check + PHASE-08's live proof.
+- **PHASE-13 mixes** a conformance VT + an install VT + inspection VA.
+- **PHASE-14 is VT (source-substring floor) + VA (topology/semantics gate)** — the
+  driver is `.js`, judged by inspection over the substring floor.
+- **PHASE-15 is VA + VH** — governance authoring, operator-accepted.
