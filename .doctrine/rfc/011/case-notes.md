@@ -713,3 +713,15 @@ em-dash/hyphen mismatch inside a long multi-line block — a re-Read of the exac
 4-line region + a tighter anchor fixed it (one wasted Edit call). Long verbatim
 old_string blocks over prose with em-dashes are fragile match targets; prefer a
 short unique anchor line.
+
+[dispatch; SL-206-PHASE-08-derisk]
+Token-cost: mis-read the worker_commit commit path early — concluded a workflow
+worker "falls to mode-A" from mem_019f361983 (unknown-agent), not noticing that
+probe was an UNARMED/benign fork. Spent ~2 exchanges building the fall-to-A framing
+before the operator's one-line correction ("worker_commit is an mcp tool") snapped
+it: MCP = server-side/unconfined, RO .git irrelevant; the wall was arming, not
+capability. Root cause: the two failure modes (unarmed→unknown-agent vs
+armed→resolves) live in adjacent memories whose titles both say "workflow leaf
+cannot commit" — the discriminator (armed cwd) is buried in the body. A future
+agent re-reading those memories will re-make the same misread. Signposting the
+armed/unarmed discriminator in the memory titles would cut it.
