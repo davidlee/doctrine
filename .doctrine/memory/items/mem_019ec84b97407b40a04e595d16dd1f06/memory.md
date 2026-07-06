@@ -1,14 +1,27 @@
 # SubagentStart stamp hook silently no-fires for nested-session dispatch workers
 
-> **⚠ CONTRADICTED under different conditions (SL-206 P1b, 2026-07-06).** A
-> `SubagentStart(dispatch-orchestrator)` hook **DID fire** for an `Agent`-tool
-> spawn from a child-session main thread (`CLAUDE_CODE_CHILD_SESSION=1`) — see
-> [[mem.fact.claude.subagentstart-fires-from-child-session]]. That run used a
-> *different matcher* (`dispatch-orchestrator`, not the `dispatch-worker` stamp
-> below) and a later harness build (hooks now hot-reload). So this no-fire is
-> **not a reliable invariant** — treat it as version-fragile / unresolved, and
-> **do not build a security boundary on "child session ⇒ no SubagentStart."**
-> The true no-fire condition is unknown-pending a nested subagent→subagent probe.
+> **⚠ SUPERSEDED — the no-fire claim below does not reproduce (SL-206, 2026-07-06).**
+> The original SL-068 observation (2026-06-15) is retained below as a historical
+> note, but the operative claim — "`SubagentStart` silently no-fires for
+> nested/child-session spawns" — is **refuted by two independent SL-206 probes**
+> and must NOT be relied on (least of all as a security invariant):
+> - **P1b** (agent `a418b827a5f402ec4`): a `SubagentStart(dispatch-orchestrator)`
+>   hook **fired** for an `Agent`-tool spawn from a child-session main thread
+>   (`CLAUDE_CODE_CHILD_SESSION=1`). → [[mem.fact.claude.subagentstart-fires-from-child-session]].
+> - **P0** (nested worker `afd0c43fe5815021e`): a `SubagentStart` observer
+>   **fired for a nested, subagent-initiated `dispatch-worker` spawn** — the SAME
+>   matcher family this note claims no-fires. Payload carried no spawner id.
+>   → [[mem.fact.claude.subagentstart-fires-nested-no-parent-discriminator]].
+>
+> Net: two firings, zero reproductions of the no-fire. Treat the no-fire as a
+> **version-specific artifact** of the SL-068 harness build, not an invariant.
+> **Do not build a security boundary (e.g. SL-206 A2 nomination) on it** — use an
+> explicit intent token instead. Cited stale by `unjail-direction.md` §4.3,
+> `RFC-018` §1d, and dispatch-mechanics reasoning — those should read this
+> supersession, not the claim below.
+
+---
+_Historical (SL-068, 2026-06-15) — the observation as recorded; now superseded above:_
 
 On the claude `/dispatch` arm, the matcher-scoped `SubagentStart` hook
 (`doctrine worktree marker --stamp-subagent`, matcher `dispatch-worker`) does

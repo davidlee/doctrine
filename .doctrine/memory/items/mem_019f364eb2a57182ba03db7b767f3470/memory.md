@@ -15,6 +15,18 @@ payload alone (`CLAUDE_CODE_CHILD_SESSION` is also not a reliable discriminator 
 worker `afd0c43fe5815021e` (subagent-initiated). Both fired; neither payload named
 its spawner. Preserved: `scratchpad/p0-subagentstart.log`.
 
+**Field-diff of the two entries (checked 2026-07-06) — no lineage discriminator.**
+`session_id`, `transcript_path`, `prompt_id`, `hook_event_name` are **IDENTICAL**
+across top-level and nested. Only `agent_id`, `agent_type`, and `cwd` differ; there
+is no `parent_agent_id` / depth / `spawned_by`, and **no `env` in the payload**.
+The `cwd` difference is an **isolation artifact** (the worker was
+`isolation:worktree`), NOT a spawner signal — a *no-iso* nested spawn inherits the
+parent's cwd, and the escalation grandchild (no-iso, `dispatch-orchestrator`-typed)
+lands at the jailed parent's cwd. So a cwd-based nomination gate is spoofable. The
+hook's *process* env (`CLAUDE_CODE_CHILD_SESSION=1`) was constant session-wide and
+also does not distinguish top-level from nested. ⇒ nomination cannot gate on any
+payload/env identity; only an out-of-jail intent token discriminates.
+
 **Security consequence for SL-206 A2 nomination.** An unjail allowlist keyed on
 `agent_type`-match alone (via `SubagentStart`) auto-nominates **any**
 `dispatch-orchestrator`-typed spawn — including one a *jailed* `Agent`-holder
