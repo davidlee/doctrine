@@ -242,6 +242,31 @@ unknown: the full funnel (`dispatch_import`→verify→conclude) via server-side
 untested end-to-end but Mode-B-proven. Base-health aside: **dispatch/209 is red**
 (test exit 101) — the SL-209 rig base needs a green before any real drive.
 
+### ▶ P3 RESULT — PreToolUse(Agent) spawner-id probe — RAN 2026-07-06 (PASS)
+
+Probe: observer matcher `Agent` on `PreToolUse`; nested spawn
+`main → spawner(general-purpose) → leaf`. Rig preserved:
+`scratchpad/p3-pretooluse-agent.{log,sh}`; torn down after (matcher + hook removed).
+
+- **Main-thread Agent call → `agent_id="<NONE>"`** (outer entry), and
+  **subagent-initiated call → `agent_id="a1904cf1da408e13e"`** (= the spawner's own
+  id, inner entry). `tool_input.subagent_type` present in **both**. So the spawner
+  identity that `SubagentStart` lacks (P0 Q1) **is present one seam earlier**, at
+  `PreToolUse(Agent)`.
+- **Held under `CLAUDE_CODE_CHILD_SESSION=1`** — the child-session env did NOT leak
+  an `agent_id` onto the main-thread call. New `Agent` matcher **hot-reloaded**.
+  ([[mem.fact.claude.pretooluse-agent-carries-spawner-id]].)
+
+**Net — the arming token is no longer required.** §5's escalation hole (P0 Q1)
+closes with a **PreToolUse(Agent) spawn-gate** ("Option A"): deny the spawn iff
+`agent_id present ∧ caller ∉ allowlist ∧ subagent_type ∈ privileged-set`. This is
+cheaper and stronger than the single-slot arming token (which only compensated for
+`SubagentStart`'s missing parentage) — and it closes escalation at the source, so
+`SubagentStart` type-match becomes trustworthy again. Same gate hardens the shipped
+`dispatch-worker` provisioning matcher (escalatable today, bounded) and gives
+IMP-269 `/fork` its discriminator. **Q2 (/fork PreToolUse behavior) un-probed —
+informational, not load-bearing; Option A holds either way.**
+
 ## 7. Open, and what re-opens `design.md`
 
 - **OQ-A2a — A1 vs A2.** Is the one-spawn subagent orchestrator (A2) worth the

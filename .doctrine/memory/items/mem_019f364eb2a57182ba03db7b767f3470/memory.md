@@ -27,6 +27,15 @@ hook's *process* env (`CLAUDE_CODE_CHILD_SESSION=1`) was constant session-wide a
 also does not distinguish top-level from nested. ⇒ nomination cannot gate on any
 payload/env identity; only an out-of-jail intent token discriminates.
 
+**[Refined — SL-206 P3, 2026-07-06.]** The "only a token" clause is true of the
+`SubagentStart` payload — but **one seam earlier**, `PreToolUse(Agent)` **does**
+carry the caller's `agent_id` (present iff subagent-initiated, absent for
+main-thread), so a **spawn-gate** discriminates the spawner **without** a token:
+deny iff `agent_id present ∧ caller ∉ allowlist ∧ subagent_type ∈ privileged`.
+Proven under `CLAUDE_CODE_CHILD_SESSION=1` (env does not contaminate). The token
+is therefore no longer the only discriminator for the nomination leg. See
+[[mem.fact.claude.pretooluse-agent-carries-spawner-id]].
+
 **Security consequence for SL-206 A2 nomination.** An unjail allowlist keyed on
 `agent_type`-match alone (via `SubagentStart`) auto-nominates **any**
 `dispatch-orchestrator`-typed spawn — including one a *jailed* `Agent`-holder

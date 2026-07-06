@@ -656,3 +656,30 @@ spawn TOPOLOGY is unproven (who spawns whom, which primitive), probe the spawned
 agent's actual tool grant BEFORE committing a full multi-agent live drive. The
 def's tools: list is NOT authoritative — the spawn PRIMITIVE (Workflow vs Agent
 tool) rewrites it. Cheap capability probes should gate expensive live drives.
+
+[P1-POC; sl206-unjail-p1]
+SL-206 P1 orchestrator-unjail POC. Efficiency wins/losses:
+- WIN: split the POC into a deterministic hook-boundary A/B (P1a — synthetic payload
+  piped straight through the real DOCTRINE_BIN) BEFORE spending a live subagent. Proved
+  the novel code (allowlist->PassThrough) in one cheap Bash call; the subagent (P1b) then
+  only had to confirm integration. Cheaper + more decisive than leading with the agent.
+- NEAR-MISS: the env fact CLAUDE_CODE_CHILD_SESSION=1 + a recorded memory (mem_019ec84b
+  "child session silently no-fires") nearly sent me to build an elaborate multi-turn
+  fallback (background agent + harvest agent_id from a debug log + SendMessage retry) to
+  sidestep an assumed SubagentStart no-fire. Turned out unnecessary — SubagentStart FIRED.
+  Lesson: a fail-safe debug log in the POC leg (traced every agent_id/verdict) was the
+  cheap hedge that would have made the fallback trivial IF needed — worth building the
+  observability up front, but don't pre-build the whole fallback path on a memory's say-so;
+  run the cheap positive test first.
+- Tool friction: memory_record MCP rejected array fields passed as bare scalars (paths/tags
+  must be JSON arrays); one failed call. Minor.
+
+[P0 nested-spawn probe; sl206-unjail-p0]
+worker_commit red-gate refusal (commit-gate-red) returned a ~295k-char detail
+payload: it inlined the ENTIRE `doctrine check commit` transcript — thousands of
+[Prose Citation] unresolved-citation warnings + the full RED test-suite output —
+back through the MCP refusal to the (nested) worker, which then funnelled it to
+the orchestrator, which summarized it up to the main thread. A red-gate refusal
+should return a SUMMARY (gate verdict + first-N failing lines + a pointer), not
+embed the whole transcript. Multiplied across the spawn chain this is a large
+avoidable token sink. Candidate: cap/summarize worker_commit refusal detail.

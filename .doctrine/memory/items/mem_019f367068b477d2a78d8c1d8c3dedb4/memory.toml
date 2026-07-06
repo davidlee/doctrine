@@ -1,0 +1,43 @@
+memory_uid = "mem_019f367068b477d2a78d8c1d8c3dedb4"
+memory_key = "mem.fact.claude.pretooluse-agent-carries-spawner-id"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "PreToolUse(Agent) carries the spawner's agent_id — the parentage discriminator SubagentStart lacks"
+summary = "A PreToolUse hook on matcher Agent carries the caller's agent_id iff a subagent initiated the spawn (absent for main-thread) + tool_input.subagent_type — the spawn-seam discriminator that closes escalation without an arming token (SL-206 Option A)."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = []
+globs = ["src/**/pretooluse*", "src/**/jail/**"]
+commands = []
+tags = ["security", "dispatch", "hooks", "sl-206", "claude-harness"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7f4ded6af4ee867744e9b8968ed5003d13406ded"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b619976a59bbb29e5d0ec85b5dd2e2b11a0c268c3107667d3ea3b74160920b68"
+base_commit = "24b790e8812d65641b554c469e3385c00274970c"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
