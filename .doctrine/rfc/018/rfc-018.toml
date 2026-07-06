@@ -1,0 +1,76 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 18
+slug = "claude-harness-field-notes"
+title = "Claude harness field notes: empirical findings and design-artifact map"
+status = "open"
+created = "2026-07-06"
+updated = "2026-07-06"
+tags = ["claude", "dispatch", "empirical", "field-notes", "harness", "subagents", "workflow", "worktree"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "ADR-006"
+
+[[relation]]
+label = "related"
+target = "ADR-008"
+
+[[relation]]
+label = "related"
+target = "ADR-011"
+
+[[relation]]
+label = "related"
+target = "ADR-012"
+
+[[relation]]
+label = "related"
+target = "PRD-015"
+
+[[relation]]
+label = "related"
+target = "SPEC-012"
+
+[[relation]]
+label = "related"
+target = "SPEC-021"
+
+[[relation]]
+label = "related"
+target = "SPEC-022"
+
+[[relation]]
+label = "related"
+target = "RFC-005"
+
+[[relation]]
+label = "related"
+target = "RFC-006"
+
+[[relation]]
+label = "related"
+target = "RFC-011"
+
+[[relation]]
+label = "related"
+target = "RFC-012"
+
+[[relation]]
+label = "related"
+target = "RFC-016"
+
+[[relation]]
+label = "related"
+target = "SL-206"
+
+[[relation]]
+label = "related"
+target = "SL-209"
+

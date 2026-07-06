@@ -1,0 +1,88 @@
+id    = 257
+slug  = "hostile-design-review-sl-208-subcommand-help-tables"
+title = "Hostile design review: SL-208 subcommand help tables"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "reviewer"
+responder = "designer"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-208"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected one leaf-help policy; observed mutually exclusive pass-through and custom-render requirements"
+detail = "Design evidence: .doctrine/slice/208/design.md:L80-L85 says leaf commands keep clap default and only render our table when the target has visible subcommands. The public target also says leaf commands keep clap default at L50-L52. But the proposed API contract at L127-L130 says leaf commands get an empty table section and borderless options, and the internal adversarial note at L186-L189 says to skip Commands but still render borderless options. The verification item at L178 tests custom leaf output rather than pass-through. These are not harmless wording differences; they define different observable behavior and different interception control flow. Locking this design would leave the implementer guessing whether SL-208 preserves the non-goal or violates it."
+disposition = "fix-now"
+response = """Correct — the design contradicts itself. Intent: leaf commands get the borderless options section but skip the Commands table (they have no sub-subcommands, so there's nothing to table-ify). The "keep clap default" phrase in D3/L80 is wrong — strike it. The pass-through applies only to the Commands section; options are always custom-rendered. Will update D3 and the API contract to say: "Leaf commands get Usage + Options (borderless) only; commands with sub-subcommands also get the Commands table.""""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Expected command-path extraction to be parsed, color-aware, and value-safe; observed argv filtering that mistakes option values for subcommands"
+detail = "Design evidence: .doctrine/slice/208/design.md:L109-L114 proposes deriving the path by filtering every argv token that does not start with '-' and is not 'help'. That is not a command parser. It will treat global option values such as 'never' in 'doctrine --color never worktree --help', path values such as '-p /tmp', and subcommand option values as command path segments. The same snippet passes 'color' and 'term_width' without specifying how they are obtained in the Err arm, despite L53 requiring '--color never' to suppress ANSI. Supporting current seam: src/main.rs:218-L220 already uses the same naive has_real_subcommand predicate. SL-208 extends the broken heuristic into the renderer instead of designing a robust clap-tree/path-resolution strategy."
+disposition = "fix-now"
+response = "Agreed — the argv-filter heuristic is fragile. The correct approach: use clap's command tree, not raw argv. Walk `Cli::command().find_subcommand(path[0])` iteratively down the path, bailing if a segment doesn't resolve. Extract `--color` via a separate parse of global args before path extraction (the global `--color` flag is already parsed by clap before this error arm — but in the `Err(e)` arm we don't have the parsed CLI. Alternative: use `Cli::try_parse_from` with just the global args we need, or read the raw `--color` value from argv manually. Will specify the resolution strategy in the design."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected help requests and missing-subcommand errors to preserve exit semantics; observed design collapses both into successful custom help"
+detail = "Design evidence: .doctrine/slice/208/design.md:L57-L62 frames the DisplayHelp/MissingSubcommand intercept as the single path for custom rendering, and L109-L117 returns Ok(()) after writing help whenever has_real_subcommand is true. The slice scope at .doctrine/slice/208/slice-208.md:L16-L18 explicitly includes MissingSubcommand, but the design never states whether 'doctrine worktree' without a verb remains an error, which exit code it uses, or whether the diagnostic prefix is preserved. That is a behavior contract, not terminal cosmetics. Scripts should not silently get success because the formatter wanted a nicer table."
+disposition = "fix-now"
+response = "Sharp catch. The design collapses DisplayHelp and MissingSubcommand into the same custom-render path, but they have different contracts. Resolution: the custom render applies ONLY to DisplayHelp and DisplayHelpOnMissingArgumentOrSubcommand. MissingSubcommand keeps clap's default (error exit, standard message). The code will match: if `e.kind() == MissingSubcommand` → fall through to `e.exit()` unchanged; if DisplayHelp variants → custom render. This preserves the error contract."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected option rendering to preserve clap's information contract; observed an underspecified homemade formatter that drops generated semantics"
+detail = "Design evidence: .doctrine/slice/208/design.md:L48-L50 promises a two-column Options layout, L72-L75 says arg names are compacted and help text is taken verbatim, and L136-L139 repeats that contract. That is nowhere near enough to preserve clap help semantics: defaults, possible values, value names, required/optional markers, long_about vs help, env/default annotations, headings, global arguments, aliases, positional Arguments vs Options, and after-help text are all generated by clap rather than living in get_help() alone. The sample at L41-L43 includes '[default: auto]' and '[possible values: ...]' but the design never says where those strings come from. The verification table at L174-L180 only checks shape, so this can pass tests while losing user-visible information."
+disposition = "fix-now"
+response = """Fair — "verbatim from get_help()" isn't enough. The compacted arg name must include clap-generated markers: required/optional brackets, value names, default values, possible values, and env var annotations. Approach: instead of building arg display names from individual clap getters, use clap's own `get_long_help()` or `render_help()` for each arg, which already bakes in the full info contract. For the two-column layout, extract the arg's display portion from clap's rendered help (it's the portion before the help text on the first line). This way we reshape the layout without losing information. Will specify the extraction strategy."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected explicit dependency and wrapping design; observed a transitive textwrap assumption and duplicated layout machinery"
+detail = "Design evidence: .doctrine/slice/208/design.md:L199-L205 says to use textwrap::fill and claims textwrap is already available transitively. Cargo.toml does not declare textwrap, and Rust crates cannot just use arbitrary transitive dependencies as direct imports. The Code Impact section L121-L145 also omits the Cargo.toml change. Worse, L147-L152 declares no listing.rs changes and justifies a new inline layout helper in cli.rs; that creates a second table/wrapping implementation beside listing::render_table, bypassing the established RenderOpts/trim/determinism seam from SL-150. This is exactly the parallel implementation the project standards tell us not to grow."
+disposition = "fix-now"
+response = "Two real problems: (1) textwrap isn't a direct dependency — need to add it to Cargo.toml. (2) The options layout duplicates listing.rs machinery. Resolution: add a borderless mode to `listing::render_columns` via a new `ColumnPaint::NoSeparator` or similar, OR accept that the options section is different enough (no │ separators, different alignment) to warrant a lightweight inline helper that still uses RenderOpts for color/term_width but doesn't duplicate the table grid. I'll go with adding `textwrap` as a direct dep and using a thin inline layout that reuses `RenderOpts` but not the grid machinery — it's not table-shaped data, it's key-value padding. Will document the Cargo.toml change and the rationale for not extending listing.rs."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Expected verification to exercise the risky binary intercept; observed tests aimed mostly at the pure renderer"
+detail = "Design evidence: .doctrine/slice/208/design.md:L156-L164 updates snapshot tests by switching from clap render_help() to render_subcommand_help, and L174-L180 adds shape tests around the renderer. The dangerous code is not the happy-path string builder; it is main.rs path extraction, ErrorKind handling, '--color never' parsing, nested help syntax, and exit status. Those are introduced at L95-L117, but the verification plan does not require black-box CARGO_BIN_EXE tests for 'doctrine worktree --help', 'doctrine --color never worktree --help', a depth-2 command, or MissingSubcommand behavior. SL-150 explicitly used black-box golden coverage for human help; SL-208 drops that discipline right where the blast radius moved."
+disposition = "fix-now"
+response = "Correct — the risky code is in main.rs, not the pure renderer. Need black-box integration tests that run the actual binary. Add tests using `assert_cmd` or raw `std::process::Command` that invoke `./target/debug/doctrine worktree --help`, `doctrine --color never worktree --help`, a depth-2 command, and MissingSubcommand. These belong in `tests/` as integration binaries. Will add to the verification plan."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Expected plain-mode terminology to be precise; observed impossible 'plain ASCII' with box-drawing separators"
+detail = "Design evidence: .doctrine/slice/208/design.md:L46-L53 requires subcommand tables to use the box-drawing '│' separator and then says '--color never' produces 'plain ASCII throughout'. '│' is not ASCII. The likely intent is byte-clean/no ANSI, matching listing.rs and SL-150, but the design says something stricter and incompatible with its own sample. This kind of sloppy wording poisons golden tests and gives future maintainers permission to fight over whether plain mode means ASCII fallback or Unicode without escape codes."
+disposition = "fix-now"
+response = """Pedantic and correct. "│" is U+2502 BOX DRAWINGS LIGHT VERTICAL, not ASCII. The intent is "no ANSI escape codes" — same contract as SL-150's listing.rs. Will replace "plain ASCII throughout" with "no ANSI escape codes; box-drawing chars (│) are preserved (no terminal styling, matching the top-level help table).""""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "Expected the subcommands table shape to be pinned; observed sample/output ambiguity around headers and indentation"
+detail = "Design evidence: .doctrine/slice/208/design.md:L35-L39 shows a Commands section with no 'command │ description' header row and two-space-indented rows. But L147-L150 says render_columns and render_table are used as-is for the subcommands table; render_columns always emits a header row, while render_table does not know Column metadata. D4/L87-L90 does not settle which helper owns the final shape. This is exactly the sort of tiny rendering ambiguity that metastasizes into brittle snapshot churn: the sample, the named existing helper, and the target style do not agree. Pin the expected bytes or stop pretending this is designed."
+disposition = "fix-now"
+response = 'The sample matches the top-level help which also has no "command │ description" header row — families are the structure there. For subcommand help, the parent command name IS the context (you just typed `doctrine worktree --help`), so a header row is noise. Resolution: do NOT use `render_columns` directly (it always emits a header). Instead, build the grid manually (no header row, just data rows) and pass to `render_table` directly — mirroring how `render_grouped` builds its grid. This gives us the exact shape in the sample. Will specify this in the design.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
