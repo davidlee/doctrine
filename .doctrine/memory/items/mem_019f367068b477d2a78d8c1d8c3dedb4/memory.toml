@@ -26,12 +26,12 @@ tree = "7f4ded6af4ee867744e9b8968ed5003d13406ded"
 ref_name = "refs/heads/edge"
 checkout_state_id = "b619976a59bbb29e5d0ec85b5dd2e2b11a0c268c3107667d3ea3b74160920b68"
 base_commit = "24b790e8812d65641b554c469e3385c00274970c"
-verified_sha = ""
+verified_sha = "5ee6e9d7844b8d44b308a94b47a2648689d01b44"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-07-06"
 review_by = ""
 
 [trust]

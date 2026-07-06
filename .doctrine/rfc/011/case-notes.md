@@ -694,3 +694,13 @@ targeted observer shim that dumps just the discriminating fields is orders of
 magnitude leaner than routing a full gate transcript through the spawn chain.
 Token lesson: probe the ONE field in question, jq-project the payload at the hook,
 never log the whole stdin blob.
+
+[/design (P4 probe); sl206-p4-spawn-gate]
+P4 active-deny spawn-gate probe: one attacker subagent (~31k tokens, 2 nested
+spawn attempts) proved the escalation-closed property E2E. Same lean shape as P3 —
+jq-project the discriminating fields at the hook, dump one JSON line per decision,
+instruct the attacker to report BLOCKED/SUCCESS verbatim. Total probe cost for the
+full-unjail safety case (P1+P3+P4) stayed small precisely because each probe
+tested ONE seam with a minimal rig, never routed a full transcript. The
+worker_commit ~295k-char refusal (ISS-219) remains the lone outlier — an
+un-truncated gate transcript, not a probe-design choice.
