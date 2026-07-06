@@ -337,6 +337,27 @@ confined orchestrator is correct and proven (SL-199). Corrected path:
 
 </details>
 
+### Placement spike + design delta (2026-07-06)
+Decided §5.4-patch vs slice-reopen empirically. Spike `wkubn99yg` (gitignored
+`.dispatch/placement-spike.js`), driver Bash-cwd parked at coord-209:
+- **Arm A — `agent()` NO isolation:** landed at `/workspace/doctrine/.dispatch/SL-209`,
+  branch `dispatch/209`, `.git` **RO**, coord working tree **RW**. = the SL-199
+  orchestrator placement (`cwd_is_coord_root` would fire). **Placement viable.**
+- **Arm B — `isolation:'worktree'`:** fresh-forked to
+  `.dispatch/SL-209/.worktrees/wf_…-2`, detached `HEAD`. Confirms the §5.4 defect —
+  a fresh fork, never coord-root.
+- Both arms RO `.git` (universal for a jailed linked worktree — by design; server-side
+  MCP does the coord `.git` writes). The ONLY difference is cwd placement.
+- Corroborated (not trusted over the spike): `docs/claude/subagents.md:263`
+  ("a subagent starts in the main conversation's cwd … `isolation: worktree` gives an
+  isolated copy"); `docs/claude/settings.md:339` (`worktree.baseRef` default `head`).
+
+**Design delta landed** (in-slice `/design`, §5.4): PHASE-05 DELTA callout + code fix
+(orchestrator spawn drops `isolation`; F2 slice guard) + §5.5 coord-root invariant +
+§2 diagram. Orchestration model UNCHANGED (confined orchestrator, server-side writes).
+Adversarial re-lock deferred — conferring (operator leans: fold into the revised plan's
+review, not a separate design re-lock). Spike fork reaped; primary on edge; coord 209 clean.
+
 ### Stable state / resume
 - Coord 206 `68743c8b` (PHASE-04, untouched); coord 209 `fa951846` (rig, no phase
   driven); `main`=`fa951846`; edge working tree clean; probe isolation worktrees pruned.

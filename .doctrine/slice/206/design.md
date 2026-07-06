@@ -81,10 +81,10 @@ not by MCP-unreachability.
 ### 5.1 System Model
 
 ```
-Workflow /drive-slice   (JS, harness; args:{slice}; budget pool = live, tree-wide)
+Workflow /drive-slice   (JS; args:{slice}; PRECONDITION: cwd parked at coord-root .dispatch/SL-<n>)
   ├─ bootstrap: planner agent() → next_ready[]        (compute_next_phases authority)
   └─ loop while next_ready non-empty & budget allows:
-       agent(dispatch-orchestrator, isolation:'worktree', schema: PhaseReceipt)
+       agent(dispatch-orchestrator, NO isolation → jailed to coord-root, schema: PhaseReceipt)
           ├─ arm base → dispatch-worker(fork) → import → conclude → reap  [SL-199 as-shipped]
           ├─ call dispatch_phase_receipt{slice,phase}    [NEW, read-only]
           ├─ call dispatch_next_ready{slice}             [NEW, read-only]  (slice-global)
@@ -186,6 +186,46 @@ know them (the fork branch is reaped; verify comes from running tests).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
+> **PHASE-05 DELTA (2026-07-06 — placement correction, evidence-backed).** The
+> original §5.4 spawned the per-phase orchestrator with `isolation:'worktree'`.
+> That is WRONG: `isolation:'worktree'` FRESH-FORKS the orchestrator into a
+> detached `.worktrees/agent-<hex>`, where the SL-199 coord-root arming
+> discriminator (`cwd_is_coord_root ∧ coord_in_dispatch`) never fires — so it
+> cannot arm/fork/import and no phase completes. The confined-orchestrator MODEL
+> is correct and UNCHANGED: the RO shared `.git` is BY DESIGN (SL-199 Mode B,
+> proven — the orchestrator writes coord `.git` only via the server-side MCP funnel
+> tools; "integrity never rests on the confined orchestrator"). The defect was
+> **placement, not permission.** Corrections:
+>
+> 1. **Orchestrator spawn drops `isolation`.** A no-isolation subagent starts in
+>    the driver's current working directory (`docs/claude/subagents.md:263`), so a
+>    driver parked at coord-root places the orchestrator jailed to the COORD TREE
+>    (`dispatch/<n>`, RO `.git`, writable working tree) — exactly SL-199's placement.
+> 2. **Coord-root precondition (fail-closed).** `/drive-slice` MUST be invoked with
+>    cwd parked at the coord tree (`.dispatch/SL-<n>` on `dispatch/<n>`) — the same
+>    "cd into the coord tree" ritual `/dispatch` documents. Because the JS driver has
+>    no shell, the check lives in the orchestrator's FIRST action: it asserts
+>    `pwd == coord-root ∧ branch == dispatch/<slice>` and, on mismatch, returns a
+>    minimal receipt with `halt_reason="coord:not-at-coord-root"` (§5.5). The driver
+>    halts the drive on it like any `coord:<reason>`.
+> 3. **Worker isolation stays def-pinned** to the worker frontmatter (SL-199 delta
+>    A2), NOT the orchestrator's per-call arg — the nested worker forks at B off the
+>    orchestrator's coord-root cwd, and `cwd_is_coord_root` fires for it.
+> 4. **Harness contract (F1) + slice guard (F2).** `meta` is a pure literal and all
+>    drive logic runs in a TOP-LEVEL body (the Workflow tool executes the top level,
+>    never a `run` export; `.claude/workflows/` is not a named registry — invoke by
+>    `scriptPath`). The driver parses `args` (which may arrive as a JSON string),
+>    validates `slice` is a positive integer, and halts fail-closed otherwise; probe
+>    agents never guess a slice.
+>
+> Evidence (do not re-derive): PHASE-05 acceptance drive (notes.md FINDING 3,
+> corrected) + a placement spike — arm A (no isolation, driver parked at coord-209)
+> landed at `.dispatch/SL-209` on `dispatch/209`, RO `.git`, writable working tree
+> (= SL-199 placement); arm B (`isolation:'worktree'`) fresh-forked to a detached
+> `.worktrees/agent-<hex>`. Corroborated by `docs/claude/subagents.md:263` +
+> `settings.md:339` (baseRef default `head`). Durable:
+> `mem.pattern.dispatch.confined-orchestrator-placement-not-permission`.
+
 **Driver loop (JS, `/drive-slice`):**
 
 ```js
@@ -194,6 +234,10 @@ const SOFT_CEILING    = 120_000;  // advisory dumb-zone; planning-only, NEVER ga
 
 let lastActual = null;
 const report = { phases: [], halted: null, divergence: null };
+// F2 slice guard: `args` may arrive as a JSON string (Workflow footgun). Parse,
+// validate a positive integer, halt fail-closed — never let a probe guess a slice.
+const slice = Number((typeof args === 'string' ? JSON.parse(args) : (args||{})).slice);
+if (!Number.isInteger(slice) || slice < 1) throw new Error(`drive-slice: bad slice ${JSON.stringify(args)}`);
 // NB: the script has no shell / no MCP — every doctrine read is via a spawned
 // agent. `planner`/`divergenceProbe` below are lightweight agent() calls granted
 // only the relevant read-only tool, NOT raw JS.
@@ -205,8 +249,14 @@ while (ready.length) {
   if (budget.total && budget.remaining() < est) { report.halted = {reason:'budget-exhausted', phase}; break; }
 
   const before = budget.spent();
+  // PLACEMENT: NO isolation. A no-isolation subagent starts in the driver's cwd
+  // (subagents.md:263); with the driver parked at coord-root the orchestrator is
+  // jailed to the COORD TREE (dispatch/<n>, RO .git, writable working tree) — the
+  // proven SL-199 placement where cwd_is_coord_root fires for the nested worker
+  // fork. isolation:'worktree' would fresh-fork it to a detached .worktrees/agent-<hex>
+  // where arming can never fire. Worker isolation rides the worker frontmatter, not here.
   const r = await agent(orchestratorPrompt(slice, phase),
-                        { isolation:'worktree', schema: PhaseReceipt });
+                        { schema: PhaseReceipt });   // agentType: dispatch-orchestrator
   lastActual = budget.spent() - before;               // adaptive
   report.phases.push(r);
   log(`phase ${phase}: ${lastActual/1000|0}k; soft-ceiling headroom ~${((SOFT_CEILING-lastActual)/1000)|0}k`); // advisory
@@ -297,6 +347,16 @@ exists — D2):
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
+- **Coord-root placement is load-bearing (PHASE-05 delta).** The orchestrator is
+  spawned with NO `isolation`, so it inherits the driver's cwd; the driver MUST be
+  invoked parked at coord-root (`.dispatch/SL-<n>` on `dispatch/<n>`). Only then is
+  the orchestrator jailed to the coord tree (RO `.git`, writable coord working tree)
+  and `cwd_is_coord_root` fires for the nested worker fork (SL-199). Fail-closed: the
+  orchestrator's first action asserts `pwd == coord-root ∧ branch == dispatch/<slice>`
+  and halts with `halt_reason="coord:not-at-coord-root"` on mismatch — a misplaced
+  driver can never silently fork the wrong base. RO shared `.git` is EXPECTED, not a
+  fault: every coord `.git` write is a server-side MCP funnel call, never the
+  orchestrator's own git.
 - **Config lives in the script.** `SEED_PHASE_COST`, `SOFT_CEILING` are named
   constants in `/drive-slice` (harness-side, consumed by JS `budget.*`), NOT
   doctrine config — the Rust emitter never sees `budget.spent()`. No new Rust
