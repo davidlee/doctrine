@@ -167,24 +167,33 @@ async function divergenceProbe(slice) {
 }
 
 function orchestratorPrompt(slice, phase) {
+  // Coord ids/branches are zero-padded 3-digit everywhere in the Rust authority
+  // (`.dispatch/SL-{slice:03}`, `dispatch/{slice:03}` — src/dispatch.rs:583,
+  // src/worktree/coordinate.rs:156, src/mcp_server/dispatch.rs:136). The assert
+  // MUST pad or it false-halts every 1-2 digit slice (SL-7 tree is SL-007).
+  const s3 = String(slice).padStart(3, '0');
   return (
     `You are driving slice ${slice} phase ${phase} through the dispatch funnel from ` +
     `inside its coordination worktree.\n\n` +
     `PLACEMENT PRECONDITION (fail-closed — assert FIRST, before arming, spawning, ` +
     `importing, or concluding anything). Run \`pwd\` and \`git branch --show-current\`. ` +
-    `You MUST be at the slice's coordination worktree root (the .dispatch/SL-${slice} ` +
-    `tree) on branch dispatch/${slice}. If pwd is NOT the coord root OR the branch is ` +
-    `NOT dispatch/${slice} — e.g. you were fresh-forked into a detached agent worktree ` +
+    `You MUST be at the slice's coordination worktree root (the .dispatch/SL-${s3} ` +
+    `tree) on branch dispatch/${s3}. If pwd is NOT the coord root OR the branch is ` +
+    `NOT dispatch/${s3} — e.g. you were fresh-forked into a detached agent worktree ` +
     `where the SL-199 coord-root arming discriminator never fires — DO NOT arm, spawn, ` +
     `import, or conclude. Immediately return a MINIMAL receipt with ` +
     `halt_reason="coord:not-at-coord-root" and stop.\n\n` +
-    `Only when placement holds: arm the base, spawn a worker to execute the phase, ` +
-    `import the delta, conclude the phase, reap the fork, then compose and return a ` +
-    `PhaseReceipt: source its durable core from dispatch_phase_receipt, its readiness ` +
-    `adjunct from dispatch_next_ready, and run the verify command — set verify.green + ` +
-    `failures from the result. On ANY funnel refusal, set halt_reason="funnel:<reason>" ` +
-    `and return a non-Completed receipt; on a coord refusal, return a minimal receipt ` +
-    `with halt_reason="coord:<reason>". Never auto-merge, never land to trunk.`
+    `Only when placement holds: arm the base (capture the armed base oid B), spawn a ` +
+    `worker to execute the phase, import the delta, conclude the phase, reap the fork, ` +
+    `then compose and return a PhaseReceipt: source its durable core from ` +
+    `dispatch_phase_receipt, its readiness adjunct from dispatch_next_ready, and run ` +
+    `the verify command — set verify.green + failures from the result. ARMING CHECK: ` +
+    `confirm the worker forked at the armed base — boundary.code_start MUST equal the B ` +
+    `you armed; if it does not (a silent passthrough fresh-fork, NOT an armed fork), ` +
+    `set halt_reason="funnel:unarmed-fork" and return a non-Completed receipt. On ANY ` +
+    `funnel refusal, set halt_reason="funnel:<reason>" and return a non-Completed ` +
+    `receipt; on a coord refusal, return a minimal receipt with ` +
+    `halt_reason="coord:<reason>". Never auto-merge, never land to trunk.`
   );
 }
 
