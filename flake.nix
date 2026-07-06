@@ -72,6 +72,7 @@
 
         jailEnvOptions = with jailLib.combinators; [
           (try-fwd-env "OPENROUTER_API_KEY")
+          (try-fwd-env "DOCTRINE_BIN")
           (set-env "LD_LIBRARY_PATH" "${lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib]}")
           # No CARGO_TARGET_DIR redirect: each worktree builds into its own
           # in-tree, gitignored `target/` (cargo's default). Per-worktree build
