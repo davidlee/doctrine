@@ -1711,6 +1711,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn agent_conformance_passes_the_shipped_install_agents_tree() {
+        // Live-config regression lock (SL-206 PHASE-13 VT-1), mirroring
+        // `check_spawn_seam_symmetry_passes_the_shipped_hooks_config`: the real
+        // `install/agents/` tree — worker + orchestrator + probe — must satisfy
+        // doctor #9, not a fixture.
+        let findings = agent_conformance_findings(&crate::test_support::repo_root());
+        assert!(
+            findings.is_empty(),
+            "the shipped install/agents/ defs must satisfy agent_conformance: {findings:?}"
+        );
+    }
+
     // ------------------------------------------------------------------
     // SpawnSeamSymmetry tests (#10, SL-206 design §5.6 I1, VT-1)
     // ------------------------------------------------------------------
