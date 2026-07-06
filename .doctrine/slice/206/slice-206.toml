@@ -66,6 +66,26 @@ selector = "src/install.rs"
 intent = "design-target"
 note = "PHASE-04 modifies it (EX-7 install seeding legs); import belt requires design-target to land — upgraded from scope-relevant"
 
+[[selector]]
+selector = "src/worktree/**"
+intent = "design-target"
+note = "PHASE-11 modifies: nominate/denominate + gate legs (worktree module), guard/main exhaustive-match ripple, hooks.json matcher data"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "PHASE-11 modifies: nominate/denominate + gate legs (worktree module), guard/main exhaustive-match ripple, hooks.json matcher data"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+note = "PHASE-11 modifies: nominate/denominate + gate legs (worktree module), guard/main exhaustive-match ripple, hooks.json matcher data"
+
+[[selector]]
+selector = "plugins/doctrine/hooks/hooks.json"
+intent = "design-target"
+note = "PHASE-11 modifies: nominate/denominate + gate legs (worktree module), guard/main exhaustive-match ripple, hooks.json matcher data"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-031"
