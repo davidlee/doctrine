@@ -2753,61 +2753,18 @@ pub(crate) fn render_phase_table(rows: &[(String, String, String)]) -> String {
 pub(crate) fn run_plan_next(path: Option<PathBuf>, slice: u32, json: bool) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
 
-    // 1. Read plan.toml
-    let plan = crate::slice::read_plan(&root.join(".doctrine/slice"), slice)?;
-
-    // 2. Read phase statuses from runtime state
-    let state_dir = crate::state::phases_dir(&root, slice);
-
-    // Build ordered phase+status list
-    let mut rows: Vec<(String, String, String)> = Vec::new();
-    for ph in &plan.phases {
-        let stem = ph.id.to_lowercase();
-        let status = match crate::state::read_phase_status(&state_dir, &stem) {
-            Ok(Some(s)) => s,
-            Ok(None) => "pending".to_string(), // absent tracking file → pending
-            Err(_) => "unknown".to_string(),
-        };
-        rows.push((ph.id.clone(), status, ph.name.clone()));
-    }
-
-    // 3. Compute `next`
-    // Scan in plan order, skip completed/blocked.
-    // First actionable in_progress → only that phase.
-    // First actionable pending → that phase + consecutive pending.
-    let mut next: Vec<String> = Vec::new();
-    let mut found_actionable = false;
-    let mut saw_blocked = false;
-
-    for (id, status, _) in &rows {
-        match status.as_str() {
-            "completed" => {}
-            "blocked" => {
-                saw_blocked = true;
-                if found_actionable {
-                    break; // stop at blocked after we started collecting
-                }
-            }
-            "in_progress" => {
-                if !found_actionable {
-                    next.push(id.clone());
-                    break; // in_progress gates subsequent pending
-                }
-            }
-            _ => {
-                // pending or unknown
-                if !found_actionable {
-                    next.push(id.clone());
-                    found_actionable = true;
-                    // continue for consecutive pending
-                } else if status.as_str() == "pending" {
-                    next.push(id.clone());
-                } else {
-                    break; // non-pending stops the run
-                }
-            }
-        }
-    }
+    // Read the plan + runtime sheets into ordered `(id, status, name)` rows via
+    // the shared readiness seam (EX-7) — the SAME value `dispatch_next_ready`
+    // (MCP) consumes, so the two never re-derive. `next` rides the shared
+    // `compute_next_phases` authority, byte-identical to the pre-refactor inline
+    // scan (the same guarantee `run_status` already relies on).
+    let rows = plan_next_rows(&root, slice)?;
+    let next = compute_next_phases(&rows);
+    // `saw_blocked` only gates the all-blocked message, and is only read when
+    // `next` is empty — where it equals "any row is blocked" (the pre-refactor
+    // scan, unable to find an actionable phase, walked every row and set the flag
+    // on each blocked one).
+    let saw_blocked = rows.iter().any(|(_, status, _)| status == "blocked");
 
     // 4. Render output
     if json {
@@ -2914,6 +2871,24 @@ pub(crate) enum ReceiptStatus {
     ConcludeIncomplete,
     /// The sheet is unreadable (an IO error, not merely absent) — fail-loud.
     Unknown,
+}
+
+impl ReceiptStatus {
+    /// The distinct kebab-case token each status surfaces as over the read-only
+    /// funnel tools (SL-206 PHASE-03) — richer than the legacy phase-row string
+    /// ([`receipt_status_legacy_str`]): `ConcludeIncomplete` stays SEPARATE from
+    /// `Completed` (the sheet-completed-but-uncommitted gap the enum exists to
+    /// surface). STD-001 single-source — no bare literal at the tool call sites.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            ReceiptStatus::NotStarted => "not-started",
+            ReceiptStatus::InProgress => "in-progress",
+            ReceiptStatus::Blocked => "blocked",
+            ReceiptStatus::Completed => "completed",
+            ReceiptStatus::ConcludeIncomplete => "conclude-incomplete",
+            ReceiptStatus::Unknown => "unknown",
+        }
+    }
 }
 
 /// One projected row per planned phase: its id, name, the durable
@@ -3026,6 +3001,23 @@ fn phase_projection(
             }
         })
         .collect()
+}
+
+/// A single planned phase's [`ReceiptStatus`], over the SAME PHASE-02 projection
+/// authority [`phase_projection`] applies per row (SL-206 PHASE-03): the phase's
+/// disposable runtime sheet read under `state_dir`, folded with `has_boundary`
+/// (whether a committed boundary row backs it) through [`derive_receipt_status`].
+/// The single-phase seam the `dispatch_phase_receipt` MCP tool consumes — no
+/// parallel status derivation. The caller supplies `has_boundary` from the
+/// committed ledger read (the git touch stays in the caller, as in `run_status`).
+pub(crate) fn phase_receipt_status(
+    state_dir: &Path,
+    phase: &str,
+    has_boundary: bool,
+) -> ReceiptStatus {
+    let stem = phase.to_lowercase();
+    let sheet = crate::state::read_phase_status(state_dir, &stem);
+    derive_receipt_status(sheet, has_boundary)
 }
 
 /// `doctrine dispatch status` — read-only full dispatch rollup: coordination
@@ -3278,7 +3270,34 @@ fn count_phase_refs(root: &Path, slice3: &str) -> usize {
 }
 
 /// Compute next phases using same logic as plan-next.
-fn compute_next_phases(rows: &[(String, String, String)]) -> Vec<String> {
+/// Read a slice's plan + disposable runtime phase sheets into ordered
+/// `(id, legacy_status, name)` rows — the readiness input BOTH `dispatch
+/// plan-next` (CLI, [`run_plan_next`]) and `dispatch_next_ready` (the MCP funnel
+/// tool) consume, so neither re-derives it (SL-206 PHASE-03, EX-7). Rides the
+/// PHASE-02 [`phase_projection`] authority with an EMPTY committed set:
+/// `plan-next` never consulted the committed boundaries ledger, and
+/// `legacy_status` is boundary-independent, so the rows stay byte-identical to
+/// the pre-refactor inline read.
+pub(crate) fn plan_next_rows(
+    root: &Path,
+    slice: u32,
+) -> anyhow::Result<Vec<(String, String, String)>> {
+    let plan = crate::slice::read_plan(&root.join(".doctrine/slice"), slice)?;
+    let state_dir = crate::state::phases_dir(root, slice);
+    let committed: BTreeSet<&str> = BTreeSet::new();
+    Ok(phase_projection(&plan, &state_dir, &committed)
+        .into_iter()
+        .map(|p| (p.id, p.legacy_status, p.name))
+        .collect())
+}
+
+/// The next actionable phase(s) over the readiness rows — the SOLE readiness
+/// authority (SL-206 PHASE-03, EX-2): scan in plan order, skip completed; the
+/// first actionable `in_progress` gates alone; the first actionable pending runs
+/// with its consecutive pending followers. Both `dispatch plan-next` (via
+/// [`run_plan_next`]), `run_status`, and the `dispatch_next_ready` MCP tool
+/// consume this — no parallel readiness logic exists.
+pub(crate) fn compute_next_phases(rows: &[(String, String, String)]) -> Vec<String> {
     let mut next: Vec<String> = Vec::new();
     let mut found_actionable = false;
     for (id, status, _) in rows {

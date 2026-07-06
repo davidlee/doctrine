@@ -14,7 +14,8 @@ use crate::catalog::hydrate::{CatalogEdgeLabel, CatalogKey};
 use crate::catalog::scan::{self, ScanMode};
 use crate::finding::{Category, Finding};
 use crate::mcp_server::dispatch::{
-    TOOL_DISPATCH_CONCLUDE_PHASE, TOOL_DISPATCH_IMPORT, TOOL_DISPATCH_REAP,
+    TOOL_DISPATCH_AUTHORED_DIVERGENCE, TOOL_DISPATCH_CONCLUDE_PHASE, TOOL_DISPATCH_IMPORT,
+    TOOL_DISPATCH_NEXT_READY, TOOL_DISPATCH_PHASE_RECEIPT, TOOL_DISPATCH_REAP,
 };
 
 // ---------------------------------------------------------------------------
@@ -366,6 +367,9 @@ const AGENT_SCAN_ROOTS: [&str; 2] = ["install/agents", ".doctrine/agents"];
 const ROLE_MARKER_KEY: &str = "doctrine-role";
 const ROLE_WORKER: &str = "worker";
 const ROLE_ORCHESTRATOR: &str = "orchestrator";
+/// The read-only funnel role (SL-206): a `probe` agent-def may hold EXACTLY the three
+/// read tokens ([`DISPATCH_READ_TOOLS`]) — no write token, no other `mcp__*` grant.
+const ROLE_PROBE: &str = "probe";
 /// The single MCP token a confined **worker** may hold — its only sanctioned
 /// jail-wall bypass (SL-198 keystone). Any other `mcp__*` token is an escape.
 const TOOL_ALLOWED: &str = "mcp__doctrine__worker_commit";
@@ -375,22 +379,45 @@ const MCP_TOKEN_PREFIX: &str = "mcp__";
 /// bare-name constants ([`TOOL_DISPATCH_IMPORT`] …), never re-typed here.
 const MCP_DOCTRINE_PREFIX: &str = "mcp__doctrine__";
 
+/// The three SL-199 funnel WRITE bare-name tokens (import / conclude / reap).
+const DISPATCH_WRITE_TOOLS: [&str; 3] = [
+    TOOL_DISPATCH_IMPORT,
+    TOOL_DISPATCH_CONCLUDE_PHASE,
+    TOOL_DISPATCH_REAP,
+];
+/// The three SL-206 funnel READ bare-name tokens (phase-receipt / next-ready /
+/// authored-divergence) — the `probe` role's EXACT set, and the growth the
+/// `orchestrator` role gains ATOP its three write tokens.
+const DISPATCH_READ_TOOLS: [&str; 3] = [
+    TOOL_DISPATCH_PHASE_RECEIPT,
+    TOOL_DISPATCH_NEXT_READY,
+    TOOL_DISPATCH_AUTHORED_DIVERGENCE,
+];
+
 /// The fully-qualified MCP tokens a confined agent of `role` may hold — the
 /// role-keyed allowlist. A `worker` holds only [`TOOL_ALLOWED`]; an
-/// `orchestrator` holds only the three funnel tokens (composed from the §B
-/// [`crate::mcp_server::dispatch`] bare-name constants). Any other role yields
-/// the empty set (no `mcp__*` token permitted).
+/// `orchestrator` holds the three funnel WRITE tokens PLUS the three READ tokens
+/// (SL-206); a `probe` holds EXACTLY the three READ tokens. Every token is
+/// composed from [`MCP_DOCTRINE_PREFIX`] and the [`crate::mcp_server::dispatch`]
+/// bare-name constants — never re-typed. Any other role yields the empty set (no
+/// `mcp__*` token permitted).
 fn allowed_mcp_tokens(role: &str) -> Vec<String> {
+    let qualify = |bares: &[&str]| -> Vec<String> {
+        bares
+            .iter()
+            .map(|bare| format!("{MCP_DOCTRINE_PREFIX}{bare}"))
+            .collect()
+    };
     match role {
         ROLE_WORKER => vec![TOOL_ALLOWED.to_string()],
-        ROLE_ORCHESTRATOR => [
-            TOOL_DISPATCH_IMPORT,
-            TOOL_DISPATCH_CONCLUDE_PHASE,
-            TOOL_DISPATCH_REAP,
-        ]
-        .iter()
-        .map(|bare| format!("{MCP_DOCTRINE_PREFIX}{bare}"))
-        .collect(),
+        ROLE_ORCHESTRATOR => qualify(
+            &DISPATCH_WRITE_TOOLS
+                .iter()
+                .chain(DISPATCH_READ_TOOLS.iter())
+                .copied()
+                .collect::<Vec<_>>(),
+        ),
+        ROLE_PROBE => qualify(&DISPATCH_READ_TOOLS),
         _ => Vec::new(),
     }
 }
@@ -409,10 +436,11 @@ fn allowed_mcp_tokens(role: &str) -> Vec<String> {
 ///    writable MCP token would otherwise slip an allow-by-marker lint.
 /// 2. **Role-keyed tool allowlist.** A marked def's `tools:` may contain no
 ///    `mcp__*` token outside its role's sanctioned set ([`allowed_mcp_tokens`]):
-///    a `worker` may hold only [`TOOL_ALLOWED`]; an `orchestrator` only the three
-///    funnel tokens. This also rejects a bare `mcp__doctrine` server grant (it is
-///    `mcp__`-prefixed and in no role's set). Ceiling, not floor — extras are
-///    rejected, but the set's tokens need not all be present.
+///    a `worker` may hold only [`TOOL_ALLOWED`]; an `orchestrator` the three
+///    funnel WRITE tokens plus the three SL-206 READ tokens; a `probe` EXACTLY
+///    the three READ tokens. This also rejects a bare `mcp__doctrine` server
+///    grant (it is `mcp__`-prefixed and in no role's set). Ceiling, not floor —
+///    extras are rejected, but the set's tokens need not all be present.
 ///
 /// Absent scan roots yield zero findings (downstream projects without an
 /// `install/` tree are clean).
@@ -458,13 +486,17 @@ fn collect_agent_def_findings(dir: &Path, root: &Path, findings: &mut Vec<Findin
         // Rule 1 — marker mandatory (deny-by-default). Thread the validated role
         // out into Rule 2's role-keyed allowlist.
         let role = match fm_scalar(fm, ROLE_MARKER_KEY) {
-            Some(role) if role == ROLE_WORKER || role == ROLE_ORCHESTRATOR => role,
+            Some(role)
+                if role == ROLE_WORKER || role == ROLE_ORCHESTRATOR || role == ROLE_PROBE =>
+            {
+                role
+            }
             Some(role) => {
                 findings.push(Finding {
                     category: Category::AgentConformance,
                     entity: Some(rel.clone()),
                     message: format!(
-                        "invalid `{ROLE_MARKER_KEY}: {role}` (expected `{ROLE_WORKER}` or `{ROLE_ORCHESTRATOR}`)"
+                        "invalid `{ROLE_MARKER_KEY}: {role}` (expected `{ROLE_WORKER}`, `{ROLE_ORCHESTRATOR}`, or `{ROLE_PROBE}`)"
                     ),
                 });
                 continue;
@@ -1440,6 +1472,122 @@ mod tests {
         assert!(
             findings.is_empty(),
             "absent scan roots yield no findings (downstream-safe)"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // VT-4: SL-206 allowlist growth — orchestrator +3 reads, probe arm,
+    // marker validator accepts `probe` (EX-4, EX-5, EX-6).
+    // ------------------------------------------------------------------
+
+    /// Fully-qualify a bare funnel token as the allowlist stores it.
+    fn qualified(bare: &str) -> String {
+        format!("{MCP_DOCTRINE_PREFIX}{bare}")
+    }
+
+    #[test]
+    fn allowed_mcp_tokens_orchestrator_grows_by_the_three_reads() {
+        let allowed = allowed_mcp_tokens(ROLE_ORCHESTRATOR);
+        // The three WRITE tokens survive unchanged (EX-6 behaviour-preservation)...
+        for bare in DISPATCH_WRITE_TOOLS {
+            assert!(
+                allowed.contains(&qualified(bare)),
+                "orchestrator keeps write token {bare}: {allowed:?}"
+            );
+        }
+        // ...PLUS the three new READ tokens (EX-4 growth).
+        for bare in [
+            TOOL_DISPATCH_PHASE_RECEIPT,
+            TOOL_DISPATCH_NEXT_READY,
+            TOOL_DISPATCH_AUTHORED_DIVERGENCE,
+        ] {
+            assert!(
+                allowed.contains(&qualified(bare)),
+                "orchestrator gains read token {bare}: {allowed:?}"
+            );
+        }
+        assert_eq!(
+            allowed.len(),
+            6,
+            "exactly the six funnel tokens: {allowed:?}"
+        );
+    }
+
+    #[test]
+    fn allowed_mcp_tokens_probe_holds_exactly_the_three_reads() {
+        let allowed = allowed_mcp_tokens(ROLE_PROBE);
+        let expect: Vec<String> = DISPATCH_READ_TOOLS.iter().map(|b| qualified(b)).collect();
+        assert_eq!(allowed, expect, "probe holds EXACTLY the three reads");
+        // No write token, in particular, leaks into the probe set.
+        assert!(
+            !allowed.contains(&qualified(TOOL_DISPATCH_IMPORT)),
+            "probe holds no write token: {allowed:?}"
+        );
+    }
+
+    #[test]
+    fn agent_conformance_passes_probe_with_only_read_tokens() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/dispatch-probe.md",
+            "---\nname: dispatch-probe\ndoctrine-role: probe\ntools: Read, Bash, mcp__doctrine__dispatch_phase_receipt, mcp__doctrine__dispatch_next_ready, mcp__doctrine__dispatch_authored_divergence\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert!(
+            findings.is_empty(),
+            "a probe holding exactly the three read tokens passes: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn agent_conformance_fails_probe_holding_a_write_token() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/overreaching-probe.md",
+            "---\nname: overreaching-probe\ndoctrine-role: probe\ntools: Read, mcp__doctrine__dispatch_phase_receipt, mcp__doctrine__dispatch_import\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(
+            findings.len(),
+            1,
+            "a probe holding a WRITE token must fail (reads-only ceiling)"
+        );
+        assert!(findings[0].message.contains("dispatch_import"));
+    }
+
+    #[test]
+    fn agent_conformance_still_passes_orchestrator_with_only_write_tokens() {
+        // EX-5/EX-6: the shipped orchestrator def holds only the three write
+        // tokens — a SUBSET of the grown six-token allowlist ⇒ doctor #9 green.
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/dispatch-orchestrator.md",
+            "---\nname: dispatch-orchestrator\ndoctrine-role: orchestrator\ntools: Read, Bash, mcp__doctrine__dispatch_import, mcp__doctrine__dispatch_conclude_phase, mcp__doctrine__dispatch_reap\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert!(
+            findings.is_empty(),
+            "orchestrator with only the three write tokens stays green: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn agent_conformance_invalid_role_message_mentions_probe() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/bad-role.md",
+            "---\nname: bad-role\ndoctrine-role: auditor\ntools: Read\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(findings.len(), 1, "an unknown role is a failure");
+        assert!(
+            findings[0].message.contains(ROLE_PROBE),
+            "the expected-roles message now lists `probe`: {}",
+            findings[0].message
         );
     }
 }
