@@ -1,0 +1,110 @@
+# Implementation plan for SL-208 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-208"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# ── PHASE-01: Renderer implementation ──────────────────────────────────
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Renderer implementation (cli.rs + Cargo.toml)"
+objective = "Implement render_subcommand_help and render_options_section in src/commands/cli.rs, add textwrap dependency to Cargo.toml, write unit tests TDD-style."
+
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked (RV-257 closed, 8/8 verified)" },
+  { id = "EN-2", text = "plan is committed on disk" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "textwrap added to Cargo.toml as a direct dependency" },
+  { id = "EX-2", text = "render_subcommand_help(path, color, term_width) -> String in cli.rs — walks clap tree, returns about+usage+commands+options" },
+  { id = "EX-3", text = "render_options_section(cmd, color, term_width) -> String in cli.rs — borderless 2-col with textwrap wrapping" },
+  { id = "EX-4", text = "All unit tests green (see VT-1 through VT-7)" },
+  { id = "EX-5", text = "cargo fmt clean, cargo clippy --bin doctrine zero warnings" },
+]
+
+verification = [
+  { id = "VT-1", expects = "render_subcommand_help produces cozy-table output with │ separators for commands that have sub-subcommands", test_file = "src/main.rs", keywords = ["subcommand_help_uses_cozy_table", "render_subcommand_help", "│"] },
+  { id = "VT-2", expects = "render_options_section produces borderless 2-col layout with no │ separators or box-drawing chars", test_file = "src/main.rs", keywords = ["options_section_no_borders", "render_options_section"] },
+  { id = "VT-3", expects = "no-color mode returns output with zero ANSI escape codes", test_file = "src/main.rs", keywords = ["subcommand_help_no_color_is_plain", "\u001b"] },
+  { id = "VT-4", expects = "leaf commands skip Commands table but render Options section", test_file = "src/main.rs", keywords = ["subcommand_help_leaf_skips_commands_table", "Options:"] },
+  { id = "VT-5", expects = "output contains about text and Usage: line", test_file = "src/main.rs", keywords = ["Usage:", "render_subcommand_help", "about"] },
+  { id = "VT-6", expects = "path walking strips intermediate help tokens correctly", test_file = "src/main.rs", keywords = ["subcommand_help_path_walks_clap_tree", "find_subcommand"] },
+  { id = "VT-7", expects = "clap-generated usage line has ANSI stripped in plain mode", test_file = "src/main.rs", keywords = ["subcommand_help_ansi_stripped_from_usage_plain_mode", "render_usage"] },
+]
+
+specs        = []
+requirements = []
+
+# ── PHASE-02: Wire intercept + integration tests ───────────────────────
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Wire intercept in main.rs + black-box integration tests"
+objective = "Extend the DisplayHelp error-handling arm in main.rs to call render_subcommand_help for subcommand help requests. Update existing snapshot tests. Add black-box integration tests exercising the binary."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — render functions exist and pass unit tests" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "DisplayHelp + DisplayHelpOnMissingArgumentOrSubcommand intercept calls render_subcommand_help for subcommand paths" },
+  { id = "EX-2", text = "MissingSubcommand keeps clap default (error exit, unchanged)" },
+  { id = "EX-3", text = "Existing help_snapshot_* tests updated to new format and green" },
+  { id = "EX-4", text = "6 black-box integration tests green (test binary in tests/)" },
+  { id = "EX-5", text = "Top-level --help unchanged (help_snapshot_top_level green, cli_top_level_help_unchanged green)" },
+  { id = "EX-6", text = "cargo fmt clean, cargo clippy --bin doctrine zero warnings" },
+]
+
+verification = [
+  { id = "VT-1", expects = "doctrine worktree --help exits 0 and contains │ separators with subcommand names", test_file = "tests/e2e_subcommand_help.rs", keywords = ["worktree", "--help", "│", "provision"] },
+  { id = "VT-2", expects = "doctrine --color never worktree --help exits 0 with no ANSI escapes", test_file = "tests/e2e_subcommand_help.rs", keywords = ["--color", "never", "\u001b"] },
+  { id = "VT-3", expects = "doctrine worktree without verb exits non-zero (MissingSubcommand preserved)", test_file = "tests/e2e_subcommand_help.rs", keywords = ["MissingSubcommand", "error", "exit"] },
+  { id = "VT-4", expects = "doctrine worktree help provision --help exits 0 and renders help for provision", test_file = "tests/e2e_subcommand_help.rs", keywords = ["help", "provision", "--help"] },
+  { id = "VT-5", expects = "doctrine --help exits 0 and contains family headings (top-level unchanged)", test_file = "tests/e2e_subcommand_help.rs", keywords = ["--help", "change", "governance"] },
+  { id = "VT-6", expects = "doctrine memory sync --help exits 0 and contains cozy-table for sync subcommand", test_file = "tests/e2e_subcommand_help.rs", keywords = ["memory", "sync", "│"] },
+  { id = "VA-1", expects = "Existing write_class_tests all green (help output changes only — no dispatch identity change)", test_file = "src/main.rs", keywords = ["write_class_tests"] },
+]
+
+specs        = []
+requirements = []
+
+# ── PHASE-03: Gate ─────────────────────────────────────────────────────
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Gate — lint, format, regression check"
+objective = "Run full gate (clippy zero warnings, fmt clean), ensure all pre-existing tests green, commit and transition to ready."
+
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 and PHASE-02 complete — all tests green" },
+]
+
+exit_criteria = [
+  { id = "EX-1", text = "cargo clippy --bin doctrine zero warnings" },
+  { id = "EX-2", text = "cargo fmt clean" },
+  { id = "EX-3", text = "cargo test --bin doctrine green (all unit tests including unchanged)" },
+  { id = "EX-4", text = "cargo test --test e2e_subcommand_help green" },
+  { id = "EX-5", text = "Top-level --help output unchanged from pre-change baseline" },
+]
+
+verification = [
+  { id = "VT-1", expects = "cargo clippy --bin doctrine produces zero warnings", test_file = "src/main.rs", keywords = ["fn main"] },
+  { id = "VA-1", expects = "Manual visual check: doctrine worktree --help, doctrine dispatch --help, doctrine revision --help all render clean cozy-tables", test_file = "src/commands/cli.rs", keywords = ["render_subcommand_help"] },
+]
+
+specs        = []
+requirements = []
