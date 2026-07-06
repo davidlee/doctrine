@@ -847,3 +847,47 @@ the driver must act on deterministically has to be PINNED in the prompt, not lef
 the agent. Fix: interpolate arm:"${arm}" into hopPrompt + spell out the arm commit
 model and current-tip base_B. Note the cost shape: each defect costs a full ~15min/
 180k-token drive to surface because the failure only manifests at the interior hop.
+
+[drive-slice; SL-209-P02-dispose-orchestrator]
+Dispose hop for SL-209 PHASE-02 was handed fork_tip=null with an (A)-path
+worktree-diff import premise (verify a revive commit descends from the prepped
+fork). Coord tree present, on dispatch/209, tip 343c4ca5 (PHASE-01 conclude).
+But PHASE-02 has NO importable artifact: dispatch_phase_receipt reports
+status=not-started; no fork branch, no fork worktree admin dir, and no revive
+commit exist for 209 (exhaustive: for-each-ref, worktree list, .git/worktrees,
+fsck dangling, log -S'fn accept_b' all negative — scratch_accept_b.rs exists
+nowhere on disk or in any object). The prep contract hands the dispose hop a
+fork_tip but no fork NAME, and dispatch_import requires `name`; with no fork in
+existence there is nothing to name, verify, or import. Token cost: the (A)-path
+premise ("import the worker WORKTREE DIFF") presumes the artifact exists, so the
+orchestrator burns a full exhaustive-search sweep to establish absence before it
+can justify a coord halt rather than a fabricated import. A cheaper contract
+would pass the expected fork name/tip so a single existence probe settles it.
+
+[dispatch; SL-206-P16-drive3-worktree-fork-base-mismatch]
+Drive 3 (wf_7eb19157-a61) surfaced the deepest defect yet — STRUCTURAL, not a
+deliverable bug. Both PHASE-01 and PHASE-02 workers STOPPED on the driver's own
+BASE GUARD (fork_tip null, no delta). Root cause: Workflow `isolation:'worktree'`
+provisions the worker worktree from the PRIMARY SESSION cwd (/workspace/doctrine
+@ edge, tip 94182624), NOT from the scriptPath's coord tree and NOT from the
+SL-209 dispatch coordination base. Verified: both leftover isolation worktrees
+(wf_7eb19157-a61-{2,4}) sat detached at 94182624 = edge tip. The driver computes
+base_B from the SL-209 dispatch tip (fa951846 → 343c4ca after P01), which is a
+branch line structurally disconnected from edge. So base_B != worker-fork-base on
+EVERY hop by construction; the base guard correctly refuses every worker.
+PHASE-01 only reached Completed because its interior O fabricated/revived the
+delta (A-path fallback) — the (B) self-commit path NEVER fired, so P5 (RV-258 F-2:
+prove worker_commit non-null fork_tip) is UNMET across all 3 drives. PHASE-02's O
+declined to fabricate → halt coord:worker-delta-absent.
+Token cost: 3 full drives (~15min/~200k tok each) to surface a base-topology
+mismatch that a single up-front "where does isolation:worktree fork from?" probe
+would have caught. The two prior defects (top-level oneOf 400; unpinned arm) each
+masked this one — you can't observe the base mismatch until the prep prompt is
+well-formed AND the arm is pinned so a claude worker actually spawns. Layered
+defects each cost a full drive because the interior hop is the only observation
+point. Lesson: for a spawn-topology driver, assert the fork base empirically
+(spawn one throwaway isolation worker, print `git rev-parse HEAD`) BEFORE wiring
+the full alternating loop — don't infer the base from the dispatch coordination
+tip. Parked for design decision: align bases (set up SL-209 dispatch AT edge tip
+so base_B == fork base) vs. driver discovers actual worker HEAD vs. run the
+workflow itself from the coord tree. Needs /consult before drive 4.
