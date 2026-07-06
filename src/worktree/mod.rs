@@ -28,6 +28,10 @@ mod allowlist;
 // `expect` in jail.rs (covers both cfg while items are unconsumed).
 mod jail;
 pub(crate) use jail::JailPolicy;
+// design §5.6 I1 — the doctor #10 spawn-seam-symmetry check imports the SAME deny-set
+// the gate consumes (never re-types it, STD-001); re-exported here since `jail` itself
+// is private to this module.
+pub(crate) use jail::PRIVILEGED_AGENT_TYPES;
 
 // SL-182 PHASE-03: the PreToolUse hook shell (command tier). Drives the pure jail
 // core (leaf) with impure inputs resolved here: git topology, host capability,

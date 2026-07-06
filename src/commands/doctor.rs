@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `doctrine doctor` — corpus health scan.
 //!
-//! Runs all nine checks (id integrity, relation integrity, spec FK, memory health,
-//! lifecycle, raw label, TOML parse, prose citation, agent conformance) over the
-//! corpus, renders them
+//! Runs all ten checks (id integrity, relation integrity, spec FK, memory health,
+//! lifecycle, raw label, TOML parse, prose citation, agent conformance, spawn seam
+//! symmetry) over the corpus, renders them
 //! grouped by category with severity, and exits non-zero on any error-severity
 //! finding. The `--json` flag emits a flat JSON array of finding objects.
 
@@ -66,6 +66,11 @@ pub(crate) fn run_doctor(
     // #9 — Agent Conformance (Error) — SL-198 RSK-225: worker tool-surface is a
     // jail wall; scan authored agent-defs under install/agents + .doctrine/agents.
     findings.extend(crate::doctor_checks::agent_conformance_findings(&root));
+
+    // #10 — Spawn Seam Symmetry (Error) — SL-206 design §5.6 I1: the unjail
+    // nomination/gate deny-set must be ONE list covering EVERY harness spawn seam
+    // (`Agent`, `Workflow`); a drift here is an open escalation hole, not a lint nit.
+    findings.extend(crate::doctor_checks::spawn_seam_symmetry_findings(&root));
 
     if json {
         // Reuse the shared list envelope `{kind, rows}` (design §5.4 / F7) so the

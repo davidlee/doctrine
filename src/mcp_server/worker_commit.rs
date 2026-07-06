@@ -617,4 +617,71 @@ mod tests {
             other => panic!("expected Committed, got {other:?}"),
         }
     }
+
+    // --- VT-2: wrong-base revive rejection (design §5.5 mechanism 2, RV-258 F-5) -------
+
+    #[test]
+    fn worker_commit_wrong_base_revive_refuses_before_any_tip_moves() {
+        // Design §5.5: a fixup revive's `DispatchRecord` `base` is re-stamped to
+        // `fork_tip` — the prior worker's durable committed delta — precisely so
+        // `worker_commit` mechanically rejects a revive whose worktree HEAD does NOT
+        // actually descend from `fork_tip` (a botched/omitted reset), BEFORE any tip
+        // moves. RV-258 F-5: a raw `git reset --hard` + prompt-obedience is NO
+        // guarantee — the guarantee is this base-check, the SAME belt
+        // ([`head_at_base`] / the resolver's stale-record consistency check) that
+        // guards every initial commit. No test step here relies on the revive worker
+        // "obeying" a fixup prompt; the mismatch alone must refuse.
+        let (_tmp, primary, wt, agent, base) = worker_fixture("[\"true\"]", &[]);
+        let coord = wt
+            .parent()
+            .expect("wt has a .worktrees parent")
+            .parent()
+            .expect(".worktrees has a coord parent")
+            .to_path_buf();
+
+        // The PRIOR worker's landed commit — the durable `fork_tip` a revive must
+        // resume from.
+        fs::write(wt.join("seed"), "prior worker work\n").unwrap();
+        git_run(&wt, &["commit", "-aq", "-m", "prior worker commit"]);
+        let fork_tip = git_run(&wt, &["rev-parse", "HEAD^{commit}"]);
+        assert_ne!(
+            fork_tip, base,
+            "fork_tip must have advanced past the original base"
+        );
+
+        // Simulate a BOTCHED revive: the fresh worktree's fixup edit lands WITHOUT the
+        // worker ever actually resetting to `fork_tip` — HEAD stays at the stale `base`
+        // instead (the un-enforced reset step RV-258 F-5 flags as no guarantee).
+        git_run(&wt, &["reset", "--hard", &base]);
+        fs::write(wt.join("seed"), "revive edit at the wrong base\n").unwrap();
+
+        // The revive's DispatchRecord `base` IS re-stamped to `fork_tip` (what design
+        // §5.5 requires) — the enforcement lives entirely in the base-check below, not
+        // in trusting that the reset happened.
+        provision_dispatch_record(&coord, &agent, &fork_tip, &wt, &format!("dispatch/{agent}"))
+            .unwrap();
+
+        let out = run_worker_commit(&primary, &agent, "revive commit").unwrap();
+        match out {
+            WorkerCommitOutput::Refused { reason, .. } => {
+                assert!(
+                    reason == NOT_AT_BASE || reason == "stale-record",
+                    "a wrong-base revive must refuse via the base-check family \
+                     (head_at_base / the resolver's HEAD==base consistency check), \
+                     never commit: got reason {reason}"
+                );
+            }
+            other => panic!(
+                "wrong-base revive MUST be refused before any tip moves — there is no \
+                 prompt-obedience substitute for the base-check; got {other:?}"
+            ),
+        }
+        // No tip moved: the worktree HEAD sits exactly where the botched reset left it,
+        // never having advanced past `base` (and never onto a new commit).
+        assert_eq!(
+            git_run(&wt, &["rev-parse", "HEAD^{commit}"]),
+            base,
+            "no commit landed — HEAD did not advance past the wrong base"
+        );
+    }
 }

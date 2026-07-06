@@ -599,6 +599,126 @@ fn fm_tool_tokens(fm: &str) -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
+// SpawnSeamSymmetry — #10 unjail nomination/gate check (SL-206, design §5.6 I1)
+// ---------------------------------------------------------------------------
+
+/// The shipped hook config — the AUTHORED/shipped source of truth (mirrors #9's
+/// [`AGENT_SCAN_ROOTS`] posture: scan the tree that ships, never a derived/installed
+/// copy that a tampered install could diverge from).
+const HOOKS_CONFIG_PATH: &str = "plugins/doctrine/hooks/hooks.json";
+
+/// The harness spawn-seam registry (design §5.6 I1(b), RV-258 F-1): every known seam a
+/// `PreToolUse` matcher must gate. A FUTURE seam is added HERE first — the check reds
+/// until its matcher lands, so a new surface defaults to gated, never silently
+/// forgotten.
+const SEAM_REGISTRY: [&str; 2] = ["Agent", "Workflow"];
+
+/// One `hooks.json` matcher entry — only the field this check reasons over.
+#[derive(serde::Deserialize)]
+struct MatcherEntry {
+    matcher: String,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct HooksSection {
+    #[serde(rename = "SubagentStart", default)]
+    subagent_start: Vec<MatcherEntry>,
+    #[serde(rename = "PreToolUse", default)]
+    pre_tool_use: Vec<MatcherEntry>,
+}
+
+#[derive(serde::Deserialize)]
+struct HooksConfig {
+    hooks: HooksSection,
+}
+
+/// A `PreToolUse` matcher covers `seam` iff `seam` is an EXACT `|`-alternation member
+/// (`"Edit|Write"` covers `Edit` and `Write`; `"AgentX"` covers neither `Agent` nor a
+/// substring of itself — no partial/substring match, I1(b)).
+fn matcher_covers_seam(matcher: &str, seam: &str) -> bool {
+    matcher.split('|').any(|m| m == seam)
+}
+
+/// #10 — Spawn-seam symmetry (SL-206, design §5.6 I1; RV-258 F-1). PURE core over the
+/// raw `hooks.json` TEXT (no disk here — [`spawn_seam_symmetry_findings`] is the impure
+/// shell that supplies it), so the decision is unit-testable without touching a
+/// filesystem. Two Error-severity rules — together the mechanical form of "one list,
+/// every spawn seam" (design §5.6):
+///
+/// (a) **nomination ⊆ gate.** Every `SubagentStart` matcher (a nominated
+///     `subagent_type`) MUST be in [`crate::worktree::PRIVILEGED_AGENT_TYPES`] — the
+///     SAME deny-set the `PreToolUse(Agent)` gate consumes (imported, never re-typed,
+///     STD-001) — else a type is nominated without ever being gated.
+/// (b) **every registry seam is gated.** Each [`SEAM_REGISTRY`] entry MUST be covered
+///     ([`matcher_covers_seam`]) by at least one `PreToolUse` matcher. Necessary
+///     because (a) alone is not sufficient (RV-258 F-1): a nominated type could sit
+///     "in the deny-set" while an entirely UNGATED seam bypasses the deny check.
+///
+/// An unparseable config is itself a symmetry failure (Error) — a doctor check must
+/// not go blind on its own input and report a false clean.
+fn check_spawn_seam_symmetry(config_json: &str) -> Vec<Finding> {
+    let config: HooksConfig = match serde_json::from_str(config_json) {
+        Ok(config) => config,
+        Err(e) => {
+            return vec![Finding {
+                category: Category::SpawnSeamSymmetry,
+                entity: Some(HOOKS_CONFIG_PATH.to_string()),
+                message: format!("unparseable hook config: {e}"),
+            }];
+        }
+    };
+
+    let mut findings = Vec::new();
+
+    // (a) nomination ⊆ gate.
+    for entry in &config.hooks.subagent_start {
+        if !crate::worktree::PRIVILEGED_AGENT_TYPES.contains(&entry.matcher.as_str()) {
+            findings.push(Finding {
+                category: Category::SpawnSeamSymmetry,
+                entity: Some(HOOKS_CONFIG_PATH.to_string()),
+                message: format!(
+                    "SubagentStart nominates `{}`, absent from the gate deny-set {:?} \
+                     (nomination ⊄ gate, I1(a))",
+                    entry.matcher,
+                    crate::worktree::PRIVILEGED_AGENT_TYPES
+                ),
+            });
+        }
+    }
+
+    // (b) every registered seam has a covering PreToolUse matcher.
+    for seam in SEAM_REGISTRY {
+        let covered = config
+            .hooks
+            .pre_tool_use
+            .iter()
+            .any(|entry| matcher_covers_seam(&entry.matcher, seam));
+        if !covered {
+            findings.push(Finding {
+                category: Category::SpawnSeamSymmetry,
+                entity: Some(HOOKS_CONFIG_PATH.to_string()),
+                message: format!(
+                    "spawn seam `{seam}` has no PreToolUse matcher — ungated (I1(b), RV-258 F-1)"
+                ),
+            });
+        }
+    }
+
+    findings
+}
+
+/// The impure shell: read the SHIPPED hook config under `root` and run
+/// [`check_spawn_seam_symmetry`] over its text. An absent config yields zero findings —
+/// a downstream project without the plugin tree is clean (mirrors #9's absent-root
+/// posture, [`collect_agent_def_findings`]).
+pub(crate) fn spawn_seam_symmetry_findings(root: &Path) -> Vec<Finding> {
+    let Ok(text) = std::fs::read_to_string(root.join(HOOKS_CONFIG_PATH)) else {
+        return Vec::new();
+    };
+    check_spawn_seam_symmetry(&text)
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1589,5 +1709,82 @@ mod tests {
             "the expected-roles message now lists `probe`: {}",
             findings[0].message
         );
+    }
+
+    // ------------------------------------------------------------------
+    // SpawnSeamSymmetry tests (#10, SL-206 design §5.6 I1, VT-1)
+    // ------------------------------------------------------------------
+
+    /// Build a minimal `hooks.json` body: one `SubagentStart` matcher nominating
+    /// `subagent_type`, and one `PreToolUse` entry per `pre_tool_use_matchers` string.
+    fn seam_symmetry_fixture(subagent_type: &str, pre_tool_use_matchers: &[&str]) -> String {
+        let pre_tool_use: Vec<String> = pre_tool_use_matchers
+            .iter()
+            .map(|m| {
+                format!(r#"{{"matcher": "{m}", "hooks": [{{"type": "command", "command": "x"}}]}}"#)
+            })
+            .collect();
+        format!(
+            r#"{{"hooks": {{"SubagentStart": [{{"matcher": "{subagent_type}", "hooks": [{{"type": "command", "command": "x"}}]}}], "PreToolUse": [{}]}}}}"#,
+            pre_tool_use.join(",")
+        )
+    }
+
+    #[test]
+    fn check_spawn_seam_symmetry_reds_on_nomination_outside_the_gate_deny_set() {
+        // I1(a): a SubagentStart matcher nominates a type absent from
+        // `PRIVILEGED_AGENT_TYPES` — nomination ⊄ gate. Both PreToolUse seams are
+        // covered here so the finding isolates rule (a) only.
+        let config = seam_symmetry_fixture("rogue-type", &["Agent", "Workflow"]);
+        let findings = check_spawn_seam_symmetry(&config);
+        assert_eq!(
+            findings.len(),
+            1,
+            "exactly one nomination-outside-gate finding: {findings:?}"
+        );
+        assert_eq!(findings[0].category, Category::SpawnSeamSymmetry);
+        assert_eq!(
+            findings[0].category.severity(),
+            crate::finding::Severity::Error
+        );
+        assert!(findings[0].message.contains("rogue-type"));
+    }
+
+    #[test]
+    fn check_spawn_seam_symmetry_reds_on_ungated_workflow_seam() {
+        // I1(b): SEAM_REGISTRY's `Workflow` seam has NO PreToolUse matcher at all — an
+        // ungated seam bypasses the deny check entirely (RV-258 F-1), even though the
+        // lone nomination IS in the gate deny-set.
+        let config = seam_symmetry_fixture(crate::worktree::PRIVILEGED_AGENT_TYPES[0], &["Agent"]);
+        let findings = check_spawn_seam_symmetry(&config);
+        assert_eq!(
+            findings.len(),
+            1,
+            "exactly one ungated-Workflow-seam finding: {findings:?}"
+        );
+        assert_eq!(findings[0].category, Category::SpawnSeamSymmetry);
+        assert!(findings[0].message.contains("Workflow"));
+    }
+
+    #[test]
+    fn check_spawn_seam_symmetry_passes_the_shipped_hooks_config() {
+        // Live-config regression lock (VT-1 green): the SHIPPED
+        // plugins/doctrine/hooks/hooks.json nominates only a gate-covered type AND
+        // every SEAM_REGISTRY seam (`Agent`, `Workflow`) has a covering PreToolUse
+        // matcher — the real file `check_spawn_seam_symmetry` guards, not a fixture.
+        let findings = spawn_seam_symmetry_findings(&crate::test_support::repo_root());
+        assert!(
+            findings.is_empty(),
+            "the shipped hook config must satisfy check_spawn_seam_symmetry: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn matcher_covers_seam_is_exact_alternation_membership_not_substring() {
+        // I1(b): `Agent` must NOT match a hypothetical `AgentX` alternation member.
+        assert!(matcher_covers_seam("Agent", "Agent"));
+        assert!(matcher_covers_seam("Edit|Agent|Write", "Agent"));
+        assert!(!matcher_covers_seam("AgentX", "Agent"));
+        assert!(!matcher_covers_seam("AgentX|Other", "Agent"));
     }
 }
