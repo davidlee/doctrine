@@ -599,3 +599,60 @@ orchestrators. §5 must spec that handoff.
 **Resume:** confirm topology, run P5+P6 (small rigs like P3/P4), then author §5
 (workflow serial loop + alternating ephemeral nominated orchestrators + both-arm
 worker spawn + spawn/import authority split), ADR-008 amendment, adversarial pass.
+
+## PHASE-11 — nomination + spawn-gate hooks (2026-07-06)
+
+Landed `7dcfed82 → 9761a2b4` (funnel import; conclude tip `66f3fadc` carries the
+boundary row). Worker: Sonnet, claude arm, ~316k tokens. Full T1–T8:
+
+- **I1 single source**: `PRIVILEGED_AGENT_TYPES` (`jail.rs:121`, leaf tier per
+  ADR-001 — the pure gate can't import engine) + `is_privileged_agent_type`, the
+  ONE membership test shared by nominate eligibility and the Agent gate leg.
+- **Nominate/denominate** (`worktree nominate|denominate`, SubagentStart /
+  SubagentStop handlers in `subagent.rs`): allowlist at
+  `$CLAUDE_PROJECT_DIR/.doctrine/state/orch-allowlist.txt`
+  (`NOMINATION_ALLOWLIST_REL`, never cwd-relative); ineligible type → refuse,
+  no write; idempotent append; absent-entry removal = clean no-op. Injected
+  `project_dir` in `act_*` for env-race-free tests.
+- **Gate legs** (`pretooluse.rs` → pure `decide_agent`/`decide_workflow` in
+  `jail.rs`): Agent denies iff `agent_id present ∧ ∉ allowlist ∧ subagent_type ∈
+  deny-set`; Workflow blanket-denies any present agent_id (EX-3 posture until
+  OQ-4). No agent_id ⇒ PassThrough (INV-1 unchanged).
+- **Nominated PassThrough** (T5): `resolve_target` honours `agent_id ∈ allowlist`,
+  scoped to the exact id (P1a triple reproduced as unit tests); unreadable/absent
+  allowlist ⇒ not nominated (fail-safe).
+- **hooks.json**: SubagentStart/SubagentStop `dispatch-orchestrator` matchers +
+  PreToolUse `Agent`/`Workflow` → `worktree pretooluse`; matcher strings
+  mechanically extractable for the PHASE-12 doctor check.
+- Ripple: `guard.rs`/`main.rs` exhaustive-match arms (`Hookmint`, mirroring
+  `marker --stamp-subagent`); `project_anchor`/`ENV_PROJECT_DIR` DRY'd to
+  `shared.rs`.
+
+**EX-6 correction (T7 finding was half-right).** `plugins/` IS embedded
+(RustEmbed `PluginAssets`) but `doctrine install` materializes **skills only**
+(`discover()` walks `<domain>/skills/<skill>/`); `hooks/hooks.json` ships via
+the **plugin/marketplace surface**. Live seating for a project therefore =
+plugin refresh (marketplace update, or `install --dev` local marketplace) +
+`/reload-plugins`, AND a hook-visible doctrine binary that knows
+`nominate`/`denominate` — an edge-built PATH binary fails the new hooks
+**fail-safe** (agent stays jailed; nomination inert, never an escape). For THIS
+repo the new config cannot seat live until the slice lands (delta is on
+dispatch/206 only); PHASE-16 owns the live acceptance. Manual placement
+(ISS-216 analog): copy `plugins/doctrine/hooks/hooks.json` over the live plugin
+cache copy + `/reload-plugins` + `DOCTRINE_BIN` → a dispatch-branch build.
+
+**Funnel incident — worker_commit false-red, second trigger class.** Gate
+refused `commit-gate-red` on `vt9_no_discoverable_root_emits_nothing`
+(src/memory.rs) — a pre-existing env-sensitive test, NOT the delta (confirmed
+failing at B on an untouched tree with `CLAUDE_PROJECT_DIR` pointing at an
+unmasked doctrine root; masked in the primary tree by a stale
+`mem-surface-seen-s9.txt`). Filed **ISS-220**. Landed via the sanctioned
+land-not-rewrite path (`mem.pattern.dispatch.worker-commit-stale-path-false-red`):
+orchestrator committed the worker's exact bytes (`d2f9d16f`, author preserved,
+C^==B), fresh verification stood in for the gate — regression diff vs B green,
+fresh doctor exit 0, post-import prove green.
+
+**Verification:** VT n/a this phase; VA-1 attested (all five clauses, see plan);
+VH-1 PENDING — human confirm of fail-safe posture + seating path. 235
+worktree-module tests green incl. 30+ new; behaviour-preservation held
+(existing suites green unchanged).
