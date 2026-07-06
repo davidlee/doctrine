@@ -1,5 +1,15 @@
 # SubagentStart stamp hook silently no-fires for nested-session dispatch workers
 
+> **⚠ CONTRADICTED under different conditions (SL-206 P1b, 2026-07-06).** A
+> `SubagentStart(dispatch-orchestrator)` hook **DID fire** for an `Agent`-tool
+> spawn from a child-session main thread (`CLAUDE_CODE_CHILD_SESSION=1`) — see
+> [[mem.fact.claude.subagentstart-fires-from-child-session]]. That run used a
+> *different matcher* (`dispatch-orchestrator`, not the `dispatch-worker` stamp
+> below) and a later harness build (hooks now hot-reload). So this no-fire is
+> **not a reliable invariant** — treat it as version-fragile / unresolved, and
+> **do not build a security boundary on "child session ⇒ no SubagentStart."**
+> The true no-fire condition is unknown-pending a nested subagent→subagent probe.
+
 On the claude `/dispatch` arm, the matcher-scoped `SubagentStart` hook
 (`doctrine worktree marker --stamp-subagent`, matcher `dispatch-worker`) does
 **not fire** when the orchestrator is itself a nested/child Claude session
