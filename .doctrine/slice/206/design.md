@@ -466,11 +466,21 @@ exists — D2):
      `fork_tip` instead of `B_i`. Zero worker-side git. **Gated by OQ-6**: CHR-039
      proved the hook controls the fork *cwd*, not yet that it can redirect the fork
      *base ref* to an arbitrary existing branch tip.
-  2. **Worker-side reset (guaranteed fallback).** The fixup prompt carries
-     `fork_tip`; the revive worker's first act is `git reset --hard <fork_tip>` onto
-     its fresh worktree, then re-edits. Ugly (a worker touching git refs) but needs
-     **no** new mechanism and is always available; the R-5 belt still guards
-     `.doctrine/`/`.claude/`, and the reset target is O-supplied (not worker-chosen).
+  2. **Worker-side reset, base ENFORCED not hoped (floor).** The fixup prompt carries
+     `fork_tip`; the revive worker resets its fresh worktree to it, re-edits, then
+     **commits via `worker_commit` exactly as the initial worker does** — and that is
+     where the guarantee actually lives, **not** in the reset. RV-258 F-5 is correct
+     that a raw `git reset --hard` + prompt-obedience is **no guarantee** (R-5 belts
+     only `.doctrine/`/`.claude/` writes, not ref movement; the repo carries a
+     documented wrong-base trap — `mem.signpost.doctrine.dispatch-claude-arm-wrong-base`).
+     The fix: the revive's `DispatchRecord` base is **re-stamped to `fork_tip`**, so
+     `worker_commit` (`src/mcp_server/worker_commit.rs` — refuses unless `HEAD==base`,
+     then verifies the new commit's single parent `== base`) **mechanically rejects a
+     wrong-base revive** before any tip moves. Belt-and-brace on the **(A)** import
+     path (no `worker_commit`): the **disposing O verifies the revive commit's parent
+     chain descends from `fork_tip` before import**, halting `coord:revive-wrong-base`
+     on a mismatch. So "same fork" is enforced by the same base-check that guards the
+     initial commit, on both handoff modes — never by prompt obedience.
   Design ships mechanism 2 as the floor and adopts 1 iff OQ-6 proves out. The
   disposing O is likewise re-spawned each pass (re-derives from the fork diff +
   verify output). Accepted cost of workflow-spawned ephemerals; true context-intact
@@ -510,10 +520,21 @@ exists — D2):
 ### 5.6 Security — nomination + spawn-gate (ADR-008 amendment)
 
 The orchestrator runs **unjailed** (`PassThrough`, RW `.git`) — a new exception
-to orchestrator confinement, so an **ADR-008 amendment is in scope** (§7, §9). It
-is provably safe: escalation is closed at the spawn seam with **no arming token**.
-Proven end-to-end — P1 (nomination round-trip), P3 (discriminator), P4 (active
-deny), 2026-07-06 (`unjail-direction.md` §6).
+to orchestrator confinement, so an **ADR-008 amendment is in scope** (§7, §9).
+
+**Proof status is per-seam, not blanket (RV-258 F-1).** Escalation via the
+**`Agent`** seam is **proven closed** end-to-end, no arming token — P1 (nomination
+round-trip), P3 (discriminator), P4 (active deny), 2026-07-06
+(`unjail-direction.md` §6). The **`Workflow`** seam (I1(b)) is **NOT yet
+empirically proven** to carry caller identity into the gate (OQ-4). The design does
+**not** wait on that proof to be safe: the Workflow seam is closed **by a
+fail-safe default** — until OQ-4 proves a jailed caller's `agent()`/`Workflow` call
+presents its `agent_id` to a `PreToolUse(Workflow)` matcher, the matcher **DENIES
+`Workflow` to any caller with a present `agent_id`** (i.e. any subagent), full
+stop. So the confinement boundary is closed *by construction* on both seams — one
+by a proven identity-gate, one by a blanket subagent-deny — and OQ-4's outcome only
+decides whether the Workflow seam can be *relaxed* to the finer identity-gate, never
+whether it is safe. No seam is ever "assumed covered": a seam is gated or denied.
 
 **Two halves, one closed loop.**
 
@@ -551,12 +572,16 @@ deny), 2026-07-06 (`unjail-direction.md` §6).
   forgotten**. (This is what OQ-4 must resolve as a **symmetry requirement**, not a
   convenience: see §6.)
   **I1 is CHECKED, not asserted** (matches "containment by grant, checked" — §4). A
-  new **doctor check** (a doctor-#9 sibling over the shipped hook config) parses the
-  `SubagentStart` nomination matchers and the `PreToolUse` gate deny-set and fails
-  **Error-severity** iff any nominated `subagent_type` is **not** in the gate set
-  (nomination ⊆ gate). A type auto-nominated without a gate entry is an open
-  escalation hole; the check makes I1 a conformance fact, not a prose promise, and
-  is the mechanical form of "one list, every spawn seam".
+  new **doctor check** (a doctor-#9 sibling over the shipped hook config) fails
+  **Error-severity** on either of two conditions: **(a)** any nominated
+  `subagent_type` (from a `SubagentStart` matcher) is **not** in the gate deny-set
+  (nomination ⊄ gate); **(b)** a **known spawn seam has no `PreToolUse` matcher at
+  all** — the seam registry (`Agent`, `Workflow`) must each have a gate entry, else
+  a nominated type could be "in the deny-set" while an *ungated seam* bypasses the
+  deny check entirely (RV-258 F-1: nomination ⊆ gate is necessary, not sufficient —
+  the gate must also provably cover every seam). Together (a)+(b) are the mechanical
+  form of "one list, every spawn seam"; a new seam added to the registry without a
+  matcher reds the check, defaulting to gated-not-forgotten.
 - **I2 — config outside every jail.** The allowlist and hook config live at a
   path writable ONLY by the main thread — out of every worktree jail (jailed
   agents cannot write it: worktree-jail Bash deny + import R-5 belt on
@@ -590,10 +615,18 @@ alone buys bounded/gated capability (worker tier); anything unbounded
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1** — Where does `/drive-slice` live as an *authored, shippable*
-  artifact? Baseline: `install/`-templated → seeded to `.claude/workflows/`.
-  Confirm the install path exists / is the right home (vs a harness-local file
-  the slice merely documents). Resolve in phase-planning.
+- **OQ-1 — RESOLVED to a baseline (RV-258 F-4).** `/drive-slice`'s authored home is
+  **`install/workflows/drive-slice.js`** (committed, audited), seeded to
+  `.claude/workflows/drive-slice.js` (the installed/derived copy) by `doctrine
+  install`. This is now a **design decision, not an open question** — the script is a
+  primary deliverable (scope) and must not sit outside the audit surface; leaving the
+  home unpinned let the *currently shipped* `install/workflows/drive-slice.js` (the
+  retired confined-per-phase POC) drift unflagged. ⇒ `install/workflows/drive-slice.js`
+  is a **design-target selector** (§9), so conformance reds the stale POC script
+  until the implementation phase replaces it with the alternating-unjailed topology.
+  Phase-planning confirms only the *install mechanics* (the seeding leg in
+  `src/install.rs`), not the home. (The `.claude/workflows/` copy stays gitignored
+  scope-relevant — the installed artifact, never the authored source.)
 - **OQ-2** — Does `compute_next_phases` need a machine-readable (JSON) surface,
   or does `dispatch_next_ready` wrap it cleanly without touching the existing
   CLI rendering? (Expected: thin wrapper, no CLI change.)
@@ -758,9 +791,17 @@ alone buys bounded/gated capability (worker tier); anything unbounded
   grows to include the three read-only tools and the new `dispatch-probe` role
   holds exactly the read set; the check stays green on the updated agent defs.
 - **I1 spawn-seam-symmetry doctor check (new, #9 sibling)** — over the shipped hook
-  config: every `SubagentStart` nomination `subagent_type` ∈ the `PreToolUse` gate
-  deny-set (nomination ⊆ gate). Test: a nomination matcher with no gate entry reds
-  the check (Error); the shipped config passes.
+  config, two Error conditions (RV-258 F-1): (a) every `SubagentStart` nomination
+  `subagent_type` ∈ the `PreToolUse` gate deny-set (nomination ⊆ gate); (b) every
+  seam in the seam registry (`Agent`, `Workflow`) has a `PreToolUse` matcher. Tests:
+  a nomination with no gate entry reds (a); a registry seam with no matcher reds (b);
+  the shipped config passes both.
+- **Wrong-base revive rejection (RV-258 F-5)** — a revive whose delta does not
+  descend from the re-stamped `fork_tip` base is **rejected before any tip moves**:
+  under (B) by `worker_commit`'s existing `HEAD==base` ∧ single-parent-`==base`
+  check (add the revive-base case to its test); under (A) by the disposing O's
+  parent-chain verify (`coord:revive-wrong-base` halt). No test relies on the worker
+  obeying the reset prompt.
 - **Behaviour-preservation**: existing `dispatch status` suite green **unchanged**
   after the `phase_projection` extract.
 
@@ -778,23 +819,35 @@ alone buys bounded/gated capability (worker tier); anything unbounded
   precondition + a runtime probe against the installed copy, and the claim is
   never "source scan ⇒ runtime truth".
 
-**Declared touch-set (selector accuracy, post-RV-255 correction).** The Rust
+**Declared touch-set (selector accuracy, post-RV-255 + RV-258 F-4).** The Rust
 design-targets are `src/dispatch.rs` (phase_projection + ReceiptStatus),
 `src/mcp_server/dispatch.rs` (the three emitter tools), `src/mcp_server/tools.rs`
-(MCP registration), and `src/doctor_checks.rs` (check #9 allowlist/marker growth).
-The `/drive-slice` authored home is **not yet a design-target**: no selector
-covers `install/workflows/**`, and `.claude/workflows/**` is scope-relevant AND
-gitignored (the installed copy only). When OQ-1 fixes the committed home, that
-path MUST be registered `--intent design-target` before the script is committed,
-else conformance reds it as undeclared. `src/install.rs` (probe asset + workflows
-seeding leg, if the "seeded by install" claim is kept) rides the broad
-`src/**` scope-relevant selector — touched but not audit-red.
+(MCP registration), and `src/doctor_checks.rs` (check #9 allowlist growth **+ the
+new I1 seam-symmetry check**). The `/drive-slice` authored home **`install/workflows/
+drive-slice.js` IS a design-target** (OQ-1 resolved) — registered `--intent
+design-target`, so conformance reds the currently-shipped **retired-model** POC
+script until the implementation phase overwrites it with the alternating-unjailed
+topology (this is the drift F-4 flagged, now caught by the selector rather than
+missed). `.claude/workflows/**` stays scope-relevant AND gitignored (the installed
+copy only). `src/install.rs` (the probe asset + `install/workflows/` seeding leg)
+rides the broad `src/**` scope-relevant selector — touched but not audit-red.
 
-**Phase-0 e2e (manual, doubles as the SQ3 demo + the `/drive-slice` inspection
-verification):** one real `/drive-slice` against a scratch slice — confined fork
-mints at armed base on `dispatch/<n>`; a phase drives to `Completed`; an injected
-red verify halts the loop without auto-merge; the forbidden-write runtime probe
-refuses.
+**Phase-0 e2e (manual, doubles as the fork-at-base demo + the `/drive-slice`
+inspection verification):** one real `/drive-slice` against a scratch slice —
+- the **worker** fork mints at armed base on `dispatch/<n>` (unjail re-frame — the
+  fork is the workflow leaf's, not a nested confined-orchestrator spawn);
+- a phase drives to `Completed`; an injected red verify halts the loop without
+  auto-merge; the forbidden-write runtime probe refuses;
+- **P5 pinned directly (RV-258 F-2), NOT assumed.** The claude arm must *prove which
+  handoff mode ran*: either **(B)** — a **successful `worker_commit`** call landing a
+  **non-null `WorkReceipt.fork_tip`** (the target path exercised end-to-end) — **or**
+  an **explicit, recorded fall-to-(A)** with the P5 failure reason (worker leaf lost
+  the `worker_commit` MCP tool). A silent degrade to (A) is a phase-0 **failure**:
+  the drive must never *assume* (B) without evidence it ran;
+- **Workflow-seam gate (RV-258 F-1).** Assert the OQ-4 posture live: a jailed
+  subagent attempting a privileged `agent()`/`Workflow` spawn is **denied** (either
+  by caller-identity if the seam carries it, or by the blanket subagent-deny default
+  §5.6) — the escalation attempt never spawns a privileged leaf.
 
 ## 10. Review Notes
 
@@ -845,3 +898,29 @@ correction).** Four findings, all integrated, no architecture change:
   orchestrator as a **reversible escape hatch** (no functional loss) and the
   **seam-symmetry obligation as the standing price** (§5.6 amendment ledger, §7 D8).
   Verdict unchanged.
+
+**RV-258 (formal inquisition, GPT-5.5 on the written artifact, 2026-07-06).** 5
+findings (1 blocker, 4 major), all confirmed against real code and integrated; no
+architecture change — the corrections closed overclaims and hardened invariants:
+- **F-1 (blocker) — safety overclaimed per-seam.** §5.6 read "provably safe /
+  escalation closed" while the `Workflow` seam (I1(b)) is unproven (OQ-4). Fixed:
+  proof status is now **per-seam** — the `Agent` seam is proven closed; the
+  `Workflow` seam is closed by a **fail-safe blanket subagent-deny default** until
+  OQ-4 relaxes it to the identity-gate. The I1 doctor check now also asserts **every
+  seam has a matcher** (nomination ⊆ gate is necessary, not sufficient) (§5.6, §9).
+- **F-2 (major) — (B) target unverified.** §9 never pinned P5. Fixed: phase-0 must
+  prove which handoff mode ran — a successful `worker_commit` + non-null `fork_tip`,
+  **or** an explicit recorded fall-to-(A); a silent degrade is a phase-0 failure (§9).
+- **F-5 (major) — "guaranteed" revive floor was prompt-obedience.** Worker-side
+  `git reset --hard` bypasses `worker_commit`'s proven base invariants. Fixed: the
+  revive commits via `worker_commit` with base **re-stamped to `fork_tip`** (rejects
+  wrong-base mechanically); the (A) path adds a disposing-O parent-chain verify
+  (`coord:revive-wrong-base`); §9 pins a wrong-base-revive rejection test (§5.5, §9).
+- **F-4 (major) — central artifact outside the audit surface.** OQ-1 left
+  `/drive-slice`'s home unpinned while the shipped POC script still carried the
+  retired model. Fixed: OQ-1 **resolved** — home is `install/workflows/drive-slice.js`,
+  a **design-target** so conformance reds the stale POC until implementation replaces
+  it (§6 OQ-1, §9).
+- **F-3 (major)** — shell-damaged duplicate of F-5; **withdrawn** (raised in error).
+Verdict: the approach held; every charge was artifact overclaim/completeness, not a
+structural defect. No unresolved blocker. Sealed in RV-258 `## Synthesis`.
