@@ -1,0 +1,42 @@
+memory_uid = "mem_019f357982687833b19b42814d1814a6"
+memory_key = "mem.pattern.dispatch.confined-orchestrator-cannot-write-funnel"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A workflow-confined (isolation:worktree) agent gets a READ-ONLY shared .git in the jail — it cannot drive the dispatch funnel; the orchestrator role needs RW .git"
+summary = "isolation:worktree confinement gives RO shared .git → arm-spawn/worktree-fork/update-ref/commit all fail; the dispatch orchestrator must run unconfined (main-thread RW .git) and confine only the workers it spawns."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["install/workflows/drive-slice.js"]
+globs = []
+commands = []
+tags = ["dispatch", "orchestrator", "worktree", "confinement", "jail", "funnel"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8e4ec12b2f6b1668d2d44d262e89e50d237e4bd7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d0543aa9c2ca279a0c63b1520d77b67ed3bf475079df24d5790284b18acd6c31"
+base_commit = "fa9518465ac75e4736922b1ce6c65fb4c8ddac80"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

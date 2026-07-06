@@ -544,3 +544,70 @@ should run from the coord tree's ./target/debug/doctrine, not PATH — the gate
 violates its own rule. Token cost: ~full worker turn (146k) landed uncommittable;
 orchestrator diagnosis + land-not-rewrite pivot. Candidate backlog ISS: point the
 worker_commit belt's doctor invocation at the build/coord binary.
+
+[dispatch; SL206-drive-p05-bootstrap]
+PHASE-05 (live /drive-slice acceptance) cannot run against the session's doctrine
+MCP server: it's edge-built (`.mcp.json` cmd `${DOCTRINE_BIN:-doctrine}` → PATH
+`~/.cargo/bin/doctrine`), so it does NOT serve the PHASE-03 read tools the
+deliverable calls — `dispatch_next_ready`/`_phase_receipt`/`_authored_divergence`
+(probe + orchestrator MCP surface). Confirmed absent via ToolSearch; the slice
+binary serves all three (MCP stdio smoke). This is ISS-218's root cause escalated:
+not just a `worker_commit` gate false-red, but the acceptance phase's own tools
+unserved. EN-1 ("defs + reference script live per PHASE-01 procedure") is
+UNDER-SPECIFIED — installing the agent DEFS (`.claude/agents/*.md`) does not serve
+the slice's new MCP TOOLS; the server binary itself must be the slice build. Remedy
+(operator-directed): build slice binary in a throwaway worktree, point
+`DOCTRINE_BIN` at it in `.claude/settings.local.json`, restart session so the MCP
+server re-spawns against it. Incidental cost: a fresh `git worktree` checkout at the
+slice tip DROPS gitignored `web/map/dist/` → RustEmbed `map_server::assets::Assets`
+derive fails to emit `::get` (E0599, 3 errs) — a fresh-checkout cousin of the
+AGENTS.md nix embed-strip hazard; `cp -R web/map/dist` from primary tree fixes it,
+then debug build is clean. So multi-phase dispatch whose LATER phases add MCP tools
+can't self-accept until those tools are served — a bootstrap the plan should carry
+as an explicit EN precondition (repoint+restart), not fold into "install".
+
+[dispatch; SL206-drive-p05-harness-contract]
+PHASE-05 first live load of the shipped /drive-slice (`.claude/workflows/drive-slice.js`,
+PHASE-04) FAILS under the real Claude Code Workflow harness. Two hard contract
+violations, both invisible to PHASE-04's inspection + static-conformance verification:
+  1. `meta.description` is built with `+` string concatenation → tool rejects:
+     "Invalid workflow script: meta must be a pure literal: non-literal node type
+     in meta: BinaryExpression". The Workflow tool requires meta to be a PURE
+     LITERAL (no concat, no computed values). Load-blocking.
+  2. All drive logic is in `export async function run({slice})`. The Workflow tool
+     executes a TOP-LEVEL body (top-level await agent()/log()); it never calls a
+     `run` export. So even with meta fixed the shipped script no-ops (defines run,
+     never invokes it).
+  Minor: `meta.phases` are bare strings (tool wants [{title,detail}]); `meta.args`
+  is a non-standard field (tool passes args via the `args` global).
+Also: `.claude/workflows/` is NOT the Workflow tool's NAMED registry (only built-ins
+`deep-research`/`code-review` resolve by name) — `Workflow({name:'drive-slice'})`
+errors "not found". The runtime path is `Workflow({scriptPath: '.../drive-slice.js'})`.
+So the install target + invocation contract were both authored against design §5.4's
+ASSUMED harness model, never validated against the actual tool. Confirmed the fix is
+CONTRACT-COSMETIC (not logic) by a scratchpad probe copy with only three adaptations
+(literal meta; phases as {title} objects; hoist run() to a top-level `await run(args)`):
+it LOADED and entered the drive. This is precisely the inspection-vs-real-load gap
+PHASE-05 exists to close. Fix-forward is small but touches a LANDED PHASE-04
+deliverable → governance decision (patch-forward + disposition at audit, vs re-open
+PHASE-04) pending operator direction.
+
+[dispatch; SL206-drive-p05-confined-orchestrator]
+PHASE-05 live drive (once the args/meta contract issues were probed past) surfaced
+the LOAD-BEARING defect: the shipped /drive-slice spawns the dispatch-orchestrator
+with `agent(..., {isolation:'worktree'})`. Under the jail that confinement gives the
+orchestrator a READ-ONLY shared `.git` and no write to the coord tree — so EVERY
+funnel write fails: `dispatch arm-spawn` → RO `.doctrine/state/dispatch/spawn`;
+`doctrine worktree fork`/`git update-ref`/`git commit` → "cannot lock ref … Read-only
+file system". The orchestrator cannot arm, fork a worker, or import/conclude → phases
+never reach Completed. It composed a clean `anomaly:coord-tree-and-git-read-only`
+halt, coord tip unchanged, NO auto-merge (safety held). Root: §5.4 inverts the
+working claude-arm model, where the orchestrator is the MAIN thread (RW `.git`,
+operates the coord tree) and CONFINES the WORKERS — drive-slice.js confines the
+orchestrator, the one role needing RW `.git`. This is a design-model defect, not a
+transcription/contract patch. Positive: planner probe, typed PhaseReceipt
+compose→consume, report-and-halt/no-auto-merge, divergence advisory (never gates),
+null-budget unmetered all WORKED. Token/complexity note: three sequential probe runs
++ a full slice-binary build + host-disk-full recovery were needed just to reach the
+first real load — the inspection-only verification of PHASE-04 deferred all of this
+cost to acceptance. Feeds ISS-218 family (stale/confined binary + env surface).
