@@ -198,7 +198,7 @@ the `agent()` call forces the shape and the harness validates it:
 
 ```
 PhaseReceipt = PhaseReceiptCore                        // (from dispatch_phase_receipt Resolved; ABSENT on CoordRefused)
-  + worker_fork   : string                             // orchestrator armed/spawned it (ephemeral, reaped)
+  + worker_fork   : string                             // ephemeral, reaped. pi arm: O `git worktree add`-ed it (knowable at prep). claude arm (B): HARNESS-minted at agent() spawn (agent-id-named) — UNKNOWABLE at prep; the disposing O DISCOVERS it from WorkReceipt.fork_tip, never from prep (C1)
   + verify        : { green: bool, failures: string[] }// orchestrator RAN the tests
   + halt_reason?  : string                             // set on any stop — incl. "coord:<reason>" when the emitter returned CoordRefused
   + fixup?        : { reason: string, instructions: string } // fixable worker delta → revive on fork (§5.4)
@@ -270,8 +270,13 @@ alternate; the workflow threads facts (2a-a), never computes them:
     ⇒ accepted-or-halted. Drives the bounded revive loop.
   - **prep** (absent on the terminal O and whenever no next phase is ready):
     `{ phase, arm: "claude"|"pi", base_B, worker_prompt, worker_fork }` — the next
-    worker's context; on pi, O has already `git worktree add`-ed + spawned it.
-  - `next_ready: string[]` — the slice-global adjunct (`dispatch_next_ready`).
+    worker's context; on pi, O has already `git worktree add`-ed + spawned it. A
+    **null prep is overloaded** (drive-complete vs prep-failed): on a *hard* prep
+    failure (distill error, pi `git worktree add` failure) the O MUST set
+    `halt_reason` (`coord:`/`funnel:`) rather than return a silent null; the driver
+    additionally belts a silent omission via the `next_ready` cross-check (A1, §5.4).
+  - `next_ready: string[]` — the slice-global adjunct (`dispatch_next_ready`);
+    load-bearing for the A1 belt, not decoration.
 
 ```js
 const SEED_PHASE_COST = 45_000;   // RFC-011-observed funnel ceremony (STD-001: rationale in comment)
@@ -330,7 +335,17 @@ while (hop.prep) {                                        // prep present ⇒ a 
   if (hop.receipt_status === 'Blocked')    { report.halted={reason:HALT.PHASE_BLOCKED, phase}; break; }  // (F4)
   if (hop.receipt_status !== 'Completed')  { report.halted={reason:`${HALT.ANOMALY}:${hop.receipt_status}`, phase}; break; } // Unknown (F4)
   if (!hop.verify.green)                   { report.halted={reason:HALT.VERIFY_RED, phase}; break; }
-  // accepted ⇒ loop on hop.prep (this O already prepped W_{i+1}); null ⇒ drive done.
+  // A1 — `hop.prep` is OVERLOADED: drive-complete vs prep-failed vs prep-skipped.
+  // A clean dispose that then FAILS to prep (distill error, pi `git worktree add`
+  // failure) also returns prep:null; treating null as done would report a truncated
+  // drive as complete (violates F3 — success must not be an omission). Belt: a null
+  // prep with a NON-EMPTY next_ready is an anomaly, not completion. (The disposing O
+  // SHOULD also set halt_reason directly on a hard prep failure it detects — coord:/
+  // funnel:; this cross-check catches a SILENT omission the receipt didn't name.)
+  if (!hop.prep && hop.next_ready && hop.next_ready.length) {
+    report.halted = { reason: HALT.PREP_INCOMPLETE, phase }; break;
+  }
+  // accepted ⇒ loop on hop.prep; null prep ∧ next_ready empty ⇒ drive genuinely done.
 }
 report.divergence = await divergenceProbe(slice);  // agent(dispatch-probe) → read-only divergence tool (§5.5)
 return report;
@@ -344,10 +359,13 @@ not scattered literals. Two families:
   design does not mint these strings — it forwards the authored enums.
 - **Script-local** — a named `HALT` table in `/drive-slice` (the driver's only
   authored vocabulary): `{ NULL_RECEIPT, CONCLUDE_INCOMPLETE, PHASE_BLOCKED,
-  ANOMALY, VERIFY_RED, BUDGET_EXHAUSTED, FIXUP_EXHAUSTED }`. Single source; the loop
-  references members, never inline literals (STD-001 in the JS reference).
-  `FIXUP_EXHAUSTED` fires when a hop's bounded revive loop exceeds `MAX_FIXUP`
-  without an accepted dispose — the worker could not fix its delta in-budget.
+  ANOMALY, VERIFY_RED, BUDGET_EXHAUSTED, FIXUP_EXHAUSTED, PREP_INCOMPLETE }`. Single
+  source; the loop references members, never inline literals (STD-001 in the JS
+  reference). `FIXUP_EXHAUSTED` fires when a hop's bounded revive loop exceeds
+  `MAX_FIXUP` without an accepted dispose — the worker could not fix its delta
+  in-budget. `PREP_INCOMPLETE` (A1) fires when a hop disposed cleanly but returned a
+  null `prep` while `next_ready` is non-empty — a prep that silently failed, not a
+  genuine drive-complete (§5.4 loop belt).
 
 - **null `total` → unmetered**: `budget.total &&` short-circuits; the loop runs
   all ready phases (D4-a).
@@ -422,13 +440,29 @@ exists — D2):
   confinement is the worker's, never the orchestrator's.
 - **Revive is fork-durable, not context-intact (§5.1, D10).** The documented
   Workflow primitives are `agent()`/`parallel()`/`pipeline()` — one-shot spawns, no
-  `SendMessage`. So a fixup revives the worker as a **fresh `agent()` on the same
-  fork branch** (the delta is durable there under (B)) carrying O's fixup notes — the
-  worker resumes from committed state, not cold, but its prior *live reasoning* is
-  gone. The disposing O is likewise re-spawned each pass (re-derives from the fork
-  diff + verify output). Accepted cost of workflow-spawned ephemerals; true
-  context-intact revive is a later enhancement iff the runtime exposes continuation
-  (OQ-5). `MAX_FIXUP`-bounded; exhaustion halts (`FIXUP_EXHAUSTED`).
+  `SendMessage`. So a fixup revives the worker as a **fresh `agent()`** whose delta
+  starts from the prior worker's committed `fork_tip` (durable under (B)) carrying
+  O's fixup notes — the worker resumes from committed state, not cold, but its prior
+  *live reasoning* is gone. **The revive base is NOT free (C1).** A plain
+  `agent(isolation:'worktree')` mints a **fresh** worktree off the Bash-cwd HEAD
+  (armed base `B_i`), **not** the prior `fork_tip` — so "on the same fork" needs a
+  stated mechanism, not an assertion. Two, in preference order:
+  1. **Re-armed base (preferred, unproven).** The `WorktreeCreate` arming hook —
+     doctrine's own, which already controls the isolated worker's fork base
+     (CHR-039: payload is controllable) — points the revive worktree's base at
+     `fork_tip` instead of `B_i`. Zero worker-side git. **Gated by OQ-6**: CHR-039
+     proved the hook controls the fork *cwd*, not yet that it can redirect the fork
+     *base ref* to an arbitrary existing branch tip.
+  2. **Worker-side reset (guaranteed fallback).** The fixup prompt carries
+     `fork_tip`; the revive worker's first act is `git reset --hard <fork_tip>` onto
+     its fresh worktree, then re-edits. Ugly (a worker touching git refs) but needs
+     **no** new mechanism and is always available; the R-5 belt still guards
+     `.doctrine/`/`.claude/`, and the reset target is O-supplied (not worker-chosen).
+  Design ships mechanism 2 as the floor and adopts 1 iff OQ-6 proves out. The
+  disposing O is likewise re-spawned each pass (re-derives from the fork diff +
+  verify output). Accepted cost of workflow-spawned ephemerals; true context-intact
+  revive is a later enhancement iff the runtime exposes continuation (OQ-5).
+  `MAX_FIXUP`-bounded; exhaustion halts (`FIXUP_EXHAUSTED`).
 - **Config lives in the script.** `SEED_PHASE_COST`, `SOFT_CEILING` are named
   constants in `/drive-slice` (harness-side, consumed by JS `budget.*`), NOT
   doctrine config — the Rust emitter never sees `budget.spent()`. No new Rust
@@ -487,10 +521,22 @@ deny), 2026-07-06 (`unjail-direction.md` §6).
    compensated for the missing parentage is retired (P4).
 
 **Design invariants.**
-- **I1 — one list, two consumers.** The gate's privileged deny-set IS the same
+- **I1 — one list, EVERY spawn seam.** The gate's privileged deny-set IS the same
   authored list as the nomination-eligible-set — never two lists that can drift.
   A type added to nomination without the gate is an open escalation hole; the
-  design binds them to one source so the gate cannot lag a new nomination.
+  design binds them to one source so the gate cannot lag a new nomination. The
+  invariant is **not** "one list, two consumers" — it is **one list, gating every
+  spawn seam the harness exposes**. Today there are **two** spawn seams, not one:
+  (a) the `Agent` tool (`PreToolUse(Agent)` — proven P3/P4), and (b) the **Workflow
+  tool** — a jailed subagent holding `Workflow` (general-purpose agents hold `*`)
+  can run a script whose `agent('…', {agentType:'dispatch-orchestrator'})` spawns a
+  privileged child, **laundering the jailed caller's identity through the workflow
+  runtime**. The same matcher MUST cover both: extend the `PreToolUse` gate to the
+  `Workflow` tool — deny when `caller agent_id present ∧ caller ∉ allowlist` (a
+  jailed caller cannot open a workflow that spawns privileged leaves). A *future*
+  harness spawn surface inherits the gate by this rule, defaulting to **gated, not
+  forgotten**. (This is what OQ-4 must resolve as a **symmetry requirement**, not a
+  convenience: see §6.)
 - **I2 — config outside every jail.** The allowlist and hook config live at a
   path writable ONLY by the main thread — out of every worktree jail (jailed
   agents cannot write it: worktree-jail Bash deny + import R-5 belt on
@@ -502,6 +548,15 @@ orchestrator **jailed**: a visible functional failure, never an escape. Absence
 of an allowlist entry never grants `PassThrough`. Hygiene: a `SubagentStop`
 matcher removes the entry so a stale `agent_id` cannot be reused (fires awaited,
 tree-intact).
+
+**Amendment ledger (for the ADR-008 amendment, D8).** The amendment records two
+things beyond the grant: (a) the **confined orchestrator (Mode-B) as a reversible
+escape hatch** — it loses nothing functional under Workflow (import already routes
+via the shipped MCP), so if the seam-symmetry obligation below proves
+unmaintainable, revert with no functional loss; (b) the **seam-symmetry obligation
+as the standing price** — I1 binds *every* harness spawn seam (`Agent`, `Workflow`,
+any future surface) to the one deny-set; a new seam defaults to gated, and that duty
+is permanent for as long as the orchestrator runs unjailed.
 
 **Consistent with ADR-006 / CHR-039.** The orchestrator is unconfined *by design*
 (sole writer). Nomination relocates the main thread's existing unjailed status to
@@ -531,17 +586,32 @@ alone buys bounded/gated capability (worker tier); anything unbounded
   operator-assessed low-risk)? If P5 fails, fall to **(A)**: O(dispose) imports the
   worker's uncommitted working-tree diff. Design authors (B) target + (A) fallback
   (D9).
-- **OQ-4 — workflow spawn vs the §5.6 spawn-gate.** The workflow spawns
-  `dispatch-orchestrator` (privileged) via `agent()`. Confirm the workflow's
-  `agent()` spawn either presents caller `agent_id=<NONE>` (main-thread-equivalent
-  ⇒ not denied) or does not trigger `PreToolUse(Agent)` at all (workflow `agent()`
-  ≠ the `Agent` tool) — either passes. A workflow-`agent_id` that trips the gate
-  would need the workflow itself allowlisted. Phase-0 verification; nomination
-  *firing* for a workflow leaf is already confirmed (OQ-3).
+- **OQ-4 — spawn-seam SYMMETRY (not "either passes").** The workflow spawns
+  `dispatch-orchestrator` (privileged) via `agent()` — a **second spawn seam**
+  distinct from the `Agent` tool the §5.6 gate proved (P3/P4). Framing this as
+  "confirm either the workflow presents `agent_id=<NONE>` OR doesn't trip
+  `PreToolUse(Agent)`" is **backwards**: the convenient answer (workflow `agent()`
+  reads main-thread-equivalent, or fires no gate) is **precisely the hole** — a
+  jailed `Workflow`-holder then launders its identity through the runtime to spawn
+  a privileged leaf (I1(b)). The requirement is a **symmetry invariant**: *every*
+  spawn seam must present the caller's `agent_id` to the gate, or be denied to
+  jailed callers outright. Concretely — phase-0 must establish, for the `Workflow`
+  seam: (1) does a jailed subagent's `agent()`/`Workflow` call carry the caller's
+  `agent_id` to a `PreToolUse(Workflow)` matcher? If yes, the I1 deny-set gates it
+  for free. If no (the runtime hides caller identity), then `Workflow` MUST be
+  **denied to jailed callers wholesale** (matcher on `Workflow` + `caller agent_id
+  present`). The legit main-thread `/drive-slice` launch (`agent_id=<NONE>`) passes
+  either way. Nomination *firing* for a workflow leaf is already confirmed (OQ-3);
+  this is the **escalation** direction, unproven, and load-bearing for §5.6.
 - **OQ-5 — revive-on-fork vs context-intact.** v1 revive is a fresh worker
   `agent()` on the fork (durable delta + O's notes) — documented primitives only.
   If the Workflow runtime later exposes `SendMessage`-style continuation,
   context-intact revive is a token-saving enhancement (RFC-011). Not v1.
+- **OQ-6 — revive-base mechanism (C1).** Can the `WorktreeCreate` arming hook
+  redirect a revive worktree's fork *base ref* to an existing `fork_tip` (mechanism
+  1, §5.5), or only its cwd (CHR-039 proved cwd, not base-ref)? Phase-0 probe. If it
+  cannot, the design falls to mechanism 2 (worker-side `git reset --hard <fork_tip>`,
+  guaranteed) — no architecture change either way, only which revive path ships.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -586,8 +656,17 @@ alone buys bounded/gated capability (worker tier); anything unbounded
   coord write via server-side MCP). Chosen for **simplicity of reasoning + lower
   implementation complexity** (operator's real kicker), not necessity — a confined
   orchestrator was proven viable (P0 Q2) but keeps the whole server-side-MCP-only
-  coord-write constraint. Cost: an **ADR-008 amendment** (§9) + `/inquisition`.
-  Proven safe P1/P3/P4 (§5.6); no arming token.
+  coord-write constraint. Cost, stated honestly for the ADR-008 amendment ledger:
+  unjail buys plain-git convenience for O but adds a **standing obligation** —
+  nomination machinery + the spawn-gate + `SubagentStop` hygiene + the amendment +
+  the **seam-symmetry duty forever** (I1: every future harness spawn surface inherits
+  gate duty, B1/OQ-4). The confined alternative loses **nothing functional** under
+  Workflow (import already routes via the shipped MCP). So the amendment MUST record
+  two things: (a) the **confined orchestrator as a reversible escape hatch** — if the
+  seam-symmetry obligation ever proves unmaintainable, revert to Mode-B with no
+  functional loss; (b) the seam-symmetry obligation itself as the **ongoing price**
+  of the unjail posture. This strengthens the amendment; it does not change the
+  verdict. Proven safe P1/P3/P4 (§5.6); no arming token.
 - **D9 — spawn/import authority split; (B) self-commit target, (A) import
   fallback.** The workflow spawns all agents (wall #1: an orchestrator leaf has no
   `Agent` tool → cannot nest the worker); the disposing orchestrator imports +
@@ -621,11 +700,14 @@ alone buys bounded/gated capability (worker tier); anything unbounded
 - **R3 — Un-allowlisted MCP *writes* run un-prompted from a background worker**
   (CHR-039 tested reads only). *Mitigation*: the grant gate (D2) is the control;
   the emitter adds no write surface; phase-0 runtime-probes a forbidden write.
-- **R4 — SQ3 (confined fork-at-base from a workflow) not empirically re-demoed**
-  — leans on SL-199 prior art. *Mitigation*: plan **phase-0** is a narrow SQ3
-  de-risk (one real `/drive-slice` against a scratch slice, asserting the fork
-  mints at armed base on `dispatch/<n>` end-to-end); does NOT re-run CHR-039's
-  settled probes.
+- **R4 — worker fork-at-base from a workflow leaf not empirically re-demoed**
+  (unjail re-frame: the fork is now the **worker's**, minted by the workflow
+  `agent(isolation:'worktree')` leaf, NOT a nested confined-orchestrator spawn —
+  CHR-039 proved the leaf fires `WorktreeCreate` and forks at the armed base).
+  *Mitigation*: plan **phase-0** is a narrow de-risk (one real `/drive-slice`
+  against a scratch slice, asserting the worker fork mints at armed base on
+  `dispatch/<n>` end-to-end, and — folded in — the OQ-6 revive-base probe); does NOT
+  re-run CHR-039's settled probes.
 - **R5 — behaviour-preservation regression** in `run_status`. *Mitigation*: the
   extract is delegate-only; existing dispatch suites must stay green unchanged
   (the gate).
@@ -718,3 +800,24 @@ deliver_to`; (2) §9 selector accuracy — `dispatch-worker.md` reclassified
 design-target→scope-relevant, the Rust design-targets enumerated, and the
 `/drive-slice` home flagged as an unregistered selector pending OQ-1. Both are
 completeness/accuracy corrections, not architecture — the sealed verdict stands.
+
+**Internal adversarial pass on the §5 unjail rewrite (2026-07-06, post-topology
+correction).** Four findings, all integrated, no architecture change:
+- **B1 (security, real)** — the spawn-gate covered one seam (`Agent`); the
+  **Workflow tool is a second, ungated seam** (a jailed `Workflow`-holder can launder
+  identity through the runtime). Fixed: I1 generalized to *one list, every spawn
+  seam*; OQ-4 reframed from "either passes" to a **symmetry requirement** (§5.6 I1,
+  §6 OQ-4).
+- **A1 (correctness, real)** — `hop.prep === null` was overloaded (drive-complete vs
+  prep-failed); a clean dispose that failed to prep read as done. Fixed: null-prep +
+  non-empty `next_ready` ⇒ `HALT.PREP_INCOMPLETE` belt + hard-failure sets
+  `halt_reason` (§5.4).
+- **C1 (under-specified)** — revive-on-fork asserted "same fork" with no mechanism;
+  a plain isolated `agent()` forks off `B_i`, not `fork_tip`. Fixed: two stated
+  mechanisms (re-armed base, preferred/OQ-6; worker-side `git reset --hard`,
+  guaranteed floor) + `worker_fork` provenance corrected (claude arm: discovered
+  from `WorkReceipt`, not prep) (§5.2, §5.5, §6 OQ-6).
+- **D8-ledger (sharpening)** — the ADR-008 amendment must record the confined
+  orchestrator as a **reversible escape hatch** (no functional loss) and the
+  **seam-symmetry obligation as the standing price** (§5.6 amendment ledger, §7 D8).
+  Verdict unchanged.
