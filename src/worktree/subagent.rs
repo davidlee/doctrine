@@ -9,11 +9,12 @@
 use super::allowlist::{
     Allowlist, allowlist_violations, is_withheld, parse_allowlist, select_copies,
 };
+use super::jail::is_privileged_agent_type;
 use super::marker::{DISPATCH_WORKER_AGENT_TYPE, marker_present, write_marker};
 use super::provision::run_provision;
 use super::shared::{
-    gather_fork_worktree, gather_tree_clean, is_linked_worktree, matches, resolve_commit,
-    resolve_common_dir, target_dir_for_branch,
+    gather_fork_worktree, gather_tree_clean, is_linked_worktree, matches, project_anchor,
+    resolve_commit, resolve_common_dir, target_dir_for_branch,
 };
 use crate::fsutil::{self, CopyOutcome};
 use crate::git;
@@ -398,4 +399,273 @@ pub(crate) fn run_verify_worker(
             bail!("verify-worker-refused: {}", refusal.token());
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Nomination + spawn-gate hooks (SL-206 PHASE-11, design §5.6) — the
+// `SubagentStart(dispatch-orchestrator)` nominate handler and the
+// `SubagentStop` denominate hygiene handler. Closed loop with `pretooluse`'s
+// `Agent`/`Workflow` gate legs: nominate WRITES the allowlist entry (I2 — the
+// FIXED, out-of-jail path is writable only by a process that resolves
+// `CLAUDE_PROJECT_DIR`; jailed callers cannot spawn at all, so a worker cannot
+// nominate anything); denominate REMOVES it on `SubagentStop` (hygiene, so a
+// stale `agent_id` cannot be reused); [`is_nominated`] is the READ side
+// `pretooluse`'s gate + jail PassThrough leg both consume.
+// ---------------------------------------------------------------------------
+
+/// The allowlist's FIXED, out-of-jail location relative to `project_anchor()`
+/// (design §5.6 I2 — resolved from `CLAUDE_PROJECT_DIR`, NEVER cwd-relative;
+/// a `SubagentStart` hook's cwd is the SPAWNED tree, not the project root,
+/// `mem_019ee3a0`). Presence-plus-membership, one `agent_id` per line — mirrors
+/// `marker.rs`'s `.doctrine/state/dispatch/worker` shape (a runtime artifact,
+/// not an authored entity).
+const NOMINATION_ALLOWLIST_REL: &str = ".doctrine/state/orch-allowlist.txt";
+
+fn allowlist_path(project_dir: &Path) -> PathBuf {
+    project_dir.join(NOMINATION_ALLOWLIST_REL)
+}
+
+/// Read the allowlist into trimmed, non-empty lines. Fail-safe (design §5.6):
+/// an absent or unreadable file resolves to EMPTY — nobody nominated, never a
+/// read error that could somehow imply membership.
+fn read_allowlist(project_dir: &Path) -> Vec<String> {
+    fs::read_to_string(allowlist_path(project_dir))
+        .ok()
+        .map(|body| {
+            body.lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Write the allowlist body (one `agent_id` per line), creating the parent dir
+/// as needed. The SOLE writer-shell for both [`act_nominate`] and
+/// [`act_denominate`] — never two write paths that could diverge on format.
+fn write_allowlist(project_dir: &Path, lines: &[String]) -> anyhow::Result<()> {
+    let path = allowlist_path(project_dir);
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)
+            .with_context(|| format!("create nomination-allowlist dir {}", dir.display()))?;
+    }
+    let mut body = String::new();
+    for line in lines {
+        body.push_str(line);
+        body.push('\n');
+    }
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "runtime nomination-allowlist state"
+    )]
+    fs::write(&path, body)
+        .with_context(|| format!("write nomination allowlist {}", path.display()))?;
+    Ok(())
+}
+
+/// `agent_id ∈ existing` — the ONE membership test both the gate (T4) and the
+/// jail `PassThrough` leg (T5) rely on via [`is_nominated`]. PURE.
+fn is_nominated_among(existing: &[String], agent_id: &str) -> bool {
+    existing.iter().any(|line| line == agent_id)
+}
+
+/// Idempotent append (T2): `agent_id` appended to `existing` iff not already
+/// present (exact-line match) — a repeated nomination (retry, resume) never
+/// duplicates the entry. PURE.
+pub(crate) fn append_nomination(existing: &[String], agent_id: &str) -> Vec<String> {
+    if is_nominated_among(existing, agent_id) {
+        existing.to_vec()
+    } else {
+        let mut out = existing.to_vec();
+        out.push(agent_id.to_string());
+        out
+    }
+}
+
+/// Remove every line exactly equal to `agent_id` (T3, denominate hygiene).
+/// Absent id ⇒ `existing` returned content-unchanged. PURE.
+pub(crate) fn remove_nomination(existing: &[String], agent_id: &str) -> Vec<String> {
+    existing
+        .iter()
+        .filter(|line| line.as_str() != agent_id)
+        .cloned()
+        .collect()
+}
+
+/// `agent_id` is currently nominated at `project_dir` (design §5.6). The
+/// `pretooluse` Bash/Edit/Write `PassThrough` leg (T5) and the `Agent` spawn-gate
+/// (T4) both call this with the SAME `project_dir` they resolved
+/// (`project_anchor()`), so the membership read is single-sourced. Fail-safe:
+/// nomination NEVER defaults to granted — an absent/unreadable allowlist file
+/// folds to [`read_allowlist`]'s empty default.
+pub(crate) fn is_nominated(project_dir: &Path, agent_id: &str) -> bool {
+    is_nominated_among(&read_allowlist(project_dir), agent_id)
+}
+
+/// Why `nominate` refuses (design §5.6). `SubagentStart` cannot fail-closed —
+/// exit 2 does not abort the spawn — so a refusal here is simply "don't write",
+/// never a block. Distinct named tokens (STD-001; the security-boundary
+/// property tests assert on VARIANTS, not prose).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NominateRefusal {
+    /// `CLAUDE_PROJECT_DIR` is unset/uncanonicalizable — the FIXED allowlist
+    /// path is unresolvable. An environment/setup error, not a benign refusal.
+    MissingProjectDir,
+    /// `agent_type` is absent or not in [`super::jail::PRIVILEGED_AGENT_TYPES`]
+    /// — a benign (non-orchestrator) spawn. `SubagentStart` fires for EVERY
+    /// subagent type, so this is the expected common case, not a failure.
+    Ineligible,
+    /// The payload carried no (or an empty) `agent_id` — nothing to write.
+    MissingAgentId,
+}
+
+impl NominateRefusal {
+    /// The distinct named token each refusal fails closed with.
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            NominateRefusal::MissingProjectDir => "missing-project-dir",
+            NominateRefusal::Ineligible => "ineligible",
+            NominateRefusal::MissingAgentId => "missing-agent-id",
+        }
+    }
+}
+
+/// PURE nominate classifier (T2). Precondition order: project-dir resolvability
+/// (an environment/setup problem, checked first — without it nothing else
+/// matters) → eligibility (the ordinary benign-spawn case, named next so a
+/// benign spawn's refusal reads as "ineligible", not a missing-id red herring)
+/// → `agent_id` presence (a malformed/partial payload, checked last).
+pub(crate) fn classify_nominate(
+    agent_type: &str,
+    project_dir_present: bool,
+    agent_id_present: bool,
+) -> Result<(), NominateRefusal> {
+    if !project_dir_present {
+        return Err(NominateRefusal::MissingProjectDir);
+    }
+    if !is_privileged_agent_type(agent_type) {
+        return Err(NominateRefusal::Ineligible);
+    }
+    if !agent_id_present {
+        return Err(NominateRefusal::MissingAgentId);
+    }
+    Ok(())
+}
+
+/// The `SubagentStart` nominate payload subset read (tolerates extra fields,
+/// mirroring [`SubagentPayload`]). JSON on stdin: `{ "agent_id": "...",
+/// "agent_type": "dispatch-orchestrator" }`.
+#[derive(Debug, Default, serde::Deserialize)]
+struct NominatePayload {
+    #[serde(default)]
+    agent_id: Option<String>,
+    #[serde(default)]
+    agent_type: Option<String>,
+}
+
+/// The already-resolved-inputs nominate act (gather → classify → act):
+/// testable with an injected `project_dir` — no env mutation in tests, since
+/// `CLAUDE_PROJECT_DIR` is a process-global env var multiple test threads would
+/// race on (design §5.6 I2's real resolution stays in [`run_nominate`] alone).
+/// `pub(crate)` for that testability (mod.rs's test module, T2's golden suite).
+pub(crate) fn act_nominate(
+    project_dir: Option<&Path>,
+    agent_id: Option<&str>,
+    agent_type: &str,
+) -> anyhow::Result<()> {
+    let agent_id = agent_id.filter(|s| !s.is_empty());
+    if let Err(refusal) = classify_nominate(agent_type, project_dir.is_some(), agent_id.is_some()) {
+        writeln!(io::stderr(), "nominate-refused: {}", refusal.token())?;
+        bail!("nominate-refused: {}", refusal.token());
+    }
+    // classify_nominate's Ok arm guarantees both are Some — the precondition
+    // order above checked exactly these two facts. Never a panic on the
+    // structurally-unreachable else (`unreachable!`/`unwrap` are denied,
+    // Cargo.toml): a bail is the fail-loud, non-panicking equivalent.
+    let (Some(project_dir), Some(agent_id)) = (project_dir, agent_id) else {
+        bail!("nominate: internal error — classify_nominate(Ok) without both inputs present");
+    };
+    let existing = read_allowlist(project_dir);
+    let updated = append_nomination(&existing, agent_id);
+    write_allowlist(project_dir, &updated)?;
+    writeln!(io::stderr(), "nominated {agent_id}")?;
+    Ok(())
+}
+
+/// `doctrine worktree nominate` — the `SubagentStart(dispatch-orchestrator)`
+/// hook handler (design §5.6). Reads `{agent_id, agent_type}` JSON on stdin; an
+/// ELIGIBLE spawn (`agent_type ∈ PRIVILEGED_AGENT_TYPES`) appends `agent_id` to
+/// the FIXED allowlist at `$CLAUDE_PROJECT_DIR`-resolved
+/// `.doctrine/state/orch-allowlist.txt` (I2 — out of every worker jail).
+///
+/// `SubagentStart` is READ-ONLY (a non-zero exit does NOT abort the spawn — the
+/// same non-fail-closable contract as [`run_stamp_subagent`]), so a refusal
+/// here is simply "don't write"; the fail-safe direction is a MISSED
+/// nomination leaves the orchestrator jailed (a visible functional failure),
+/// NEVER an escape (design §5.6 "fail-safe" — absence of an allowlist entry
+/// never grants `PassThrough`).
+pub(crate) fn run_nominate() -> anyhow::Result<()> {
+    let mut raw = String::new();
+    io::Read::read_to_string(&mut io::stdin(), &mut raw)
+        .context("read SubagentStart nominate payload")?;
+    // Malformed JSON folds to an empty payload ⇒ classified `missing-agent-id`
+    // (an empty `agent_type` also refuses `ineligible`) — never a panic.
+    let payload: NominatePayload = serde_json::from_str(&raw).unwrap_or_default();
+    let agent_type = payload.agent_type.unwrap_or_default();
+    act_nominate(
+        project_anchor().as_deref(),
+        payload.agent_id.as_deref(),
+        &agent_type,
+    )
+}
+
+/// The `SubagentStop` denominate payload subset read. JSON on stdin:
+/// `{ "agent_id": "..." }` (tolerates extra fields, same subset philosophy as
+/// [`SubagentPayload`]/[`NominatePayload`]).
+#[derive(Debug, Default, serde::Deserialize)]
+struct DenominatePayload {
+    #[serde(default)]
+    agent_id: Option<String>,
+}
+
+/// The already-resolved-inputs denominate act (T3) — see [`act_nominate`] on
+/// why `project_dir` is injected rather than env-resolved here. A missing
+/// `agent_id`, an unresolvable `project_dir`, or an entry not currently present
+/// is a CLEAN no-op: NO write at all (never even touches the file), so a
+/// benign `SubagentStop` for an un-nominated agent leaves nothing behind.
+/// `pub(crate)` for that testability (mod.rs's test module, T3's golden suite).
+pub(crate) fn act_denominate(
+    project_dir: Option<&Path>,
+    agent_id: Option<&str>,
+) -> anyhow::Result<()> {
+    let Some(agent_id) = agent_id.filter(|s| !s.is_empty()) else {
+        return Ok(()); // no agent_id ⇒ nothing to remove.
+    };
+    let Some(project_dir) = project_dir else {
+        return Ok(()); // no resolvable anchor ⇒ nothing to remove.
+    };
+    let existing = read_allowlist(project_dir);
+    if !is_nominated_among(&existing, agent_id) {
+        return Ok(()); // absent entry ⇒ clean no-op, no write.
+    }
+    let updated = remove_nomination(&existing, agent_id);
+    write_allowlist(project_dir, &updated)?;
+    writeln!(io::stderr(), "denominated {agent_id}")?;
+    Ok(())
+}
+
+/// `doctrine worktree denominate` — the `SubagentStop` hygiene hook handler
+/// (design §5.6). Reads `{agent_id}` JSON on stdin; removes exactly that entry
+/// from the allowlist so a stale `agent_id` cannot be reused once the
+/// orchestrator's session ends. Absent file / absent entry / absent env is a
+/// CLEAN no-op, exit 0 — never an error: this is best-effort hygiene, not the
+/// security-load-bearing gate itself (the gate is the allowlist READ,
+/// [`is_nominated`], which is fail-safe regardless of whether hygiene ran).
+pub(crate) fn run_denominate() -> anyhow::Result<()> {
+    let mut raw = String::new();
+    io::Read::read_to_string(&mut io::stdin(), &mut raw)
+        .context("read SubagentStop denominate payload")?;
+    let payload: DenominatePayload = serde_json::from_str(&raw).unwrap_or_default();
+    act_denominate(project_anchor().as_deref(), payload.agent_id.as_deref())
 }

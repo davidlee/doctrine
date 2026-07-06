@@ -22,6 +22,28 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "matcher": "dispatch-orchestrator",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${DOCTRINE_BIN:-doctrine} worktree nominate"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "dispatch-orchestrator",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${DOCTRINE_BIN:-doctrine} worktree denominate"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -34,6 +56,24 @@
       },
       {
         "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${DOCTRINE_BIN:-doctrine} worktree pretooluse"
+          }
+        ]
+      },
+      {
+        "matcher": "Workflow",
         "hooks": [
           {
             "type": "command",
