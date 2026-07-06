@@ -1,0 +1,46 @@
+memory_uid = "mem_019f37c54b487942b96723d29087af1c"
+memory_key = "mem.pattern.dispatch.mcp-import-lands-object-db-coord-tree-stale"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "dispatch MCP funnel lands object-db commits — coord working tree goes stale (staged reversal)"
+summary = "dispatch_import/dispatch_conclude_phase land commits object-db-only; the coord working tree+index stay at pre-import content, showing as STAGED REVERSALS of the landed delta. A pathless git commit there would silently revert the import. Remedy: git restore --source=HEAD --staged --worktree -- <delta paths> before any suite run or commit in the coord tree."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch_import", "dispatch_conclude_phase"]
+tags = ["dispatch", "funnel", "coord-tree", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "fe1b924662bc79aa84b9176ae0d9b72de34a2c48"
+ref_name = "refs/heads/edge"
+checkout_state_id = "201df5d8e7e866d8fb751b52b9c7992c468acd81a88e5a37448e60ea2f4e2305"
+base_commit = "c79fcec98aad845d5fda7963f47b452db654053b"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-206"
+
