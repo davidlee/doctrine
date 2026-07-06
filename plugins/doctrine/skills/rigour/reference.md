@@ -10,8 +10,8 @@ It covers three things:
    partially substitute for capability.
 2. **The behavioural deltas** — for each behaviour that distinguishes a
    frontier model from its predecessors: a mechanistic account of *why* the
-   weaker model fails, why the corresponding spine interrupts that failure,
-   and how the spine itself degrades.
+   weaker model fails, why the corresponding discipline interrupts that failure,
+   and how the discipline itself degrades.
 3. **Design principles for skill authors** — the transferable lessons about
    turning behaviour into skill prose, extracted from writing this one.
 
@@ -48,20 +48,20 @@ ledger forces the agent to classify a claim as verified or assumed; it cannot
 make the classification correct. Procedure narrows variance and raises the
 floor. It does not raise the ceiling.
 
-Corollary for skill design: every step of a spine must be **individually
+Corollary for skill design: every step of a discipline must be **individually
 within the target agent's capacity**. "Enumerate two hypotheses" works
 because generating a second plausible hypothesis is easy once demanded;
-what was hard was noticing that only one existed. If a spine's steps are
+what was hard was noticing that only one existed. If a discipline's steps are
 themselves edge-of-capacity, the skill has merely relocated the failure.
 
 ---
 
 ## 2. The behavioural deltas
 
-Ten deltas, mapped to seven spines (two pairs merge, one becomes the
-calibration dial rather than a spine):
+Ten deltas, mapped to seven disciplines (two pairs merge, one becomes the
+calibration dial rather than a discipline):
 
-| Delta | Behaviour | Spine |
+| Delta | Behaviour | Discipline |
 |---|---|---|
 | A | Calibration — confidence tracks evidence | Epistemic ledger |
 | B | Hypothesis discipline | Differential diagnosis |
@@ -94,7 +94,7 @@ confident prose whose confidence is uncoupled from grounding, and — worse —
 compounds through self-conditioning. The model has no native signal for "this
 claim of mine is ungrounded"; fluency and truth feel identical from inside.
 
-**Why the spine works.** Tagging claims `verified | inferred | assumed`
+**Why the discipline works.** Tagging claims `verified | inferred | assumed`
 converts an implicit, continuous, unavailable quantity (calibration) into a
 discrete, cheap classification (provenance: did I observe this?). The
 classification is vastly easier than calibration itself — it asks about the
@@ -125,7 +125,7 @@ context shapes what completions are probable. Probes get chosen to confirm
 representing the alternative). Symptom-patching follows naturally: if the
 first hypothesis is assumed, the obvious action is the fix it implies.
 
-**Why the spine works.** Forced enumeration of ≥2 hypotheses breaks the
+**Why the discipline works.** Forced enumeration of ≥2 hypotheses breaks the
 conditioning monopoly — the alternative now also exists in context, and the
 question "which observation distinguishes these" becomes *askable*. It was not
 askable with one hypothesis; there was nothing to distinguish. Predicting each
@@ -157,7 +157,7 @@ fix inherits the fix's assumptions — it verifies the implementation against
 itself. This is the oldest failure in empirical method, and the model
 recapitulates it faithfully.
 
-**Why the spine works.** Pre-registration is the classical remedy, imported
+**Why the discipline works.** Pre-registration is the classical remedy, imported
 whole: fix the goalposts before the evidence arrives, so the evidence cannot
 move them. The falsification framing ("what observation would prove me
 wrong?") counteracts pass-seeking — a check chosen for its ability to fail is
@@ -189,7 +189,7 @@ answers, until quality quietly decays. Tangent-chasing compounds it — each
 source raises questions whose pursuit raises more (the helium-balloon
 problem).
 
-**Why the spine works.** Writing the question and stopping condition *before*
+**Why the discipline works.** Writing the question and stopping condition *before*
 reading converts open-ended ingestion into search with a termination
 predicate. The stopping condition does the heavy lifting: it is decided while
 the agent is still fresh and neutral, not mid-read when curiosity and
@@ -203,24 +203,24 @@ conclusions travel, file dumps don't.
 procedure is only as good as the up-front predicate, and a weak agent may set
 a weak one. Partially self-correcting: a wrong stop surfaces as `assumed`
 claims in the ledger (A) or as surprise later (F), both of which re-open the
-question. Which is the general pattern: spines back-stop each other.
+question. Which is the general pattern: disciplines back-stop each other.
 
 ### E. Risk-ordered decomposition
 
 **Behaviour.** A frontier model decomposes work to *retire uncertainty*: it
-identifies which decisions are load-bearing, attacks the riskiest unknown
+identifies which decisions are foundational, attacks the riskiest unknown
 first with the smallest probe that could kill it, and defers reversible
-decisions. Seams are cut so pieces verify independently.
+decisions. Boundaries are drawn so pieces verify independently.
 
 **Failure mechanism.** Easiest-first is a progress-signal maximizer — visible
 motion, early wins, everything green until the fatal unknown at the end, where
 it is most expensive. Two forces produce it: completion pressure again (each
 finished sub-task is a completion reward), and **narrative-order planning** —
 models tend to plan in the order the problem statement presents, which is
-rarely risk order. Big-bang integration is the same failure at the seam level:
+rarely risk order. Big-bang integration is the same failure at the boundary level:
 risk compounds silently in unassembled pieces.
 
-**Why the spine works.** "Mark which decisions are load-bearing" forces the
+**Why the discipline works.** "Mark which decisions are foundational" forces the
 dependency analysis that narrative-order planning skips. "Smallest probe that
 could retire it" is information-per-token maximization — a spike or thin
 end-to-end path buys certainty precisely where variance is highest.
@@ -228,7 +228,7 @@ Explicitly naming easiest-first as the anti-pattern matters more than it
 seems: models are better at recognizing a *named* failure mode in their own
 behaviour than at deriving it (see §3).
 
-**How it fails.** Everything gets marked load-bearing, and the ordering
+**How it fails.** Everything gets marked foundational, and the ordering
 collapses back to arbitrary. The discriminating question is in the skill:
 *would the rest of the work be rebuilt around it if it changed?* Most
 decisions fail that test honestly applied.
@@ -249,12 +249,12 @@ prerequisite failure: an agent that never predicted anything *cannot be
 surprised*. Without expectations on record there is no contradiction to
 notice — anomalies present as noise.
 
-**Why the spine works.** Two parts. The tripwire converts a felt anomaly into
+**Why the discipline works.** Two parts. The tripwire converts a felt anomaly into
 a procedural halt — "surprise blocks the next forward step" is mechanical, not
 a judgement call. And the *capacity to be surprised* is manufactured upstream
-by other spines: pre-registered predictions (C) and ledgered expectations (A)
+by other disciplines: pre-registered predictions (C) and ledgered expectations (A)
 put expectations on record, so contradiction becomes detectable rather than
-smoothable. This is the deepest inter-spine dependency: surprise sensitivity
+smoothable. This is the deepest inter-discipline dependency: surprise sensitivity
 is not a standalone behaviour but a *product* of prediction discipline.
 
 **How it fails.** Anomalies below the noticing threshold — no procedure fires
@@ -279,7 +279,7 @@ mechanical — numbers and observable, not vibes: two failed attempts; third
 touch of the same file for the same reason; can't connect current action to
 stated goal.
 
-**Why the spine works.** A mechanical rule set *in advance* is a commitment
+**Why the discipline works.** A mechanical rule set *in advance* is a commitment
 device — it was chosen by the agent at its most neutral, and checking it
 requires no judgement at the compromised moment, only counting. "The third
 attempt must be a different strategy" further blocks the loophole of counting
@@ -289,7 +289,7 @@ accusation will rationalize around it.
 
 **How it fails.** Definitional gaming — "this isn't really a second attempt,
 it's a refinement". Partially mitigated by the circular-edit rule (file
-touches are harder to redefine than "attempts"). Ultimately this spine has the
+touches are harder to redefine than "attempts"). Ultimately this discipline has the
 weakest enforcement, because it polices the agent's own accounting; the
 scope-drift rule ("re-derive the chain from goal to action") is the backstop,
 since a thrashing agent usually cannot produce the chain.
@@ -301,15 +301,15 @@ spend an hour of thinking on an irreversible architectural call and none on a
 rename, and it makes that allocation *silently and correctly*.
 
 **Failure mechanism.** Uniform effort. Weaker models apply roughly constant
-depth everywhere — gold-plating trivia while under-analysing the load-bearing
+depth everywhere — gold-plating trivia while under-analysing the decisive
 call, because nothing in the generation process prices one decision
 differently from another. Skills themselves aggravate this: **a skill that
 demands full ceremony unconditionally gets either applied uniformly (cost
 explosion) or, eventually, ignored entirely** (compliance collapse). Both
 outcomes kill the skill.
 
-**Why it's the dial, not a spine.** Calibration is a posture-level property —
-it governs *how much of the rest to apply*, so it must run before the spines
+**Why it's the dial, not a discipline.** Calibration is a posture-level property —
+it governs *how much of the rest to apply*, so it must run before the disciplines
 and gate them. The stakes × reversibility 2×2 makes the allocation cheap: two
 one-bit judgements the target band can make reliably, versus the continuous
 depth-allocation that it can't. Saying the quadrant *out loud* is another
@@ -336,8 +336,8 @@ research detour — no amount of file-reading resolves a preference. The inverse
 failure exists too: over-asking, deferring judgement the agent should own,
 which trains the human to stop reading the questions.
 
-**Why the spine works.** The classification step (research-resolvable vs
-human-decision) is the load-bearing move — it forces the question "*could* any
+**Why the discipline works.** The classification step (research-resolvable vs
+human-decision) is the decisive move — it forces the question "*could* any
 amount of reading settle this?" before either guessing or asking. The
 options-plus-recommendation format attacks the asking-aversion economically:
 it converts the interruption from a burden (open question, thinking delegated
@@ -367,7 +367,7 @@ dropped. And rationale-free records ("decided X") are almost as bad as none:
 the *why* is what prevents expensive re-litigation by whoever resumes,
 including the same agent post-compaction.
 
-**Why the spine works.** Write-through (update the artifact when the state
+**Why the discipline works.** Write-through (update the artifact when the state
 changes) removes the batch step entirely — there is no documentation phase to
 drop. The cold-start test ("could a fresh agent resume from artifacts
 alone?") is a checkable predicate for a property — sufficiency — that is
@@ -396,7 +396,7 @@ or review.
 
 **Every procedure needs an exit condition.** An open loop gets abandoned
 silently, and the abandonment is invisible — the agent just stops doing it.
-An explicit exit ("every load-bearing claim is verified/inferred, or its
+An explicit exit ("every consequential claim is verified/inferred, or its
 assumed status is declared") makes completion checkable and makes *non*-
 completion a visible state that must be either finished or explicitly waived.
 
@@ -408,7 +408,7 @@ observable predicates. Spend the judgement budget at neutral moments (setting
 stopping conditions, pre-registering checks, declaring the quadrant) and let
 the compromised moments run on rails.
 
-**Pre-commitment is the master pattern.** It recurs in nearly every spine:
+**Pre-commitment is the master pattern.** It recurs in nearly every discipline:
 predict before observing, define the check before acting, set stopping
 conditions before reading, fix tripwire counts before starting, declare the
 quadrant out loud. The common mechanism: decisions made early, by the agent
@@ -437,11 +437,11 @@ weight the evidence" fails (that *is* the hard part, restated). When drafting
 a step, ask: is this a checkpoint, or is it the original problem wearing a
 procedure costume?
 
-**Let spines compound, but degrade gracefully.** The deepest structure in
-`/rigour` is that spines manufacture each other's preconditions: surprise
+**Let disciplines compound, but degrade gracefully.** The deepest structure in
+`/rigour` is that disciplines manufacture each other's preconditions: surprise
 sensitivity (F) only exists downstream of prediction discipline (C) and a
 ledger (A); a bad stopping condition (D) is caught later as an assumed claim
-(A) or a surprise (F). Design for that reinforcement — but ensure each spine
+(A) or a surprise (F). Design for that reinforcement — but ensure each discipline
 still pays for itself alone, because partial adoption is the normal case.
 
 **Write for the weakest intended reader.** Short imperative steps. Tables
@@ -451,7 +451,7 @@ the weaker reader — the one the skill exists for — keeps the thread. Note th
 tension with register: compression must not become telegraphic ambiguity.
 
 **Know what doesn't transfer.** Procedure cannot convey taste: which
-hypothesis is *actually* plausible, which claim is *actually* load-bearing,
+hypothesis is *actually* plausible, which claim *actually* matters,
 when a rule's exception genuinely applies. A skill narrows variance and
 raises the floor; the ceiling stays where the model put it. Budget your
 skill-writing effort accordingly: target the failures that are *biases*
@@ -480,14 +480,14 @@ for a harness-agnostic skill.
 **Self-accounting is the weak joint.** Tripwires police the agent's own
 counting; the ledger polices the agent's own honesty about provenance. An
 agent motivated (by completion pressure) to game its accounting can. The
-spines are designed so gaming leaves visible residue — a strawman hypothesis
+disciplines are designed so gaming leaves visible residue — a strawman hypothesis
 is detectable, a tautological check is nameable — but detection assumes
 someone looks. Adversarial review of the *process artifacts* (not just the
 output) is the natural complement.
 
-**Unmeasured.** No ablation data: which spines carry the most value, whether
+**Unmeasured.** No ablation data: which disciplines carry the most value, whether
 the routing table actually gets used or agents read top-to-bottom, whether
 the calibration dial is honoured under pressure. The skill's structure
-(discrete spines, explicit exits) is deliberately amenable to being
-instrumented later — per-spine adoption and outcomes are observable in
+(discrete disciplines, explicit exits) is deliberately amenable to being
+instrumented later — per-discipline adoption and outcomes are observable in
 transcripts if anyone cares to measure.

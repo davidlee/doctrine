@@ -14,7 +14,7 @@ a stage.
 At the edge, specific failure modes dominate: confabulated confidence,
 anchoring on the first hypothesis, greedy reading, success declared without
 evidence, retrying harder instead of differently, and state lost to context
-pressure. Each spine below substitutes an explicit procedure for the judgement
+pressure. Each discipline below substitutes an explicit procedure for the judgement
 that would otherwise have to be flawless. Discipline is cheaper than capacity;
 buy correctness with process.
 
@@ -25,16 +25,16 @@ Rigour costs tokens and time. Set the dial by **stakes × reversibility**:
 |  | Reversible | Hard to reverse |
 |---|---|---|
 | **Low stakes** | no posture — just work | pre-registered verification only |
-| **High stakes** | ledger + verification | full posture, all spines armed |
+| **High stakes** | ledger + verification | full posture, all disciplines armed |
 
-Say out loud which quadrant the task is in and which spines you are arming.
+Say out loud which quadrant the task is in and which disciplines you are arming.
 Re-evaluate when scope shifts — a task can migrate quadrants mid-flight.
 
-## Routing: symptom → spine
+## Routing: symptom → discipline
 
 Route on the *symptom you notice*, not the lifecycle stage:
 
-| Symptom | Spine |
+| Symptom | Discipline |
 |---|---|
 | Confident conclusions resting on thin evidence | Epistemic ledger |
 | Behaviour contradicts your model of the system | Differential diagnosis |
@@ -45,16 +45,16 @@ Route on the *symptom you notice*, not the lifecycle stage:
 | An unknown you cannot resolve yourself | Epistemic ledger → escalate |
 | Long task; context loss or handover plausible | State externalization |
 
-Symptoms compound; arm every spine that matches. When none match but the work
+Symptoms compound; arm every discipline that matches. When none match but the work
 still feels beyond you, that itself is a tripwire — stop and reassess.
 
-## The spines
+## The disciplines
 
 ### Epistemic ledger
 
 Track what you actually know, separately from what you believe.
 
-1. Tag every load-bearing claim: **verified** (you observed it), **inferred**
+1. Tag every consequential claim: **verified** (you observed it), **inferred**
    (it follows from verified claims), or **assumed** (you need it to be true).
 2. Build nothing irreversible on an `assumed` claim. Upgrade it — verify or
    derive it — or surface it before proceeding.
@@ -123,13 +123,13 @@ answer survives in notes rather than in unaided recall.
 
 Sequence work to retire uncertainty, not to feel progress.
 
-1. List the decisions and unknowns; mark which are *load-bearing* — those the
+1. List the decisions and unknowns; mark which are *foundational* — those the
    rest of the work would be rebuilt around if they changed.
-2. Attack the riskiest load-bearing unknown first, with the smallest probe
+2. Attack the riskiest foundational unknown first, with the smallest probe
    that could retire it (a spike, a stub, a thin end-to-end path).
 3. Defer reversible decisions; keep options open where deferral is cheap.
-4. Cut seams so each piece is *independently verifiable* — integration risk
-   compounds silently in big-bang assembly.
+4. Divide the work so each piece is *independently verifiable* — integration
+   risk compounds silently in big-bang assembly.
 5. Easiest-first is the anti-pattern: it manufactures visible progress while
    the fatal unknown waits at the end, when it is most expensive.
 
@@ -178,7 +178,7 @@ Exit: a cold-start reader could continue the work from artifacts alone.
   your actions; ceremony that never alters a decision is waste — drop to a
   lighter quadrant instead.
 - Do not let the posture replace the stage skill's own process; it augments.
-- Do not silently downgrade mid-task. If you abandon a spine under time or
+- Do not silently downgrade mid-task. If you abandon a discipline under time or
   context pressure, say so.
 - Uncertainty is reported, never laundered: an `assumed` claim stays visibly
   assumed all the way into the final summary.
