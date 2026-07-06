@@ -92,39 +92,41 @@ not by MCP-unreachability.
 
 ### 5.1 System Model
 
-The workflow is the **durable serial loop and the sole spawn authority**; each
-phase runs through three *ephemeral* agents it spawns in turn — two
-**nominated-unjailed** orchestrators bracketing one **jailed worker**. Spawn
-authority (workflow) is deliberately **separated from import authority**
-(`O(dispose)`) — a genuine departure from shipped `/dispatch`, forced by wall #1:
-a workflow leaf has no `Agent` tool, so an orchestrator leaf cannot spawn the
-worker; only the workflow can.
+The workflow is the **durable serial loop and the sole spawn authority**; it
+**alternates** *ephemeral* **nominated-unjailed** orchestrators and **jailed**
+workers. Crucially there are **never two orchestrators back-to-back**: each
+*interior* orchestrator does **two jobs in one agent** — dispose the previous
+worker's commit *and* prep the next worker's context — so an orchestrator always
+sits *between* two workers (the first preps-only, the terminal disposes-only).
+Spawn authority (workflow) is deliberately **separated from import authority**
+(the disposing orchestrator) — a genuine departure from shipped `/dispatch`,
+forced by wall #1: a workflow leaf has no `Agent` tool, so an orchestrator leaf
+cannot spawn the worker; only the workflow can.
 
 ```
 Workflow /drive-slice   (JS; args:{slice}; durable serial loop; SPAWN AUTHORITY)
-  bootstrap: planner agent() → next_ready[]            (compute_next_phases authority)
-  loop while next_ready non-empty & budget allows — per phase, ALTERNATING ephemeral agents:
+  bootstrap: O₀ = agent(dispatch-orchestrator) → next_ready + PREP the phase-1 worker
+  loop, ALTERNATING O and W — one orchestrator BETWEEN two workers, TWO jobs:
 
-    O(prepare) = agent(dispatch-orchestrator, schema: PrepReceipt)   ── NOMINATED-UNJAILED
+    W_i  = worker (JAILED): claude arm = workflow agent(dispatch-worker, isolation:worktree)
+                            pi arm     = already spawned by the prior O_{i-1}
+       · edits source in its fork; self-commits via worker_commit MCP  [claude, TARGET 2b-B]
+         (pi / fallback (A): leaves an uncommitted diff, the disposing O imports it)
+       ▶ { fork_tip, summary }                                        → workflow holds
+
+    O_i  = agent(dispatch-orchestrator) ── NOMINATED-UNJAILED ── TWO JOBS in one agent:
+       (1) DISPOSE W_i — import delta onto B_i, verify, commit ONE on dispatch branch,
+           dispatch_conclude_phase→boundary, dispatch_reap; on a FIXABLE defect emit a
+           fixup verdict instead → workflow revives W_i on its fork (bounded, §5.5)
+       (2) PREP W_{i+1} (iff W_i accepted ∧ next_ready non-empty) — capture B_{i+1},
+           distill the next worker prompt; pi arm → git worktree add + spawn subprocess
        · SubagentStart(dispatch-orchestrator) → allowlist → PreToolUse PassThrough (§5.6)
-       · capture base B = dispatch_tip; distill self-contained worker prompt
-       · pi arm ONLY: `git worktree add` + spawn pi subprocess (RW .git — unjailed O)
-       ▶ returns { base_B, worker_prompt, worker_fork }         → workflow holds (2a-a)
+       ▶ HopReceipt { dispose: receipt_status|verify|fixup|halt · prep: next ctx · next_ready }
 
-    W(work)    = claude arm: agent(dispatch-worker, isolation:worktree, schema: WorkReceipt)
-                 pi arm:     (already spawned by O(prepare))    ── JAILED (bwrap / worktree-jail)
-       · edits source in its fork; self-commits via worker_commit MCP  [claude arm, TARGET 2b-B]
-       ▶ returns { fork_tip, summary }                          → workflow holds
-
-    O(dispose) = agent(dispatch-orchestrator, schema: PhaseReceipt) ── NOMINATED-UNJAILED
-       · import worker delta onto B; run verify (tests); commit ONE on dispatch branch
-       · dispatch_conclude_phase → boundary row; dispatch_reap; dispatch_phase_receipt
-       · on fixable defect: emit fixup verdict → workflow revives worker on fork (§5.4)
-       ▶ returns PhaseReceipt (schema-validated: receipt_status | halt_reason | fixup)
-
-    JS: receipt.fixup → revive W on fork; halt_reason/receipt_status → advance | halt+report
-  → advance to next phase: FRESH ephemeral agents (no prompt-cache TTL bleed;
-    no single context driving a 7-phase slice end-to-end)
+    JS: hop.fixup → revive W_i; hop.halt → report+stop; else advance on hop.prep (null ⇒ done)
+  → O₀ preps-only, the terminal O disposes-only, every interior O does both — never two
+    orchestrators back-to-back; FRESH context each hop (no prompt-cache TTL bleed, no
+    single context driving a 7-phase slice end-to-end)
 ```
 
 **Trust tiers CHANGE from SL-199.** The orchestrator is no longer *confined*
@@ -196,11 +198,18 @@ the `agent()` call forces the shape and the harness validates it:
 
 ```
 PhaseReceipt = PhaseReceiptCore                        // (from dispatch_phase_receipt Resolved; ABSENT on CoordRefused)
-  + worker_branch : string                             // orchestrator armed/spawned it (ephemeral, reaped)
+  + worker_fork   : string                             // orchestrator armed/spawned it (ephemeral, reaped)
   + verify        : { green: bool, failures: string[] }// orchestrator RAN the tests
   + halt_reason?  : string                             // set on any stop — incl. "coord:<reason>" when the emitter returned CoordRefused
+  + fixup?        : { reason: string, instructions: string } // fixable worker delta → revive on fork (§5.4)
   + next_ready    : string[]                           // slice-global adjunct (from dispatch_next_ready) — labelled, not part of the durable core
 ```
+
+Under the **two-job orchestrator** (§5.4, D10) this composition is the **dispose
+half** of `HopReceipt`; `worker_fork` is threaded from the **prep half** of the
+*prior* hop, and the **prep half** for the *next* worker rides alongside. §5.2
+stays the emitter-core contract; §5.4 is the harness-schema shape the driver loop
+consumes.
 
 On a `CoordRefused` emitter result the orchestrator emits a **minimal** receipt
 (`halt_reason="coord:<reason>"`, no core fields) — the driver halts on
@@ -226,51 +235,48 @@ know them (the fork branch is reaped; verify comes from running tests).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-> **PHASE-05 DELTA (2026-07-06 — placement correction, evidence-backed).** The
-> original §5.4 spawned the per-phase orchestrator with `isolation:'worktree'`.
-> That is WRONG: `isolation:'worktree'` FRESH-FORKS the orchestrator into a
-> detached `.worktrees/agent-<hex>`, where the SL-199 coord-root arming
-> discriminator (`cwd_is_coord_root ∧ coord_in_dispatch`) never fires — so it
-> cannot arm/fork/import and no phase completes. The confined-orchestrator MODEL
-> is correct and UNCHANGED: the RO shared `.git` is BY DESIGN (SL-199 Mode B,
-> proven — the orchestrator writes coord `.git` only via the server-side MCP funnel
-> tools; "integrity never rests on the confined orchestrator"). The defect was
-> **placement, not permission.** Corrections:
->
-> 1. **Orchestrator spawn drops `isolation`.** A no-isolation subagent starts in
->    the driver's current working directory (`docs/claude/subagents.md:263`), so a
->    driver parked at coord-root places the orchestrator jailed to the COORD TREE
->    (`dispatch/<n>`, RO `.git`, writable working tree) — exactly SL-199's placement.
-> 2. **Coord-root precondition (fail-closed).** `/drive-slice` MUST be invoked with
->    cwd parked at the coord tree (`.dispatch/SL-<n>` on `dispatch/<n>`) — the same
->    "cd into the coord tree" ritual `/dispatch` documents. Because the JS driver has
->    no shell, the check lives in the orchestrator's FIRST action: it asserts
->    `pwd == coord-root ∧ branch == dispatch/<slice>` and, on mismatch, returns a
->    minimal receipt with `halt_reason="coord:not-at-coord-root"` (§5.5). The driver
->    halts the drive on it like any `coord:<reason>`.
-> 3. **Worker isolation stays def-pinned** to the worker frontmatter (SL-199 delta
->    A2), NOT the orchestrator's per-call arg — the nested worker forks at B off the
->    orchestrator's coord-root cwd, and `cwd_is_coord_root` fires for it.
-> 4. **Harness contract (F1) + slice guard (F2).** `meta` is a pure literal and all
->    drive logic runs in a TOP-LEVEL body (the Workflow tool executes the top level,
->    never a `run` export; `.claude/workflows/` is not a named registry — invoke by
->    `scriptPath`). The driver parses `args` (which may arrive as a JSON string),
->    validates `slice` is a positive integer, and halts fail-closed otherwise; probe
->    agents never guess a slice.
->
-> Evidence (do not re-derive): PHASE-05 acceptance drive (notes.md FINDING 3,
-> corrected) + a placement spike — arm A (no isolation, driver parked at coord-209)
-> landed at `.dispatch/SL-209` on `dispatch/209`, RO `.git`, writable working tree
-> (= SL-199 placement); arm B (`isolation:'worktree'`) fresh-forked to a detached
-> `.worktrees/agent-<hex>`. Corroborated by `docs/claude/subagents.md:263` +
-> `settings.md:339` (baseRef default `head`). Durable:
-> `mem.pattern.dispatch.confined-orchestrator-placement-not-permission`.
+> **↻ CONFINED-PLACEMENT DELTA RETIRED (2026-07-06, unjail re-open).** The prior
+> §5.4 spawned ONE **confined** orchestrator per phase (no `isolation`, jailed to
+> coord-root, arm→fork→import→conclude in one agent); its load-bearing concern was
+> **placement** — coord-root parking so `cwd_is_coord_root` fires for the nested
+> worker fork. That whole model is superseded by §5.1. Under unjail: the
+> orchestrator is **nominated-unjailed** (RW `.git` from any cwd — P1 side-probe:
+> every `.git` is RW under PassThrough), realized as **alternating unjailed
+> orchestrators** — each interior one disposing the previous worker's commit +
+> prepping the next in ONE agent (never two back-to-back) — and it **no longer
+> nests the worker** (wall #1 — the workflow is spawn authority). Coord-root parking is therefore **no longer
+> load-bearing for git access**: O addresses the coord tree explicitly
+> (`git -C .dispatch/SL-<slice>`) and still asserts it exists ∧ is on
+> `dispatch/<slice>` before acting — now a *correctness* precondition
+> (`halt_reason="coord:<reason>"` on miss), not a confinement one. The harness
+> contract (F1: pure-literal `meta`, top-level body, `scriptPath` invoke) + slice
+> guard (F2: parse `args`, validate positive integer, halt) carry forward unchanged
+> below. The retired placement memory
+> (`mem.pattern.dispatch.confined-orchestrator-placement-not-permission`) is scoped
+> to the confined model — kept as history, not current.
 
 **Driver loop (JS, `/drive-slice`):**
+
+**Per-hop schemas (harness `schema:`, agent-composed).** Orchestrators and workers
+alternate; the workflow threads facts (2a-a), never computes them:
+- `WorkReceipt = { fork_tip: string|null, summary }` — the worker's committed fork
+  tip (claude arm, (B) self-commit) or `null` (pi / fallback (A) — the disposing
+  orchestrator reads the worktree diff).
+- `HopReceipt` — the between-workers orchestrator's **combined** receipt, two halves
+  plus a slice-global adjunct:
+  - **dispose** (absent on the bootstrap O₀): §5.2 `PhaseReceiptCore + verify +
+    halt_reason?` **plus `fixup?: { reason, instructions }`** — set when the worker
+    delta is a *fixable* defect (verify-red-but-addressable, incomplete edit); absent
+    ⇒ accepted-or-halted. Drives the bounded revive loop.
+  - **prep** (absent on the terminal O and whenever no next phase is ready):
+    `{ phase, arm: "claude"|"pi", base_B, worker_prompt, worker_fork }` — the next
+    worker's context; on pi, O has already `git worktree add`-ed + spawned it.
+  - `next_ready: string[]` — the slice-global adjunct (`dispatch_next_ready`).
 
 ```js
 const SEED_PHASE_COST = 45_000;   // RFC-011-observed funnel ceremony (STD-001: rationale in comment)
 const SOFT_CEILING    = 120_000;  // advisory dumb-zone; planning-only, NEVER gated
+const MAX_FIXUP       = 2;        // bounded worker-fixup revivals per hop (§5.5); halt past it
 
 let lastActual = null;
 const report = { phases: [], halted: null, divergence: null };
@@ -278,40 +284,55 @@ const report = { phases: [], halted: null, divergence: null };
 // validate a positive integer, halt fail-closed — never let a probe guess a slice.
 const slice = Number((typeof args === 'string' ? JSON.parse(args) : (args||{})).slice);
 if (!Number.isInteger(slice) || slice < 1) throw new Error(`drive-slice: bad slice ${JSON.stringify(args)}`);
-// NB: the script has no shell / no MCP — every doctrine read is via a spawned
-// agent. `planner`/`divergenceProbe` below are lightweight agent() calls granted
-// only the relevant read-only tool, NOT raw JS.
-let ready = await planner(slice);   // agent() → dispatch_next_ready{slice} (compute_next_phases authority)
+// The workflow holds NO MCP and runs NO git: every doctrine read/write is via a
+// spawned agent. It is the SPAWN AUTHORITY + STATE BUS (2a-a) — it threads
+// {base_B, worker_fork, fork_tip} between the alternating agents, never computes them.
 
-while (ready.length) {
-  const phase = ready[0];
-  const est = lastActual ?? SEED_PHASE_COST;
-  if (budget.total && budget.remaining() < est) { report.halted = {reason:'budget-exhausted', phase}; break; }
+// Bootstrap O₀ (dispatch-orchestrator): read next_ready + PREP the first worker.
+// Prep-only — no previous worker to dispose. dispatch-probe reads fold in here.
+let hop = await agent(bootstrapPrompt(slice), { schema: HopReceipt });
+if (!hop || hop.halt_reason) { return { ...report, halted:{ reason: hop?.halt_reason ?? HALT.NULL_RECEIPT } }; }
 
+while (hop.prep) {                                        // prep present ⇒ a phase is ready to run
+  const prep = hop.prep, phase = prep.phase;
+  if (budget.total && budget.remaining() < (lastActual ?? SEED_PHASE_COST)) {
+    report.halted = { reason: HALT.BUDGET_EXHAUSTED, phase }; break;
+  }
   const before = budget.spent();
-  // PLACEMENT: NO isolation. A no-isolation subagent starts in the driver's cwd
-  // (subagents.md:263); with the driver parked at coord-root the orchestrator is
-  // jailed to the COORD TREE (dispatch/<n>, RO .git, writable working tree) — the
-  // proven SL-199 placement where cwd_is_coord_root fires for the nested worker
-  // fork. isolation:'worktree' would fresh-fork it to a detached .worktrees/agent-<hex>
-  // where arming can never fire. Worker isolation rides the worker frontmatter, not here.
-  const r = await agent(orchestratorPrompt(slice, phase),
-                        { schema: PhaseReceipt });   // agentType: dispatch-orchestrator
-  lastActual = budget.spent() - before;               // adaptive
-  report.phases.push(r);
-  log(`phase ${phase}: ${lastActual/1000|0}k; soft-ceiling headroom ~${((SOFT_CEILING-lastActual)/1000)|0}k`); // advisory
 
-  // Halt vocabulary is a NAMED, single-sourced contract — see HALT in §5.4 (F6).
-  if (!r)                                { report.halted={reason:HALT.NULL_RECEIPT, phase}; break; }
-  if (r.halt_reason)                     { report.halted={reason:r.halt_reason, phase}; break; } // incl. coord:<reason> (F3), funnel:<reason>
-  if (r.receipt_status === 'ConcludeIncomplete') { report.halted={reason:HALT.CONCLUDE_INCOMPLETE, phase}; break; }
-  if (r.receipt_status === 'Blocked')    { report.halted={reason:HALT.PHASE_BLOCKED, phase}; break; }  // (F4)
-  if (r.receipt_status !== 'Completed')  { report.halted={reason:`${HALT.ANOMALY}:${r.receipt_status}`, phase}; break; } // Unknown lands here (F4)
-  if (!r.verify.green)                   { report.halted={reason:HALT.VERIFY_RED, phase}; break; }
+  // W_i (JAILED): claude arm = workflow-spawned worker, self-commits (B).
+  //               pi arm = already spawned by the prior O; skip this agent().
+  let work = prep.arm === 'claude'
+    ? await agent(prep.worker_prompt, { schema: WorkReceipt, isolation: 'worktree' }) // agentType: dispatch-worker
+    : { fork_tip: null };
 
-  ready = r.next_ready;                                // consume authority, NEVER re-derive
+  // O_i — ONE orchestrator, TWO jobs: DISPOSE W_i, then (iff accepted) PREP W_{i+1}
+  // in the SAME agent. Bounded fixup loop first: a fixable defect revives W_i on its
+  // fork and re-disposes; no prep happens until dispose is accepted.
+  let fixups = 0;
+  for (;;) {
+    hop = await agent(hopPrompt(slice, phase, prep, work.fork_tip), { schema: HopReceipt }); // dispatch-orchestrator
+    if (!hop) { hop = { halt_reason: HALT.NULL_RECEIPT, prep: null }; break; }
+    if (!hop.fixup) break;                                // disposed: accepted (may carry prep) or halted
+    if (++fixups > MAX_FIXUP) { hop = { halt_reason: HALT.FIXUP_EXHAUSTED, prep: null }; break; }
+    // revive-on-fork (§5.5): fresh worker on the SAME fork (durable delta under (B))
+    // + O's fixup notes. NOT SendMessage context-intact — fork-durable.
+    work = await agent(fixupPrompt(prep, hop.fixup), { schema: WorkReceipt, isolation: 'worktree' });
+  }
+
+  lastActual = budget.spent() - before;                  // adaptive (whole hop, incl. worker + fixups)
+  report.phases.push({ phase, ...hop });
+  log(`phase ${phase}: ${lastActual/1000|0}k${fixups?` (${fixups} fixup)`:''}`);
+
+  // Halt on the DISPOSE half — named, single-sourced (F6).
+  if (hop.halt_reason)                     { report.halted={reason:hop.halt_reason, phase}; break; } // coord:/funnel:/FIXUP_/NULL_ (F3)
+  if (hop.receipt_status === 'ConcludeIncomplete') { report.halted={reason:HALT.CONCLUDE_INCOMPLETE, phase}; break; }
+  if (hop.receipt_status === 'Blocked')    { report.halted={reason:HALT.PHASE_BLOCKED, phase}; break; }  // (F4)
+  if (hop.receipt_status !== 'Completed')  { report.halted={reason:`${HALT.ANOMALY}:${hop.receipt_status}`, phase}; break; } // Unknown (F4)
+  if (!hop.verify.green)                   { report.halted={reason:HALT.VERIFY_RED, phase}; break; }
+  // accepted ⇒ loop on hop.prep (this O already prepped W_{i+1}); null ⇒ drive done.
 }
-report.divergence = await divergenceProbe(slice);  // agent() → read-only divergence tool (§5.5); NOT raw JS git
+report.divergence = await divergenceProbe(slice);  // agent(dispatch-probe) → read-only divergence tool (§5.5)
 return report;
 ```
 
@@ -323,8 +344,10 @@ not scattered literals. Two families:
   design does not mint these strings — it forwards the authored enums.
 - **Script-local** — a named `HALT` table in `/drive-slice` (the driver's only
   authored vocabulary): `{ NULL_RECEIPT, CONCLUDE_INCOMPLETE, PHASE_BLOCKED,
-  ANOMALY, VERIFY_RED, BUDGET_EXHAUSTED }`. Single source; the loop references
-  members, never inline literals (STD-001 in the JS reference).
+  ANOMALY, VERIFY_RED, BUDGET_EXHAUSTED, FIXUP_EXHAUSTED }`. Single source; the loop
+  references members, never inline literals (STD-001 in the JS reference).
+  `FIXUP_EXHAUSTED` fires when a hop's bounded revive loop exceeds `MAX_FIXUP`
+  without an accepted dispose — the worker could not fix its delta in-budget.
 
 - **null `total` → unmetered**: `budget.total &&` short-circuits; the loop runs
   all ready phases (D4-a).
@@ -344,9 +367,9 @@ not scattered literals. Two families:
 
 | Subagent type          | MCP grant (exhaustive)                                | Raw tools |
 |------------------------|-------------------------------------------------------|-----------|
-| `dispatch-orchestrator`| `dispatch_import`, `dispatch_conclude_phase`, `dispatch_reap`, `dispatch_phase_receipt`*, `dispatch_next_ready`*, `dispatch_authored_divergence`* | Read, Edit, Write, Bash, Grep, Glob, Agent (needs them to run the funnel + tests) |
+| `dispatch-orchestrator` **(nominated-unjailed)** | `dispatch_import`, `dispatch_conclude_phase`, `dispatch_reap`, `dispatch_phase_receipt`*, `dispatch_next_ready`*, `dispatch_authored_divergence`* | Read, Edit, Write, Bash, Grep, Glob — **no `Agent`** (stripped for workflow leaves, wall #1; O never nest-spawns — workflow is spawn authority; O uses Bash for the pi-arm `git worktree add` + subprocess) |
 | **`dispatch-probe`** (new) | `dispatch_next_ready`*, `dispatch_authored_divergence`*, `dispatch_phase_receipt`* | **Read, Grep, Glob only** — no Write/Edit/Bash/Agent |
-| `dispatch-worker`      | `worker_commit`                                       | Read, Edit, Write, Bash, Grep, Glob |
+| `dispatch-worker` (jailed) | `worker_commit` — `SubagentStart(dispatch-worker)` **fires for the workflow leaf** ⇒ DispatchRecord provisioned ⇒ resolves (open gate: P5, MCP-retention) | Read, Edit, Write, Bash, Grep, Glob |
 | workflow script        | *(none — JS, no MCP)*                                 | *(none)* |
 
 (* new, read-only MCP tools.)
@@ -387,16 +410,25 @@ exists — D2):
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **Coord-root placement is load-bearing (PHASE-05 delta).** The orchestrator is
-  spawned with NO `isolation`, so it inherits the driver's cwd; the driver MUST be
-  invoked parked at coord-root (`.dispatch/SL-<n>` on `dispatch/<n>`). Only then is
-  the orchestrator jailed to the coord tree (RO `.git`, writable coord working tree)
-  and `cwd_is_coord_root` fires for the nested worker fork (SL-199). Fail-closed: the
-  orchestrator's first action asserts `pwd == coord-root ∧ branch == dispatch/<slice>`
-  and halts with `halt_reason="coord:not-at-coord-root"` on mismatch — a misplaced
-  driver can never silently fork the wrong base. RO shared `.git` is EXPECTED, not a
-  fault: every coord `.git` write is a server-side MCP funnel call, never the
-  orchestrator's own git.
+- **Unjail placement, not coord-root parking (supersedes the PHASE-05 delta).** The
+  orchestrator runs **nominated-unjailed** (`PassThrough`) — RW `.git` from any cwd
+  (P1 side-probe). It is NOT jailed to coord-root; it addresses the coord tree
+  explicitly (`git -C .dispatch/SL-<slice>`) and imports/commits with plain git (not
+  the server-side MCP-only Mode-B path). Load-bearing instead: **(1) nomination must
+  land before O's first tool call** (`SubagentStart` sync-blocking, §5.6/I2); **(2)**
+  O still asserts the coord tree exists ∧ is on `dispatch/<slice>` before acting —
+  now a *correctness* precondition (`halt_reason="coord:<reason>"` on miss), not a
+  confinement one. The worker stays jailed either arm (bwrap / worktree-jail) —
+  confinement is the worker's, never the orchestrator's.
+- **Revive is fork-durable, not context-intact (§5.1, D10).** The documented
+  Workflow primitives are `agent()`/`parallel()`/`pipeline()` — one-shot spawns, no
+  `SendMessage`. So a fixup revives the worker as a **fresh `agent()` on the same
+  fork branch** (the delta is durable there under (B)) carrying O's fixup notes — the
+  worker resumes from committed state, not cold, but its prior *live reasoning* is
+  gone. The disposing O is likewise re-spawned each pass (re-derives from the fork
+  diff + verify output). Accepted cost of workflow-spawned ephemerals; true
+  context-intact revive is a later enhancement iff the runtime exposes continuation
+  (OQ-5). `MAX_FIXUP`-bounded; exhaustion halts (`FIXUP_EXHAUSTED`).
 - **Config lives in the script.** `SEED_PHASE_COST`, `SOFT_CEILING` are named
   constants in `/drive-slice` (harness-side, consumed by JS `budget.*`), NOT
   doctrine config — the Rust emitter never sees `budget.spent()`. No new Rust
@@ -490,6 +522,26 @@ alone buys bounded/gated capability (worker tier); anything unbounded
 - **OQ-2** — Does `compute_next_phases` need a machine-readable (JSON) surface,
   or does `dispatch_next_ready` wrap it cleanly without touching the existing
   CLI rendering? (Expected: thin wrapper, no CLI change.)
+- **OQ-3 — (B) worker self-commit, one residual probe (P5).**
+  `SubagentStart(dispatch-worker)` **fires for a workflow-spawned worker leaf**
+  (operator-confirmed 2026-07-06) ⇒ the `DispatchRecord` is provisioned ⇒
+  `worker_commit` resolves. The one open gate on (B) is **P5**: does a workflow
+  leaf **retain the `worker_commit` MCP tool** (the runtime strips
+  `Agent`/`Grep`/`Glob` and injects `StructuredOutput`; MCP retention unprobed,
+  operator-assessed low-risk)? If P5 fails, fall to **(A)**: O(dispose) imports the
+  worker's uncommitted working-tree diff. Design authors (B) target + (A) fallback
+  (D9).
+- **OQ-4 — workflow spawn vs the §5.6 spawn-gate.** The workflow spawns
+  `dispatch-orchestrator` (privileged) via `agent()`. Confirm the workflow's
+  `agent()` spawn either presents caller `agent_id=<NONE>` (main-thread-equivalent
+  ⇒ not denied) or does not trigger `PreToolUse(Agent)` at all (workflow `agent()`
+  ≠ the `Agent` tool) — either passes. A workflow-`agent_id` that trips the gate
+  would need the workflow itself allowlisted. Phase-0 verification; nomination
+  *firing* for a workflow leaf is already confirmed (OQ-3).
+- **OQ-5 — revive-on-fork vs context-intact.** v1 revive is a fresh worker
+  `agent()` on the fork (durable delta + O's notes) — documented primitives only.
+  If the Workflow runtime later exposes `SendMessage`-style continuation,
+  context-intact revive is a token-saving enhancement (RFC-011). Not v1.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -529,6 +581,32 @@ alone buys bounded/gated capability (worker tier); anything unbounded
   `dispatch-probe` role, not the raw-tool-bearing orchestrator. (F6) the halt
   vocabulary is a named contract (`HALT` + re-exported `funnel:`/`coord:` closed
   vocabs). (F7) scope prose corrected to three read-only tools.
+- **D8 — orchestrator nominated-unjailed; safety by nomination + spawn-gate, not
+  MCP-unreachability.** Supersedes SL-199 Mode B (confined orchestrator, every
+  coord write via server-side MCP). Chosen for **simplicity of reasoning + lower
+  implementation complexity** (operator's real kicker), not necessity — a confined
+  orchestrator was proven viable (P0 Q2) but keeps the whole server-side-MCP-only
+  coord-write constraint. Cost: an **ADR-008 amendment** (§9) + `/inquisition`.
+  Proven safe P1/P3/P4 (§5.6); no arming token.
+- **D9 — spawn/import authority split; (B) self-commit target, (A) import
+  fallback.** The workflow spawns all agents (wall #1: an orchestrator leaf has no
+  `Agent` tool → cannot nest the worker); the disposing orchestrator imports +
+  commits — a forced departure from `/dispatch` (there the orchestrator both spawns
+  and imports), but it buys fresh-context-per-hop (no TTL bleed). Claude worker
+  **self-commits via `worker_commit`** (fork-durable ⇒ O reads a committed tip;
+  revive resumes from it). **(A)** orchestrator-imports-diff is the both-arm
+  in-a-pinch fallback (pi arm is always (A) — worker bwrap-confined, cannot commit;
+  `pi-spawn-confined.sh`). Rejected authoring (A) primary: ephemeral-worktree
+  survival fragility + no durable revive point. Pi arm kept reachable, not a v1
+  priority.
+- **D10 — one orchestrator between two workers (two jobs), bounded revive-on-fork.**
+  No two orchestrators back-to-back: each interior O disposes the previous worker's
+  commit *and* preps the next in ONE agent (`HopReceipt`); boundaries degenerate
+  (O₀ preps-only, terminal O disposes-only). Fixup = fresh worker on the fork + O's
+  notes, `MAX_FIXUP`-bounded, **not** `SendMessage` context-intact (unavailable
+  in-workflow, OQ-5); O re-spawned each dispose pass (re-derives from the fork diff
+  + verify). Accepted cost of workflow-spawned ephemerals for fresh-context
+  isolation.
 
 ## 8. Risks & Mitigations
 
