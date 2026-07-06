@@ -58,6 +58,7 @@ const HALT = {
   BUDGET_EXHAUSTED:    'BUDGET_EXHAUSTED',    // projected next-hop cost exceeds remaining budget
   FIXUP_EXHAUSTED:     'FIXUP_EXHAUSTED',     // bounded revive loop exceeded MAX_FIXUP without an accepted dispose
   PREP_INCOMPLETE:     'PREP_INCOMPLETE',     // A1 belt: clean dispose, null prep, but next_ready non-empty (silent prep failure)
+  RECEIPT_AMBIGUOUS:   'RECEIPT_AMBIGUOUS',   // a hop carried BOTH fixup and prep — exclusivity the schema can't encode (top-level oneOf is API-forbidden)
 };
 
 // --- Schemas (harness `schema:` on each agent() call) --------------------------
@@ -90,10 +91,11 @@ const DivergenceReceipt = {
 // half (§5.2 PhaseReceiptCore + verify + halt_reason?) plus a fixup? XOR prep?
 // half, plus the slice-global next_ready adjunct. The dispose half is ABSENT on
 // the bootstrap O₀ (prep-only), so the core fields are not globally `required`;
-// they are present on interior hops. The top-level `oneOf` enforces the
-// fixup/prep exclusivity the loop assumes — the harness rejects a receipt
-// carrying both, rather than the loop silently taking `fixup` and dropping a
-// live `prep` (§5.4).
+// they are present on interior hops. fixup/prep exclusivity is enforced by a JS
+// guard on each returned hop (NOT a schema oneOf — the Anthropic tool input_schema
+// contract forbids a top-level oneOf/allOf/anyOf, so the union cannot ride the
+// schema; a receipt carrying both halts as RECEIPT_AMBIGUOUS rather than the loop
+// silently taking `fixup` and dropping a live `prep`; §5.4).
 const HopReceipt = {
   type: 'object',
   properties: {
@@ -135,15 +137,11 @@ const HopReceipt = {
     next_ready: { type: 'array', items: { type: 'string' } },
   },
   required: ['next_ready'],
-  // fixup XOR prep XOR neither-when-halted. JSON Schema cannot say "these two keys
-  // are mutually exclusive" directly, so this is the closest faithful encoding:
-  // exactly one of {only-fixup, only-prep, neither} must match. (The loop and the
-  // harness both rely on this; do NOT change any Rust to express it differently.)
-  oneOf: [
-    { required: ['fixup'], not: { required: ['prep'] } },
-    { required: ['prep'], not: { required: ['fixup'] } },
-    { allOf: [{ not: { required: ['fixup'] } }, { not: { required: ['prep'] } }] },
-  ],
+  // fixup XOR prep XOR neither-when-halted. The Anthropic tool input_schema contract
+  // forbids a top-level oneOf/allOf/anyOf, so this exclusivity CANNOT ride the schema
+  // (a top-level oneOf 400s at agent creation). It is enforced in JS on each returned
+  // hop — a receipt carrying BOTH halts as HALT.RECEIPT_AMBIGUOUS rather than the loop
+  // silently taking `fixup` and dropping a live `prep`.
 };
 
 // --- Arm detection -------------------------------------------------------------
@@ -280,6 +278,8 @@ if (!hop || hop.halt_reason) {
   report.halted = { reason: hop?.halt_reason ?? HALT.NULL_RECEIPT };
   return report;
 }
+// Bootstrap O₀ is prep-only — a fixup half here is malformed (nothing to dispose).
+if (hop.fixup) { report.halted = { reason: HALT.RECEIPT_AMBIGUOUS }; return report; }
 
 while (hop.prep) {                                   // prep present ⇒ a phase is ready to run
   const prep = hop.prep, phase = prep.phase;
@@ -307,6 +307,10 @@ while (hop.prep) {                                   // prep present ⇒ a phase
   for (;;) {
     hop = await agent(hopPrompt(slice, phase, prep, work.fork_tip), { schema: HopReceipt, agentType: 'dispatch-orchestrator' });
     if (!hop) { hop = { halt_reason: HALT.NULL_RECEIPT, prep: null }; break; }
+    // fixup XOR prep — the exclusivity the schema can't encode (top-level oneOf is
+    // API-forbidden). A hop carrying BOTH is ambiguous: halt loud rather than let the
+    // next line silently take fixup and drop a live prep.
+    if (hop.fixup && hop.prep) { hop = { halt_reason: HALT.RECEIPT_AMBIGUOUS, prep: null }; break; }
     if (!hop.fixup) break;                           // disposed: accepted (may carry prep) or halted
     if (++fixups > MAX_FIXUP) { hop = { halt_reason: HALT.FIXUP_EXHAUSTED, prep: null }; break; }
     // Revive-on-fork (§5.5): a FRESH worker on the SAME fork (delta durable under
