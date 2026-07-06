@@ -155,6 +155,35 @@ workflow form (D') can be revived after all.
    commit lands. **FAIL** = still `worktree-jail: cwd-not-a-worktree` / RO `.git`.
    Confirms (or refutes) that nomination flips a subagent to unjailed.
 
+> **▶ P1 RESULT — RAN 2026-07-06, PASS (both halves).** The nomination + unjail
+> mechanism works end-to-end. Rig: POC leg in `pretooluse.rs` (`agent_id ∈
+> $CLAUDE_PROJECT_DIR/.doctrine/state/orch-allowlist.txt ⇒ PassThrough`, fail-safe),
+> a `SubagentStart(dispatch-orchestrator)` hook writing the allowlist, both built
+> into the live `DOCTRINE_BIN` (SL-206-bin) and torn down after. Preserved:
+> `scratchpad/p1-pretooluse.patch`, `p1-orch-nominate.sh`, `p1-evidence-*.log`.
+> - **P1a (hook boundary, deterministic).** Synthetic jailed-subagent payload through
+>   the real binary: allowlist absent → `deny: cwd-not-a-worktree`; same `agent_id`
+>   listed → **empty = PassThrough**; a *different* `agent_id`, same cwd → `deny`.
+>   Membership flips confinement, and only for the listed id.
+> - **P1b (live orchestrator, end-to-end).** Main-thread `Agent`-tool spawn of a
+>   `dispatch-orchestrator` (agent `a418b827a5f402ec4`). `SubagentStart` **fired**,
+>   matched, wrote the allowlist **before** the first Bash (sync-blocking confirmed:
+>   3× `NOMINATED-passthrough`). The orchestrator's Bash ran **unwrapped**:
+>   `git rev-parse HEAD`✓, coord-tree read `git -C .dispatch/SL-206 rev-parse` →
+>   `9ba5c0a6` (**a jailed agent cannot run this**), empty commit **landed** `98835cc`
+>   in a scratch repo (RW `.git` under PassThrough). `RESULT: ALLOWED-and-committed`.
+>
+> **⚠ Correction to §4.3 lie #3.** This POC ran in a session with
+> `CLAUDE_CODE_CHILD_SESSION=1`, yet `SubagentStart` **fired** for the orchestrator
+> spawn. `mem_019ec84b`'s "silently no-fires in a child session" is therefore either
+> stale or narrower than stated — the true condition is **not** "spawner is a child
+> session." A child session's own main thread spawning via the `Agent` tool DOES get
+> `SubagentStart`. (The no-fire may bite only spawns nested *below* that — untested
+> here.) Also observed: the `settings.local.json` hook edit **hot-reloaded** (no
+> restart). Net: A2's nomination is *more* robust than §4.4 assumed — the lie it was
+> hedging against did not materialise for the orchestrator spawn. See `mem_019f3b…`
+> (new finding). **This strengthens A2 and further weakens the need for D'.**
+
 ### P2 — is SubagentStart "less full of shit" inside a Workflow? (D' revival)
 Replace the hook with a **logger shim** and run it under a **Workflow** `agent()`
 spawn (both `isolation:worktree` and no-iso). In the *same* run, log **every** hook
@@ -183,6 +212,8 @@ real epoch timestamp.
   deferred (reading (ii)); this direction is scoped to drive-to-Completed (reading (i)).
 - **Re-open trigger:** P1 PASS → `/design` on A2 §5 (spawn model, nomination seam,
   security) with an adversarial pass; P1 FAIL → fall back to A1 and re-scope SL-206.
+  **STATUS: P1 PASSED (2026-07-06, §6 result block). The re-open trigger is met —
+  `/design` on A2 §5 is unblocked, awaiting operator go.**
 
 ## 8. Evidence index
 

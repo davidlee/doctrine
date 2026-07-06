@@ -1,0 +1,43 @@
+memory_uid = "mem_019f363b08cc7221a624308e3fc24844"
+memory_key = "mem.fact.claude.subagentstart-fires-from-child-session"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "SubagentStart fires for Agent-tool spawn from a child-session main thread"
+summary = 'SubagentStart DOES fire for an Agent-tool spawn even when the spawning session has CLAUDE_CODE_CHILD_SESSION=1 — narrows/corrects the "child session silently no-fires" claim.'
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["/workspace/doctrine/.doctrine/slice/206/unjail-direction.md"]
+globs = []
+commands = []
+tags = ["claude", "hooks", "subagentstart", "dispatch", "sl-206"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2afc78e9924821484a72f50d7618e93d5d2cc6ed"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ea6675c4fd87cf0314bf18c452729a8167c2a51de30de3b45371235f7bf7753c"
+base_commit = "f749f8299ae7799d4984ce5ad6049b1c17f8a375"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
