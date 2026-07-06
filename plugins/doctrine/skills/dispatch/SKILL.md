@@ -68,8 +68,12 @@ After workers return, in exact order:
 1. Precond — worktree/index clean, HEAD == B
 2. Delta check — net diff `B..S`, single non-merge commit, `S^ == B`
 3. R-5 belt — reject any `.doctrine/` or `.claude/` touch
-4. Import — apply surviving net-diffs onto `B`, non-committing. The claude arm
-   then runs the **post-import reject-and-halt prove gate** in-process
+4. Import — apply surviving net-diffs onto `B`, non-committing. The claude arm's
+   **primary path folds steps 4+7**: the worker self-committed via `worker_commit`
+   (commit-gate-green at source), and `dispatch_import` composes + commits
+   server-side with the same belts (`/dispatch-agent`). The CLI
+   `import --from-worktree` fallback stays non-committing and runs the
+   **post-import reject-and-halt prove gate** in-process
    (`doctrine check prove` on the post-import tree): an unformatted OR lint-red
    delta HALTS the import (staged, NOT committed) and is reported — never
    auto-fixed (ADR-012 sole-writer: land-or-reject, never rewrite). A red here is
@@ -88,8 +92,10 @@ After workers return, in exact order:
 8. Record — knowledge trails the confirmed commit, **and the per-phase `B→B+1`
    boundary lands in the primary-tree conformance registry** (F-5 resolves it from
    the coord tree; F-6 guard; upsert by phase) — by arm:
-   - **claude** — `dispatch record-boundary` already double-writes it (+ the
-     `phase/<N>` ref-cut); no separate call (`/dispatch-agent`).
+   - **claude** — `dispatch_conclude_phase` lands the committed boundary row AND
+     flips the phase sheet in one call (`/dispatch-agent`); `dispatch
+     record-boundary` survives only as the manual escape hatch (correct a range /
+     bootstrap a pre-binding phase).
    - **codex/pi** — `doctrine slice record-delta <SL> PHASE-NN --commit <S>` (`S`
      pinned at step 7) — the arm's commit-scoped `[S^,S]` registry write, matching
      the claude arm (symmetric derive deferred, D6/IMP-171; no `record-boundary` on
