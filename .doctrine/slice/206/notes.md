@@ -358,16 +358,73 @@ Decided §5.4-patch vs slice-reopen empirically. Spike `wkubn99yg` (gitignored
 Adversarial re-lock deferred — conferring (operator leans: fold into the revised plan's
 review, not a separate design re-lock). Spike fork reaped; primary on edge; coord 209 clean.
 
+### FINDING 4 — the Workflow primitive strips `Agent`; placement patch was necessary but NOT sufficient (2026-07-06, PHASE-07 live drive)
+
+PHASE-07 re-drove SL-209 with the PHASE-06-corrected driver (`wf_6e50798d-656`),
+Bash-cwd parked at coord-209 root. Result: **halt at PHASE-01**, `halt_reason=
+"spawn:fork-blocked-readonly-git"`. The placement fix WORKED as far as it goes —
+but a deeper wall the placement spike never probed (it tested placement, never
+worker-spawn) now surfaces:
+
+**What proved out (PHASE-06 fix validated):**
+- Placement held — orchestrator ran at coord-209 root, branch `dispatch/209`.
+- Base **armed at B=`fa951846`** — the SL-199 `cwd_is_coord_root` discriminator fired.
+- Fail-loud & safe — coord tip untouched, zero stray `dispatch/w-209` refs, no
+  auto-merge, no false conclude. The driver's safety axis is perfect.
+
+**The wall (both worker-spawn arms closed to the orchestrator):**
+- **pi-arm** — orchestrator ran bash `git worktree add -b dispatch/w-209-p01 …`
+  → real `fatal: cannot lock ref 'refs/heads/dispatch/w-209-p01'` (shared `.git`
+  RO in the jail; it cannot create the worker fork ref).
+- **claude-arm** — the orchestrator held **no `Agent`/`Task` tool at runtime** and
+  no `worker_commit` MCP, so the harness-privileged fork-create was unreachable.
+
+**Root cause (decisive two-path probe, CC 2.1.198):** the Claude Code **Workflow
+runtime strips the `Agent` tool from every subagent it spawns** — workflow agents
+are leaves, cannot nest-spawn, regardless of the def's `tools:`. Same
+`dispatch-orchestrator` def: main-thread **Agent-tool** spawn → HAS `Agent`;
+**Workflow** `agent()` spawn → NO `Agent` (also strips Grep/Glob, injects
+`StructuredOutput`). Recorded durably as [[mem.fact.claude.workflow-strips-agent-tool]]
+(`mem_019f36028bca7411b33fde4981aaba85`), with the probe transcripts
+(`wf_40e8c2c3-3fe` workflow arm; `ae3a5dd36e3ea8c41` main-thread arm).
+
+So the defect is **the wrong harness primitive**, NOT placement (fixed) or git
+permission (a symptom). A workflow-spawned orchestrator can never reach the
+working claude-arm; it always falls to the pi-arm bash path that RO `.git` blocks.
+This does NOT contradict SL-199 Mode B (confined orchestrator landing via
+server-side MCP is still sound) — it says a *workflow agent* cannot BE that
+orchestrator, because it cannot spawn the worker.
+
+**Fix directions (design territory — awaiting operator steer, then `/design` on §5.4):**
+- **A — Agent-tool-spawned orchestrator.** Drive via the Agent tool (not Workflow):
+  the orchestrator subagent retains `Agent` (proven) and nest-spawns workers via the
+  harness-privileged fork-create. Zero new machinery; matches real `/dispatch`.
+  Unwitnessed leg: subagent→worker nested privileged fork (production spawns workers
+  from the *main thread*, not a subagent).
+- **D — workflow script spawns the WORKER directly.** A worker is a leaf (needs no
+  `Agent`); a workflow `agent(isolation:'worktree')` DOES mint the fork at the armed
+  base ([[mem_019f331005d776c1a65c65bfe59581bf]], SQ3) and DOES reach MCP
+  ([[mem_019f328b116a7172ba7eabef25ed979d]]). Keeps `/drive-slice` autonomous; the
+  funnel import/conclude runs from a second workflow-spawned MCP-holding agent (or the
+  main thread). More seams than A.
+- **B — new privileged `dispatch_spawn_worker` MCP tool** (server-side, unconfined,
+  like `worker_commit`) so a confined orchestrator can create the fork. Most new
+  machinery; keeps the confined-orchestrator model. Weakest lean.
+
 ### Stable state / resume
-- Coord 206 `68743c8b` (PHASE-04, untouched); coord 209 `fa951846` (rig, no phase
-  driven); `main`=`fa951846`; edge working tree clean; probe isolation worktrees pruned.
+- Coord 206 `68743c8b` (PHASE-04, untouched); coord 209 `fa951846` (rig, **still
+  no phase driven** — PHASE-07 halted pre-worker, coord intact); `main`=`fa951846`;
+  edge working tree carries only foreign/scratch; probe worktrees pruned.
+- PHASE-07 `in_progress`; VH-1 NOT satisfied (drive did not complete a phase). EX-5
+  arming half witnessed (base armed at B); EX-1/2/3/4/6 pending a working driver.
 - Corrected/hardened reference at `.dispatch/drive-slice-probe.js` (gitignored):
   the 3 contract fixes + slice guard, drive logic verbatim. Fix template.
-- Next (corrected): (1) spike coord-tree placement of a workflow-spawned agent
-  against SL-209; (2) if viable, patch §5.4 placement + FINDING 1/2, re-drive SL-209,
-  then exercise EX-2 (inject a regression past the worker gate) + EX-3 (forbidden-write
-  probe); (3) if not viable, reopen the slice premise. Teardown SL-209 + `DOCTRINE_BIN`
-  repoint at PHASE-05 close.
+- Next: operator picks A/D/B → `/design` §5.4 (the Workflow-primitive choice is the
+  defect, deeper than the PHASE-06 placement delta). Cheapest confirming probe for A:
+  reuse the live orchestrator `ae3a5dd36e3ea8c41` (Agent-tool-spawned, cwd parked at
+  coord-209) to drive ONE SL-209 phase — if PHASE-01 → Completed with
+  `code_start==fa951846`, Architecture A is witnessed. Teardown SL-209 +
+  `DOCTRINE_BIN` repoint at rework close.
 - NOTE (infra): host disk `/dev/nvme0n1p2` hit 100% mid-session (accumulated dispatch
   `target/` caches across worktrees); reclaimed `.dispatch/SL-206/target` +
   `.dispatch/SL-165/target` (regenerable). Watch headroom on re-drive (each worker

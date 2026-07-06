@@ -1,0 +1,59 @@
+memory_uid = "mem_019f36028bca7411b33fde4981aaba85"
+memory_key = "mem.fact.claude.workflow-strips-agent-tool"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Workflow-spawned agents do not receive the Agent tool"
+summary = "Claude Code Workflow runtime strips the Agent tool from every subagent it spawns — workflow agents are leaves, cannot nest-spawn."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = []
+globs = [".claude/workflows/**"]
+commands = ["dispatch", "drive-slice"]
+tags = ["workflow", "subagent", "dispatch", "harness", "agent-tool"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "dd5a29c2e159b8c4c4470f835dda155e4b61f9d5"
+ref_name = "refs/heads/edge"
+checkout_state_id = "22573c27fd0bfb4ae7b4828b84ec4f6fa83304776b09a486f9bf1a671ff89cb3"
+base_commit = "835ae459ae2932648423a7e47b3c4c07fb988bc6"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "probe"
+ref = "wf_40e8c2c3-3fe vs agent:ae3a5dd36e3ea8c41"
+
+[[source]]
+kind = "doc"
+ref = "docs/claude/subagents.md:376,784,790"
+
+[[relation]]
+label = "related"
+target = "mem_019f328b116a7172ba7eabef25ed979d"
+
+[[relation]]
+label = "related"
+target = "mem_019f331005d776c1a65c65bfe59581bf"
+
