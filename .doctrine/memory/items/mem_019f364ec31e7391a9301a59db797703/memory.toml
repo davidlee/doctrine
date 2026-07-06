@@ -1,0 +1,43 @@
+memory_uid = "mem_019f364ec31e7391a9301a59db797703"
+memory_key = "mem.fact.dispatch.confined-orchestrator-nested-worker-machinery-works"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Confined orchestrator can drive the shipped nested-worker machinery"
+summary = "A jailed-at-coord-root dispatch-orchestrator nest-spawns a worker: WorktreeCreate fires, worker forks at correct base, worker_commit resolves + runs the full gate, in-jail state writes work — confined-A2 is viable, unjail may be unnecessary."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["src/worktree/pretooluse.rs", "src/worktree/jail.rs"]
+globs = ["src/worktree/**"]
+commands = []
+tags = ["dispatch", "claude-harness", "sl-206"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2ae5fc15f4d5d5f2d8d492740c95b67ac556ea86"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0a7b39f2c69532260b98487f5be12b805c079d79a90c501f57ed2728705bc54e"
+base_commit = "807c3efdb1464be01638ca396ab037eb95b7bb52"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

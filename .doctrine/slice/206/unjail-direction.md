@@ -210,20 +210,60 @@ real epoch timestamp.
 - **If it NO-FIRES** → D' is dead for good; A2 is the sole path. Either outcome is
   decisive.
 
+### ▶ P0 RESULT — nested-spawn probe — RAN 2026-07-06 (settles two questions)
+
+Probe: main thread parked at coord `.dispatch/SL-209` (dispatch/209 @ `fa951846`)
+`Agent`-spawned a **confined** `dispatch-orchestrator` (agent `add711b568b9d372e`,
+no-iso ⇒ jailed at coord root); it nest-spawned one `dispatch-worker`
+(`isolation:worktree`, `afd0c43fe5815021e`). Observer shims logged `SubagentStart`
++ `WorktreeCreate`. Rig preserved: `scratchpad/p0-*.log`, `p0-*.sh`. **No** allowlist /
+pretooluse edit — natural confinement only.
+
+- **Q1 — escalation reading: CONFIRMED LIVE.** `SubagentStart` **fired for the
+  subagent-initiated** worker spawn (2 log entries, one `prompt_id`: orchestrator
+  *and* worker). Payload carries **no spawner id** — a hook cannot tell main- from
+  subagent-initiated. ⇒ a type-match-only nomination allowlist is escalatable
+  (jailed `Agent`-holder → `Agent(subagent_type:"dispatch-orchestrator")` →
+  auto-nominated grandchild). **The §5 arming token is now a ship-blocker for the
+  unjail leg, not optional hardening.** ([[mem.fact.claude.subagentstart-fires-nested-no-parent-discriminator]].)
+- **Q2 — confined-A2 viability: STRONGLY SUPPORTED.** The confined orchestrator:
+  sealed out of shared `.git` (RO, `index.lock` EROFS) but **wrote its own coord
+  `.doctrine/state/`** (arming feasible); its nested `isolation:worktree` spawn
+  **fired `WorktreeCreate`** (provisioner runs) and **forked at the correct base**
+  (`fa951846`); the worker's `worker_commit` **resolved + ran the full gate**,
+  refusing only at `commit-gate-red` — a **pre-existing red `test` recipe on the
+  SL-209 base** (exit 101), not a confinement failure. ⇒ the shipped worker
+  machinery works from a *confined* orchestrator. ([[mem.fact.dispatch.confined-orchestrator-nested-worker-machinery-works]].)
+
+**Net.** Confined-A2 looks viable → the unjail/nomination boundary-change may be
+**unnecessary** (cheaper path, no ADR-008 amendment). If unjail is pursued anyway
+(harness-surface minimization), the arming token is mandatory. Remaining confined-A2
+unknown: the full funnel (`dispatch_import`→verify→conclude) via server-side MCP,
+untested end-to-end but Mode-B-proven. Base-health aside: **dispatch/209 is red**
+(test exit 101) — the SL-209 rig base needs a green before any real drive.
+
 ## 7. Open, and what re-opens `design.md`
 
 - **OQ-A2a — A1 vs A2.** Is the one-spawn subagent orchestrator (A2) worth the
   confinement-boundary change over the simpler skill form (A1 ≈ `/dispatch` packaged)?
-  Answer after P1 + an A1-vs-A2 value-delta sketch.
+  **P0 shifts this: a *confined* orchestrator drives the shipped worker machinery
+  (Q2), so a confined-A2 needs NO boundary change at all — the unjail is only worth
+  it for harness-surface minimization, which now costs a mandatory arming token (Q1).
+  Leaning: confined-A2 first; unjail as banked fallback.**
 - **OQ-A2b — ADR-008 amendment.** An unjail-allowlist is a new exception to
-  orchestrator confinement. Likely needs an ADR-008 amendment + `/inquisition`, not
-  a silent code change.
+  orchestrator confinement. **P0 Q2 makes it likely avoidable** — confined-A2 keeps
+  the boundary intact (no amendment). Amendment (+ `/inquisition`) is required ONLY
+  if the unjail path is chosen; and that path additionally requires the §5 arming
+  token (P0 Q1: type-match alone is escalatable).
 - **IMP-275** — in-workflow / in-orchestrator landing (audit/reconcile/close) stays
   deferred (reading (ii)); this direction is scoped to drive-to-Completed (reading (i)).
 - **Re-open trigger:** P1 PASS → `/design` on A2 §5 (spawn model, nomination seam,
   security) with an adversarial pass; P1 FAIL → fall back to A1 and re-scope SL-206.
-  **STATUS: P1 PASSED (2026-07-06, §6 result block). The re-open trigger is met —
-  `/design` on A2 §5 is unblocked, awaiting operator go.**
+  **STATUS: P1 PASSED + P0 RAN (2026-07-06, §6 result blocks). Board changed:
+  confined-A2 viable (P0 Q2) → the design fork is now "confined-A2 (no boundary
+  change) vs unjail (surface-min, token-gated)", not "does unjail work". `/design`
+  on §5 is unblocked and should carry the confined-vs-unjail decision + arming token
+  + refuted-memory rewrite. Awaiting operator go.**
 
 ## 8. Evidence index
 

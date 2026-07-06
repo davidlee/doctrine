@@ -1,0 +1,43 @@
+memory_uid = "mem_019f364eb2a57182ba03db7b767f3470"
+memory_key = "mem.fact.claude.subagentstart-fires-nested-no-parent-discriminator"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "SubagentStart fires for nested (subagent-initiated) spawns; payload has no parent discriminator"
+summary = "SubagentStart fires for subagent-initiated Agent-tool spawns too; payload carries no spawner id, so a hook cannot tell main- from subagent-initiated — nomination needs an intent token, not type-match alone."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["src/worktree/pretooluse.rs"]
+globs = ["src/worktree/**"]
+commands = []
+tags = ["security", "dispatch", "claude-harness", "sl-206"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2ae5fc15f4d5d5f2d8d492740c95b67ac556ea86"
+ref_name = "refs/heads/edge"
+checkout_state_id = "095b5c722076c9bb02f77936d4afc1b9e949c880d8a1bfaa44d8470d96e9f3b5"
+base_commit = "807c3efdb1464be01638ca396ab037eb95b7bb52"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
