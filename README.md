@@ -173,7 +173,7 @@ the default workflow.
 templates:
 
 ``` zsh
-$EDITOR .doctrine/templates
+nvim .doctrine/templates
 ```
 
 skills:
@@ -182,7 +182,7 @@ skills:
 rm .claude/skills/code-review # remove symlink
 cp -r .doctrine/skills/code-review/ .claude/skills/
 
-$EDITOR .claude/skills/code-review/SKILL.md
+nvim .claude/skills/code-review/SKILL.md
 git add -f .claude/skills/code-review/SKILL.md
 
 doctrine install # skips existing non-symlinks
@@ -193,7 +193,7 @@ or:
 ``` zsh
 gh repo fork davidlee/doctrine --clone
 cd doctrine
-$EDITOR doctrine/plugins/review
+nvim doctrine/plugins/review
 git commit -m "feat: review like a pirate" && git push
 cargo install --path .             # build with your edits
 
@@ -287,6 +287,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-015 — Governance state on a dedicated ref namespace](.doctrine/rfc/015/rfc-015.md) — `open`
 - [RFC-016 — Zero-rescue dispatch: invariants into verbs, lineage rows](.doctrine/rfc/016/rfc-016.md) — `open`
 - [RFC-017 — Human onboarding docs: tour, quickstart, mental model](.doctrine/rfc/017/rfc-017.md) — `open`
+- [RFC-018 — Claude harness field notes: empirical findings and design-artifact map](.doctrine/rfc/018/rfc-018.md) — `open`
 
 ### Architecture Decision Records
 
