@@ -830,3 +830,66 @@ gate false-red, NOT a lost `worker_commit` tool).
 **Verification:** VT-1/VT-2 green in worker tree (3260 passed, 0 failed, 0
 ignored-net); regression diff vs B byte-identical (4/4); doctor agent-conformance
 0 on the coord tree post-land; import prove (fmt-check + clippy) green.
+
+## PHASE-14 — /drive-slice unjail driver (2026-07-07, Opus worker via funnel)
+
+**Landed:** code `9c515def` (44c51d54→9c515def), boundary `8d5c8c6d` (funnel
+provenance). PHASE-14 completed. Opus dispatch-worker, ~72k tok, 10 tool-uses.
+
+**Deliverable — `install/workflows/drive-slice.js`** (345 lines, single-file JS,
+NO Rust delta). Realizes design §5.4 reference implementation faithfully:
+- **F1 harness contract** — pure-literal `meta` (name/description/3-entry phases)
+  as first statement; top-level body (top-level `await`); no `Date.now`/
+  `Math.random`/`new Date`. `node --check` passes.
+- **F2 slice guard** — `Number(...)` + `Number.isInteger` positive-int check,
+  fail-closed throw; parses `args` that may arrive as a JSON string.
+- **Schemas** (harness `schema:`) — `WorkReceipt {fork_tip:string|null, summary}`;
+  `HopReceipt` = dispose half (PhaseReceiptCore fields + verify + halt_reason?) +
+  `fixup?` XOR `prep?` + `next_ready`. The **oneOf** encodes fixup-XOR-prep-XOR-
+  neither as three mutually-exclusive branches ({only-fixup},{only-prep},{neither});
+  "both" matches zero → harness rejects. Honestly commented as the closest faithful
+  JSON-Schema encoding (JSON Schema can't say "these two keys are exclusive"
+  directly) — no Rust changed to express it.
+- **Alternating O/W two-job loop** — `driveArm`→claude(`dispatch-probe` O₀,
+  read-only)/pi(`dispatch-orchestrator` O₀); `while (hop.prep)`; claude-arm worker
+  spawn (`isolation:'worktree'`, `agentType:'dispatch-worker'`) vs pi `{fork_tip:null}`;
+  interior O = one `dispatch-orchestrator` agent, TWO jobs (dispose+prep). Script is
+  sole spawn authority (no `Agent`-tool spawn — workflow strips it, O never nests).
+- **Bounded fixup loop** — inner `for(;;)`, `++fixups > MAX_FIXUP ⇒ FIXUP_EXHAUSTED`,
+  revive worker via fresh `dispatch-worker` agent. Comment: revive is fork-durable
+  (not context-intact SendMessage), base ENFORCED by `worker_commit`'s HEAD==base ∧
+  single-parent==base — NOT a prompt-obeyed reset; (A)-path adds disposing-O
+  parent-chain verify → `coord:revive-wrong-base`.
+- **Named HALT** — single-sourced `HALT` table (8 members incl. `PREP_INCOMPLETE`,
+  `FIXUP_EXHAUSTED`); loop references members only, zero inline literals; `funnel:`/
+  `coord:` families forwarded from the O receipt, not minted.
+- **A1 belt** — `!hop.prep && hop.next_ready?.length ⇒ HALT.PREP_INCOMPLETE` (a
+  clean dispose that silently failed to prep ≠ drive-complete).
+- **Budget-adaptive** — `budget.total &&` short-circuits (unmetered on null total);
+  `lastActual` = pool-spend delta per hop, seeded by `SEED_PHASE_COST`.
+- **No auto-merge** — drives + reports; closing `divergenceProbe` (`dispatch-probe`
+  → `dispatch_authored_divergence`) appended read-only, NEVER gated.
+- Genuinely instructive prompt builders (bootstrap/hop/fixup/divergence) — the O
+  prompt addresses the coord tree explicitly (`git -C .dispatch/SL-<slice>`) and
+  asserts `dispatch/<slice>` else `coord:<reason>`.
+
+**EX-6 selector gate pre-met** — `install/workflows/drive-slice.js` already a
+committed `design-target` selector (slice-206.toml:60, PHASE-04 residue); import
+`--slice 206` scope-check passed, no `selector add` needed.
+
+**Funnel — fall-to-(A), stale-`$PATH` false-red (3rd RECURRENCE, ISS-220).**
+`worker_commit` Refused `commit-gate-red` again — the gate shells a stale
+`~/.cargo/bin/doctrine` (pre-PHASE-10) that false-flags the shipped `dispatch-probe`
+role + orchestrator read tokens. Delta is pure JS and touches NEITHER — pure
+env-gate false-red. Landed via fall-to-(A) live-worktree import (in-process prove
+gate fmt+clippy green — trivially, no Rust delta) → orchestrator commit; worker
+bytes **byte-identical** (sha256 match). P5 fall-to-(A) recorded (reason: env gate
+false-red). **The false-red now fires on EVERY phase regardless of delta content**
+(here: a phase with zero Rust/def change still hit it) — it is a fixed per-phase
+tax gated on the stale in-jail `$PATH` binary, not on what the worker changed.
+
+**Verification:** VT-1 all 5 substrings present (`HopReceipt`×7, `WorkReceipt`×4,
+`PREP_INCOMPLETE`×2, `MAX_FIXUP`×3, `Number.isInteger`×1); `node --check` clean; no
+`Agent`/clock/auto-merge patterns; regression diff vs worker source byte-identical;
+import prove green. VA-1 (topology/semantics inspection) confirmed at orchestrator
+read pre-land; re-confirm at audit.
