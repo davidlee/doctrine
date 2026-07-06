@@ -61,6 +61,11 @@ selector = "install/workflows/drive-slice.js"
 intent = "design-target"
 note = "PHASE-04 authored home for /drive-slice reference workflow (OQ-1 resolved); EX-6 selector gate"
 
+[[selector]]
+selector = "src/install.rs"
+intent = "design-target"
+note = "PHASE-04 modifies it (EX-7 install seeding legs); import belt requires design-target to land — upgraded from scope-relevant"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-031"
