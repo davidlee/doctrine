@@ -13,15 +13,26 @@
 //
 // Transcribed from `.doctrine/slice/206/design.md` §5.4 — the driver loop is the
 // authored source; this file must not drift from it.
+//
+// PHASE-06 corrections (design §5.4 delta `ef23828f`, placement reconciliation):
+//   - PLACEMENT: the per-phase orchestrator `agent()` carries NO `isolation`. A
+//     no-isolation subagent starts in the driver's cwd — the slice's coordination
+//     worktree root — where the SL-199 arming discriminator fires. `isolation:
+//     'worktree'` fresh-forked it into a detached tree where it never armed, so no
+//     phase ever reached Completed. The confined-orchestrator model is proven
+//     (SL-199 Mode B); the defect was placement, not permission.
+//   - F1 (harness contract): `meta` is a pure literal (single-string description,
+//     `[{title}]` phases); the drive logic runs in a TOP-LEVEL body — the Workflow
+//     tool executes the body and never calls a `run` export.
+//   - F2 (slice guard): the top-level body tolerates args-as-string and fails
+//     closed on a non-positive-integer slice, so the driver never guesses which
+//     slice it drives.
 
 export const meta = {
   name: 'drive-slice',
   description:
-    "Drive one slice's ready phases to completion via one confined " +
-    'dispatch-orchestrator per phase; consume typed PhaseReceipts, report-and-halt, ' +
-    'never auto-merge. Read-only bootstrap + closing divergence probe via dispatch-probe.',
-  args: { slice: 'The slice id to drive (e.g. SL-206).' },
-  phases: ['bootstrap', 'drive', 'divergence-probe'],
+    "Drive one slice's ready phases to completion via one confined dispatch-orchestrator per phase; consume typed PhaseReceipts, report-and-halt, never auto-merge. Read-only bootstrap + closing divergence probe via dispatch-probe.",
+  phases: [{ title: 'bootstrap' }, { title: 'drive' }, { title: 'divergence-probe' }],
 };
 
 // ── Budget config (STD-001: named, rationale in comment; in-script per D4) ──
@@ -44,6 +55,11 @@ const SOFT_CEILING = 120_000; // advisory dumb-zone; planning-only, NEVER gated
 //         (src/mcp_server/dispatch.rs: `CoordRefusal` @ ~:52, reasons
 //          `unknown-slice` | `ambiguous` | `stale`).
 //     The design does not mint these strings; it forwards the authored enums.
+//     ONE exception, minted at the orchestrator (not the emitter): the
+//     fail-closed placement precondition below emits `coord:not-at-coord-root`
+//     — an orchestrator-detected extension of the `coord:` family (a
+//     coordination-worktree fault), distinct from the Rust `CoordRefusal` enum.
+//     The driver passes it through verbatim like any other `coord:` reason.
 //
 //  2. Script-local — the driver's ONLY authored halt vocabulary. Members only,
 //     never inline literals.
@@ -153,20 +169,28 @@ async function divergenceProbe(slice) {
 function orchestratorPrompt(slice, phase) {
   return (
     `You are driving slice ${slice} phase ${phase} through the dispatch funnel from ` +
-    `inside its coordination worktree. Arm the base, spawn a worker to execute the ` +
-    `phase, import the delta, conclude the phase, reap the fork, then compose and ` +
-    `return a PhaseReceipt: source its durable core from dispatch_phase_receipt, its ` +
-    `readiness adjunct from dispatch_next_ready, and run the verify command — set ` +
-    `verify.green + failures from the result. On ANY funnel refusal, set ` +
-    `halt_reason="funnel:<reason>" and return a non-Completed receipt; on a coord ` +
-    `refusal, return a minimal receipt with halt_reason="coord:<reason>". Never ` +
-    `auto-merge, never land to trunk.`
+    `inside its coordination worktree.\n\n` +
+    `PLACEMENT PRECONDITION (fail-closed — assert FIRST, before arming, spawning, ` +
+    `importing, or concluding anything). Run \`pwd\` and \`git branch --show-current\`. ` +
+    `You MUST be at the slice's coordination worktree root (the .dispatch/SL-${slice} ` +
+    `tree) on branch dispatch/${slice}. If pwd is NOT the coord root OR the branch is ` +
+    `NOT dispatch/${slice} — e.g. you were fresh-forked into a detached agent worktree ` +
+    `where the SL-199 coord-root arming discriminator never fires — DO NOT arm, spawn, ` +
+    `import, or conclude. Immediately return a MINIMAL receipt with ` +
+    `halt_reason="coord:not-at-coord-root" and stop.\n\n` +
+    `Only when placement holds: arm the base, spawn a worker to execute the phase, ` +
+    `import the delta, conclude the phase, reap the fork, then compose and return a ` +
+    `PhaseReceipt: source its durable core from dispatch_phase_receipt, its readiness ` +
+    `adjunct from dispatch_next_ready, and run the verify command — set verify.green + ` +
+    `failures from the result. On ANY funnel refusal, set halt_reason="funnel:<reason>" ` +
+    `and return a non-Completed receipt; on a coord refusal, return a minimal receipt ` +
+    `with halt_reason="coord:<reason>". Never auto-merge, never land to trunk.`
   );
 }
 
 // ── Driver loop (JS, /drive-slice) — transcribed from design §5.4 ──
 
-export async function run({ slice }) {
+async function run({ slice }) {
   let lastActual = null;
   const report = { slice, phases: [], halted: null, divergence: null };
 
@@ -182,8 +206,16 @@ export async function run({ slice }) {
     }
 
     const before = budget.spent();
+    // PLACEMENT (PHASE-06 fix, design §5.4 delta): NO isolation. A no-isolation
+    // subagent starts in the driver's current working directory
+    // (docs/claude/subagents.md:263) — the slice's coordination worktree root,
+    // where the SL-199 arming discriminator (cwd_is_coord_root ∧ coord_in_dispatch,
+    // src/worktree/create.rs) fires and the orchestrator arms/spawns/imports through
+    // the server-side MCP funnel over the RO shared .git (integrity never rests on
+    // the confined orchestrator; SL-199 Mode B). isolation:'worktree' would
+    // FRESH-FORK it into a detached .worktrees/agent-<hex> where the discriminator
+    // never fires and no phase ever reaches Completed.
     const r = await agent(orchestratorPrompt(slice, phase), {
-      isolation: 'worktree',
       schema: PhaseReceipt,
       agentType: 'dispatch-orchestrator',
     });
@@ -233,3 +265,19 @@ export async function run({ slice }) {
   report.divergence = await divergenceProbe(slice);
   return report;
 }
+
+// ── Top-level entry (F1: the Workflow tool executes this body; it never calls a
+// `run` export). F2 slice guard: tolerate args-as-string (the tool's documented
+// footgun) AND fail closed on a non-positive-integer slice — the driver must
+// never guess which slice it drives. ──
+const parsed = typeof args === 'string' ? JSON.parse(args) : (args || {});
+const slice = Number(parsed.slice);
+if (!Number.isInteger(slice) || slice < 1) {
+  throw new Error(
+    `drive-slice refuses: expected a positive integer slice id, got ${JSON.stringify(parsed.slice)}`,
+  );
+}
+log(`drive-slice: starting for slice ${slice}`);
+const result = await run({ slice });
+log(`drive-slice: report ${JSON.stringify(result).slice(0, 800)}`);
+return result;
