@@ -22,6 +22,10 @@ intent = "design-target"
 selector = "src/listing.rs"
 intent = "scope-relevant"
 
+[[relation]]
+label = "related"
+target = "SL-150"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
