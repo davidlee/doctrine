@@ -99,3 +99,45 @@ Scope: registering the 3 tools forced the e2e tool-count golden
 the selector; widened to design-target (commit `eaea6b3d`, operator-approved). A
 worker overreach on the out-of-selector red (edited the golden + re-committed on a
 fabricated authorization) is logged to RFC-011 case-notes.
+
+## PHASE-04 — Agent defs + /drive-slice reference workflow (landed 2026-07-06)
+
+Landed S=`d94a301f` (B=`aba7b740`), boundary `68743c8b`, fork reaped, provenance
+funnel. Model: opus (the /drive-slice script is the slice centerpiece — Rust-vocab
+↔ JS HALT-contract coupling). Five files, all verified green against the correct
+target: `install/agents/claude/dispatch-probe.md` (new — probe role, exactly the 3
+read MCP tokens, no raw write/bash/agent), `dispatch-orchestrator.md` (+3 read
+tokens), `install/workflows/drive-slice.js` (new — design §5.4 driver loop, frozen
+single-sourced `HALT` table, `coord:`/`funnel:` passed through from the Rust
+vocabs, no auto-merge), `src/doctor_checks.rs` (new real-tree conformance test
+`agent_conformance_real_shipped_defs_are_clean`, VT-1), `src/install.rs` (probe
+def + workflows seeding legs — EX-5/EX-7 both made real, nothing waived). Suite
+3205/0 (3204 at B + 1 new test), prove clean.
+
+**Landed via land-not-rewrite — worker_commit false-red (stale-PATH binary).** The
+`worker_commit` gate belt runs `doctrine doctor` via PATH `~/.cargo/bin/doctrine`,
+which the flake bump rebuilt from **edge** — pre-PHASE-03, so it rejects
+`doctrine-role: probe` (unknown) + the orchestrator's 3 read tokens (old 3-token
+allowlist) → exit 1. Fresh worktree binary (dispatch/206 source) → doctor exit 0,
+zero conformance findings. Both tag `0.16.0`; divergence is SOURCE, not version.
+Root cause: PHASE-04's def depends on PHASE-03's conformance surface, which lives
+only on `dispatch/206` (unpromoted pre-audit). Orchestrator landed the worker's
+own staged bytes (author preserved, `dispatch@doctrine` committer via import),
+substituting fresh-binary verification for the gate's stale-binary check. Operator
+approved the bypass. See [[mem.pattern.dispatch.worker-commit-stale-path-false-red]]
+and RFC-011 case-notes; backlog ISS filed (belt should use the coord/build binary,
+not PATH — violates AGENTS.md's own rule).
+
+**Selector corrections (register-before-land, EX-6 + emergent):**
+`install/workflows/drive-slice.js` → design-target (OQ-1 home, edge `b268759f`).
+`src/install.rs` scope-relevant→**design-target** (edge `4c45ef98`): PHASE-04
+modifies it substantively; the import belt (`classify_import`) requires
+design-target to land ANY path, so the plan's scope-relevant classification was a
+plan defect the belt correctly caught. Both mirrored to the coord belt for the
+live import.
+
+**Base freshness:** trunk moved 21 ahead of fork-point at conclude (was 12 at
+PHASE-04 start; the edge companion commits accrue). No overlap with PHASE-04's
+files — refresh-base deferred; the conclude/integration merge handles it. NOTE:
+the coord worktree is STALE (worktree-free import) — will trip INV-6 at
+prepare-review; un-stale before the conclude cadence.
