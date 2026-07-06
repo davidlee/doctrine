@@ -35,7 +35,8 @@ We are currently benchmarking token efficiency for RFC-011.
 incidental complexity, confusion, or other source of token-inefficiency to: 
 `.doctrine/rfc/011/case-notes.md`, whether or they relate to the dispatch
 orchestrator, worker, or any other agent or root cause. Identify each entry
-with `[skill being used; a session-unique identifier]\n`
+with `[skill being used; a session-unique identifier]\n` **IMPORTANT:** append 
+to the primary working tree, not a linked worktree.
 
 # orchestration
 
