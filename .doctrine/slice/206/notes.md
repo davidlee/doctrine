@@ -687,3 +687,52 @@ target path proven again post-unjail-config.
 carry `check_spawn_seam_symmetry`/`SEAM_REGISTRY`/`Workflow` and
 `fork_tip`/`base`). 3255 full-suite green in worker tree; regression diff vs B
 green on coord tree.
+
+## PHASE-13 — Agent defs (dispatch-probe + orchestrator tokens) + install seeding (2026-07-07)
+
+Landed `490eff2e → 8f9c974b` (conclude tip `b90ce59f`). Worker: Sonnet, claude
+arm, ~151k tokens.
+
+- **New `install/agents/claude/dispatch-probe.md`** — read-only probe role
+  (`doctrine-role: probe`; `tools: Read, Grep, Glob` + the three read funnel
+  tokens; NO Write/Edit/Bash/Agent). Serves BOTH the closing divergence probe AND
+  the claude-arm bootstrap O₀ (prep-only, read-only ⇒ no nomination, least-privilege).
+- **`dispatch-orchestrator.md`** tools grown with the three read tokens, `Agent`
+  stripped (workflow is spawn authority). Body UNTOUCHED — its confined-narrative
+  ("you sit in Jail / sole writer, ro `.git`") is now stale vs the unjail posture;
+  deferred (outside EX-2's tools-line scope, and §9 targets orchestrator only as
+  "gains three read tokens"). **FLAG: orchestrator def body needs an unjail-narrative
+  pass — PHASE-14 driver work or a doc reconcile.**
+- **`install_agent_def` generalized** — dest filename now derived from the asset
+  basename (`Path::new(embed_asset).file_name()`); `DISPATCH_WORKER_AGENT_FILE`
+  removed; `DISPATCH_PROBE_AGENT_ASSET` seeded in the claude leg. Fixed a latent
+  bug (any non-worker asset previously wrote to `dispatch-worker.md`, e.g. the old
+  `glossary.md` test).
+- **Workflows seeding leg** — `claude_workflows_dir`/`workflow_canonical_dir`/
+  `embedded_workflow_defs`/`install_workflow_assets` mirror the agent-def
+  materialize+link (reused `classify_link`/`write_link`/`relative_target`/
+  `install_base` — no parallel symlink impl), wired into the claude leg. Payload
+  (`install/workflows/drive-slice.js`) lands PHASE-14, so `embedded_workflow_defs()`
+  enumerates empty today; the mechanism is covered by 3 synthetic-asset tests +
+  one empty-enumeration assertion.
+- **doctor allowlist logic UNTOUCHED** (landed PHASE-10). VT-1
+  `agent_conformance_passes_the_shipped_install_agents_tree` asserts #9 green on
+  all three shipped defs; VT-2 folded into the retargeted probe-asset install test
+  (`install_agent_def_dispatch_probe_writes_bytes_identically_under_the_derived_dest`).
+
+**Funnel — fall-to-(A), stale-`$PATH` false-red (RECURRENCE of PHASE-11).**
+`worker_commit` Refused `commit-gate-red`: its `check commit` chain shells bare
+`doctrine` from `$PATH` = read-only `~/.cargo/bin/doctrine` (pre-PHASE-10), which
+rejects the new probe role + orchestrator read tokens (4 agent-conformance errors:
+`expected worker or orchestrator` + 3 `forbidden MCP token`). Delta proven
+**delta-independent + green** via BOTH the coord (`SL-206-bin`) and worker-built
+binaries (agent-conformance 0). Same footgun as PHASE-11
+(`mem.pattern.dispatch.worker-commit-stale-path-false-red`, ISS-220). Landed via
+fall-to-(A) live-worktree import (`worktree import --from-worktree`, in-process
+prove gate fmt+clippy green) → orchestrator commit (`8f9c974b`, worker bytes
+byte-identical: 4/4 regression diff MATCH). P5 fall-to-(A) recorded (reason: env
+gate false-red, NOT a lost `worker_commit` tool).
+
+**Verification:** VT-1/VT-2 green in worker tree (3260 passed, 0 failed, 0
+ignored-net); regression diff vs B byte-identical (4/4); doctor agent-conformance
+0 on the coord tree post-land; import prove (fmt-check + clippy) green.
