@@ -105,3 +105,31 @@ PHASE-03 EX-8 pins this.
 - **No auto-land (IMP-174).** No phase crosses the authored split-brain; landing
   stays `/audit → /reconcile → /close`. The driver reports; the divergence
   advisory is raw signal only.
+
+## PHASE-06/07 — rework (appended after PHASE-05 acceptance)
+
+PHASE-05 drove the shipped `/drive-slice` live and found it never completes a
+phase. Root cause (reconciled against SL-199, corrected in notes.md FINDING 3 +
+design §5.4 delta `ef23828f`): a **placement** defect, not the orchestration
+model. The confined orchestrator is proven-realizable (SL-199 Mode B) — RO shared
+`.git` is by design, coord `.git` writes go through the server-side MCP funnel.
+§5.4 merely spawned the orchestrator with `isolation:'worktree'`, fresh-forking it
+away from coord-root where the SL-199 arming discriminator (`cwd_is_coord_root`)
+never fires. A placement spike + `docs/claude/subagents.md:263` confirmed a
+no-isolation subagent inherits the driver's coord-root cwd — the fix.
+
+- **Why two phases.** The fix (PHASE-06) is a source correction with a testable
+  presence floor (VT) plus absence/correctness inspection (VA) — `agent()` carrying
+  no `isolation` is an *absence*, which the VT keyword floor cannot assert, so it is
+  a VA. The witness (PHASE-07) is the inherently empirical VH-1 live drive SL-199
+  left owed; it carries no VT (a live armed loop is human/agent-judged, and the
+  SL-209 test files land on a different coord tree than SL-206's `verify-vt` reads).
+- **Immutability.** PHASE-01–05 are untouched; the rework appends. PHASE-06/07
+  carry the corrected criteria, including the two internal-review residuals: the
+  orchestrator entry-assert wording (PHASE-06) and the coord-root invoke ritual
+  (PHASE-07).
+- **Landing.** The deliverable is authored on `dispatch/206` (its existing home) —
+  one home, no new split-brain (IMP-174) — reseated live for the PHASE-07 drive,
+  integrated at `/close`. It is a shipped script, edited by the sole writer, not
+  driven through a worker (which would also mean repairing the machinery with the
+  machinery under repair). OQ-1 (script home) thereby resolves to `dispatch/206`.

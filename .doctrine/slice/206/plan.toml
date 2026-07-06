@@ -207,3 +207,70 @@ verification = [
 ]
 specs        = []
 requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE-06/07 — REWORK appended after PHASE-05 acceptance found the §5.4 placement
+# defect (notes.md FINDING 3, corrected). Design delta ef23828f: the confined-
+# orchestrator model is correct; the fix is coord-tree PLACEMENT, not unconfining.
+# PHASE-01..05 stay as the historical record of the original attempt + findings.
+# Deliverable is authored on dispatch/206 (its home); authored edit, not worker-
+# driven (it is a shipped script, not slice-code-under-test).
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-06"
+name      = "Placement + harness-contract fix + reseat"
+objective = """
+Correct the `/drive-slice` deliverable per the §5.4 delta, authored directly on \
+dispatch/206 (sole-writer edit, no worker). (1) PLACEMENT: the per-phase \
+orchestrator `agent()` call drops `isolation:'worktree'` so it inherits the \
+driver's coord-root cwd and is jailed to the coord tree. (2) COORD-ROOT ASSERT: \
+`orchestratorPrompt` prepends a fail-closed first-action assert \
+(`pwd==coord-root ∧ branch==dispatch/<slice>` → `halt_reason="coord:not-at-coord-root"`). \
+(3) F1 harness contract: `meta` a pure literal, `phases:[{title}]`, all drive logic \
+in a TOP-LEVEL body (no uncalled `run` export). (4) F2: parse `args` (may be a JSON \
+string), validate `slice` is a positive integer, halt fail-closed. Then reseat the \
+corrected copy live under `.claude/workflows/` for the PHASE-07 drive. Worker \
+isolation stays def-pinned to the worker frontmatter (unchanged)."""
+entrance_criteria = [
+  { id = "EN-1", text = "Design §5.4 delta landed (ef23828f); deliverable identified on dispatch/206 (install/workflows/drive-slice.js) + live .claude copy" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "drive-slice.js: orchestrator agent() call carries NO isolation arg; F2 slice guard present; orchestratorPrompt carries the coord-root entry-assert; meta is a pure literal with phases:[{title}] and drive logic runs in a top-level body" },
+  { id = "EX-2", text = ".claude/workflows/drive-slice.js reseated so the live copy == the corrected source; worker isolation confirmed def-pinned to the worker frontmatter" },
+]
+verification = [
+  { id = "VT-1", expects = "corrected driver carries the F2 slice guard + coord-root entry-assert + receipt schema", test_file = "install/workflows/drive-slice.js", keywords = ["Number.isInteger", "not-at-coord-root", "PhaseReceipt"], waived = false },
+  { id = "VA-1", expects = "Agent confirms by reading the file: the orchestrator agent() call has NO isolation; meta is a pure literal (single-string description, phases:[{title}]); drive logic runs at top level with no uncalled run export; worker isolation is def-pinned, not per-call" },
+  { id = "VA-2", expects = "Agent confirms the reseated .claude/workflows/drive-slice.js is byte-identical to the corrected install/ source" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "VH-1 live acceptance re-drive"
+objective = """
+Witness the live armed loop end-to-end with the corrected driver — the VH-1 \
+integrated-loop witness SL-199 left OWED and PHASE-05 first attempted. Invoke \
+`/drive-slice` parked at coord-209 root against the SL-209 scratch rig and assert \
+the load-bearing invariants in anger: both phases drive to Completed via typed \
+PhaseReceipts consumed by the loop; an injected red verify halts without auto-merge \
+(coord tip intact); a forbidden review_*/memory_* write from a spawned agent is \
+refused/absent against the INSTALLED def while granted funnel tools remain callable; \
+the authored_divergence advisory emits (never gates) and the null-budget loop runs \
+unmetered. Document the coord-root invoke ritual."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 landed + reseated live; SL-209 rig present (dispatch/209); DOCTRINE_BIN serves the slice binary; driver invoked with cwd parked at coord-209 root" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SL-209 drives to all-Completed via /drive-slice; each phase returns a valid typed PhaseReceipt consumed by the JS loop; final report all-green — VH-1 witnessed" },
+  { id = "EX-2", text = "An injected red verify halts the loop at that phase; NO funnel integrate/auto-merge occurs; coord-209 tip unchanged (SL-199 §D boundary intact)" },
+  { id = "EX-3", text = "A forbidden review_*/memory_* write from a spawned agent is refused/absent against the installed def; granted funnel tools are callable" },
+  { id = "EX-4", text = "authored_divergence advisory emits in the final report and is never acted on; the null-budget loop runs unmetered (+Nk pacing best-effort if injectable)" },
+]
+verification = [
+  { id = "VH-1", expects = "Human confirms from the live drive report: SL-209 reached all-Completed on the happy path with typed receipts consumed, AND the injected-red run halted at the red phase with no auto-merge and coord tip intact — the owed SL-199 armed-loop witness" },
+  { id = "VA-1", expects = "Agent confirms from the drive artifacts: the forbidden-write probe was refused/absent against the installed def, granted funnel tools were callable, and the divergence advisory emitted without gating" },
+]
+specs        = []
+requirements = []
