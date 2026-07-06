@@ -725,3 +725,12 @@ armed→resolves) live in adjacent memories whose titles both say "workflow leaf
 cannot commit" — the discriminator (armed cwd) is buried in the body. A future
 agent re-reading those memories will re-make the same misread. Signposting the
 armed/unarmed discriminator in the memory titles would cut it.
+
+[dispatch-agent; SL206-P11-resume]
+Shipped dispatch-agent SKILL.md still documents the retired live-worktree-import
+funnel ("ro-.git blocks self-commit", footer worktreePath → verify-worker →
+worktree import --from-worktree). Actual claude-arm funnel since SL-198/199:
+worker self-commits via worker_commit MCP; orchestrator lands via dispatch_import
+→ dispatch_conclude_phase → dispatch_reap. Cost: orchestrator must re-derive the
+real cadence from tool schemas + memories each session (~2-3k tokens) and risks
+mis-instructing the worker prompt. Skill needs a rewrite pass post-SL-206.
