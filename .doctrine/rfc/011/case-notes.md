@@ -791,3 +791,24 @@ conformance lint via the server's in-process binary, not a $PATH shell-out) woul
 retire it for every remaining phase; absent that, every /drive-slice-driven phase
 inherits the same tax the hand-driven funnel is paying now — worth pricing into the
 RFC-011 comparison (the driver does NOT remove it; it inherits it).
+
+[dispatch; SL-206-P16-substrate-swap]
+PHASE-16 (in-anger e2e acceptance of the shipped /drive-slice) is hard-gated on a
+LIVE substrate that the driving session cannot self-create. The live .claude/
+substrate is nix-built from edge (flake ro-binds nix doctrine over
+~/.cargo/bin/doctrine, unconditional); a dispatch FORK cannot be nix-built. So the
+PHASE-10-14 code (read tools, nomination hooks, grown grants, worker_commit gate)
+is absent from the live plugin hooks (only `worktree pretooluse` installed — no
+PHASE-11 SubagentStart nomination / Workflow matcher). Consequence: the
+workflow-spawned dispatch-orchestrator can't be nominated-unjailed → its plain-git
+commit is denied → the drive halts at the first dispose. The ONLY lever is
+DOCTRINE_BIN → operator restart (hooks read it from settings.local.json, MCP from
+env/.envrc). Net cost: an entire slice's acceptance phase cannot run inside the
+authoring session — it needs a build swap + reseat + /reload-plugins + restart, an
+operator boundary. This is the ISS-216 reseat gap (design R6/F2) biting at
+acceptance time: the slice that ADDS the dispatch machinery cannot dogfood its own
+machinery until that machinery ships to edge and is nix-rebuilt. A dispatch-native
+"drive against a fork-built binary" path (or a faster reseat-without-restart) would
+remove a whole-session stall from every dispatch slice whose acceptance is a live
+drive. Also re-confirms ISS-220 (worker_commit false-red from stale $PATH doctrine)
+is the same root: the live gate/MCP binary lags the coord build.
