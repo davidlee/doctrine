@@ -105,7 +105,10 @@ cannot spawn the worker; only the workflow can.
 
 ```
 Workflow /drive-slice   (JS; args:{slice}; durable serial loop; SPAWN AUTHORITY)
-  bootstrap: O₀ = agent(dispatch-orchestrator) → next_ready + PREP the phase-1 worker
+  bootstrap: O₀ preps-only (no prior worker to dispose) → next_ready + PREP phase-1 worker
+     claude arm: O₀ = agent(dispatch-probe)  ── READ-ONLY, UNPRIVILEGED, NO nomination
+                 (base_B from dispatch_phase_receipt.dispatch_tip; prompt from Read/Grep) ─┐
+     pi arm:     O₀ = agent(dispatch-orchestrator) ── nominated-unjailed (needs `git worktree add`)
   loop, ALTERNATING O and W — one orchestrator BETWEEN two workers, TWO jobs:
 
     W_i  = worker (JAILED): claude arm = workflow agent(dispatch-worker, isolation:worktree)
@@ -277,6 +280,12 @@ alternate; the workflow threads facts (2a-a), never computes them:
     additionally belts a silent omission via the `next_ready` cross-check (A1, §5.4).
   - `next_ready: string[]` — the slice-global adjunct (`dispatch_next_ready`);
     load-bearing for the A1 belt, not decoration.
+  - **`fixup` and `prep` are MUTUALLY EXCLUSIVE** — a fixable defect revives the
+    worker (no prep until dispose is accepted); an accepted dispose may prep. The
+    driver loop *assumes* this exclusivity, so the `schema:` **enforces** it (`oneOf`:
+    `fixup` set XOR `prep` set XOR neither-when-halted) — the harness rejects a
+    receipt carrying both, rather than the loop silently taking the `fixup` branch
+    and dropping a live prep.
 
 ```js
 const SEED_PHASE_COST = 45_000;   // RFC-011-observed funnel ceremony (STD-001: rationale in comment)
@@ -293,9 +302,13 @@ if (!Number.isInteger(slice) || slice < 1) throw new Error(`drive-slice: bad sli
 // spawned agent. It is the SPAWN AUTHORITY + STATE BUS (2a-a) — it threads
 // {base_B, worker_fork, fork_tip} between the alternating agents, never computes them.
 
-// Bootstrap O₀ (dispatch-orchestrator): read next_ready + PREP the first worker.
-// Prep-only — no previous worker to dispose. dispatch-probe reads fold in here.
-let hop = await agent(bootstrapPrompt(slice), { schema: HopReceipt });
+// Bootstrap O₀: read next_ready + PREP the first worker. Prep-only — no previous
+// worker to dispose, so on the CLAUDE arm it is READ-ONLY ⇒ the unprivileged
+// dispatch-probe role (no nomination, one fewer privileged spawn/drive). Only the
+// PI arm's O₀ needs unjail (it `git worktree add`s the first worker's tree).
+const arm = driveArm(args);              // drive-level: 'claude' (v1) | 'pi'
+const bootstrapType = arm === 'pi' ? 'dispatch-orchestrator' : 'dispatch-probe';
+let hop = await agent(bootstrapPrompt(slice), { schema: HopReceipt }); // agentType: bootstrapType
 if (!hop || hop.halt_reason) { return { ...report, halted:{ reason: hop?.halt_reason ?? HALT.NULL_RECEIPT } }; }
 
 while (hop.prep) {                                        // prep present ⇒ a phase is ready to run
@@ -386,7 +399,7 @@ not scattered literals. Two families:
 | Subagent type          | MCP grant (exhaustive)                                | Raw tools |
 |------------------------|-------------------------------------------------------|-----------|
 | `dispatch-orchestrator` **(nominated-unjailed)** | `dispatch_import`, `dispatch_conclude_phase`, `dispatch_reap`, `dispatch_phase_receipt`*, `dispatch_next_ready`*, `dispatch_authored_divergence`* | Read, Edit, Write, Bash, Grep, Glob — **no `Agent`** (stripped for workflow leaves, wall #1; O never nest-spawns — workflow is spawn authority; O uses Bash for the pi-arm `git worktree add` + subprocess) |
-| **`dispatch-probe`** (new) | `dispatch_next_ready`*, `dispatch_authored_divergence`*, `dispatch_phase_receipt`* | **Read, Grep, Glob only** — no Write/Edit/Bash/Agent |
+| **`dispatch-probe`** (new) | `dispatch_next_ready`*, `dispatch_authored_divergence`*, `dispatch_phase_receipt`* | **Read, Grep, Glob only** — no Write/Edit/Bash/Agent. Serves the closing divergence probe AND the **claude-arm bootstrap O₀** (prep-only, read-only ⇒ no nomination — least-privilege) |
 | `dispatch-worker` (jailed) | `worker_commit` — `SubagentStart(dispatch-worker)` **fires for the workflow leaf** ⇒ DispatchRecord provisioned ⇒ resolves (open gate: P5, MCP-retention) | Read, Edit, Write, Bash, Grep, Glob |
 | workflow script        | *(none — JS, no MCP)*                                 | *(none)* |
 
@@ -537,6 +550,13 @@ deny), 2026-07-06 (`unjail-direction.md` §6).
   harness spawn surface inherits the gate by this rule, defaulting to **gated, not
   forgotten**. (This is what OQ-4 must resolve as a **symmetry requirement**, not a
   convenience: see §6.)
+  **I1 is CHECKED, not asserted** (matches "containment by grant, checked" — §4). A
+  new **doctor check** (a doctor-#9 sibling over the shipped hook config) parses the
+  `SubagentStart` nomination matchers and the `PreToolUse` gate deny-set and fails
+  **Error-severity** iff any nominated `subagent_type` is **not** in the gate set
+  (nomination ⊆ gate). A type auto-nominated without a gate entry is an open
+  escalation hole; the check makes I1 a conformance fact, not a prose promise, and
+  is the mechanical form of "one list, every spawn seam".
 - **I2 — config outside every jail.** The allowlist and hook config live at a
   path writable ONLY by the main thread — out of every worktree jail (jailed
   agents cannot write it: worktree-jail Bash deny + import R-5 belt on
@@ -737,6 +757,10 @@ alone buys bounded/gated capability (worker tier); anything unbounded
 - **`allowed_mcp_tokens` (doctor check #9, F1)** — asserts the orchestrator set
   grows to include the three read-only tools and the new `dispatch-probe` role
   holds exactly the read set; the check stays green on the updated agent defs.
+- **I1 spawn-seam-symmetry doctor check (new, #9 sibling)** — over the shipped hook
+  config: every `SubagentStart` nomination `subagent_type` ∈ the `PreToolUse` gate
+  deny-set (nomination ⊆ gate). Test: a nomination matcher with no gate entry reds
+  the check (Error); the shipped config passes.
 - **Behaviour-preservation**: existing `dispatch status` suite green **unchanged**
   after the `phase_projection` extract.
 

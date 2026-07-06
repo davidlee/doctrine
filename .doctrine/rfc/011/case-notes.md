@@ -704,3 +704,12 @@ full-unjail safety case (P1+P3+P4) stayed small precisely because each probe
 tested ONE seam with a minimal rig, never routed a full transcript. The
 worker_commit ~295k-char refusal (ISS-219) remains the lone outlier — an
 un-truncated gate transcript, not a probe-design choice.
+
+[/design; SL-206-internal-adv-pass-b975e471]
+Internal adversarial pass on §5 unjail rewrite surfaced 4 findings (B1 second
+spawn seam, A1 null-prep overload, C1 revive mechanism unstated, D8-ledger).
+Integration cost was low. One incidental: an Edit old_string match failed on an
+em-dash/hyphen mismatch inside a long multi-line block — a re-Read of the exact
+4-line region + a tighter anchor fixed it (one wasted Edit call). Long verbatim
+old_string blocks over prose with em-dashes are fragile match targets; prefer a
+short unique anchor line.
