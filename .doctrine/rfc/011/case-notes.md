@@ -812,3 +812,21 @@ machinery until that machinery ships to edge and is nix-rebuilt. A dispatch-nati
 remove a whole-session stall from every dispatch slice whose acceptance is a live
 drive. Also re-confirms ISS-220 (worker_commit false-red from stale $PATH doctrine)
 is the same root: the live gate/MCP binary lags the coord build.
+
+[dispatch; SL-206-P16-drive-oneOf-400]
+PHASE-16 in-anger acceptance drive (Workflow drive-slice vs SL-209 rig) HALTED at
+the bootstrap agent() with NULL_RECEIPT. Root cause: the shipped
+install/workflows/drive-slice.js `HopReceipt` schema (passed as agent({schema:})
+on the bootstrap O0 AND every interior hop) carries a TOP-LEVEL `oneOf`
+(fixup-XOR-prep exclusivity, drive-slice.js:142). The harness synthesizes a
+StructuredOutput tool with that schema as input_schema; the Anthropic tool API
+categorically rejects top-level oneOf/allOf/anyOf → "400 tools.N.custom.input_schema:
+input_schema does not support oneOf, allOf, or anyOf at the top level". The PHASE-14
+deliverable was never validated against the real tool-schema constraint — the
+workflow is unrunnable on the claude arm as shipped. This is precisely the class
+of defect an in-anger acceptance exists to catch: the schema type-checks as JSON
+Schema but violates the harness/API contract. Fix candidates: (B) drop the
+top-level oneOf, enforce fixup-XOR-prep in a JS guard after each hop returns
+(preserves return shape + all downstream reads); (A) nest the union under a
+property (changes return shape → invasive). Token cost: a full substrate stand-up
++ launch consumed before the deliverable's first line of real work ran.
