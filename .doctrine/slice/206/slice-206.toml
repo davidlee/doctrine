@@ -1,7 +1,7 @@
 id = 206
 slug = "workflow-slice-driver"
 title = "Workflow-templated slice-driver"
-status = "ready"
+status = "done"
 created = "2026-07-05"
 updated = "2026-07-06"
 tags = []
