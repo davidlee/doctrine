@@ -273,22 +273,27 @@ informational, not load-bearing; Option A holds either way.**
   confinement-boundary change over the simpler skill form (A1 ≈ `/dispatch` packaged)?
   **P0 shifts this: a *confined* orchestrator drives the shipped worker machinery
   (Q2), so a confined-A2 needs NO boundary change at all — the unjail is only worth
-  it for harness-surface minimization, which now costs a mandatory arming token (Q1).
+  it for harness-surface minimization. **P3 update:** the unjail leg's escalation
+  cost is a PreToolUse(Agent) spawn-gate, NOT an arming token (cheaper than thought,
+  but still a boundary change confined-A2 avoids entirely).
   Leaning: confined-A2 first; unjail as banked fallback.**
 - **OQ-A2b — ADR-008 amendment.** An unjail-allowlist is a new exception to
   orchestrator confinement. **P0 Q2 makes it likely avoidable** — confined-A2 keeps
   the boundary intact (no amendment). Amendment (+ `/inquisition`) is required ONLY
-  if the unjail path is chosen; and that path additionally requires the §5 arming
-  token (P0 Q1: type-match alone is escalatable).
+  if the unjail path is chosen; and that path additionally requires the §5
+  escalation fix — a **PreToolUse(Agent) spawn-gate** (P3), superseding the arming
+  token (P0 Q1: type-match alone is escalatable; P3: the spawner id is available at
+  the Agent PreToolUse seam).
 - **IMP-275** — in-workflow / in-orchestrator landing (audit/reconcile/close) stays
   deferred (reading (ii)); this direction is scoped to drive-to-Completed (reading (i)).
 - **Re-open trigger:** P1 PASS → `/design` on A2 §5 (spawn model, nomination seam,
   security) with an adversarial pass; P1 FAIL → fall back to A1 and re-scope SL-206.
-  **STATUS: P1 PASSED + P0 RAN (2026-07-06, §6 result blocks). Board changed:
-  confined-A2 viable (P0 Q2) → the design fork is now "confined-A2 (no boundary
-  change) vs unjail (surface-min, token-gated)", not "does unjail work". `/design`
-  on §5 is unblocked and should carry the confined-vs-unjail decision + arming token
-  + refuted-memory rewrite. Awaiting operator go.**
+  **STATUS: P1 + P0 + P3 all RAN & PASSED (2026-07-06, §6 result blocks). Board:
+  confined-A2 viable (P0 Q2) → the design fork is "confined-A2 (no boundary change)
+  vs unjail (surface-min)". P3 retired the arming token — the unjail leg's
+  escalation fix is a PreToolUse(Agent) spawn-gate. Operator chose (ii): run P3
+  first (done), then `/design` re-open on §5 speccing the fallback security once
+  (spawn-gate) + IMP-269. `/design` re-open now unblocked — proceeding.**
 
 ## 8. Evidence index
 

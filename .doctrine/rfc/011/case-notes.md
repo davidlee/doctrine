@@ -683,3 +683,14 @@ the orchestrator, which summarized it up to the main thread. A red-gate refusal
 should return a SUMMARY (gate verdict + first-N failing lines + a pointer), not
 embed the whole transcript. Multiplied across the spawn chain this is a large
 avoidable token sink. Candidate: cap/summarize worker_commit refusal detail.
+
+[/design (P3 probe); sl206-p3-pretooluse]
+P3 PreToolUse(Agent) spawner-id probe: cheap and clean. One nested Agent-tool
+spawn (main→spawner→leaf, ~30k subagent tokens) + a 9-line observer shim settled
+the whole question — docs (hooks.md:595/1412) had already grounded it, the probe
+only had to confirm the child-session env didn't contaminate the discriminator on
+2.1.198. Contrast P0's worker_commit red-gate refusal (~295k chars, ISS-219): a
+targeted observer shim that dumps just the discriminating fields is orders of
+magnitude leaner than routing a full gate transcript through the spawn chain.
+Token lesson: probe the ONE field in question, jq-project the payload at the hook,
+never log the whole stdin blob.
