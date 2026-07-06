@@ -671,3 +671,25 @@ OQ-6 mechanism-1, and ISS-216 reseat all confirmed from the drive artifacts abov
 - RFC-016 References §ext (SL-206 PHASE-08 evidence block).
 - Scratchpad rigs (throwaway, preserved): `oq4-workflow-seam.{sh,log}`,
   `p5-{setup,arm,ex1-fork-evidence}.log`, `oq6-{arm,evidence}.log`.
+
+## PHASE-15 — PRE-LANDED out-of-band via REV-021 (2026-07-06)
+
+**Do not re-author at reconciliation.** The ADR-008 amendment this phase scopes
+is already minted AND applied:
+
+- **REV-021** (`ADR-008: nominated-unjailed orchestrator`) — minted `0ada4c2e`,
+  applied + `done` `29e18252`. Slice tagged `rev-021-applied`.
+- ADR-008 now carries **D-B6** with all three ledger clauses (EX-1 ✓): (a)
+  Mode-B reversible escape hatch, (b) seam-symmetry standing price
+  (conformance-checked), (c) steered-O blast radius named. Proof provenance
+  honest (EX-2 ✓): D-B6 states P1/P3/P4 bound jailed→O only, "NOT covered by
+  the escalation proofs" for O-steered.
+- **VH-1 ✓** — operator directed the mint and the apply ("might as well apply
+  it"); confinement-posture acceptance given.
+
+**Residue for the phase/reconcile — why the phase is NOT flipped completed:**
+EN-1 (PHASE-12's I1 seam-symmetry doctor check exists) was **not yet met** at
+apply time — D-B6 cites the doctor check *forward*. When PHASE-12 lands, verify
+`check_spawn_seam_symmetry` + `SEAM_REGISTRY` match D-B6's description ((a)
+nomination ⊆ gate deny-set, (b) every registered seam has a matcher), then flip
+PHASE-15 on that check alone. Nothing else remains.

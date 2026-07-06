@@ -4,7 +4,7 @@ title = "Workflow-templated slice-driver"
 status = "ready"
 created = "2026-07-05"
 updated = "2026-07-06"
-tags = []
+tags = ["rev-021-applied"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
