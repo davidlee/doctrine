@@ -1,0 +1,43 @@
+memory_uid = "mem_019f376ddf9e7a618bbe453c73c66989"
+memory_key = "mem.fact.dispatch.armed-workflow-worker-mode-b-viable"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Armed workflow dispatch-worker leaf retains worker_commit and RESOLVES (mode-B viable)"
+summary = "A workflow-spawned dispatch-worker isolation:worktree leaf, armed via arm-spawn, keeps the worker_commit MCP tool and its armed fork resolves to a provisioned DispatchRecord (not unknown-agent) — mode-B self-commit is viable."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["src/mcp_server/worker_commit.rs"]
+globs = [".claude/workflows/**"]
+commands = ["dispatch", "drive-slice"]
+tags = ["dispatch", "workflow", "worker-commit", "mode-b", "sl-206", "phase-08", "arming"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "ff8c61db6537171945b3604637f01f58253775a4"
+tree = "1f37532d3c3884e74b5cab6446f61daf8e2e180b"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "ff8c61db6537171945b3604637f01f58253775a4"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

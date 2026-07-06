@@ -599,3 +599,75 @@ orchestrators. §5 must spec that handoff.
 **Resume:** confirm topology, run P5+P6 (small rigs like P3/P4), then author §5
 (workflow serial loop + alternating ephemeral nominated orchestrators + both-arm
 worker spawn + spawn/import authority split), ADR-008 amendment, adversarial pass.
+
+---
+
+## PHASE-08 — Unjail de-risk gate: RESULTS (2026-07-06, GREENLIT)
+
+Empirical gate against scratch slice SL-207 (coord tree `.dispatch/SL-207` on
+`dispatch/207`, base `ff8c61db` = edge==main). Main-thread rigs (Workflow +
+throwaway PreToolUse matcher), no receipt code. **All load-bearing premises hold
+→ no `/design` re-entry; PHASE-09..16 scaffolding de-risked.**
+
+Model: Opus 4.8 (harness/jail security probing).
+
+### EX-1 — worker forks at the ARMED base (VH-1) ✅
+Confirmed **live in-session** + `mem_019f331005`. P5 workflow `wf_9829cbac-a41`
+minted its `dispatch-worker isolation:worktree` leaf at
+`.dispatch/SL-207/.worktrees/wf_9829cbac-a41-1`, HEAD == armed base `ff8c61db`
+(the ARMED-fork location, not benign `.worktrees/`), `--git-common-dir` = shared
+primary `.git`, branch `dispatch/wf_9829cbac-a41-1`. Evidence:
+`scratchpad/p5-ex1-fork-evidence.log`.
+
+### EX-2 — P5 mode-B: worker_commit retention + resolution ✅ (viable)
+`has_worker_commit_tool = true` — the workflow leaf **retains** the `worker_commit`
+MCP tool (only Agent/Grep/Glob stripped; MCP survives — `mem_019f36028bca` row 2).
+`worker_commit` returned **`Refused reason=commit-gate-red`, NOT `unknown-agent`**
+⇒ the armed fork **resolved** to a provisioned DispatchRecord and ran the belts
+end-to-end (contrast `mem_019f361983`'s unarmed `unknown-agent`). Belt correctly
+enforced. `fork_tip = null` because the gate went red on a **stale reaped-fork
+`CARGO_MANIFEST_DIR` test-binary artifact** (doctrine self-flagged "recompile
+before trusting a RED"; `ff8c61db` is GREEN when built fresh — salvage check-commit
+80 suites this session). Mode-B is **viable, not fall-to-(A)**; the clean non-null
+`fork_tip` witness lands in PHASE-16's green e2e (EX-6: `boundary.code_start ==
+pre-arm B`). Closes design OQ-3/P5. Memory:
+`mem.fact.dispatch.armed-workflow-worker-mode-b-viable`.
+
+### EX-3 — Workflow spawn seam (OQ-4) ✅ (closed by absence)
+Live probe: a `Tools:*` Agent-tool subagent asked to call `Workflow` → **NO-TOOL**
+(not in toolset, not ToolSearch-loadable); throwaway `PreToolUse(Workflow)` deny
+matcher **never fired** (empty log). Workflow-leaf path: `mem_019f36028bca` row 3
+shows a `Tools:*` workflow leaf gets no `Workflow` either. **No subagent holds the
+Workflow tool** → the second seam has nothing to launder through at runtime.
+Stronger than the design's blanket-deny plan; PHASE-12 `SEAM_REGISTRY` guards
+future harness releases. Memory:
+`mem.fact.claude.workflow-seam-closed-by-absence`. Rig: `scratchpad/oq4-workflow-seam.sh`.
+
+### EX-4 — OQ-6 revive base ✅ (mechanism-1 proven live)
+Re-armed at `base=20fee23f` (`ff8c61db^`, non-tip fork_tip stand-in); probe
+`wf_5c9eac76-9c1` minted its fork at HEAD == `20fee23f` (== armed base, ≠ coord
+tip `ff8c61db`). So **`arm-spawn --base` redirects the fork BASE ref to an
+arbitrary commit** — a revive re-arms at `fork_tip`, zero worker-side git
+(**mechanism-1**, design §5.5 preferred). PHASE-14 need not fall to the
+mechanism-2 floor. Evidence: `scratchpad/oq6-evidence.log`.
+
+### EX-5 — ISS-216 reseat ✅ (manual placement characterised)
+`doctrine install` cannot reseat a changed def (skip-if-exists + stale pre-subdir-
+split symlink `.claude/agents/dispatch-worker.md → ../../.doctrine/agents/…`).
+**Documented procedure:** write the changed def directly to
+`.claude/agents/<name>.md` (regular file — the harness live-reads that dir). The
+live tree already shows this: `dispatch-orchestrator.md` + `dispatch-probe.md` are
+hand-placed regular files. PHASE-13's install.rs work fixes the reseat per ISS-216
+directions; until then, manual placement.
+
+### VA-1 (agent confirms) ✅
+P5 disposition (mode-B viable, retention+resolution), Workflow-seam denial/absence,
+OQ-6 mechanism-1, and ISS-216 reseat all confirmed from the drive artifacts above.
+
+### Evidence & memories
+- Memories: `mem.fact.dispatch.armed-workflow-worker-mode-b-viable`,
+  `mem.fact.claude.workflow-seam-closed-by-absence`,
+  `mem.fact.dispatch.worker-commit-gate-stale-baked-binaries`.
+- RFC-016 References §ext (SL-206 PHASE-08 evidence block).
+- Scratchpad rigs (throwaway, preserved): `oq4-workflow-seam.{sh,log}`,
+  `p5-{setup,arm,ex1-fork-evidence}.log`, `oq6-{arm,evidence}.log`.
