@@ -647,3 +647,12 @@ conflating the primary-tree "never discard uncommitted work" guardrail (about
 durable work) with a coord worktree's ephemeral import state. Lesson for the
 dispatch skill: name coord-tree dirty-index as expected/disposable, distinct from
 primary-tree uncommitted work, so an orchestrator resets rather than freezes.
+
+[record-memory + execute; SL206-p07-probe-before-drive]
+PHASE-07 live drive wf_6e50798d-656 spent ~100k subagent tokens + 400s to
+discover the orchestrator lacked the Agent tool — a fact a 20k tool-introspection
+probe (wf_40e8c2c3-3fe, "list your tools") revealed in 9s. Lesson: when a new
+spawn TOPOLOGY is unproven (who spawns whom, which primitive), probe the spawned
+agent's actual tool grant BEFORE committing a full multi-agent live drive. The
+def's tools: list is NOT authoritative — the spawn PRIMITIVE (Workflow vs Agent
+tool) rewrites it. Cheap capability probes should gate expensive live drives.
