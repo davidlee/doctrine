@@ -64,10 +64,15 @@ jobs:
       - name: Setup just
         uses: extractions/setup-just@v2
 
-      # dtolnay/rust-toolchain pins by channel (@stable), not a version tag —
-      # that is its supported pinning model. Adds the cross target.
+      # dtolnay/rust-toolchain pins by channel, not a version tag — its supported
+      # pinning model. MUST track the dev toolchain (flake.nix: rust-bin.beta.latest),
+      # NOT @stable: the codebase's `#[cfg_attr(not(test), expect(dead_code/unused))]`
+      # self-clearing idiom is a hard error when unfulfilled (warnings = "deny"), and
+      # lint-firing is rustc-version-sensitive. A stable/beta split makes items read
+      # dead on beta but live on stable → unfulfilled expect → CI-only build failure
+      # (broke every release v0.11.0..v0.17.1 while dev stayed green). Adds the cross target.
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@beta
         with:
           targets: ${{ matrix.target }}
 
