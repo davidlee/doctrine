@@ -188,7 +188,7 @@ fn vt2_tools_list() {
         "tools/list should not error: {resp:?}"
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 22, "expected 22 tools, got {tools:?}");
+    assert_eq!(tools.len(), 25, "expected 25 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -215,6 +215,10 @@ fn vt2_tools_list() {
         "dispatch_import",
         "dispatch_conclude_phase",
         "dispatch_reap",
+        // SL-206 PHASE-03 dispatch funnel read surface.
+        "dispatch_phase_receipt",
+        "dispatch_next_ready",
+        "dispatch_authored_divergence",
     ] {
         assert!(
             names.contains(expected),
