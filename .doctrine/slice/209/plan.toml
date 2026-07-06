@@ -1,0 +1,57 @@
+# Implementation plan for SL-209 — the authored, durable phase plan.
+#
+# THROWAWAY acceptance rig for SL-206 PHASE-05. Two file-disjoint phases, each
+# creating one self-contained integration test under tests/ (auto-discovered, no
+# shared-file/mod edits) so a dispatch worker produces a clean single-file green
+# delta and the orchestrator's verify beat is meaningful. Abandon after PHASE-05.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-209"
+
+[specs]
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Scratch accept A"
+objective = """
+Create a new self-contained integration test file `tests/scratch_accept_a.rs` \
+containing exactly one passing test `fn accept_a()` that asserts a trivial truth \
+(e.g. `assert_eq!(1 + 1, 2)`). No other files. It must compile and pass under \
+`cargo test --test scratch_accept_a`."""
+entrance_criteria = [
+  { id = "EN-1", text = "Coordination tree at B; no tests/scratch_accept_a.rs yet" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "tests/scratch_accept_a.rs exists with a passing fn accept_a(); suite green" },
+]
+verification = [
+  { id = "VT-1", expects = "accept_a compiles and passes", test_file = "tests/scratch_accept_a.rs", keywords = ["accept_a"], waived = false },
+]
+specs             = []
+requirements      = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Scratch accept B"
+objective = """
+Create a new self-contained integration test file `tests/scratch_accept_b.rs` \
+containing exactly one passing test `fn accept_b()` that asserts a trivial truth \
+(e.g. `assert_eq!(2 + 2, 4)`). No other files. It must compile and pass under \
+`cargo test --test scratch_accept_b`."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed; no tests/scratch_accept_b.rs yet" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "tests/scratch_accept_b.rs exists with a passing fn accept_b(); suite green" },
+]
+verification = [
+  { id = "VT-1", expects = "accept_b compiles and passes", test_file = "tests/scratch_accept_b.rs", keywords = ["accept_b"], waived = false },
+]
+specs             = []
+requirements      = []
