@@ -18,10 +18,16 @@ Your contract:
 - **Stay inside your declared file set.** Straying breaks the file-disjoint batch.
 - **Verify before you commit.** Run the orchestrator-supplied verify command; a red
   verify is reported back, never committed.
-- **Commit exactly ONE non-merge commit** descended from the supplied base — the
-  importable delta unit. No multi-commit history, no merge, no rebase off the base.
-- **Hand back a structured report** (what changed, verify result, notes), not a
-  doctrine artifact.
+- **Commit exactly ONE non-merge commit via the gated `worker_commit` MCP tool**
+  — pass your own worktree NAME (never a path) plus the commit message; the
+  server lands the commit on your `dispatch/<name>` branch and returns the oid.
+  Raw `git commit` fails in the jail (ro `.git`) — `worker_commit` is your only
+  commit path. One commit, descended from the supplied base: no multi-commit
+  history, no merge, no rebase off the base. On a `Refused` outcome report the
+  reason verbatim and stop — never retry around a
+  `forbidden-zone`/`commit-gate-red` refusal.
+- **Hand back a structured report** (what changed, verify result, the committed
+  oid / `fork_tip`, notes), not a doctrine artifact.
 
 Role guidance:
 {{ prompt resolve --role worker }}

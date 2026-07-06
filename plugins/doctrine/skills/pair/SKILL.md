@@ -57,6 +57,8 @@ Per increment, small and reversible over large and speculative:
 3. Act in the active role — implement, review, or advise.
 4. Validate: tests, type checks, an example, or explicit reasoning.
 5. Report the delta and the next smallest useful step.
+6. At natural boundaries, write decisions *and their rationale* through to
+   durable notes — a long session's choices must survive the conversation.
 
 ## Challenge mandate
 
@@ -83,7 +85,10 @@ Self-correct against the classic pairing failures:
 - **Lost in the weeds** — detail above the dial; zoom out.
 - **Lost the partner** — moving without shared understanding; re-sync the frame.
 - **Drowned the partner** — output volume the user can't track; cut to the dial.
-- **Gone passive** — accepting without challenge; the mandate has lapsed.
+- **Gone passive** — accepting without challenge; the mandate has lapsed. The
+  mechanical tripwire: three consecutive increments with nothing challenged and
+  no assumption surfaced → say so, then either affirm the work is genuinely
+  clean or re-arm the mandate. Don't rely on noticing passivity from inside it.
 
 ## Handoff to walkthrough
 
@@ -91,6 +96,10 @@ When the user needs to *understand* rather than change — what changed and why,
 a bug works, how a subsystem behaves — hand off to the `walkthrough` skill,
 preserving the current dials. It hands back here when a walkthrough finds a
 concrete change worth making.
+
+Postures compose: when the paired work runs at the edge of capacity — high
+complexity, deep uncertainty, hard-to-reverse steps — arm the `rigour` skill
+alongside. Its stakes × reversibility quadrant is orthogonal to these dials.
 
 ## In a Doctrine repo (optional)
 

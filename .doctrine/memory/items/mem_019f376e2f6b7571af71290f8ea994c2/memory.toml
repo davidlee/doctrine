@@ -1,0 +1,43 @@
+memory_uid = "mem_019f376e2f6b7571af71290f8ea994c2"
+memory_key = "mem.fact.dispatch.worker-commit-gate-stale-baked-binaries"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "fact"
+status = "active"
+title = "worker_commit's check-commit gate reds in a fork from stale reaped-fork CARGO_MANIFEST_DIR binaries"
+summary = "A worker_commit in a fresh worker fork can Refuse commit-gate-red from stale test binaries baked with a reaped fork's CARGO_MANIFEST_DIR — doctrine self-flags 'recompile before trusting a RED'; the RED is a rig artifact, not a real regression."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["src/mcp_server/worker_commit.rs"]
+globs = []
+commands = ["dispatch", "check"]
+tags = ["dispatch", "worker-commit", "check-gate", "cargo-manifest-dir", "test-flake", "sl-206", "phase-08"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1f37532d3c3884e74b5cab6446f61daf8e2e180b"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0f4dbab6d1e3b373a6ae8db7e652cd20d09c97d4ce14081de43333bc2aa523ab"
+base_commit = "ff8c61db6537171945b3604637f01f58253775a4"
+verified_sha = "76d5faf0c84ae55d12cc2f10ac599811ff51dc1f"
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "verified"
+reviewed = "2026-07-06"
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

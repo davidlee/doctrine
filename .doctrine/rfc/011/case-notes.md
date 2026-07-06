@@ -713,3 +713,181 @@ em-dash/hyphen mismatch inside a long multi-line block — a re-Read of the exac
 4-line region + a tighter anchor fixed it (one wasted Edit call). Long verbatim
 old_string blocks over prose with em-dashes are fragile match targets; prefer a
 short unique anchor line.
+
+[dispatch; SL-206-PHASE-08-derisk]
+Token-cost: mis-read the worker_commit commit path early — concluded a workflow
+worker "falls to mode-A" from mem_019f361983 (unknown-agent), not noticing that
+probe was an UNARMED/benign fork. Spent ~2 exchanges building the fall-to-A framing
+before the operator's one-line correction ("worker_commit is an mcp tool") snapped
+it: MCP = server-side/unconfined, RO .git irrelevant; the wall was arming, not
+capability. Root cause: the two failure modes (unarmed→unknown-agent vs
+armed→resolves) live in adjacent memories whose titles both say "workflow leaf
+cannot commit" — the discriminator (armed cwd) is buried in the body. A future
+agent re-reading those memories will re-make the same misread. Signposting the
+armed/unarmed discriminator in the memory titles would cut it.
+
+[dispatch-agent; SL206-P11-resume]
+Shipped dispatch-agent SKILL.md still documents the retired live-worktree-import
+funnel ("ro-.git blocks self-commit", footer worktreePath → verify-worker →
+worktree import --from-worktree). Actual claude-arm funnel since SL-198/199:
+worker self-commits via worker_commit MCP; orchestrator lands via dispatch_import
+→ dispatch_conclude_phase → dispatch_reap. Cost: orchestrator must re-derive the
+real cadence from tool schemas + memories each session (~2-3k tokens) and risks
+mis-instructing the worker prompt. Skill needs a rewrite pass post-SL-206.
+
+[dispatch-agent rewrite; IMP-276-manual-install]
+Manual (no-`doctrine install`) refresh of the live worker def has two frictions:
+`.claude/agents/dispatch-worker.md` is a symlink into `.doctrine/agents/` (edit
+tool refuses write-through-symlink; must resolve target first), and the installed
+def has the role hymn BAKED IN (template resolved), so a plain cp of the
+`install/agents/` source would regress it to unresolved `{{ prompt resolve }}`
+syntax — edits must be applied twice, once per tier. ~1k tokens of discovery per
+session that touches installed defs.
+
+[phase-plan + dispatch-agent; SL-206-P13-drive]
+- cwd-reset footgun (main-thread orchestrator): a `cd /workspace/doctrine && grep`
+  silently reset the persistent Bash cwd from the coord tree (.dispatch/SL-206) to
+  the PRIMARY edge tree. Subsequent pathless greps then read the WRONG tree's src —
+  which lacks the PHASE-10 deltas (no ROLE_PROBE) — leading to a false "PHASE-10
+  didn't land / doctor code missing" conclusion and ~4 wasted tool calls re-checking
+  in the coord tree. Root cause: orchestrator drives from main context where cwd is
+  shared+mutable across unrelated commands; the coord/primary tree split makes a
+  stray absolute-path `cd` a correctness hazard, not just a nuisance. A disposable
+  orchestrator context bound to the coord tree (the RFC-011 lever) would not carry
+  this shared-mutable-cwd risk.
+- skill/funnel staleness: /dispatch-agent SKILL still documents the OLD live-worktree
+  live-import model ("worker CANNOT self-commit; orchestrator imports the live tree"),
+  but this slice's own funnel (SL-199) is the MCP self-commit path (worker_commit →
+  dispatch_import). Reconciling the two (skill vs CLAUDE.md vs parked cadence vs the
+  dispatch_import tool schema) cost real reasoning tokens mid-drive. The shipped
+  skill should point at the MCP funnel as the current claude-arm default.
+
+[dispatch-agent funnel; SL-206-P13-drive]
+- worker_commit stale-$PATH false-red RECURRED (2nd time, cf PHASE-11 / ISS-220 /
+  mem.pattern.dispatch.worker-commit-stale-path-false-red). Every claude-arm worker
+  that changes an allowlist/conformance rule its OWN phase introduces will false-red
+  worker_commit, because the gate's `check commit` shells bare `doctrine` from $PATH
+  (read-only ~/.cargo/bin, stale) rather than the server's own binary. Cost this
+  phase: ~6 orchestrator tool-calls to reproduce/confirm delta-independence + a
+  fall-to-(A) live-worktree-import detour instead of the one-shot MCP self-commit
+  path. Structural fix (worker_commit gate should run its check via the server's
+  in-process binary, not $PATH) would remove a recurring per-phase tax on exactly
+  the phases that touch doctrine's own gates. Until fixed, every such phase pays the
+  (A) detour + a fresh-verification burden.
+
+[dispatch/phase-plan; SL-206-P14-driveslice]
+PHASE-14 (author install/workflows/drive-slice.js) — worker_commit false-red
+RECURRED a 3rd time (commit-gate-red), and this instance sharpens the diagnosis:
+the PHASE-14 delta is PURE JS, touching zero Rust and zero agent defs. The
+stale-$PATH gate binary (pre-PHASE-10 ~/.cargo/bin/doctrine, no ROLE_PROBE)
+false-flags the shipped dispatch-probe role + orchestrator read tokens that are
+ALREADY COMMITTED in the base tree — so the refusal is entirely delta-independent.
+Confirmed: a phase that changes nothing the conformance check inspects still pays
+the fall-to-(A) detour. Cost this phase ≈ one extra import+commit round-trip + the
+diagnostic reasoning to (re)confirm it's the known env footgun, not a real defect.
+This is now a FIXED per-phase tax gated purely on the in-jail stale binary, not on
+worker output. Structural fix (worker_commit's `check commit` should run its
+conformance lint via the server's in-process binary, not a $PATH shell-out) would
+retire it for every remaining phase; absent that, every /drive-slice-driven phase
+inherits the same tax the hand-driven funnel is paying now — worth pricing into the
+RFC-011 comparison (the driver does NOT remove it; it inherits it).
+
+[dispatch; SL-206-P16-substrate-swap]
+PHASE-16 (in-anger e2e acceptance of the shipped /drive-slice) is hard-gated on a
+LIVE substrate that the driving session cannot self-create. The live .claude/
+substrate is nix-built from edge (flake ro-binds nix doctrine over
+~/.cargo/bin/doctrine, unconditional); a dispatch FORK cannot be nix-built. So the
+PHASE-10-14 code (read tools, nomination hooks, grown grants, worker_commit gate)
+is absent from the live plugin hooks (only `worktree pretooluse` installed — no
+PHASE-11 SubagentStart nomination / Workflow matcher). Consequence: the
+workflow-spawned dispatch-orchestrator can't be nominated-unjailed → its plain-git
+commit is denied → the drive halts at the first dispose. The ONLY lever is
+DOCTRINE_BIN → operator restart (hooks read it from settings.local.json, MCP from
+env/.envrc). Net cost: an entire slice's acceptance phase cannot run inside the
+authoring session — it needs a build swap + reseat + /reload-plugins + restart, an
+operator boundary. This is the ISS-216 reseat gap (design R6/F2) biting at
+acceptance time: the slice that ADDS the dispatch machinery cannot dogfood its own
+machinery until that machinery ships to edge and is nix-rebuilt. A dispatch-native
+"drive against a fork-built binary" path (or a faster reseat-without-restart) would
+remove a whole-session stall from every dispatch slice whose acceptance is a live
+drive. Also re-confirms ISS-220 (worker_commit false-red from stale $PATH doctrine)
+is the same root: the live gate/MCP binary lags the coord build.
+
+[dispatch; SL-206-P16-drive-oneOf-400]
+PHASE-16 in-anger acceptance drive (Workflow drive-slice vs SL-209 rig) HALTED at
+the bootstrap agent() with NULL_RECEIPT. Root cause: the shipped
+install/workflows/drive-slice.js `HopReceipt` schema (passed as agent({schema:})
+on the bootstrap O0 AND every interior hop) carries a TOP-LEVEL `oneOf`
+(fixup-XOR-prep exclusivity, drive-slice.js:142). The harness synthesizes a
+StructuredOutput tool with that schema as input_schema; the Anthropic tool API
+categorically rejects top-level oneOf/allOf/anyOf → "400 tools.N.custom.input_schema:
+input_schema does not support oneOf, allOf, or anyOf at the top level". The PHASE-14
+deliverable was never validated against the real tool-schema constraint — the
+workflow is unrunnable on the claude arm as shipped. This is precisely the class
+of defect an in-anger acceptance exists to catch: the schema type-checks as JSON
+Schema but violates the harness/API contract. Fix candidates: (B) drop the
+top-level oneOf, enforce fixup-XOR-prep in a JS guard after each hop returns
+(preserves return shape + all downstream reads); (A) nest the union under a
+property (changes return shape → invasive). Token cost: a full substrate stand-up
++ launch consumed before the deliverable's first line of real work ran.
+
+[dispatch; SL-206-P16-interior-arm-not-pinned]
+Second PHASE-16 acceptance defect (drive got FURTHER: PHASE-01 fully disposed via
+the nominated-unjail interior commit — boundary.code_start == pre-arm tip fa951846
+proving EX-6 arming, verify green, coord tip advanced; closing divergence probe
+emitted + never gated proving EX-5). Then HALTED at PHASE-02 coord:revive-wrong-base.
+Root cause: drive-slice.js `bootstrapPrompt` pins arm:"${arm}" (the drive arm) but
+`hopPrompt`'s prep instruction left `arm` free-form, so the disposing orchestrator
+chose "pi" on a claude-arm drive. The loop only spawns a worker when
+prep.arm==="claude" (line 299); with arm="pi" it skips the spawn, threads
+fork_tip=null, and the terminal O tried to import a pi-arm worktree diff that never
+existed — reaching for a stale fork at the OLD base (pre-PHASE-01) → wrong-base halt.
+An LLM orchestrator will fill an unpinned enum field from context/prior; any value
+the driver must act on deterministically has to be PINNED in the prompt, not left to
+the agent. Fix: interpolate arm:"${arm}" into hopPrompt + spell out the arm commit
+model and current-tip base_B. Note the cost shape: each defect costs a full ~15min/
+180k-token drive to surface because the failure only manifests at the interior hop.
+
+[drive-slice; SL-209-P02-dispose-orchestrator]
+Dispose hop for SL-209 PHASE-02 was handed fork_tip=null with an (A)-path
+worktree-diff import premise (verify a revive commit descends from the prepped
+fork). Coord tree present, on dispatch/209, tip 343c4ca5 (PHASE-01 conclude).
+But PHASE-02 has NO importable artifact: dispatch_phase_receipt reports
+status=not-started; no fork branch, no fork worktree admin dir, and no revive
+commit exist for 209 (exhaustive: for-each-ref, worktree list, .git/worktrees,
+fsck dangling, log -S'fn accept_b' all negative — scratch_accept_b.rs exists
+nowhere on disk or in any object). The prep contract hands the dispose hop a
+fork_tip but no fork NAME, and dispatch_import requires `name`; with no fork in
+existence there is nothing to name, verify, or import. Token cost: the (A)-path
+premise ("import the worker WORKTREE DIFF") presumes the artifact exists, so the
+orchestrator burns a full exhaustive-search sweep to establish absence before it
+can justify a coord halt rather than a fabricated import. A cheaper contract
+would pass the expected fork name/tip so a single existence probe settles it.
+
+[dispatch; SL-206-P16-drive3-worktree-fork-base-mismatch]
+Drive 3 (wf_7eb19157-a61) surfaced the deepest defect yet — STRUCTURAL, not a
+deliverable bug. Both PHASE-01 and PHASE-02 workers STOPPED on the driver's own
+BASE GUARD (fork_tip null, no delta). Root cause: Workflow `isolation:'worktree'`
+provisions the worker worktree from the PRIMARY SESSION cwd (/workspace/doctrine
+@ edge, tip 94182624), NOT from the scriptPath's coord tree and NOT from the
+SL-209 dispatch coordination base. Verified: both leftover isolation worktrees
+(wf_7eb19157-a61-{2,4}) sat detached at 94182624 = edge tip. The driver computes
+base_B from the SL-209 dispatch tip (fa951846 → 343c4ca after P01), which is a
+branch line structurally disconnected from edge. So base_B != worker-fork-base on
+EVERY hop by construction; the base guard correctly refuses every worker.
+PHASE-01 only reached Completed because its interior O fabricated/revived the
+delta (A-path fallback) — the (B) self-commit path NEVER fired, so P5 (RV-258 F-2:
+prove worker_commit non-null fork_tip) is UNMET across all 3 drives. PHASE-02's O
+declined to fabricate → halt coord:worker-delta-absent.
+Token cost: 3 full drives (~15min/~200k tok each) to surface a base-topology
+mismatch that a single up-front "where does isolation:worktree fork from?" probe
+would have caught. The two prior defects (top-level oneOf 400; unpinned arm) each
+masked this one — you can't observe the base mismatch until the prep prompt is
+well-formed AND the arm is pinned so a claude worker actually spawns. Layered
+defects each cost a full drive because the interior hop is the only observation
+point. Lesson: for a spawn-topology driver, assert the fork base empirically
+(spawn one throwaway isolation worker, print `git rev-parse HEAD`) BEFORE wiring
+the full alternating loop — don't infer the base from the dispatch coordination
+tip. Parked for design decision: align bases (set up SL-209 dispatch AT edge tip
+so base_B == fork base) vs. driver discovers actual worker HEAD vs. run the
+workflow itself from the coord tree. Needs /consult before drive 4.

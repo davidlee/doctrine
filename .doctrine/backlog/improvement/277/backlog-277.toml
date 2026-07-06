@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 244
-slug = "add-concept-entity-and-descriptor-facet"
-title = "Add concept entity and descriptor facet"
+id = 277
+slug = "drive-slice-claude-arm-never-arms-the-worker-spawn"
+title = "drive-slice claude arm never arms the worker spawn"
 kind = "improvement"
-status = "resolved"
-resolution = "done"
-created = "2026-07-03"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-07-06"
 updated = "2026-07-06"
-tags = ["area:graph", "area:knowledge", "area:web"]
+tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -20,10 +20,3 @@ tags = ["area:graph", "area:knowledge", "area:web"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[value]
-value = 2.2
-
-[estimate]
-lower = 0.8
-upper = 1.4

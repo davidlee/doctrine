@@ -4,7 +4,7 @@ title = "Workflow-templated slice-driver"
 status = "done"
 created = "2026-07-05"
 updated = "2026-07-06"
-tags = []
+tags = ["rev-021-applied"]
 
 [relationships]
 needs = []                      # slice→work hard prerequisite
@@ -133,6 +133,10 @@ target = "IMP-174"
 [[relation]]
 label = "related"
 target = "ISS-216"
+
+[[relation]]
+label = "related"
+target = "REV-021"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

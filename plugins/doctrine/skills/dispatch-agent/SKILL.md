@@ -1,13 +1,13 @@
 ---
 name: dispatch-agent
-description: The claude arm of `/dispatch` — spawn a worker via the `Agent` tool using the dispatch-worker subagent type with worktree isolation. Base is explicit — `dispatch arm-spawn --base B` writes the base file, then cd into the spawn dir before the Agent spawn so the WorktreeCreate hook forks at B. Reached only from the `/dispatch` router on a claude↔env-marker agreement; do not invoke directly.
+description: The claude arm of `/dispatch` — spawn a worker via the `Agent` tool using the dispatch-worker subagent type with worktree isolation. Base is explicit — `dispatch arm-spawn --base B` writes the base file, then cd into the spawn dir before the Agent spawn so the WorktreeCreate hook forks at B. Worker self-commits via the gated `worker_commit` MCP tool; the orchestrator lands via `dispatch_import` → `dispatch_conclude_phase` → `dispatch_reap`. Reached only from the `/dispatch` router on a claude↔env-marker agreement; do not invoke directly.
 ---
 
 # Dispatch — claude arm
 
 Spawn a worker via the `Agent` tool. The harness-identical funnel and drive loop
-live in the [`/dispatch` router](../dispatch/SKILL.md) — this skill is only the
-spawn template.
+live in the [`/dispatch` router](../dispatch/SKILL.md) — this skill is the spawn
+template plus this arm's landing mechanics.
 
 ## Pre-spawn — arm the base, cd into the spawn dir
 
@@ -19,12 +19,18 @@ the Agent payload cwd **is** the arming dir
 `base` file in that dir — never cwd HEAD. cwd is the *discriminator*, not the base
 source.
 
+Arming does double duty: the hook also **provisions the worker's
+`DispatchRecord`** — the registration `worker_commit` resolves the worker's
+opaque agent id against. An unarmed spawn is a benign pass-through worktree with
+**no record**, so its `worker_commit` refuses `unknown-agent` and it cannot land
+a fork commit at all.
+
 **Base-clean beat (before `arm-spawn`).** Assert the base is prove-clean —
 `doctrine check prove` (NON-mutating fmt-check + lint) — before arming/spawning,
 and on `main` before you branch the fork. A RED base is a BASE defect (operator
 format-and-commit / prep worktree), NEVER folded into a worker delta, NEVER
 auto-fixed. This is the same pre-spawn beat the funnel documents; run it once per
-batch (the post-import prove gate is the only other prove run).
+batch.
 
 **Before every spawn (or parallel batch):**
 1. `doctrine dispatch arm-spawn --base <B> [--slice <N>]` — writes
@@ -72,13 +78,22 @@ isolation: worktree
 prompt: <pre-distilled worker prompt, including the base-guard block above>
 ```
 
-## Post-spawn funnel (claude arm) — symmetric live-import
+**The prompt MUST instruct the self-commit:** finish by calling the
+`worker_commit` MCP tool with the worker's own **worktree NAME** (never a path)
+plus the commit message, and report the returned oid (`fork_tip`) in the
+structured hand-back. Raw `git commit` fails in the jail (ro `.git`) —
+`worker_commit` is the worker's only commit path. On a `Refused` outcome the
+worker reports the reason verbatim and stops; it never retries around a
+`forbidden-zone`/`commit-gate-red` refusal.
 
-The worker's ro-`.git` blocks its self-commit, so its delta never rides a fork
-commit — it lives in the **worktree**, which **persists** on disk after the Agent
-returns (doctrine ships `create-fork` as the `WorktreeCreate` hook and **no**
-`WorktreeRemove` hook, so the harness does NOT auto-reap; `docs/claude/hooks.md:2442`).
-The orchestrator imports that live tree directly. Five steps, in order:
+## Post-spawn funnel — worker self-commit, orchestrator lands
+
+**Primary (B): the worker's delta arrives as ONE committed non-merge commit `C`
+(`C^ == B`) on its own `dispatch/<agent>` branch**, landed server-side by the
+gated `worker_commit` tool (belts are the security boundary: non-empty delta →
+forbidden-zone scope → `HEAD == B` → the `check commit` gate). The delta is
+therefore **fork-durable** — it survives the worktree, and a revive/fixup resumes
+from the committed tip. In order:
 
 1. **Footer.** Read the Agent return footer for `worktreePath:`.
    NO footer / no `worktreePath:` ⇒ no isolated tree was created (hook abort or
@@ -86,59 +101,69 @@ The orchestrator imports that live tree directly. Five steps, in order:
    the subprocess arm if the hook is failing.
 2. **Identity.** Derive from `worktreePath` (the normative datum, live-proven):
    `name = basename(worktreePath)`, `branch = dispatch/<name>`. Do NOT read the
-   footer's `worktreeBranch` field — it is `undefined` for the hook-created tree
-   (PHASE-04 VA-1, live 2.1.181).
-3. **Verify.** `doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <derived branch>`
-   Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base / branch-mismatch.
-   (`--branch` binds dir↔branch — both belts verify ONE worker state. The
-   `no-worker-head` refusal is ALSO the runtime catch if the tree ever went missing —
-   the second boundary behind the install-time no-`WorktreeRemove` assert, RV-205 F-2.)
-4. **Import.** `doctrine worktree import --base <B> --from-worktree <worktreePath> --slice <N>`
-   Gathers the live tracked+untracked delta, runs the `classify_import` belt
-   (`.doctrine/`/`.claude/` reject, HEAD==B, clean coord tree), applies onto `B`
-   NON-committing. `--slice <N>` scope-checks the worker delta against the slice's
-   **design-target** selectors: any touched path no selector declares refuses with
-   `undeclared-scope` (the offending paths + a `slice selector add` hint print
-   before the halt). This realizes the router funnel's arm-neutral **Import** beat on
-   this arm (the `B..S` single-commit check reads vacuously — a worktree carries no
-   commits). A belt/precond/scope violation exits **nonzero** → the funnel HALTS here.
-   After the apply, `import` also runs the **reject-and-halt prove gate** on the
-   post-import tree (`doctrine check prove`, in-process): an unformatted/lint-red
-   delta HALTS (staged, not committed), never auto-fixed. EX-4: the subprocess
-   (fork) arm shares the SAME pre-spawn base-clean beat (no separate beat); the
-   post-import prove gate ships on THIS (claude) arm this phase — fork-arm parity is
-   a deferred follow-up.
-5. **Reap — GATED on step 4 exit 0 (F-3).** ONLY after `import` succeeded (and the
-   batch's commit + `record-boundary` have landed) reap the tree:
-   ```
-   doctrine worktree import --base "$B" --from-worktree "$WT" --slice "$N" && \
-     <commit + record-boundary> && \
-     git worktree remove --force "$WT"
-   ```
-   The `--force` is required (the tree is intentionally dirty). **On import failure
-   the funnel HALTS and LEAVES the tree on disk** for diagnosis — never `--force`-reap
-   the sole copy of an unimported delta. A parallel batch reaps each tree
-   independently, each gated on its own import.
+   footer's `worktreeBranch` field — it is `undefined` for the hook-created tree.
+   Cross-check the worker's reported `fork_tip` against `git rev-parse <branch>`.
+3. **Verify.** `doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <branch>`
+   Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base /
+   branch-mismatch. It accepts the post-commit HEAD (tests
+   `merge-base --is-ancestor B HEAD`, a descendant — not `HEAD == B`); `--branch`
+   binds dir↔branch so both belts verify ONE worker state.
+4. **Land.** `dispatch_import{slice, name: <branch>}` (MCP) — resolves the coord
+   tree server-side by slice, runs the `classify_import` scope belt as a HARD
+   pre-compose gate (`.doctrine/`/`.claude/` reject, undeclared-scope reject —
+   nothing lands on a refusal), composes coord-tip ⊕ worker-tip via `merge-tree`
+   (object-db only, working-tree-free), and lands **ONE non-merge commit**
+   preserving the worker AUTHOR. Import and commit are folded — no separate
+   orchestrator commit step. Any `Refused{reason}` ⇒ report-and-halt
+   (`merge-conflict`, `head-moved`, `undeclared-scope`, … are never
+   auto-resolved). The delta is already commit-gate-green (worker_commit ran the
+   gate), so no separate post-import prove run on this path.
+5. **Conclude.** `dispatch_conclude_phase{slice, phase, code_start: <B>,
+   code_end: <coord_tip from step 4>}` — one call, two tiers: flips the
+   gitignored phase sheet to `completed` AND lands the committed `(B, coord_tip)`
+   boundary row (UPSERT-by-phase, working-tree-free). Idempotent on retry; the
+   only fault outcome is a flipped sheet with no committed boundary, which a
+   retry re-composes.
+6. **Reap.** `dispatch_reap{slice, name: <branch>}` — runs the patch-id
+   landed-oracle (`git cherry`): it REFUSES a fork whose patch is not in coord
+   history, then removes the landed fork's worktree + branch. Reap ONLY through
+   this oracle — never a raw `git worktree remove --force` against an unimported
+   tree (that deletes the sole copy of an unlanded delta; the tool's refusal is
+   the guard a raw remove lacks).
 
-## Boundary recording
-After the batch's code commit and before the knowledge commit:
-`doctrine dispatch record-boundary --slice <N> --phase PHASE-NN --code-start <B> --code-end <B+1>`.
-Claude-arm-only (no fork branch); skip on codex/pi. **One call double-writes both
-registries** (dispatch.rs): the committed `phase/<N>` ref-cut **and** the
-primary-tree conformance registry (F-6 guard, upsert by phase). The committed
-ledger is also what `dispatch sync --prepare-review` re-derives the registry from
-(auto-heal) before the completeness gate runs — so on this arm registry capture is
-**enforced machinery**, not a step the orchestrator can forget. The claude arm
-therefore needs **no** funnel `slice record-delta` step; `record-delta` survives
-on this arm **only** as the manual escape hatch (correct a range / bootstrap a
-pre-binding phase).
+## Fallback (A) — live-worktree import
+
+The in-a-pinch path when the primary cannot run: the MCP server is down, or the
+worker was never provisioned (`worker_commit` → `unknown-agent`) so no fork
+commit exists. The worker's uncommitted delta still lives in the **worktree**,
+which **persists** after the Agent returns (no `WorktreeRemove` hook — the
+harness does not auto-reap). NOT a bypass: a `forbidden-zone` /
+`commit-gate-red` / `undeclared-scope` refusal is a worker-delta defect — fix up
+or halt, never import around it.
+
+1. `verify-worker` as above (step 3; HEAD == B in this mode — no commit).
+2. `doctrine worktree import --base <B> --from-worktree <worktreePath> --slice <N>`
+   — gathers the live tracked+untracked delta, runs the same `classify_import`
+   belt, applies onto `B` **NON-committing**, then runs the reject-and-halt prove
+   gate in-process (an unformatted/lint-red delta HALTS staged, never auto-fixed).
+3. Commit ONE on the coordination branch yourself, then record the boundary:
+   `doctrine dispatch record-boundary --slice <N> --phase PHASE-NN --code-start <B> --code-end <B+1>`.
+4. Reap gated on the landed delta — on this path the tree is the sole copy until
+   the coord commit lands; `&&`-chain the removal behind it.
+
+This is also the **pi/subprocess arm's only mode** — a bwrap-confined worker
+cannot commit at all (`/dispatch-subprocess`). Never instruct or expect
+self-commit off the claude arm.
 
 ## Worker confinement (SL-182)
 The claude worker is confined by two installed **PreToolUse** hooks (plugin
 `hooks.json` → `doctrine worktree pretooluse`): **Bash** is opaquely rewritten
 into a nested bwrap jail (rw the worktree, ro everything else); **Edit|Write**
 outside the worktree is denied. The orchestrator (no `agent_id`) passes through.
-Confinement is by construction — no cooperative worker flag.
+Confinement is by construction — no cooperative worker flag. `worker_commit` is
+the deliberate, single-purpose bypass of that wall: the *unconfined server*
+commits on the worker's behalf, and the tool's belts — not the wall — are the
+security boundary there.
 
 - **No hot-reload.** Plugin `hooks/` changes load at session start only
   (`docs/claude/plugins-reference.md:394`). After `doctrine install` (or any
@@ -153,20 +178,23 @@ Confinement is by construction — no cooperative worker flag.
 
 ## Red Flags
 **Never:** spawn without first `arm-spawn`-ing and cd'ing INTO the spawn dir (a
-spawn from the coord root is a benign pass-through, never a dispatch worker); read
-the footer's `worktreeBranch` (undefined for the hook-created tree — derive
-`branch = dispatch/basename(worktreePath)` instead); funnel a worker that returned
-no `worktreePath:` footer; point `dispatch setup --dir` at an outside-root sibling
-on the claude arm (the `cd` silently reverts under a jail; use `.dispatch/SL-<n>`);
-spawn with a `subagent_type` other than `dispatch-worker`; run `fork` or bwrap here
-(that's `/dispatch-subprocess`); claim parallel landing (v1 lands one per base).
+spawn from the coord root is a benign pass-through, never a dispatch worker —
+and its `worker_commit` refuses `unknown-agent`); read the footer's
+`worktreeBranch` (undefined for the hook-created tree — derive
+`branch = dispatch/basename(worktreePath)` instead); funnel a worker that
+returned no `worktreePath:` footer; import the live tree when a fork commit
+exists (the delta is the commit — land it via `dispatch_import`); use fallback
+(A) to route around a `worker_commit`/`dispatch_import` refusal (a refusal is a
+defect or a halt, never a detour); raw `git worktree remove --force` an
+unlanded tree (reap through `dispatch_reap`'s patch-id oracle); claim
+self-commit on the pi arm; point `dispatch setup --dir` at an outside-root
+sibling (ISS-031); spawn with a `subagent_type` other than `dispatch-worker`;
+run `fork` or bwrap here (that's `/dispatch-subprocess`); claim parallel landing
+(v1 lands one per base).
 **Always:** `arm-spawn --base B` then cd into the spawn dir before the spawn, cd
-back to the coord root after; pin `subagent_type` to `dispatch-worker`; embed the
-base-guard block in the distilled worker prompt; derive `branch` from
-`worktreePath`; run `verify-worker` before `import --from-worktree`; `&&`-gate the
-`git worktree remove --force` reap on a clean import exit (a failed import HALTS and
-LEAVES the tree — never `--force`-reap an unimported delta); return to the router for
-the funnel cadence.
-
-**Never:** import from a captured patch file or a fork commit on this arm (retired —
-the delta is the live worktree); reap the worker tree before `import` returns 0.
+back to the coord root after; pin `subagent_type` to `dispatch-worker`; embed
+the base-guard block AND the `worker_commit` self-commit instruction in the
+distilled worker prompt; derive `branch` from `worktreePath`; run `verify-worker`
+before landing; land `dispatch_import` → conclude `dispatch_conclude_phase`
+(`code_start = B`, `code_end = coord_tip`) → reap `dispatch_reap`, in that
+order; return to the router for the drive cadence.
