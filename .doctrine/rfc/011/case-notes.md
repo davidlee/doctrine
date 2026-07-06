@@ -743,3 +743,51 @@ def has the role hymn BAKED IN (template resolved), so a plain cp of the
 `install/agents/` source would regress it to unresolved `{{ prompt resolve }}`
 syntax — edits must be applied twice, once per tier. ~1k tokens of discovery per
 session that touches installed defs.
+
+[phase-plan + dispatch-agent; SL-206-P13-drive]
+- cwd-reset footgun (main-thread orchestrator): a `cd /workspace/doctrine && grep`
+  silently reset the persistent Bash cwd from the coord tree (.dispatch/SL-206) to
+  the PRIMARY edge tree. Subsequent pathless greps then read the WRONG tree's src —
+  which lacks the PHASE-10 deltas (no ROLE_PROBE) — leading to a false "PHASE-10
+  didn't land / doctor code missing" conclusion and ~4 wasted tool calls re-checking
+  in the coord tree. Root cause: orchestrator drives from main context where cwd is
+  shared+mutable across unrelated commands; the coord/primary tree split makes a
+  stray absolute-path `cd` a correctness hazard, not just a nuisance. A disposable
+  orchestrator context bound to the coord tree (the RFC-011 lever) would not carry
+  this shared-mutable-cwd risk.
+- skill/funnel staleness: /dispatch-agent SKILL still documents the OLD live-worktree
+  live-import model ("worker CANNOT self-commit; orchestrator imports the live tree"),
+  but this slice's own funnel (SL-199) is the MCP self-commit path (worker_commit →
+  dispatch_import). Reconciling the two (skill vs CLAUDE.md vs parked cadence vs the
+  dispatch_import tool schema) cost real reasoning tokens mid-drive. The shipped
+  skill should point at the MCP funnel as the current claude-arm default.
+
+[dispatch-agent funnel; SL-206-P13-drive]
+- worker_commit stale-$PATH false-red RECURRED (2nd time, cf PHASE-11 / ISS-220 /
+  mem.pattern.dispatch.worker-commit-stale-path-false-red). Every claude-arm worker
+  that changes an allowlist/conformance rule its OWN phase introduces will false-red
+  worker_commit, because the gate's `check commit` shells bare `doctrine` from $PATH
+  (read-only ~/.cargo/bin, stale) rather than the server's own binary. Cost this
+  phase: ~6 orchestrator tool-calls to reproduce/confirm delta-independence + a
+  fall-to-(A) live-worktree-import detour instead of the one-shot MCP self-commit
+  path. Structural fix (worker_commit gate should run its check via the server's
+  in-process binary, not $PATH) would remove a recurring per-phase tax on exactly
+  the phases that touch doctrine's own gates. Until fixed, every such phase pays the
+  (A) detour + a fresh-verification burden.
+
+[dispatch/phase-plan; SL-206-P14-driveslice]
+PHASE-14 (author install/workflows/drive-slice.js) — worker_commit false-red
+RECURRED a 3rd time (commit-gate-red), and this instance sharpens the diagnosis:
+the PHASE-14 delta is PURE JS, touching zero Rust and zero agent defs. The
+stale-$PATH gate binary (pre-PHASE-10 ~/.cargo/bin/doctrine, no ROLE_PROBE)
+false-flags the shipped dispatch-probe role + orchestrator read tokens that are
+ALREADY COMMITTED in the base tree — so the refusal is entirely delta-independent.
+Confirmed: a phase that changes nothing the conformance check inspects still pays
+the fall-to-(A) detour. Cost this phase ≈ one extra import+commit round-trip + the
+diagnostic reasoning to (re)confirm it's the known env footgun, not a real defect.
+This is now a FIXED per-phase tax gated purely on the in-jail stale binary, not on
+worker output. Structural fix (worker_commit's `check commit` should run its
+conformance lint via the server's in-process binary, not a $PATH shell-out) would
+retire it for every remaining phase; absent that, every /drive-slice-driven phase
+inherits the same tax the hand-driven funnel is paying now — worth pricing into the
+RFC-011 comparison (the driver does NOT remove it; it inherits it).
