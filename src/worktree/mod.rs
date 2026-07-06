@@ -264,16 +264,18 @@ pub(crate) enum WorktreeCommand {
         base: String,
 
         /// The fork branch carrying the single non-merge commit `S` (`S^ == B`) —
-        /// the pi/subprocess arm's committed-fork source. Mutually exclusive with
+        /// a committed-fork source (the claude arm's `worker_commit` delta, when
+        /// landing via CLI instead of `dispatch_import`). Mutually exclusive with
         /// `--from-worktree`.
         #[arg(long, conflicts_with = "from_worktree")]
         fork: Option<String>,
 
-        /// The worker's persisted live worktree dir (the claude arm, SL-182 PHASE-05):
-        /// the orchestrator gathers the working-tree delta straight from it, since
-        /// ro-`.git` blocks the worker's self-commit and the tree persists post-return
-        /// (no `WorktreeRemove` hook). Mutually exclusive with `--fork`; exactly one
-        /// is required.
+        /// The worker's persisted live worktree dir — the uncommitted-delta source:
+        /// the pi/subprocess arm's only mode (bwrap worker cannot commit), and the
+        /// claude arm's in-a-pinch fallback (MCP down / unprovisioned worker). The
+        /// orchestrator gathers the working-tree delta straight from it; the tree
+        /// persists post-return (no `WorktreeRemove` hook). Mutually exclusive with
+        /// `--fork`; exactly one is required.
         #[arg(long = "from-worktree")]
         from_worktree: Option<PathBuf>,
 
