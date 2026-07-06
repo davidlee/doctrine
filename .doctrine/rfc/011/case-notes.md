@@ -830,3 +830,20 @@ top-level oneOf, enforce fixup-XOR-prep in a JS guard after each hop returns
 (preserves return shape + all downstream reads); (A) nest the union under a
 property (changes return shape → invasive). Token cost: a full substrate stand-up
 + launch consumed before the deliverable's first line of real work ran.
+
+[dispatch; SL-206-P16-interior-arm-not-pinned]
+Second PHASE-16 acceptance defect (drive got FURTHER: PHASE-01 fully disposed via
+the nominated-unjail interior commit — boundary.code_start == pre-arm tip fa951846
+proving EX-6 arming, verify green, coord tip advanced; closing divergence probe
+emitted + never gated proving EX-5). Then HALTED at PHASE-02 coord:revive-wrong-base.
+Root cause: drive-slice.js `bootstrapPrompt` pins arm:"${arm}" (the drive arm) but
+`hopPrompt`'s prep instruction left `arm` free-form, so the disposing orchestrator
+chose "pi" on a claude-arm drive. The loop only spawns a worker when
+prep.arm==="claude" (line 299); with arm="pi" it skips the spawn, threads
+fork_tip=null, and the terminal O tried to import a pi-arm worktree diff that never
+existed — reaching for a stale fork at the OLD base (pre-PHASE-01) → wrong-base halt.
+An LLM orchestrator will fill an unpinned enum field from context/prior; any value
+the driver must act on deterministically has to be PINNED in the prompt, not left to
+the agent. Fix: interpolate arm:"${arm}" into hopPrompt + spell out the arm commit
+model and current-tip base_B. Note the cost shape: each defect costs a full ~15min/
+180k-token drive to surface because the failure only manifests at the interior hop.
