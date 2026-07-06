@@ -1,0 +1,51 @@
+memory_uid = "mem_019f361983617d529a054e52617c5f55"
+memory_key = "mem.fact.claude.workflow-leaf-cannot-commit"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Workflow isolation:worktree leaf cannot commit in the jail"
+summary = "A workflow isolation:worktree leaf gets a linked worktree on the RO jail .git — cannot commit by any path"
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = []
+globs = [".claude/workflows/**"]
+commands = ["dispatch"]
+tags = ["workflow", "dispatch", "jail", "worker-commit", "git"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2c3d1686cd0517ae6a2a471e71f78171e71c6c8e"
+ref_name = "refs/heads/edge"
+checkout_state_id = "72b5ca8fedbfe39e8a9fa29b13de8f9bc70998a32359450ae55c1f5357569c0e"
+base_commit = "2b7dbd790776ca9bf23fa3a779b42ed70cc92a78"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019f36028bca7411b33fde4981aaba85"
+
+[[relation]]
+label = "related"
+target = "mem_019f331005d776c1a65c65bfe59581bf"
+
