@@ -78,34 +78,64 @@ not by MCP-unreachability.
 
 ## 5. Proposed Design
 
-> **⚠ POST-PHASE-07 — the workflow-spawn model in §5.1/§5.4 is SUPERSEDED pending
-> a POC.** PHASE-07 proved a Workflow `agent()` leaf cannot drive committing
-> dispatch in the jail (three structural walls: no `Agent`, RO `.git`+no
-> `DispatchRecord`, `worktree-jail` deny). The replacement direction — an
-> **Agent-orchestrated** driver with an **orchestrator-unjail nomination** via
-> `SubagentStart` — plus its reasoning chain, evidence, and the gating POC, is in
-> **[`unjail-direction.md`](./unjail-direction.md)**. Do not treat §5.1/§5.4 below
-> as current until the POC lands and this design is re-opened via `/design`. See
-> also `notes.md` FINDING 4/5.
+> **↻ RE-OPENED 2026-07-06 — unjail model now current (POC landed).** The prior
+> workflow-spawn / confined-orchestrator model is RETIRED. PHASE-07 proved a
+> Workflow `agent()` leaf cannot drive committing dispatch (three walls: no
+> `Agent`, RO `.git`+no `DispatchRecord`, `worktree-jail` deny); the POC then
+> proved the replacement — a **durable workflow loop** spawning **alternating
+> ephemeral nominated-unjailed orchestrators + jailed workers**, escalation closed
+> at the `PreToolUse(Agent)` spawn seam (P1/P3/P4, unjail-direction.md §6). §5.1
+> below is the current system model; §5.6 the security posture; the retired
+> confined-placement delta is struck from §5.4. Reasoning chain + evidence:
+> **[`unjail-direction.md`](./unjail-direction.md)**; `notes.md` FINDING 4/5 + the
+> topology-REFINED section.
 
 ### 5.1 System Model
 
+The workflow is the **durable serial loop and the sole spawn authority**; each
+phase runs through three *ephemeral* agents it spawns in turn — two
+**nominated-unjailed** orchestrators bracketing one **jailed worker**. Spawn
+authority (workflow) is deliberately **separated from import authority**
+(`O(dispose)`) — a genuine departure from shipped `/dispatch`, forced by wall #1:
+a workflow leaf has no `Agent` tool, so an orchestrator leaf cannot spawn the
+worker; only the workflow can.
+
 ```
-Workflow /drive-slice   (JS; args:{slice}; PRECONDITION: cwd parked at coord-root .dispatch/SL-<n>)
-  ├─ bootstrap: planner agent() → next_ready[]        (compute_next_phases authority)
-  └─ loop while next_ready non-empty & budget allows:
-       agent(dispatch-orchestrator, NO isolation → jailed to coord-root, schema: PhaseReceipt)
-          ├─ arm base → dispatch-worker(fork) → import → conclude → reap  [SL-199 as-shipped]
-          ├─ call dispatch_phase_receipt{slice,phase}    [NEW, read-only]
-          ├─ call dispatch_next_ready{slice}             [NEW, read-only]  (slice-global)
-          └─ graft verify{} + worker_branch; attach next_ready[]
-          ▶ returns PhaseReceipt (schema-validated)
-       JS: receipt.receipt_status / halt_reason → advance | retry | halt+report
+Workflow /drive-slice   (JS; args:{slice}; durable serial loop; SPAWN AUTHORITY)
+  bootstrap: planner agent() → next_ready[]            (compute_next_phases authority)
+  loop while next_ready non-empty & budget allows — per phase, ALTERNATING ephemeral agents:
+
+    O(prepare) = agent(dispatch-orchestrator, schema: PrepReceipt)   ── NOMINATED-UNJAILED
+       · SubagentStart(dispatch-orchestrator) → allowlist → PreToolUse PassThrough (§5.6)
+       · capture base B = dispatch_tip; distill self-contained worker prompt
+       · pi arm ONLY: `git worktree add` + spawn pi subprocess (RW .git — unjailed O)
+       ▶ returns { base_B, worker_prompt, worker_fork }         → workflow holds (2a-a)
+
+    W(work)    = claude arm: agent(dispatch-worker, isolation:worktree, schema: WorkReceipt)
+                 pi arm:     (already spawned by O(prepare))    ── JAILED (bwrap / worktree-jail)
+       · edits source in its fork; self-commits via worker_commit MCP  [claude arm, TARGET 2b-B]
+       ▶ returns { fork_tip, summary }                          → workflow holds
+
+    O(dispose) = agent(dispatch-orchestrator, schema: PhaseReceipt) ── NOMINATED-UNJAILED
+       · import worker delta onto B; run verify (tests); commit ONE on dispatch branch
+       · dispatch_conclude_phase → boundary row; dispatch_reap; dispatch_phase_receipt
+       · on fixable defect: emit fixup verdict → workflow revives worker on fork (§5.4)
+       ▶ returns PhaseReceipt (schema-validated: receipt_status | halt_reason | fixup)
+
+    JS: receipt.fixup → revive W on fork; halt_reason/receipt_status → advance | halt+report
+  → advance to next phase: FRESH ephemeral agents (no prompt-cache TTL bleed;
+    no single context driving a 7-phase slice end-to-end)
 ```
 
-Two trust tiers (unchanged from SL-199): the **workflow** is a dumb sequencer
-(no writes, no arming, no MCP); the **orchestrator** is the sole writer, drives
-the funnel via its narrow grant.
+**Trust tiers CHANGE from SL-199.** The orchestrator is no longer *confined*
+(Mode-B: every coord write routed through server-side MCP); it is
+**nominated-unjailed** (`PassThrough`, RW `.git`) and imports/commits with plain
+git, exactly like the main-thread claude arm. Safety no longer rests on the
+MCP-unreachability of coord `.git`; it rests on the **nomination + spawn-gate**
+closed loop (§5.6 — proven P1/P3/P4). The **workflow** still holds no MCP and runs
+no git — but it is no longer a "dumb sequencer": it is the **spawn authority and
+per-phase state bus** (2a-a), threading `{ base_B, worker_fork, fork_tip }` from
+each agent's schema into the next agent's prompt.
 
 ### 5.2 Interfaces & Contracts
 
@@ -397,6 +427,59 @@ exists — D2):
 - **`resolve_coord` refusals are workflow halt states**, not noise: `stale`
   (torn-down/prunable coord) and `ambiguous` are plausible from the primary tree
   and must halt loudly.
+
+### 5.6 Security — nomination + spawn-gate (ADR-008 amendment)
+
+The orchestrator runs **unjailed** (`PassThrough`, RW `.git`) — a new exception
+to orchestrator confinement, so an **ADR-008 amendment is in scope** (§7, §9). It
+is provably safe: escalation is closed at the spawn seam with **no arming token**.
+Proven end-to-end — P1 (nomination round-trip), P3 (discriminator), P4 (active
+deny), 2026-07-06 (`unjail-direction.md` §6).
+
+**Two halves, one closed loop.**
+
+1. **Nominate.** A `SubagentStart(dispatch-orchestrator)` command hook writes the
+   spawned `agent_id` to a PassThrough allowlist at a FIXED, out-of-jail path
+   (`$CLAUDE_PROJECT_DIR`-resolved, never cwd-relative — the hook's cwd is the
+   *spawned* tree, §4.3-1). The hook is **sync-blocking** — the entry lands before
+   the orchestrator's first `PreToolUse` (P1b). `PreToolUse.decide()` then reads
+   `agent_id ∈ allowlist → PassThrough`, scoped to that one id (a non-listed
+   control stays jailed — P1a).
+2. **Gate.** A `PreToolUse(Agent)` matcher **denies** the spawn iff
+   `agent_id present ∧ caller ∉ allowlist ∧ subagent_type ∈ privileged-set`
+   (`dispatch-orchestrator`, `fork`, …). `PreToolUse(Agent)` carries the caller's
+   `agent_id` — present iff subagent-initiated (P3) — the parentage discriminator
+   `SubagentStart` **lacks** (P0 Q1). So a jailed `Agent`-holder cannot spawn a
+   privileged (auto-nominated) child: escalation closes at the source, and
+   `SubagentStart` type-match is trustworthy again — the token that only
+   compensated for the missing parentage is retired (P4).
+
+**Design invariants.**
+- **I1 — one list, two consumers.** The gate's privileged deny-set IS the same
+  authored list as the nomination-eligible-set — never two lists that can drift.
+  A type added to nomination without the gate is an open escalation hole; the
+  design binds them to one source so the gate cannot lag a new nomination.
+- **I2 — config outside every jail.** The allowlist and hook config live at a
+  path writable ONLY by the main thread — out of every worktree jail (jailed
+  agents cannot write it: worktree-jail Bash deny + import R-5 belt on
+  `.claude/`/`.doctrine/`). A worker therefore cannot nominate anything.
+
+**Fail-safe — every failure lands on *more* confinement.** A missed
+`SubagentStart` (not fail-closeable — exit 2 does not abort) leaves the
+orchestrator **jailed**: a visible functional failure, never an escape. Absence
+of an allowlist entry never grants `PassThrough`. Hygiene: a `SubagentStop`
+matcher removes the entry so a stale `agent_id` cannot be reused (fires awaited,
+tree-intact).
+
+**Consistent with ADR-006 / CHR-039.** The orchestrator is unconfined *by design*
+(sole writer). Nomination relocates the main thread's existing unjailed status to
+a trusted-def subagent — the def name cannot be forged (`.claude/agents/` is
+worker-unwritable: jailed + R-5) — it invents no new trust. Note the shipped
+`dispatch-worker` provisioning matcher is escalatable *today* (bounded — worker
+commits land on an ephemeral fork behind the commit gate); the same spawn-gate
+hardens it. Rule: **grant power must scale with intent evidence** — type-match
+alone buys bounded/gated capability (worker tier); anything unbounded
+(`PassThrough`) requires the spawn-gate.
 
 ## 6. Open Questions & Unknowns
 
