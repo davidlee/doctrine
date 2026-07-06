@@ -86,6 +86,11 @@ selector = "plugins/doctrine/hooks/hooks.json"
 intent = "design-target"
 note = "PHASE-11 modifies: nominate/denominate + gate legs (worktree module), guard/main exhaustive-match ripple, hooks.json matcher data"
 
+[[selector]]
+selector = "src/mcp_server/worker_commit.rs"
+intent = "design-target"
+note = "PHASE-12 adds revive-base rejection test (VT-2)"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-031"
