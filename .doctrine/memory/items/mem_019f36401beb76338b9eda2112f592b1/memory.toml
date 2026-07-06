@@ -1,0 +1,43 @@
+memory_uid = "mem_019f36401beb76338b9eda2112f592b1"
+memory_key = "mem.fact.claude.jail-ro-git-is-bwrap-wrap-passthrough-commits"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Jail RO .git is the bwrap wrap on confined Bash, not an fs permission — PassThrough commits"
+summary = "The worktree-jail's RO .git is the bwrap wrap on a CONFINED subagent's Bash, not an fs permission. PassThrough (main thread, or an agent_id nominated via a SubagentStart allowlist) runs Bash unwrapped => RW .git everywhere => commits. SL-206 P1 proven."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = ["/workspace/doctrine/src/worktree/pretooluse.rs", "/workspace/doctrine/src/worktree/jail.rs"]
+globs = []
+commands = []
+tags = ["claude", "worktree", "jail", "bwrap", "confinement", "dispatch", "sl-206"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "98f0faf52442245e86d3a25b656805032efb72d0"
+ref_name = "refs/heads/edge"
+checkout_state_id = "03dc0e063df40b2e84ef86cf9b340c022d7dd26390f43232f62c465456747fdb"
+base_commit = "0048ee755b788999dc19f3b5a7a28f048246ef7f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

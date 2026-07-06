@@ -173,6 +173,16 @@ workflow form (D') can be revived after all.
 >   `9ba5c0a6` (**a jailed agent cannot run this**), empty commit **landed** `98835cc`
 >   in a scratch repo (RW `.git` under PassThrough). `RESULT: ALLOWED-and-committed`.
 >
+> **Mechanism confirmed.** A side-probe showed every `.git` (primary, coord
+> `.dispatch/SL-206`, and a `.worktrees/` worker gitdir) is **RW from the main
+> thread**. So the "RO shared `.git`" of §1 wall #2 is **not an fs permission** —
+> it is the **bwrap wrap** the jail imposes on a *confined* subagent's Bash.
+> `PassThrough` (main thread, or a nominated orchestrator) runs Bash **unwrapped**
+> ⇒ RW `.git` everywhere. This is *why* nomination yields a committing orchestrator:
+> flip to PassThrough ⇒ no wrap ⇒ RW `.git`. (Rig preserved in the session
+> scratchpad — `p1-pretooluse.patch` / `p1-orch-nominate.sh` — reconstructable from
+> this block if the scratchpad is gone.)
+>
 > **⚠ Correction to §4.3 lie #3.** This POC ran in a session with
 > `CLAUDE_CODE_CHILD_SESSION=1`, yet `SubagentStart` **fired** for the orchestrator
 > spawn. `mem_019ec84b`'s "silently no-fires in a child session" is therefore either
