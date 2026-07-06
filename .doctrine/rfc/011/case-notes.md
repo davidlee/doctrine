@@ -526,3 +526,21 @@ architecture structurally violates; the two docs (verb help vs import
 architecture) don't reconcile in one place. Also: the stale coord worktree will
 trip INV-6 ("coord working tree == committed graph") at conclude/prepare-review —
 a latent conclude-time concern flagged for the conclude cadence.
+
+[dispatch; SL206-drive-p04-falsered]
+worker_commit gate FALSE-RED via stale PATH binary. PHASE-04's probe agent-def
+depends on PHASE-03's `probe` role + grown orchestrator allowlist — a conformance
+surface that lives ONLY on dispatch/206 (not promoted to edge/main pre-audit). The
+worker_commit `check commit` belt runs `just validate` → `doctrine doctor` via
+PATH `~/.cargo/bin/doctrine`, which the user's flake bump rebuilt from EDGE (pre
+PHASE-03). So doctor rejects `doctrine-role: probe` (unknown) + the 3 orchestrator
+read tokens (old 3-token allowlist) → exit 1 → gate red. Fresh worktree binary
+(dispatch/206 source) → doctor exit 0, zero conformance findings. Both tag 0.16.0;
+divergence is SOURCE not version. Root cause = a multi-phase dispatch gate-design
+flaw: the worker_commit conformance belt validates with the PATH binary, which
+structurally lags whenever a later phase's authored content depends on an earlier
+unpromoted phase's binary-level change. AGENTS.md already says corpus/doctor verbs
+should run from the coord tree's ./target/debug/doctrine, not PATH — the gate
+violates its own rule. Token cost: ~full worker turn (146k) landed uncommittable;
+orchestrator diagnosis + land-not-rewrite pivot. Candidate backlog ISS: point the
+worker_commit belt's doctor invocation at the build/coord binary.
