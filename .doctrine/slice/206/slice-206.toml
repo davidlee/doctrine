@@ -91,6 +91,16 @@ selector = "src/mcp_server/worker_commit.rs"
 intent = "design-target"
 note = "PHASE-12 adds revive-base rejection test (VT-2)"
 
+[[selector]]
+selector = "src/finding.rs"
+intent = "design-target"
+note = "PHASE-12 ripple: Category enum variant + doctor registry wiring for check #10"
+
+[[selector]]
+selector = "src/commands/doctor.rs"
+intent = "design-target"
+note = "PHASE-12 ripple: Category enum variant + doctor registry wiring for check #10"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-031"
