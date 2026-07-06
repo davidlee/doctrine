@@ -1,0 +1,43 @@
+memory_uid = "mem_019f36a33f4a7573a5882d6a599e5b73"
+memory_key = "mem.fact.dispatch.unjail-nomination-round-trip"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Orchestrator-unjail nomination round-trips: allowlist flips PreToolUse posture deny→PassThrough, unjailed orchestrator commits"
+summary = "SL-206 P1: a SubagentStart-written PassThrough allowlist entry flips a jailed subagent's PreToolUse posture deny→PassThrough for ONLY the listed agent_id (control denied); the unjailed orchestrator then ran unwrapped Bash — RW .git — and committed (98835cc). The nomination leg of full-commit unjail, proven E2E."
+created = "2026-07-06"
+updated = "2026-07-06"
+
+[scope]
+paths = []
+globs = ["src/**/jail/**", "src/**/pretooluse*"]
+commands = []
+tags = ["security", "dispatch", "hooks", "sl-206", "claude-harness"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "063534f4da7272093b3ab81da68e2e8c4355277f"
+tree = "551f1138d1577c929eb008c4d79c2787649c0b26"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "063534f4da7272093b3ab81da68e2e8c4355277f"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
