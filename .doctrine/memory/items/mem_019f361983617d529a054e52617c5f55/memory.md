@@ -55,6 +55,29 @@ OR new server-side machinery to adopt+commit a harness-minted worktree
 (Architecture **B'** — extends the `worker_commit` family). Retracts D
 (workflow-direct-worker) entirely.
 
+## No-isolation is not an escape hatch (probe `wf_93413e70-159`)
+
+A **no-isolation** workflow leaf inherits the **session cwd = primary tree**
+(`/workspace/doctrine`), and `worktree-jail` (SL-182 PreToolUse hook,
+`src/worktree/pretooluse.rs`) **denies every Bash call**: `worktree-jail:
+cwd-not-a-worktree: /workspace/doctrine` (couldn't even `pwd`; `cd /tmp`,
+`git -C`, `dangerouslyDisableSandbox` all still denied — the hook checks session
+cwd, not the command target).
+
+The gate keys on **`agent_id`** (`decide()`, pretooluse.rs:129): **no `agent_id`**
+(main thread / human) → `PassThrough`, unconfined; **`agent_id` present** (ANY
+subagent, incl. every workflow leaf) → confined → must sit in a project worktree
+or be denied. So: iso leaf → worktree cwd → Bash allowed but `.git` RO; no-iso
+leaf → primary cwd → all Bash denied. **The only unconfined actor is the main
+thread; a workflow is never the main thread.** No no-isolation escape.
+
+Net: a workflow leaf hits three stacked walls — (1) no `Agent` (can't spawn),
+(2) RO `.git` + not a `DispatchRecord` (can't commit), (3) no-iso → primary cwd
+(can't even run Bash). The proven committing path (claude arm) needs a
+main-thread PassThrough orchestrator + worker subagents committing via
+server-side `worker_commit` into provisioned `DispatchRecord`s — none of which a
+workflow can be.
+
 ## Relates
 
 - [[mem_019f36028bca7411b33fde4981aaba85]] — no `Agent` tool (the other half).
