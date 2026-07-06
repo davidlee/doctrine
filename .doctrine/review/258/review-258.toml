@@ -1,0 +1,59 @@
+id    = 258
+slug  = "design-review-of-sl-206"
+title = "design review of SL-206"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-206"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected every privileged spawn seam proven gated before unjail claim, observed Workflow seam remains unproven while §5.6 declares safety"
+detail = "SL-206 design overclaims the security proof. §5.6 says the unjail model is 'provably safe' and 'escalation is closed' based on P1/P3/P4 (.doctrine/slice/206/design.md:510-516), but the same section's I1 immediately admits a second privileged spawn seam via the Workflow tool that must also be gated (.doctrine/slice/206/design.md:537-552), and §6/OQ-4 says that seam is still load-bearing and unproven: phase-0 must establish whether a jailed caller's Workflow/agent() presents caller agent_id or else Workflow must be denied wholesale (.doctrine/slice/206/design.md:609-625). The proposed conformance check only verifies nomination-set ⊆ gate-set by parsing SubagentStart nominations and the PreToolUse gate deny-set (.doctrine/slice/206/design.md:553-559, 760-763); that does not prove the Workflow seam is actually covered, only that nominated subagent types appear in one deny-set. Expected: do not declare the confinement boundary closed until every privileged spawn seam is either empirically proven to carry caller identity into the gate or mechanically denied. Observed: the design marks the boundary safe before proving its second named seam."
+disposition = "fix-now"
+response = "Confirmed. §5.6 overclaimed a blanket 'provably safe' when only the Agent seam is proven (P1/P3/P4); the Workflow seam (I1(b)) is unproven (OQ-4). Fixed in design.md (commit e6b60ced): proof status is now stated per-seam — the Agent seam is proven closed; the Workflow seam is closed by a FAIL-SAFE blanket subagent-deny default (PreToolUse(Workflow) denies any caller with a present agent_id) until OQ-4 proves caller-identity carriage, at which point it MAY be relaxed to the finer identity-gate. No seam is ever 'assumed covered'. The I1 doctor check now fails on TWO conditions: (a) nomination ⊄ gate, AND (b) any registry seam (Agent, Workflow) lacking a PreToolUse matcher — closing the nomination⊆gate necessary-not-sufficient gap the finding named."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected §9 to prove the chosen claude-arm self-commit path, observed target path still rests on unproven P5"
+detail = "The design authors worker self-commit (B) as the claude-arm target path, not a speculative variant: scope/objectives say the claude worker self-commits via worker_commit while orchestrator-import is fallback (.doctrine/slice/206/slice-206.md:53-56), §5.1 threads WorkReceipt.fork_tip from that committed worker delta (.doctrine/slice/206/design.md:114-118), and D9 again makes '(B) self-commit target, (A) import fallback' the chosen contract (.doctrine/slice/206/design.md:690-699). But OQ-3 states the load-bearing runtime fact is still unproven: whether a workflow leaf retains the worker_commit MCP tool (P5) (.doctrine/slice/206/design.md:600-607). §9's phase-0/e2e verification never requires proving that path: it asserts armed-base forking, drive-to-Completed, red-verify halt, and forbidden-write refusal, but does not require a successful worker_commit call, a non-null WorkReceipt.fork_tip, or evidence that the claude arm actually ran in mode (B) rather than silently degrading to (A) (.doctrine/slice/206/design.md:793-797). Expected: if (B) is the authored target and revive durability depends on committed fork tips, verification must pin P5 directly. Observed: the target path is still a guess with fallback language, not a verified invariant."
+disposition = "fix-now"
+response = "Confirmed. (B) worker self-commit was authored as the claude-arm target while P5 (does a workflow leaf retain worker_commit?) is unproven, and §9 phase-0 never required proving the path ran. Fixed (e6b60ced): phase-0 now pins P5 directly — the claude arm must prove WHICH mode ran, either (B) a successful worker_commit landing a non-null WorkReceipt.fork_tip, OR an explicit recorded fall-to-(A) with the P5 failure reason. A silent degrade to (A) is a phase-0 FAILURE. The target path is no longer a guess with fallback language."
+
+[[finding]]
+id = "F-3"
+status = "withdrawn"
+severity = "major"
+title = "Expected revive fallback to enforce same-fork/base invariants mechanically, observed 'guaranteed' reset path is only a prompt convention"
+detail = "§5.5 calls worker-side reset the 'guaranteed fallback' for revive-on-fork: the fixup prompt carries fork_tip and the revived worker's first act is ; this is presented as always available and sufficient if hook re-arming cannot retarget the fork base (.doctrine/slice/206/design.md:459-475, 630-634). That is not a mechanical guarantee. The worker is a raw-Bash jailed agent; R-5 only belts .doctrine/.claude writes, not git ref movement, and nothing in the design binds the worker to the orchestrator-supplied fork_tip beyond prompt obedience. The proven base invariants in the shipped commit path live in  itself: it refuses unless HEAD==B before commit and then enforces exactly one commit with C^==B (). Mechanism 2 bypasses those invariants entirely. §9 also does not name a test that proves revive reset actually lands on fork_tip or that a wrong-base revive is detected before import (.doctrine/slice/206/design.md:793-797). Expected: the floor path for 'same fork' must be enforced or re-verified by machinery, especially in a repo that already carries a documented claude-arm wrong-base trap (mem.signpost.doctrine.dispatch-claude-arm-wrong-base). Observed: the fallback is only a prompt-level hope, so the design's 'guaranteed' wording is false and wrong-base delta loss can slip through the revive path."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected core workflow artifact to have a committed audited home, observed /drive-slice remains outside the declared design-target set"
+detail = "The workflow script is not ancillary; the slice scope makes a saved parameterized Workflow script one of the primary deliverables (.doctrine/slice/206/slice-206.md:40-48). Yet OQ-1 still leaves its authored home unresolved (.doctrine/slice/206/design.md:593-596), and §9 explicitly says no selector currently covers install/workflows/**, so the /drive-slice authored home is not yet a design-target and conformance cannot red a stale or wrong committed script (.doctrine/slice/206/design.md:781-789). That is already a concrete risk, not a theoretical one: the currently shipped workflow asset in .dispatch/SL-206-bin/install/workflows/drive-slice.js still implements the retired confined per-phase orchestrator model rather than the current alternating unjailed two-job topology (see file header and loop shape at .dispatch/SL-206-bin/install/workflows/drive-slice.js:1-8 and :153-230). Expected: before validation depends on /drive-slice, the design must pin its committed home and include that path in the declared design-target set. Observed: the central artifact is left outside the audit surface, so drift is already possible and presently visible."
+disposition = "fix-now"
+response = "Confirmed. /drive-slice is a primary deliverable but OQ-1 left its authored home open, and the currently-shipped install/workflows/drive-slice.js still carried the retired confined-per-phase POC. Fixed (e6b60ced): OQ-1 RESOLVED to a baseline — the authored home is install/workflows/drive-slice.js (committed, audited), seeded to .claude/workflows/ by doctrine install. It is a design-target selector (already registered on the slice, OQ-1-resolved note), so conformance REDS the stale POC script until the implementation phase overwrites it with the alternating-unjailed topology — the drift the finding surfaced is now caught by the selector, not missed. The shipped POC staleness is expected pre-implementation state (design precedes code), not a design defect."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected revive floor to preserve same-fork invariants by machinery, observed worker-side reset bypasses the only proven base guards"
+detail = "This supersedes the shell-damaged citation in F-3. The design still overstates mechanism 2. §5.5 presents worker-side reset as the guaranteed floor for revive-on-fork: the revive worker is told to move to the prior fork tip and continue (.doctrine/slice/206/design.md:459-475), and §6/OQ-6 treats that as the fallback if hook retargeting cannot be proven (.doctrine/slice/206/design.md:630-634). But the only shipped path that actually enforces base integrity is worker_commit: it resolves the stamped worker record, refuses unless HEAD is still at base B before commit, and then verifies the new commit has exactly one parent equal to B (src/mcp_server/worker_commit.rs:214-271). The worker-side reset fallback bypasses those checks entirely. It relies on a raw-Bash worker obeying a prompt, while R-5 protects only .doctrine and .claude writes, not ref movement. §9 never names a test that proves the revived worker really lands on the intended fork tip or that wrong-base revive is caught before import (.doctrine/slice/206/design.md:793-797). Expected: the floor path for same-fork revive must either reuse an enforced invariant like worker_commit or add an explicit post-revive base/fork verification. Observed: the claimed guaranteed fallback is only procedural guidance, so wrong-base revive remains a live correctness hole."
+disposition = "fix-now"
+response = "Confirmed and the strongest charge — cited worker_commit.rs:214-271's real base invariants. §5.5 called worker-side 'git reset --hard <fork_tip>' the 'guaranteed fallback' when it is only prompt-obedience (R-5 belts .doctrine/.claude writes, not ref movement; the repo carries a documented wrong-base trap). Fixed (e6b60ced): the guarantee now lives where it actually is — the revive worker commits via worker_commit with its DispatchRecord base RE-STAMPED to fork_tip, so worker_commit's HEAD==base ∧ single-parent==base check mechanically rejects a wrong-base revive before any tip moves. Belt-and-brace on the (A) import path (no worker_commit): the disposing O verifies the revive commit's parent chain descends from fork_tip before import, halting coord:revive-wrong-base on mismatch. §9 pins a wrong-base-revive rejection test on both modes; no test relies on the worker obeying the reset prompt. 'Guaranteed' wording removed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
