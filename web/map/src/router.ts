@@ -86,7 +86,9 @@ export function buildHash(
   depth: number,
   cmFocusKey?: string | null,
 ): string {
-  let base = `#/${view}/${id}`;
+  const safeView = encodeURIComponent(view);
+  const safeId = encodeURIComponent(id);
+  let base = `#/${safeView}/${safeId}`;
   const params: string[] = [];
 
   if (depth !== state.depth) {
