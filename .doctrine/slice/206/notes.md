@@ -750,3 +750,34 @@ fresh doctor exit 0, post-import prove green.
 VH-1 PENDING — human confirm of fail-safe posture + seating path. 235
 worktree-module tests green incl. 30+ new; behaviour-preservation held
 (existing suites green unchanged).
+
+## PHASE-12 — I1 seam-symmetry check + revive-base rejection test (2026-07-07)
+
+Landed `289a19ed → b1408f46` (conclude tip `cf258dbd`). Worker: Sonnet, claude
+arm, ~175k tokens, clean `worker_commit` self-commit (`8594b5da`) — the SL-198
+target path proven again post-unjail-config.
+
+- **Doctor #10 `check_spawn_seam_symmetry`** (`doctor_checks.rs`): pure core
+  over the shipped `plugins/doctrine/hooks/hooks.json`; `SEAM_REGISTRY =
+  ["Agent","Workflow"]`; Error on (a) nominated type ∉ `PRIVILEGED_AGENT_TYPES`
+  (imported via a `pub(crate) use` re-export in `worktree/mod.rs` — jail is a
+  private submodule) and (b) any registry seam without a PreToolUse matcher
+  (exact alternation-member match, not substring). Live green on the shipped
+  config (doctor exit 0, 47 warnings unchanged); ripple: `Category::
+  SpawnSeamSymmetry` in `finding.rs` (9→10 categories) + `commands/doctor.rs`
+  registry wiring — selectors upgraded to design-target pre-import.
+- **VT-2 revive-base test** (`worker_commit.rs`): wrong-base revive Refused
+  before any tip moves. Finding: the operative refusal token is
+  **`stale-record`** — the resolver's own HEAD==base consistency check fires
+  before `run_worker_commit`'s `head_at_base` belt (same fact, earlier call
+  site); test asserts either token, commentary explains the belt-and-suspenders
+  layering.
+- Environmental note: running the commit gate directly in a marker-stamped
+  worker tree reds 3 `e2e_adr_cli_golden` tests (SL-199 F2 worker-marker guard)
+  — `worker_commit`'s own wrapper clears the marker, so the real path is
+  unaffected; confirmed by clear-and-rerun.
+
+**Verification:** VT-1 + VT-2 keyword mandates satisfied (test names/bodies
+carry `check_spawn_seam_symmetry`/`SEAM_REGISTRY`/`Workflow` and
+`fork_tip`/`base`). 3255 full-suite green in worker tree; regression diff vs B
+green on coord tree.
