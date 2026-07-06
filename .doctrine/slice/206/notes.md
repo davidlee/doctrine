@@ -504,3 +504,98 @@ Operator answers the fork (A / B / C, or "spike the residual first") → continu
 `/design` §5 sections (interfaces/state/ADR-impact/verification) → adversarial pass
 (codex GPT-5.5) → `/plan`. If (C)/A: no ADR amendment; if (B): ADR-008 amendment +
 `/inquisition` + arming-token + posture-registry-row spec.
+
+## 2026-07-06 — full-unjail RESOLVED (safe) + corrected drive-by-workflow model (compaction prep 2)
+
+**Decision locked: full-commit unjail, provably safe.** Operator chose it for
+SIMPLICITY (reasoning + implementation surface), not necessity. Safety proven E2E
+across three composable seams, all banked+verified:
+- P1 nomination round-trip — allowlist flips PreToolUse deny→PassThrough (control
+  denied), unjailed orchestrator committed 98835cc. `mem.fact.dispatch.unjail-nomination-round-trip`.
+- P3 — PreToolUse(Agent) carries spawner agent_id (=<NONE> main / =caller nested),
+  holds under CHILD_SESSION=1. P4 — active deny gate BLOCKS a subagent-initiated
+  privileged spawn E2E, scoped, legit path intact. `mem.fact.claude.pretooluse-agent-carries-spawner-id`.
+- Invariants the design must hold: I1 gate privileged-set ≡ nomination-eligible-set
+  (one list); I2 allowlist/hook config outside every jail (main-thread-write only).
+- Commits this window: e78f4c98 (P4), 72ce0da8 (P1 bank + RFC-016 pointer).
+  RFC-016 References now points here (OQ-2 arm-unification).
+
+**CORRECTED design model (operator steer — supersedes my A1/A2-convergence take).**
+My earlier "retire the workflow, loop moves into orchestrator / A1 ships first"
+was WRONG. Corrections:
+- A1 (orchestrator = top-level main thread) ALREADY WORKS — not this slice. This
+  slice = **drive-BY-WORKFLOW**. The workflow is the point.
+- The blocker was the workflow-spawned orchestrator LEAF couldn't write/.git.
+  Nomination fixes exactly that (PassThrough → RW .git). So the ORIGINAL §5.1
+  workflow model stands; the ONLY change is the per-phase orchestrator is now
+  nominated-UNJAILED instead of confined-leaf.
+- **Workflow = durable lifecycle manager.** One orchestrator CANNOT run a 7-phase
+  slice E2E (context) and its prompt-cache TTL (5min) bleeds while a worker runs.
+  So the workflow loops over phases, spawning a FRESH nominated-unjailed
+  orchestrator per phase (or batch), advancing on its receipt.
+
+**THE open wrinkle to resolve next (resume here).** Wall-1 persists under unjail:
+the Workflow runtime STRIPS the Agent tool from agent() spawns
+(`mem_019f36028bca`, proven, provisioning-layer — NOT fixed by PassThrough, which
+is permission-layer). So a workflow-spawned orchestrator, even unjailed, has NO
+Agent tool → cannot spawn workers via the claude Agent-arm. Therefore it must
+drive workers via the **SUBPROCESS/pi arm** (`git worktree add` + subprocess) —
+which unjail SPECIFICALLY unblocks (previously failed `cannot lock ref` on RO
+.git; PassThrough gives RW .git). Coherent model:
+  workflow (loop) → agent() spawn fresh nominated-unjailed orchestrator per phase
+  → orchestrator drives worker via subprocess arm → funnel (arm/import/conclude
+  via MCP or CLI) → return receipt → workflow advances.
+Sub-questions for §5: (a) is the subprocess WORKER confined under bwrap when
+spawned by an unjailed workflow orchestrator? (unprobed); (b) orchestrator drives
+funnel via MCP (server-side) or CLI (it can shell now)? (c) per-phase vs per-batch
+orchestrator granularity. Receipt machinery (5.2/5.3) + grant table largely
+survive; 5.4/5.5 confined-placement delta retired (no confinement).
+
+**Resume:** confirm the corrected model with operator, then author §5 around it
+(workflow lifecycle loop + nominated orchestrator + subprocess worker arm + the
+three sub-questions), ADR-008 amendment scope, then adversarial pass → /inquisition.
+
+## 2026-07-06 — v1 topology REFINED (operator steer 2): workflow = spawn authority, both arms
+
+**Hard requirement: BOTH claude AND subprocess arm workers. Subprocess-only is
+NOT acceptable.** This corrects "orchestrator drives worker via subprocess arm."
+
+**Key insight I missed:** the WORKFLOW's agent() CAN spawn a claude-arm worker (a
+leaf — the Agent-strip only stops the SPAWNED agent from nesting further; the
+workflow spawns leaves fine). The orchestrator can't (Agent-stripped). ⇒
+**claude-arm workers are reachable only via the workflow.** So the workflow is the
+spawn authority for workers, NOT the orchestrator.
+
+**v1 topology — serial, alternating, workflow-sequenced:**
+```
+workflow (durable serial loop; spawn authority)
+  per phase, alternating ephemeral agents:
+    O(prepare)  → nominated-unjailed: capture base B, arm, distill worker prompt
+    W(work)     → claude arm: workflow agent() leaf
+                  pi arm:     O spawns subprocess (git worktree add — RW .git)
+    O(dispose)  → nominated-unjailed: import delta, verify, conclude, reap → receipt
+  → advance; fresh agents next phase (no TTL bleed, no single-context 7-phase)
+```
+- Adjacent O(dispose N)+O(prepare N+1) may merge into one spawn — v1 keep simple.
+- Parallel batches DEFERRED (v1 serial only).
+- Workflow (JS) has no shell/MCP → it spawns claude workers via agent() but CANNOT
+  spawn pi workers (no bash); pi workers spawned by the unjailed orchestrator.
+
+**Topology shift to spec in §5:** spawn-authority (workflow) is SEPARATED from
+import-authority (orchestrator) — shipped /dispatch has the orchestrator do both.
+Here the workflow spawns the claude worker; a later O imports its delta. Workflow
+becomes the coordination layer passing worker branch/commit between ephemeral
+orchestrators. §5 must spec that handoff.
+
+**Two probes gating §5 (run before authoring):**
+- **P5** — does a workflow-spawned claude WORKER retain the `worker_commit` MCP
+  tool? (Agent-strip also removes Grep/Glob, injects StructuredOutput — if it
+  strips MCP too, claude worker can't self-commit → pi-style orchestrator-imports-
+  diff fallback.) Decides claude-worker commit path.
+- **P6** — is the pi/subprocess worker still bwrap-confined when spawned by an
+  UNJAILED orchestrator, or does it inherit PassThrough? Funnel wants worker
+  jailed; inherited unjail = a hole to close.
+
+**Resume:** confirm topology, run P5+P6 (small rigs like P3/P4), then author §5
+(workflow serial loop + alternating ephemeral nominated orchestrators + both-arm
+worker spawn + spawn/import authority split), ADR-008 amendment, adversarial pass.
