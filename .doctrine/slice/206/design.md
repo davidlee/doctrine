@@ -594,14 +594,25 @@ of an allowlist entry never grants `PassThrough`. Hygiene: a `SubagentStop`
 matcher removes the entry so a stale `agent_id` cannot be reused (fires awaited,
 tree-intact).
 
-**Amendment ledger (for the ADR-008 amendment, D8).** The amendment records two
+**Amendment ledger (for the ADR-008 amendment, D8).** The amendment records three
 things beyond the grant: (a) the **confined orchestrator (Mode-B) as a reversible
 escape hatch** — it loses nothing functional under Workflow (import already routes
 via the shipped MCP), so if the seam-symmetry obligation below proves
 unmaintainable, revert with no functional loss; (b) the **seam-symmetry obligation
 as the standing price** — I1 binds *every* harness spawn seam (`Agent`, `Workflow`,
 any future surface) to the one deny-set; a new seam defaults to gated, and that duty
-is permanent for as long as the orchestrator runs unjailed.
+is permanent for as long as the orchestrator runs unjailed. **This toll stays
+one-time ONLY while it is conformance-checked** (the I1 doctor check): as prose it
+would be re-paid per harness release. (c) the **steered-orchestrator blast radius,
+named out loud.** The P1/P3/P4 proofs bound **jailed→O escalation** (a worker cannot
+*become* the orchestrator); they say **nothing** about **O-steered** — the
+orchestrator's primary attacker-shaped input is the worker's diff (fork→O), and a
+nominated-unjailed O has main-thread reach (primary tree, history, `.claude/`), a
+reach Mode-B's tunnel-set bounded. The residual is roughly what the main thread
+already accepts running `/dispatch` by hand, and is mitigated (trusted committed
+def, narrow prompt, **structured inputs — diffs + typed receipts, not free-form
+instructions**) — but the amendment states the residual as a sentence rather than
+letting "proven safe P1/P3/P4" imply the escalation proof covers it. It does not.
 
 **Consistent with ADR-006 / CHR-039.** The orchestrator is unconfined *by design*
 (sole writer). Nomination relocates the main thread's existing unjailed status to
