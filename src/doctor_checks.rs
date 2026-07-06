@@ -1574,6 +1574,32 @@ mod tests {
         );
     }
 
+    /// Real-tree conformance (SL-206 PHASE-04, VT-1): the THREE shipped agent
+    /// defs — worker, orchestrator, and the new `probe` — all pass check #9
+    /// against the AUTHORED `install/agents/` tree now that `dispatch-probe.md`
+    /// exists and the orchestrator lists the grown token set. Unlike the
+    /// synthetic-fixture cases above (each seeds one def in a tempdir), this
+    /// scans the REAL corpus rooted at `CARGO_MANIFEST_DIR`, so a drifted
+    /// shipped def — e.g. a probe granted a write token outside `ROLE_PROBE`'s
+    /// set, or an orchestrator listing a token the allowlist never grew to hold
+    /// — reds here rather than shipping silently.
+    #[test]
+    fn agent_conformance_real_shipped_defs_are_clean() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // Sanity: the probe role's allowlist is exactly the three read tokens —
+        // the ceiling the shipped `dispatch-probe.md` must fit under.
+        assert_eq!(
+            allowed_mcp_tokens(ROLE_PROBE).len(),
+            3,
+            "ROLE_PROBE allowlist should hold exactly the three read tokens"
+        );
+        let findings = agent_conformance_findings(root);
+        assert!(
+            findings.is_empty(),
+            "shipped agent defs (worker + orchestrator + probe) must pass check #9: {findings:?}"
+        );
+    }
+
     #[test]
     fn agent_conformance_invalid_role_message_mentions_probe() {
         let dir = tmp();

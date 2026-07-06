@@ -40,6 +40,25 @@ const RUNNER_NPX: &str = "npx";
 const DISPATCH_WORKER_AGENT_FILE: &str = "dispatch-worker.md";
 const DISPATCH_WORKER_AGENT_ASSET: &str = "agents/claude/dispatch-worker.md";
 const DISPATCH_WORKER_AGENT_ASSET_PI: &str = "agents/pi/dispatch-worker.md";
+/// The read-only probe agent def (SL-206) — seeded alongside the Claude worker
+/// so `/drive-slice`'s bootstrap planner + closing divergence probe have a
+/// genuinely read-only role to spawn.
+const DISPATCH_PROBE_AGENT_FILE: &str = "dispatch-probe.md";
+const DISPATCH_PROBE_AGENT_ASSET: &str = "agents/claude/dispatch-probe.md";
+/// The `/drive-slice` reference workflow (SL-206) — a harness-side JS driver
+/// seeded into `.claude/workflows/`, NOT a confined agent def.
+const DRIVE_SLICE_WORKFLOW_FILE: &str = "drive-slice.js";
+const DRIVE_SLICE_WORKFLOW_ASSET: &str = "workflows/drive-slice.js";
+
+/// A confined agent def to seed: its destination filename paired with its embed
+/// asset key. The two always travel together (one asset, one home), so they ride
+/// as one argument to [`install_agent_def`].
+pub(crate) struct AgentDefAsset<'a> {
+    /// The def's on-disk filename (canonical + link), e.g. `dispatch-worker.md`.
+    file: &'a str,
+    /// The embed key under `install/`, e.g. `agents/claude/dispatch-worker.md`.
+    embed: &'a str,
+}
 
 /// Marker token injected into the dispatch-worker agent defs (SL-186 PHASE-04).
 /// When `install_agent_def` sees this literal in a def, it resolves the role
@@ -2023,11 +2042,43 @@ pub(crate) fn install_agents_for(
         root,
         agent_name,
         canon_subdir,
-        embed_asset,
+        &AgentDefAsset {
+            file: DISPATCH_WORKER_AGENT_FILE,
+            embed: embed_asset,
+        },
         global,
         dry_run,
         out,
-    )
+    )?;
+
+    // SL-206: the read-only `dispatch-probe` def and the `/drive-slice` reference
+    // workflow are Claude-harness artifacts (the orchestrator/driver live under
+    // `.claude/`), so they ride the Claude leg only. Both reuse the seams above —
+    // the probe via `install_agent_def` (canonical+symlink), the workflow via a
+    // direct derived materialization.
+    if agent_name == "claude" {
+        install_agent_def(
+            root,
+            agent_name,
+            canon_subdir,
+            &AgentDefAsset {
+                file: DISPATCH_PROBE_AGENT_FILE,
+                embed: DISPATCH_PROBE_AGENT_ASSET,
+            },
+            global,
+            dry_run,
+            out,
+        )?;
+        install_workflow_def(
+            root,
+            DRIVE_SLICE_WORKFLOW_FILE,
+            DRIVE_SLICE_WORKFLOW_ASSET,
+            global,
+            dry_run,
+            out,
+        )?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -2044,11 +2095,13 @@ pub(crate) fn install_agent_def(
     root: &Path,
     agent_name: &str,
     canon_subdir: Option<&str>,
-    embed_asset: &str,
+    def: &AgentDefAsset<'_>,
     global: bool,
     dry_run: bool,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
+    let def_file = def.file;
+    let embed_asset = def.embed;
     let canon_base = agent_canonical_dir(root, global)?;
     let canon_dir = match canon_subdir {
         Some(sub) => canon_base.join(sub),
@@ -2058,16 +2111,13 @@ pub(crate) fn install_agent_def(
         "claude" => claude_agents_dir(root, global)?,
         _ => pi_agents_dir(root, global)?,
     };
-    let canon = canon_dir.join(DISPATCH_WORKER_AGENT_FILE);
-    let dest = link_dir.join(DISPATCH_WORKER_AGENT_FILE);
-    let target = relative_target(&link_dir, &canon_dir, DISPATCH_WORKER_AGENT_FILE);
+    let canon = canon_dir.join(def_file);
+    let dest = link_dir.join(def_file);
+    let target = relative_target(&link_dir, &canon_dir, def_file);
 
-    writeln!(out, "agent {agent_name} (dispatch-worker):")?;
-    writeln!(
-        out,
-        "  agent     {DISPATCH_WORKER_AGENT_FILE} → {}",
-        dest.display()
-    )?;
+    let label = def_file.strip_suffix(".md").unwrap_or(def_file);
+    writeln!(out, "agent {agent_name} ({label}):")?;
+    writeln!(out, "  agent     {def_file} → {}", dest.display())?;
     if dry_run {
         return Ok(());
     }
@@ -2092,23 +2142,51 @@ pub(crate) fn install_agent_def(
 
     // 2. Reconcile the agent link by proven ownership (re-classify at mutation
     //    time, like `execute`'s skill links).
-    match classify_link(DISPATCH_WORKER_AGENT_FILE, &dest, &target) {
+    match classify_link(def_file, &dest, &target) {
         Link::Create { .. } => {
             write_link(&dest, &target)?;
-            writeln!(out, "  linked    {DISPATCH_WORKER_AGENT_FILE}")?;
+            writeln!(out, "  linked    {def_file}")?;
         }
         Link::Relink { .. } => {
             write_link(&dest, &target)?;
-            writeln!(out, "  relinked  {DISPATCH_WORKER_AGENT_FILE}")?;
+            writeln!(out, "  relinked  {def_file}")?;
         }
         Link::KeepForeign { reason, .. } => {
-            writeln!(
-                out,
-                "  kept      {DISPATCH_WORKER_AGENT_FILE} ({})",
-                foreign_reason(&reason)
-            )?;
+            writeln!(out, "  kept      {def_file} ({})", foreign_reason(&reason))?;
         }
     }
+    Ok(())
+}
+
+/// The Claude workflows directory (project-local or, with `global`, user home).
+fn claude_workflows_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".claude/workflows"))
+}
+
+/// Seed a harness workflow script into `.claude/workflows/` from the embed
+/// (SL-206). A workflow is a **derived** copy (harness-side JS, not a confined
+/// agent def), so — unlike `install_agent_def`'s canonical+symlink ownership —
+/// it is materialized directly and overwritten each run (idempotent).
+fn install_workflow_def(
+    root: &Path,
+    workflow_file: &str,
+    embed_asset: &str,
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    let dir = claude_workflows_dir(root, global)?;
+    let dest = dir.join(workflow_file);
+    writeln!(out, "workflow claude ({workflow_file}):")?;
+    writeln!(out, "  workflow  {workflow_file} → {}", dest.display())?;
+    if dry_run {
+        return Ok(());
+    }
+    let data = embedded_asset(embed_asset)
+        .with_context(|| format!("Embedded workflow '{embed_asset}' not found"))?;
+    fs::create_dir_all(&dir).with_context(|| format!("Failed to create {}", dir.display()))?;
+    crate::fsutil::write_atomic(&dest, &data)?;
+    writeln!(out, "  seeded    {workflow_file}")?;
     Ok(())
 }
 
@@ -3521,7 +3599,10 @@ mod tests {
             dir.path(),
             "claude",
             None,
-            DISPATCH_WORKER_AGENT_ASSET,
+            &AgentDefAsset {
+                file: DISPATCH_WORKER_AGENT_FILE,
+                embed: DISPATCH_WORKER_AGENT_ASSET,
+            },
             false,
             false,
             &mut out,
@@ -3542,7 +3623,10 @@ mod tests {
             dir.path(),
             "claude",
             None,
-            "glossary.md",
+            &AgentDefAsset {
+                file: DISPATCH_WORKER_AGENT_FILE,
+                embed: "glossary.md",
+            },
             false,
             false,
             &mut out,
