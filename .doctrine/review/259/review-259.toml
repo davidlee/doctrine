@@ -1,0 +1,52 @@
+id    = 259
+slug  = "sl-206-final-reconciliation-audit-workflow-slice-driver"
+title = "SL-206 final reconciliation audit — workflow-slice-driver"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-206"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "PHASE-16 green-e2e witness waived — (B) worker self-commit never fired end-to-end"
+detail = "Expected (PHASE-16 EX-1/EX-6/P5): a live drive of /drive-slice against the SL-209 rig produces a non-null worker fork_tip via the gated worker_commit MCP tool — the (B) mode-B self-commit path proven end-to-end. Observed: across 3 live drives (2026-07-07) the worker fork_tip was null every time; the base guard refused each worker by construction (structural fork-base mismatch, see F-3). (B) is capability-verified only — PHASE-08 P5 probe wf_9829cbac-a41 confirmed has_worker_commit_tool=true and worker_commit→Refused(commit-gate-red) i.e. resolved+ran belts, not unknown-agent — but the clean non-null fork_tip witness deferred to PHASE-16 was never obtained e2e. Operator decision (token cost ~200k/drive, topology now understood): accept the waiver, close the phase honestly with the green-e2e witness WAIVED rather than faked."
+disposition = "tolerated"
+response = "Accepted drift. (B) mode-B self-commit is capability-verified (PHASE-08 P5 probe wf_9829cbac-a41: worker_commit resolved + ran commit-gate belts, not unknown-agent) — only the non-null fork_tip e2e witness is unmet, and its sole blocker is the unarmed-launch mechanism gap (F-3), now understood. Operator decision (~200k tok/drive, no further trial drives): close PHASE-16 with the green-e2e witness explicitly WAIVED rather than faked. Hardening tracked in IMP-277; when the arming ritual is encoded a single armed drive obtains the witness."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "drive-slice.js never arms the worker spawn — root cause of the 3-drive failure"
+detail = "Expected: on the claude arm the driver arms the worker spawn so the worktree create-fork hook forks at the coordination base (worker-marked + provisioned, worker_commit resolves). Observed: install/workflows/drive-slice.js never calls `doctrine dispatch arm-spawn` (grep arm-spawn = 0). The Workflow `agent({agentType:'dispatch-worker', isolation:'worktree'})` leaf is provisioned from the primary-session cwd, not the coord arming dir, so the create-fork discriminator (cwd == arming dir) never matches → benign Passthrough → detached@HEAD, unmarked → base guard refuses (fork_tip null). Verified-viable recipe (launch ritual: arm-spawn --base <coord-tip> + park session cwd at arming dir before launch; per-phase re-arm by interior O in hopPrompt) captured in IMP-277; capability proven by mem.fact.dispatch.armed-workflow-worker-mode-b-viable."
+disposition = "tolerated"
+response = "Accepted interim UX compromise, captured as IMP-277 (drive-slice claude arm never arms the worker spawn). The driver ships with the arming ritual as an un-encoded operator step (arm-spawn --base <coord-tip> + park session cwd at arming dir + per-phase re-arm in hopPrompt). Not a fix-now: the verified-viable recipe is documented and the topology understood; encoding it into the driver is bounded hardening deferred by explicit operator decision, not scope of this slice's acceptance. Green-e2e waived (see F-1)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Conformance registry empty — 14 completed phases carry no source-delta row"
+detail = 'Expected: `doctrine slice conformance 206` yields a path-conformance delta (declared design-target selectors vs recorded source-deltas). Observed: conformance reports "incomplete — partial coverage"; every completed phase (PHASE-01..08, 11..16) reports "has no recorded source-delta row" — the F-2 backstop. The delta registry was never recorded as phases landed (dispatch worker deltas were imported but record-delta was not run). Per the audit skill this partial registry must not be read as clean. Not bootstrapped (would require reconstructing 14 --start/--end oid pairs) by explicit token-thrift operator decision; the phases were individually reviewed during dispatch, so the mechanical conformance signal is a process-debt gap, not evidence of undeclared code drift.'
+disposition = "tolerated"
+response = "Accepted process-debt, not code drift. The registry was never recorded as dispatch phases landed (worker deltas imported, record-delta not run). Bootstrapping 14 --start/--end oid pairs is real reconstruction rejected by explicit token-thrift operator decision. Mitigation: each phase was individually reviewed during dispatch (review/* evidence refs), so the mechanical conformance signal is redundant-with-review here, not the sole assurance. Flagged not-clean per the F-2 backstop; not read as conformant."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "check gate red on validate — corpus-wide, not SL-206 code"
+detail = """Expected: `doctrine check gate` green. Observed: `just gate` clippy portion clean (cargo clippy --workspace exit 0, zero warnings — the code gate is green), but the `validate` recipe fails with 664 corpus findings, of which 613 are "memory edge(s) use raw labels (expected)" plus link findings — corpus-wide doctrine-entity validation state during RFC-011, not attributable to SL-206's deliverable (a JS workflow + dispatch shell). The mergeable code gate (clippy) is clean; the validate red is pre-existing corpus noise."""
+disposition = "tolerated"
+response = 'Accepted pre-existing corpus noise. The code gate (clippy --workspace) is green with zero warnings — the mergeable deliverable is clean. The validate red is corpus-wide entity-validation state (613 raw-label memory edges self-described "(expected)" + link findings) during RFC-011, not introduced by SL-206. Out of slice scope; no code change warranted.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
