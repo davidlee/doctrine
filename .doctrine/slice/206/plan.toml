@@ -339,8 +339,13 @@ requirements = []
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PHASE-09 — Testable Rust core: per-phase projection reader + durable
-# ReceiptStatus. Behaviour-preserving (D6, R5). Unchanged by unjail — carried
-# from the retired PHASE-02 verbatim (never executed). No new tool surface yet.
+# ReceiptStatus. Behaviour-preserving (D6, R5). Model-agnostic (confinement is the
+# orchestrator's trust posture; this reads phase state and does not depend on it).
+# SALVAGE, not rebuild: the confined PHASE-02 BUILT this verbatim and it landed
+# green on dispatch/206 (stranded — dispatch sync never ran; archived at
+# SL-206-confined-archive). This phase INTEGRATES that delta onto main + conforms;
+# its tests ride in with it (the VT mandates go green on arrival). No new tool
+# surface yet.
 # ─────────────────────────────────────────────────────────────────────────────
 [[phase]]
 id        = "PHASE-09"
@@ -359,7 +364,7 @@ boundary missing), Unknown (malformed sheet, fail-loud). No silent collapse to \
 NotStarted. phase_projection + ReceiptStatus are DEFINED in src/dispatch.rs, \
 co-located with run_status, so the VT keyword floor resolves in the test_file."""
 entrance_criteria = [
-  { id = "EN-1", text = "PHASE-08 exit criteria met (unjail approach greenlit)" },
+  { id = "EN-1", text = "Read core available to integrate: the model-agnostic PHASE-02 delta on dispatch/206 (confined drive; archived SL-206-confined-archive). This is build+salvage, NOT rebuild — the PHASE-08 empirical gate is NOT a prerequisite (08 gates the unjail-specific machinery 11+, not this integration)" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "A read-only phase_projection fn yields one row per planned phase from {plan, sheet, committed boundaries}; run_status delegates to it for phase_rows" },
@@ -378,8 +383,14 @@ requirements = []
 # ─────────────────────────────────────────────────────────────────────────────
 # PHASE-10 — The three read-only tools + the doctor role/allowlist growth. Grow
 # the conformance ceiling FIRST (3⊆6 green until the defs catch up in PHASE-13).
-# Add the probe role to the marker validator (F1/F5). Unchanged by unjail —
-# carried from the retired PHASE-03.
+# Add the probe role to the marker validator (F1/F5). Model-agnostic (the read
+# tools serve a PassThrough orchestrator identically to a confined one). SALVAGE,
+# not rebuild: the confined PHASE-03 BUILT this (mcp_server/dispatch.rs + tools.rs
+# + doctor_checks.rs allowlist growth) and it landed green on dispatch/206
+# (stranded; archived SL-206-confined-archive). This phase INTEGRATES that delta +
+# conforms. NOTE the confined install.rs seeding + install/workflows/drive-slice.js
+# are SUPERSEDED (wrong trust model / Workflow strips Agent) — rebuilt by the
+# unjail defs (PHASE-13) + driver (PHASE-14), NOT salvaged here.
 # ─────────────────────────────────────────────────────────────────────────────
 [[phase]]
 id        = "PHASE-10"

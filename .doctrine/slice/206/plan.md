@@ -181,8 +181,22 @@ fix (drop `isolation`, coord-root assert) was the last confined attempt; the
 replacement is a durable workflow loop spawning **alternating nominated-unjailed
 orchestrators + jailed workers**, escalation closed at the `PreToolUse` spawn seam
 (P1/P3/P4). PHASE-01..07 are frozen: they carry the confined criteria and the
-executed 06/07 status, and they are the legible record of *why* unjail. Nothing
-from them landed as shipped code, so 08..16 rebuild from the Rust down.
+executed status, and they are the legible record of *why* unjail.
+
+**Salvage, not rebuild (correction).** An earlier planning pass asserted "nothing
+from 01..07 landed as shipped code" — false. The confined PHASE-02/03/04 DID land
+~1112 lines on `dispatch/206` via the funnel; it was never integrated (`dispatch
+sync` never ran) and the primary phase sheets never flipped, so it read as empty
+from the primary tree. It is archived at `SL-206-confined-archive`. Crucially the
+**read core is model-agnostic** — reading phase state and the read-only funnel
+tools serve a PassThrough orchestrator exactly as a confined one — so PHASE-09/10
+**integrate that stranded delta** (`src/dispatch.rs`, `src/mcp_server/dispatch.rs`,
+`src/mcp_server/tools.rs`, `src/doctor_checks.rs` allowlist growth) rather than
+rebuild it; its tests ride in and the VT mandates go green on arrival. Only the
+confined `install.rs` seeding + `install/workflows/drive-slice.js` are genuinely
+**superseded** (wrong trust model; the Workflow runtime strips the `Agent` tool) —
+those are rebuilt by the unjail defs (PHASE-13) + driver (PHASE-14). So 08, 11, 12,
+13, 14, 15, 16 are the real remaining work; 09/10 are integrate-and-conform.
 
 **Why PHASE-08 first (empirical gate, unjail premises).** The unjail design rests
 on premises confined PHASE-01 never tested: a *worker* leaf (not a nested confined
@@ -192,10 +206,14 @@ runs (B `worker_commit` vs A import); the **Workflow-seam** escalation is denied
 + the nomination hooks; a failure in a load-bearing premise (fork-at-base, P5,
 seam-denial) sends the work back to `/design`, not forward. No receipt code.
 
-**Why the Rust core (09/10) is unchanged and precedes everything else.** The
+**Why the Rust core (09/10) is salvaged and precedes everything else.** The
 projection reader + `ReceiptStatus` (PHASE-09) and the three read-only tools +
 doctor allowlist growth (PHASE-10) are *identical* under confined or unjail — they
-read committed coord truth and add no write surface. They carry the
+read committed coord truth and add no write surface. Because they are already
+built + tested on `dispatch/206`, these two phases integrate that delta (the
+orchestrator, sole writer, applies the salvaged patch onto the fresh coord and
+conforms) — not a worker rebuild. They neither require nor wait on the PHASE-08
+empirical gate (08 gates the unjail-specific machinery 11+). They carry the
 behaviour-preservation gate (R5: `run_status` output byte-identical) and the
 conformance-ceiling ordering proof (grow `allowed_mcp_tokens` to 6 first, so the
 defs' 3 tokens stay `3 ⊆ 6` green until PHASE-13 lists them — reverse it and the
