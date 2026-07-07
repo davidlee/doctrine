@@ -891,3 +891,32 @@ the full alternating loop — don't infer the base from the dispatch coordinatio
 tip. Parked for design decision: align bases (set up SL-209 dispatch AT edge tip
 so base_B == fork base) vs. driver discovers actual worker HEAD vs. run the
 workflow itself from the coord tree. Needs /consult before drive 4.
+
+[audit+close; SL-206-final-close-2e1c58e2]
+Two structural token traps closing SL-206 (audit → reconcile → close → land):
+
+1. **Split authored state across coord/primary trees.** The audit ran on the
+   coord tree `.dispatch/SL-206` (dispatch/206) because that holds the real 16/16
+   runtime state, but the `review_*` MCP verbs are rooted at the PRIMARY tree — so
+   RV-259 got authored on edge while `slice status → done` wrote slice-206.toml on
+   dispatch/206. Two commits on two branches for one close; had to reconcile them
+   via the later main FF. A reviewer driving an audit on a dispatch coord tree
+   should expect the ledger to land on the parent tree, not beside the runtime it
+   audited.
+
+2. **prepare-review's registry gate demands a registry the funnel never fills.**
+   Path-B integration (`dispatch sync --prepare-review`) hard-requires (a) a
+   boundaries-ledger row per funnel phase AND (b) a complete *source-delta*
+   registry (every completed phase has a `slice record-delta` row). The dispatch
+   funnel records BOUNDARIES (`dispatch record-boundary`) but does NOT record
+   source-delta rows as phases land — so at close the registry was empty for all
+   16 phases, and prepare-review blocked. Two parallel registries (boundaries vs
+   source-delta), and the integration gate checks the one the funnel doesn't
+   populate. First gate failure named only PHASE-09/10 (missing boundary rows);
+   fixing those surfaced the SECOND gate (missing source-delta rows for 10 phases)
+   — a staged wall that only reveals the next course after you pay for the last.
+   Cost: a mid-close re-consult and a fallback from clean projection (B) to raw
+   fast-forward (A). Lesson for the dispatch design: either the funnel should
+   record source-delta rows as it concludes each phase, or prepare-review should
+   accept the boundaries ledger as the delta source — not require a second,
+   hand-backfilled registry at integration time.
