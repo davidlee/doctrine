@@ -672,6 +672,206 @@ OQ-6 mechanism-1, and ISS-216 reseat all confirmed from the drive artifacts abov
 - Scratchpad rigs (throwaway, preserved): `oq4-workflow-seam.{sh,log}`,
   `p5-{setup,arm,ex1-fork-evidence}.log`, `oq6-{arm,evidence}.log`.
 
+## PHASE-11 — nomination + spawn-gate hooks (2026-07-06)
+
+Landed `7dcfed82 → 9761a2b4` (funnel import; conclude tip `66f3fadc` carries the
+boundary row). Worker: Sonnet, claude arm, ~316k tokens. Full T1–T8:
+
+- **I1 single source**: `PRIVILEGED_AGENT_TYPES` (`jail.rs:121`, leaf tier per
+  ADR-001 — the pure gate can't import engine) + `is_privileged_agent_type`, the
+  ONE membership test shared by nominate eligibility and the Agent gate leg.
+- **Nominate/denominate** (`worktree nominate|denominate`, SubagentStart /
+  SubagentStop handlers in `subagent.rs`): allowlist at
+  `$CLAUDE_PROJECT_DIR/.doctrine/state/orch-allowlist.txt`
+  (`NOMINATION_ALLOWLIST_REL`, never cwd-relative); ineligible type → refuse,
+  no write; idempotent append; absent-entry removal = clean no-op. Injected
+  `project_dir` in `act_*` for env-race-free tests.
+- **Gate legs** (`pretooluse.rs` → pure `decide_agent`/`decide_workflow` in
+  `jail.rs`): Agent denies iff `agent_id present ∧ ∉ allowlist ∧ subagent_type ∈
+  deny-set`; Workflow blanket-denies any present agent_id (EX-3 posture until
+  OQ-4). No agent_id ⇒ PassThrough (INV-1 unchanged).
+- **Nominated PassThrough** (T5): `resolve_target` honours `agent_id ∈ allowlist`,
+  scoped to the exact id (P1a triple reproduced as unit tests); unreadable/absent
+  allowlist ⇒ not nominated (fail-safe).
+- **hooks.json**: SubagentStart/SubagentStop `dispatch-orchestrator` matchers +
+  PreToolUse `Agent`/`Workflow` → `worktree pretooluse`; matcher strings
+  mechanically extractable for the PHASE-12 doctor check.
+- Ripple: `guard.rs`/`main.rs` exhaustive-match arms (`Hookmint`, mirroring
+  `marker --stamp-subagent`); `project_anchor`/`ENV_PROJECT_DIR` DRY'd to
+  `shared.rs`.
+
+**EX-6 correction (T7 finding was half-right).** `plugins/` IS embedded
+(RustEmbed `PluginAssets`) but `doctrine install` materializes **skills only**
+(`discover()` walks `<domain>/skills/<skill>/`); `hooks/hooks.json` ships via
+the **plugin/marketplace surface**. Live seating for a project therefore =
+plugin refresh (marketplace update, or `install --dev` local marketplace) +
+`/reload-plugins`, AND a hook-visible doctrine binary that knows
+`nominate`/`denominate` — an edge-built PATH binary fails the new hooks
+**fail-safe** (agent stays jailed; nomination inert, never an escape). For THIS
+repo the new config cannot seat live until the slice lands (delta is on
+dispatch/206 only); PHASE-16 owns the live acceptance. Manual placement
+(ISS-216 analog): copy `plugins/doctrine/hooks/hooks.json` over the live plugin
+cache copy + `/reload-plugins` + `DOCTRINE_BIN` → a dispatch-branch build.
+
+**Funnel incident — worker_commit false-red, second trigger class.** Gate
+refused `commit-gate-red` on `vt9_no_discoverable_root_emits_nothing`
+(src/memory.rs) — a pre-existing env-sensitive test, NOT the delta (confirmed
+failing at B on an untouched tree with `CLAUDE_PROJECT_DIR` pointing at an
+unmasked doctrine root; masked in the primary tree by a stale
+`mem-surface-seen-s9.txt`). Filed **ISS-220**. Landed via the sanctioned
+land-not-rewrite path (`mem.pattern.dispatch.worker-commit-stale-path-false-red`):
+orchestrator committed the worker's exact bytes (`d2f9d16f`, author preserved,
+C^==B), fresh verification stood in for the gate — regression diff vs B green,
+fresh doctor exit 0, post-import prove green.
+
+**Verification:** VT n/a this phase; VA-1 attested (all five clauses, see plan);
+VH-1 PENDING — human confirm of fail-safe posture + seating path. 235
+worktree-module tests green incl. 30+ new; behaviour-preservation held
+(existing suites green unchanged).
+
+## PHASE-12 — I1 seam-symmetry check + revive-base rejection test (2026-07-07)
+
+Landed `289a19ed → b1408f46` (conclude tip `cf258dbd`). Worker: Sonnet, claude
+arm, ~175k tokens, clean `worker_commit` self-commit (`8594b5da`) — the SL-198
+target path proven again post-unjail-config.
+
+- **Doctor #10 `check_spawn_seam_symmetry`** (`doctor_checks.rs`): pure core
+  over the shipped `plugins/doctrine/hooks/hooks.json`; `SEAM_REGISTRY =
+  ["Agent","Workflow"]`; Error on (a) nominated type ∉ `PRIVILEGED_AGENT_TYPES`
+  (imported via a `pub(crate) use` re-export in `worktree/mod.rs` — jail is a
+  private submodule) and (b) any registry seam without a PreToolUse matcher
+  (exact alternation-member match, not substring). Live green on the shipped
+  config (doctor exit 0, 47 warnings unchanged); ripple: `Category::
+  SpawnSeamSymmetry` in `finding.rs` (9→10 categories) + `commands/doctor.rs`
+  registry wiring — selectors upgraded to design-target pre-import.
+- **VT-2 revive-base test** (`worker_commit.rs`): wrong-base revive Refused
+  before any tip moves. Finding: the operative refusal token is
+  **`stale-record`** — the resolver's own HEAD==base consistency check fires
+  before `run_worker_commit`'s `head_at_base` belt (same fact, earlier call
+  site); test asserts either token, commentary explains the belt-and-suspenders
+  layering.
+- Environmental note: running the commit gate directly in a marker-stamped
+  worker tree reds 3 `e2e_adr_cli_golden` tests (SL-199 F2 worker-marker guard)
+  — `worker_commit`'s own wrapper clears the marker, so the real path is
+  unaffected; confirmed by clear-and-rerun.
+
+**Verification:** VT-1 + VT-2 keyword mandates satisfied (test names/bodies
+carry `check_spawn_seam_symmetry`/`SEAM_REGISTRY`/`Workflow` and
+`fork_tip`/`base`). 3255 full-suite green in worker tree; regression diff vs B
+green on coord tree.
+
+## PHASE-13 — Agent defs (dispatch-probe + orchestrator tokens) + install seeding (2026-07-07)
+
+Landed `490eff2e → 8f9c974b` (conclude tip `b90ce59f`). Worker: Sonnet, claude
+arm, ~151k tokens.
+
+- **New `install/agents/claude/dispatch-probe.md`** — read-only probe role
+  (`doctrine-role: probe`; `tools: Read, Grep, Glob` + the three read funnel
+  tokens; NO Write/Edit/Bash/Agent). Serves BOTH the closing divergence probe AND
+  the claude-arm bootstrap O₀ (prep-only, read-only ⇒ no nomination, least-privilege).
+- **`dispatch-orchestrator.md`** tools grown with the three read tokens, `Agent`
+  stripped (workflow is spawn authority). Body UNTOUCHED — its confined-narrative
+  ("you sit in Jail / sole writer, ro `.git`") is now stale vs the unjail posture;
+  deferred (outside EX-2's tools-line scope, and §9 targets orchestrator only as
+  "gains three read tokens"). **FLAG: orchestrator def body needs an unjail-narrative
+  pass — PHASE-14 driver work or a doc reconcile.**
+- **`install_agent_def` generalized** — dest filename now derived from the asset
+  basename (`Path::new(embed_asset).file_name()`); `DISPATCH_WORKER_AGENT_FILE`
+  removed; `DISPATCH_PROBE_AGENT_ASSET` seeded in the claude leg. Fixed a latent
+  bug (any non-worker asset previously wrote to `dispatch-worker.md`, e.g. the old
+  `glossary.md` test).
+- **Workflows seeding leg** — `claude_workflows_dir`/`workflow_canonical_dir`/
+  `embedded_workflow_defs`/`install_workflow_assets` mirror the agent-def
+  materialize+link (reused `classify_link`/`write_link`/`relative_target`/
+  `install_base` — no parallel symlink impl), wired into the claude leg. Payload
+  (`install/workflows/drive-slice.js`) lands PHASE-14, so `embedded_workflow_defs()`
+  enumerates empty today; the mechanism is covered by 3 synthetic-asset tests +
+  one empty-enumeration assertion.
+- **doctor allowlist logic UNTOUCHED** (landed PHASE-10). VT-1
+  `agent_conformance_passes_the_shipped_install_agents_tree` asserts #9 green on
+  all three shipped defs; VT-2 folded into the retargeted probe-asset install test
+  (`install_agent_def_dispatch_probe_writes_bytes_identically_under_the_derived_dest`).
+
+**Funnel — fall-to-(A), stale-`$PATH` false-red (RECURRENCE of PHASE-11).**
+`worker_commit` Refused `commit-gate-red`: its `check commit` chain shells bare
+`doctrine` from `$PATH` = read-only `~/.cargo/bin/doctrine` (pre-PHASE-10), which
+rejects the new probe role + orchestrator read tokens (4 agent-conformance errors:
+`expected worker or orchestrator` + 3 `forbidden MCP token`). Delta proven
+**delta-independent + green** via BOTH the coord (`SL-206-bin`) and worker-built
+binaries (agent-conformance 0). Same footgun as PHASE-11
+(`mem.pattern.dispatch.worker-commit-stale-path-false-red`, ISS-220). Landed via
+fall-to-(A) live-worktree import (`worktree import --from-worktree`, in-process
+prove gate fmt+clippy green) → orchestrator commit (`8f9c974b`, worker bytes
+byte-identical: 4/4 regression diff MATCH). P5 fall-to-(A) recorded (reason: env
+gate false-red, NOT a lost `worker_commit` tool).
+
+**Verification:** VT-1/VT-2 green in worker tree (3260 passed, 0 failed, 0
+ignored-net); regression diff vs B byte-identical (4/4); doctor agent-conformance
+0 on the coord tree post-land; import prove (fmt-check + clippy) green.
+
+## PHASE-14 — /drive-slice unjail driver (2026-07-07, Opus worker via funnel)
+
+**Landed:** code `9c515def` (44c51d54→9c515def), boundary `8d5c8c6d` (funnel
+provenance). PHASE-14 completed. Opus dispatch-worker, ~72k tok, 10 tool-uses.
+
+**Deliverable — `install/workflows/drive-slice.js`** (345 lines, single-file JS,
+NO Rust delta). Realizes design §5.4 reference implementation faithfully:
+- **F1 harness contract** — pure-literal `meta` (name/description/3-entry phases)
+  as first statement; top-level body (top-level `await`); no `Date.now`/
+  `Math.random`/`new Date`. `node --check` passes.
+- **F2 slice guard** — `Number(...)` + `Number.isInteger` positive-int check,
+  fail-closed throw; parses `args` that may arrive as a JSON string.
+- **Schemas** (harness `schema:`) — `WorkReceipt {fork_tip:string|null, summary}`;
+  `HopReceipt` = dispose half (PhaseReceiptCore fields + verify + halt_reason?) +
+  `fixup?` XOR `prep?` + `next_ready`. The **oneOf** encodes fixup-XOR-prep-XOR-
+  neither as three mutually-exclusive branches ({only-fixup},{only-prep},{neither});
+  "both" matches zero → harness rejects. Honestly commented as the closest faithful
+  JSON-Schema encoding (JSON Schema can't say "these two keys are exclusive"
+  directly) — no Rust changed to express it.
+- **Alternating O/W two-job loop** — `driveArm`→claude(`dispatch-probe` O₀,
+  read-only)/pi(`dispatch-orchestrator` O₀); `while (hop.prep)`; claude-arm worker
+  spawn (`isolation:'worktree'`, `agentType:'dispatch-worker'`) vs pi `{fork_tip:null}`;
+  interior O = one `dispatch-orchestrator` agent, TWO jobs (dispose+prep). Script is
+  sole spawn authority (no `Agent`-tool spawn — workflow strips it, O never nests).
+- **Bounded fixup loop** — inner `for(;;)`, `++fixups > MAX_FIXUP ⇒ FIXUP_EXHAUSTED`,
+  revive worker via fresh `dispatch-worker` agent. Comment: revive is fork-durable
+  (not context-intact SendMessage), base ENFORCED by `worker_commit`'s HEAD==base ∧
+  single-parent==base — NOT a prompt-obeyed reset; (A)-path adds disposing-O
+  parent-chain verify → `coord:revive-wrong-base`.
+- **Named HALT** — single-sourced `HALT` table (8 members incl. `PREP_INCOMPLETE`,
+  `FIXUP_EXHAUSTED`); loop references members only, zero inline literals; `funnel:`/
+  `coord:` families forwarded from the O receipt, not minted.
+- **A1 belt** — `!hop.prep && hop.next_ready?.length ⇒ HALT.PREP_INCOMPLETE` (a
+  clean dispose that silently failed to prep ≠ drive-complete).
+- **Budget-adaptive** — `budget.total &&` short-circuits (unmetered on null total);
+  `lastActual` = pool-spend delta per hop, seeded by `SEED_PHASE_COST`.
+- **No auto-merge** — drives + reports; closing `divergenceProbe` (`dispatch-probe`
+  → `dispatch_authored_divergence`) appended read-only, NEVER gated.
+- Genuinely instructive prompt builders (bootstrap/hop/fixup/divergence) — the O
+  prompt addresses the coord tree explicitly (`git -C .dispatch/SL-<slice>`) and
+  asserts `dispatch/<slice>` else `coord:<reason>`.
+
+**EX-6 selector gate pre-met** — `install/workflows/drive-slice.js` already a
+committed `design-target` selector (slice-206.toml:60, PHASE-04 residue); import
+`--slice 206` scope-check passed, no `selector add` needed.
+
+**Funnel — fall-to-(A), stale-`$PATH` false-red (3rd RECURRENCE, ISS-220).**
+`worker_commit` Refused `commit-gate-red` again — the gate shells a stale
+`~/.cargo/bin/doctrine` (pre-PHASE-10) that false-flags the shipped `dispatch-probe`
+role + orchestrator read tokens. Delta is pure JS and touches NEITHER — pure
+env-gate false-red. Landed via fall-to-(A) live-worktree import (in-process prove
+gate fmt+clippy green — trivially, no Rust delta) → orchestrator commit; worker
+bytes **byte-identical** (sha256 match). P5 fall-to-(A) recorded (reason: env gate
+false-red). **The false-red now fires on EVERY phase regardless of delta content**
+(here: a phase with zero Rust/def change still hit it) — it is a fixed per-phase
+tax gated on the stale in-jail `$PATH` binary, not on what the worker changed.
+
+**Verification:** VT-1 all 5 substrings present (`HopReceipt`×7, `WorkReceipt`×4,
+`PREP_INCOMPLETE`×2, `MAX_FIXUP`×3, `Number.isInteger`×1); `node --check` clean; no
+`Agent`/clock/auto-merge patterns; regression diff vs worker source byte-identical;
+import prove green. VA-1 (topology/semantics inspection) confirmed at orchestrator
+read pre-land; re-confirm at audit.
+
 ## PHASE-15 — PRE-LANDED out-of-band via REV-021 (2026-07-06)
 
 **Do not re-author at reconciliation.** The ADR-008 amendment this phase scopes
