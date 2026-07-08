@@ -1,14 +1,3 @@
-// The resolver (`resolve_agent` + `classify_resolve` + its helpers) is prod-dead until
-// PHASE-02 `worker_commit` consumes it; this phase exercises it only from tests. Suppress
-// the resulting `unused` in the NON-test build; the test build uses every item, so the
-// expectation would be unfulfilled there (hence `not(test)`).
-#![cfg_attr(
-    not(test),
-    expect(
-        unused,
-        reason = "PHASE-02 worker_commit consumes the resolver; prod-dead until then"
-    )
-)]
 // SPDX-License-Identifier: GPL-3.0-only
 //! Per-worktree dispatch record — the trust anchor `worker_commit` consumes (SL-198
 //! PHASE-01, design §5.2/§5.3/§5.5).

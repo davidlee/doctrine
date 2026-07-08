@@ -724,10 +724,6 @@ enum RefAction {
 }
 
 /// The planned action for `.pi/APPEND_SYSTEM.md`.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "retained for future non-pi harness use")
-)]
 enum SymlinkAction {
     /// Create .pi/ dir then create the symlink.
     CreateDirAndLink,
@@ -741,10 +737,6 @@ enum SymlinkAction {
 
 /// The reportable result of the append-system symlink install.
 #[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "retained for future non-pi harness use")
-)]
 enum AppendSystemOutcome {
     /// Created .pi/ directory and symlink.
     CreatedDirAndLink,
@@ -1647,10 +1639,6 @@ fn install_codex_hook(
 
 /// Pure decision for `.pi/APPEND_SYSTEM.md` symlink state.
 /// Reads only Path existence/metadata — no mutation.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "retained for future non-pi harness use")
-)]
 fn plan_append_system(root: &Path) -> SymlinkAction {
     let pi_dir = root.join(".pi");
     let link_path = pi_dir.join("APPEND_SYSTEM.md");
