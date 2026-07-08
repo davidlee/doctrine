@@ -123,6 +123,25 @@ nix-build:
   fi
   direnv reload
 
+# Blanks the pin to fakeHash, lets nix report the real `got:`, writes it back.
+# Host-only (needs nix); the FOD hash is intrinsic to bun deps and must change
+# whenever the lockfile does — this kills the manual `got:` chase.
+# Regenerate the webModules FOD hash in flake.nix after web/map/bun.lock changes.
+web-hash:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  command -v nix >/dev/null || { echo "web-hash: needs nix (host, not jail)" >&2; exit 1; }
+  fake="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  sed -i "s|outputHash = \"sha256-[^\"]*\"|outputHash = \"$fake\"|" flake.nix
+  got=$(nix build .#doctrine 2>&1 | grep -oP 'got:\s+\K sha256-\S+' | tr -d ' ' | head -1)
+  if [ -n "$got" ]; then
+    sed -i "s|outputHash = \"$fake\"|outputHash = \"$got\"|" flake.nix
+    echo "web-hash: pinned $got"
+  else
+    echo "web-hash: no got: hash — hash already correct?" >&2
+    exit 1
+  fi
+
 # install with vite stage
 install: web-build
   cargo install --path .

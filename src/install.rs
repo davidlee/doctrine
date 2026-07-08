@@ -2142,10 +2142,8 @@ pub(crate) fn install_agent_def(
 // leg installs defs: materialize a canonical copy under `.doctrine/workflows/`,
 // then symlink the link dir at it — reusing `classify_link`/`write_link`/
 // `relative_target`/`install_base`, no parallel symlink impl. The `/drive-slice`
-// payload (`drive-slice.js`) lands in PHASE-14, so `embedded_workflow_defs()`
-// enumerates EMPTY today and this leg is a no-op in production — the mechanism
-// is exercised in tests via a synthetic asset list (`install_workflow_assets`),
-// not the (absent) real payload.
+// payload (`drive-slice.js`) landed in PHASE-14, so `embedded_workflow_defs()`
+// enumerates it and this leg is live in production.
 // ---------------------------------------------------------------------------
 
 /// The Claude workflows directory (project-local or, with `global`, user home).
@@ -2160,8 +2158,8 @@ fn workflow_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> 
 }
 
 /// Return every embedded workflow file (under `"workflows/"`) as
-/// `(relative-path, bytes)` pairs — mirrors `embedded_agent_defs`. Empty until
-/// SL-206 PHASE-14 ships the first `.js` payload.
+/// `(relative-path, bytes)` pairs — mirrors `embedded_agent_defs`. Carries the
+/// `/drive-slice` payload since SL-206 PHASE-14.
 pub(crate) fn embedded_workflow_defs() -> Vec<(String, Vec<u8>)> {
     let prefix = "workflows/";
     Assets::iter()
@@ -3685,10 +3683,16 @@ mod tests {
     // --- Workflows leg (SL-206 PHASE-13 T6) ---
 
     #[test]
-    fn embedded_workflow_defs_is_empty_before_the_phase_14_payload() {
-        // The `/drive-slice` payload (`drive-slice.js`) lands in PHASE-14 — today
-        // the embed root is empty, so the leg is a documented no-op, not dead code.
-        assert!(embedded_workflow_defs().is_empty());
+    fn embedded_workflow_defs_carries_the_drive_slice_payload() {
+        // SL-206 PHASE-14 shipped `drive-slice.js` into the embed root — the leg
+        // is now live in production, not a no-op.
+        let defs = embedded_workflow_defs();
+        assert!(
+            defs.iter()
+                .any(|(rel, bytes)| rel == "drive-slice.js" && !bytes.is_empty()),
+            "expected drive-slice.js in embedded workflow defs, got {:?}",
+            defs.iter().map(|(r, _)| r).collect::<Vec<_>>()
+        );
     }
 
     #[test]
