@@ -182,26 +182,33 @@ impl Claim for GitRef {
     }
 }
 
-/// Build the `GitRef` scan source: re-fetch the reservation namespace and union the
-/// remote ids with the passed local dirs each call (design EX-4, F-V6).
-fn gitref_scan_source(root: &Path, remote: &str) -> ScanSource {
+/// Build the `GitRef` scan source for `prefix`'s id-space: re-fetch the reservation
+/// namespace and union THIS KIND's remote ids with the passed local dirs each call
+/// (design EX-4, F-V6). The scan MUST be scoped to `prefix` — enumerating the whole
+/// namespace pools every kind's ids and drives `next_id` to the global max+1 (ISS-221).
+fn gitref_scan_source(root: &Path, remote: &str, prefix: &str) -> ScanSource {
     let root = root.to_path_buf();
     let remote = remote.to_owned();
+    let prefix = prefix.to_owned();
     Box::new(move |local: &[u32]| {
         // Re-fetch so a rival's post-`AlreadyHeld` ref widens this iteration's set.
+        // The refspec fetches every kind's refs (one round-trip); the id read below
+        // narrows to `prefix`.
         git::fetch_refspec(&root, &remote, RESERVATION_REFSPEC)
             .with_context(|| format!("Failed to fetch reservations from {remote}"))?;
         let mut ids: Vec<u32> = local.to_vec();
-        ids.extend(remote_reservation_ids(&root)?);
+        ids.extend(remote_reservation_ids(&root, &prefix)?);
         Ok(ids)
     })
 }
 
-/// The reserved ids visible in the fetched LOCAL reservation namespace — parse the
-/// trailing `<NNN>` of every `refs/doctrine/reservation/<prefix>/<NNN>` (design §5.3).
-/// Unparseable ref names under the namespace are ignored, not fatal (E3).
-fn remote_reservation_ids(root: &Path) -> anyhow::Result<Vec<u32>> {
-    let rows = git::for_each_ref(root, &format!("{RESERVATION_REF_PREFIX}/"))
+/// The reserved ids visible in the fetched LOCAL reservation namespace FOR `prefix` —
+/// parse the trailing `<NNN>` of every `refs/doctrine/reservation/<prefix>/<NNN>`
+/// (design §5.3). Scoped to `<prefix>/` so a sibling kind's ids never leak into this
+/// kind's candidate set (ISS-221) — the allocation twin of `survey`'s `held_prefix`
+/// filter. Unparseable ref names under the namespace are ignored, not fatal (E3).
+fn remote_reservation_ids(root: &Path, prefix: &str) -> anyhow::Result<Vec<u32>> {
+    let rows = git::for_each_ref(root, &format!("{RESERVATION_REF_PREFIX}/{prefix}/"))
         .context("Failed to enumerate reservation refs")?;
     Ok(rows
         .iter()
@@ -308,7 +315,7 @@ fn gitref(root: &Path, prefix: &str, remote: &str) -> (Box<dyn Claim>, ScanSourc
         holder_name,
         holder_email,
     };
-    (Box::new(backend), gitref_scan_source(root, remote))
+    (Box::new(backend), gitref_scan_source(root, remote, prefix))
 }
 
 /// Resolve the configured remote (explicit `[reservation] remote` else
@@ -669,6 +676,27 @@ mod tests {
             .collect();
         ids.sort_unstable();
         assert_eq!(ids, vec!["001", "002"], "one ref each for ids 1 and 2");
+    }
+
+    /// ISS-221 regression: the GitRef scan source is scoped to its OWN prefix. Two
+    /// kinds sharing a remote must not pool ids — a fresh `RSK` allocation sees only
+    /// `RSK` reservations, never the higher `SL` ids, so per-kind counters stay
+    /// independent on the remote arm (they always were on `LocalFs`). The pre-fix
+    /// scan enumerated the whole namespace and returned the union, making every
+    /// kind's `next_id` the global max+1.
+    #[test]
+    fn gitref_scan_source_is_scoped_to_its_own_prefix() {
+        let env = Substrate::new(1);
+        // A high SL reservation and a low RSK reservation coexist on one remote.
+        hold(&env, 0, "SL", 148);
+        hold(&env, 0, "RSK", 2);
+
+        // The RSK scan must return ONLY the RSK id (2), never the SL id (148).
+        let (_b, mut scan) = gitref(env.clone(0), "RSK", env.remote());
+        let ids = scan(&[]).unwrap();
+        assert_eq!(ids, vec![2], "RSK scan is scoped to RSK reservations only");
+        // ⇒ the next RSK id is 3, not 149 (no cross-kind pooling).
+        assert_eq!(crate::entity::next_id(&ids, &[]), 3);
     }
 
     /// VT-4 (e2e): the reservation commit's tree is the empty tree (no blobs); the
