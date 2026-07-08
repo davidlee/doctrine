@@ -14,7 +14,8 @@ use crate::catalog::hydrate::{CatalogEdgeLabel, CatalogKey};
 use crate::catalog::scan::{self, ScanMode};
 use crate::finding::{Category, Finding};
 use crate::mcp_server::dispatch::{
-    TOOL_DISPATCH_CONCLUDE_PHASE, TOOL_DISPATCH_IMPORT, TOOL_DISPATCH_REAP,
+    TOOL_DISPATCH_AUTHORED_DIVERGENCE, TOOL_DISPATCH_CONCLUDE_PHASE, TOOL_DISPATCH_IMPORT,
+    TOOL_DISPATCH_NEXT_READY, TOOL_DISPATCH_PHASE_RECEIPT, TOOL_DISPATCH_REAP,
 };
 
 // ---------------------------------------------------------------------------
@@ -366,6 +367,9 @@ const AGENT_SCAN_ROOTS: [&str; 2] = ["install/agents", ".doctrine/agents"];
 const ROLE_MARKER_KEY: &str = "doctrine-role";
 const ROLE_WORKER: &str = "worker";
 const ROLE_ORCHESTRATOR: &str = "orchestrator";
+/// The read-only funnel role (SL-206): a `probe` agent-def may hold EXACTLY the three
+/// read tokens ([`DISPATCH_READ_TOOLS`]) — no write token, no other `mcp__*` grant.
+const ROLE_PROBE: &str = "probe";
 /// The single MCP token a confined **worker** may hold — its only sanctioned
 /// jail-wall bypass (SL-198 keystone). Any other `mcp__*` token is an escape.
 const TOOL_ALLOWED: &str = "mcp__doctrine__worker_commit";
@@ -375,22 +379,45 @@ const MCP_TOKEN_PREFIX: &str = "mcp__";
 /// bare-name constants ([`TOOL_DISPATCH_IMPORT`] …), never re-typed here.
 const MCP_DOCTRINE_PREFIX: &str = "mcp__doctrine__";
 
+/// The three SL-199 funnel WRITE bare-name tokens (import / conclude / reap).
+const DISPATCH_WRITE_TOOLS: [&str; 3] = [
+    TOOL_DISPATCH_IMPORT,
+    TOOL_DISPATCH_CONCLUDE_PHASE,
+    TOOL_DISPATCH_REAP,
+];
+/// The three SL-206 funnel READ bare-name tokens (phase-receipt / next-ready /
+/// authored-divergence) — the `probe` role's EXACT set, and the growth the
+/// `orchestrator` role gains ATOP its three write tokens.
+const DISPATCH_READ_TOOLS: [&str; 3] = [
+    TOOL_DISPATCH_PHASE_RECEIPT,
+    TOOL_DISPATCH_NEXT_READY,
+    TOOL_DISPATCH_AUTHORED_DIVERGENCE,
+];
+
 /// The fully-qualified MCP tokens a confined agent of `role` may hold — the
 /// role-keyed allowlist. A `worker` holds only [`TOOL_ALLOWED`]; an
-/// `orchestrator` holds only the three funnel tokens (composed from the §B
-/// [`crate::mcp_server::dispatch`] bare-name constants). Any other role yields
-/// the empty set (no `mcp__*` token permitted).
+/// `orchestrator` holds the three funnel WRITE tokens PLUS the three READ tokens
+/// (SL-206); a `probe` holds EXACTLY the three READ tokens. Every token is
+/// composed from [`MCP_DOCTRINE_PREFIX`] and the [`crate::mcp_server::dispatch`]
+/// bare-name constants — never re-typed. Any other role yields the empty set (no
+/// `mcp__*` token permitted).
 fn allowed_mcp_tokens(role: &str) -> Vec<String> {
+    let qualify = |bares: &[&str]| -> Vec<String> {
+        bares
+            .iter()
+            .map(|bare| format!("{MCP_DOCTRINE_PREFIX}{bare}"))
+            .collect()
+    };
     match role {
         ROLE_WORKER => vec![TOOL_ALLOWED.to_string()],
-        ROLE_ORCHESTRATOR => [
-            TOOL_DISPATCH_IMPORT,
-            TOOL_DISPATCH_CONCLUDE_PHASE,
-            TOOL_DISPATCH_REAP,
-        ]
-        .iter()
-        .map(|bare| format!("{MCP_DOCTRINE_PREFIX}{bare}"))
-        .collect(),
+        ROLE_ORCHESTRATOR => qualify(
+            &DISPATCH_WRITE_TOOLS
+                .iter()
+                .chain(DISPATCH_READ_TOOLS.iter())
+                .copied()
+                .collect::<Vec<_>>(),
+        ),
+        ROLE_PROBE => qualify(&DISPATCH_READ_TOOLS),
         _ => Vec::new(),
     }
 }
@@ -409,10 +436,11 @@ fn allowed_mcp_tokens(role: &str) -> Vec<String> {
 ///    writable MCP token would otherwise slip an allow-by-marker lint.
 /// 2. **Role-keyed tool allowlist.** A marked def's `tools:` may contain no
 ///    `mcp__*` token outside its role's sanctioned set ([`allowed_mcp_tokens`]):
-///    a `worker` may hold only [`TOOL_ALLOWED`]; an `orchestrator` only the three
-///    funnel tokens. This also rejects a bare `mcp__doctrine` server grant (it is
-///    `mcp__`-prefixed and in no role's set). Ceiling, not floor — extras are
-///    rejected, but the set's tokens need not all be present.
+///    a `worker` may hold only [`TOOL_ALLOWED`]; an `orchestrator` the three
+///    funnel WRITE tokens plus the three SL-206 READ tokens; a `probe` EXACTLY
+///    the three READ tokens. This also rejects a bare `mcp__doctrine` server
+///    grant (it is `mcp__`-prefixed and in no role's set). Ceiling, not floor —
+///    extras are rejected, but the set's tokens need not all be present.
 ///
 /// Absent scan roots yield zero findings (downstream projects without an
 /// `install/` tree are clean).
@@ -458,13 +486,17 @@ fn collect_agent_def_findings(dir: &Path, root: &Path, findings: &mut Vec<Findin
         // Rule 1 — marker mandatory (deny-by-default). Thread the validated role
         // out into Rule 2's role-keyed allowlist.
         let role = match fm_scalar(fm, ROLE_MARKER_KEY) {
-            Some(role) if role == ROLE_WORKER || role == ROLE_ORCHESTRATOR => role,
+            Some(role)
+                if role == ROLE_WORKER || role == ROLE_ORCHESTRATOR || role == ROLE_PROBE =>
+            {
+                role
+            }
             Some(role) => {
                 findings.push(Finding {
                     category: Category::AgentConformance,
                     entity: Some(rel.clone()),
                     message: format!(
-                        "invalid `{ROLE_MARKER_KEY}: {role}` (expected `{ROLE_WORKER}` or `{ROLE_ORCHESTRATOR}`)"
+                        "invalid `{ROLE_MARKER_KEY}: {role}` (expected `{ROLE_WORKER}`, `{ROLE_ORCHESTRATOR}`, or `{ROLE_PROBE}`)"
                     ),
                 });
                 continue;
@@ -564,6 +596,126 @@ fn fm_tool_tokens(fm: &str) -> Vec<String> {
         break;
     }
     tokens
+}
+
+// ---------------------------------------------------------------------------
+// SpawnSeamSymmetry — #10 unjail nomination/gate check (SL-206, design §5.6 I1)
+// ---------------------------------------------------------------------------
+
+/// The shipped hook config — the AUTHORED/shipped source of truth (mirrors #9's
+/// [`AGENT_SCAN_ROOTS`] posture: scan the tree that ships, never a derived/installed
+/// copy that a tampered install could diverge from).
+const HOOKS_CONFIG_PATH: &str = "plugins/doctrine/hooks/hooks.json";
+
+/// The harness spawn-seam registry (design §5.6 I1(b), RV-258 F-1): every known seam a
+/// `PreToolUse` matcher must gate. A FUTURE seam is added HERE first — the check reds
+/// until its matcher lands, so a new surface defaults to gated, never silently
+/// forgotten.
+const SEAM_REGISTRY: [&str; 2] = ["Agent", "Workflow"];
+
+/// One `hooks.json` matcher entry — only the field this check reasons over.
+#[derive(serde::Deserialize)]
+struct MatcherEntry {
+    matcher: String,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct HooksSection {
+    #[serde(rename = "SubagentStart", default)]
+    subagent_start: Vec<MatcherEntry>,
+    #[serde(rename = "PreToolUse", default)]
+    pre_tool_use: Vec<MatcherEntry>,
+}
+
+#[derive(serde::Deserialize)]
+struct HooksConfig {
+    hooks: HooksSection,
+}
+
+/// A `PreToolUse` matcher covers `seam` iff `seam` is an EXACT `|`-alternation member
+/// (`"Edit|Write"` covers `Edit` and `Write`; `"AgentX"` covers neither `Agent` nor a
+/// substring of itself — no partial/substring match, I1(b)).
+fn matcher_covers_seam(matcher: &str, seam: &str) -> bool {
+    matcher.split('|').any(|m| m == seam)
+}
+
+/// #10 — Spawn-seam symmetry (SL-206, design §5.6 I1; RV-258 F-1). PURE core over the
+/// raw `hooks.json` TEXT (no disk here — [`spawn_seam_symmetry_findings`] is the impure
+/// shell that supplies it), so the decision is unit-testable without touching a
+/// filesystem. Two Error-severity rules — together the mechanical form of "one list,
+/// every spawn seam" (design §5.6):
+///
+/// (a) **nomination ⊆ gate.** Every `SubagentStart` matcher (a nominated
+///     `subagent_type`) MUST be in [`crate::worktree::PRIVILEGED_AGENT_TYPES`] — the
+///     SAME deny-set the `PreToolUse(Agent)` gate consumes (imported, never re-typed,
+///     STD-001) — else a type is nominated without ever being gated.
+/// (b) **every registry seam is gated.** Each [`SEAM_REGISTRY`] entry MUST be covered
+///     ([`matcher_covers_seam`]) by at least one `PreToolUse` matcher. Necessary
+///     because (a) alone is not sufficient (RV-258 F-1): a nominated type could sit
+///     "in the deny-set" while an entirely UNGATED seam bypasses the deny check.
+///
+/// An unparseable config is itself a symmetry failure (Error) — a doctor check must
+/// not go blind on its own input and report a false clean.
+fn check_spawn_seam_symmetry(config_json: &str) -> Vec<Finding> {
+    let config: HooksConfig = match serde_json::from_str(config_json) {
+        Ok(config) => config,
+        Err(e) => {
+            return vec![Finding {
+                category: Category::SpawnSeamSymmetry,
+                entity: Some(HOOKS_CONFIG_PATH.to_string()),
+                message: format!("unparseable hook config: {e}"),
+            }];
+        }
+    };
+
+    let mut findings = Vec::new();
+
+    // (a) nomination ⊆ gate.
+    for entry in &config.hooks.subagent_start {
+        if !crate::worktree::PRIVILEGED_AGENT_TYPES.contains(&entry.matcher.as_str()) {
+            findings.push(Finding {
+                category: Category::SpawnSeamSymmetry,
+                entity: Some(HOOKS_CONFIG_PATH.to_string()),
+                message: format!(
+                    "SubagentStart nominates `{}`, absent from the gate deny-set {:?} \
+                     (nomination ⊄ gate, I1(a))",
+                    entry.matcher,
+                    crate::worktree::PRIVILEGED_AGENT_TYPES
+                ),
+            });
+        }
+    }
+
+    // (b) every registered seam has a covering PreToolUse matcher.
+    for seam in SEAM_REGISTRY {
+        let covered = config
+            .hooks
+            .pre_tool_use
+            .iter()
+            .any(|entry| matcher_covers_seam(&entry.matcher, seam));
+        if !covered {
+            findings.push(Finding {
+                category: Category::SpawnSeamSymmetry,
+                entity: Some(HOOKS_CONFIG_PATH.to_string()),
+                message: format!(
+                    "spawn seam `{seam}` has no PreToolUse matcher — ungated (I1(b), RV-258 F-1)"
+                ),
+            });
+        }
+    }
+
+    findings
+}
+
+/// The impure shell: read the SHIPPED hook config under `root` and run
+/// [`check_spawn_seam_symmetry`] over its text. An absent config yields zero findings —
+/// a downstream project without the plugin tree is clean (mirrors #9's absent-root
+/// posture, [`collect_agent_def_findings`]).
+pub(crate) fn spawn_seam_symmetry_findings(root: &Path) -> Vec<Finding> {
+    let Ok(text) = std::fs::read_to_string(root.join(HOOKS_CONFIG_PATH)) else {
+        return Vec::new();
+    };
+    check_spawn_seam_symmetry(&text)
 }
 
 // ---------------------------------------------------------------------------
@@ -1441,5 +1593,211 @@ mod tests {
             findings.is_empty(),
             "absent scan roots yield no findings (downstream-safe)"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // VT-4: SL-206 allowlist growth — orchestrator +3 reads, probe arm,
+    // marker validator accepts `probe` (EX-4, EX-5, EX-6).
+    // ------------------------------------------------------------------
+
+    /// Fully-qualify a bare funnel token as the allowlist stores it.
+    fn qualified(bare: &str) -> String {
+        format!("{MCP_DOCTRINE_PREFIX}{bare}")
+    }
+
+    #[test]
+    fn allowed_mcp_tokens_orchestrator_grows_by_the_three_reads() {
+        let allowed = allowed_mcp_tokens(ROLE_ORCHESTRATOR);
+        // The three WRITE tokens survive unchanged (EX-6 behaviour-preservation)...
+        for bare in DISPATCH_WRITE_TOOLS {
+            assert!(
+                allowed.contains(&qualified(bare)),
+                "orchestrator keeps write token {bare}: {allowed:?}"
+            );
+        }
+        // ...PLUS the three new READ tokens (EX-4 growth).
+        for bare in [
+            TOOL_DISPATCH_PHASE_RECEIPT,
+            TOOL_DISPATCH_NEXT_READY,
+            TOOL_DISPATCH_AUTHORED_DIVERGENCE,
+        ] {
+            assert!(
+                allowed.contains(&qualified(bare)),
+                "orchestrator gains read token {bare}: {allowed:?}"
+            );
+        }
+        assert_eq!(
+            allowed.len(),
+            6,
+            "exactly the six funnel tokens: {allowed:?}"
+        );
+    }
+
+    #[test]
+    fn allowed_mcp_tokens_probe_holds_exactly_the_three_reads() {
+        let allowed = allowed_mcp_tokens(ROLE_PROBE);
+        let expect: Vec<String> = DISPATCH_READ_TOOLS.iter().map(|b| qualified(b)).collect();
+        assert_eq!(allowed, expect, "probe holds EXACTLY the three reads");
+        // No write token, in particular, leaks into the probe set.
+        assert!(
+            !allowed.contains(&qualified(TOOL_DISPATCH_IMPORT)),
+            "probe holds no write token: {allowed:?}"
+        );
+    }
+
+    #[test]
+    fn agent_conformance_passes_probe_with_only_read_tokens() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/dispatch-probe.md",
+            "---\nname: dispatch-probe\ndoctrine-role: probe\ntools: Read, Bash, mcp__doctrine__dispatch_phase_receipt, mcp__doctrine__dispatch_next_ready, mcp__doctrine__dispatch_authored_divergence\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert!(
+            findings.is_empty(),
+            "a probe holding exactly the three read tokens passes: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn agent_conformance_fails_probe_holding_a_write_token() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/overreaching-probe.md",
+            "---\nname: overreaching-probe\ndoctrine-role: probe\ntools: Read, mcp__doctrine__dispatch_phase_receipt, mcp__doctrine__dispatch_import\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(
+            findings.len(),
+            1,
+            "a probe holding a WRITE token must fail (reads-only ceiling)"
+        );
+        assert!(findings[0].message.contains("dispatch_import"));
+    }
+
+    #[test]
+    fn agent_conformance_still_passes_orchestrator_with_only_write_tokens() {
+        // EX-5/EX-6: the shipped orchestrator def holds only the three write
+        // tokens — a SUBSET of the grown six-token allowlist ⇒ doctor #9 green.
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/dispatch-orchestrator.md",
+            "---\nname: dispatch-orchestrator\ndoctrine-role: orchestrator\ntools: Read, Bash, mcp__doctrine__dispatch_import, mcp__doctrine__dispatch_conclude_phase, mcp__doctrine__dispatch_reap\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert!(
+            findings.is_empty(),
+            "orchestrator with only the three write tokens stays green: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn agent_conformance_invalid_role_message_mentions_probe() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/bad-role.md",
+            "---\nname: bad-role\ndoctrine-role: auditor\ntools: Read\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(findings.len(), 1, "an unknown role is a failure");
+        assert!(
+            findings[0].message.contains(ROLE_PROBE),
+            "the expected-roles message now lists `probe`: {}",
+            findings[0].message
+        );
+    }
+
+    #[test]
+    fn agent_conformance_passes_the_shipped_install_agents_tree() {
+        // Live-config regression lock (SL-206 PHASE-13 VT-1), mirroring
+        // `check_spawn_seam_symmetry_passes_the_shipped_hooks_config`: the real
+        // `install/agents/` tree — worker + orchestrator + probe — must satisfy
+        // doctor #9, not a fixture.
+        let findings = agent_conformance_findings(&crate::test_support::repo_root());
+        assert!(
+            findings.is_empty(),
+            "the shipped install/agents/ defs must satisfy agent_conformance: {findings:?}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // SpawnSeamSymmetry tests (#10, SL-206 design §5.6 I1, VT-1)
+    // ------------------------------------------------------------------
+
+    /// Build a minimal `hooks.json` body: one `SubagentStart` matcher nominating
+    /// `subagent_type`, and one `PreToolUse` entry per `pre_tool_use_matchers` string.
+    fn seam_symmetry_fixture(subagent_type: &str, pre_tool_use_matchers: &[&str]) -> String {
+        let pre_tool_use: Vec<String> = pre_tool_use_matchers
+            .iter()
+            .map(|m| {
+                format!(r#"{{"matcher": "{m}", "hooks": [{{"type": "command", "command": "x"}}]}}"#)
+            })
+            .collect();
+        format!(
+            r#"{{"hooks": {{"SubagentStart": [{{"matcher": "{subagent_type}", "hooks": [{{"type": "command", "command": "x"}}]}}], "PreToolUse": [{}]}}}}"#,
+            pre_tool_use.join(",")
+        )
+    }
+
+    #[test]
+    fn check_spawn_seam_symmetry_reds_on_nomination_outside_the_gate_deny_set() {
+        // I1(a): a SubagentStart matcher nominates a type absent from
+        // `PRIVILEGED_AGENT_TYPES` — nomination ⊄ gate. Both PreToolUse seams are
+        // covered here so the finding isolates rule (a) only.
+        let config = seam_symmetry_fixture("rogue-type", &["Agent", "Workflow"]);
+        let findings = check_spawn_seam_symmetry(&config);
+        assert_eq!(
+            findings.len(),
+            1,
+            "exactly one nomination-outside-gate finding: {findings:?}"
+        );
+        assert_eq!(findings[0].category, Category::SpawnSeamSymmetry);
+        assert_eq!(
+            findings[0].category.severity(),
+            crate::finding::Severity::Error
+        );
+        assert!(findings[0].message.contains("rogue-type"));
+    }
+
+    #[test]
+    fn check_spawn_seam_symmetry_reds_on_ungated_workflow_seam() {
+        // I1(b): SEAM_REGISTRY's `Workflow` seam has NO PreToolUse matcher at all — an
+        // ungated seam bypasses the deny check entirely (RV-258 F-1), even though the
+        // lone nomination IS in the gate deny-set.
+        let config = seam_symmetry_fixture(crate::worktree::PRIVILEGED_AGENT_TYPES[0], &["Agent"]);
+        let findings = check_spawn_seam_symmetry(&config);
+        assert_eq!(
+            findings.len(),
+            1,
+            "exactly one ungated-Workflow-seam finding: {findings:?}"
+        );
+        assert_eq!(findings[0].category, Category::SpawnSeamSymmetry);
+        assert!(findings[0].message.contains("Workflow"));
+    }
+
+    #[test]
+    fn check_spawn_seam_symmetry_passes_the_shipped_hooks_config() {
+        // Live-config regression lock (VT-1 green): the SHIPPED
+        // plugins/doctrine/hooks/hooks.json nominates only a gate-covered type AND
+        // every SEAM_REGISTRY seam (`Agent`, `Workflow`) has a covering PreToolUse
+        // matcher — the real file `check_spawn_seam_symmetry` guards, not a fixture.
+        let findings = spawn_seam_symmetry_findings(&crate::test_support::repo_root());
+        assert!(
+            findings.is_empty(),
+            "the shipped hook config must satisfy check_spawn_seam_symmetry: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn matcher_covers_seam_is_exact_alternation_membership_not_substring() {
+        // I1(b): `Agent` must NOT match a hypothetical `AgentX` alternation member.
+        assert!(matcher_covers_seam("Agent", "Agent"));
+        assert!(matcher_covers_seam("Edit|Agent|Write", "Agent"));
+        assert!(!matcher_covers_seam("AgentX", "Agent"));
+        assert!(!matcher_covers_seam("AgentX|Other", "Agent"));
     }
 }

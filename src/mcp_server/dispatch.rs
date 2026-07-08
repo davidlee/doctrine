@@ -601,6 +601,209 @@ pub(crate) fn dispatch_reap(root: &Path, slice: u32, name: &str) -> anyhow::Resu
     })
 }
 
+// ======================================================================================
+// §D the funnel READ SURFACE — three read-only MCP tools over the coord (SL-206 PHASE-03)
+// ======================================================================================
+//
+// Each tool resolves the coord tree SERVER-SIDE by slice-id ([`resolve_coord`], no caller
+// path) and reads — NEVER mutates — the coordination state, composing an EXISTING
+// authority, no forked logic:
+//   * `dispatch_phase_receipt`       — the PHASE-02 per-phase projection
+//                                      ([`crate::dispatch::phase_receipt_status`]) + the
+//                                      committed boundary row.
+//   * `dispatch_next_ready`          — the readiness authority verbatim
+//                                      ([`crate::dispatch::compute_next_phases`] over the
+//                                      shared [`crate::dispatch::plan_next_rows`] seam).
+//   * `dispatch_authored_divergence` — `.doctrine/**` divergence over
+//                                      trunk-authority..dispatch-tip
+//                                      ([`git::trunk_commit`] + [`git::diff_doctrine_paths`]).
+
+/// The tool name the MCP registry keys `dispatch_phase_receipt` on (STD-001 single-source).
+pub(crate) const TOOL_DISPATCH_PHASE_RECEIPT: &str = "dispatch_phase_receipt";
+/// The tool name the MCP registry keys `dispatch_next_ready` on (STD-001).
+pub(crate) const TOOL_DISPATCH_NEXT_READY: &str = "dispatch_next_ready";
+/// The tool name the MCP registry keys `dispatch_authored_divergence` on (STD-001).
+pub(crate) const TOOL_DISPATCH_AUTHORED_DIVERGENCE: &str = "dispatch_authored_divergence";
+
+/// The outcome shape shared by every §D read tool: a `Resolved(core)` payload, or a
+/// `CoordRefused { reason }` carrying the [`CoordRefusal`] token VERBATIM — with NO
+/// fabricated tip or payload on the refusal path (EX-1). Serialised externally-tagged
+/// (`{"Resolved": {…}}` / `{"CoordRefused": { "reason": … }}`), matching the write
+/// surface's `Ok`-carries-refusal convention: a coord refusal is a normal result, never a
+/// JSON-RPC error.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) enum ReadOutcome<T> {
+    /// The coord resolved; `T` is the read payload.
+    Resolved(T),
+    /// [`resolve_coord`] refused (unknown-slice | ambiguous | stale); `reason` is the
+    /// distinct token, and NO payload/tip is fabricated.
+    CoordRefused { reason: String },
+}
+
+/// `dispatch_phase_receipt` outcome — a per-phase receipt, or a coord refusal.
+pub(crate) type PhaseReceiptResult = ReadOutcome<PhaseReceiptCore>;
+/// `dispatch_next_ready` outcome — the ready-phase readout, or a coord refusal.
+pub(crate) type NextReadyResult = ReadOutcome<NextReadyCore>;
+/// `dispatch_authored_divergence` outcome — the divergence readout, or a coord refusal.
+pub(crate) type DivergenceResult = ReadOutcome<DivergenceCore>;
+
+/// Fold a [`CoordRefusal`] to the shared `CoordRefused` arm (token VERBATIM, no tip).
+fn coord_refused<T>(refusal: CoordRefusal) -> ReadOutcome<T> {
+    ReadOutcome::CoordRefused {
+        reason: refusal.token().to_owned(),
+    }
+}
+
+/// The `Resolved` payload of [`dispatch_phase_receipt`]: a phase's receipt over three
+/// tiers. `dispatch_tip` is the LIVE coord branch tip (real, from [`resolve_coord`]) —
+/// DISTINCT from `code_end`, the phase's committed boundary end oid (EX-1); both are
+/// carried as separate fields so a consumer can see the tip has advanced past the recorded
+/// boundary. `code_start`/`code_end` are absent when no boundary row backs the phase yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct PhaseReceiptCore {
+    pub(crate) slice: u32,
+    pub(crate) phase: String,
+    /// The rich [`crate::dispatch::ReceiptStatus`] token (kebab-case) — `conclude-incomplete`
+    /// stays distinct from `completed`.
+    pub(crate) status: String,
+    /// The live coordination branch tip (real, distinct from `code_end`).
+    pub(crate) dispatch_tip: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) code_start: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) code_end: Option<String>,
+}
+
+/// `dispatch_phase_receipt{slice, phase}` — resolve the coord SERVER-SIDE, then project a
+/// SINGLE phase's receipt over the PHASE-02 authority (design §A / EX-1). Read-only: no
+/// coord mutation. EVERY [`resolve_coord`] refusal (unknown-slice | ambiguous | stale)
+/// short-circuits to `CoordRefused(reason)` with NO fabricated tip. On resolution the core
+/// carries the LIVE `dispatch_tip` (the coord branch tip) and — when a committed boundary
+/// row backs the phase — the `(code_start, code_end)` oids, `code_end` being DISTINCT from
+/// the live tip. The receipt status rides [`crate::dispatch::phase_receipt_status`]
+/// (the same per-row derivation `run_status` uses), with `has_boundary` sourced from the
+/// committed boundaries ledger at the tip.
+pub(crate) fn dispatch_phase_receipt(
+    root: &Path,
+    slice: u32,
+    phase: &str,
+) -> anyhow::Result<PhaseReceiptResult> {
+    let coord = match resolve_coord(root, slice) {
+        Ok(coord) => coord,
+        Err(refusal) => return Ok(coord_refused(refusal)),
+    };
+    // The committed boundaries ledger at the LIVE tip (object-db read; the live coord
+    // index/worktree are never touched). Absent ⇒ empty ⇒ no boundary backs the phase.
+    let boundaries = read_boundaries_at(&coord.root, &coord.tip, slice)?;
+    let boundary = boundaries.rows.iter().find(|r| r.phase == phase);
+    let has_boundary = boundary.is_some();
+    // The disposable runtime sheet lives under the coord worktree's gitignored state.
+    let state_dir = crate::state::phases_dir(&coord.root, slice);
+    let status = crate::dispatch::phase_receipt_status(&state_dir, phase, has_boundary);
+    Ok(ReadOutcome::Resolved(PhaseReceiptCore {
+        slice,
+        phase: phase.to_owned(),
+        status: status.as_str().to_owned(),
+        dispatch_tip: coord.tip,
+        code_start: boundary.map(|b| b.code_start_oid.clone()),
+        code_end: boundary.map(|b| b.code_end_oid.clone()),
+    }))
+}
+
+/// One phase row in a [`NextReadyCore`] readout — the plan id, its legacy status string,
+/// and its name (the same tuple the readiness seam yields).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct NextPhaseRow {
+    pub(crate) id: String,
+    pub(crate) status: String,
+    pub(crate) name: String,
+}
+
+/// The `Resolved` payload of [`dispatch_next_ready`]: the `next` actionable phase id(s)
+/// — the [`crate::dispatch::compute_next_phases`] output VERBATIM (EX-2) — alongside the
+/// full ordered `phases` readout the readiness was computed from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct NextReadyCore {
+    pub(crate) next: Vec<String>,
+    pub(crate) phases: Vec<NextPhaseRow>,
+}
+
+/// `dispatch_next_ready{slice}` — resolve the coord SERVER-SIDE, then return the next
+/// actionable phase(s) as computed by the EXISTING readiness authority
+/// [`crate::dispatch::compute_next_phases`] over the SHARED
+/// [`crate::dispatch::plan_next_rows`] seam (design §A / EX-2) — the SAME value `dispatch
+/// plan-next` renders, no parallel readiness logic. Read-only. A [`resolve_coord`] refusal
+/// short-circuits to `CoordRefused(reason)`.
+pub(crate) fn dispatch_next_ready(root: &Path, slice: u32) -> anyhow::Result<NextReadyResult> {
+    let coord = match resolve_coord(root, slice) {
+        Ok(coord) => coord,
+        Err(refusal) => return Ok(coord_refused(refusal)),
+    };
+    let rows = crate::dispatch::plan_next_rows(&coord.root, slice)?;
+    let next = crate::dispatch::compute_next_phases(&rows);
+    let phases = rows
+        .into_iter()
+        .map(|(id, status, name)| NextPhaseRow { id, status, name })
+        .collect();
+    Ok(ReadOutcome::Resolved(NextReadyCore { next, phases }))
+}
+
+/// The `Resolved` payload of [`dispatch_authored_divergence`]: whether the coord's
+/// `.doctrine/**` authored tree has `diverged` from the trunk authority, the resolved
+/// `compared_ref` (the trunk commit the diff was taken against), and the `drifted_paths`
+/// (present only when non-empty).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct DivergenceCore {
+    pub(crate) diverged: bool,
+    pub(crate) compared_ref: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) drifted_paths: Vec<String>,
+}
+
+/// `dispatch_authored_divergence{slice}` — resolve the coord SERVER-SIDE, then report
+/// whether its `.doctrine/**` authored tree has diverged from the trunk over
+/// `trunk_ref..dispatch_tip` (design §A / EX-3, EX-8). The trunk `compared_ref` is
+/// resolved from the REAL trunk authority [`git::trunk_commit`] (the peeled ladder —
+/// `DOCTRINE_TRUNK_REF` / `origin/HEAD` / `main` / `master`), NEVER hardcoded `edge` and
+/// NEVER the journal-row printer. `dispatch_tip` is the live coord tip. Read-only: no
+/// coord mutation — a name-only diff over the [`crate::corpus_guard::DOCTRINE_PATHSPEC`]
+/// authored subtree. A [`resolve_coord`] refusal short-circuits to `CoordRefused(reason)`.
+pub(crate) fn dispatch_authored_divergence(
+    root: &Path,
+    slice: u32,
+) -> anyhow::Result<DivergenceResult> {
+    let coord = match resolve_coord(root, slice) {
+        Ok(coord) => coord,
+        Err(refusal) => return Ok(coord_refused(refusal)),
+    };
+    let compared_ref = git::trunk_commit(&coord.root)?.context(
+        "trunk ref not found (no DOCTRINE_TRUNK_REF / origin/HEAD / main / master resolves)",
+    )?;
+    let drifted_paths = git::diff_doctrine_paths(
+        &coord.root,
+        &compared_ref,
+        &coord.tip,
+        crate::corpus_guard::DOCTRINE_PATHSPEC,
+    )?;
+    Ok(ReadOutcome::Resolved(DivergenceCore {
+        diverged: !drifted_paths.is_empty(),
+        compared_ref,
+        drifted_paths,
+    }))
+}
+
+/// Read the committed boundaries ledger at `tip` (`.doctrine/dispatch/<NNN>/boundaries.toml`)
+/// — an object-db read (the live coord index/worktree are never touched). Absent ⇒ the
+/// empty ledger. Mirrors `read_ledger` in the CLI, but keyed on a resolved tip.
+fn read_boundaries_at(root: &Path, tip: &str, slice: u32) -> anyhow::Result<Boundaries> {
+    let path = format!(".doctrine/dispatch/{slice:03}/boundaries.toml");
+    match git::read_path_at(root, tip, &path)? {
+        Some(text) => Boundaries::parse(&text)
+            .with_context(|| format!("parse committed boundaries.toml at {tip}")),
+        None => Ok(Boundaries::default()),
+    }
+}
+
 #[cfg(test)]
 #[expect(
     clippy::unwrap_used,
@@ -1380,5 +1583,186 @@ mod tests {
         let (_tmp, primary, _coord, _base, _bt) = primary_with_coord(199);
         let out = dispatch_reap(&primary, 200, "dispatch/wk").unwrap();
         assert_eq!(out, funnel_refused("unknown-slice", String::new()));
+    }
+
+    // ==================================================================================
+    // §D the funnel READ SURFACE (SL-206 PHASE-03)
+    // ==================================================================================
+
+    /// Write a disposable runtime phase sheet (`status = "<status>"`) for `phase` under
+    /// the coord's gitignored state tree — the tier `read_phase_status` reads.
+    fn write_phase_sheet(coord: &Path, slice: u32, phase: &str, status: &str) {
+        let dir = crate::state::phases_dir(coord, slice);
+        fs::create_dir_all(&dir).unwrap();
+        let stem = phase.to_lowercase();
+        fs::write(
+            dir.join(format!("{stem}.toml")),
+            format!("status = \"{status}\"\n"),
+        )
+        .unwrap();
+    }
+
+    // --- VT-1: dispatch_phase_receipt --------------------------------------------------
+
+    #[test]
+    fn dispatch_phase_receipt_resolved_carries_real_tip_distinct_from_code_end() {
+        let (_tmp, primary, coord, base, _bt) = primary_with_coord(206);
+        // A committed boundary row for PHASE-01 (code_end = base, DISTINCT from the tip
+        // we advance to by committing the ledger).
+        fs::create_dir_all(coord.join(".doctrine/dispatch/206")).unwrap();
+        fs::write(
+            coord.join(".doctrine/dispatch/206/boundaries.toml"),
+            format!(
+                "[[boundary]]\nphase = \"PHASE-01\"\ncode_start_oid = \"{base}\"\ncode_end_oid = \"{base}\"\n"
+            ),
+        )
+        .unwrap();
+        git_run(&coord, &["add", ".doctrine/dispatch/206/boundaries.toml"]);
+        git_run(&coord, &["commit", "-q", "-m", "boundary"]);
+        let tip = git_run(&coord, &["rev-parse", "refs/heads/dispatch/206"]);
+        // A completed phase sheet in the coord's disposable runtime state (written after
+        // the commit — it is not part of committed history).
+        write_phase_sheet(&coord, 206, "PHASE-01", "completed");
+
+        match dispatch_phase_receipt(&primary, 206, "PHASE-01").unwrap() {
+            ReadOutcome::Resolved(core) => {
+                assert_eq!(core.dispatch_tip, tip, "carries the REAL live coord tip");
+                assert_eq!(
+                    core.code_end.as_deref(),
+                    Some(base.as_str()),
+                    "the committed boundary's code_end"
+                );
+                assert_ne!(
+                    core.dispatch_tip,
+                    core.code_end.clone().unwrap(),
+                    "the live dispatch_tip is DISTINCT from the boundary code_end (EX-1)"
+                );
+                // Sheet "completed" + a committed boundary ⇒ boundary-backed Completed.
+                assert_eq!(core.status, "completed");
+            }
+            other => panic!("expected Resolved, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dispatch_phase_receipt_no_boundary_omits_oids_and_reflects_sheet() {
+        let (_tmp, primary, coord, _base, _bt) = primary_with_coord(206);
+        // Sheet says completed, but NO committed boundary backs it ⇒ conclude-incomplete
+        // (the gap the ReceiptStatus enum surfaces), and no code oids are fabricated.
+        write_phase_sheet(&coord, 206, "PHASE-02", "completed");
+        match dispatch_phase_receipt(&primary, 206, "PHASE-02").unwrap() {
+            ReadOutcome::Resolved(core) => {
+                assert_eq!(core.status, "conclude-incomplete");
+                assert!(core.code_start.is_none() && core.code_end.is_none());
+            }
+            other => panic!("expected Resolved, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_tools_refuse_unknown_slice_with_no_fabricated_tip() {
+        let (_tmp, primary, _coord, _base, _bt) = primary_with_coord(206);
+        // slice 207 has no live coord ⇒ EVERY read tool short-circuits to CoordRefused
+        // carrying the resolve_coord token VERBATIM, with no Resolved payload / tip.
+        assert_eq!(
+            dispatch_phase_receipt(&primary, 207, "PHASE-01").unwrap(),
+            ReadOutcome::CoordRefused {
+                reason: "unknown-slice".to_string()
+            }
+        );
+        assert_eq!(
+            dispatch_next_ready(&primary, 207).unwrap(),
+            ReadOutcome::CoordRefused {
+                reason: "unknown-slice".to_string()
+            }
+        );
+        assert_eq!(
+            dispatch_authored_divergence(&primary, 207).unwrap(),
+            ReadOutcome::CoordRefused {
+                reason: "unknown-slice".to_string()
+            }
+        );
+    }
+
+    // --- VT-2: dispatch_next_ready wraps compute_next_phases verbatim ------------------
+
+    #[test]
+    fn dispatch_next_ready_agrees_with_compute_next_phases() {
+        let (_tmp, primary, coord, _base, _bt) = primary_with_coord(206);
+        // A three-phase plan on disk in the coord (read_plan reads the working tree).
+        fs::create_dir_all(coord.join(".doctrine/slice/206")).unwrap();
+        fs::write(
+            coord.join(".doctrine/slice/206/plan.toml"),
+            "[[phase]]\nid = \"PHASE-01\"\nname = \"one\"\n\n\
+             [[phase]]\nid = \"PHASE-02\"\nname = \"two\"\n\n\
+             [[phase]]\nid = \"PHASE-03\"\nname = \"three\"\n",
+        )
+        .unwrap();
+        // PHASE-01 completed; 02/03 pending (absent sheet ⇒ pending).
+        write_phase_sheet(&coord, 206, "PHASE-01", "completed");
+
+        // The shared readiness authority, computed directly over the same rows.
+        let rows = crate::dispatch::plan_next_rows(&coord, 206).unwrap();
+        let expected = crate::dispatch::compute_next_phases(&rows);
+        assert_eq!(expected, vec!["PHASE-02", "PHASE-03"], "fixture sanity");
+
+        match dispatch_next_ready(&primary, 206).unwrap() {
+            ReadOutcome::Resolved(core) => {
+                assert_eq!(core.next, expected, "next == compute_next_phases VERBATIM");
+                let ids: Vec<&str> = core.phases.iter().map(|p| p.id.as_str()).collect();
+                assert_eq!(ids, vec!["PHASE-01", "PHASE-02", "PHASE-03"]);
+                assert_eq!(core.phases[0].status, "completed");
+                assert_eq!(core.phases[1].status, "pending");
+            }
+            other => panic!("expected Resolved, got {other:?}"),
+        }
+    }
+
+    // --- VT-3: dispatch_authored_divergence -------------------------------------------
+
+    #[test]
+    fn dispatch_authored_divergence_true_iff_doctrine_differs_trunk_to_tip() {
+        let (_tmp, primary, coord, base, _bt) = primary_with_coord(206);
+        // Clean coord at base: trunk (main) == coord tip == base ⇒ no `.doctrine/**`
+        // divergence, and compared_ref is the RESOLVED trunk (main tip), not a hardcode.
+        match dispatch_authored_divergence(&primary, 206).unwrap() {
+            ReadOutcome::Resolved(core) => {
+                assert!(!core.diverged, "clean coord has no divergence: {core:?}");
+                assert_eq!(
+                    core.compared_ref, base,
+                    "compared_ref = git::trunk_commit (the resolved main tip)"
+                );
+                assert!(core.drifted_paths.is_empty());
+            }
+            other => panic!("expected Resolved, got {other:?}"),
+        }
+
+        // Commit a `.doctrine/**` change on the dispatch branch — the coord tip advances
+        // past trunk; the authored subtree now diverges over trunk_ref..dispatch_tip.
+        fs::create_dir_all(coord.join(".doctrine/slice/206")).unwrap();
+        fs::write(coord.join(".doctrine/slice/206/notes.md"), "drift\n").unwrap();
+        git_run(&coord, &["add", ".doctrine/slice/206/notes.md"]);
+        git_run(&coord, &["commit", "-q", "-m", "authored drift"]);
+
+        match dispatch_authored_divergence(&primary, 206).unwrap() {
+            ReadOutcome::Resolved(core) => {
+                assert!(
+                    core.diverged,
+                    "authored `.doctrine` change diverges: {core:?}"
+                );
+                assert_eq!(
+                    core.compared_ref, base,
+                    "still compared to the RESOLVED trunk, never edge/hardcode"
+                );
+                assert!(
+                    core.drifted_paths
+                        .iter()
+                        .any(|p| p == ".doctrine/slice/206/notes.md"),
+                    "the drifted authored path is reported: {:?}",
+                    core.drifted_paths
+                );
+            }
+            other => panic!("expected Resolved, got {other:?}"),
+        }
     }
 }

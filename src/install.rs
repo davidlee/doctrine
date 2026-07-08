@@ -37,9 +37,13 @@ const DOCTRINE_MARKETPLACE: &str = "doctrine";
 const MARKETPLACE_ONLY_DOMAINS: &[&str] = &[MEMORY_SUBSET_DOMAIN, PARTNER_SUBSET_DOMAIN];
 const RUNNER_BUNX: &str = "bunx";
 const RUNNER_NPX: &str = "npx";
-const DISPATCH_WORKER_AGENT_FILE: &str = "dispatch-worker.md";
 const DISPATCH_WORKER_AGENT_ASSET: &str = "agents/claude/dispatch-worker.md";
 const DISPATCH_WORKER_AGENT_ASSET_PI: &str = "agents/pi/dispatch-worker.md";
+/// The claude-arm read-only probe def (SL-206 PHASE-13) — bootstrap phase-planner
+/// AND closing authored-divergence probe. Seeded alongside the worker/orchestrator
+/// defs via the same `install_agent_def` leg; dest filename is DERIVED from this
+/// asset's basename (no `_FILE` twin needed — see `install_agent_def`).
+const DISPATCH_PROBE_AGENT_ASSET: &str = "agents/claude/dispatch-probe.md";
 
 /// Marker token injected into the dispatch-worker agent defs (SL-186 PHASE-04).
 /// When `install_agent_def` sees this literal in a def, it resolves the role
@@ -499,6 +503,25 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
             // 3. Agent-def install (kept as-is).
             if let Err(e) = install_agents_for(root, "claude", None, args.global, false, &mut out) {
                 writeln!(io::stdout(), "  claude agent-def install failed: {e:#}")?;
+            }
+            // 3b. Probe def (SL-206 PHASE-13) — claude-arm only (read-only bootstrap
+            // + closing authored-divergence probe; no `agents/pi/dispatch-probe.md`
+            // counterpart exists).
+            if let Err(e) = install_agent_def(
+                root,
+                "claude",
+                None,
+                DISPATCH_PROBE_AGENT_ASSET,
+                args.global,
+                false,
+                &mut out,
+            ) {
+                writeln!(io::stdout(), "  claude probe-def install failed: {e:#}")?;
+            }
+            // 3c. Workflows leg (SL-206 PHASE-13) — payload lands PHASE-14; a
+            // no-op today (empty embed enumeration), mechanism only.
+            if let Err(e) = install_workflows_for(root, args.global, false, &mut out) {
+                writeln!(io::stdout(), "  claude workflows install failed: {e:#}")?;
             }
         } else {
             non_claude_agents.push(agent.clone());
@@ -2034,12 +2057,17 @@ pub(crate) fn install_agents_for(
 // Imperative: printing
 // ---------------------------------------------------------------------------
 
-/// Install a dispatch-worker agent def for the given agent: materialize the
-/// canonical copy from the embed into `.doctrine/agents/` (under an optional
-/// subdir), then symlink the agent's link dir at it. Idempotent — refreshes
-/// the canonical each run and only (re)writes a link that is missing or proven
-/// ours, never clobbering a foreign one. Reuses
-/// `classify_link`/`write_link`/`relative_target` — no parallel symlink impl.
+/// Install an agent def for the given agent: materialize the canonical copy
+/// from the embed into `.doctrine/agents/` (under an optional subdir), then
+/// symlink the agent's link dir at it. Idempotent — refreshes the canonical
+/// each run and only (re)writes a link that is missing or proven ours, never
+/// clobbering a foreign one. Reuses `classify_link`/`write_link`/
+/// `relative_target` — no parallel symlink impl.
+///
+/// The dest filename is DERIVED from `embed_asset`'s basename (SL-206
+/// PHASE-13) — never hardcoded — so this one function seeds every claude-arm
+/// def (`dispatch-worker.md`, `dispatch-probe.md`, …) rather than each needing
+/// its own copy-paste variant.
 pub(crate) fn install_agent_def(
     root: &Path,
     agent_name: &str,
@@ -2049,6 +2077,10 @@ pub(crate) fn install_agent_def(
     dry_run: bool,
     out: &mut dyn Write,
 ) -> anyhow::Result<()> {
+    let file_name = Path::new(embed_asset)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .with_context(|| format!("Embedded agent asset '{embed_asset}' has no file name"))?;
     let canon_base = agent_canonical_dir(root, global)?;
     let canon_dir = match canon_subdir {
         Some(sub) => canon_base.join(sub),
@@ -2058,16 +2090,12 @@ pub(crate) fn install_agent_def(
         "claude" => claude_agents_dir(root, global)?,
         _ => pi_agents_dir(root, global)?,
     };
-    let canon = canon_dir.join(DISPATCH_WORKER_AGENT_FILE);
-    let dest = link_dir.join(DISPATCH_WORKER_AGENT_FILE);
-    let target = relative_target(&link_dir, &canon_dir, DISPATCH_WORKER_AGENT_FILE);
+    let canon = canon_dir.join(file_name);
+    let dest = link_dir.join(file_name);
+    let target = relative_target(&link_dir, &canon_dir, file_name);
 
-    writeln!(out, "agent {agent_name} (dispatch-worker):")?;
-    writeln!(
-        out,
-        "  agent     {DISPATCH_WORKER_AGENT_FILE} → {}",
-        dest.display()
-    )?;
+    writeln!(out, "agent {agent_name} ({file_name}):")?;
+    writeln!(out, "  agent     {file_name} → {}", dest.display())?;
     if dry_run {
         return Ok(());
     }
@@ -2092,21 +2120,116 @@ pub(crate) fn install_agent_def(
 
     // 2. Reconcile the agent link by proven ownership (re-classify at mutation
     //    time, like `execute`'s skill links).
-    match classify_link(DISPATCH_WORKER_AGENT_FILE, &dest, &target) {
+    match classify_link(file_name, &dest, &target) {
         Link::Create { .. } => {
             write_link(&dest, &target)?;
-            writeln!(out, "  linked    {DISPATCH_WORKER_AGENT_FILE}")?;
+            writeln!(out, "  linked    {file_name}")?;
         }
         Link::Relink { .. } => {
             write_link(&dest, &target)?;
-            writeln!(out, "  relinked  {DISPATCH_WORKER_AGENT_FILE}")?;
+            writeln!(out, "  relinked  {file_name}")?;
         }
         Link::KeepForeign { reason, .. } => {
-            writeln!(
-                out,
-                "  kept      {DISPATCH_WORKER_AGENT_FILE} ({})",
-                foreign_reason(&reason)
-            )?;
+            writeln!(out, "  kept      {file_name} ({})", foreign_reason(&reason))?;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Workflows leg (SL-206 PHASE-13) — seed embedded `install/workflows/*.js`
+// assets into the claude-arm `.claude/workflows/` dir the same way the agents
+// leg installs defs: materialize a canonical copy under `.doctrine/workflows/`,
+// then symlink the link dir at it — reusing `classify_link`/`write_link`/
+// `relative_target`/`install_base`, no parallel symlink impl. The `/drive-slice`
+// payload (`drive-slice.js`) lands in PHASE-14, so `embedded_workflow_defs()`
+// enumerates EMPTY today and this leg is a no-op in production — the mechanism
+// is exercised in tests via a synthetic asset list (`install_workflow_assets`),
+// not the (absent) real payload.
+// ---------------------------------------------------------------------------
+
+/// The Claude workflows directory (project-local or, with `global`, user home).
+fn claude_workflows_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".claude/workflows"))
+}
+
+/// The canonical workflows tree, mirroring `agent_canonical_dir` so the
+/// relative link target is stable.
+fn workflow_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> {
+    Ok(install_base(root, global)?.join(".doctrine/workflows"))
+}
+
+/// Return every embedded workflow file (under `"workflows/"`) as
+/// `(relative-path, bytes)` pairs — mirrors `embedded_agent_defs`. Empty until
+/// SL-206 PHASE-14 ships the first `.js` payload.
+pub(crate) fn embedded_workflow_defs() -> Vec<(String, Vec<u8>)> {
+    let prefix = "workflows/";
+    Assets::iter()
+        .filter_map(|name| {
+            let name = name.as_ref();
+            name.strip_prefix(prefix)
+                .map(|rel| (rel.to_string(), Assets::get(name).map(|f| f.data.to_vec())))
+        })
+        .filter_map(|(rel, opt)| opt.map(|bytes| (rel, bytes)))
+        .collect()
+}
+
+/// Seed every embedded claude workflow asset: materialize a canonical copy
+/// under `.doctrine/workflows/`, then symlink `.claude/workflows/` at it.
+/// Public entry point — delegates to `install_workflow_assets` over the real
+/// embed, kept separate so tests can drive the mechanism over a synthetic
+/// asset list without an embedded payload.
+pub(crate) fn install_workflows_for(
+    root: &Path,
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+) -> anyhow::Result<()> {
+    install_workflow_assets(root, global, dry_run, out, &embedded_workflow_defs())
+}
+
+/// The testable core of the workflows leg: materialize+link every `(name,
+/// bytes)` asset. No embed access — a synthetic list exercises the mechanism
+/// before the real payload (PHASE-14) exists.
+fn install_workflow_assets(
+    root: &Path,
+    global: bool,
+    dry_run: bool,
+    out: &mut dyn Write,
+    assets: &[(String, Vec<u8>)],
+) -> anyhow::Result<()> {
+    let canon_dir = workflow_canonical_dir(root, global)?;
+    let link_dir = claude_workflows_dir(root, global)?;
+    for (rel, data) in assets {
+        let file_name = Path::new(rel)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .with_context(|| format!("Embedded workflow asset '{rel}' has no file name"))?;
+        let canon = canon_dir.join(file_name);
+        let dest = link_dir.join(file_name);
+        let target = relative_target(&link_dir, &canon_dir, file_name);
+
+        writeln!(out, "  workflow  {file_name} → {}", dest.display())?;
+        if dry_run {
+            continue;
+        }
+
+        fs::create_dir_all(&canon_dir)
+            .with_context(|| format!("Failed to create {}", canon_dir.display()))?;
+        crate::fsutil::write_atomic(&canon, data)?;
+
+        match classify_link(file_name, &dest, &target) {
+            Link::Create { .. } => {
+                write_link(&dest, &target)?;
+                writeln!(out, "  linked    {file_name}")?;
+            }
+            Link::Relink { .. } => {
+                write_link(&dest, &target)?;
+                writeln!(out, "  relinked  {file_name}")?;
+            }
+            Link::KeepForeign { reason, .. } => {
+                writeln!(out, "  kept      {file_name} ({})", foreign_reason(&reason))?;
+            }
         }
     }
     Ok(())
@@ -3535,23 +3658,82 @@ mod tests {
     }
 
     #[test]
-    fn install_agent_def_without_marker_writes_bytes_identically() {
+    fn install_agent_def_dispatch_probe_writes_bytes_identically_under_the_derived_dest() {
+        // SL-206 PHASE-13 (T4/VT-2): the dest filename is DERIVED from the
+        // embed-asset basename — a marker-free asset (the probe def has no
+        // WORKER_RESOLVE_MARKER) lands as a plain byte copy at its OWN name
+        // (`dispatch-probe.md`), not the previously-hardcoded
+        // `dispatch-worker.md` (the bug this generalization fixes).
         let dir = tempfile::tempdir().unwrap();
         let mut out = Vec::new();
         install_agent_def(
             dir.path(),
             "claude",
             None,
-            "glossary.md",
+            DISPATCH_PROBE_AGENT_ASSET,
             false,
             false,
             &mut out,
         )
         .unwrap();
 
-        let expected = embedded_asset("glossary.md").unwrap();
-        let written = fs::read(dir.path().join(".doctrine/agents/dispatch-worker.md")).unwrap();
+        let expected = embedded_asset(DISPATCH_PROBE_AGENT_ASSET).unwrap();
+        let written = fs::read(dir.path().join(".doctrine/agents/dispatch-probe.md")).unwrap();
         assert_eq!(written, expected.as_ref());
+    }
+
+    // --- Workflows leg (SL-206 PHASE-13 T6) ---
+
+    #[test]
+    fn embedded_workflow_defs_is_empty_before_the_phase_14_payload() {
+        // The `/drive-slice` payload (`drive-slice.js`) lands in PHASE-14 — today
+        // the embed root is empty, so the leg is a documented no-op, not dead code.
+        assert!(embedded_workflow_defs().is_empty());
+    }
+
+    #[test]
+    fn install_workflow_assets_materializes_and_links_a_synthetic_workflow() {
+        // Drives the mechanism over a synthetic asset list (no real embed payload
+        // exists yet) — proves materialize+link works before PHASE-14 ships the
+        // first real `.js` file.
+        let dir = tempfile::tempdir().unwrap();
+        let mut out = Vec::new();
+        let assets = vec![("drive-slice.js".to_string(), b"// stub workflow".to_vec())];
+        install_workflow_assets(dir.path(), false, false, &mut out, &assets).unwrap();
+
+        let canon = dir.path().join(".doctrine/workflows/drive-slice.js");
+        let link = dir.path().join(".claude/workflows/drive-slice.js");
+        assert_eq!(fs::read(&canon).unwrap(), b"// stub workflow");
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the workflows leg links, not copies, into .claude/workflows/"
+        );
+        assert_eq!(fs::read(&link).unwrap(), b"// stub workflow");
+    }
+
+    #[test]
+    fn install_workflow_assets_dry_run_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut out = Vec::new();
+        let assets = vec![("drive-slice.js".to_string(), b"// stub".to_vec())];
+        install_workflow_assets(dir.path(), false, true, &mut out, &assets).unwrap();
+
+        assert!(!dir.path().join(".doctrine/workflows").exists());
+        assert!(!dir.path().join(".claude/workflows").exists());
+    }
+
+    #[test]
+    fn install_workflow_assets_empty_list_is_a_no_op() {
+        // The production shape TODAY (PHASE-14 payload absent): no assets ⇒ no
+        // dirs created, no error.
+        let dir = tempfile::tempdir().unwrap();
+        let mut out = Vec::new();
+        install_workflow_assets(dir.path(), false, false, &mut out, &[]).unwrap();
+        assert!(!dir.path().join(".doctrine/workflows").exists());
+        assert!(!dir.path().join(".claude/workflows").exists());
     }
 
     // --- trait-aware bake (SL-191 VT-3) ---

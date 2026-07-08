@@ -284,6 +284,17 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
                 ..
             } => Hookmint("marker --stamp-subagent"),
             WorktreeCommand::Marker { .. } => MarkerClear,
+            // nominate/denominate (SL-206 PHASE-11, design §5.6) are the
+            // SubagentStart/SubagentStop hook verbs for the orchestrator-unjail
+            // allowlist — the SAME Hookmint pattern as `marker --stamp-subagent`:
+            // the legit fire is a FRESH `dispatch-orchestrator` spawn (no worker
+            // marker, so worker_mode resolves false and it passes automatically),
+            // while a marked WORKER invoking either verb directly (the pi/codex
+            // arm's `DOCTRINE_WORKER`-only defense-in-depth, no bwrap wrap) is
+            // refused — a worker must never write/clear the allowlist itself
+            // (design §5.6 I2: "a worker cannot nominate anything").
+            WorktreeCommand::Nominate => Hookmint("nominate"),
+            WorktreeCommand::Denominate => Hookmint("denominate"),
         },
         // dispatch sync projects coordination refs (SL-064 PHASE-04 / ADR-012
         // §4) — Orchestrator-classed across the whole verb class; refused under

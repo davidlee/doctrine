@@ -98,6 +98,34 @@ const REASON_ESCAPES_WORKTREE: &str = "escapes-worktree";
 /// arm (only `Backend::Deny` yields `None` from `select_jailer`, and that reason is
 /// preferred). Never a panic — fail-closed to a deny.
 const REASON_NO_BACKEND: &str = "no-jail-backend";
+/// `PreToolUse(Agent)` spawn-gate deny (design §5.6 I1(a), P3/P4-proven): a jailed,
+/// non-nominated caller attempted to spawn a privileged agent type.
+const REASON_PRIVILEGED_SPAWN_DENIED: &str = "privileged-spawn-denied";
+/// `PreToolUse(Workflow)` spawn-gate deny (design §5.6 I1(b)): the fail-safe
+/// blanket deny for ANY caller with a present `agent_id` — OQ-4 has not yet proven
+/// the Workflow seam carries caller identity into a privileged spawn, so the
+/// boundary stays closed by construction rather than by an unprovable identity
+/// check (never relaxed by nomination membership).
+const REASON_WORKFLOW_DENIED: &str = "workflow-denied-jailed-caller";
+
+// ---- nomination + spawn-gate vocabulary (design §5.6, I1 — ONE list, EVERY
+//      spawn seam) --------------------------------------------------------------
+/// The nomination-eligible-set == the gate's privileged deny-set (I1): the
+/// `SubagentStart` `nominate` handler (`subagent.rs`) and this leaf's
+/// [`decide_agent`] gate consume the SAME array — never two lists that can drift
+/// (a type added to nomination without the gate is an open escalation hole,
+/// RV-258 F-1). Lives HERE, in the leaf, rather than beside `marker.rs`'s
+/// engine-tier `DISPATCH_WORKER_AGENT_TYPE`: the pure `decide_agent` gate cannot
+/// import an engine-tier module (ADR-001 leaf ← engine, no upward reach), so the
+/// single source for a leaf-consumed set must itself live in the leaf.
+pub(crate) const PRIVILEGED_AGENT_TYPES: &[&str] = &["dispatch-orchestrator"];
+
+/// `agent_type ∈ PRIVILEGED_AGENT_TYPES` — the ONE membership test nomination
+/// eligibility (T2) and the spawn-gate ([`decide_agent`]) both call, so they can
+/// never diverge on what counts as privileged.
+pub(crate) fn is_privileged_agent_type(agent_type: &str) -> bool {
+    PRIVILEGED_AGENT_TYPES.contains(&agent_type)
+}
 
 // ---- SL-183 PHASE-03 fail-closed derivation reason stems (STD-001, §5.5 F-B4).
 //      Every `resolve_inputs` failure branch (a–f) renders one of these; the arm
@@ -324,24 +352,75 @@ impl JailPolicy {
     }
 }
 
-/// Map `(agent_id, cwd, shell-resolved topology)` → `Target` (VT-1). PURE.
-/// `cwd_is_project_worktree` is computed by the shell via `is_linked_worktree` +
-/// git-common-dir == this project's main `.git` (A1, git-topology not path-prefix);
-/// see the module R1 note. A sibling repo's worktree ⇒ `false` ⇒ `Reject`.
-/// **Precondition (D-canon, codex-blocker-1): `cwd` is already shell-canonicalized**
-/// (symlink-resolved, absolute). `Target::Jail(cwd)` carries it forward AS `wt` into
-/// both `pathcheck` and `bwrap_argv`, so a non-canonical `cwd` here poisons every
-/// downstream wall — the canonicality obligation is the shell's, load-bearing at the
-/// entry to the whole pure surface.
+/// Map `(agent_id, cwd, shell-resolved topology, nomination)` → `Target` (VT-1).
+/// PURE. `cwd_is_project_worktree` is computed by the shell via `is_linked_worktree`
+/// AND git-common-dir == this project's main `.git` (A1, git-topology not
+/// path-prefix); see the module R1 note. A sibling repo's worktree ⇒ `false` ⇒
+/// `Reject`.
+///
+/// `is_nominated` (design §5.6, SL-206 PHASE-11) is the shell-resolved
+/// membership test — `agent_id` is a line in the FIXED allowlist. A nominated
+/// caller resolves to `Target::Orchestrator` (`PassThrough`) **scoped to
+/// exactly that `agent_id`**: a DIFFERENT `agent_id` at the SAME `cwd` still
+/// resolves through the ordinary jail/reject legs (P1-proven,
+/// `unjail-direction.md` §6). Checked BEFORE the topology leg, so nomination
+/// resolves to `PassThrough` even for a `cwd` this project cannot otherwise
+/// confirm — the nominated orchestrator's own re-spawns need no worktree
+/// topology at all.
+///
+/// **Precondition (D-canon, codex-blocker-1): `cwd` is already
+/// shell-canonicalized** (symlink-resolved, absolute). `Target::Jail(cwd)`
+/// carries it forward as `wt` into both `pathcheck` and `bwrap_argv`, so a
+/// non-canonical `cwd` here poisons every downstream wall — the canonicality
+/// obligation is the shell's, load-bearing at the entry to the whole pure
+/// surface.
 pub(crate) fn resolve_target(
     agent_id: Option<&str>,
     cwd: &Path,
     cwd_is_project_worktree: bool,
+    is_nominated: bool,
 ) -> Target {
     match agent_id {
         None => Target::Orchestrator,
+        Some(_) if is_nominated => Target::Orchestrator,
         Some(_) if cwd_is_project_worktree => Target::Jail(cwd.to_path_buf()),
         Some(_) => Target::Reject(format!("{REASON_NOT_WORKTREE}: {}", cwd.display())),
+    }
+}
+
+/// `PreToolUse(Agent)` spawn-gate decision (design §5.6 I1(a) — proven P3/P4).
+/// PURE. DENY the spawn iff the caller is jailed (`agent_id` present, NOT
+/// nominated) AND the target `subagent_type` is privileged
+/// ([`is_privileged_agent_type`]) — the escalation the P0 nested-spawn probe found
+/// and P3/P4 closed. Every other case is `PassThrough`: the orchestrator itself
+/// (no `agent_id`, INV-1), a nominated caller re-spawning (the legit delegated
+/// path, P4), or a jailed caller spawning a non-privileged (benign) type — the
+/// gate is scoped, not a blanket `Agent` deny.
+pub(crate) fn decide_agent(
+    agent_id: Option<&str>,
+    is_nominated: bool,
+    subagent_type: &str,
+) -> Decision {
+    match agent_id {
+        Some(_) if !is_nominated && is_privileged_agent_type(subagent_type) => Decision::Deny {
+            reason: format!("{REASON_PRIVILEGED_SPAWN_DENIED}: {subagent_type}"),
+        },
+        _ => Decision::PassThrough,
+    }
+}
+
+/// `PreToolUse(Workflow)` spawn-gate decision (design §5.6 I1(b)). PURE. Fail-safe
+/// blanket deny: ANY caller with a present `agent_id` (i.e. any subagent) is denied
+/// Workflow outright, regardless of nomination — OQ-4 has not yet proven the
+/// Workflow seam carries caller identity into a privileged spawn, so this seam
+/// stays closed by construction (a coarser deny) rather than by an unprovable
+/// identity check. Only the orchestrator itself (no `agent_id`) passes through.
+pub(crate) fn decide_workflow(agent_id: Option<&str>) -> Decision {
+    match agent_id {
+        Some(_) => Decision::Deny {
+            reason: REASON_WORKFLOW_DENIED.to_string(),
+        },
+        None => Decision::PassThrough,
     }
 }
 
@@ -914,11 +993,11 @@ mod tests {
     fn resolve_target_no_agent_is_orchestrator() {
         // No agent_id ⇒ orchestrator, regardless of topology (INV-1).
         assert_eq!(
-            resolve_target(None, &pb("/anywhere"), false),
+            resolve_target(None, &pb("/anywhere"), false, false),
             Target::Orchestrator
         );
         assert_eq!(
-            resolve_target(None, &pb("/anywhere"), true),
+            resolve_target(None, &pb("/anywhere"), true, false),
             Target::Orchestrator
         );
     }
@@ -927,7 +1006,7 @@ mod tests {
     fn resolve_target_agent_in_project_worktree_is_jail() {
         let wt = pb("/root/.worktrees/agent-1");
         assert_eq!(
-            resolve_target(Some("agent-1"), &wt, true),
+            resolve_target(Some("agent-1"), &wt, true, false),
             Target::Jail(wt.clone())
         );
     }
@@ -935,12 +1014,49 @@ mod tests {
     #[test]
     fn resolve_target_agent_in_sibling_repo_worktree_is_reject() {
         // A1: a sibling repo's worktree resolves to `false` (git-topology, not
-        // path-prefix) ⇒ Reject, never Jail.
+        // path-prefix) ⇒ Reject, never Jail. Allowlist absent (not nominated) ⇒
+        // this deny is UNCHANGED by the SL-206 nomination leg (P1a rig: "allowlist
+        // absent ⇒ deny unchanged").
         let sibling = pb("/other-repo/.worktrees/agent-9");
-        match resolve_target(Some("agent-9"), &sibling, false) {
+        match resolve_target(Some("agent-9"), &sibling, false, false) {
             Target::Reject(reason) => assert!(reason.contains(REASON_NOT_WORKTREE)),
             other => panic!("expected Reject, got {other:?}"),
         }
+    }
+
+    // ---- VT-5: nomination PassThrough leg (T5, design §5.6, SL-206 PHASE-11) ----
+    // P1a rig-proven shape (`unjail-direction.md` §6): a nominated `agent_id`
+    // PassThroughs even where the ordinary topology check would Reject; a
+    // DIFFERENT `agent_id` at the SAME `cwd` stays jailed — nomination is scoped
+    // to exactly the listed id, never a blanket cwd-based grant.
+
+    #[test]
+    fn resolve_target_nominated_agent_passes_through_regardless_of_topology() {
+        // Listed id ⇒ PassThrough (Orchestrator) even though `cwd` is NOT a
+        // recognised project worktree — nomination overrides the topology reject.
+        let cwd = pb("/other-repo/.worktrees/agent-9");
+        assert_eq!(
+            resolve_target(Some("agent-9"), &cwd, false, true),
+            Target::Orchestrator
+        );
+    }
+
+    #[test]
+    fn resolve_target_nomination_is_scoped_to_the_listed_id_only() {
+        // The SAME cwd, a DIFFERENT (non-nominated) agent_id ⇒ still jailed — the
+        // P1a "different agent_id, same cwd ⇒ deny/jail" case. Nomination never
+        // widens to "anyone at this cwd".
+        let wt = pb("/root/.worktrees/agent-1");
+        assert_eq!(
+            resolve_target(Some("agent-1"), &wt, true, true),
+            Target::Orchestrator,
+            "the listed id passes through"
+        );
+        assert_eq!(
+            resolve_target(Some("agent-2"), &wt, true, false),
+            Target::Jail(wt.clone()),
+            "a different, non-nominated id at the SAME cwd stays jailed"
+        );
     }
 
     // ---- VT-2: pathcheck (T3) --------------------------------------------------
@@ -1406,6 +1522,56 @@ mod tests {
             decide_write(&target, Some(&pb("/opt/cache/blob")), &policy),
             Decision::PassThrough
         );
+    }
+
+    // ---- T4: decide_agent / decide_workflow (design §5.6 spawn-gate) -----------
+
+    #[test]
+    fn decide_agent_jailed_privileged_spawn_denies() {
+        match decide_agent(Some("a1"), false, "dispatch-orchestrator") {
+            Decision::Deny { reason } => {
+                assert!(reason.contains(REASON_PRIVILEGED_SPAWN_DENIED));
+                assert!(reason.contains("dispatch-orchestrator"));
+            }
+            other => panic!("expected Deny, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decide_agent_jailed_benign_spawn_passes_through() {
+        assert_eq!(
+            decide_agent(Some("a1"), false, "dispatch-worker"),
+            Decision::PassThrough
+        );
+    }
+
+    #[test]
+    fn decide_agent_nominated_privileged_spawn_passes_through() {
+        assert_eq!(
+            decide_agent(Some("a1"), true, "dispatch-orchestrator"),
+            Decision::PassThrough
+        );
+    }
+
+    #[test]
+    fn decide_agent_no_agent_id_always_passes_through() {
+        // The orchestrator itself (INV-1) is never gated, whatever the target type.
+        assert_eq!(
+            decide_agent(None, false, "dispatch-orchestrator"),
+            Decision::PassThrough
+        );
+    }
+
+    #[test]
+    fn decide_workflow_any_agent_id_denies() {
+        assert!(matches!(decide_workflow(Some("a1")), Decision::Deny { .. }));
+        // Nomination does NOT exempt Workflow — the blanket deny is deliberate
+        // (I1(b), OQ-4 unproven): decide_workflow does not even take `is_nominated`.
+    }
+
+    #[test]
+    fn decide_workflow_no_agent_id_passes_through() {
+        assert_eq!(decide_workflow(None), Decision::PassThrough);
     }
 
     // ---- SL-183 PHASE-02 fixtures ----------------------------------------------

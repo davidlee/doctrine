@@ -2753,61 +2753,18 @@ pub(crate) fn render_phase_table(rows: &[(String, String, String)]) -> String {
 pub(crate) fn run_plan_next(path: Option<PathBuf>, slice: u32, json: bool) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
 
-    // 1. Read plan.toml
-    let plan = crate::slice::read_plan(&root.join(".doctrine/slice"), slice)?;
-
-    // 2. Read phase statuses from runtime state
-    let state_dir = crate::state::phases_dir(&root, slice);
-
-    // Build ordered phase+status list
-    let mut rows: Vec<(String, String, String)> = Vec::new();
-    for ph in &plan.phases {
-        let stem = ph.id.to_lowercase();
-        let status = match crate::state::read_phase_status(&state_dir, &stem) {
-            Ok(Some(s)) => s,
-            Ok(None) => "pending".to_string(), // absent tracking file → pending
-            Err(_) => "unknown".to_string(),
-        };
-        rows.push((ph.id.clone(), status, ph.name.clone()));
-    }
-
-    // 3. Compute `next`
-    // Scan in plan order, skip completed/blocked.
-    // First actionable in_progress → only that phase.
-    // First actionable pending → that phase + consecutive pending.
-    let mut next: Vec<String> = Vec::new();
-    let mut found_actionable = false;
-    let mut saw_blocked = false;
-
-    for (id, status, _) in &rows {
-        match status.as_str() {
-            "completed" => {}
-            "blocked" => {
-                saw_blocked = true;
-                if found_actionable {
-                    break; // stop at blocked after we started collecting
-                }
-            }
-            "in_progress" => {
-                if !found_actionable {
-                    next.push(id.clone());
-                    break; // in_progress gates subsequent pending
-                }
-            }
-            _ => {
-                // pending or unknown
-                if !found_actionable {
-                    next.push(id.clone());
-                    found_actionable = true;
-                    // continue for consecutive pending
-                } else if status.as_str() == "pending" {
-                    next.push(id.clone());
-                } else {
-                    break; // non-pending stops the run
-                }
-            }
-        }
-    }
+    // Read the plan + runtime sheets into ordered `(id, status, name)` rows via
+    // the shared readiness seam (EX-7) — the SAME value `dispatch_next_ready`
+    // (MCP) consumes, so the two never re-derive. `next` rides the shared
+    // `compute_next_phases` authority, byte-identical to the pre-refactor inline
+    // scan (the same guarantee `run_status` already relies on).
+    let rows = plan_next_rows(&root, slice)?;
+    let next = compute_next_phases(&rows);
+    // `saw_blocked` only gates the all-blocked message, and is only read when
+    // `next` is empty — where it equals "any row is blocked" (the pre-refactor
+    // scan, unable to find an actionable phase, walked every row and set the flag
+    // on each blocked one).
+    let saw_blocked = rows.iter().any(|(_, status, _)| status == "blocked");
 
     // 4. Render output
     if json {
@@ -2893,6 +2850,176 @@ fn trunk_drift(root: &Path, tip: &str) -> anyhow::Result<Option<Drift>> {
     }))
 }
 
+/// A planned phase's receipt status, sourced across three tiers: the plan (the
+/// phase set), the disposable runtime sheet, and the COMMITTED boundaries ledger
+/// (SL-206 PHASE-02, EX-5). Unlike the sheet-only status string it enriches,
+/// `Completed` is sourced from a committed boundary row — a sheet that merely
+/// claims "completed" with no committed boundary is surfaced distinctly as
+/// `ConcludeIncomplete` (the gap the sheet alone hides). A genuinely unreadable
+/// sheet is `Unknown` (fail-loud), never silently collapsed to `NotStarted`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReceiptStatus {
+    /// No runtime sheet row — the phase has no recorded progress.
+    NotStarted,
+    /// The sheet records the phase in progress.
+    InProgress,
+    /// The sheet records the phase blocked.
+    Blocked,
+    /// A committed boundary row backs the phase — the authority for done.
+    Completed,
+    /// The sheet says "completed" but NO committed boundary row backs it.
+    ConcludeIncomplete,
+    /// The sheet is unreadable (an IO error, not merely absent) — fail-loud.
+    Unknown,
+}
+
+impl ReceiptStatus {
+    /// The distinct kebab-case token each status surfaces as over the read-only
+    /// funnel tools (SL-206 PHASE-03) — richer than the legacy phase-row string
+    /// ([`receipt_status_legacy_str`]): `ConcludeIncomplete` stays SEPARATE from
+    /// `Completed` (the sheet-completed-but-uncommitted gap the enum exists to
+    /// surface). STD-001 single-source — no bare literal at the tool call sites.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            ReceiptStatus::NotStarted => "not-started",
+            ReceiptStatus::InProgress => "in-progress",
+            ReceiptStatus::Blocked => "blocked",
+            ReceiptStatus::Completed => "completed",
+            ReceiptStatus::ConcludeIncomplete => "conclude-incomplete",
+            ReceiptStatus::Unknown => "unknown",
+        }
+    }
+}
+
+/// One projected row per planned phase: its id, name, the durable
+/// [`ReceiptStatus`] classification, and the verbatim legacy status string
+/// (SL-206 PHASE-02). `run_status` folds this into its legacy
+/// `(id, status_string, name)` tuple using `legacy_status` — NOT the enum — so
+/// `dispatch status` output stays byte-identical to the pre-refactor code; the
+/// enum enriches for PHASE-03 consumers but never alters the rendered string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PhaseProjection {
+    pub id: String,
+    pub name: String,
+    pub status: ReceiptStatus,
+    /// The verbatim sheet-derived status string under the ORIGINAL `run_status`
+    /// mapping — `Ok(Some(s)) ⇒ s` (so a `planned` skeleton stays "planned"),
+    /// `Ok(None) ⇒ "pending"`, `Err ⇒ "unknown"`. The behaviour-preserving
+    /// source for the rendered phase row (EX-4).
+    pub legacy_status: String,
+}
+
+/// Derive a phase's [`ReceiptStatus`] from its runtime-sheet read and whether a
+/// committed boundary row backs it. `Completed` is boundary-sourced; a
+/// sheet-"completed" with no boundary is `ConcludeIncomplete`. A read *error* is
+/// `Unknown` (fail-loud), never `NotStarted`. The `planned` skeleton (a phase
+/// materialised but not yet started) has no recorded progress ⇒ `NotStarted`; an
+/// unrecognised status string ⇒ `Unknown`. Pure over its two inputs.
+fn derive_receipt_status(
+    sheet: anyhow::Result<Option<String>>,
+    has_boundary: bool,
+) -> ReceiptStatus {
+    use crate::state::PhaseStatus;
+    match sheet {
+        Err(_) => ReceiptStatus::Unknown,
+        Ok(None) => ReceiptStatus::NotStarted,
+        Ok(Some(s)) => {
+            if s == PhaseStatus::InProgress.as_str() {
+                ReceiptStatus::InProgress
+            } else if s == PhaseStatus::Blocked.as_str() {
+                ReceiptStatus::Blocked
+            } else if s == PhaseStatus::Completed.as_str() {
+                if has_boundary {
+                    ReceiptStatus::Completed
+                } else {
+                    ReceiptStatus::ConcludeIncomplete
+                }
+            } else if s == PhaseStatus::Planned.as_str() {
+                ReceiptStatus::NotStarted
+            } else {
+                ReceiptStatus::Unknown
+            }
+        }
+    }
+}
+
+/// Map a [`ReceiptStatus`] back to a legacy phase-row status string —
+/// `Completed`/`ConcludeIncomplete` both render "completed". A durable
+/// classification→string projection for future [`ReceiptStatus`] consumers
+/// (PHASE-03). NOTE: `run_status` does NOT use this — it renders the verbatim
+/// `PhaseProjection::legacy_status` to stay byte-identical to the pre-refactor
+/// output (a `planned` skeleton must survive as "planned", which the enum cannot
+/// carry). Only the projection tests exercise it today.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-03 consumers are the first non-test callers; run_status renders the verbatim legacy string for behaviour-preservation"
+    )
+)]
+fn receipt_status_legacy_str(status: ReceiptStatus) -> &'static str {
+    match status {
+        ReceiptStatus::Completed | ReceiptStatus::ConcludeIncomplete => "completed",
+        ReceiptStatus::InProgress => "in_progress",
+        ReceiptStatus::Blocked => "blocked",
+        ReceiptStatus::NotStarted => "pending",
+        ReceiptStatus::Unknown => "unknown",
+    }
+}
+
+/// Read-only projection of a slice's planned phases over three tiers — the plan
+/// (`plan`, the phase set + names), the disposable runtime sheet (per-phase
+/// progress under `state_dir`), and the committed boundaries ledger (`committed`,
+/// the phase-id set with a committed boundary row — the authority for
+/// `Completed`). Yields one [`PhaseProjection`] per planned phase, in plan order
+/// (SL-206 PHASE-02, EX-5). The git read of the ledger stays in the caller so
+/// this reader touches only the sheet.
+fn phase_projection(
+    plan: &crate::plan::Plan,
+    state_dir: &Path,
+    committed: &BTreeSet<&str>,
+) -> Vec<PhaseProjection> {
+    plan.phases
+        .iter()
+        .map(|ph| {
+            let stem = ph.id.to_lowercase();
+            let sheet = crate::state::read_phase_status(state_dir, &stem);
+            let has_boundary = committed.contains(ph.id.as_str());
+            // The verbatim legacy string, under the ORIGINAL run_status mapping —
+            // computed off the same read, before the read is consumed by the
+            // ReceiptStatus derivation. This is what run_status renders (EX-4).
+            let legacy_status = match &sheet {
+                Ok(Some(s)) => s.clone(),
+                Ok(None) => "pending".to_string(),
+                Err(_) => "unknown".to_string(),
+            };
+            PhaseProjection {
+                id: ph.id.clone(),
+                name: ph.name.clone(),
+                status: derive_receipt_status(sheet, has_boundary),
+                legacy_status,
+            }
+        })
+        .collect()
+}
+
+/// A single planned phase's [`ReceiptStatus`], over the SAME PHASE-02 projection
+/// authority [`phase_projection`] applies per row (SL-206 PHASE-03): the phase's
+/// disposable runtime sheet read under `state_dir`, folded with `has_boundary`
+/// (whether a committed boundary row backs it) through [`derive_receipt_status`].
+/// The single-phase seam the `dispatch_phase_receipt` MCP tool consumes — no
+/// parallel status derivation. The caller supplies `has_boundary` from the
+/// committed ledger read (the git touch stays in the caller, as in `run_status`).
+pub(crate) fn phase_receipt_status(
+    state_dir: &Path,
+    phase: &str,
+    has_boundary: bool,
+) -> ReceiptStatus {
+    let stem = phase.to_lowercase();
+    let sheet = crate::state::read_phase_status(state_dir, &stem);
+    derive_receipt_status(sheet, has_boundary)
+}
+
 /// `doctrine dispatch status` — read-only full dispatch rollup: coordination
 /// state, phase table, trunk drift, sync state, candidate summary, next-step
 /// guidance. Read-only — callable from anywhere.
@@ -2922,16 +3049,24 @@ pub(crate) fn run_status(path: Option<PathBuf>, slice: u32, json: bool) -> anyho
     // --- Phase table -----------------------------------------------------------
     let plan = crate::slice::read_plan(&root.join(".doctrine/slice"), slice)?;
     let state_dir = crate::state::phases_dir(&root, slice);
-    let mut phase_rows: Vec<(String, String, String)> = Vec::new();
-    for ph in &plan.phases {
-        let stem = ph.id.to_lowercase();
-        let status = match crate::state::read_phase_status(&state_dir, &stem) {
-            Ok(Some(s)) => s,
-            Ok(None) => "pending".to_string(),
-            Err(_) => "unknown".to_string(),
-        };
-        phase_rows.push((ph.id.clone(), status, ph.name.clone()));
-    }
+    // The committed boundaries ledger (the authority for `Completed`), read from
+    // the dispatch tip's object db. Absent/empty ⇒ empty set, so a sheet-
+    // "completed" phase projects `ConcludeIncomplete` — which still renders
+    // "completed" (EX-4), preserving today's output while surfacing the gap to
+    // ReceiptStatus consumers.
+    let boundaries = read_ledger::<Boundaries>(&root, &dispatch_ref, &slice3, "boundaries.toml")?;
+    let committed: BTreeSet<&str> = boundaries.rows.iter().map(|r| r.phase.as_str()).collect();
+    // Delegate per-phase row construction to the projection, then fold each row
+    // back to the legacy `(id, status_string, name)` tuple. The status string is
+    // the VERBATIM `legacy_status` (the original Ok(Some(s))→s / None→"pending" /
+    // Err→"unknown" mapping), NOT derived from ReceiptStatus — so ALL downstream
+    // (all_completed, compute_next_phases on the literal "pending", the sheet's
+    // "planned", render_phase_table, JSON) is byte-identical (SL-206 PHASE-02,
+    // EX-4). ReceiptStatus rides alongside for PHASE-03 consumers only.
+    let phase_rows: Vec<(String, String, String)> = phase_projection(&plan, &state_dir, &committed)
+        .into_iter()
+        .map(|p| (p.id, p.legacy_status, p.name))
+        .collect();
 
     // --- Sync state ------------------------------------------------------------
     let review_ref = format!("{REVIEW_REF_PREFIX}{slice3}");
@@ -3135,7 +3270,34 @@ fn count_phase_refs(root: &Path, slice3: &str) -> usize {
 }
 
 /// Compute next phases using same logic as plan-next.
-fn compute_next_phases(rows: &[(String, String, String)]) -> Vec<String> {
+/// Read a slice's plan + disposable runtime phase sheets into ordered
+/// `(id, legacy_status, name)` rows — the readiness input BOTH `dispatch
+/// plan-next` (CLI, [`run_plan_next`]) and `dispatch_next_ready` (the MCP funnel
+/// tool) consume, so neither re-derives it (SL-206 PHASE-03, EX-7). Rides the
+/// PHASE-02 [`phase_projection`] authority with an EMPTY committed set:
+/// `plan-next` never consulted the committed boundaries ledger, and
+/// `legacy_status` is boundary-independent, so the rows stay byte-identical to
+/// the pre-refactor inline read.
+pub(crate) fn plan_next_rows(
+    root: &Path,
+    slice: u32,
+) -> anyhow::Result<Vec<(String, String, String)>> {
+    let plan = crate::slice::read_plan(&root.join(".doctrine/slice"), slice)?;
+    let state_dir = crate::state::phases_dir(root, slice);
+    let committed: BTreeSet<&str> = BTreeSet::new();
+    Ok(phase_projection(&plan, &state_dir, &committed)
+        .into_iter()
+        .map(|p| (p.id, p.legacy_status, p.name))
+        .collect())
+}
+
+/// The next actionable phase(s) over the readiness rows — the SOLE readiness
+/// authority (SL-206 PHASE-03, EX-2): scan in plan order, skip completed; the
+/// first actionable `in_progress` gates alone; the first actionable pending runs
+/// with its consecutive pending followers. Both `dispatch plan-next` (via
+/// [`run_plan_next`]), `run_status`, and the `dispatch_next_ready` MCP tool
+/// consume this — no parallel readiness logic exists.
+pub(crate) fn compute_next_phases(rows: &[(String, String, String)]) -> Vec<String> {
     let mut next: Vec<String> = Vec::new();
     let mut found_actionable = false;
     for (id, status, _) in rows {
@@ -3977,6 +4139,139 @@ mod tests {
         assert!(
             result.is_ok(),
             "status --json should succeed; err: {result:?}"
+        );
+    }
+
+    // --- SL-206 PHASE-02: phase_projection + ReceiptStatus ---------------------
+
+    /// VT-1 (SL-206 PHASE-02): the `phase_projection` branch table — each tier
+    /// combination derives the right `ReceiptStatus`. Boundary-present ⇒
+    /// Completed; sheet-"completed" with no boundary ⇒ ConcludeIncomplete;
+    /// blocked ⇒ Blocked; an unreadable sheet ⇒ Unknown (fail-loud, never
+    /// NotStarted); in_progress ⇒ InProgress; no sheet ⇒ NotStarted. Hermetic: a
+    /// seeded phases dir + a committed set parsed from a real boundaries body.
+    #[test]
+    fn phase_projection_derives_receipt_status_per_tier() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state_dir = tmp.path().join("phases");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        let write = |stem: &str, status: &str| {
+            std::fs::write(
+                state_dir.join(format!("{stem}.toml")),
+                format!("status = \"{status}\"\n"),
+            )
+            .unwrap();
+        };
+        write("phase-01", "completed"); // + committed boundary → Completed
+        write("phase-02", "completed"); // no boundary          → ConcludeIncomplete
+        write("phase-03", "blocked"); //                        → Blocked
+        // phase-04: a DIRECTORY at the `.toml` path forces read_phase_status to
+        // return Err (an IO error that is not NotFound) → Unknown.
+        std::fs::create_dir_all(state_dir.join("phase-04.toml")).unwrap();
+        write("phase-05", "in_progress"); //                    → InProgress
+        // phase-06: no sheet at all →                             NotStarted
+
+        let plan = crate::plan::Plan::parse(&plan_body(&[
+            ("PHASE-01", "done-bounded"),
+            ("PHASE-02", "conclude-incomplete"),
+            ("PHASE-03", "blocked"),
+            ("PHASE-04", "malformed"),
+            ("PHASE-05", "in-progress"),
+            ("PHASE-06", "not-started"),
+        ]))
+        .unwrap();
+
+        // Committed ledger backs only PHASE-01 — parsed from a real boundaries
+        // body, then reduced to the phase-id set exactly as run_status does.
+        let boundaries = Boundaries::parse(
+            "[[boundary]]\nphase = \"PHASE-01\"\ncode_start_oid = \"s\"\ncode_end_oid = \"e\"\n",
+        )
+        .unwrap();
+        let committed: BTreeSet<&str> = boundaries.rows.iter().map(|r| r.phase.as_str()).collect();
+
+        let projected = phase_projection(&plan, &state_dir, &committed);
+        let got: Vec<(&str, ReceiptStatus)> = projected
+            .iter()
+            .map(|r| (r.id.as_str(), r.status))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("PHASE-01", ReceiptStatus::Completed),
+                ("PHASE-02", ReceiptStatus::ConcludeIncomplete),
+                ("PHASE-03", ReceiptStatus::Blocked),
+                ("PHASE-04", ReceiptStatus::Unknown),
+                ("PHASE-05", ReceiptStatus::InProgress),
+                ("PHASE-06", ReceiptStatus::NotStarted),
+            ]
+        );
+    }
+
+    /// VT-2 (SL-206 PHASE-02): `run_status` delegates its per-phase rows to
+    /// `phase_projection`, and the legacy status string is unchanged. On a full
+    /// fixture (dispatch ref + committed boundary for PHASE-01 + sheets) the
+    /// command succeeds, and the same ingredients fed through
+    /// `phase_projection` → `receipt_status_legacy_str` reproduce today's
+    /// `(id, status)` rows — Completed and InProgress both round-trip to their
+    /// legacy strings, proving the delegation path.
+    #[test]
+    fn run_status_delegates_phase_rows_to_phase_projection() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        seed_slice_dir(src.path(), 85);
+        seed_plan(
+            src.path(),
+            85,
+            &plan_body(&[("PHASE-01", "setup"), ("PHASE-02", "build")]),
+        );
+        // Commit a boundaries ledger (PHASE-01 only) onto the tree the dispatch
+        // ref will point at, so run_status reads it from the object db.
+        let bdir = src.path().join(".doctrine/dispatch/085");
+        std::fs::create_dir_all(&bdir).unwrap();
+        std::fs::write(
+            bdir.join("boundaries.toml"),
+            "[[boundary]]\nphase = \"PHASE-01\"\ncode_start_oid = \"s\"\ncode_end_oid = \"e\"\n",
+        )
+        .unwrap();
+        git(src.path(), &["add", "-A"]);
+        git(src.path(), &["commit", "-q", "-m", "seed boundaries"]);
+        create_dispatch_ref(src.path(), 85);
+        seed_phase_tracking(src.path(), 85, 1, "completed");
+        seed_phase_tracking(src.path(), 85, 2, "in_progress");
+
+        let result = run_status(Some(src.path().to_path_buf()), 85, false);
+        assert!(result.is_ok(), "status should succeed; err: {result:?}");
+
+        // Reconstruct run_status' ingredients and assert the delegated projection
+        // reproduces the legacy rows (behaviour-preservation, EX-4).
+        let dispatch_ref = format!("{DISPATCH_REF_PREFIX}085");
+        let boundaries =
+            read_ledger::<Boundaries>(src.path(), &dispatch_ref, "085", "boundaries.toml").unwrap();
+        let committed: BTreeSet<&str> = boundaries.rows.iter().map(|r| r.phase.as_str()).collect();
+        let plan = crate::slice::read_plan(&src.path().join(".doctrine/slice"), 85).unwrap();
+        let state_dir = crate::state::phases_dir(src.path(), 85);
+
+        let projected = phase_projection(&plan, &state_dir, &committed);
+        assert_eq!(
+            projected.iter().map(|r| r.status).collect::<Vec<_>>(),
+            vec![ReceiptStatus::Completed, ReceiptStatus::InProgress],
+            "PHASE-01 is boundary-backed Completed; PHASE-02 InProgress",
+        );
+        let legacy: Vec<(String, String)> = projected
+            .iter()
+            .map(|r| {
+                (
+                    r.id.clone(),
+                    receipt_status_legacy_str(r.status).to_string(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            legacy,
+            vec![
+                ("PHASE-01".to_string(), "completed".to_string()),
+                ("PHASE-02".to_string(), "in_progress".to_string()),
+            ]
         );
     }
 

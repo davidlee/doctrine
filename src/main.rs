@@ -576,6 +576,38 @@ mod write_class_tests {
         );
     }
 
+    // SL-206 PHASE-11: `worktree nominate`/`worktree denominate` are the
+    // Hookmint class — the SAME pattern as `marker --stamp-subagent`: refused
+    // under worker-mode (a worker cannot nominate/denominate, design §5.6 I2),
+    // but the legit fire (a fresh, unmarked orchestrator spawn / its own
+    // SubagentStop) passes automatically since worker_mode resolves false there.
+    #[test]
+    fn worktree_nominate_is_hookmint() {
+        let c = Cli::try_parse_from(["doctrine", "worktree", "nominate"])
+            .unwrap()
+            .command;
+        assert!(
+            matches!(write_class(&c), WriteClass::Hookmint("nominate")),
+            "nominate must be the Hookmint class"
+        );
+        assert_eq!(cls(&["doctrine", "worktree", "nominate"]), Some("nominate"));
+    }
+
+    #[test]
+    fn worktree_denominate_is_hookmint() {
+        let c = Cli::try_parse_from(["doctrine", "worktree", "denominate"])
+            .unwrap()
+            .command;
+        assert!(
+            matches!(write_class(&c), WriteClass::Hookmint("denominate")),
+            "denominate must be the Hookmint class"
+        );
+        assert_eq!(
+            cls(&["doctrine", "worktree", "denominate"]),
+            Some("denominate")
+        );
+    }
+
     // SL-056 PHASE-06: `worktree fork` is the FIRST Orchestrator-classed verb —
     // refused under worker-mode, carries the "fork" verb label.
     #[test]

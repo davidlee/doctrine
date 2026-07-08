@@ -31,20 +31,23 @@ use serde::Deserialize;
 
 use super::create::{JAIL_SUBPATH, WORKTREES_SUBDIR};
 use super::jail::{
-    Backend, Decision, JailPolicy, ResolvedMac, decide_bash, decide_write, resolve_target,
-    seatbelt_profile, validate_policy,
+    Backend, Decision, JailPolicy, ResolvedMac, decide_agent, decide_bash, decide_workflow,
+    decide_write, resolve_target, seatbelt_profile, validate_policy,
 };
 #[cfg(target_os = "macos")]
 use super::jail::{RealEnv, resolve_inputs, seatbelt_backend};
+use super::shared::project_anchor;
+use super::subagent::is_nominated;
 
 // ---- stdin field / tool vocabulary (STD-001: single-sourced) -------------------
-/// Harness-supplied project-root anchor (`docs/claude/hooks.md:462`). The topology
-/// check confirms `cwd` shares this project's git-common-dir (A1). Absent ⇒
-/// fail-closed (a subagent whose project cannot be confirmed is not jailed HERE).
-const ENV_PROJECT_DIR: &str = "CLAUDE_PROJECT_DIR";
 const TOOL_BASH: &str = "Bash";
 const TOOL_EDIT: &str = "Edit";
 const TOOL_WRITE: &str = "Write";
+/// The `Agent`-tool spawn-gate seam (design §5.6 I1(a) — proven P3/P4).
+const TOOL_AGENT: &str = "Agent";
+/// The `Workflow`-tool spawn-gate seam (design §5.6 I1(b) — fail-safe blanket
+/// deny pending OQ-4; NOT yet proven to carry caller identity).
+const TOOL_WORKFLOW: &str = "Workflow";
 
 // ---- emitted-JSON vocabulary (STD-001; mirrors the probe wrap/pathcheck) --------
 const HOOK_EVENT: &str = "PreToolUse";
@@ -111,22 +114,33 @@ struct ToolInput {
     description: Option<String>,
     #[serde(default)]
     file_path: Option<String>,
+    /// The `Agent`-tool spawn target (design §5.6 I1(a); P3-confirmed field name).
+    /// Read ONLY on the `Agent` leg — absent/irrelevant for Bash/Edit/Write.
+    #[serde(default)]
+    subagent_type: Option<String>,
 }
 
 /// Map the payload + resolved impure inputs to a leaf `Decision`. PURE. The shell
-/// resolves `cwd` (canonicalized), `cwd_is_project_worktree` (topology), `real`
-/// (the canonicalized write target), `backend` (host capability), and `policy`.
-/// An unregistered `tool_name` ⇒ `PassThrough` (the matcher should not route it
-/// here; guarding an unread tool would be a latent jail hole — design §5.2).
+/// resolves `cwd` (canonicalized), `cwd_is_project_worktree` (topology),
+/// `is_nominated` (allowlist membership, design §5.6), `real` (the canonicalized
+/// write target), `backend` (host capability), and `policy`. An unregistered
+/// `tool_name` ⇒ `PassThrough` (the matcher should not route it here; guarding an
+/// unread tool would be a latent jail hole — design §5.2).
 fn decide(
     input: &PreToolUseInput,
     cwd: &Path,
     cwd_is_project_worktree: bool,
+    is_nominated: bool,
     real: Option<&Path>,
     backend: &Backend,
     policy: &JailPolicy,
 ) -> Decision {
-    let target = resolve_target(input.agent_id.as_deref(), cwd, cwd_is_project_worktree);
+    let target = resolve_target(
+        input.agent_id.as_deref(),
+        cwd,
+        cwd_is_project_worktree,
+        is_nominated,
+    );
     match input.tool_name.as_deref() {
         Some(TOOL_BASH) => {
             let cmd = input.tool_input.command.as_deref().unwrap_or_default();
@@ -134,6 +148,21 @@ fn decide(
             decide_bash(&target, cmd, desc, policy, backend)
         }
         Some(TOOL_EDIT | TOOL_WRITE) => decide_write(&target, real, policy),
+        // Spawn-gate (design §5.6): a PROVEN identity-gate for `Agent` (P3/P4),
+        // a fail-safe blanket deny for `Workflow` pending OQ-4. Neither leg touches
+        // `resolve_target`/`Target` — the caller's raw `agent_id` + nomination is
+        // all the gate needs (it is not confining a tool call to a worktree, it is
+        // refusing a PRIVILEGED SPAWN).
+        Some(TOOL_AGENT) => decide_agent(
+            input.agent_id.as_deref(),
+            is_nominated,
+            input
+                .tool_input
+                .subagent_type
+                .as_deref()
+                .unwrap_or_default(),
+        ),
+        Some(TOOL_WORKFLOW) => decide_workflow(input.agent_id.as_deref()),
         _ => Decision::PassThrough,
     }
 }
@@ -169,17 +198,6 @@ fn render(decision: &Decision) -> Option<String> {
             .to_string(),
         ),
     }
-}
-
-/// The harness-supplied project-root anchor (`CLAUDE_PROJECT_DIR`), realpath'd.
-/// One source shared by the topology check (A1) and the macOS Seatbelt arm's
-/// `main_root` (`resolve_inputs`' policy-dir + validate base). This module IS the
-/// claude-specific `PreToolUse` handler (ADR-011 per-harness altitude), so the
-/// claude env var is a legitimate contract, not new coupling. `None` ⇒ absent or
-/// uncanonicalizable ⇒ every consumer fails closed.
-fn project_anchor() -> Option<PathBuf> {
-    let raw = std::env::var_os(ENV_PROJECT_DIR)?;
-    fs::canonicalize(PathBuf::from(raw)).ok()
 }
 
 /// Is `cwd` a linked worktree of THIS project? (A1 — git topology, not a path
@@ -418,11 +436,21 @@ pub(crate) fn run_pretooluse() -> anyhow::Result<()> {
             .and_then(|fp| canonicalize_missing(&cwd, fp)),
         _ => None,
     };
+    // Nomination membership (design §5.6): `agent_id ∈` the FIXED allowlist under
+    // `CLAUDE_PROJECT_DIR` — fail-safe, an absent anchor or unreadable/absent file
+    // resolves to `false` (never nominated by default, `is_nominated`'s own
+    // contract). Consumed by BOTH the Bash/Edit/Write `resolve_target` PassThrough
+    // leg (T5) and the `Agent` spawn-gate leg (T4) — one read, two consumers.
+    let nominated = match (project_anchor(), input.agent_id.as_deref()) {
+        (Some(anchor), Some(agent_id)) => is_nominated(&anchor, agent_id),
+        _ => false,
+    };
 
     let decision = decide(
         &input,
         &cwd,
         is_project_worktree,
+        nominated,
         real.as_deref(),
         &backend,
         &policy,
@@ -470,6 +498,7 @@ mod tests {
             &bash(Some("a1"), "echo hi"),
             Path::new(WT),
             true,
+            false,
             None,
             &Backend::Bwrap,
             &JailPolicy::default(),
@@ -502,6 +531,7 @@ mod tests {
             &input(Some("a1"), TOOL_WRITE),
             Path::new(WT),
             true,
+            false,
             Some(Path::new("/etc/passwd")),
             &Backend::Bwrap,
             &JailPolicy::default(),
@@ -520,6 +550,7 @@ mod tests {
             &input(Some("a1"), TOOL_WRITE),
             Path::new(WT),
             true,
+            false,
             Some(&Path::new(WT).join("src/lib.rs")),
             &Backend::Bwrap,
             &JailPolicy::default(),
@@ -534,6 +565,7 @@ mod tests {
         let d = decide(
             &bash(None, "rm -rf /"),
             Path::new(WT),
+            false,
             false,
             None,
             &Backend::Bwrap,
@@ -550,6 +582,7 @@ mod tests {
         let d = decide(
             &bash(Some("a1"), "echo hi"),
             Path::new("/home/u/proj"),
+            false,
             false,
             None,
             &Backend::Bwrap,
@@ -571,6 +604,7 @@ mod tests {
             &input(Some("a1"), TOOL_EDIT),
             Path::new(WT),
             true,
+            false,
             Some(Path::new("/home/u/proj/Cargo.toml")),
             &Backend::Bwrap,
             &JailPolicy::default(),
@@ -587,11 +621,135 @@ mod tests {
             &input(Some("a1"), "Read"),
             Path::new(WT),
             true,
+            false,
             None,
             &Backend::Bwrap,
             &JailPolicy::default(),
         );
         assert_eq!(d, Decision::PassThrough);
+    }
+
+    // ── T4: spawn-gate legs (design §5.6 — Agent proven P3/P4, Workflow fail-safe)
+
+    fn agent_call(agent: Option<&str>, subagent_type: &str) -> PreToolUseInput {
+        let mut i = input(agent, TOOL_AGENT);
+        i.tool_input.subagent_type = Some(subagent_type.to_string());
+        i
+    }
+
+    #[test]
+    fn jailed_caller_privileged_spawn_denied() {
+        // A jailed (non-nominated) caller spawning a PRIVILEGED type ⇒ DENY — the
+        // P3/P4-proven escalation close.
+        let d = decide(
+            &agent_call(Some("a1"), "dispatch-orchestrator"),
+            Path::new(WT),
+            true,
+            false, // not nominated
+            None,
+            &Backend::Bwrap,
+            &JailPolicy::default(),
+        );
+        let v = parse(&render(&d).expect("deny emits JSON"));
+        assert_eq!(v["hookSpecificOutput"]["permissionDecision"], DECISION_DENY);
+        let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap();
+        assert!(reason.contains("dispatch-orchestrator"), "reason: {reason}");
+    }
+
+    #[test]
+    fn jailed_caller_benign_spawn_allowed() {
+        // A jailed caller spawning a NON-privileged (benign) type ⇒ PassThrough —
+        // the gate is scoped, not a blanket Agent deny (P4).
+        let d = decide(
+            &agent_call(Some("a1"), "dispatch-worker"),
+            Path::new(WT),
+            true,
+            false,
+            None,
+            &Backend::Bwrap,
+            &JailPolicy::default(),
+        );
+        assert_eq!(d, Decision::PassThrough);
+        assert_eq!(render(&d), None);
+    }
+
+    #[test]
+    fn allowlisted_caller_privileged_spawn_allowed() {
+        // A NOMINATED caller re-spawning a privileged type ⇒ PassThrough — the
+        // legit main-thread-delegated nomination path is not over-blocked (P4).
+        let d = decide(
+            &agent_call(Some("a1"), "dispatch-orchestrator"),
+            Path::new(WT),
+            true,
+            true, // nominated
+            None,
+            &Backend::Bwrap,
+            &JailPolicy::default(),
+        );
+        assert_eq!(d, Decision::PassThrough);
+    }
+
+    #[test]
+    fn no_agent_id_agent_spawn_allowed() {
+        // The orchestrator itself (no agent_id, INV-1) is never gated here.
+        let d = decide(
+            &agent_call(None, "dispatch-orchestrator"),
+            Path::new(WT),
+            false,
+            false,
+            None,
+            &Backend::Bwrap,
+            &JailPolicy::default(),
+        );
+        assert_eq!(d, Decision::PassThrough);
+    }
+
+    #[test]
+    fn workflow_any_agent_id_denied_no_agent_id_allowed() {
+        // Fail-safe blanket deny (OQ-4 unproven): ANY caller with a present
+        // `agent_id` is denied Workflow, regardless of nomination — even a
+        // nominated caller (the gate deliberately does not consult the allowlist
+        // here, design §5.6 I1(b)). No `agent_id` ⇒ PassThrough (the orchestrator).
+        let jailed = decide(
+            &input(Some("a1"), TOOL_WORKFLOW),
+            Path::new(WT),
+            true,
+            false,
+            None,
+            &Backend::Bwrap,
+            &JailPolicy::default(),
+        );
+        assert!(
+            matches!(jailed, Decision::Deny { .. }),
+            "jailed: {jailed:?}"
+        );
+
+        let nominated = decide(
+            &input(Some("a1"), TOOL_WORKFLOW),
+            Path::new(WT),
+            true,
+            true,
+            None,
+            &Backend::Bwrap,
+            &JailPolicy::default(),
+        );
+        assert!(
+            matches!(nominated, Decision::Deny { .. }),
+            "nomination does not exempt Workflow: {nominated:?}"
+        );
+
+        let orchestrator = decide(
+            &input(None, TOOL_WORKFLOW),
+            Path::new(WT),
+            false,
+            false,
+            None,
+            &Backend::Bwrap,
+            &JailPolicy::default(),
+        );
+        assert_eq!(orchestrator, Decision::PassThrough);
     }
 
     // ── VT-3: runtime fail-closed — a degraded backend denies, never passes ─────
@@ -604,6 +762,7 @@ mod tests {
             &bash(Some("a1"), "echo hi"),
             Path::new(WT),
             true,
+            false,
             None,
             &Backend::Deny {
                 reason: REASON_NO_BWRAP.to_string(),
@@ -634,6 +793,7 @@ mod tests {
             &inp,
             wt,
             true,
+            false,
             Some(real),
             &Backend::Bwrap,
             &JailPolicy::default(),

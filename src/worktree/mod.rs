@@ -28,6 +28,10 @@ mod allowlist;
 // `expect` in jail.rs (covers both cfg while items are unconsumed).
 mod jail;
 pub(crate) use jail::JailPolicy;
+// design §5.6 I1 — the doctor #10 spawn-seam-symmetry check imports the SAME deny-set
+// the gate consumes (never re-types it, STD-001); re-exported here since `jail` itself
+// is private to this module.
+pub(crate) use jail::PRIVILEGED_AGENT_TYPES;
 
 // SL-182 PHASE-03: the PreToolUse hook shell (command tier). Drives the pure jail
 // core (leaf) with impure inputs resolved here: git topology, host capability,
@@ -79,7 +83,7 @@ pub(crate) use import::{CLAUDE_PREFIX, DOCTRINE_PREFIX, gather_worktree_delta_pa
 pub(crate) use inventory::run_list;
 pub(crate) use land::run_land;
 pub(crate) use provision::{run_check_allowlist, run_provision};
-pub(crate) use subagent::{run_stamp_subagent, run_verify_worker};
+pub(crate) use subagent::{run_denominate, run_nominate, run_stamp_subagent, run_verify_worker};
 
 #[cfg(test)]
 pub(crate) use coordinate::{CoordAction, CoordRefusal, base_has_slice_plan, classify_coordinate};
@@ -89,7 +93,9 @@ pub(crate) use gc::{GcPlan, GcRefusal, GcState, GcVerdict, classify_gc};
 pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land, no_such_fork_message};
 #[cfg(test)]
 pub(crate) use subagent::{
-    Stamp, StampRefusal, WorkerVerify, WorkerVerifyRefusal, classify_stamp, classify_worker_verify,
+    NominateRefusal, Stamp, StampRefusal, WorkerVerify, WorkerVerifyRefusal, act_denominate,
+    act_nominate, append_nomination, classify_nominate, classify_stamp, classify_worker_verify,
+    is_nominated, remove_nomination,
 };
 // SL-198 PHASE-02 (test-only): the record provisioner that `worker_commit`'s tests
 // cross-check against (VT-3 belt-agreement; integration fixtures that stand up a live
@@ -191,6 +197,21 @@ pub(crate) enum WorktreeCommand {
     /// stdout. No `-p`: the root is the payload cwd's `--show-toplevel`.
     /// Orchestrator-classed — fires in the markerless parent coord tree.
     CreateFork,
+
+    /// Nominate an orchestrator subagent as unjailed, for the claude
+    /// `SubagentStart` hook (stdin payload, design §5.6 / SL-206 PHASE-11).
+    /// Reads `{agent_id, agent_type}` JSON; an ELIGIBLE `agent_type`
+    /// (privileged — currently `dispatch-orchestrator`) appends `agent_id` to
+    /// the FIXED, `CLAUDE_PROJECT_DIR`-resolved allowlist. `SubagentStart` is
+    /// read-only (a refusal cannot abort the spawn) — a missed/refused
+    /// nomination leaves the spawned agent jailed, never an escape.
+    Nominate,
+
+    /// Denominate — hygiene counterpart for the claude `SubagentStop` hook
+    /// (stdin payload, design §5.6 / SL-206 PHASE-11). Reads `{agent_id}` JSON;
+    /// removes exactly that entry from the allowlist so a stale `agent_id`
+    /// cannot be reused. Absent file/entry is a clean no-op, exit 0.
+    Denominate,
 
     /// Confine a subagent tool call for the claude `PreToolUse` hook (stdin
     /// payload). Reads `{agent_id?, cwd, tool_name, tool_input}` JSON on stdin;
@@ -429,6 +450,8 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
             path,
         } => run_fork(path, &base, &branch, &dir, worker),
         WorktreeCommand::CreateFork => run_create_fork(),
+        WorktreeCommand::Nominate => run_nominate(),
+        WorktreeCommand::Denominate => run_denominate(),
         WorktreeCommand::Pretooluse => run_pretooluse(),
         WorktreeCommand::JailPrefix {
             dir,
@@ -1154,6 +1177,160 @@ mod tests {
             Err(StampRefusal::AlreadyMarked)
         );
         assert_eq!(StampRefusal::AlreadyMarked.token(), "already-marked");
+    }
+
+    // --- SL-206 PHASE-11 T2: classify_nominate pure arms (design §5.6) ---
+
+    const PRIVILEGED: &str = "dispatch-orchestrator";
+
+    #[test]
+    fn classify_nominate_ok_when_eligible_and_present() {
+        assert_eq!(classify_nominate(PRIVILEGED, true, true), Ok(()));
+    }
+
+    #[test]
+    fn classify_nominate_missing_project_dir_errors_first() {
+        // Checked FIRST regardless of eligibility/agent_id — an environment
+        // problem, not a benign refusal.
+        assert_eq!(
+            classify_nominate(PRIVILEGED, false, true),
+            Err(NominateRefusal::MissingProjectDir)
+        );
+        assert_eq!(
+            NominateRefusal::MissingProjectDir.token(),
+            "missing-project-dir"
+        );
+    }
+
+    #[test]
+    fn classify_nominate_ineligible_agent_type_refuses() {
+        // Absent or non-privileged agent_type ⇒ ineligible — the ordinary
+        // benign (non-orchestrator) SubagentStart fire.
+        assert_eq!(
+            classify_nominate("", true, true),
+            Err(NominateRefusal::Ineligible)
+        );
+        assert_eq!(
+            classify_nominate("dispatch-worker", true, true),
+            Err(NominateRefusal::Ineligible)
+        );
+        assert_eq!(NominateRefusal::Ineligible.token(), "ineligible");
+    }
+
+    #[test]
+    fn classify_nominate_missing_agent_id_refuses() {
+        assert_eq!(
+            classify_nominate(PRIVILEGED, true, false),
+            Err(NominateRefusal::MissingAgentId)
+        );
+        assert_eq!(NominateRefusal::MissingAgentId.token(), "missing-agent-id");
+    }
+
+    // --- SL-206 PHASE-11 T2/T3: append_nomination / remove_nomination (pure) ---
+
+    #[test]
+    fn append_nomination_adds_new_id_idempotently() {
+        let existing: Vec<String> = vec![];
+        let once = append_nomination(&existing, "agent-1");
+        assert_eq!(once, vec!["agent-1".to_string()]);
+        // Re-adding the SAME id must not duplicate the line (idempotent).
+        let twice = append_nomination(&once, "agent-1");
+        assert_eq!(twice, vec!["agent-1".to_string()], "no duplicate line");
+    }
+
+    #[test]
+    fn append_nomination_preserves_other_entries() {
+        let existing = vec!["agent-1".to_string()];
+        let updated = append_nomination(&existing, "agent-2");
+        assert_eq!(updated, vec!["agent-1".to_string(), "agent-2".to_string()]);
+    }
+
+    #[test]
+    fn remove_nomination_removes_only_the_matching_id() {
+        let existing = vec!["agent-1".to_string(), "agent-2".to_string()];
+        assert_eq!(
+            remove_nomination(&existing, "agent-1"),
+            vec!["agent-2".to_string()]
+        );
+        // Absent id ⇒ content-unchanged no-op.
+        assert_eq!(remove_nomination(&existing, "agent-9"), existing);
+    }
+
+    // --- SL-206 PHASE-11 T2/T3: act_nominate / act_denominate (design §5.6) ---
+    // Injected `project_dir` (no env mutation — CLAUDE_PROJECT_DIR is a process-
+    // global var multiple test threads would race on).
+
+    #[test]
+    fn act_nominate_eligible_appends_to_allowlist() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        act_nominate(Some(dir), Some("agent-1"), PRIVILEGED).unwrap();
+        assert!(
+            is_nominated(dir, "agent-1"),
+            "eligible nomination is readable back"
+        );
+    }
+
+    #[test]
+    fn act_nominate_ineligible_refuses_no_write() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let err = act_nominate(Some(dir), Some("agent-1"), "dispatch-worker").unwrap_err();
+        assert!(format!("{err}").contains("ineligible"));
+        assert!(!is_nominated(dir, "agent-1"), "no write on refusal");
+    }
+
+    #[test]
+    fn act_nominate_is_idempotent_on_repeat() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        act_nominate(Some(dir), Some("agent-1"), PRIVILEGED).unwrap();
+        act_nominate(Some(dir), Some("agent-1"), PRIVILEGED).unwrap();
+        let body = fs::read_to_string(dir.join(".doctrine/state/orch-allowlist.txt")).unwrap();
+        assert_eq!(
+            body.lines().filter(|l| *l == "agent-1").count(),
+            1,
+            "no duplicate line on repeat nomination"
+        );
+    }
+
+    #[test]
+    fn act_nominate_missing_project_dir_errors_no_write() {
+        // `project_dir = None` simulates an absent `CLAUDE_PROJECT_DIR` (T2
+        // "missing env") without mutating the real process environment.
+        let err = act_nominate(None, Some("agent-1"), PRIVILEGED).unwrap_err();
+        assert!(format!("{err}").contains("missing-project-dir"));
+    }
+
+    #[test]
+    fn act_denominate_removes_only_the_nominated_id() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        act_nominate(Some(dir), Some("agent-1"), PRIVILEGED).unwrap();
+        act_nominate(Some(dir), Some("agent-2"), PRIVILEGED).unwrap();
+        act_denominate(Some(dir), Some("agent-1")).unwrap();
+        assert!(!is_nominated(dir, "agent-1"), "agent-1 removed");
+        assert!(is_nominated(dir, "agent-2"), "agent-2 untouched");
+    }
+
+    #[test]
+    fn act_denominate_absent_file_is_a_clean_no_op() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        act_denominate(Some(dir), Some("agent-1")).unwrap();
+        assert!(
+            !dir.join(".doctrine/state/orch-allowlist.txt").exists(),
+            "no file created on a no-op denominate"
+        );
+    }
+
+    #[test]
+    fn act_denominate_absent_entry_is_a_clean_no_op() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        act_nominate(Some(dir), Some("agent-1"), PRIVILEGED).unwrap();
+        act_denominate(Some(dir), Some("agent-9")).unwrap(); // never nominated
+        assert!(is_nominated(dir, "agent-1"), "unrelated entry untouched");
     }
 
     // --- SL-064 PHASE-08: worker-verify pure classifier + token table (design §8.4) ---
