@@ -189,7 +189,7 @@
           dontFixup = true;
           outputHashMode = "recursive";
           outputHashAlgo = "sha256";
-          outputHash = "sha256-9toahEZbo6E94MgkTzXuzCQLkF5d2VDL9O1BNAFh3vo=";
+          outputHash = "sha256-Fn1c5nzfclWXvney5hCVNUviKz3oeyYkl45Ry0M/w8c=";
         };
 
         webDist = stdenv.mkDerivation {
