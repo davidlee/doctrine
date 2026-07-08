@@ -5,10 +5,10 @@ id = 187
 slug = "dispatch-candidate-worktree-should-stage-generated-embed-assets-webmapdist-before-gate"
 title = "Dispatch candidate worktree should stage generated embed assets (web/map/dist) before gate"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "duplicate"
 created = "2026-06-27"
-updated = "2026-07-03"
+updated = "2026-07-07"
 tags = ["area:dispatch", "area:web", "area:worktree"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
