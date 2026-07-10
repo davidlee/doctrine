@@ -956,3 +956,19 @@ plan.toml scaffold's comment block renders VT mandate example as a
 multi-line inline table — invalid TOML if imitated literally. Cost: one
 failed `slice phases`, one rewrite pass. Scaffold comment should show a
 single-line row or use array-of-tables syntax.
+
+[slice; SL-211-triage-jail]
+Spawned two Explore subagents to triage dispatch backlog. Both hit the
+`worktree-jail` PreToolUse hook: every Bash call from a pinned subagent in the
+main checkout (`/workspace/doctrine`) is rejected `cwd-not-a-worktree`, so
+`doctrine backlog show` is unreachable. `EnterWorktree` refuses to *create* from a
+pinned subagent. One agent fully dead-ended (0 items read, 341s/48k tokens burned
+on retries + escape probes); the other recovered only by reading authored
+`.doctrine/backlog/<kind>/<n>/*.toml|md` directly (65 tool calls). Cost: ~123k
+subagent tokens, one wasted agent. Root cause: read-only corpus queries have no
+jail-exempt path for subagents; the CLI is the sanctioned read surface but Bash is
+walled. Mitigation options: (a) spawn triage agents with `cwd` set to a worktree;
+(b) expose a backlog-read MCP tool (parallels the memory_* read tools already
+exempt); (c) main-thread does CLI reads, hands bodies to subagents for synthesis.
+The main thread is unjailed, so batch triage that needs the CLI should not be
+delegated to worktree-pinned subagents as-is.
