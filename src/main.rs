@@ -7,6 +7,7 @@ mod boundary;
 mod catalog;
 mod clock;
 mod commands;
+mod comparison;
 mod concept_map;
 mod conduct;
 mod conformance;

@@ -11,6 +11,7 @@ use anyhow::Result;
 use clap::CommandFactory;
 use clap::Subcommand;
 
+use crate::commands::compare::CompareArgs;
 use crate::commands::config::ConfigCommand;
 use crate::commands::facet::{
     EstimateClearArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs, ValueClearArgs, ValueSetArgs,
@@ -743,6 +744,9 @@ pub(crate) enum Command {
         action: RiskAction,
     },
 
+    /// Capture a pairwise value comparison into an append-only session file.
+    Compare(CompareArgs),
+
     /// Resolve and inspect the LLM prompt cascade.
     Prompt {
         #[command(subcommand)]
@@ -799,7 +803,7 @@ static FAMILIES: &[Family] = &[
     Family {
         key: "facets",
         suppress_verbs: false,
-        members: &["estimate", "value", "risk", "tag"],
+        members: &["estimate", "value", "compare", "risk", "tag"],
     },
     Family {
         key: "reports",
@@ -1447,6 +1451,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             RiskAction::Set(args) => crate::commands::facet::run_risk_set(&args),
             RiskAction::Clear(args) => crate::commands::facet::run_risk_clear(&args),
         },
+        Command::Compare(args) => crate::commands::compare::run_compare(args),
         Command::Supersede { new, old, path } => {
             crate::commands::supersede::run_supersede(path, &new, &old)
         }
@@ -1514,8 +1519,8 @@ mod tests {
         }
 
         // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168)
-        // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01).
-        assert_eq!(visible.len(), 49, "expected 49 visible top-level commands");
+        // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01) + `compare` (SL-210 PHASE-02).
+        assert_eq!(visible.len(), 50, "expected 50 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the

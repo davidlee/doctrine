@@ -161,15 +161,20 @@ list, with a unit test pinning the relationship (D6; no magic strings).
 
 ### `src/commands/compare.rs` — new, command shell
 
-- Clap: `compare` group with bare capture args +
-  `args_conflicts_with_subcommands = true`; subcommands `list`, `withdraw`.
-  (Fallback if ergonomics fight clap: promote capture to `compare record` —
-  cosmetic, not structural.)
+- Clap: `compare` group; capture is the `compare record` subcommand beside
+  `list`, `withdraw`. **EX-4 outcome (PHASE-02): the pre-authorised fallback
+  was taken.** The primary shape (bare capture args +
+  `args_conflicts_with_subcommands = true` + `subcommand_negates_reqs = true`)
+  was implemented and tested first, but clap 4's `subcommand_negates_reqs`
+  does not relax *required positionals* sharing an argument slot with
+  subcommand names — `compare list` failed with "required argument was not
+  provided: a" (verified against the real binary and an in-module clap test).
+  Cosmetic, not structural; rationale also in the `compare.rs` module doc.
 - Full capture surface (RV-262 F-3/F-4 — every schema column the row needs
   is settable at capture; nothing reachable only by default):
 
   ```text
-  doctrine compare <A> <B> --prefer <A|B|a|b>
+  doctrine compare record <A> <B> --prefer <A|B|a|b>
       [--frame equal-effort|prefer-first]   # default equal-effort
       [--rater human|agent]                 # default agent
       [--by <NAME>] [--lens <L>] [--note <N>]
