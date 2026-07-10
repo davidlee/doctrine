@@ -1,109 +1,128 @@
 # Split-lineage close recovery
 
-Batches **IMP-127 + IMP-236 + IMP-169** — one wound, one shippable change: a
-dispatched slice whose code reached trunk by any sanctioned non-native route
-(hand-resolved 3-way merge, manual merge, direct-land) cannot reach `done`,
-because the close-gate demands a journal **trunk row** that no verb will write
-for a split-lineage slice.
+Batches **IMP-236 + IMP-169** — one shippable change: a dispatched slice whose
+code reached trunk by a sanctioned route that leaves no journal **trunk row**
+(operator direct-land, manual merge, external integration) cannot reach `done`,
+because the close-gate demands a trunk row no verb writes for it. This slice
+makes the variation **recordable** and the gate **recognise** it.
+
+Scope narrowed from the original three-item batch: **IMP-127** (ingest a
+hand-resolved 3-way merge) is split to **SL-212** — its clean non-FF auto-merge
+face reverses ADR-012 D2/D4 FF-only and is gated on RFC-006 external review. This
+slice keeps only the two moves that record a row / recognise an already-landed
+tip, which do **not** touch the FF-only invariant.
 
 ## Context
 
-The sanctioned dispatch close chain is a ladder — every rung gates the next:
-`slice status done` refuses without a journal trunk row → only `sync --integrate`
-writes it → integrate refuses without an admitted `close_target` → `admit` refuses
-without a Doctrine-computed clean `merge_oid` → `candidate create` runs its own
-all-or-nothing 3-way merge and records **no** `merge_oid` on any conflict. So a
-single conflicting path dead-ends the whole close, and hand-resolving the git
-merge does not help — `admit` validates the recorded OID, which stays empty.
+The sanctioned dispatch close chain is a ladder: `slice status done` refuses
+without a journal trunk row → only `sync --integrate` writes it → integrate
+refuses without an admitted `close_target` → … So when the operator lands the
+reviewed code by any route *other than* the dispatch-native integrate (a manual
+merge onto trunk when pre-dispatch `edge→main` promotion was skipped; a
+direct-land after a candidate conflict), the code is on trunk, green, reviewed —
+but no trunk row exists and `done` is unreachable.
 
 The close-gate (`ledger.rs::trunk_integration`) distinguishes: journal
 absent/zero-rows → `NotDispatched` (waves through); journal has rows but none
 target trunk → `Blocked("no trunk row")`. A funnel-driven dispatched slice
-journals `review/<N>` + `phase/<N>-NN` rows, so a direct-land hits the second arm
-and `done` refuses even though trunk genuinely holds the reviewed, green code.
+journals `review/<N>` + `phase/<N>-NN` rows, so a non-native land hits the second
+arm and refuses — even though trunk genuinely holds the reviewed code. Neither
+integrate path writes that row for this shape: `plan_candidate_trunk_row` needs
+an admitted `close_target`; `plan_trunk_row` needs a ff the split lineage forbids.
 
-Neither integrate path writes that row for a split-lineage slice:
-`plan_candidate_trunk_row` sources the admitted `close_target` OID and refuses
-(the conflicted candidate blocks admission — IMP-127); `plan_trunk_row` (legacy)
-sources the `phase/<N>-NN` chain tip and requires it to fast-forward trunk — the
-exact ff split lineage forbids.
+**RFC-016 §C + §D is the governing frame.** §C: "IMP-169 (recognise
+manual/external integration) and IMP-236 (direct-land records a trunk row) are
+the same move" — an operator-carried contract becomes a refusal-with-prescription
+in the gate. §D: every legal variation gets a first-class recorded row at the
+moment it happens ("manual land → trunk row"); the contrapositive is the belt — a
+variation that cannot get a row is refused at the point of variation, not
+discovered at close. Contract text stays in SPEC-022 as rationale; enforcement
+lives in the verb.
 
-**Observed cost, live lifecycle debt:** SL-104 (direct-land escape, forfeited
-CAS provenance), SL-147 (manual merge, stranded at `reconcile`), SL-190
-(hand-wrote a verified trunk row by hand to force `done`). SL-147 and SL-190 are
-shipped-but-lifecycle-incomplete today. Recurs on any base drift.
+**Observed cost, live lifecycle debt:** SL-147 (manual merge over an advanced
+trunk, stranded at `reconcile`), SL-190 (hand-wrote a verified trunk row into
+`journal.toml` by hand to force `done`). Both are shipped-but-lifecycle-incomplete
+today. Recurs on any base drift.
 
-Memory: `mem.pattern.dispatch.split-lineage-close-conflict-direct-land`,
-`mem.pattern.dispatch.close-deadlock-refresh-base-recovery` (high-trust, the
-refresh-base recovery), `mem.pattern.dispatch.close-preff-trunk-absorbs-repair`
-(an existing pre-FF alternative — assess for reuse before writing new merge code).
+Memory (acceptance oracle): `mem.pattern.dispatch.split-lineage-close-conflict-direct-land`
+(the SL-190 corrected finding — the hand-written trunk row is exactly what this
+slice mechanises), `mem.pattern.dispatch.close-deadlock-refresh-base-recovery`
+(high-trust), `mem.pattern.dispatch.close-preff-trunk-absorbs-repair`.
 
 ## Scope & Objectives
 
-Three seams, one coherent recovery path:
+1. **Record a trunk row for a sanctioned non-native land (IMP-236).** A verb that
+   writes the verified journal trunk row (`target_ref = trunk`, `planned_new_oid`
+   = the landed tip, an ancestor of trunk) once the reviewed code is on trunk by
+   direct-land / manual merge — replacing the hand-edited `journal.toml` SL-190
+   resorted to. The row must be *earned*: the recorded tip must be an ancestor of
+   the live trunk and carry the reviewed surface (no unreviewed code waved
+   through).
+2. **Close-gate recognises manual/external integration (IMP-169).** The
+   `trunk_integration` gate accepts the row written by (1) — and, where no
+   candidate/journal path can run at all, refuses with a **prescription** naming
+   the record verb, not a dead end. RFC-016 §C refusal-with-prescription.
 
-1. **Ingest a hand-resolved merge (IMP-127).** A verb — the "it's complicated"
-   path, *not* a `--force` — that adopts an operator-performed (base, source)
-   3-way merge as the candidate's Doctrine merge, so `admit` has a real
-   `merge_oid` to validate. The merge still happens and is still validated; the
-   operator just performs it by hand when the internal auto-merge conflicts.
-2. **Record the trunk row after a sanctioned direct integration (IMP-236 +
-   IMP-169).** Once the resolved candidate (or an externally-merged tip) is on
-   trunk, a sanctioned path writes the verified journal trunk row
-   (`target_ref = trunk`, `planned_new_oid` = the landed tip, ancestor of trunk)
-   so the close-gate passes — covering both the ingested-candidate route (236)
-   and manual/external integration where no candidate exists (169).
-
-Objective: any split-lineage dispatched slice whose code is genuinely on trunk,
-green, and reviewed can reach `done` through a sanctioned, provenance-preserving
-path — no hand-edited `journal.toml`, no forfeited CAS integrity, no `--force`.
+Objective: a split-lineage dispatched slice whose code is genuinely on trunk,
+green, and reviewed reaches `done` through a sanctioned, provenance-checked path —
+no hand-edited `journal.toml`, no forfeited integrity — **without touching
+ADR-012 FF-only**.
 
 ## Non-Goals
 
-- **Prevention** of split lineage (routing phase commits into a staging ref;
-  landing authored-tier deltas cleanly) — that is batch B (IMP-201 / IMP-174).
-  This slice is *recovery* only: the split has already happened.
-- A blanket `--force` that bypasses the 3-way merge or the OID CAS.
-- Gate-binary-not-on-edge candidate rebuild for self-modifying close (IMP-203).
-- Concurrency/shared-trunk race handling beyond what the existing integrate CAS
-  already provides.
+- **IMP-127** — ingest a hand-resolved 3-way merge / clean non-FF auto-merge.
+  Split to SL-212; reverses ADR-012 D2/D4, gated on RFC-006. This slice records a
+  row over a tip the operator *already* landed; it does not merge onto trunk.
+- **Prevention** of split lineage (IMP-201 code-tier / IMP-174 authored-tier) —
+  separate efforts; IMP-174 coordinates with RFC-015.
+- The broader RFC-016 machine (`dispatch next` state machine, candidate
+  auto-sourcing, bundle export/ingest) — this slice is the §C/§D beachhead, not
+  the whole direction. Design must not preclude it.
+- A blanket `--force` or any bypass of the row-earned check.
 
 ## Affected surface (coarse — /design refines)
 
-- `src/dispatch.rs` — candidate create/admit seam; `plan_trunk_row` /
-  `plan_candidate_trunk_row`; integrate legs.
-- `src/ledger.rs` — `trunk_integration` close-gate; trunk-row planning/validation.
-- CLI surface for the new ingest + record verbs (`dispatch candidate` /
-  `dispatch sync` families).
-- Close skill + dispatch-mechanics memory (recovery path documentation) — the
-  two stale memories above become the acceptance oracle.
+- `src/ledger.rs` — `trunk_integration` close-gate; trunk-row validation.
+- `src/dispatch.rs` — trunk-row write path; the record verb's plumbing.
+- CLI surface for the record verb (`dispatch sync` / journal family).
+- Close skill + dispatch-mechanics memory — the SL-190 hand-write pattern retires
+  into a verb; the two recovery memories become the acceptance oracle.
 
 ## Risks / Assumptions / Open Questions
 
-- **R1** Adopting a hand-made merge OID must not weaken the CAS provenance the
-  candidate seam exists to give — the ingest must still validate the merge is a
-  true 3-way of the recorded (base, source), not an arbitrary tree.
-- **R2** Two write paths for the trunk row (ingested-candidate vs
-  manual/external) risk divergence — prefer one recorder with two sources over
-  parallel implementations.
-- **OQ-1** Does the pre-FF-trunk alternative
-  (`close-preff-trunk-absorbs-repair`) already cover the IMP-236 case such that
-  only IMP-127 + IMP-169 need new code? Resolve in `/design`.
-- **OQ-2** Should IMP-169's manual/external path be a distinct verb or the same
-  record-trunk-row verb IMP-236 needs, sourced differently? (R2.)
-- **A1** The pure/imperative split holds — merge/ref ops stay in the thin shell;
-  planning/validation stays pure (pass OIDs in).
+- **R1** The recorded trunk row must be *earned* — validate the tip is an
+  ancestor of live trunk and carries the reviewed surface, or the gate degrades
+  to a rubber stamp (the integrity the gate exists to give).
+- **R2** IMP-236 and IMP-169 must share **one** recorder/gate seam (two sources —
+  candidate-less land vs external merge — one row schema), not parallel
+  implementations. RFC-016 §D: rows consumed mechanically downstream.
+- **OQ-1** IMP-169 carries a **stale dispatch reservation**
+  (`refs/doctrine/reservation/IMP/169`, 2026-06-24, empty tree). Confirm no
+  active drive and reap before execute.
+- **OQ-2** Is IMP-236's row-write a distinct verb from IMP-169's external-
+  integration recognition, or one verb with two sources? (R2.) Resolve in
+  `/design`.
+- **OQ-3** Does the existing `close-preff-trunk-absorbs-repair` pattern already
+  cover part of IMP-236 (pre-FF trunk so the standard integrate writes the row)?
+  If so this slice may only need IMP-169's recognition + a prescription. Resolve
+  in `/design`.
+- **A1** The pure/imperative split holds — ref/merge ops in the thin shell;
+  row planning/validation pure (pass OIDs in).
 
 ## Verification / Closure intent
 
-- Replay each historical dead-end (SL-104 / SL-147 / SL-190 shapes) through the
-  new path to `done` with no hand-edited journal and no forfeited CAS.
+- Replay the SL-147 / SL-190 shapes through the new record verb to `done` with no
+  hand-edited journal and no forfeited integrity.
+- Negative: an *un-earned* row (tip not an ancestor of trunk, or missing the
+  reviewed surface) is refused.
 - Behaviour-preservation: existing dispatch/ledger suites stay green unchanged;
-  the non-split (clean base) close path is byte-unchanged.
-- The two recovery memories are re-verified against the shipped verbs (stale →
+  the native (clean-base) integrate + close path is byte-unchanged.
+- The two recovery memories re-verified against the shipped verbs (stale →
   current).
 
 ## Follow-Ups
 
-- Batch B: IMP-201 (code-tier prevention) + IMP-174 (authored-tier split-brain).
-- IMP-203 (gate-binary-not-on-edge candidate rebuild).
+- SL-212: IMP-127 ingest (RFC-006 / ADR-012 Revision gated).
+- Batch B: IMP-201 (code-tier prevention); IMP-174 (authored-tier, coordinates
+  with RFC-015).
+- The full RFC-016 zero-rescue direction (`dispatch next`, auto-sourcing).

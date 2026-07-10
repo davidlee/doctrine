@@ -1,7 +1,7 @@
-id = 211
-slug = "split-lineage-close-recovery"
-title = "Split-lineage close recovery"
-status = "design"
+id = 212
+slug = "ingest-hand-resolved-trunk-merge"
+title = "Ingest hand-resolved trunk merge"
+status = "proposed"
 created = "2026-07-10"
 updated = "2026-07-10"
 tags = []
@@ -10,14 +10,6 @@ tags = []
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
-[[selector]]
-selector = "src/dispatch.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/ledger.rs"
-intent = "scope-relevant"
-
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
@@ -25,12 +17,7 @@ target = "ADR-012"
 [[relation]]
 label = "references"
 role = "originates_from"
-target = "IMP-236"
-
-[[relation]]
-label = "references"
-role = "originates_from"
-target = "IMP-169"
+target = "IMP-127"
 
 [[relation]]
 label = "related"
@@ -38,11 +25,11 @@ target = "RFC-016"
 
 [[relation]]
 label = "related"
-target = "SPEC-021"
+target = "SPEC-022"
 
 [[relation]]
 label = "related"
-target = "SPEC-022"
+target = "RFC-006"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
