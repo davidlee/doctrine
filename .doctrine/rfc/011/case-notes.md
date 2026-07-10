@@ -1061,3 +1061,18 @@ canonical registry must be read directly (git show <coord>:slice-NNN.toml), and
 conformance run from the detached worktree instead reports "incomplete" because
 runtime phase-completion state is gitignored and absent there. The edge/coord
 split means neither tree gives a clean conformance read pre-integrate.
+
+[close; SL-210-resume-audit] Stage-2 integrate went clean (candidate create 3-way
+merge auto-reconciled the edge/coord authored split: edge's status=reconcile +
+audit artifacts merged with the bundle's canonical selectors/design/ADR-census,
+no conflict — status trap defused because the bundle's status == fork base, so
+only edge's side moved it). Two incidental token sinks: (1) `git show
+<branchref-with-slashes>:path` (refs/heads/candidate/210/close-001:src/...)
+returned empty/garbled (wc=3), making landed code look ABSENT and costing a
+re-verify — `git ls-tree <ref> <path>` + `git cat-file -p <hash>` and `git diff
+--stat <base>..<ref>` are reliable where `git show <ref>:path` is not, when the
+ref name contains slashes. (2) The close-skill ISS-030 check `git diff --quiet
+HEAD` false-alarmed DIRTY on a pre-existing, unrelated, not-mine `flake.nix`
+modification — the whole-tree check trips on any tracked dirt, not just phantom
+reverse-diff of landed paths; filter to landed paths (`git diff --name-only HEAD
+| grep <landed>`) to distinguish a real phantom from ambient WIP.
