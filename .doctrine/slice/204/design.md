@@ -143,19 +143,36 @@ pub(crate) fn materialise(
 - Internal scaffold invocations (`entity.rs:374`, `entity.rs:477`) read the
   parameter.
 - `materialise_named` (memory) doesn't ride `Kind.scaffold` — untouched.
+- **Governance spine (RV-261 F-1):** `governance::run_new` materialises off the
+  descriptor (`entity::materialise(&g.kind, …)`, `governance.rs:485`) — the
+  scaffold it needs moves onto `GovKind` (D4), and `run_new` passes
+  `g.scaffold`. The spine's other consumers (`list_rows`, `run_show`, boot
+  projection) touch only identity fields — unaffected.
 
 ### D4 — Re-exports pin the blast radius
 
 - `entity.rs`: `pub(crate) use crate::kinds::Kind;` — existing `entity::Kind`
   imports and all ~200 `.prefix`/`.dir`/`.stem` field accesses stay untouched
   (fields stay flat on `Kind`).
-- Each kind module re-exports its statics
+- Each kind module with a **plain `Kind` static** re-exports it
   (`pub(crate) use crate::kinds::SLICE_KIND;`) — call sites like
   `entity::rel_path(&SLICE_KIND, …)` untouched. Existing consumer→kind-module
   edges persist (command-tier, harmless); **no new** edges appear.
-- `GovKind` (`governance.rs:37`, command) switches its embedded `Kind` value to
-  `kind: &'static Kind` referencing the same leaf static the `KINDS` row points
-  at — one identity, two viewers, still no copy.
+- **Governance/RFC kinds are NOT plain re-exports (RV-261 F-2).** `ADR_KIND`,
+  `POLICY_KIND`, `STANDARD_KIND`, `RFC_KIND` are `GovKind` descriptors (inline
+  `Kind` value + scaffold today), consumed *as `GovKind`* by the governance
+  spine, boot projection, and relation scanners. Dual-surface plan:
+  - leaf `kinds` gains four plain identity statics (`kinds::ADR_KIND` etc. —
+    `Kind` only), which the `KINDS` rows reference directly (today's
+    `&ADR_KIND.kind` → `&kinds::ADR_KIND`);
+  - `GovKind` (`governance.rs:37`) becomes
+    `{ kind: &'static Kind, scaffold: Scaffold, statuses, hidden }` — borrows
+    the leaf identity, carries the scaffold D3 evicts from `Kind`;
+  - the four `GovKind` descriptor statics **stay in their kind modules** under
+    their existing names (they hold the scaffold fns, which cannot leave).
+  Field access through `g.kind.dir` etc. auto-derefs — spine call sites
+  compile unchanged; only `run_new`'s materialise call gains `g.scaffold` (D3).
+  One identity, two viewers, still no copy.
 
 ### D5 — What stays in `integrity`
 
@@ -192,8 +209,8 @@ for scaffolds/labels beyond identity).
 | `src/kinds/resolve.rs` | new — the 5 ref helpers |
 | `src/entity.rs` | Kind def out / re-export in; `Scaffold` type; materialise param; test kinds |
 | `src/integrity.rs` | −13 kind imports, −table, −helpers; keeps validate/reseat |
-| `src/adr.rs` `src/backlog.rs` `src/concept_map.rs` `src/knowledge.rs` `src/policy.rs` `src/rec.rs` `src/requirement.rs` `src/review.rs` `src/revision.rs` `src/rfc.rs` `src/slice.rs` `src/spec.rs` `src/standard.rs` | statics → re-exports; materialise call sites +arg; 3 stubs die |
-| `src/governance.rs` | GovKind holds `&'static Kind` |
+| `src/adr.rs` `src/backlog.rs` `src/concept_map.rs` `src/knowledge.rs` `src/policy.rs` `src/rec.rs` `src/requirement.rs` `src/review.rs` `src/revision.rs` `src/rfc.rs` `src/slice.rs` `src/spec.rs` `src/standard.rs` | plain statics → re-exports; adr/policy/standard/rfc `GovKind` descriptors rewire to leaf identity + own scaffold (D4); materialise call sites +arg; 3 stubs die |
+| `src/governance.rs` | GovKind → `{ kind: &'static Kind, scaffold, statuses, hidden }`; `run_new` passes `g.scaffold` |
 | `src/catalog/hydrate.rs` `src/catalog/scan.rs` `src/commands/cli.rs` `src/commands/dep_seq.rs` `src/commands/doctor.rs` `src/commands/facet.rs` `src/commands/map.rs` `src/commands/relation.rs` `src/commands/supersede.rs` `src/commands/tag.rs` `src/commands/validate.rs` `src/doctor_checks.rs` `src/map_server/markdown.rs` `src/map_server/routes.rs` `src/priority/graph.rs` `src/priority/surface.rs` `src/reconcile.rs` `src/relation.rs` `src/relation_graph.rs` `src/relation_query.rs` `src/search.rs` `src/supersede.rs` | retarget `integrity::` → `kinds::` |
 | `.doctrine/adr/001/layering.toml` | `integrity = "engine"`; measured `command` ratchet |
 | `tests/architecture_layering.rs` | expectation updates if any hard-code integrity's tier |

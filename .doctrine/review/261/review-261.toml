@@ -1,0 +1,34 @@
+id    = 261
+slug  = "sl-204-design-review-external-adversarial-codex"
+title = "SL-204 design review — external adversarial (codex)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "codex"
+responder = "claude"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-204"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "GovKind loses the scaffold seam under D3/D4"
+detail = "[.doctrine/slice/204/design.md:126-158,195] D3 removes  and D4 says  only changes to , but the shared governance create path still relies on the scaffold being carried on :  documents that contract and calls  today [src/governance.rs:470-497]. The current governance descriptors inline the scaffold in /// [src/adr.rs:155-162; src/policy.rs:33-42; src/standard.rs:35-44; src/rfc.rs:30-39]. If  drops  and  only stores , the ADR/POL/STD/RFC authoring path has no scaffold to pass and the design does not compile as written. Fix: make the design explicit about where the governance spine gets its scaffold after extraction (for example , or an equivalent generic seam), and include that in the code-impact/verification text instead of describing  as a pure type tweak."
+disposition = "fixed"
+response = "Accepted — verified against src/governance.rs:470-497 (run_new materialises off g.kind's scaffold). Design amended: D3 gains a governance-spine clause (run_new passes g.scaffold); D4 moves the scaffold onto GovKind ({ kind: &'static Kind, scaffold: Scaffold, statuses, hidden }); §5 governance.rs row updated."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "D4 hand-waves the governance/RFC kind-type split"
+detail = "[.doctrine/slice/204/design.md:147-158] D4 says the kind modules can simply re-export their statics so call sites stay untouched, but four of the imported names are not plain  statics today: , , , and  are  descriptors, and  reaches their inner  via  [src/integrity.rs:60-69,171-174]. Those  values are consumed broadly as  by the governance spine, boot projection, and relation scanners [src/adr.rs:155-164; src/boot.rs:111-119; src/governance.rs:66-92,472-497; src/relation_graph.rs:488-490]. Re-exporting a leaf  under the existing  names would break that surface; preserving the names means preserving  values and introducing distinct leaf  statics that they borrow. The design hints at this only in one sentence ( holds ) and then falls back to the blanket “re-export the statics” story, which is materially misleading. Fix: spell out the dual-surface plan for ADR/POL/STD/RFC explicitly: new leaf  statics, existing  descriptors retained, and no claim that those names are untouched plain re-exports."
+disposition = "fixed"
+response = "Accepted — ADR_KIND/POLICY_KIND/STANDARD_KIND/RFC_KIND are GovKind descriptors, not plain Kind statics; blanket re-export claim was wrong for them. D4 rewritten with explicit dual-surface plan: four new plain leaf identity statics (kinds::ADR_KIND etc.) referenced directly by KINDS rows; GovKind descriptors stay in their kind modules under existing names, borrowing leaf identity and carrying the scaffold; §5 kind-module row updated."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
