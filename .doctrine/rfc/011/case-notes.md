@@ -1082,3 +1082,10 @@ reverse-diff of landed paths; filter to landed paths (`git diff --name-only HEAD
 but `review dispose --as` only accepts the literal words `raiser|responder`,
 not those labels — one failed invocation + retry to discover. Either accept
 the configured labels as aliases or say "role position, not label" in help.
+
+[plan; SL-213-plan-authoring]
+`slice plan` scaffold's comment block illustrates the VT mandate as a
+multi-line inline table ("{ id = ..., \n expects = ..., \n ... }") — invalid
+TOML if followed literally; cost one failed `slice phases` + a reformat pass.
+Scaffold comment should show a single-line row or use [[phase.verification]]
+array-of-tables syntax.
