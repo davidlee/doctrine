@@ -934,3 +934,12 @@ also creates a tracked slug symlink sibling (`035-<slug> -> 035`). Path-limited
 `git add`/`commit` of the numbered dir silently misses the symlink; cost one
 follow-up commit. Suggest: print both paths, or emit the symlink inside the
 numbered dir's parent listing guidance.
+
+[review/external; fable-partial-order-rfc]
+Same slug-symlink omission as backlog: `review new` (MCP review_new) reports
+only the numbered dir; slug symlink missed the ledger commit, needed a
+follow-up. Also: codex verify pass left an empty `v_B` file at repo root —
+unquoted `>` in a formula echo (`v_A*c_B > v_B*c_A`). Harmless but a stray
+tracked-tree artifact from an external reviewer with workspace-write; consider
+advising reviewers to quote formulae or spot-checking `git status` after
+external sessions.
