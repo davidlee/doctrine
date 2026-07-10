@@ -1044,3 +1044,20 @@ exists). Neither /dispatch nor /dispatch-agent mentions this beat; also
 explains why verify-vt rendered all VTs UNATTRIBUTABLE pre-derive, all PASS
 post. One more round-trip: sync's CLI now requires --slice (skill shows
 bare `dispatch sync --prepare-review`).
+
+[audit; SL-210-resume-audit] Auditing a dispatched slice's evidence ref
+(review/210) in a fresh detached scratch worktree cost two extra build cycles:
+`cargo build` failed with a RustEmbed error — `web/map/dist/` "does not exist" —
+because that derived web-map bundle is gitignored and absent from any fresh
+checkout. `tail -5` on the build log hid the real error behind icu_* candidate
+noise, and `BUILD_DONE rc=$?` captured the echo's exit, not cargo's (pipe),
+masking the failure as success. Fix was a one-liner (`cp -r <built-tree>/web/map/dist/.`)
+but the diagnosis burned tokens. Two reusable levers: (a) copy web/map/dist into
+any fresh worktree BEFORE building a dispatched-slice evidence ref; (b) grep the
+build log for '^error' rather than tail-ing, and never read `$?` through a pipe.
+Also: `slice conformance` run from the parent tree (edge) over-reports undeclared
+when the slice's authored selectors are still on the coordination surface — the
+canonical registry must be read directly (git show <coord>:slice-NNN.toml), and
+conformance run from the detached worktree instead reports "incomplete" because
+runtime phase-completion state is gitignored and absent there. The edge/coord
+split means neither tree gives a clean conformance read pre-integrate.

@@ -1,0 +1,43 @@
+id    = 264
+slug  = "sl-210-audit-comparison-ledger-capture-conformance-reconciliation"
+title = "SL-210 audit: comparison ledger capture — conformance reconciliation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-210"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Conformance from edge flags cli.rs/guard.rs undeclared — canonical selectors declare both"
+detail = "Expected: `slice conformance 210` clean on the landing surface. Observed (run from edge working tree): undeclared(4) = {adr/001/layering.toml, slice-210.toml, src/commands/cli.rs, src/commands/guard.rs}. Root cause: edge's slice-210.toml selectors are STALE — the selector remediation (adding cli.rs + guard.rs as design-target) lives on dispatch/210 == review/210, not yet on edge/main. Verified: `git show review/210:.doctrine/slice/210/slice-210.toml` declares both `src/commands/cli.rs` and `src/commands/guard.rs` as intent=design-target (with a note: SL-115 moved the CLI enum to cli.rs; guard write_class is exhaustive-by-design — both compelled by the compare verb). On the canonical landing surface, both code paths are conformant. Evidence surface reviewed: review/210 impl-bundle @ bf3a56efd0f2 (canonical design + selectors identical to dispatch/210 tip 7f9fd0573943; verified byte-identical)."
+disposition = "aligned"
+response = "Canonical registry (review/210 == dispatch/210 slice-210.toml) already declares cli.rs + guard.rs as design-target; the undeclared cells are a stale-edge-selector artifact that vanishes once the coord authored tree lands at stage-2 integrate. No selector `add`/`rm` and no §6 edit needed — the remediation is already made on the coordination surface. The two remaining undeclared cells (adr/001/layering.toml, slice-210.toml) are authored-tier files, never code selectors — expected, not scope creep."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Authored .doctrine truth (design EX-4, selectors, ADR-001 census) canonical on coord surface only, not edge/main"
+detail = """Expected: canonical design + governance visible on the trunk. Observed: edge's design.md is STALE (EX-4 clap-fallback outcome unrecorded on edge); the ADR-001 leaf census registering `comparison` (adr/001/layering.toml) and the remediated slice-210.toml selectors exist only on review/210 == dispatch/210. This is the normal dispatch-funnel pre-integrate state (ADR-012): the coordination worktree holds authored truth; stage-2 `dispatch sync --slice 210 --integrate --trunk refs/heads/main` projects it onto main at /close. `dispatch_authored_divergence` enumerates the fork. Design records EX-4 as the PRE-AUTHORISED fallback (capture = `compare record`; clap 4 subcommand_negates_reqs won't relax required positionals) — so a naive "CLI differs from design usage block" reading against the stale edge copy is a stale-copy artifact, not a deviation."""
+disposition = "aligned"
+response = "Normal dispatch-funnel pre-integrate state (ADR-012). Authored truth (canonical design.md with EX-4 recorded, remediated selectors, ADR-001 census) is already correct on the coordination surface; the sole remaining action is stage-2 integrate, which is /close's job — never a reconcile REV or direct edit. Nothing for /reconcile to write. Recorded in the reconciliation brief as an integrate-at-close item, not a governance change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "Engine signatures are a superset of the design sketch (fallible to_toml, session_of_one helper)"
+detail = """Expected (design § comparison.rs): `to_toml(s) -> String`; functions listed = parse/to_toml/admissible_value_pair/validate_judgement. Observed: `to_toml -> anyhow::Result<String>` (toml serialization is fallible — correct to surface it) and an added `session_of_one(header, judgement)` constructor that stamps COMPARISON_SCHEMA + version so the shell never hand-sets the wire discriminators. Both are correctness-preserving enrichments of the design prose, not divergences; the golden byte-shape test pins the wire output regardless. facet.rs warn routes to stderr (design said "print a warning") and uses `kinds::is_value_bearing(prefix)` for the scoring-inert check — distinct from comparison admissibility's VALUE_BEARING-minus-RSK (D6 vs REV-022 Q1; different purposes, both correct)."""
+disposition = "aligned"
+response = "Correctness-preserving enrichments of the design sketch, not deviations: fallible to_toml surfaces a real serde failure mode; session_of_one centralises wire-discriminator stamping (D2 uniformity); stderr is the right sink for a warning; the two value-bearing checks serve distinct purposes (comparison admissibility D6 vs scoring-inert warn REV-022 Q1), both correct. Golden byte-shape + round-trip tests pin the wire contract. No change needed — design prose need not be edited to match a strict superset."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

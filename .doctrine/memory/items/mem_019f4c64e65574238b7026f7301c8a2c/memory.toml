@@ -1,0 +1,42 @@
+memory_uid = "mem_019f4c64e65574238b7026f7301c8a2c"
+memory_key = "mem.pattern.doctrine.audit-dispatched-slice-fresh-worktree"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Auditing a dispatched slice's evidence ref in a fresh worktree: supply web/map/dist first"
+summary = "A fresh detached worktree on a review/* evidence ref fails to build until the gitignored web/map/dist RustEmbed bundle is copied in; conformance reads clean on neither edge nor the worktree pre-integrate."
+created = "2026-07-10"
+updated = "2026-07-10"
+
+[scope]
+paths = ["web/map/dist", ".doctrine/review"]
+globs = []
+commands = []
+tags = ["audit", "dispatch", "worktree", "conformance", "build"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "2413c5f9278a4fb2db07a85857e2f80d0cac7780"
+ref_name = "refs/heads/edge"
+checkout_state_id = "37f4c98ec775640ab44a6be13104e4f525899f3f7d173a009fc495058fcf8dd6"
+base_commit = "52a8f6edfee2d07408316a42b0de41c9aec1d9a3"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
