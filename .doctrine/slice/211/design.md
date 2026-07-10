@@ -95,7 +95,7 @@ unchanged gate then reads that row and passes the slice to `done`.
 ```
                        ┌─ --prepare-review → review/<N> + phase/<N>-NN (no trunk)
  dispatch sync --slice ┼─ --integrate      → advance trunk ff-only (descendant)   ── existing
-                       └─ --record-integration → record row: reviewed_oid ⊑ trunk  ── NEW (SL-211)
+                       └─ --record-integration → record row: payload ⊑ trunk       ── NEW (SL-211)
                                                      │
  slice status … done → trunk_integration ──────────┘ (unchanged; accepts ancestor row)
 ```
@@ -111,83 +111,90 @@ dispatch sync --slice N --record-integration --trunk <ref>
 - `--trunk <ref>` required for this stage.
 - Orchestrator-classed — refused under worker-mode (same as the other stages).
 
-**Earned-surface resolution (R2 — one recorder seam).** The recorder sources the
-surface the operator actually landed — which is **`review/<N>`** (the immutable
-reviewed bundle), or the admitted `close_target` when a candidate flow produced a
-richer landed OID (audit repair beyond raw review). It is **not** the phase-chain
-tip: the sanctioned land is `git merge --no-ff review/<N>` (or an admitted
-candidate merge of `review/<N>`), and `review/<N>` is a re-committed filtered tree
-on a *different lineage* from `phase/<N>-NN` — so the phase tip is generally **not**
-an ancestor of trunk even though the code landed (F-1, §10). This is the recorder's
-own resolution; it is deliberately **not** welded to the advancing planners
-(`plan_trunk_row` sources the phase tip precisely because it advances trunk with
-the `.doctrine`-stripped code cut — a different job).
+**Earned-surface resolution (R2 — one seam, shared with integrate).** The recorder
+sources the **model trunk payload**, identical to `integrate`'s trunk planning —
+SPEC-022 is normative: `review/<N>` is a *review surface*, **never** a trunk
+payload, and a candidate-active slice **requires** a `close_target` admission (no
+raw-evidence fallback). So:
 
 ```rust
-fn record_surface(
-    root: &Path, slice3: &str, candidates: &Candidates,
+fn resolve_trunk_payload(
+    root: &Path, slice3: &str, journal: &Journal, candidates: &Candidates,
 ) -> anyhow::Result<String /* oid */> {
-    // Prefer the admitted close_target (richest true surface — includes any
-    // audit repair); else the immutable reviewed bundle review/<N>. Both are
-    // ancestors of trunk under the sanctioned `merge --no-ff` land; the earned
-    // check (below) fail-closes if the chosen surface is NOT actually on trunk
-    // (operator landed something else — e.g. cherry-picks).
-    if let Some(a) = &candidates.current_admission.close_target {
-        return Ok(a.admitted_oid.clone());
+    if candidates.rows.is_empty() {
+        // legacy: the .doctrine-stripped cumulative code cut (NOT review/<N>).
+        let phase_ref = phase_chain_tip(journal, slice3)
+            .with_context(|| format!("no phase/{slice3}-NN code units"))?;
+        resolve_commit(root, &phase_ref)?.with_context(|| format!("{phase_ref} unresolved"))
+    } else {
+        // candidate-active: the admitted close_target — REFUSE if none (mirrors
+        // plan_candidate_trunk_row / SPEC-022; the fix for RV-263 finding 1).
+        candidates.current_admission.close_target.as_ref()
+            .context("record-integration: candidate workflow active but no close_target \
+                      admission — run `dispatch candidate admit --role close_target` (or \
+                      supersede the conflicted candidate); will not fall back to raw review")
+            .map(|a| a.admitted_oid.clone())
     }
-    let review_ref = format!("{REVIEW_REF_PREFIX}{slice3}");
-    resolve_commit(root, &review_ref)?
-        .with_context(|| format!("record-integration: {review_ref} does not resolve"))
 }
 ```
-`plan_trunk_row` / `plan_candidate_trunk_row` are left **unchanged** — no shared
-refactor, so their existing suites (and error copy) are untouched
-(behaviour-preservation).
+This is `integrate()`'s inline branch (`dispatch.rs:2044–2055`) extracted; the
+recorder and the two advancing planners (`plan_trunk_row` /
+`plan_candidate_trunk_row`) all consume it. The refusal *behaviour* (candidate-
+active without admission) is preserved byte-for-behaviour; the extraction's only
+observable churn is that the two planners' no-admission message text becomes the
+shared string — a trivial-implementation detail, existing suites updated to match.
+
+**The sanctioned recovery land is therefore the payload, not `review/<N>`** —
+`git merge --no-ff phase/<N>-NN` (legacy) or the admitted candidate ref
+(candidate-active), so the payload is genuinely an ancestor of trunk. This revises
+the oracle memories' merge step (§ Doc/memory, §10 F-1).
 
 **Planner (pure over OIDs; is_ancestor is the thin-shell git seam):**
 ```rust
 fn plan_recorded_trunk_row(
-    root: &Path, slice3: &str, candidates: &Candidates, trunk_ref: &str,
+    root: &Path, slice3: &str, journal: &Journal,
+    candidates: &Candidates, trunk_ref: &str,
 ) -> anyhow::Result<JournalRow> {
-    let reviewed = record_surface(root, slice3, candidates)?;
+    let payload = resolve_trunk_payload(root, slice3, journal, candidates)?;
     let tip = resolve_commit(root, trunk_ref)?
         .with_context(|| format!(
             "record-integration: {trunk_ref} does not resolve — no trunk to record onto"))?;
-    // EARNED CHECK (R1 negative): the reviewed surface must already be on trunk.
+    // EARNED CHECK (R1 negative): the payload must already be on trunk.
     // is_ancestor proves *integration occurred* (a commit in trunk's history), the
     // same standard the gate holds — not tree-survival-at-tip (SPEC-022; F-1b).
     anyhow::ensure!(
-        git::is_ancestor(root, &reviewed, &tip)?,
-        "record-integration: reviewed surface {reviewed} is not an ancestor of \
-         {trunk_ref} (at {tip}) — the reviewed code has not landed on trunk; land \
-         it (`git merge --no-ff review/{slice3}`) before recording"
+        git::is_ancestor(root, &payload, &tip)?,
+        "record-integration: trunk payload {payload} is not an ancestor of {trunk_ref} \
+         (at {tip}) — land it (`git merge --no-ff phase/{slice3}-NN` or the admitted \
+         candidate) before recording"
     );
-    Ok(recorded_row(trunk_ref, reviewed))
+    Ok(recorded_row(trunk_ref, payload))
 }
 ```
 
 **Handler:** `run_record_integration(path, slice, trunk_ref)` → `root::find` →
 resolve `dispatch/<N>` tip, tree-read `journal.toml` + candidates →
 **trunk-matches-`deliver_to` guard** (F-4: the row must target the gate's ref) →
-**existing-trunk-row guard** (F-2: no row ⇒ record; a *Verified* ancestor row ⇒
-"already recorded" no-op; a *Failed/Pending* stale row ⇒ refuse with guidance to
-clear it, never a silent no-op) → `plan_recorded_trunk_row` → append →
-`commit_journal` onto `dispatch/<N>`. **No `with_journaled_projection`** (no
-advance). The `Sync { .. }` variant is already `Orchestrator`-classed
-(`guard.rs:303`) — the new stage inherits worker-mode refusal, no classifier
-change (F-3).
+**existing-trunk-row guard** (F-2: no row ⇒ record; a *Verified* row ⇒ real prior
+integration, gate already passes ⇒ idempotent no-op; a *Failed/Pending* row ⇒
+**replace** it — a non-applied row has zero external effect, so overwriting it with
+the earned Verified row IS the recovery, no hand-edit) → `plan_recorded_trunk_row`
+→ append/replace → `commit_journal` onto `dispatch/<N>`. **No
+`with_journaled_projection`** (no advance). The `Sync { .. }` variant is already
+`Orchestrator`-classed (`guard.rs:303`) — the new stage inherits worker-mode
+refusal, no classifier change (F-3).
 
 ### 5.3 Data, State & Ownership
 
-**Row shape** — `recorded_row(trunk_ref, reviewed_oid)`:
+**Row shape** — `recorded_row(trunk_ref, payload)`:
 
 | field | value | why |
 |---|---|---|
 | `target_ref` | `trunk_ref` | the row the gate filters for |
-| `source_oid` | `reviewed_oid` | earned surface (evidence) |
-| `planned_new_oid` | `reviewed_oid` | the gate re-checks `is_ancestor(this, trunk)` |
-| `applied_new_oid` | `reviewed_oid` | already applied — terminal, not pending |
-| `expected_old_oid` | `reviewed_oid` | **= planned**, *not* the trunk tip |
+| `source_oid` | `payload` | earned trunk payload (evidence) |
+| `planned_new_oid` | `payload` | the gate re-checks `is_ancestor(this, trunk)` |
+| `applied_new_oid` | `payload` | already applied — terminal, not pending |
+| `expected_old_oid` | `payload` | **= planned**, *not* the trunk tip |
 | `status` | `Verified` | statement of fact, not intent |
 
 `expected_old = planned` (not `trunk_tip`) is load-bearing for replay-safety: a
@@ -203,12 +210,15 @@ run ledger, object-db sourced), written by the recorder alone.
 ### 5.4 Lifecycle, Operations & Dynamics
 
 Recovery flow (replaces the SL-190 hand-edit):
-1. Operator lands the reviewed code on trunk out-of-band (manual `merge --no-ff
-   review/<N>`, or a direct-land) — the reviewed tip becomes an ancestor of trunk.
+1. Operator lands the **trunk payload** out-of-band — `git merge --no-ff
+   phase/<N>-NN` (legacy) or the admitted candidate ref (candidate-active) — so
+   the payload becomes an ancestor of trunk. (Landing `review/<N>` is *not* the
+   sanctioned move: it is a review surface, a different lineage from the payload;
+   the earned check would refuse.)
 2. `dispatch sync --slice N --record-integration --trunk <ref>` — earned check
    passes; Verified trunk row committed.
 3. `slice status N done` — `trunk_integration` reads the row, re-verifies
-   `is_ancestor(reviewed, trunk)` → `Integrated` → passes.
+   `is_ancestor(payload, trunk)` → `Integrated` → passes.
 
 The recorder is terminal for the trunk leg; `--edge` aggregation, if wanted, stays
 the separate `--integrate --edge` path (not gated by `done`).
@@ -220,21 +230,25 @@ the separate `--integrate --edge` path (not gated by `done`).
 - **INV-2** A recorded row's `planned_new_oid` is always an ancestor of the trunk
   tip at record time (the earned check); the gate re-asserts it at `done`.
 - **INV-3** `ledger.rs::trunk_integration` is **unchanged**.
+- **INV-4** The recorder never records `review/<N>` as a trunk payload (SPEC-022
+  invariant preserved) — only the phase-chain tip or the admitted `close_target`.
 - **EDGE — trunk ref absent** → refuse ("no trunk to record onto").
-- **EDGE — reviewed surface not on trunk** → refuse (R1 negative); no row written.
-  Covers a cherry-pick land (breaks `review/<N>` ancestry) — the operator must
-  land via `merge --no-ff` to preserve the ancestry the recorder checks.
+- **EDGE — payload not on trunk** → refuse (R1 negative); no row written. Covers a
+  cherry-pick land or a `review/<N>` merge (payload lineage absent) — the operator
+  must land the payload (`merge --no-ff phase/<N>-NN` / admitted candidate) to
+  earn the row.
+- **EDGE — candidate-active without a `close_target` admission** → **refuse**
+  (mirrors SPEC-022 / `plan_candidate_trunk_row`; RV-263 F-1). Prescription: admit
+  a close_target reflecting the landed tip, or supersede the conflicted candidate.
+  No raw-`review/<N>` fallback.
 - **EDGE — `--trunk` ≠ `deliver_to`** (F-4) → refuse: the recorded row would
   target a ref the gate does not read, so `done` would still block. Guard resolves
   both and refuses a mismatch (or defaults `--trunk` to `deliver_to`).
-- **EDGE — existing trunk row** (F-2): Verified ancestor row ⇒ idempotent
-  "already recorded" no-op; Failed/Pending stale row (e.g. a prior refused
-  integrate that journaled then failed) ⇒ **refuse** with guidance to clear it —
-  never a silent no-op that leaves the gate reading the stale row.
-- **EDGE — candidate rows present but no `close_target` admission** → falls back
-  to `review/<N>` (this *is* the SL-190 shape: candidate seam abandoned, operator
-  direct-landed `review/<N>`). Not a refusal.
-- **EDGE — trunk tip == reviewed tip** (clean ff already happened elsewhere) →
+- **EDGE — existing trunk row** (F-2): a *Verified* row ⇒ real prior integration,
+  gate already passes ⇒ idempotent no-op; a *Failed/Pending* row (never applied,
+  zero external effect — e.g. a prior refused integrate) ⇒ **replace** it with the
+  earned Verified row (this is the recovery, not a dead-end refusal).
+- **EDGE — trunk tip == payload tip** (clean ff already happened elsewhere) →
   planned == tip → row still valid; a later replay is a clean NoOp.
 
 ## 6. Open Questions & Unknowns
@@ -252,31 +266,39 @@ the separate `--integrate --edge` path (not gated by `done`).
 
 ## 7. Decisions, Rationale & Alternatives
 
-- **D1 — the recorded row carries the reviewed OID (planned = reviewed), and the
+- **D1 — the recorded row carries the trunk payload (planned = payload), and the
   gate re-verifies.** Alternative (B) recorded the live trunk tip → gate check
   `is_ancestor(tip, tip)` is trivially true → rubber stamp; all integrity resting
   on one record-time assertion. Rejected per R1. (A) keeps the gate a live,
-  re-checkable invariant and records *which* reviewed commit landed.
+  re-checkable invariant and records *which* payload commit landed.
 - **D2 — `expected_old = planned`, not the trunk tip.** Makes a stray later
   integrate a non-destructive `Refused` rather than a backward trunk advance
   (§5.3).
-- **D3 — one recorder verb with its own earned-surface resolution** (R2). Source
-  = admitted `close_target` else `review/<N>`; the advancing planners are left
-  unchanged (they source the phase tip for a different job — see D6). "One seam"
-  means one recorder, not welded to the integrate planners.
+- **D3 — one seam: the recorder's payload resolution == integrate's** (R2). The
+  inline branch in `integrate()` (`dispatch.rs:2044–2055`) is extracted to
+  `resolve_trunk_payload` and shared by the recorder and the two advancing
+  planners. No parallel implementation; existing planner tests prove the extraction
+  (the no-admission refusal *behaviour* is preserved; only the message text
+  becomes the shared string).
 - **D4 — earnedness in the verb; the gate leaf and the prescription copy stay
   mechanical.** The slice-shell prescription (§ below) is an unconditional
   signpost; it does not re-derive earnedness (no is_ancestor duplicated into
   `slice.rs`).
 - **D5 — `ledger.rs` unchanged.** The gate already accepts an ancestor row;
   behaviour-preservation by construction.
-- **D6 — the earned surface is `review/<N>` (or admitted `close_target`), NOT the
-  phase-chain tip** (F-1). The operator lands `merge --no-ff review/<N>`; the
-  phase cut `phase/<N>-NN` is a different lineage (re-committed, `.doctrine`-
-  stripped, parented on `trunk_base`) and is generally not an ancestor of trunk.
-  Sourcing the phase tip would spuriously refuse a genuine land. `close_target` is
-  preferred when admitted because it carries any audit repair the raw bundle
-  lacks; `review/<N>` is the honest fallback for the direct-land case.
+- **D6 — the earned surface is the model trunk payload (phase-chain tip /
+  admitted `close_target`), NEVER `review/<N>`** (RV-263, supersedes the internal
+  F-1). SPEC-022 is normative: `review/<N>` is a review surface, never a trunk
+  payload, and candidate-active *requires* a `close_target` admission. The
+  consequence — the sanctioned recovery land is `merge --no-ff phase/<N>-NN` (or
+  the admitted candidate), not `review/<N>`, so the payload is a genuine ancestor.
+  This keeps the recorder a thin sibling of integrate (identical source) and
+  revises the oracle memories' merge step.
+- **D7 — a non-applied trunk row (Pending/Failed) is *replaced*, not refused**
+  (RV-263 F-2). Such a row never mutated trunk, so overwriting it with the earned
+  Verified row is the recovery — it closes the stuck state a prior refused
+  integrate leaves, without a hand-edit. A Verified row means real integration →
+  the gate already passes → idempotent no-op.
 
 **Prescription (IMP-169, RFC-016 §C)** — copy edit in the slice close-gate shell
 (`slice.rs:1016–1020`). The current Blocked refusal points only at
@@ -285,8 +307,8 @@ Augment to name both remedies:
 ```
 slice N → done: refused — dispatched code not integrated to trunk: {reason}
   • if trunk can still fast-forward: `dispatch sync --integrate --trunk <ref>`, verify, retry
-  • if the reviewed code already landed out-of-band (manual merge / direct-land):
-    `dispatch sync --slice N --record-integration --trunk <ref>`
+  • if the trunk payload already landed out-of-band (manual merge of the payload /
+    direct-land): `dispatch sync --slice N --record-integration --trunk <ref>`
 ```
 
 **Non-goals** — IMP-127 (ingest a hand-resolved 3-way merge; SL-212, reverses
@@ -299,8 +321,9 @@ broader RFC-016 machine (`dispatch next`, auto-sourcing, bundle export/ingest); 
 - **R1 — un-earned row rubber-stamps the gate.** Mitigated by the earned check
   (§5.2 `plan_recorded_trunk_row`) *and* the gate's independent `is_ancestor`
   re-verification (D1). Negative test VT-2.
-- **R2 — parallel implementation of the two sources.** Mitigated by
-  `resolve_trunk_payload` extraction shared with both existing planners (D3).
+- **R2 — parallel implementation of the payload resolution.** Mitigated by the
+  `resolve_trunk_payload` extraction shared by the recorder and both advancing
+  planners (D3) — the recorder's source is byte-identical to integrate's.
 - **R3 — a later stray integrate corrupts trunk.** Mitigated by `expected_old =
   planned` → `Refused`, never a backward advance (D2). Documented as unsupported;
   non-destructive.
@@ -310,20 +333,26 @@ broader RFC-016 machine (`dispatch next`, auto-sourcing, bundle export/ingest); 
 
 Red/green/refactor; behaviour-preservation is the existing suites staying green.
 
-- **VT-1** Record writes a Verified trunk row (`planned = reviewed_oid`);
-  `trunk_integration` → `Integrated`; `slice status … done` passes. (SL-190 shape.)
-- **VT-2 (negative, R1)** reviewed_oid *not* an ancestor of trunk → refuse; no row.
-- **VT-3** Manual-merge lineage (trunk = merge commit, reviewed tip = ancestor) →
-  recorded + `done`. (SL-147 shape.)
-- **VT-4 (D6)** Source resolution: admitted `close_target` → that OID; else →
-  `review/<N>` (incl. candidate-rows-but-no-admission = SL-190 shape). Explicitly
-  assert the phase-chain tip is **not** used (regression guard against F-1).
-- **VT-5** Idempotent re-record over a Verified row → no duplicate ("already
-  recorded"); a Failed/Pending stale trunk row → refuse (F-2), not silent no-op.
+- **VT-1** Record writes a Verified trunk row (`planned = payload`);
+  `trunk_integration` → `Integrated`; `slice status … done` passes. (SL-190 shape,
+  landing the phase-cut payload.)
+- **VT-2 (negative, R1)** payload *not* an ancestor of trunk (incl. a `review/<N>`
+  merge — wrong lineage) → refuse; no row.
+- **VT-3** Legacy manual-merge lineage (trunk = merge commit of `phase/<N>-NN`,
+  payload = ancestor) → recorded + `done`. (SL-147 shape.)
+- **VT-4 (D6/RV-263 F-1)** Source resolution == integrate's: candidate-active →
+  admitted `close_target`; candidate-active **without** admission → **refuse** (no
+  raw-review fallback); legacy → phase-chain tip. Assert `review/<N>` is **never**
+  recorded as a payload.
+- **VT-5 (D7/F-2)** Re-record over a Verified row → idempotent no-op ("already
+  integrated"); over a Failed/Pending row → **replace** it with the earned Verified
+  row (not a refusal, not a duplicate).
 - **VT-6 (F-4)** `--trunk` ≠ `deliver_to` → refuse (or defaults); a matching ref
   records a row the gate reads.
 - **VT-7 (behaviour-preservation)** existing dispatch + ledger suites green
-  unchanged (no shared refactor of the advancing planners); `Sync { .. }` stays
+  unchanged; the `resolve_trunk_payload` extraction is proven by the existing
+  `plan_trunk_row` / `plan_candidate_trunk_row` tests (refusal behaviour intact;
+  message-exact assertions updated to the shared string). `Sync { .. }` stays
   `Orchestrator`-classed with the new stage present.
 - **VT-8 (prescription)** Blocked `slice status` message names
   `--record-integration` (mirrors `slice.rs:6469`).
@@ -334,15 +363,12 @@ Red/green/refactor; behaviour-preservation is the existing suites staying green.
 
 **Internal adversarial pass (design skill §6) — findings integrated:**
 
-- **F-1 (MAJOR, integrated).** The legacy earned surface was mis-specified as the
-  phase-chain tip. The sanctioned land is `git merge --no-ff review/<N>`;
-  `review/<N>` is a different lineage from `phase/<N>-NN` (re-committed, filtered,
-  `trunk_base`-parented), so `is_ancestor(phase_tip, trunk)` is generally false
-  even when the code landed — the earned check would spuriously refuse. Fixed:
-  source = admitted `close_target` else `review/<N>` (§5.2, D6). Side effect: the
-  "share `resolve_trunk_payload` with the advancing planners" refactor is dropped
-  (different sources for different jobs), which also removes the risk of
-  perturbing existing planner error copy.
+- **F-1 (MAJOR, SUPERSEDED by RV-263 below).** The internal pass mis-diagnosed the
+  legacy surface as `review/<N>` (it correctly saw the phase-tip lineage problem
+  but drew the wrong conclusion). The external pass showed `review/<N>` is *never*
+  a valid trunk payload (SPEC-022) — the real fix is that the sanctioned recovery
+  lands the *payload* (`phase/<N>-NN` / admitted candidate), not `review/<N>`. See
+  RV-263 finding 1 resolution.
 - **F-2 (MEDIUM, integrated).** The `fresh` idempotence guard would silently
   no-op over a *stale Failed/Pending* trunk row from a prior refused integrate,
   leaving the gate reading a non-ancestor row (permanent block). Fixed: the
@@ -358,6 +384,29 @@ Red/green/refactor; behaviour-preservation is the existing suites staying green.
   "integration occurred", the gate's own SPEC-022 standard, not tree-survival at
   tip (a later revert is out of scope — same property the existing gate has).
 
-**Open for external pass (optional):** whether `--trunk` should hard-refuse a
-`deliver_to` mismatch or silently default; whether to also emit the earned-surface
-OID in the success line for operator verification (cf. `--show-journal-trunk-oid`).
+**External adversarial pass — codex/GPT-5.5, RV-263 (both findings accepted):**
+
+- **RV-263 finding 1 (blocker) — candidate-active raw-`review/<N>` fallback breaks
+  the SPEC-022 `close_target`-admission contract.** SPEC-022:169 is normative:
+  candidate-active `integrate` *requires* a `close_target` admission and never
+  falls back to raw evidence; `review/<N>` is never a trunk payload. Resolution
+  (user-chosen option a): the recorder's payload == integrate's — phase-chain tip
+  (legacy) / admitted `close_target` (candidate, refuse if none). The sanctioned
+  recovery land is the payload, not `review/<N>`. This also *reverts* the internal
+  F-1 and restores the shared `resolve_trunk_payload` seam (D3, D6). §5.2/§5.4/§5.5,
+  VT-4.
+- **RV-263 finding 2 (major) — the stale-row guard named no clearing verb.** A
+  prior refused `--integrate --trunk` can leave a Failed/Pending trunk row; my
+  first F-2 fix *refused* it with "clear it" but no verb clears it → still stuck.
+  Resolution: the recorder **replaces** a non-applied (Pending/Failed) row with the
+  earned Verified row — the row carried zero external effect, so overwriting it is
+  the recovery (D7). §5.4/§5.5, VT-5.
+- Codex confirmed the parts that hold: `expected_old = planned` replay-safety
+  against `advance_row`, and "gate unchanged" against `trunk_integration`
+  (ancestor-not-tip passes; ambiguous / empty-planned fail closed).
+
+**Still open (minor, non-blocking):** whether `--trunk` hard-refuses a `deliver_to`
+mismatch or silently defaults; whether to emit the payload OID in the success line
+(cf. `--show-journal-trunk-oid`). Retroactive note: already-stranded SL-147/SL-190
+that historically merged `review/<N>` may need a payload re-land to record (or stay
+one-offs) — the verb is forward-correct for the general shape.
