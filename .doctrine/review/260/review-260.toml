@@ -1,0 +1,72 @@
+id    = 260
+slug  = "external-adversarial-review-comparison-based-value-elicitation"
+title = "External adversarial review: comparison-based value elicitation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "codex"
+responder = "claude"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "RFC-019"
+
+[[finding]]
+id = "F-1"
+status = "open"
+severity = "blocker"
+title = "Latent value domain is undefined against negative anchors"
+detail = "RFC-019 T1 / Indeterminacy / OQ-6 define inequalities over latent values (`v_A > v_B`), ratio checks (`v_A/c_A`), and even a constrained Bradley-Terry projection, but the current authoring contract still allows negative anchors: `doctrine value set --help` says `<MAGNITUDE>` may be any finite f64, including negative. The RFC never constrains the carrier set for `v`. That leaves the formal model ill-defined as written: Bradley-Terry assumes positive strengths, ratio-form evidence becomes nonsensical when feasible values can cross or equal zero, and the determinacy predicate changes character once negative anchors are allowed. Before this can be implemented, the RFC needs an explicit domain contract for intrinsic value and a migration story for out-of-domain authored values."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "A2/A4 contradict the current value facet contract"
+detail = "RFC-019 A2/A4 and OQ-4 say records and `RSK` are outside the value domain because record priority should be purely derived and risk should live in `risk_dim`. The current engine disagrees on both fronts. `src/kinds.rs` defines `VALUE_BEARING = [SL, ISS, IMP, CHR, RSK, IDE]`, so risks currently participate in `value_dim` as well as `risk_dim`. Separately, `doctrine value set --help` accepts any canonical entity ref, so the capture surface still permits writing `[value]` on records and governance kinds. The RFC does not specify any validation, migration, or ADR-015 amendment for this contract change. As written, the proposed admissibility rules reject data and scoring behaviour that doctrine currently permits."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "major"
+title = "T3 relies on obsolete absent-value semantics"
+detail = 'RFC-019 T3(a) and Phase B say that items with neither authored nor inferred value keep the "existing absent-value identity (`value_dim = 0`)". That is no longer true in the current priority engine. `src/priority/graph.rs` defines `DEFAULT_VALUE = 1.0`, and `effective_raw_value()` gives every value-bearing kind with no `[value]` facet that default, including in the burndown path. This is not a cosmetic drift: it changes what an "unanchored" component means, what projection fallback has to match, and how authored-vs-derived values compose with the live consumer. The RFC is reasoning against an obsolete scoring contract.'
+
+[[finding]]
+id = "F-4"
+status = "open"
+severity = "blocker"
+title = "Supersession is nondeterministic across session files"
+detail = """RFC-019 T6/OQ-3 define supersession as "a later row supersedes an earlier one" for the same `(pair, frame, rater)`, but the storage model never defines a stable notion of later across session files. Rows live in `.doctrine/comparisons/<date>-<uid>.toml`, each row carries a `date`, and sessions are expected to merge add/add across machines. That leaves same-day captures, clock skew, cherry-picks, and concurrent tombstones ambiguous. Because supersession decides which evidence is active, two replicas can legitimately derive different feasible regions from the same merged corpus. This is blocker-level because the ledger's core semantics are not deterministic until the RFC specifies a total ordering key or an explicit conflict state for incomparable recency."""
+
+[[finding]]
+id = "F-5"
+status = "open"
+severity = "blocker"
+title = "Estimate-domain determinacy is hand-waved, not specified"
+detail = """RFC-019's estimate domain, determinacy rule, and Phase E all rely on exact reasoning about `sign(v_A/c_A - v_B/c_B)` over every feasible assignment, with estimate questions ranked beside value comparisons by hypothetical propagation. The current consumer does not operate on a free cost variable: `src/priority/graph.rs` derives one scalar `est_cost = lower + β(upper-lower)` from authored ranges. The RFC says estimate comparisons constrain `est_cost` ordering and that projection then "adjusts ranges minimally within bounds", but never defines the feasible region or objective over `(lower, upper)` that would make those propagations exact and reproducible. Without a formal estimate model, the claimed determinacy test and cross-domain yield ranking are not computable as specified; they are just placeholders."""
+
+[[finding]]
+id = "F-6"
+status = "open"
+severity = "major"
+title = "Guaranteed-yield selection has no tractable evaluation plan"
+detail = 'RFC-019 says guaranteed-yield selection is "cheap and pure" because each candidate can be scored by hypothetically applying each answer, re-running propagation, and counting newly-determined decisions. That skips the actual search surface. In the value domain alone the candidate set is quadratic in admissible items; Phase E then adds estimate questions into the same queue. Nothing in the RFC narrows the candidate pool before evaluation, and no incremental propagation or cached delta mechanism is specified. The existing priority seam is whole-graph style: one base pre-pass plus whole-graph consequence/burndown post-passes in `src/priority/graph.rs`, not an incremental inference engine. As written, the central Phase C cost claim is unsupported at realistic corpus sizes.'
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "major"
+title = "The dependency-closed scoping cut is under-specified"
+detail = """RFC-019's scoping context defines the release boundary as a dependency-closed greedy walk down value density until budget runs out, then treats "membership stability" around that water line as mechanically decidable. The closure rule is not actually specified. If an item near the line pulls in prerequisites from below the line, both total cost and set membership change; depending on whether closure happens before ranking, after ranking, or to a fixpoint, the resulting cut differs. Because the queue ranks questions by their effect on this boundary band, the ambiguity propagates into Phase E's selection semantics as well. The RFC needs a precise closure-and-budget algorithm before membership stability is a real predicate rather than an intuition."""
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "major"
+title = "Persistent bounds conflict with mutable authored anchors"
+detail = """RFC-019 T6 says a terminal item's rows become inert for elicitation but their bounds contributions persist, because closing `B` should not falsify that `A > B` was once judged. That only works for append-only comparison rows. The same section also treats authored `value` magnitudes as point anchors in the constraint layer, but those anchors are mutable today: doctrine ships both `value set` and `value clear`. If a terminal item's authored value is later cleared or changed, all propagated bounds through that anchor disappear or move, which contradicts the RFC's persistence story. The design needs explicit anchor lifecycle rules or snapshotting; otherwise "terminal rows still contribute bounds" is not actually true for one of its own anchor types."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
