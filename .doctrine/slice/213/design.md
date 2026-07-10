@@ -124,11 +124,17 @@ Input: parsed sessions + entity status map. Output: every row tagged with
 exactly one `RowStatus`. First matching rule wins:
 
 - **R1 Tombstone** — a tombstone evicts its target by uid → `Tombstoned`.
-- **R2 Explicit supersession** — a row named by any active row's `supersedes`
-  → `Superseded { by }`. Chains resolve transitively; a superseding row that is
-  itself tombstoned does not revive its target (R1 evaluates for the
-  superseding row first). A `supersedes` pointing at an unknown uid is a
-  load-time warning; resolution ignores it.
+- **R2 Explicit supersession** — a row is `Superseded { by }` iff any
+  **non-tombstoned** row names it in `supersedes`. The pointer's effect is
+  independent of the pointer-holder's own superseded status (only a tombstone
+  disarms a pointer) — this makes resolution a single pass, no fixpoint:
+  chains work (A←B←C leaves only C active), and mutual/cyclic supersession
+  (A↔B) deactivates every participant plus a `MalformedSupersession` finding
+  naming the cycle. A tombstoned superseder does not revive its target only
+  if another live pointer exists; otherwise the target returns to `Active`
+  (tombstoning your correction restores the original — intended). A
+  `supersedes` pointing at an unknown uid is a load-time warning; resolution
+  ignores it.
 - **R3 Implicit revision** — within a single session file only: same identity
   key `(pair, domain, frame, form, lens, rater)`, higher `seq` wins. Cross-
   session same-key rows are concurrent evidence — both `Active`; conflicts are
@@ -156,7 +162,9 @@ both), hence never compiled to `v_A > v_B`; the natural future consumer is a
 compiler with a cost model in hand (`v_A·c_B > v_B·c_A` shape). Elicitation
 prompts must stretch from fixed-scope projects to sprint commitment without
 changing row semantics. Frame implies domain at capture; users never type a
-domain.
+domain. Pair admissibility for the `priority` domain reuses the value-domain
+set (VALUE_BEARING minus RSK) initially — widened only when a consumer
+exists to justify it.
 
 ### Compilation — active set → `ConstraintSet`
 
@@ -269,7 +277,8 @@ DEFAULT_VALUE` (D11); `value_dim` and burndown consume identically.
   fields structurally.
 - **S4 Findings** — `PreferenceCycle` (members + quarantined row uids +
   supersession-directing reprobe hint, C7), `AnchorConflict` (both anchors with
-  values + quarantined uids + exits), `AnchorGaugeDisconnect` (P7 hint).
+  values + quarantined uids + exits), `AnchorGaugeDisconnect` (P7 hint),
+  `MalformedSupersession` (R2 cycle: participating uids + exit — tombstone one).
   Inert `priority`-domain rows: one-line disclosure in `explain` only ("N
   prefer-first judgements recorded — not value-bearing; no consumer yet") —
   not a finding; nothing is wrong.
@@ -283,8 +292,10 @@ section.
    `version ≠ 2` rejected with the pre-release message; per-domain frame
    admissibility.
 2. **Resolution** — one test per R-rule; cross-session concurrency (both
-   active); supersession chain + tombstoned superseder; duplicate-uid collapse;
-   merge-order invariance.
+   active); supersession chain + tombstoned superseder (target revival);
+   mutual-supersession cycle → all deactivated + `MalformedSupersession`;
+   `incomparable` superseding a preference row (retract-to-unknown gesture);
+   duplicate-uid collapse; merge-order invariance.
 3. **Compilation** — the D3 golden (A>B>C>A + A>D: B–D/C–D independence, A>D
    retained, finding lists exactly the cycle rows); 2-cycle; violation-closure
    goldens (single-row conflict, chain conflict, overlapping paths); C2;
