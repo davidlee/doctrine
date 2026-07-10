@@ -58,6 +58,13 @@ so the golden surface lives in one place.
 - **GAUGE_STEP** enters as a pure parameter in PHASE-04 and gets its config
   home (`priority/config.rs`, default 0.25) in PHASE-05 — the sensitivity
   sweep runs in PHASE-04 where the parameter is free.
+- **StatusMap sourcing (PHASE-05)**: statuses and supersedes relations ride
+  the existing scan; the R6 "decomposed" event's data source is an open
+  implementation point — verify what encodes decomposition at phase-plan
+  time, and if nothing does, R6's decomposed row is vacuously satisfied
+  (children inherit nothing by default) with a note, not a blocker.
+- **No proptest dependency** — property tests are hand-rolled input
+  generators in `mod tests`, matching existing suite idiom.
 - **VH-1 (PHASE-06)** doubles as the Phase C entry-criterion dry run: capture
   a small real ledger over this repo's backlog and eyeball the explain/list
   story. Its outcome feeds the RFC-019 Phase C gate, not this slice's close.

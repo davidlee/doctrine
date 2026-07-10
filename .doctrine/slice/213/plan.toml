@@ -28,7 +28,8 @@ exit_criteria = [
   { id = "EX-1", text = "src/comparison/ exists (wire.rs, mod.rs); crate::comparison::X paths compile unchanged elsewhere" },
   { id = "EX-2", text = "v2 wire model round-trips; version 1 (or any ≠2) file rejected with a message naming the remedy" },
   { id = "EX-3", text = "capture accepts exactly one of --prefer/--equal/--incomparable, plus --supersedes validated against the loaded corpus; prefer-first rows carry domain=priority" },
-  { id = "EX-4", text = "quick gate clean (doctrine check commit): clippy zero warnings, fmt" },
+  { id = "EX-4", text = "existing compare list and withdraw keep working against v2 rows (minimal render adaptation — response shown; the RowState column is PHASE-06)" },
+  { id = "EX-5", text = "quick gate clean (doctrine check commit): clippy zero warnings, fmt" },
 ]
 verification = [
   { id = "VT-1", expects = "v2 wire goldens: Response vocabulary parses + serializes; magnitude and supersedes round-trip; per-domain frame admissibility (equal-effort only in value, prefer-first only in priority)",
@@ -120,9 +121,9 @@ verification = [
     test_file = "src/comparison/project.rs",
     keywords = ["fn project", "ValueProvenance", "Gauge", "budgeted"],
     waived = false },
-  { id = "VT-2", expects = "property tests P10–P12/P14 over generated components; anchor-value collision and gauge-disconnect pinned as expected outputs (D14)",
+  { id = "VT-2", expects = "property tests P10–P12/P14 over hand-rolled generated components (no proptest dep in this crate); anchor-value collision and gauge-disconnect pinned as expected outputs (D14)",
     test_file = "src/comparison/project.rs",
-    keywords = ["proptest", "equivariance"],
+    keywords = ["generated", "equivariance"],
     waived = false },
 ]
 specs        = []
@@ -131,7 +132,7 @@ requirements = []
 [[phase]]
 id        = "PHASE-05"
 name      = "Priority wiring + behaviour preservation"
-objective = "Move load_sessions from commands/compare.rs to src/comparison/store.rs (engine seam); thread the pipeline (store → resolve → compile → project) into the priority build shell; build_from_with_cfg gains a projected-values input consulted by effective_raw_value under authored > projected > gauge > DEFAULT_VALUE (D11); GAUGE_STEP named const in priority/config.rs, config-overridable; burndown consumes projected/gauge values identically to value_dim (governed policy: gauge participates in burndown)."
+objective = "Move load_sessions from commands/compare.rs to src/comparison/store.rs (engine seam); construct the resolution StatusMap from the existing entity scan (statuses + supersedes relations; decomposed-detection source verified at phase-plan); thread the pipeline (store → resolve → compile → project) into the priority build shell; build_from_with_cfg gains a projected-values input consulted by effective_raw_value under authored > projected > gauge > DEFAULT_VALUE (D11); GAUGE_STEP named const in priority/config.rs, config-overridable; burndown consumes projected/gauge values identically to value_dim (governed policy: gauge participates in burndown)."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-04 landed: full pure pipeline available" },
   { id = "EN-2", text = "existing priority suites green pre-wiring (the preservation baseline)" },
@@ -144,7 +145,11 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "effective_raw_value provenance-chain unit tests incl. gauge tier; empty-map identity test",
     test_file = "src/priority/graph.rs",
-    keywords = ["projected", "Gauge", "GAUGE_STEP"],
+    keywords = ["projected", "Gauge"],
+    waived = false },
+  { id = "VT-4", expects = "GAUGE_STEP named const with config override, default 0.25",
+    test_file = "src/priority/config.rs",
+    keywords = ["GAUGE_STEP", "0.25"],
     waived = false },
   { id = "VT-2", expects = "gauge-fed burndown golden (governed-policy pin); ledger-fed value_dim integration test",
     test_file = "src/priority/graph.rs",
