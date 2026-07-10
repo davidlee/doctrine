@@ -14,7 +14,7 @@ ref   = "SL-210"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "ComparisonSession sketch cannot emit the documented session schema"
 detail = 'SL-210 design is internally inconsistent about the file format it says Phase A ships. The documented schema requires a nested [session] header plus lowercase literals like rater = "agent" and form = "order" (.doctrine/slice/210/design.md:39-67, echoed by SL-210 scope at .doctrine/slice/210/slice-210.md:14-20 and RFC-019 T2/OQ-3 at .doctrine/rfc/019/rfc-019.md:226-233,722-725). But the proposed engine shape is ComparisonSession { uid, date, judgements, tombstones } with plain derived Serialize/Deserialize enums RaterKind { Human, Agent } and RowForm { Order, Ratio }, and to_toml is explicitly described as mirroring the serde-based house pattern from src/plan.rs and src/ledger.rs (.doctrine/slice/210/design.md:113-120; src/plan.rs:79-99; src/ledger.rs:255-269). Follow that design literally and the writer cannot produce the promised TOML: uid/date serialize at top level instead of under [session], and the enum tokens serialize as Human/Agent/Order/Ratio rather than the lowercase wire values the schema and RFC require. That means the design, as written, cannot round-trip its own golden shape or interoperate with the declared schema.'
@@ -23,7 +23,7 @@ response = 'Accepted. The serde sketch was not the wire model. Design now shows 
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Session schema drops RFC-mandated audience metadata"
 detail = "RFC-019 makes session metadata part of the persistence contract, not a later embellishment: session files exist because judgements arrive as 'one rater/audience, one date, a run of answers', and the resolved OQ-3 shape is a [session] header carrying rater, audience, and defaults (.doctrine/rfc/019/rfc-019.md:228,245-260,722-725). T4 then makes distinct stakeholder audiences an intended product direction, not speculation (.doctrine/rfc/019/rfc-019.md:290-302), and OQ-1 keeps per-audience reporting buildable from the capture ledger (.doctrine/rfc/019/rfc-019.md:685-689). SL-210's scope also says the header carries rater/audience/date/session uid (.doctrine/slice/210/slice-210.md:14-16). The design's shipped schema removes audience entirely and shrinks [session] to only uid/date (.doctrine/slice/210/design.md:43-46), with no replacement field elsewhere. Under this design, any future audience-scoped elicitation session becomes indistinguishable on disk from any other session with the same rater kind, so the Phase D/T4 surfaces the RFC intends cannot be built without a schema migration or lossy heuristics. That is a direct contract break with the governing RFC and the slice scope."
@@ -32,7 +32,7 @@ response = "Accepted — contract break with RFC-019 T2/OQ-3 and the slice scope
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Capture surface cannot record human-vs-agent provenance"
 detail = "The design says rater provenance is mandatory day one: D5 chooses a required rater kind enum (human|agent) plus optional by-identity, and RFC-019 OQ-1 makes per-row rater mandatory so pooled inference can later distinguish human from agent evidence (.doctrine/slice/210/design.md:28-29,57-58; .doctrine/rfc/019/rfc-019.md:231,685-689). But the proposed CLI surface exposes no way to set rater at capture time. The target behavior only names --prefer/--lens/--by/--note (.doctrine/slice/210/design.md:152-158), and the scope verb signature likewise only has --by, not a rater selector (.doctrine/slice/210/slice-210.md:21-24). Defaulting every row to agent means any real human judgement captured through Phase A is either mislabeled as agent or cannot be expressed at all. That poisons the evidence ledger's provenance and makes later disagreement / confidence reporting unsound on exactly the axis RFC-019 says must stay buildable."
@@ -41,7 +41,7 @@ response = "Accepted as an authorship defect: D5 committed to an explicit rater 
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Shipped frame vocabulary is unreachable from the proposed CLI"
 detail = "RFC-019's typed-frame model is load-bearing: frame is the thing that tells Phase B what inequality a row means, so the vocabulary must be closed and auditable rather than inferred from prose (.doctrine/rfc/019/rfc-019.md:145-161,304-311). SL-210 adopts that in D7 by shipping two value-domain frames now, equal-effort and prefer-first (.doctrine/slice/210/design.md:30-31,53-55,91-94). But the proposed capture command has no frame selector at all: it only accepts refs, --prefer, optional --lens, --by, and --note, with equal-effort merely described as the default (.doctrine/slice/210/design.md:136-158). As written, prefer-first is not actually capturable. Any judgement asked in the 'which would you rather have first?' frame must either be mislabeled as equal-effort or be impossible to record, which corrupts the formal meaning of the evidence row before Phase B ever sees it."
@@ -57,7 +57,7 @@ detail = "The only user-facing lookup surface the design gives for withdrawals i
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Short row IDs in list output cannot drive withdraw safely"
 detail = "The only user-facing lookup surface the design gives for withdrawals is compare list, but that renderer intentionally prints only a short row uid while compare withdraw addresses a row by uid (.doctrine/slice/210/design.md:148-156). This is not a harmless display choice in this codebase: doctrine already documents that uuid-v7 prefixes collide because they share a leading timestamp bucket, so list surfaces that are meant to feed a follow-up verb must show the full uid, not a short one (src/memory.rs:2157-2163, 945-950, 6800-6803). Under the proposed design, a user who lists evidence and then withdraws by the shown identifier can hit ambiguity or the wrong row as soon as two captures share the same visible prefix. That makes the authored evidence surface non-deterministic in ordinary multi-session use, exactly where the design is trying to preserve deterministic append-only behavior."
