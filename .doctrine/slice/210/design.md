@@ -41,8 +41,9 @@ schema  = "doctrine.comparison-session"
 version = 1
 
 [session]
-uid  = "0197f3a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f"
-date = "2026-07-10"
+uid      = "0197f3a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f"
+date     = "2026-07-10"
+audience = "stakeholder"      # optional — OQ-1/T4 per-audience surfacing rides this
 
 [[judgement]]
 uid       = "0197f3a2-6c2f-7d4e-8f5a-2b3c4d5e6f7a"
@@ -85,6 +86,10 @@ Invariants:
 
 No clock, disk, rng, or git. Date and uids are inputs (the date/uid pattern).
 
+The serde model is the wire model — it must emit the documented schema
+exactly (RV-262 F-1): nested `[session]` table, singular array-of-table
+names, lowercase enum tokens.
+
 ```rust
 pub(crate) const COMPARISON_SCHEMA: &str = "doctrine.comparison-session";
 pub(crate) const COMPARISONS_DIR: &str = "comparisons";   // under .doctrine/
@@ -93,9 +98,23 @@ pub(crate) const FRAME_EQUAL_EFFORT: &str = "equal-effort";
 pub(crate) const FRAME_PREFER_FIRST: &str = "prefer-first";
 pub(crate) const VALUE_FRAMES: &[&str] = &[FRAME_EQUAL_EFFORT, FRAME_PREFER_FIRST];
 
-#[derive(Serialize, Deserialize)] pub(crate) enum RaterKind { Human, Agent }
-#[derive(Serialize, Deserialize)] pub(crate) enum RowForm { Order, Ratio }
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RaterKind { Human, Agent }      // wire: "human" / "agent"
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum RowForm { Order, Ratio }        // wire: "order" / "ratio"
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct SessionHeader {
+  pub uid: String,
+  pub date: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub audience: Option<String>,                 // OQ-1/T4 contract field
+}
+
+#[derive(Serialize, Deserialize)]
 pub(crate) struct Judgement {
   pub uid: String, pub seq: u32,
   pub a: String, pub b: String, pub preferred: String,
@@ -105,18 +124,27 @@ pub(crate) struct Judgement {
   pub note: Option<String>, pub date: String,
 }
 
+#[derive(Serialize, Deserialize)]
 pub(crate) struct Tombstone {
   pub uid: String, pub seq: u32, pub target: String,
   pub date: String, pub note: Option<String>,
 }
 
+/// The file model — serializes 1:1 to the documented schema.
+#[derive(Serialize, Deserialize)]
 pub(crate) struct ComparisonSession {
-  pub uid: String, pub date: String,
-  pub judgements: Vec<Judgement>, pub tombstones: Vec<Tombstone>,
+  pub schema: String,          // COMPARISON_SCHEMA, checked on parse
+  pub version: u32,
+  pub session: SessionHeader,
+  #[serde(default, rename = "judgement")]
+  pub judgements: Vec<Judgement>,
+  #[serde(default, rename = "tombstone")]
+  pub tombstones: Vec<Tombstone>,
 }
 
 pub(crate) fn parse(text: &str) -> anyhow::Result<ComparisonSession>;
-pub(crate) fn to_toml(s: &ComparisonSession) -> String;   // mirrors plan/ledger house pattern
+pub(crate) fn to_toml(s: &ComparisonSession) -> String;   // mirrors plan/ledger house pattern;
+                                                          // golden test pins byte shape
 
 /// Value-domain admissibility over already-resolved kinds. Pure; the kind
 /// lookup happens in the shell. Err carries the human-readable refusal.
@@ -137,6 +165,19 @@ list, with a unit test pinning the relationship (D6; no magic strings).
   `args_conflicts_with_subcommands = true`; subcommands `list`, `withdraw`.
   (Fallback if ergonomics fight clap: promote capture to `compare record` —
   cosmetic, not structural.)
+- Full capture surface (RV-262 F-3/F-4 — every schema column the row needs
+  is settable at capture; nothing reachable only by default):
+
+  ```text
+  doctrine compare <A> <B> --prefer <A|B|a|b>
+      [--frame equal-effort|prefer-first]   # default equal-effort
+      [--rater human|agent]                 # default agent
+      [--by <NAME>] [--lens <L>] [--note <N>]
+      [--audience <AUD>]                    # session-header field
+  ```
+
+  `domain` is fixed at `value` and `form` at `order` in Phase A (D8; no
+  flag mints them).
 - Capture flow: parse both refs (`parse_canonical_ref`) → resolve kinds via
   the corpus scan (refs must exist — dangling evidence refused) →
   `admissible_value_pair` → `validate_judgement` → mint session uid + row uid
@@ -145,10 +186,13 @@ list, with a unit test pinning the relationship (D6; no magic strings).
   semantics — never truncate an existing path).
 - `list [<ID>]`: scan `.doctrine/comparisons/*.toml`, parse all sessions,
   flatten rows, sort by `(date, session_uid, seq)`, optional participation
-  filter (`a == ID || b == ID`), render: short row uid, pair with preferred
-  marked, frame, rater(+by), date, note; rows targeted by any tombstone
-  render struck with `withdrawn` — display-only interpretation (resolution is
-  Phase B).
+  filter (`a == ID || b == ID`), render: **full row uid**, pair with
+  preferred marked, frame, rater(+by), date, note; rows targeted by any
+  tombstone render struck with `withdrawn` — display-only interpretation
+  (resolution is Phase B). Full uid, never a prefix: uuid-v7 prefixes share
+  a timestamp bucket and collide, and this listing is the lookup surface
+  that feeds `withdraw` (RV-262 F-6; house precedent in the memory
+  subsystem).
 - `withdraw <row-uid> [--note]`: scan to locate the target row uid (must
   exist, must be a judgement, must not already be tombstoned — double
   withdraw refuses with "already withdrawn"); append-only: writes a *new*
@@ -191,6 +235,8 @@ The pure core never sees a path or a clock; the shell never interprets rows.
 Unit (`src/comparison.rs`):
 
 - `round_trip_preserves_all_fields` — full row incl. optionals, golden TOML
+- `golden_shape_matches_documented_schema` — byte-level: nested `[session]`,
+  singular `[[judgement]]`/`[[tombstone]]`, lowercase enum tokens (F-1)
 - `parse_preserves_unknown_frame_rows` — losslessness / forward compat
 - `validate_rejects_preferred_outside_pair`, `_self_pair`, `_unknown_frame`,
   `_unknown_domain`

@@ -18,12 +18,14 @@ nothing here consumes the ledger.
   `{uid, a, b, preferred, domain, frame (closed vocab per domain),
   form: order|ratio, lens?, rater (mandatory; human|agent), note, date}`.
   Phase A *elicits* only value-domain order rows; the schema carries the rest.
-- **Capture verb**: `doctrine value compare <A> <B> --prefer <A|B>
-  [--lens L] [--by RATER] [--note …]` — verb naming is a design-time question
-  (RFC-019 flags `value compare` as possibly wrong-shaped once the estimate
-  domain arrives; a domain-neutral `doctrine compare` may age better).
-- **List verb**: `doctrine value comparisons [<ID>]` — evidence listing,
-  per-item filter, active/superseded visibility.
+- **Capture verb** (naming adjudicated at design, D1 — domain-neutral
+  top-level group): `doctrine compare <A> <B> --prefer <A|B>
+  [--frame F] [--rater human|agent] [--by NAME] [--lens L] [--note …]
+  [--audience AUD]`.
+- **List verb**: `doctrine compare list [<ID>]` — evidence listing,
+  per-item filter, withdrawn visibility; full row uids (feeds `withdraw`).
+- **Withdraw verb** (OQ-A3 adjudicated: ships in A): `doctrine compare
+  withdraw <row-uid>` — appends a tombstone; resolution stays Phase B.
 - **Domain admissibility at capture** (A2/A4): value-domain rows admit only
   commensurable value-bearing pairs; records refused with reason (their worth
   is derived, A2). RSK admissibility per REV-022 Q2 adjudication.
