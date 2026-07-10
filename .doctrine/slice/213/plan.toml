@@ -32,18 +32,9 @@ exit_criteria = [
   { id = "EX-5", text = "quick gate clean (doctrine check commit): clippy zero warnings, fmt" },
 ]
 verification = [
-  { id = "VT-1", expects = "v2 wire goldens: Response vocabulary parses + serializes; magnitude and supersedes round-trip; per-domain frame admissibility (equal-effort only in value, prefer-first only in priority)",
-    test_file = "src/comparison/wire.rs",
-    keywords = ["enum Response", "Incomparable", "supersedes", "DOMAIN_PRIORITY"],
-    waived = false },
-  { id = "VT-2", expects = "version gate: version != 2 is a parse error whose message names the remedy (unreleased v1 — delete or recreate)",
-    test_file = "src/comparison/wire.rs",
-    keywords = ["COMPARISON_VERSION", "never released"],
-    waived = false },
-  { id = "VT-3", expects = "capture: response group mutual exclusion, --supersedes unknown-uid hard error, frame-derived domain",
-    test_file = "src/commands/compare.rs",
-    keywords = ["supersedes", "incomparable"],
-    waived = false },
+  { id = "VT-1", expects = "v2 wire goldens: Response vocabulary parses + serializes; magnitude and supersedes round-trip; per-domain frame admissibility (equal-effort only in value, prefer-first only in priority)", test_file = "src/comparison/wire.rs", keywords = ["enum Response", "Incomparable", "supersedes", "DOMAIN_PRIORITY"], waived = false },
+  { id = "VT-2", expects = "version gate: version != 2 is a parse error whose message names the remedy (unreleased v1 — delete or recreate)", test_file = "src/comparison/wire.rs", keywords = ["COMPARISON_VERSION", "never released"], waived = false },
+  { id = "VT-3", expects = "capture: response group mutual exclusion, --supersedes unknown-uid hard error, frame-derived domain", test_file = "src/commands/compare.rs", keywords = ["supersedes", "incomparable"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -61,14 +52,8 @@ exit_criteria = [
   { id = "EX-3", text = "quick gate clean" },
 ]
 verification = [
-  { id = "VT-1", expects = "one test per R-rule; R2 table row-by-row: chain, mutual cycle, self-supersession, tombstoned superseder (target revival), superseder of tombstoned target, unknown-uid warning",
-    test_file = "src/comparison/resolve.rs",
-    keywords = ["enum ResolutionStatus", "MalformedSupersession", "fn resolve"],
-    waived = false },
-  { id = "VT-2", expects = "cross-session same-key rows both Active; within-file higher seq wins; duplicate uid collapses; same uid with different content errors",
-    test_file = "src/comparison/resolve.rs",
-    keywords = ["identity", "concurrent"],
-    waived = false },
+  { id = "VT-1", expects = "one test per R-rule; R2 table row-by-row: chain, mutual cycle, self-supersession, tombstoned superseder (target revival), superseder of tombstoned target, unknown-uid warning", test_file = "src/comparison/resolve.rs", keywords = ["enum ResolutionStatus", "MalformedSupersession", "fn resolve"], waived = false },
+  { id = "VT-2", expects = "cross-session same-key rows both Active; within-file higher seq wins; duplicate uid collapses; same uid with different content errors", test_file = "src/comparison/resolve.rs", keywords = ["identity", "concurrent"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -87,18 +72,9 @@ exit_criteria = [
   { id = "EX-4", text = "quick gate clean" },
 ]
 verification = [
-  { id = "VT-1", expects = "C3 goldens: obligation-1 case, 2-cycle, cycle-edge-also-in-anchor-conflict (C3 before C4 order pinned)",
-    test_file = "src/comparison/compile.rs",
-    keywords = ["PreferenceCycle", "ConstraintSet", "fn compile"],
-    waived = false },
-  { id = "VT-2", expects = "C4 goldens: single-row conflict, chain conflict, parallel-paths conflict, one edge in several conflicts; path-form vs floor/ceiling equivalence check",
-    test_file = "src/comparison/compile.rs",
-    keywords = ["AnchorConflict", "violation"],
-    waived = false },
-  { id = "VT-3", expects = "C2: equal row merging differently-anchored classes quarantined via equality-graph closure, classes rebuilt once; C5 feasibility property test; C6 Bound enum bounds",
-    test_file = "src/comparison/compile.rs",
-    keywords = ["enum Bound", "Unbounded", "feasib"],
-    waived = false },
+  { id = "VT-1", expects = "C3 goldens: obligation-1 case, 2-cycle, cycle-edge-also-in-anchor-conflict (C3 before C4 order pinned)", test_file = "src/comparison/compile.rs", keywords = ["PreferenceCycle", "ConstraintSet", "fn compile"], waived = false },
+  { id = "VT-2", expects = "C4 goldens: single-row conflict, chain conflict, parallel-paths conflict, one edge in several conflicts; path-form vs floor/ceiling equivalence check", test_file = "src/comparison/compile.rs", keywords = ["AnchorConflict", "violation"], waived = false },
+  { id = "VT-3", expects = "C2: equal row merging differently-anchored classes quarantined via equality-graph closure, classes rebuilt once; C5 feasibility property test; C6 Bound enum bounds", test_file = "src/comparison/compile.rs", keywords = ["enum Bound", "Unbounded", "feasib"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -117,14 +93,8 @@ exit_criteria = [
   { id = "EX-4", text = "quick gate clean" },
 ]
 verification = [
-  { id = "VT-1", expects = "battery goldens incl. negative-ceiling N1, sign-crossing N2, branching N3, multi-ceiling tie N4; Y-battery pinning gauge convention and minimal-motion pinning (P13 as demonstrated behaviour)",
-    test_file = "src/comparison/project.rs",
-    keywords = ["fn project", "ValueProvenance", "Gauge", "budgeted"],
-    waived = false },
-  { id = "VT-2", expects = "property tests P10–P12/P14 over hand-rolled generated components (no proptest dep in this crate); anchor-value collision and gauge-disconnect pinned as expected outputs (D14)",
-    test_file = "src/comparison/project.rs",
-    keywords = ["generated", "equivariance"],
-    waived = false },
+  { id = "VT-1", expects = "battery goldens incl. negative-ceiling N1, sign-crossing N2, branching N3, multi-ceiling tie N4; Y-battery pinning gauge convention and minimal-motion pinning (P13 as demonstrated behaviour)", test_file = "src/comparison/project.rs", keywords = ["fn project", "ValueProvenance", "Gauge", "budgeted"], waived = false },
+  { id = "VT-2", expects = "property tests P10–P12/P14 over hand-rolled generated components (no proptest dep in this crate); anchor-value collision and gauge-disconnect pinned as expected outputs (D14)", test_file = "src/comparison/project.rs", keywords = ["generated", "equivariance"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -143,22 +113,10 @@ exit_criteria = [
   { id = "EX-3", text = "full gate clean (doctrine check gate)" },
 ]
 verification = [
-  { id = "VT-1", expects = "effective_raw_value provenance-chain unit tests incl. gauge tier; empty-map identity test",
-    test_file = "src/priority/graph.rs",
-    keywords = ["projected", "Gauge"],
-    waived = false },
-  { id = "VT-4", expects = "GAUGE_STEP named const with config override, default 0.25",
-    test_file = "src/priority/config.rs",
-    keywords = ["GAUGE_STEP", "0.25"],
-    waived = false },
-  { id = "VT-2", expects = "gauge-fed burndown golden (governed-policy pin); ledger-fed value_dim integration test",
-    test_file = "src/priority/graph.rs",
-    keywords = ["burndown", "gauge"],
-    waived = false },
-  { id = "VT-3", expects = "store seam: load_sessions lives in comparison/store.rs, missing dir → empty, filename-sorted",
-    test_file = "src/comparison/store.rs",
-    keywords = ["fn load_sessions", "COMPARISONS_DIR"],
-    waived = false },
+  { id = "VT-1", expects = "effective_raw_value provenance-chain unit tests incl. gauge tier; empty-map identity test", test_file = "src/priority/graph.rs", keywords = ["projected", "Gauge"], waived = false },
+  { id = "VT-4", expects = "GAUGE_STEP named const with config override, default 0.25", test_file = "src/priority/config.rs", keywords = ["GAUGE_STEP", "0.25"], waived = false },
+  { id = "VT-2", expects = "gauge-fed burndown golden (governed-policy pin); ledger-fed value_dim integration test", test_file = "src/priority/graph.rs", keywords = ["burndown", "gauge"], waived = false },
+  { id = "VT-3", expects = "store seam: load_sessions lives in comparison/store.rs, missing dir → empty, filename-sorted", test_file = "src/comparison/store.rs", keywords = ["fn load_sessions", "COMPARISONS_DIR"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -177,18 +135,9 @@ exit_criteria = [
   { id = "EX-4", text = "full gate clean; slice conformance delta reviewed" },
 ]
 verification = [
-  { id = "VT-1", expects = "e2e: capture → list column states (active, no-constraint, superseded, tombstoned, quarantined×2, inert×3); --active-only semantics",
-    test_file = "tests/e2e_compare_inference.rs",
-    keywords = ["active-only", "quarantined"],
-    waived = false },
-  { id = "VT-2", expects = "e2e: explain three shapes + --json parity; findings render for all four variants with supersession-directing hints",
-    test_file = "tests/e2e_compare_inference.rs",
-    keywords = ["gauge", "constraining", "MalformedSupersession"],
-    waived = false },
-  { id = "VT-3", expects = "determinism: shuffled session-file load order ⇒ byte-identical resolution/bounds/projection output; component-split discontinuity golden",
-    test_file = "tests/e2e_compare_inference.rs",
-    keywords = ["determinism", "shuffle"],
-    waived = false },
+  { id = "VT-1", expects = "e2e: capture → list column states (active, no-constraint, superseded, tombstoned, quarantined×2, inert×3); --active-only semantics", test_file = "tests/e2e_compare_inference.rs", keywords = ["active-only", "quarantined"], waived = false },
+  { id = "VT-2", expects = "e2e: explain three shapes + --json parity; findings render for all four variants with supersession-directing hints", test_file = "tests/e2e_compare_inference.rs", keywords = ["gauge", "constraining", "MalformedSupersession"], waived = false },
+  { id = "VT-3", expects = "determinism: shuffled session-file load order ⇒ byte-identical resolution/bounds/projection output; component-split discontinuity golden", test_file = "tests/e2e_compare_inference.rs", keywords = ["determinism", "shuffle"], waived = false },
   { id = "VH-1", expects = "human eyeball: explain/list output reads intelligibly on a real captured mini-ledger over this repo's backlog (the Phase C entry-criterion dry run)" },
 ]
 specs        = []
