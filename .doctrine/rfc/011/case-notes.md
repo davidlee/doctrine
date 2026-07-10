@@ -927,3 +927,10 @@ Boot snapshot SPINE lists `reports status next blockers survey explain` as if
 subcommand). Verbs are top-level (`doctrine next|survey|explain|blockers`).
 Cost: one wasted probe + correction turn. Suggest boot SPINE render mark
 section headers as non-commands.
+
+[backlog; fable-partial-order-rfc]
+`backlog new` prints only the numbered dir (`.doctrine/backlog/idea/035`) but
+also creates a tracked slug symlink sibling (`035-<slug> -> 035`). Path-limited
+`git add`/`commit` of the numbered dir silently misses the symlink; cost one
+follow-up commit. Suggest: print both paths, or emit the symlink inside the
+numbered dir's parent listing guidance.
