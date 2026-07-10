@@ -920,3 +920,10 @@ Two structural token traps closing SL-206 (audit → reconcile → close → lan
    record source-delta rows as it concludes each phase, or prepare-review should
    accept the boundaries ledger as the delta source — not require a second,
    hand-backfilled registry at integration time.
+
+[preflight; fable-partial-order-rfc]
+Boot snapshot SPINE lists `reports status next blockers survey explain` as if
+`reports` were a command group; `doctrine reports --help` errors (unrecognized
+subcommand). Verbs are top-level (`doctrine next|survey|explain|blockers`).
+Cost: one wasted probe + correction turn. Suggest boot SPINE render mark
+section headers as non-commands.

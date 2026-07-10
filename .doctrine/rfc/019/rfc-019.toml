@@ -1,0 +1,40 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 19
+slug = "comparison-value-elicitation"
+title = "Comparison-based value elicitation"
+status = "open"
+created = "2026-07-10"
+updated = "2026-07-10"
+tags = ["area:priority", "elicitation", "scoring", "value"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "ADR-015"
+
+[[relation]]
+label = "related"
+target = "ADR-017"
+
+[[relation]]
+label = "related"
+target = "ADR-018"
+
+[[relation]]
+label = "related"
+target = "RFC-001"
+
+[[relation]]
+label = "related"
+target = "RFC-002"
+
+[[relation]]
+label = "related"
+target = "IDE-013"
+
