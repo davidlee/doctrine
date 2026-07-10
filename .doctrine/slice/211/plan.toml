@@ -41,12 +41,8 @@ exit_criteria = [
   { id = "EX-2", text = "Candidate-active-without-admission still refuses (no raw-evidence fallback); refusal behaviour preserved, message may be the shared string." },
 ]
 verification = [
-  { id = "VT-1", expects = "resolve_trunk_payload is defined and consumed by integrate + both planners",
-    test_file = "src/dispatch.rs", keywords = ["fn resolve_trunk_payload", "resolve_trunk_payload("],
-    patterns = ["^\\s*fn resolve_trunk_payload"], waived = false },
-  { id = "VT-2", expects = "candidate-active without a close_target admission resolves to Err (refuse, no fallback)",
-    test_file = "src/dispatch.rs", keywords = ["resolve_trunk_payload", "close_target"],
-    patterns = [], waived = false },
+  { id = "VT-1", expects = "resolve_trunk_payload is defined and consumed by integrate + both planners", test_file = "src/dispatch.rs", keywords = ["fn resolve_trunk_payload", "resolve_trunk_payload("], patterns = ["^\\s*fn resolve_trunk_payload"], waived = false },
+  { id = "VT-2", expects = "candidate-active without a close_target admission resolves to Err (refuse, no fallback)", test_file = "src/dispatch.rs", keywords = ["resolve_trunk_payload", "close_target"], patterns = [], waived = false },
   { id = "VA-1", expects = "behaviour-preservation: full dispatch + ledger suites (incl. e2e_dispatch_sync, e2e_dispatch_candidate) green, unchanged except the shared no-admission message string." },
 ]
 specs        = []
@@ -70,15 +66,9 @@ exit_criteria = [
   { id = "EX-2", text = "`plan_recorded_trunk_row` returns the earned row when the payload is_ancestor of the trunk tip; returns Err (named refusal) when the payload is not an ancestor, or the trunk ref does not resolve." },
 ]
 verification = [
-  { id = "VT-1", expects = "recorded_row row shape: Verified status, expected_old == planned == payload",
-    test_file = "src/dispatch.rs", keywords = ["fn recorded_row", "LedgerStatus::Verified"],
-    patterns = ["^\\s*fn recorded_row"], waived = false },
-  { id = "VT-2", expects = "earned pass: payload an ancestor of trunk → Ok row with planned_new_oid == payload",
-    test_file = "src/dispatch.rs", keywords = ["fn plan_recorded_trunk_row", "plan_recorded_trunk_row("],
-    patterns = ["^\\s*fn plan_recorded_trunk_row"], waived = false },
-  { id = "VT-3", expects = "R1 negative: payload NOT an ancestor of trunk → Err naming 'not an ancestor'; no row",
-    test_file = "src/dispatch.rs", keywords = ["plan_recorded_trunk_row", "is not an ancestor"],
-    patterns = [], waived = false },
+  { id = "VT-1", expects = "recorded_row row shape: Verified status, expected_old == planned == payload", test_file = "src/dispatch.rs", keywords = ["fn recorded_row", "LedgerStatus::Verified"], patterns = ["^\\s*fn recorded_row"], waived = false },
+  { id = "VT-2", expects = "earned pass: payload an ancestor of trunk → Ok row with planned_new_oid == payload", test_file = "src/dispatch.rs", keywords = ["fn plan_recorded_trunk_row", "plan_recorded_trunk_row("], patterns = ["^\\s*fn plan_recorded_trunk_row"], waived = false },
+  { id = "VT-3", expects = "R1 negative: payload NOT an ancestor of trunk → Err naming 'not an ancestor'; no row", test_file = "src/dispatch.rs", keywords = ["plan_recorded_trunk_row", "is not an ancestor"], patterns = [], waived = false },
 ]
 specs        = []
 requirements = []
@@ -106,18 +96,10 @@ exit_criteria = [
   { id = "EX-4", text = "The slice close-gate Blocked refusal names `--record-integration` as the out-of-band-land remedy (IMP-169 §C)." },
 ]
 verification = [
-  { id = "VT-1", expects = "e2e: prepare-review → land the payload → record-integration → slice status done passes (SL-190/SL-147 shape)",
-    test_file = "tests/e2e_dispatch_sync.rs", keywords = ["record-integration"],
-    patterns = [], waived = false },
-  { id = "VT-2", expects = "handler guards: deliver_to mismatch refused; Pending/Failed row replaced; Verified row no-op",
-    test_file = "src/dispatch.rs", keywords = ["fn run_record_integration"],
-    patterns = ["^\\s*pub\\(crate\\) fn run_record_integration"], waived = false },
-  { id = "VT-3", expects = "CLI: --record-integration parses in the stage group and the Sync variant is Orchestrator-classed",
-    test_file = "src/main.rs", keywords = ["record-integration"],
-    patterns = [], waived = false },
-  { id = "VT-4", expects = "prescription: the Blocked close-gate refusal string names --record-integration",
-    test_file = "src/slice.rs", keywords = ["record-integration"],
-    patterns = [], waived = false },
+  { id = "VT-1", expects = "e2e: prepare-review → land the payload → record-integration → slice status done passes (SL-190/SL-147 shape)", test_file = "tests/e2e_dispatch_sync.rs", keywords = ["record-integration"], patterns = [], waived = false },
+  { id = "VT-2", expects = "handler guards: deliver_to mismatch refused; Pending/Failed row replaced; Verified row no-op", test_file = "src/dispatch.rs", keywords = ["fn run_record_integration"], patterns = ["^\\s*pub\\(crate\\) fn run_record_integration"], waived = false },
+  { id = "VT-3", expects = "CLI: --record-integration parses in the stage group and the Sync variant is Orchestrator-classed", test_file = "src/main.rs", keywords = ["record-integration"], patterns = [], waived = false },
+  { id = "VT-4", expects = "prescription: the Blocked close-gate refusal string names --record-integration", test_file = "src/slice.rs", keywords = ["record-integration"], patterns = [], waived = false },
 ]
 specs        = []
 requirements = []
