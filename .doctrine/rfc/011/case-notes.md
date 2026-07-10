@@ -943,3 +943,10 @@ unquoted `>` in a formula echo (`v_A*c_B > v_B*c_A`). Harmless but a stray
 tracked-tree artifact from an external reviewer with workspace-write; consider
 advising reviewers to quote formulae or spot-checking `git status` after
 external sessions.
+
+[route→revision; fable-partial-order-rfc]
+`revision new` same slug-symlink omission as backlog/review new: command
+prints only the numbered dir, tracked slug symlink created silently, missed
+by path-limited commit → follow-up commit again. Third kind exhibiting the
+pattern this session; the fix is one shared announcement seam in entity
+creation output.
