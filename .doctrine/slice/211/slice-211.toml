@@ -12,11 +12,15 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/ledger.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
