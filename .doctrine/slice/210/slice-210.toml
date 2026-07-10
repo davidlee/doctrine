@@ -24,11 +24,27 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/main.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/command/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/comparison.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/compare.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/facet.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
