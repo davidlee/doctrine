@@ -1003,3 +1003,30 @@ before spotting the short-vs-full sha mismatch in the filename. Cost: one
 wasted full-suite diff run + ~10 min diagnosis. Fix candidates: normalise
 base to a canonical form in baseline_path(), or name the missing-file path
 (incl. base component) in the error.
+
+[dispatch; SL-210-drive]
+PHASE-02 worker burned two build-error round-trips on stale scope data: (1)
+the phase file set named src/main.rs for CLI wiring, but SL-115 moved the
+Command enum/dispatch into src/commands/cli.rs; (2) src/commands/guard.rs
+write_class match is exhaustive-by-design, so ANY new Command variant compels
+an undeclared guard.rs touch — an invisible required-touch no file set lists.
+Distillers should grep the live tree for the CLI enum location and mention
+guard.rs whenever a phase adds a Command variant.
+
+[dispatch; SL-210-drive]
+dispatch_import hard-refused undeclared-scope with EMPTY detail — no offending
+paths named. Diagnosis required source-diving conformance.rs + discovering
+`slice selector list` (found a stale `src/command/**` TYPO selector that
+matches nothing, plus the genuinely-undeclared cli.rs/guard.rs). Cost: ~15 min
++ several tool calls. Fixes: populate Refused.detail with the undeclared
+paths; `selector doctor` would have flagged the dead glob — consider running
+it pre-dispatch.
+
+[dispatch; SL-210-drive]
+Working-tree-free funnel commits (dispatch_conclude_phase, dispatch_import)
+advance the coord branch tip WITHOUT touching the coord index/worktree. After
+conclude, boundaries.toml sat as a STAGED DELETION (pathless commit would have
+deleted the ledger); after import, the whole worker delta was absent from the
+working tree until a manual `git restore --source=HEAD --staged --worktree`.
+Regression diff would otherwise run the suite on a stale tree. The orchestrator
+must re-sync after EVERY MCP funnel write; skills don't mention this beat.
