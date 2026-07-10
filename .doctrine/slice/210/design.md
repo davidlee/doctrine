@@ -150,17 +150,22 @@ list, with a unit test pinning the relationship (D6; no magic strings).
   render struck with `withdrawn` — display-only interpretation (resolution is
   Phase B).
 - `withdraw <row-uid> [--note]`: scan to locate the target row uid (must
-  exist, must be a judgement); append-only: writes a *new* session-of-one
-  file containing only the tombstone (D2 uniformity — no in-place file edits,
-  merge-clean, same code path as capture).
-- `--prefer` accepts the full ref of one side; refused if it matches neither.
+  exist, must be a judgement, must not already be tombstoned — double
+  withdraw refuses with "already withdrawn"); append-only: writes a *new*
+  session-of-one file containing only the tombstone (D2 uniformity — no
+  in-place file edits, merge-clean, same code path as capture).
+- `--prefer` accepts the full ref of one side, or the literals `a`/`b`
+  (no lexical collision with canonical refs); refused otherwise.
+- Terminal-status participants are **admitted**: comparing against shipped
+  work is legitimate anchoring; row-effect semantics under entity lifecycle
+  are Phase B's T6 event-effect table, not a capture gate.
 
 ### `src/commands/facet.rs` — REV-022 Q1 warn
 
 `run_value_set`: after canonicalising, if the target kind ∉
 `kinds::VALUE_BEARING`, print a warning (write still proceeds):
-`warning: value on <ID> is scoring-inert — <kind> derives worth from what it
-unlocks (ADR-015 § Value-source resolution); estimate it instead`.
+`warning: value on <ID> is scoring-inert — <kind> is not value-bearing;
+scoring ignores this facet (ADR-015 § Value-source resolution)`.
 
 ### Wiring
 
@@ -200,7 +205,8 @@ Integration (CLI):
 - `compare_refuses_missing_ref`, `_refuses_record_pair`, `_refuses_rsk`
 - `compare_list_orders_by_total_key_and_filters_by_participant`
 - `withdraw_appends_tombstone_and_list_marks_withdrawn`
-- `withdraw_refuses_unknown_row_uid`
+- `withdraw_refuses_unknown_row_uid`, `_refuses_double_withdraw`
+- `compare_admits_terminal_status_participant`
 - `value_set_warns_on_non_value_bearing_kind` (write proceeds)
 
 Behaviour-preservation gate: priority/`survey`/`next`/`explain` suites pass
