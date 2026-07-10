@@ -14,7 +14,7 @@ ref   = "SL-211"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Candidate-active fallback to `review/<N>` violates the admitted-`close_target` contract"
 detail = "Expected: when candidate rows exist, trunk-facing flows must honor SPEC-022s candidate-active branch condition and require a current close_target admission, never falling back to raw evidence. SPEC-022 says this explicitly at .doctrine/spec/tech/022/spec-022.md:169-176, and the shipped integrate path enforces it in src/dispatch.rs:2385-2412 (`plan_candidate_trunk_row` refuses with no fallback). Observed: SL-211 reintroduces a raw-`review/<N>` fallback for the new trunk-recording path: design §5.2 chooses admitted `close_target` else `review/<N>` (.doctrine/slice/211/design.md:114-141), §5.5 makes `candidate rows present but no close_target admission` a non-refusal fallback (.doctrine/slice/211/design.md:234-236), and VT-4 blesses that shape (.doctrine/slice/211/design.md:318-320). Wrong outcome: a slice with an active candidate workflow can reach `done` via `--record-integration` without ever admitting the trunk payload, bypassing REQ-316/REQ-317s protection against silently dropping candidate repairs."
@@ -23,7 +23,7 @@ response = "Accepted. User chose option (a): the recorder's payload == integrate
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Stale trunk rows are refused but not recoverable by any described verb"
 detail = "Expected: if `record-integration` refuses a pre-existing `Pending`/`Failed` trunk row, the design must provide a sanctioned recovery that can replace or rewrite that row, otherwise the split-lineage slice remains uncloseable in exactly the state this slice is meant to repair. Observed: SL-211 §5.2/§5.5 says the new recorder will refuse stale trunk rows and tell the operator to clear them (.doctrine/slice/211/design.md:169-175, 230-236), but it defines no verb that can do that rewrite. The shipped integrate path cannot repair it either: `integrate` skips adding a new trunk row whenever one for that target already exists (`fresh()` at src/dispatch.rs:2047-2057) and then replays every existing row unchanged via `with_journaled_projection` / `advance_row` (src/dispatch.rs:2091-2100, 2112-2138). Wrong outcome: a prior refused `--integrate --trunk` leaves a stale trunk row; after the operator lands code manually, `--record-integration` still refuses, `--integrate` replays the old row again, and the only escape remains hand-editing `journal.toml` — the exact rescue this slice claims to retire."
