@@ -14,7 +14,7 @@ ref   = "SL-204"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "GovKind loses the scaffold seam under D3/D4"
 detail = "[.doctrine/slice/204/design.md:126-158,195] D3 removes  and D4 says  only changes to , but the shared governance create path still relies on the scaffold being carried on :  documents that contract and calls  today [src/governance.rs:470-497]. The current governance descriptors inline the scaffold in /// [src/adr.rs:155-162; src/policy.rs:33-42; src/standard.rs:35-44; src/rfc.rs:30-39]. If  drops  and  only stores , the ADR/POL/STD/RFC authoring path has no scaffold to pass and the design does not compile as written. Fix: make the design explicit about where the governance spine gets its scaffold after extraction (for example , or an equivalent generic seam), and include that in the code-impact/verification text instead of describing  as a pure type tweak."
@@ -23,7 +23,7 @@ response = "Accepted — verified against src/governance.rs:470-497 (run_new mat
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "D4 hand-waves the governance/RFC kind-type split"
 detail = "[.doctrine/slice/204/design.md:147-158] D4 says the kind modules can simply re-export their statics so call sites stay untouched, but four of the imported names are not plain  statics today: , , , and  are  descriptors, and  reaches their inner  via  [src/integrity.rs:60-69,171-174]. Those  values are consumed broadly as  by the governance spine, boot projection, and relation scanners [src/adr.rs:155-164; src/boot.rs:111-119; src/governance.rs:66-92,472-497; src/relation_graph.rs:488-490]. Re-exporting a leaf  under the existing  names would break that surface; preserving the names means preserving  values and introducing distinct leaf  statics that they borrow. The design hints at this only in one sentence ( holds ) and then falls back to the blanket “re-export the statics” story, which is materially misleading. Fix: spell out the dual-surface plan for ADR/POL/STD/RFC explicitly: new leaf  statics, existing  descriptors retained, and no claim that those names are untouched plain re-exports."

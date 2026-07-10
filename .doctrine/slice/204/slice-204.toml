@@ -1,9 +1,9 @@
 id = 204
 slug = "extract-per-kind-validation-contract-to-break-integrity-coupling"
 title = "Extract per-kind validation contract to break integrity coupling"
-status = "proposed"
+status = "plan"
 created = "2026-07-04"
-updated = "2026-07-04"
+updated = "2026-07-10"
 tags = []
 
 [relationships]
