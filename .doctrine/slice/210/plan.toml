@@ -1,0 +1,103 @@
+# Implementation plan for SL-210 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-210"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Pure comparison model"
+objective = "src/comparison.rs: wire-exact serde model (ComparisonSession/SessionHeader/Judgement/Tombstone, lowercase enums), vocab constants, parse/to_toml, structural validation, value-domain admissibility derived from kinds::VALUE_BEARING minus RSK. No CLI, no disk."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §comparison.rs locked (RV-262 verified); kinds::VALUE_BEARING and kinds::RSK exist at src/kinds.rs" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "comparison.rs compiles as pure engine tier: no clock/disk/rng/git imports; uid and date are function inputs" },
+  { id = "EX-2", text = "to_toml emits the documented schema byte shape: nested [session], singular [[judgement]]/[[tombstone]], lowercase rater/form tokens (RV-262 F-1)" },
+  { id = "EX-3", text = "validate_judgement rejects preferred outside pair, self-pair, unknown domain/frame; admissible_value_pair refuses records and RSK, admits cross-kind work pairs" },
+  { id = "EX-4", text = "parse preserves rows with unknown frames losslessly (forward compat); schema string and version checked" },
+]
+verification = [
+  { id = "VT-1",
+    expects = "golden byte-shape test: to_toml output matches documented schema exactly (nested [session], lowercase tokens); parse round-trips all fields incl. optionals",
+    test_file = "src/comparison.rs",
+    keywords = ["golden_shape_matches_documented_schema", "round_trip_preserves_all_fields", "COMPARISON_SCHEMA"],
+    waived = false },
+  { id = "VT-2",
+    expects = "validation + admissibility unit suite: preferred-outside-pair, self-pair, unknown frame/domain rejections; record and RSK refusals; admit set pinned to kinds:: constants",
+    test_file = "src/comparison.rs",
+    keywords = ["admissible_value_pair", "admit_set_is_value_bearing_minus_rsk", "validate_rejects_preferred_outside_pair"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Capture verb"
+objective = "src/commands/compare.rs + wiring: doctrine compare <A> <B> --prefer with full flag surface (--frame/--rater/--by/--lens/--note/--audience); ref resolution via resolve_entity_path_and_canonical; session-of-one file written with fsutil::create_new_file under .doctrine/comparisons/."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: comparison.rs model, validation, admissibility all green" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "capture writes one fresh <date>-<session-uid>.toml per invocation; never opens an existing file (create_new semantics); .doctrine/comparisons/ created lazily" },
+  { id = "EX-2", text = "both refs canonicalised and existence-checked; dangling ref refused; record/RSK pairs refused with the admissibility reason; terminal-status participants admitted" },
+  { id = "EX-3", text = "--prefer accepts full ref or literal a/b; refused otherwise; full flag surface lands (RV-262 F-3/F-4): --frame equal-effort|prefer-first, --rater human|agent default agent, --by, --lens, --note, --audience" },
+  { id = "EX-4", text = "clap shape: bare capture args + subcommand stubs coexist (args_conflicts_with_subcommands) OR the documented fallback compare record is taken and design.md updated to record it" },
+]
+verification = [
+  { id = "VT-1",
+    expects = "integration: capture writes session-of-one with expected shape; second capture never touches the first file; missing ref, record pair, RSK refused; terminal participant admitted",
+    test_file = "src/commands/compare.rs",
+    keywords = ["compare_capture_writes_session_of_one", "second_capture_never_touches_first_file", "compare_refuses_missing_ref"],
+    waived = false },
+  { id = "VT-2",
+    expects = "flag surface: --frame prefer-first and --rater human land in the row; --prefer literal shorthand works; --audience lands in session header",
+    test_file = "src/commands/compare.rs",
+    keywords = ["prefer_first", "rater", "audience"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "List, withdraw, value-set warn"
+objective = "compare list [<ID>] (dir scan, total-order sort, full row uids, withdrawn marking) and compare withdraw <row-uid> (tombstone session-of-one, double-withdraw refusal); REV-022 Q1 warn in run_value_set; behaviour-preservation gate on priority suites."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: capture produces real session files to list against" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "list renders full row uids (never prefixes, RV-262 F-6), sorts by (date, session_uid, seq), filters by participant, marks tombstoned rows withdrawn (display-only)" },
+  { id = "EX-2", text = "withdraw appends a tombstone in a fresh session-of-one file; refuses unknown row uid, refuses tombstone targets, refuses double withdraw" },
+  { id = "EX-3", text = "value set on a kind outside VALUE_BEARING prints the scoring-inert warning and still writes (REV-022 Q1)" },
+  { id = "EX-4", text = "behaviour gate: priority/survey/next/explain suites pass unchanged; just gate clean" },
+]
+verification = [
+  { id = "VT-1",
+    expects = "list + withdraw integration: total-order sort, participant filter, withdrawn marking, full-uid render; double-withdraw and unknown-uid refusals",
+    test_file = "src/commands/compare.rs",
+    keywords = ["compare_list_orders_by_total_key", "withdraw_appends_tombstone", "refuses_double_withdraw"],
+    waived = false },
+  { id = "VT-2",
+    expects = "warn: value set on a non-value-bearing kind (e.g. a record) emits the warning and the write proceeds",
+    test_file = "src/commands/facet.rs",
+    keywords = ["value_set_warns_on_non_value_bearing_kind", "scoring-inert"],
+    waived = false },
+  { id = "VA-1",
+    expects = "agent check: priority suite diff is empty — no golden churn anywhere in survey/next/explain output" },
+]
+specs        = []
+requirements = []
