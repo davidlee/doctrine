@@ -12,8 +12,9 @@ Pure order semantics. Placement rules under test:
 Gauge (anchor-free component): value = 2*DEFAULT*(h+1)/(H+2), h = longest-path
 height above sinks, H = component max height. Spread in (0, 2*DEFAULT), ordered.
 
-Below-anchor unbounded tail: synthetic floor = max(0, ceiling - STEP*(d_down+1))
-then interpolate upward (keeps positives, no manufactured negatives).
+Below-anchor unbounded tail: synthetic floor = ceiling - STEP*(d_down+1),
+clamped to >= 0 ONLY when ceiling > 0 (no manufactured negatives below small
+positive anchors; RV-265 F-1 fixed the c <= 0 inversion). Interpolate upward.
 Above-anchor unbounded head: floor + STEP per level (additive gauge step).
 """
 
@@ -118,9 +119,13 @@ def place(nodes, edges, anchors, rule="budgeted"):
             val[v] = DEFAULT; prov[v] = "gauge"
             continue
         if f is None:
-            # unbounded below: synthetic positive floor below ceiling
+            # unbounded below: synthetic floor strictly below ceiling.
+            # Positivity clamp applies only when the ceiling is positive
+            # (RV-265 F-1: with c <= 0 the clamp inverted the order).
             d = dbc[v] or 1
-            f = max(0.0, c - STEP * (d + 1))
+            f = c - STEP * (d + 1)
+            if c > 0:
+                f = max(0.0, f)
             # then interpolate one step up from synthetic floor
             k = dup[v] or 1
             val[v] = f + (c - f) / (k + 1) if rule == "budgeted" else (f + c) / 2
@@ -225,3 +230,29 @@ show("bracketed-Y arms 3 vs 1", y6n, y6e, {"T": 8.0, "B": 2.0})
 
 print("\n#### Y7: pin inside bracket — add judgement a2>b1")
 show("bracketed-Y pinned a2>b1", y6n, y6e + [("a2","b1")], {"T": 8.0, "B": 2.0})
+
+print("\n#### N1 (RV-265 F-1): negative ceiling anchor, tail below")
+show("neg anchor -0.5, 3 below", ["k0","k1","k2","k3"],
+     [("k0","k1"),("k1","k2"),("k2","k3")], {"k0": -0.5})
+
+print("\n#### N2: negative-to-positive bracket")
+show("bracket 3..-2", ["j0","j1","j2","j3"],
+     [("j0","j1"),("j1","j2"),("j2","j3")], {"j0": 3.0, "j3": -2.0})
+
+print("\n#### N3 (web #4): branching — floor from one branch, ceiling from another")
+#      A=10
+#       |
+#       X
+#      / \
+#     Y   Z=8     (X > Y, X > Z; A > X)
+show("branch floor/ceiling", ["A","X","Y","Z"],
+     [("A","X"),("X","Y"),("X","Z")], {"A": 10.0, "Z": 8.0})
+
+print("\n#### N4 (web #4): two ceiling anchors, different values + path lengths")
+#   A=10   B=9
+#     \    /
+#      \  W       (A > X direct; B > W > X)
+#       \ |
+#         X > Y
+show("multi-ceiling", ["A","B","W","X","Y"],
+     [("A","X"),("B","W"),("W","X"),("X","Y")], {"A": 10.0, "B": 9.0})

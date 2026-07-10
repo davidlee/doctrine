@@ -54,23 +54,27 @@ config)`; disk stays at the scan seam.
     children inherit nothing (A3).
 - **Tier-2 constraint compilation** (RFC-019 T1 revised) — active rows +
   authored anchors → constraint set → per-item bounds:
-  - `equal-effort` → strict inequality; `equal` → equality/band; authored
-    `value` → point anchor (the only unconditionally hard constraints).
+  - `equal-effort` → strict inequality; `equal` → exact equality merge
+    (design D8 — no band); authored `value` → point anchor (the only
+    unconditionally hard constraints).
   - **Lens partition** (T5): pooled compilation consumes unlensed rows only;
     lens-tagged rows inert for `value_dim`, reported per-lens.
-  - **Deterministic degradation, never infeasibility**: preference cycles →
-    SCC tied-group collapse + finding + reprobe marks; anchor conflicts →
-    anchors win, a deterministic feasibility-restoring residual set excluded
-    + finding. Every exclusion visible in `explain`.
+  - **Deterministic degradation, never infeasibility** (design D3/D4/D6):
+    preference cycles → within-SCC quarantine (member-level evidence
+    retained, no condensation edges, no member equalities; "tied" is display
+    only) + finding + supersession-directing reprobe marks; anchor conflicts
+    → anchors win, violation-closure quarantine of every edge on any
+    conflicting anchor-pair path + finding. Every exclusion visible in
+    `explain`; exits are explicit (supersede / tombstone / edit anchor).
   - Bounds are the *display* projection of the joint feasible set (`explain`
     renders them); the constraint graph is retained for downstream joint-set
     reasoning (Phase C determinacy) — decisions are never computed from the
     interval box.
 - **Tier-3 projection** — one deterministic scalar within bounds per item:
-  sign-aware (isotonic spacing generalises across signs; BT-style fit only
-  inside provably-positive components); anchor-free components gauge on
-  `DEFAULT_VALUE = 1.0`; resolution per applied ADR-015 (authored >
-  projected > default).
+  sign-aware budgeted interpolation (design D9 — BT-style fit superseded);
+  anchor-free components gauge on `DEFAULT_VALUE = 1.0` (bounded positive
+  spread, design D10); resolution per applied ADR-015 (authored > projected
+  > gauge > default).
 - **Wiring** — a pre-pass beside the existing base pre-pass
   (`src/priority/graph.rs` step 2c): shell loads the ledger once (impure
   seam), inference pure, projected magnitudes flow through the

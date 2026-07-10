@@ -68,13 +68,26 @@ pub struct Judgement {
 pub const COMPARISON_VERSION: u32 = 2;
 pub const DOMAIN_PRIORITY: &str = "priority";
 
-// resolve.rs
-pub enum RowStatus {
+// resolve.rs — resolution and compilation stages DO NOT share one enum
+// (web review corr. 2): quarantine is a compilation outcome layered over an
+// otherwise-active row; collapsing the stages blurs --active-only, provenance
+// counts, and the future trust policy.
+pub enum ResolutionStatus {
   Active, Superseded { by: String }, Tombstoned,
   InertLens, InertDomain, InertLifecycle,
 }
+pub enum CompilationStatus {          // assigned by compile.rs, Active rows only
+  Constraining,
+  NoConstraint,                       // `incomparable`: valid evidence, zero constraint —
+                                      // excluded from constraining-judgement counts (S3)
+  Quarantined(QuarantineReason),
+}
+pub struct RowState {
+  resolution: ResolutionStatus,
+  compilation: Option<CompilationStatus>,   // None unless resolution is Active
+}
 pub fn resolve(sessions: &[ComparisonSession], statuses: &StatusMap) -> Resolution
-// Resolution: Vec<(Judgement, RowStatus)> in (date, session_uid, seq) display order
+// Resolution: Vec<(Judgement, ResolutionStatus)> in (date, session_uid, seq) display order
 
 // compile.rs
 pub enum Bound { Unbounded, Open(f64), Closed(f64) }   // Closed only via anchor / merge with anchored class
@@ -124,24 +137,39 @@ Input: parsed sessions + entity status map. Output: every row tagged with
 exactly one `RowStatus`. First matching rule wins:
 
 - **R1 Tombstone** — a tombstone evicts its target by uid → `Tombstoned`.
-- **R2 Explicit supersession** — a row is `Superseded { by }` iff any
-  **non-tombstoned** row names it in `supersedes`. The pointer's effect is
-  independent of the pointer-holder's own superseded status (only a tombstone
-  disarms a pointer) — this makes resolution a single pass, no fixpoint:
-  chains work (A←B←C leaves only C active), and mutual/cyclic supersession
-  (A↔B) deactivates every participant plus a `MalformedSupersession` finding
-  naming the cycle. A tombstoned superseder does not revive its target only
-  if another live pointer exists; otherwise the target returns to `Active`
-  (tombstoning your correction restores the original — intended). A
-  `supersedes` pointing at an unknown uid is a load-time warning; resolution
-  ignores it.
+- **R2 Explicit supersession** — semantic statement first (web review corr.
+  1): **`supersedes` records a durable replacement edge — an act, not
+  testimony.** The edge's effect does not require its holder to be currently
+  effective; only tombstoning the holder disarms it (a tombstone withdraws
+  the whole row, act included; supersession of the holder retires its
+  *testimony* but not its replacement act). This keeps resolution a single
+  pass — a row is `Superseded { by }` iff any non-tombstoned row names it —
+  and makes revision history behave as users expect: in A←B←C only C is
+  active; tombstoning C revives B (whose edge still suppresses A).
+  State table (row X names target T):
+
+  | X state | effect of X's edge on T |
+  |---|---|
+  | active | T superseded |
+  | superseded (by Y) | T **still superseded** (durable act) |
+  | tombstoned | edge disarmed; T revives unless another live edge names it |
+  | — T tombstoned | R1 already evicted T; edge moot |
+  | — T unknown uid | load-time warning; edge ignored |
+  | X in a supersession cycle (A↔B, or longer) | every participant deactivated + `MalformedSupersession` finding naming the cycle |
+  | self-supersession (X names X) | degenerate cycle: X deactivated + finding |
+
+  A superseder whose target is tombstoned stays active (latest testimony
+  stands on its own). Chains mixing tombstones resolve by applying the table
+  edge-by-edge — no fixpoint, order-free.
 - **R3 Implicit revision** — within a single session file only: same identity
   key `(pair, domain, frame, form, lens, rater)`, higher `seq` wins. Cross-
   session same-key rows are concurrent evidence — both `Active`; conflicts are
   tier-2's job, never a lexicographic winner.
 - **R4 Domain inertness** — `domain = priority` rows → `InertDomain` (charter
-  below; no compiler this slice). `response = incomparable` stays `Active` but
-  compiles to no constraint — recorded as asked, selector fodder.
+  below; no compiler this slice). `response = incomparable` stays
+  resolution-`Active` and compiles to `CompilationStatus::NoConstraint` —
+  recorded as asked, selector fodder, **excluded from constraining-judgement
+  counts** in provenance disclosures (web review).
 - **R5 Lens inertness** — lens-tagged rows → `InertLens` for pooled `value_dim`
   (T5); reported per-lens in surfaces.
 - **R6 Lifecycle** — event-effect table:
@@ -172,17 +200,33 @@ exists to justify it.
   loser. `equal` → equality merge (union-find; classes are the graph's nodes).
   Authored `value` facets → point anchors on classes. Pure order semantics
   (D8): anchors are the only magnitude source. `magnitude` parsed, uncompiled.
-- **C2 Equal-vs-anchors** — an `equal` row merging two classes anchored at
-  different values: both anchors stand, the `equal` row is quarantined
-  `AnchorConflict` (anchors win, REV-022).
+- **C2 Equal-vs-anchors** — runs **before** class finalization: build
+  provisional equality classes; any class holding ≥ 2 distinct anchor values
+  quarantines (`AnchorConflict`) every `equal` row on any path *in the
+  equality graph* between differently-anchored members (violation-closure,
+  same philosophy as C4); rebuild classes from surviving rows. One rebuild
+  suffices: removing the connecting rows disconnects every conflicting anchor
+  pair, and splitting classes can only reduce merging. Post-C2, no class
+  holds two anchor values — C4's floors/ceilings are well-defined.
 - **C3 Cycle quarantine (D3)** — SCCs over strict edges: every within-SCC
   edge's supporting rows → `PreferenceCycle`. External member-level edges
   untouched. No member equality; no condensation edges; "tied" rendering is
   projection/display only.
-- **C4 Anchor-conflict quarantine (D4)** — violation-closure: forced-floor /
-  forced-ceiling DAG passes; every edge whose tail-floor crosses head-ceiling
-  has its rows quarantined `AnchorConflict`, naming both anchors. Pure order
-  comparison — no gap arithmetic.
+- **C4 Anchor-conflict quarantine (D4)** — violation-closure, normative
+  graph-theoretic form (web review corr. 3): *for every ordered anchor pair
+  `(X, Y)` with a directed path `X ⇝ Y` and `anchor(X) ≤ anchor(Y)`,
+  quarantine every retained edge lying on any directed path from `X` to `Y`*
+  — i.e. edges `(u, v)` with `u ∈ forward-reach(X)∪{X}` and
+  `v ∈ reverse-reach(Y)∪{Y}` connected through that edge. The forced-floor /
+  forced-ceiling two-pass computation is the *implementation* (floor(u) ≥
+  anchor(Y)-side, ceiling(v) ≤ anchor(X)-side crossing ⇔ edge on a violating
+  path); the equivalence is asserted by a test comparing both computations on
+  the branching goldens. Branching case pinned: parallel paths between one
+  conflicting anchor pair quarantine on **all** paths, and one edge may serve
+  several conflicts (quarantined once, finding lists every pair). **Single
+  pass suffices**: quarantining edges only removes paths — it can never
+  create a new anchor-pair violation — stated as an invariant with a
+  property test. Pure order comparison; no gap arithmetic.
 - **C5 Feasibility invariant** — post C3+C4 the system is satisfiable,
   provably. `compile` returning an infeasible set is a bug: debug assertion +
   property test.
@@ -211,20 +255,42 @@ Anchored components:
 
 - **P3 Anchors exact** — anchored class = authored value, provenance
   `Authored`; feasibility guaranteed by C5, debug-asserted.
-- **P4 Budgeted interpolation** — unanchored class with floor `f` (max over
-  direct successors' placed values) and ceiling `c` (min anchor above):
-  `value = f + (c − f) / (d_up + 1)`, `d_up` = longest remaining path up to the
-  ceiling-defining anchor. Even chain spacing; midpoint is the `d_up = 1` case.
-  Provenance `Projected`.
-- **P5 Unbounded above** — `value = f + GAUGE_STEP` (named const, STD-001;
-  prototype used 0.25 — final value at implementation).
-- **P6 Unbounded below** — synthetic positive floor
-  `max(0, c − GAUGE_STEP·(d_down + 1))`, then P4 upward. Never manufactures
-  negatives (scenario S4).
-- **P7 Anchor-incomparable classes** — in an anchored component but no directed
-  path to/from any anchor: `DEFAULT_VALUE`, provenance `Gauge`, with the
+- **P4 Budgeted interpolation** — unanchored class with floor `f` and ceiling
+  `c`: `value = f + (c − f) / (d_up + 1)`. Exact definitions (branching DAGs —
+  web review corr. 4, validated N3/N4):
+  - `f` = max over **direct successor classes'** placed values (edges point
+    winner → loser). All descendants are placed first (P2) and values strictly
+    decrease along edges, so direct successors suffice.
+  - `c` = **min anchor value weakly above** (over all anchors reaching this
+    class by a directed path). Ties on value: `d_up` = **max** path length
+    among the anchors attaining the min (most room; deterministic).
+  - `d_up` = longest directed path from this class up to the ceiling-defining
+    anchor.
+  - The floor-defining successor and the ceiling-defining anchor may sit in
+    different branches — order-safety needs only `f < value < c`, which the
+    formula gives; "even chain spacing" is the chain-only reading, not the
+    invariant.
+  Midpoint is the `d_up = 1` case. Provenance `Projected`.
+- **P5 Unbounded above** — `value = f + GAUGE_STEP`. `GAUGE_STEP = 0.25`
+  decided at design (web review): a quarter of `DEFAULT_VALUE` — visible,
+  subordinate to authored magnitudes. Named const in `priority/config.rs`
+  (STD-001), overridable via the existing config seam; not float hygiene — it
+  creates real cardinal spacing that feeds `value_dim` and burndown.
+  Sensitivity test: order-safety + provenance invariance across `0.05–1.0`.
+- **P6 Unbounded below** — synthetic floor `c − GAUGE_STEP·(d_down + 1)`,
+  clamped to `≥ 0` **only when `c > 0`** (no manufactured negatives below
+  small positive anchors; with `c ≤ 0` the clamp would invert the order —
+  RV-265 F-1, fixed and re-validated: scenarios N1/N2). Then P4 upward.
+  Invariant: synthetic floor strictly `< c`, property-tested.
+- **P7 Unplaced-and-unbounded classes** — the gauge branch triggers exactly
+  when a class has **neither** a floor (no placed descendants) **nor** a
+  ceiling (no anchor above): `DEFAULT_VALUE`, provenance `Gauge`, with the
   explicit hint ("no order path to any anchor — compare against an anchored
-  item to place it"). The discontinuity is documented behaviour (D14).
+  item to place it"). Anchor-*incomparability alone is not the trigger*
+  (RV-265 F-2): a class order-incomparable to every anchor but with placed
+  descendants takes P4/P5 off its floor — order-safety comes from the floor,
+  never from the gauge. The DEFAULT-vs-neighbours discontinuity is documented
+  behaviour (D14).
 
 Anchor-free components:
 
@@ -245,11 +311,14 @@ Contract (property-tested):
   replica.
 - **P12 Locality** — evidence delta in component X moves nothing in disjoint
   component Y.
-- **P13 Minimal-motion pinning** — a new cross-judgement moves only classes it
-  newly constrains; demonstrated as goldens (Y4/Y7), not promised as a theorem.
 - **P14 Affine equivariance, scoped** — within anchor-bracketed spans,
   shifting/scaling anchors shifts/scales projections identically; unbounded
   tails move by absolute `GAUGE_STEP`. The scope limit is stated, not hidden.
+
+Demonstrated behaviour (goldens, not contract — web review):
+
+- **P13 Minimal-motion pinning** — a new cross-judgement moves only classes it
+  newly constrains; demonstrated (Y4/Y7), not promised as a theorem.
 - **P15 Known artifacts accepted (D14)** — anchor-value collision (Y5): order-
   safe, disambiguated by provenance. Insertion non-monotonicity of unrelated
   gaps: out of contract; Phase C's empirical entry criterion judges projection
@@ -257,6 +326,12 @@ Contract (property-tested):
 
 Downstream: `effective_raw_value` resolves `Authored > Projected > Gauge >
 DEFAULT_VALUE` (D11); `value_dim` and burndown consume identically.
+**Governed policy, stated explicitly (web review): once projected, gauge
+values participate in every existing cardinal consumer — including burndown —
+despite their conventional provenance.** Burndown over two gauge magnitudes
+subtracts convention from convention; the alternative (per-consumer opt-outs)
+reintroduces the value_dim/burndown inconsistency SL-210 closed. Pinned by a
+gauge-fed burndown golden.
 
 ## §4 Surfaces
 
@@ -266,12 +341,15 @@ DEFAULT_VALUE` (D11); `value_dim` and burndown consume identically.
   (unknown uid = hard error — the only moment a human is present). `--frame
   prefer-first` derives `domain = priority` silently; help text carries the
   charter one-liner. Breaking flag changes are free pre-release (D1).
-- **S2 `list`** — `RowStatus` column (`active`, `superseded→uid`, `tombstoned`,
-  `quarantined(cycle)`, `quarantined(anchors)`, `inert(lens|domain|lifecycle)`)
-  + `--active-only`. Existing listing `Format`/`RenderOpts` machinery.
+- **S2 `list`** — one display column derived by joining `RowState`'s two
+  stages: `active`, `no-constraint`, `superseded→uid`, `tombstoned`,
+  `quarantined(cycle)`, `quarantined(anchors)`, `inert(lens|domain|lifecycle)`.
+  `--active-only` filters on `ResolutionStatus::Active` (quarantined and
+  no-constraint rows *are* active — they show, visibly non-constraining).
+  Existing listing `Format`/`RenderOpts` machinery.
 - **S3 `explain`** — value-source block, three shapes:
   - `value 5.0 — authored` (+ finding reference when quarantines cite it)
-  - `value 4.4 — projected · bounds (2.0 ‥ 8.0) · from 5 judgements (3 human, 2 agent)` — the rater split is the T7 disclosure
+  - `value 4.4 — projected · bounds (2.0 ‥ 8.0) · from 5 constraining judgements (3 human, 2 agent)` — the rater split is the T7 disclosure; `NoConstraint` rows never count here
   - `value 1.3 — gauge · ordered by 4 judgements, no anchor in component · set a value on any member to calibrate`
   Existing `view`/`render` structured-reason idiom; `--json` carries the same
   fields structurally.
@@ -289,7 +367,8 @@ Suites → rules pinned. VT/VA/VH criteria ids minted at `/plan` from this
 section.
 
 1. **Wire** — v2 goldens (shape, response vocabulary, magnitude, supersedes);
-   `version ≠ 2` rejected with the pre-release message; per-domain frame
+   `version ≠ 2` rejected with a remedy-naming message ("schema version 1 was
+   never released — delete or recreate this session file"); per-domain frame
    admissibility.
 2. **Resolution** — one test per R-rule; cross-session concurrency (both
    active); supersession chain + tombstoned superseder (target revival);
@@ -313,6 +392,22 @@ section.
 8. **Determinism** — shuffled session-file load order ⇒ identical resolution,
    `ConstraintSet`, projection; no-NaN/total-order suite extended over
    projected values.
+9. **Review-driven additions** (RV-265 + web review):
+   - negative-ceiling tail (N1) and sign-crossing bracket (N2) goldens; P6
+     floor-strictly-below-ceiling property test;
+   - branching floor/ceiling (N3) and multi-ceiling tie (N4) goldens;
+   - R2 state-table row-by-row: middle-of-chain superseded then tombstoned;
+     superseder of a tombstoned target; unknown-target edge post-merge;
+     self-supersession;
+   - same uid, non-identical content across files (corruption guard —
+     load-time error, not silent collapse);
+   - `incomparable` excluded from constraining counts; retract-to-unknown;
+   - C4: parallel-paths conflict; one edge in several conflicts; cycle edge
+     also in an anchor conflict (C3 first, C4 over the survivors — order
+     pinned); floor/ceiling ⇔ path-form equivalence check;
+   - `GAUGE_STEP` sensitivity sweep (order-safety + provenance invariance);
+   - gauge-fed burndown golden (governed-policy pin);
+   - component split *after* quarantine → projection discontinuity golden.
 
 ## RFC-019 deviations (design-stage, recorded)
 
@@ -333,6 +428,26 @@ is unaffected (review 3 delegated exactly these choices to this design gate).
 
 - OQ-B1 → D9/D10 (§3). OQ-B2 → D13 (§4 S2). OQ-B3 → D8 (dead). OQ-B4 → D12.
 - OQ-6 (ratio elicitation) stays open at RFC level; v2 carries the column only.
+
+## Review history
+
+- **Internal adversarial pass** (2026-07-11) — three fixes: R2
+  de-circularized, priority-domain admissibility recorded, two test gaps.
+- **RV-265, codex GPT-5.5** (2026-07-11, hostile, ledgered) — F-1 *blocker*
+  (P6 positive-floor clamp inverts order under negative ceiling anchors):
+  accepted, rule fixed + prototype re-validated (N1/N2). F-2 *major* (P7
+  prose misdefined the gauge trigger vs the prototype's correct condition):
+  accepted, P7 rewritten to floor∧ceiling absence. F-3 *minor* (slice scope
+  still stated pre-design semantics): accepted, slice reconciled.
+- **Web GPT-5.5 pass** (2026-07-11, same design version) — verdict: approve
+  after four corrections, all accepted: R2 durable-replacement semantics +
+  state table; `ResolutionStatus`/`CompilationStatus` split (with
+  `NoConstraint` for `incomparable`); C4 normative path-form + C2 pipeline
+  ordering + single-pass sufficiency; P4 branching definitions (N3/N4).
+  Notable concerns accepted: gauge-in-burndown stated as governed policy;
+  `GAUGE_STEP` decided at design (0.25, config-owned, sensitivity-swept);
+  P13/P15 moved from contract to demonstrated behaviour; D1 remedy-naming
+  error; verification additions (§5.9).
 
 ## Deferred (named seams, not built)
 
