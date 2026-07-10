@@ -1,8 +1,8 @@
 id      = 22
 slug    = "adr-015-value-provenance-amendment"
 title   = "ADR-015 value provenance amendment"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-07-10"
 tags    = []
 
