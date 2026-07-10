@@ -1076,3 +1076,9 @@ HEAD` false-alarmed DIRTY on a pre-existing, unrelated, not-mine `flake.nix`
 modification — the whole-tree check trips on any tracked dirt, not just phantom
 reverse-diff of landed paths; filter to landed paths (`git diff --name-only HEAD
 | grep <landed>`) to distinguish a real phantom from ambient WIP.
+
+[design; SL-213-design-ext-review]
+`doctrine review new --raiser/--responder` accepts free-text role *labels*,
+but `review dispose --as` only accepts the literal words `raiser|responder`,
+not those labels — one failed invocation + retry to discover. Either accept
+the configured labels as aliases or say "role position, not label" in help.
