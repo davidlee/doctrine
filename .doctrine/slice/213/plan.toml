@@ -1,0 +1,190 @@
+# Implementation plan for SL-213 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-213"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Schema v2 wire model + module split + capture"
+objective = "Grow src/comparison.rs into src/comparison/ (wire.rs + mod.rs re-exports); redefine the schema in place per design D1/D2: Response enum replaces preferred, magnitude + supersedes columns, per-domain frame tables (value→equal-effort, priority→prefer-first), COMPARISON_VERSION=2 with remedy-naming reject of any other version. Update commands/compare.rs capture in the same phase (the wire change breaks it): mutually-exclusive response group --prefer|--equal|--incomparable, --supersedes with corpus-validated uid, frame-derived domain."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §1–§2 locked (D1, D2, S1); RV-265 done" },
+  { id = "EN-2", text = "tree green: existing comparison wire suite + compare e2e pass pre-change" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/comparison/ exists (wire.rs, mod.rs); crate::comparison::X paths compile unchanged elsewhere" },
+  { id = "EX-2", text = "v2 wire model round-trips; version 1 (or any ≠2) file rejected with a message naming the remedy" },
+  { id = "EX-3", text = "capture accepts exactly one of --prefer/--equal/--incomparable, plus --supersedes validated against the loaded corpus; prefer-first rows carry domain=priority" },
+  { id = "EX-4", text = "quick gate clean (doctrine check commit): clippy zero warnings, fmt" },
+]
+verification = [
+  { id = "VT-1", expects = "v2 wire goldens: Response vocabulary parses + serializes; magnitude and supersedes round-trip; per-domain frame admissibility (equal-effort only in value, prefer-first only in priority)",
+    test_file = "src/comparison/wire.rs",
+    keywords = ["enum Response", "Incomparable", "supersedes", "DOMAIN_PRIORITY"],
+    waived = false },
+  { id = "VT-2", expects = "version gate: version != 2 is a parse error whose message names the remedy (unreleased v1 — delete or recreate)",
+    test_file = "src/comparison/wire.rs",
+    keywords = ["COMPARISON_VERSION", "never released"],
+    waived = false },
+  { id = "VT-3", expects = "capture: response group mutual exclusion, --supersedes unknown-uid hard error, frame-derived domain",
+    test_file = "src/commands/compare.rs",
+    keywords = ["supersedes", "incomparable"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Row-validity resolution"
+objective = "src/comparison/resolve.rs: pure resolution over parsed sessions + entity-status map per design R1–R6 — tombstones, durable-replacement explicit supersession (full R2 state table incl. cycles → MalformedSupersession data), within-file implicit revision by identity key, cross-session concurrency, domain/lens/lifecycle inertness. ResolutionStatus enum + Resolution output in display order; duplicate-uid collapse; same-uid-different-content load error."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: v2 wire model is the parse target" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "resolve() implements R1–R6 exactly; every R2 state-table row has a test" },
+  { id = "EX-2", text = "deterministic across session-file merge order (shuffled-input test)" },
+  { id = "EX-3", text = "quick gate clean" },
+]
+verification = [
+  { id = "VT-1", expects = "one test per R-rule; R2 table row-by-row: chain, mutual cycle, self-supersession, tombstoned superseder (target revival), superseder of tombstoned target, unknown-uid warning",
+    test_file = "src/comparison/resolve.rs",
+    keywords = ["enum ResolutionStatus", "MalformedSupersession", "fn resolve"],
+    waived = false },
+  { id = "VT-2", expects = "cross-session same-key rows both Active; within-file higher seq wins; duplicate uid collapses; same uid with different content errors",
+    test_file = "src/comparison/resolve.rs",
+    keywords = ["identity", "concurrent"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Constraint compilation + degradation"
+objective = "src/comparison/compile.rs: active rows + anchor map → ConstraintSet per design C1–C8. Equality classes via union-find with C2 pre-finalization violation-closure on multi-anchor classes; strict digraph; C3 within-SCC quarantine (member-level retention, no condensation edges, no member equalities — cordage Tarjan reuse if its API fits a non-entity graph, else local Tarjan with a deliberate-duplication note); C4 anchor-conflict violation-closure in normative path form with floor/ceiling implementation + equivalence check; C5 feasibility invariant; C6 bounds (Bound enum); quarantine policy as pure input (C8); CompilationStatus incl. NoConstraint for incomparable."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed: resolve() supplies the active-row set" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "compile() produces ConstraintSet with classes, provenance-carrying edges, anchors, quarantined map, bounds" },
+  { id = "EX-2", text = "obligation-1 golden holds: A>B>C>A + A>D quarantines exactly the cycle rows, retains A>D, leaves B–D/C–D unconstrained" },
+  { id = "EX-3", text = "C5: post-degradation infeasibility unrepresentable — property test over generated ledgers finds none" },
+  { id = "EX-4", text = "quick gate clean" },
+]
+verification = [
+  { id = "VT-1", expects = "C3 goldens: obligation-1 case, 2-cycle, cycle-edge-also-in-anchor-conflict (C3 before C4 order pinned)",
+    test_file = "src/comparison/compile.rs",
+    keywords = ["PreferenceCycle", "ConstraintSet", "fn compile"],
+    waived = false },
+  { id = "VT-2", expects = "C4 goldens: single-row conflict, chain conflict, parallel-paths conflict, one edge in several conflicts; path-form vs floor/ceiling equivalence check",
+    test_file = "src/comparison/compile.rs",
+    keywords = ["AnchorConflict", "violation"],
+    waived = false },
+  { id = "VT-3", expects = "C2: equal row merging differently-anchored classes quarantined via equality-graph closure, classes rebuilt once; C5 feasibility property test; C6 Bound enum bounds",
+    test_file = "src/comparison/compile.rs",
+    keywords = ["enum Bound", "Unbounded", "feasib"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Projection + gauge"
+objective = "src/comparison/project.rs: ConstraintSet → per-class scalar + ValueProvenance per design P1–P15 — reverse-topo budgeted interpolation with exact branching definitions (P4), GAUGE_STEP/DEFAULT_VALUE as pure inputs, signed P6 tails (clamp only when c>0, floor<c invariant), P7 gauge branch on floor∧ceiling absence, P8 gauge spread for anchor-free components. Port the full prototype battery (S1–S8, Y1–Y7, N1–N4) as goldens; property tests P10–P12, P14."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 landed: ConstraintSet is the input artifact" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "project() reproduces the prototype battery verbatim (same values to f64 display precision)" },
+  { id = "EX-2", text = "property tests: order-consistency, determinism, locality, scoped affine equivariance, P6 floor<c, gauge positivity/centring — all green" },
+  { id = "EX-3", text = "GAUGE_STEP sensitivity sweep 0.05–1.0: order-safety + provenance invariance" },
+  { id = "EX-4", text = "quick gate clean" },
+]
+verification = [
+  { id = "VT-1", expects = "battery goldens incl. negative-ceiling N1, sign-crossing N2, branching N3, multi-ceiling tie N4; Y-battery pinning gauge convention and minimal-motion pinning (P13 as demonstrated behaviour)",
+    test_file = "src/comparison/project.rs",
+    keywords = ["fn project", "ValueProvenance", "Gauge", "budgeted"],
+    waived = false },
+  { id = "VT-2", expects = "property tests P10–P12/P14 over generated components; anchor-value collision and gauge-disconnect pinned as expected outputs (D14)",
+    test_file = "src/comparison/project.rs",
+    keywords = ["proptest", "equivariance"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Priority wiring + behaviour preservation"
+objective = "Move load_sessions from commands/compare.rs to src/comparison/store.rs (engine seam); thread the pipeline (store → resolve → compile → project) into the priority build shell; build_from_with_cfg gains a projected-values input consulted by effective_raw_value under authored > projected > gauge > DEFAULT_VALUE (D11); GAUGE_STEP named const in priority/config.rs, config-overridable; burndown consumes projected/gauge values identically to value_dim (governed policy: gauge participates in burndown)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 landed: full pure pipeline available" },
+  { id = "EN-2", text = "existing priority suites green pre-wiring (the preservation baseline)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "no comparisons dir / empty dir ⇒ every existing priority suite passes UNCHANGED; empty projection map is behaviourally identical to today" },
+  { id = "EX-2", text = "projected and gauge magnitudes flow into value_dim AND burndown consistently; provenance chain exact" },
+  { id = "EX-3", text = "full gate clean (doctrine check gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "effective_raw_value provenance-chain unit tests incl. gauge tier; empty-map identity test",
+    test_file = "src/priority/graph.rs",
+    keywords = ["projected", "Gauge", "GAUGE_STEP"],
+    waived = false },
+  { id = "VT-2", expects = "gauge-fed burndown golden (governed-policy pin); ledger-fed value_dim integration test",
+    test_file = "src/priority/graph.rs",
+    keywords = ["burndown", "gauge"],
+    waived = false },
+  { id = "VT-3", expects = "store seam: load_sessions lives in comparison/store.rs, missing dir → empty, filename-sorted",
+    test_file = "src/comparison/store.rs",
+    keywords = ["fn load_sessions", "COMPARISONS_DIR"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Surfaces, findings, determinism e2e"
+objective = "compare list RowState-derived status column + --active-only (extending compare.rs's own render_row/ordering); explain value-source block (three shapes: authored / projected with bounds + constraining-judgement rater split / gauge with calibration hint) through the view/render structured-reason idiom incl. --json parity; findings variants PreferenceCycle, AnchorConflict, AnchorGaugeDisconnect, MalformedSupersession with exit-naming hints (C7); inert priority-domain disclosure line in explain; determinism e2e over shuffled file order; component-split-after-quarantine discontinuity golden."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 landed: pipeline reachable from priority surfaces" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "list shows the joined status column; --active-only filters on ResolutionStatus::Active (quarantined/no-constraint rows still show)" },
+  { id = "EX-2", text = "explain renders all three value-source shapes with correct counts (NoConstraint excluded); findings name their exits" },
+  { id = "EX-3", text = "determinism e2e green; no-NaN/total-order suite extended over projected values" },
+  { id = "EX-4", text = "full gate clean; slice conformance delta reviewed" },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: capture → list column states (active, no-constraint, superseded, tombstoned, quarantined×2, inert×3); --active-only semantics",
+    test_file = "tests/e2e_compare_inference.rs",
+    keywords = ["active-only", "quarantined"],
+    waived = false },
+  { id = "VT-2", expects = "e2e: explain three shapes + --json parity; findings render for all four variants with supersession-directing hints",
+    test_file = "tests/e2e_compare_inference.rs",
+    keywords = ["gauge", "constraining", "MalformedSupersession"],
+    waived = false },
+  { id = "VT-3", expects = "determinism: shuffled session-file load order ⇒ byte-identical resolution/bounds/projection output; component-split discontinuity golden",
+    test_file = "tests/e2e_compare_inference.rs",
+    keywords = ["determinism", "shuffle"],
+    waived = false },
+  { id = "VH-1", expects = "human eyeball: explain/list output reads intelligibly on a real captured mini-ledger over this repo's backlog (the Phase C entry-criterion dry run)" },
+]
+specs        = []
+requirements = []
