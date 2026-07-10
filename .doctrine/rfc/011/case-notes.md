@@ -993,3 +993,13 @@ spawn the doctrine CLI, which refuses under the worker marker ("worker fork
 cannot distinguish from own-delta damage without burning tokens
 investigating; worker prompt guidance should pre-declare which suites are
 runnable in-jail (lib + named module tests) vs orchestrator-only (e2e).
+
+[dispatch; SL-210-drive]
+`check regression capture/diff --base` keys the baseline file by the base
+string VERBATIM (no sha normalisation): capture with `--base 89a669e5` then
+diff with the full 40-char sha misses, and the INV-8 error blames the
+"run-fingerprint" — sent me source-diving fingerprint() (argv/env/marker/exe)
+before spotting the short-vs-full sha mismatch in the filename. Cost: one
+wasted full-suite diff run + ~10 min diagnosis. Fix candidates: normalise
+base to a canonical form in baseline_path(), or name the missing-file path
+(incl. base component) in the error.
