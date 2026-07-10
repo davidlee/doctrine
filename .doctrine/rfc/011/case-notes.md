@@ -1030,3 +1030,17 @@ deleted the ledger); after import, the whole worker delta was absent from the
 working tree until a manual `git restore --source=HEAD --staged --worktree`.
 Regression diff would otherwise run the suite on a stale tree. The orchestrator
 must re-sync after EVERY MCP funnel write; skills don't mention this beat.
+
+[dispatch; SL-210-drive]
+`dispatch sync --prepare-review` completeness gate reads the COMPLETED-phase
+set from the PRIMARY tree's runtime phase sheets, while the funnel
+(dispatch_conclude_phase) flips only the COORD tree's sheets — so a clean
+three-phase drive still hit "recorded row for PHASE-NN, which is not a
+completed phase" (inverted-sounding: rows fine, sheets lagging). Diagnosis
+required source-diving registry_completeness/completed_phase_ids. Remedy:
+flip the primary sheets to completed before prepare-review (safe: the
+capture_phase_boundary arm guard self-skips while the coord worktree
+exists). Neither /dispatch nor /dispatch-agent mentions this beat; also
+explains why verify-vt rendered all VTs UNATTRIBUTABLE pre-derive, all PASS
+post. One more round-trip: sync's CLI now requires --slice (skill shows
+bare `dispatch sync --prepare-review`).
