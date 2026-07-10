@@ -66,7 +66,7 @@ verification = [
   { id = "VT-2",
     expects = "flag surface: --frame prefer-first and --rater human land in the row; --prefer literal shorthand works; --audience lands in session header",
     test_file = "src/commands/compare.rs",
-    keywords = ["prefer_first", "rater", "audience"],
+    keywords = ["flag_surface_lands_frame_rater_by", "prefer_literal_shorthand", "audience_lands_in_session_header"],
     waived = false },
 ]
 specs        = []

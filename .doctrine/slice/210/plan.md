@@ -40,6 +40,12 @@ frozen wire contract.
 
 ## Notes
 
+- Clap mitigation (PHASE-02 EX-4): `args_conflicts_with_subcommands` with
+  *required* positionals usually needs `subcommand_negates_reqs = true` as
+  well, or clap demands the positionals before `list`/`withdraw`. Try that
+  pair first; if the shape still fights, take the pre-authorised
+  `compare record` fallback and record it in design.md.
+
 - Verb naming, session mechanics, tombstone timing, and the full flag
   surface were adjudicated at design (D1–D9) and re-verified by RV-262 —
   the plan does not reopen them.
