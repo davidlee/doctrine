@@ -12,67 +12,175 @@ after = [{ to = "SL-203", rank = 0 }]                      # slice→work soft s
 
 [[selector]]
 selector = "src/integrity.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/adr.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/backlog.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/concept_map.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/knowledge.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/policy.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/rec.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/requirement.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/review.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/revision.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/rfc.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/slice.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/spec.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/standard.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/adr/001/layering.toml"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/architecture_layering.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/kinds.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/kinds/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/kinds/resolve.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/entity.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/governance.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/hydrate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/scan.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/dep_seq.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/doctor.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/facet.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/map.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/relation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/supersede.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/tag.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/validate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/map_server/markdown.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/map_server/routes.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/surface.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/reconcile.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation_graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/relation_query.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/search.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/supersede.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
