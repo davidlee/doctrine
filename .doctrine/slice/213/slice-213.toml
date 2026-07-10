@@ -28,7 +28,7 @@ target = "SL-210"
 
 [[selector]]
 selector = "src/comparison.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/priority/**"
@@ -36,7 +36,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/commands/compare.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/comparisons/**"
@@ -45,6 +45,34 @@ intent = "scope-relevant"
 [[selector]]
 selector = "tests/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/comparison/**"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/findings.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/render.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/view.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/surface.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_compare*.rs"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

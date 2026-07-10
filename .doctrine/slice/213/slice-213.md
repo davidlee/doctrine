@@ -16,19 +16,24 @@ This slice builds the inference side per the RFC's **three-tier model**:
 tier 1 evidence (the ledger — lossless, possibly inconsistent), tier 2
 constraint set (derived interpretation with **deterministic degradation**),
 tier 3 projection (derived scalar + diagnostics feeding `value_dim`). It also
-carries the **schema v2** additive columns the revised RFC assigns to Phase B.
+carries **schema v2** — redefined in place rather than additively, since v1
+verifiably never shipped (design D1).
 
 ## Scope & Objectives
 
 Strictly additive, pure over `(ledger, authored facets, entity statuses,
 config)`; disk stays at the scan seam.
 
-- **Schema v2** (RFC-019 T2, additive; version-gated):
-  - `response` generalising `preferred`: `prefer-a | prefer-b | equal |
-    incomparable`. Deterministic v1 mapping (`preferred = a` →
-    `response = prefer-a`, etc.); `preferred` and `response` never coexist
-    in v2 files. `equal` compiles to a tier-2 equality/band; `incomparable`
-    compiles to no constraint, recorded as asked (selector fodder).
+- **Schema v2** (design D1: v1 retired outright — verified zero release
+  exposure, no session data anywhere; in-place redefinition, no compat
+  machinery, `version ≠ 2` rejected):
+  - `response` replaces `preferred`: `prefer-a | prefer-b | equal |
+    incomparable`. `equal` compiles to an exact tier-2 equality merge (D8 —
+    no band column, ever); `incomparable` compiles to no constraint,
+    recorded as asked (selector fodder).
+  - `prefer-first` reclassified to a new inert `priority` domain with a
+    cutoff-selection charter (D2); per-domain frame tables; frame derives
+    domain at capture.
   - Ratio **magnitude** column beside `form = ratio` (still not elicited —
     OQ-6 stays open; the column makes the form usable when it lands).
   - Explicit `supersedes = <row-uid>`.
@@ -74,25 +79,13 @@ config)`; disk stays at the scan seam.
   counts by rater kind (T7 disclosure), and residual/contradiction
   diagnostics; findings rendered like needs-cycle diagnoses.
 
-### Design obligations (external review 3 — settle at design, before plan)
+### Design obligations (external review 3) — SETTLED at design gate
 
-1. **Degraded-SCC propagation semantics** — collapse must not manufacture
-   relations beyond existing rows (A>B>C>A + A>D must not create B–D, C–D).
-   Candidates: existential / universal / member-level bounds retained /
-   anchor-only propagation through conflicted components.
-2. **Residual-selection policy** — deterministic, feasibility-restoring,
-   anchors preserved, retained evidence maximised, documented. Complexity
-   class chosen deliberately (not minimum-cardinality by accident).
-3. **`prefer-first` treatment** — must never compile to `v_A > v_B`. Own
-   compiler over costs (`v_A·c_B > v_B·c_A`) vs inert initially vs
-   reclassified domain.
-4. **v1→v2 compatibility** — implement the RFC's deterministic mapping; v1
-   files parse under the v2 reader forever (or via explicit upgrade — design
-   decides the mechanism, the semantics are fixed).
-
-Plus the RFC's **formal contract** items: ε vs mathematical strictness; open/
-unbounded endpoint representation; projection stability under small evidence
-deltas; scale behaviour under anchor changes.
+All four obligations and the formal-contract items are settled in
+`design.md` (decision ledger): D3 SCC quarantine (ob. 1), D4 violation-
+closure residual policy (ob. 2), D2 `priority`-domain reclassification
+(ob. 3), D1 v1 retirement dissolving compat (ob. 4); D8 pure order / no ε,
+`Bound` enum endpoints, P10–P15 stability/scale contract.
 
 ## Non-Goals
 
@@ -122,16 +115,11 @@ deltas; scale behaviour under anchor changes.
 
 ## Risks, assumptions, open questions
 
-- **OQ-B1 (design)**: projection algorithm choice and its stability
-  guarantee under evidence growth (formal-contract item).
-- **OQ-B2 (design)**: `compare list` — how much resolution/degradation
-  annotation lands here vs Phase C.
-- **OQ-B3 (design)**: `equal` band semantics — exact tie vs ε-band (v2
-  band-tolerance column ships only if design picks ε-bands).
-- **OQ-B4 (design)**: constraint-graph retention shape for Phase C joint-set
-  determinacy — what the pure layer exposes beyond per-item bounds.
-- **Assumption**: v2 stays additive — v1 sessions remain parseable; the
-  version gate is the migration mechanism.
+- **OQ-B1–OQ-B4**: RESOLVED at design — D9/D10 (budgeted interpolation +
+  gauge, prototype-validated), D13 (status column), D8 (exact equality, band
+  dead), D12 (`ConstraintSet` retained). See `design.md`.
+- **Fact (was assumption)**: v1 never released — verified against tags; v1
+  retired in place (D1), no migration mechanism exists or is needed.
 - **Risk (medium)**: degradation quality — SCC + residual machinery must stay
   terminating and give actionable findings, not a wall of pairs. Mitigation:
   mirror the needs-cycle diagnosis machinery; review-3 obligations 1–2 force
@@ -144,8 +132,8 @@ deltas; scale behaviour under anchor changes.
 
 - **Behaviour preservation**: with no ledger, every existing priority suite
   passes unchanged.
-- **Compat**: v1 golden session files parse under v2; deterministic
-  `preferred` → `response` mapping; v2 golden wire shape.
+- **Wire**: v2 golden wire shape; `version ≠ 2` rejected cleanly (no v1
+  reader — D1).
 - **Resolution**: explicit supersession; within-session implicit revision
   (identity key includes lens + form); cross-session concurrency (both rows
   active); tombstone eviction; lifecycle effects.
