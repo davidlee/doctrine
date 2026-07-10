@@ -1,0 +1,101 @@
+# Implementation plan for SL-204 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-204"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Scaffold eviction — Kind drops the fn, materialise takes it"
+objective = "Evict the scaffold fn from entity::Kind (design D3): add `pub(crate) type Scaffold`, make `materialise` take it as an explicit parameter, update all ~14 production + ~10 test call sites, give GovKind its own `scaffold` field consumed by `governance::run_new`, and delete the three panic-stub scaffolds (rec/review/revision). Kind stays defined in entity.rs this phase; no module moves."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (RV-261 done); baseline suites green (`just check`)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "entity::Kind has no scaffold field; materialise signature carries `scaffold: Scaffold`; materialise_fresh_prebuilt unchanged" },
+  { id = "EX-2", text = "GovKind = { kind, scaffold, statuses, hidden }; run_new materialises via g.scaffold" },
+  { id = "EX-3", text = "rec_scaffold_unused / review_scaffold_unused / rev_scaffold_unused deleted" },
+  { id = "EX-4", text = "full suites green unchanged (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "the Scaffold type alias and the materialise parameter exist in entity.rs", test_file = "src/entity.rs", keywords = ["type Scaffold", "scaffold: Scaffold"], waived = false },
+  { id = "VT-2", expects = "GovKind carries the scaffold seam and run_new passes it", test_file = "src/governance.rs", keywords = ["scaffold: Scaffold", "g.scaffold"], waived = false },
+  { id = "VA-1", expects = "grep confirms zero `scaffold_unused` symbols and zero `.scaffold` field reads on Kind outside entity.rs; full test suite green unchanged" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Identity relocation — Kind + statics move to leaf kinds/"
+objective = "Convert src/kinds.rs to the kinds/ umbrella and move the pure-identity Kind struct, all 27 kind statics (+ their *_DIR consts), and four new plain governance/RFC identity statics into kinds/mod.rs (design D2/D4). entity.rs re-exports Kind; kind modules re-export their statics so call sites and the ~200 field accesses stay untouched; GovKind.kind becomes &'static Kind borrowing the leaf identity."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed green (Kind is pure data — no fn field left to pin statics)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "kinds/mod.rs owns Kind + every identity static referenced by KINDS or across modules, incl. plain ADR/POLICY/STANDARD/RFC identities (kind modules keep re-exports; module-private sub-kind consts like slice's DESIGN/PLAN/NOTES may stay local)" },
+  { id = "EX-2", text = "entity.rs re-exports Kind (`pub(crate) use crate::kinds::Kind`); existing `entity::Kind` import paths compile unchanged" },
+  { id = "EX-3", text = "GovKind descriptors reference leaf identities (kind: &'static Kind); one identity, no copies" },
+  { id = "EX-4", text = "full suites green unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "kinds/mod.rs defines the pure-identity Kind struct and the slice + governance identity statics", test_file = "src/kinds/mod.rs", keywords = ["struct Kind", "SLICE_KIND", "ADR_KIND"], waived = false },
+  { id = "VT-2", expects = "entity.rs re-exports Kind from the leaf instead of defining it", test_file = "src/entity.rs", keywords = ["use crate::kinds::Kind"], waived = false },
+  { id = "VA-1", expects = "grep confirms no `struct Kind` definition outside kinds/mod.rs and no remaining Kind static initializer in kind modules; suites green" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Table + resolvers to leaf; retarget consumers"
+objective = "Move KindRef + KINDS + the membership pin-test into kinds/mod.rs and the five ref helpers (kind_by_prefix, parse_canonical_ref, parse_resolvable_ref, ensure_ref_resolves, scanned_kinds) into kinds/resolve.rs (re-exported at kinds root). Retarget the ~98 consumer references across 26 files from integrity:: to kinds::. integrity.rs drops all 13 kind-module imports and keeps only validate/reseat machinery (design D5); the 4 back-cycles break."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed green (leaf statics exist for the table to reference)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "KINDS/KindRef live in kinds/mod.rs referencing leaf statics directly (incl. &kinds::ADR_KIND replacing &ADR_KIND.kind); pin-test moved and green" },
+  { id = "EX-2", text = "kinds/resolve.rs owns the five helpers; kinds/mod.rs re-exports them at the root" },
+  { id = "EX-3", text = "integrity.rs imports no kind module; backlog/rec/review/revision production code imports kinds, not integrity" },
+  { id = "EX-4", text = "full suites green unchanged" },
+]
+verification = [
+  { id = "VT-1", expects = "resolve.rs carries the ref-resolution helpers verbatim", test_file = "src/kinds/resolve.rs", keywords = ["parse_canonical_ref", "parse_resolvable_ref", "ensure_ref_resolves", "kind_by_prefix"], waived = false },
+  { id = "VT-2", expects = "the KINDS table lives in the leaf", test_file = "src/kinds/mod.rs", keywords = ["KINDS", "KindRef", "state_dir"], waived = false },
+  { id = "VA-1", expects = "grep confirms zero kind-module imports in integrity.rs and zero `crate::integrity::` production references in backlog/rec/review/revision; suites green" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Layering re-tier + measured tangle ratchet"
+objective = "Reclassify integrity command→engine in layering.toml (updating its [tiers] comment line), regenerate the production graph via the dump_real_graph extractor, measure the live command tangle empirically (deliberately-low baseline, read TangleGrew.actual — SL-203 precedent), and ratchet [tangle_baseline] command to the measured tight value. Confirm kinds/ umbrella stays uniformly leaf (no sub-classification rows). Record re-tier verdicts for catalog/relation_graph (Tier-3 follow-up input, design VA-B)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 landed green (integrity's residual imports are entity/meta + leaves)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "layering.toml: integrity = \"engine\"; command tangle ratcheted to the measured value; kinds stays leaf with no MixedUmbrella violation" },
+  { id = "EX-2", text = "tests/architecture_layering.rs green with the 13 up-reaches gone and the 4 back-cycles broken" },
+  { id = "EX-3", text = "measured tangle delta + catalog/relation_graph re-tier verdicts recorded in slice notes (Tier-3 follow-up input)" },
+  { id = "EX-4", text = "just gate green (clippy zero warnings) on the full slice delta" },
+]
+verification = [
+  { id = "VT-1", expects = "integrity is classified engine in the tier map", test_file = ".doctrine/adr/001/layering.toml", keywords = ["integrity = \"engine\""], waived = false },
+  { id = "VA-1", expects = "tangle measured empirically at execute time (not the design's prediction); baseline set to the measured actual; architecture_layering suite green" },
+  { id = "VA-2", expects = "doctrine slice conformance clean against the 43 design-target selectors" },
+]
+specs        = []
+requirements = []
