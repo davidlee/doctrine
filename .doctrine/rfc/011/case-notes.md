@@ -950,3 +950,9 @@ prints only the numbered dir, tracked slug symlink created silently, missed
 by path-limited commit → follow-up commit again. Third kind exhibiting the
 pattern this session; the fix is one shared announcement seam in entity
 creation output.
+
+[plan; fable-partial-order-rfc]
+plan.toml scaffold's comment block renders VT mandate example as a
+multi-line inline table — invalid TOML if imitated literally. Cost: one
+failed `slice phases`, one rewrite pass. Scaffold comment should show a
+single-line row or use array-of-tables syntax.
