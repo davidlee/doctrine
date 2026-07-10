@@ -185,10 +185,30 @@ pub(crate) fn run_estimate_clear(args: &EstimateClearArgs) -> anyhow::Result<()>
     Ok(())
 }
 
+/// The REV-022 Q1 scoring-inert warning for a value facet written on a
+/// non-value-bearing kind — `None` when the target kind carries value. Pure:
+/// the decision is over the resolved canonical id's prefix, the shell writes it.
+/// Value stays writable regardless (design § REV-022 Q1 warn — warn, still write).
+fn scoring_inert_warning(canonical: &str) -> Option<String> {
+    let prefix = canonical.split('-').next().unwrap_or_default();
+    if crate::kinds::is_value_bearing(prefix) {
+        return None;
+    }
+    Some(format!(
+        "warning: value on {canonical} is scoring-inert — {prefix} is not value-bearing; scoring ignores this facet (ADR-015 § Value-source resolution)"
+    ))
+}
+
 pub(crate) fn run_value_set(args: &ValueSetArgs) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
     let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+
+    // REV-022 Q1: a value facet on a non-value-bearing kind is scoring-inert.
+    // Warn (to stderr) but still write — the facet is captured, just inert.
+    if let Some(warning) = scoring_inert_warning(&canonical) {
+        writeln!(std::io::stderr(), "{warning}")?;
+    }
 
     // Build facet & validate.
     let facet = crate::value::ValueFacet {
@@ -562,6 +582,35 @@ mod tests {
         let (path, _) = resolve_entity_path_and_canonical(&root, "SL-118").unwrap();
         let body = std::fs::read_to_string(&path).unwrap();
         assert!(body.contains("value = -5.0"), "missing value:\n{body}");
+    }
+
+    #[test]
+    fn value_set_warns_on_non_value_bearing_kind() {
+        // REV-022 Q1: a QUE knowledge record is not value-bearing → the warn
+        // fires and names the scoring-inert condition, but the facet still lands.
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "QUE", 7);
+        let warn = scoring_inert_warning("QUE-007");
+        assert!(
+            warn.is_some_and(|w| w.contains("scoring-inert")),
+            "non-value-bearing kind warns"
+        );
+
+        run_value_set(&ValueSetArgs {
+            id: "QUE-007".into(),
+            magnitude: 3.0,
+            path: Some(root.clone()),
+        })
+        .unwrap();
+        let (path, _) = resolve_entity_path_and_canonical(&root, "QUE-007").unwrap();
+        let body = std::fs::read_to_string(&path).unwrap();
+        assert!(body.contains("value = 3.0"), "facet still written:\n{body}");
+
+        // A value-bearing kind emits NO warning.
+        assert!(
+            scoring_inert_warning("SL-118").is_none(),
+            "value-bearing kind does not warn"
+        );
     }
 
     #[test]

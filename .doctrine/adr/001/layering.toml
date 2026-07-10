@@ -16,10 +16,11 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (29) ────────────────────────────────────────────────────────────
+# ── leaf (30) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
 boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
 clock = "leaf"              # out=0: std-only time helpers
+comparison = "leaf"         # → kinds: comparison-session wire model + admissibility — pure serde (SL-210 PHASE-01)
 conduct = "leaf"            # out=0: conduct.toml defaults — pure constants
 conformance = "leaf"        # out=0: path-conformance set algebra — pure (SL-147 PHASE-03)
 contentset = "leaf"         # out=0: content set wrapper — pure library

@@ -380,6 +380,14 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         Command::Estimate { .. } => Write("estimate"),
         Command::Value { .. } => Write("value"),
         Command::Risk { .. } => Write("risk"),
+        // Compare (SL-210): record + withdraw write authored session evidence
+        // under `.doctrine/comparisons/` — authored writes, funnelled through the
+        // orchestrator; `list` is a read-only view (mirrors Coverage's split).
+        Command::Compare(args) => match args.action {
+            crate::commands::compare::CompareAction::List(_) => Read,
+            crate::commands::compare::CompareAction::Record(_)
+            | crate::commands::compare::CompareAction::Withdraw(_) => Write("compare"),
+        },
     }
 }
 

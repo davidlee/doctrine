@@ -27,10 +27,6 @@ selector = "src/main.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/command/**"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "src/comparison.rs"
 intent = "design-target"
 
@@ -45,6 +41,21 @@ intent = "design-target"
 [[selector]]
 selector = "src/commands/facet.rs"
 intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "SL-115 moved CLI enum to cli.rs; guard write_class match is exhaustive-by-design — both compelled by the compare verb"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "SL-115 moved CLI enum to cli.rs; guard write_class match is exhaustive-by-design — both compelled by the compare verb"
+
+[[selector]]
+selector = "src/commands/**"
+intent = "scope-relevant"
+note = "fixes command/ typo"
 
 [[relation]]
 label = "governed_by"
