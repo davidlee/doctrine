@@ -30,16 +30,8 @@ exit_criteria = [
   { id = "EX-4", text = "parse preserves rows with unknown frames losslessly (forward compat); schema string and version checked" },
 ]
 verification = [
-  { id = "VT-1",
-    expects = "golden byte-shape test: to_toml output matches documented schema exactly (nested [session], lowercase tokens); parse round-trips all fields incl. optionals",
-    test_file = "src/comparison.rs",
-    keywords = ["golden_shape_matches_documented_schema", "round_trip_preserves_all_fields", "COMPARISON_SCHEMA"],
-    waived = false },
-  { id = "VT-2",
-    expects = "validation + admissibility unit suite: preferred-outside-pair, self-pair, unknown frame/domain rejections; record and RSK refusals; admit set pinned to kinds:: constants",
-    test_file = "src/comparison.rs",
-    keywords = ["admissible_value_pair", "admit_set_is_value_bearing_minus_rsk", "validate_rejects_preferred_outside_pair"],
-    waived = false },
+  { id = "VT-1", expects = "golden byte-shape test: to_toml output matches documented schema exactly (nested [session], lowercase tokens); parse round-trips all fields incl. optionals", test_file = "src/comparison.rs", keywords = ["golden_shape_matches_documented_schema", "round_trip_preserves_all_fields", "COMPARISON_SCHEMA"], waived = false },
+  { id = "VT-2", expects = "validation + admissibility unit suite: preferred-outside-pair, self-pair, unknown frame/domain rejections; record and RSK refusals; admit set pinned to kinds:: constants", test_file = "src/comparison.rs", keywords = ["admissible_value_pair", "admit_set_is_value_bearing_minus_rsk", "validate_rejects_preferred_outside_pair"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -58,16 +50,8 @@ exit_criteria = [
   { id = "EX-4", text = "clap shape: bare capture args + subcommand stubs coexist (args_conflicts_with_subcommands) OR the documented fallback compare record is taken and design.md updated to record it" },
 ]
 verification = [
-  { id = "VT-1",
-    expects = "integration: capture writes session-of-one with expected shape; second capture never touches the first file; missing ref, record pair, RSK refused; terminal participant admitted",
-    test_file = "src/commands/compare.rs",
-    keywords = ["compare_capture_writes_session_of_one", "second_capture_never_touches_first_file", "compare_refuses_missing_ref"],
-    waived = false },
-  { id = "VT-2",
-    expects = "flag surface: --frame prefer-first and --rater human land in the row; --prefer literal shorthand works; --audience lands in session header",
-    test_file = "src/commands/compare.rs",
-    keywords = ["flag_surface_lands_frame_rater_by", "prefer_literal_shorthand", "audience_lands_in_session_header"],
-    waived = false },
+  { id = "VT-1", expects = "integration: capture writes session-of-one with expected shape; second capture never touches the first file; missing ref, record pair, RSK refused; terminal participant admitted", test_file = "src/commands/compare.rs", keywords = ["compare_capture_writes_session_of_one", "second_capture_never_touches_first_file", "compare_refuses_missing_ref"], waived = false },
+  { id = "VT-2", expects = "flag surface: --frame prefer-first and --rater human land in the row; --prefer literal shorthand works; --audience lands in session header", test_file = "src/commands/compare.rs", keywords = ["flag_surface_lands_frame_rater_by", "prefer_literal_shorthand", "audience_lands_in_session_header"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -86,18 +70,9 @@ exit_criteria = [
   { id = "EX-4", text = "behaviour gate: priority/survey/next/explain suites pass unchanged; just gate clean" },
 ]
 verification = [
-  { id = "VT-1",
-    expects = "list + withdraw integration: total-order sort, participant filter, withdrawn marking, full-uid render; double-withdraw and unknown-uid refusals",
-    test_file = "src/commands/compare.rs",
-    keywords = ["compare_list_orders_by_total_key", "withdraw_appends_tombstone", "refuses_double_withdraw"],
-    waived = false },
-  { id = "VT-2",
-    expects = "warn: value set on a non-value-bearing kind (e.g. a record) emits the warning and the write proceeds",
-    test_file = "src/commands/facet.rs",
-    keywords = ["value_set_warns_on_non_value_bearing_kind", "scoring-inert"],
-    waived = false },
-  { id = "VA-1",
-    expects = "agent check: priority suite diff is empty — no golden churn anywhere in survey/next/explain output" },
+  { id = "VT-1", expects = "list + withdraw integration: total-order sort, participant filter, withdrawn marking, full-uid render; double-withdraw and unknown-uid refusals", test_file = "src/commands/compare.rs", keywords = ["compare_list_orders_by_total_key", "withdraw_appends_tombstone", "refuses_double_withdraw"], waived = false },
+  { id = "VT-2", expects = "warn: value set on a non-value-bearing kind (e.g. a record) emits the warning and the write proceeds", test_file = "src/commands/facet.rs", keywords = ["value_set_warns_on_non_value_bearing_kind", "scoring-inert"], waived = false },
+  { id = "VA-1", expects = "agent check: priority suite diff is empty — no golden churn anywhere in survey/next/explain output" },
 ]
 specs        = []
 requirements = []
