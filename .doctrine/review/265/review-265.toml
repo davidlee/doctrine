@@ -14,7 +14,7 @@ ref   = "SL-213"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "P6 synthetic positive floor breaks legal negative-value tails"
 detail = "RFC-019's domain contract makes any finite f64 legal and requires sign-aware projection (.doctrine/rfc/019/rfc-019.md:252-260). But P6 hardcodes an unbounded-below synthetic floor of max(0, c - GAUGE_STEP*(d_down + 1)) (.doctrine/slice/213/design.md:221-223). For a legal negative ceiling anchor, e.g. m0=-0.5 with m0 > m1, that floor becomes 0 > c; applying P4 then places m1 above the anchor (for k=1, m1=-0.25), violating m0 > m1. The prototype confesses the same failure: its P6 implementation uses the same max(0, ...) rule (.doctrine/slice/213/projection-prototype.py:120-127) and trips its own feasibility assertion when the top anchor is negative. As written, SL-213 cannot safely consume legal negative authored values."
@@ -23,7 +23,7 @@ response = "P6 rewritten: synthetic floor = c - GAUGE_STEP*(d_down+1), clamped t
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "P7 misdefines anchor-incomparable classes and conflicts with the design evidence"
 detail = "P7 says any class in an anchored component with no directed path to/from an anchor gets DEFAULT_VALUE and Gauge provenance (.doctrine/slice/213/design.md:224-227). That rule is too broad. In the prototype's Scenario 6, node q has no directed path q↔s to the only anchor s=5.0, yet q must still project above anchored descendant t because q > t and t is anchor-bounded; the prototype therefore places q at 5.0 projected, not DEFAULT_VALUE (.doctrine/slice/213/projection-prototype.py:111-119,179-186). If an implementation followed the prose literally, q would be forced to DEFAULT_VALUE=1.0 while t stays near 4.75, violating q > t. The normative condition must be phrased in terms of having neither a floor nor a ceiling inherited from anchor-bounded neighbours, not merely lacking a direct path to an anchor."
@@ -32,7 +32,7 @@ response = "P7 rewritten to the prototype's actual (correct) condition: gauge br
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The governing slice scope still contradicts the design on core Phase B semantics"
 detail = "SL-213's scope still states the old Phase B contract: equal rows compile to equality/band, preference cycles degrade by SCC tied-group collapse, and anchor conflicts exclude a deterministic residual set (.doctrine/slice/213/slice-213.md:55-64). The design replaces each of those with materially different rules: exact equality merge with the band column dead, within-SCC quarantine with no condensation edges, and violation-closure quarantine (.doctrine/slice/213/design.md:171-184,319-327). The design records RFC deviations, but not that it now disagrees with its own governing slice scope. That leaves two live doctrinal authorities saying different things about the heart of the slice, which is a planning/verification footgun even if the design's choices are otherwise acceptable."
