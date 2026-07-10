@@ -972,3 +972,24 @@ walled. Mitigation options: (a) spawn triage agents with `cwd` set to a worktree
 exempt); (c) main-thread does CLI reads, hands bodies to subagents for synthesis.
 The main thread is unjailed, so batch triage that needs the CLI should not be
 delegated to worktree-pinned subagents as-is.
+
+[dispatch; SL-210-drive]
+PHASE-01 worker went fully green (16/16 unit, fmt/clippy clean) then blocked:
+`architecture_layering_gate` demands a census row in
+`.doctrine/adr/001/layering.toml` for every new src module — authored tier,
+inside the worker forbidden zone. Structural: ANY worker adding a src module
+hits this; commit-gate green is unreachable within the worker contract.
+Recovery cost: one blocked round-trip, orchestrator fallback live-worktree
+import + manual census line + hand-committed landing (worker_commit path
+unusable). Fixes worth considering: (a) orchestrator pre-seeds the census row
+at base before spawning a module-adding phase; (b) plan/design code-impact
+tables list layering.toml whenever a new module is scoped; (c) import-time
+auto-remediation prompt.
+
+[dispatch; SL-210-drive]
+Worker's full `cargo test` in the confinement jail: ~30 e2e test binaries
+spawn the doctrine CLI, which refuses under the worker marker ("worker fork
+(signal: marker): refusing authored write"). Environmental red the worker
+cannot distinguish from own-delta damage without burning tokens
+investigating; worker prompt guidance should pre-declare which suites are
+runnable in-jail (lib + named module tests) vs orchestrator-only (e2e).
