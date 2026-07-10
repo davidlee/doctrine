@@ -95,3 +95,34 @@ selectors, ADR-001 leaf census); reconcile confirms, it does not write.
   coordination authored tree (design.md, slice-210.toml, adr/001/layering.toml)
   and the review/210 impl-bundle onto main. This is the sole remaining write and
   belongs to /close, never to reconcile or to any pre-audit step.
+
+## Reconciliation Outcome
+
+**No-op reconcile.** All three findings are terminal and disposed `aligned` — no
+per-slice direct edit and no governance/spec REV is required. The reconciled
+truth (canonical design.md with the EX-4 clap-fallback outcome, the remediated
+`design-target` selectors adding cli.rs/guard.rs, the ADR-001 leaf census
+registering `comparison`) was already authored on the coordination surface
+(dispatch/210 == review/210) during dispatch. Reconcile confirms; it writes
+nothing.
+
+### Direct edits applied
+- None.
+
+### REVs completed
+- None.
+
+### Withdrawn / tolerated
+- None. All findings `verified` + `aligned` (rationale in each finding's response).
+
+### Deferred to /close (not a reconcile surface)
+- **F-2 stage-2 integrate.** `dispatch sync --slice 210 --integrate --trunk
+  refs/heads/main` promotes the coordination authored tree + the review/210
+  impl-bundle onto main. This is the only remaining write for the slice and is
+  /close's job — reconcile does not touch it. Watch-item for /close: edge's
+  slice-210.toml now carries `status = reconcile` (bumped this pass); confirm the
+  integrate's class-routed projection reconciles the authored slice toml
+  (canonical selectors from coord vs. the status progression on edge) rather than
+  clobbering one with the other.
+
+Reconcile pass complete — handoff to /close.
