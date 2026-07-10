@@ -1,0 +1,148 @@
+# Implementation plan for SL-211 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-211"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Sequencing: 01 extracts the shared payload seam (behaviour-preserving), 02
+# builds the pure recorder planner on it (the R1 earned-check crux), 03 wires the
+# CLI stage + handler + IMP-169 prescription and proves record→done end-to-end,
+# 04 reconciles the docs/memories the verb supersedes. 01→02→03 are sequential
+# (same dispatch.rs seam, each builds on the prior); 04 is doc-tier.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Extract shared trunk-payload resolution"
+objective = """
+Extract integrate()'s inline candidate/legacy source branch (dispatch.rs:2044–2055)
+into `resolve_trunk_payload(root, slice3, journal, candidates) -> Result<oid>`:
+legacy → phase-chain tip; candidate-active → admitted close_target, REFUSE if none
+(no raw-evidence fallback). Rewire integrate() and both advancing planners
+(plan_trunk_row / plan_candidate_trunk_row) to consume it. Behaviour-preserving —
+the one observable churn is the two planners' no-admission message becoming the
+shared string (D3)."""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (RV-263 done); dispatch + ledger suites green at head." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`resolve_trunk_payload` exists and is the sole home of the candidate-vs-legacy source decision; integrate() and both planners route through it — no duplicated phase-tip / admitted-close_target resolution remains." },
+  { id = "EX-2", text = "Candidate-active-without-admission still refuses (no raw-evidence fallback); refusal behaviour preserved, message may be the shared string." },
+]
+verification = [
+  { id = "VT-1", expects = "resolve_trunk_payload is defined and consumed by integrate + both planners",
+    test_file = "src/dispatch.rs", keywords = ["fn resolve_trunk_payload", "resolve_trunk_payload("],
+    patterns = ["^\\s*fn resolve_trunk_payload"], waived = false },
+  { id = "VT-2", expects = "candidate-active without a close_target admission resolves to Err (refuse, no fallback)",
+    test_file = "src/dispatch.rs", keywords = ["resolve_trunk_payload", "close_target"],
+    patterns = [], waived = false },
+  { id = "VA-1", expects = "behaviour-preservation: full dispatch + ledger suites (incl. e2e_dispatch_sync, e2e_dispatch_candidate) green, unchanged except the shared no-admission message string." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Recorder planner + earned check"
+objective = """
+Add `recorded_row(trunk_ref, payload)` — a terminal Verified journal row with
+source=planned=applied=expected_old=payload (expected_old=planned, NOT the trunk
+tip: D2 replay-safety) — and `plan_recorded_trunk_row(root, slice3, journal,
+candidates, trunk_ref)`: resolve the payload via PHASE-01's seam, refuse an absent
+trunk, and the R1 earned check `ensure is_ancestor(payload, trunk_tip)` (refuse the
+un-earned row). Pure over OIDs; is_ancestor is the thin-shell git seam."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — `resolve_trunk_payload` available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`recorded_row` builds a Verified row with all four oid fields = payload and status Verified." },
+  { id = "EX-2", text = "`plan_recorded_trunk_row` returns the earned row when the payload is_ancestor of the trunk tip; returns Err (named refusal) when the payload is not an ancestor, or the trunk ref does not resolve." },
+]
+verification = [
+  { id = "VT-1", expects = "recorded_row row shape: Verified status, expected_old == planned == payload",
+    test_file = "src/dispatch.rs", keywords = ["fn recorded_row", "LedgerStatus::Verified"],
+    patterns = ["^\\s*fn recorded_row"], waived = false },
+  { id = "VT-2", expects = "earned pass: payload an ancestor of trunk → Ok row with planned_new_oid == payload",
+    test_file = "src/dispatch.rs", keywords = ["fn plan_recorded_trunk_row", "plan_recorded_trunk_row("],
+    patterns = ["^\\s*fn plan_recorded_trunk_row"], waived = false },
+  { id = "VT-3", expects = "R1 negative: payload NOT an ancestor of trunk → Err naming 'not an ancestor'; no row",
+    test_file = "src/dispatch.rs", keywords = ["plan_recorded_trunk_row", "is not an ancestor"],
+    patterns = [], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Record-integration verb, handler, prescription"
+objective = """
+Wire the CLI and close path. Add `record_integration: bool` to the Sync `stage`
+group (dispatch.rs:49, mutually exclusive; --trunk required for it); dispatch arm →
+`run_record_integration(path, slice, trunk_ref)`: resolve dispatch/<N> tip +
+journal + candidates; the deliver_to-match guard (F-4: refuse --trunk ≠ deliver_to);
+the existing-trunk-row guard (F-2: no row ⇒ record; Verified ⇒ idempotent no-op;
+Pending/Failed ⇒ replace); `plan_recorded_trunk_row`; `commit_journal` onto
+dispatch/<N> (NO with_journaled_projection). Add the IMP-169 §C prescription to the
+slice close-gate Blocked refusal (slice.rs:1016–1020) naming --record-integration.
+ledger.rs UNCHANGED."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — `plan_recorded_trunk_row` available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dispatch sync --slice N --record-integration --trunk <ref>` records a Verified trunk row and a split-lineage slice (payload landed as an ancestor of trunk) reaches `done` (trunk_integration → Integrated), no hand-edited journal." },
+  { id = "EX-2", text = "--trunk ≠ deliver_to refused (F-4); a Pending/Failed existing trunk row is replaced; a Verified existing row is an idempotent no-op (F-2)." },
+  { id = "EX-3", text = "The Sync variant stays Orchestrator(\"dispatch-sync\")-classed with --record-integration present; --record-integration conflicts with the other stage flags and requires --trunk." },
+  { id = "EX-4", text = "The slice close-gate Blocked refusal names `--record-integration` as the out-of-band-land remedy (IMP-169 §C)." },
+]
+verification = [
+  { id = "VT-1", expects = "e2e: prepare-review → land the payload → record-integration → slice status done passes (SL-190/SL-147 shape)",
+    test_file = "tests/e2e_dispatch_sync.rs", keywords = ["record-integration"],
+    patterns = [], waived = false },
+  { id = "VT-2", expects = "handler guards: deliver_to mismatch refused; Pending/Failed row replaced; Verified row no-op",
+    test_file = "src/dispatch.rs", keywords = ["fn run_record_integration"],
+    patterns = ["^\\s*pub\\(crate\\) fn run_record_integration"], waived = false },
+  { id = "VT-3", expects = "CLI: --record-integration parses in the stage group and the Sync variant is Orchestrator-classed",
+    test_file = "src/main.rs", keywords = ["record-integration"],
+    patterns = [], waived = false },
+  { id = "VT-4", expects = "prescription: the Blocked close-gate refusal string names --record-integration",
+    test_file = "src/slice.rs", keywords = ["record-integration"],
+    patterns = [], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Reconcile docs/memories the verb supersedes"
+objective = """
+Retire the SL-190 hand-write into the shipped verb across the doc tier. Correct the
+recovery memories' land step (`merge --no-ff review/<N>` → the payload:
+`merge --no-ff phase/<N>-NN` or the admitted candidate) and point them at
+`dispatch sync --record-integration`: split-lineage-close-conflict-direct-land,
+close-deadlock-refresh-base-recovery, close-preff-trunk-absorbs-repair. Update the
+close skill / dispatch-mechanics reference to name the verb. Re-verify the memories
+(stale → current)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — the verb is shipped and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The three recovery memories name `dispatch sync --record-integration` and describe the payload land (not a review/<N> merge); each re-verified." },
+  { id = "EX-2", text = "The close skill / dispatch-mechanics reference names the verb as the sanctioned replacement for the hand-edited journal row." },
+]
+verification = [
+  { id = "VA-1", expects = "agent inspection: the three memories + the close/dispatch-mechanics doc name the verb and the corrected payload land; no residual 'merge review/<N>' recovery instruction or 'hand-write the journal row' guidance remains." },
+  { id = "VH-1", expects = "human accepts the doc/memory reconciliation is faithful and complete." },
+]
+specs        = []
+requirements = []
