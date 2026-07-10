@@ -111,55 +111,71 @@ dispatch sync --slice N --record-integration --trunk <ref>
 - `--trunk <ref>` required for this stage.
 - Orchestrator-classed — refused under worker-mode (same as the other stages).
 
-**Shared source resolution (R2 — one seam).** Extract the earned-surface lookup
-`integrate()` does inline (`dispatch.rs:2044–2055`):
+**Earned-surface resolution (R2 — one recorder seam).** The recorder sources the
+surface the operator actually landed — which is **`review/<N>`** (the immutable
+reviewed bundle), or the admitted `close_target` when a candidate flow produced a
+richer landed OID (audit repair beyond raw review). It is **not** the phase-chain
+tip: the sanctioned land is `git merge --no-ff review/<N>` (or an admitted
+candidate merge of `review/<N>`), and `review/<N>` is a re-committed filtered tree
+on a *different lineage* from `phase/<N>-NN` — so the phase tip is generally **not**
+an ancestor of trunk even though the code landed (F-1, §10). This is the recorder's
+own resolution; it is deliberately **not** welded to the advancing planners
+(`plan_trunk_row` sources the phase tip precisely because it advances trunk with
+the `.doctrine`-stripped code cut — a different job).
+
 ```rust
-fn resolve_trunk_payload(
-    root: &Path, slice3: &str, journal: &Journal, candidates: &Candidates,
+fn record_surface(
+    root: &Path, slice3: &str, candidates: &Candidates,
 ) -> anyhow::Result<String /* oid */> {
-    if candidates.rows.is_empty() {
-        let phase_ref = phase_chain_tip(journal, slice3)
-            .with_context(|| format!("no phase/{slice3}-NN code units"))?;
-        resolve_commit(root, &phase_ref)?
-            .with_context(|| format!("{phase_ref} does not resolve"))
-    } else {
-        candidates.current_admission.close_target.as_ref()
-            .context("candidate workflow active but no close_target admission — \
-                      run `dispatch candidate admit --role close_target` first")
-            .map(|a| a.admitted_oid.clone())
+    // Prefer the admitted close_target (richest true surface — includes any
+    // audit repair); else the immutable reviewed bundle review/<N>. Both are
+    // ancestors of trunk under the sanctioned `merge --no-ff` land; the earned
+    // check (below) fail-closes if the chosen surface is NOT actually on trunk
+    // (operator landed something else — e.g. cherry-picks).
+    if let Some(a) = &candidates.current_admission.close_target {
+        return Ok(a.admitted_oid.clone());
     }
+    let review_ref = format!("{REVIEW_REF_PREFIX}{slice3}");
+    resolve_commit(root, &review_ref)?
+        .with_context(|| format!("record-integration: {review_ref} does not resolve"))
 }
 ```
-`plan_trunk_row` and `plan_candidate_trunk_row` are refactored to call it (they
-then only add `expected_old` + the *descendant* assertion). One resolution, three
-consumers.
+`plan_trunk_row` / `plan_candidate_trunk_row` are left **unchanged** — no shared
+refactor, so their existing suites (and error copy) are untouched
+(behaviour-preservation).
 
 **Planner (pure over OIDs; is_ancestor is the thin-shell git seam):**
 ```rust
 fn plan_recorded_trunk_row(
-    root: &Path, slice3: &str, journal: &Journal,
-    candidates: &Candidates, trunk_ref: &str,
+    root: &Path, slice3: &str, candidates: &Candidates, trunk_ref: &str,
 ) -> anyhow::Result<JournalRow> {
-    let reviewed = resolve_trunk_payload(root, slice3, journal, candidates)?;
+    let reviewed = record_surface(root, slice3, candidates)?;
     let tip = resolve_commit(root, trunk_ref)?
         .with_context(|| format!(
             "record-integration: {trunk_ref} does not resolve — no trunk to record onto"))?;
     // EARNED CHECK (R1 negative): the reviewed surface must already be on trunk.
+    // is_ancestor proves *integration occurred* (a commit in trunk's history), the
+    // same standard the gate holds — not tree-survival-at-tip (SPEC-022; F-1b).
     anyhow::ensure!(
         git::is_ancestor(root, &reviewed, &tip)?,
         "record-integration: reviewed surface {reviewed} is not an ancestor of \
          {trunk_ref} (at {tip}) — the reviewed code has not landed on trunk; land \
-         it (manual merge / integrate) before recording"
+         it (`git merge --no-ff review/{slice3}`) before recording"
     );
     Ok(recorded_row(trunk_ref, reviewed))
 }
 ```
 
 **Handler:** `run_record_integration(path, slice, trunk_ref)` → `root::find` →
-worker-mode class check (as the other sync stages) → resolve `dispatch/<N>` tip,
-tree-read `journal.toml` + candidates → `fresh` guard (target already journaled ⇒
-"already recorded", no-op) → `plan_recorded_trunk_row` → append → `commit_journal`
-onto `dispatch/<N>`. **No `with_journaled_projection`** (no advance).
+resolve `dispatch/<N>` tip, tree-read `journal.toml` + candidates →
+**trunk-matches-`deliver_to` guard** (F-4: the row must target the gate's ref) →
+**existing-trunk-row guard** (F-2: no row ⇒ record; a *Verified* ancestor row ⇒
+"already recorded" no-op; a *Failed/Pending* stale row ⇒ refuse with guidance to
+clear it, never a silent no-op) → `plan_recorded_trunk_row` → append →
+`commit_journal` onto `dispatch/<N>`. **No `with_journaled_projection`** (no
+advance). The `Sync { .. }` variant is already `Orchestrator`-classed
+(`guard.rs:303`) — the new stage inherits worker-mode refusal, no classifier
+change (F-3).
 
 ### 5.3 Data, State & Ownership
 
@@ -206,9 +222,18 @@ the separate `--integrate --edge` path (not gated by `done`).
 - **INV-3** `ledger.rs::trunk_integration` is **unchanged**.
 - **EDGE — trunk ref absent** → refuse ("no trunk to record onto").
 - **EDGE — reviewed surface not on trunk** → refuse (R1 negative); no row written.
-- **EDGE — already recorded** (`fresh` false) → no-op, no duplicate row.
-- **EDGE — candidate-active but no `close_target` admission** → refuse (inherited
-  from `resolve_trunk_payload`, same message the integrate path gives).
+  Covers a cherry-pick land (breaks `review/<N>` ancestry) — the operator must
+  land via `merge --no-ff` to preserve the ancestry the recorder checks.
+- **EDGE — `--trunk` ≠ `deliver_to`** (F-4) → refuse: the recorded row would
+  target a ref the gate does not read, so `done` would still block. Guard resolves
+  both and refuses a mismatch (or defaults `--trunk` to `deliver_to`).
+- **EDGE — existing trunk row** (F-2): Verified ancestor row ⇒ idempotent
+  "already recorded" no-op; Failed/Pending stale row (e.g. a prior refused
+  integrate that journaled then failed) ⇒ **refuse** with guidance to clear it —
+  never a silent no-op that leaves the gate reading the stale row.
+- **EDGE — candidate rows present but no `close_target` admission** → falls back
+  to `review/<N>` (this *is* the SL-190 shape: candidate seam abandoned, operator
+  direct-landed `review/<N>`). Not a refusal.
 - **EDGE — trunk tip == reviewed tip** (clean ff already happened elsewhere) →
   planned == tip → row still valid; a later replay is a clean NoOp.
 
@@ -235,14 +260,23 @@ the separate `--integrate --edge` path (not gated by `done`).
 - **D2 — `expected_old = planned`, not the trunk tip.** Makes a stray later
   integrate a non-destructive `Refused` rather than a backward trunk advance
   (§5.3).
-- **D3 — one verb, source resolution shared with the integrate planners** (R2).
-  No parallel implementation; existing planner tests prove the extraction.
+- **D3 — one recorder verb with its own earned-surface resolution** (R2). Source
+  = admitted `close_target` else `review/<N>`; the advancing planners are left
+  unchanged (they source the phase tip for a different job — see D6). "One seam"
+  means one recorder, not welded to the integrate planners.
 - **D4 — earnedness in the verb; the gate leaf and the prescription copy stay
   mechanical.** The slice-shell prescription (§ below) is an unconditional
   signpost; it does not re-derive earnedness (no is_ancestor duplicated into
   `slice.rs`).
 - **D5 — `ledger.rs` unchanged.** The gate already accepts an ancestor row;
   behaviour-preservation by construction.
+- **D6 — the earned surface is `review/<N>` (or admitted `close_target`), NOT the
+  phase-chain tip** (F-1). The operator lands `merge --no-ff review/<N>`; the
+  phase cut `phase/<N>-NN` is a different lineage (re-committed, `.doctrine`-
+  stripped, parented on `trunk_base`) and is generally not an ancestor of trunk.
+  Sourcing the phase tip would spuriously refuse a genuine land. `close_target` is
+  preferred when admitted because it carries any audit repair the raw bundle
+  lacks; `review/<N>` is the honest fallback for the direct-land case.
 
 **Prescription (IMP-169, RFC-016 §C)** — copy edit in the slice close-gate shell
 (`slice.rs:1016–1020`). The current Blocked refusal points only at
@@ -281,17 +315,49 @@ Red/green/refactor; behaviour-preservation is the existing suites staying green.
 - **VT-2 (negative, R1)** reviewed_oid *not* an ancestor of trunk → refuse; no row.
 - **VT-3** Manual-merge lineage (trunk = merge commit, reviewed tip = ancestor) →
   recorded + `done`. (SL-147 shape.)
-- **VT-4** Source resolution: candidate-active → admitted `close_target`; legacy →
-  phase-chain tip; candidate-active without admission → refuse.
-- **VT-5** Idempotent re-record → no duplicate row ("already recorded").
-- **VT-6 (behaviour-preservation)** existing dispatch + ledger suites green
-  unchanged; `resolve_trunk_payload` refactor proven by the existing
-  `plan_trunk_row` / `plan_candidate_trunk_row` tests.
-- **VT-7 (prescription)** Blocked `slice status` message names
+- **VT-4 (D6)** Source resolution: admitted `close_target` → that OID; else →
+  `review/<N>` (incl. candidate-rows-but-no-admission = SL-190 shape). Explicitly
+  assert the phase-chain tip is **not** used (regression guard against F-1).
+- **VT-5** Idempotent re-record over a Verified row → no duplicate ("already
+  recorded"); a Failed/Pending stale trunk row → refuse (F-2), not silent no-op.
+- **VT-6 (F-4)** `--trunk` ≠ `deliver_to` → refuse (or defaults); a matching ref
+  records a row the gate reads.
+- **VT-7 (behaviour-preservation)** existing dispatch + ledger suites green
+  unchanged (no shared refactor of the advancing planners); `Sync { .. }` stays
+  `Orchestrator`-classed with the new stage present.
+- **VT-8 (prescription)** Blocked `slice status` message names
   `--record-integration` (mirrors `slice.rs:6469`).
 - **VH** Replay the SL-147 / SL-190 shapes end-to-end to `done`, no hand-edited
   journal, no forfeited integrity.
 
 ## 10. Review Notes
 
-(Adversarial pass pending — §6 Adversarial Review of the design skill.)
+**Internal adversarial pass (design skill §6) — findings integrated:**
+
+- **F-1 (MAJOR, integrated).** The legacy earned surface was mis-specified as the
+  phase-chain tip. The sanctioned land is `git merge --no-ff review/<N>`;
+  `review/<N>` is a different lineage from `phase/<N>-NN` (re-committed, filtered,
+  `trunk_base`-parented), so `is_ancestor(phase_tip, trunk)` is generally false
+  even when the code landed — the earned check would spuriously refuse. Fixed:
+  source = admitted `close_target` else `review/<N>` (§5.2, D6). Side effect: the
+  "share `resolve_trunk_payload` with the advancing planners" refactor is dropped
+  (different sources for different jobs), which also removes the risk of
+  perturbing existing planner error copy.
+- **F-2 (MEDIUM, integrated).** The `fresh` idempotence guard would silently
+  no-op over a *stale Failed/Pending* trunk row from a prior refused integrate,
+  leaving the gate reading a non-ancestor row (permanent block). Fixed: the
+  existing-trunk-row guard distinguishes a Verified ancestor row (no-op) from a
+  stale row (refuse with guidance) (§5.4, §5.5).
+- **F-3 (MOOT).** `guard.rs:303` classes `DispatchCommand::Sync { .. }` by the
+  variant, so the new stage inherits `Orchestrator("dispatch-sync")` and
+  worker-mode refusal automatically. No classifier change; a VT confirms it.
+- **F-4 (MEDIUM, integrated).** A recorded row whose `target_ref` ≠ the gate's
+  `deliver_to` would not be read at `done`. Fixed: guard/default `--trunk` to
+  `deliver_to` (§5.4, §5.5, VT-6).
+- **F-1b (MINOR, integrated).** Clarified the earned check is `is_ancestor` =
+  "integration occurred", the gate's own SPEC-022 standard, not tree-survival at
+  tip (a later revert is out of scope — same property the existing gate has).
+
+**Open for external pass (optional):** whether `--trunk` should hard-refuse a
+`deliver_to` mismatch or silently default; whether to also emit the earned-surface
+OID in the success line for operator verification (cf. `--show-journal-trunk-oid`).
