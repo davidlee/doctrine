@@ -3,3 +3,32 @@
 <!-- Backlog item body — context, detail, links. The structured, queried fields
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
      structurally parsed (the storage rule). -->
+
+## Problem
+
+`VALUE_BEARING` (`src/kinds.rs`, SL-177) is `SL + backlog kinds` — spec
+members (REQ) are excluded, so requirements are not comparison-admissible
+(RFC-019 A2/A4 gate) and carry no `value` facet in scoring. Confirmed an
+oversight, not a position (SL-217 design session, 2026-07-12).
+
+## Why it matters
+
+Agency-style fixed-scope planning prioritises the requirement graph directly —
+potentially hundreds of REQs on the table. The Phase E scoping context
+(RFC-019 §Pair selection: budget water-line, membership stability) wants value
+evidence on REQs, or at least admissibility so pairwise judgements can cover
+them. Today the workaround is judging the delivering work items only.
+
+## Sketch
+
+- Add REQ to `VALUE_BEARING`; decide whether `value set` on a REQ warns or
+  just works (cf. REV-022 warn-on-non-value-bearing adjudication).
+- Comparison admissibility follows automatically via the A2/A4 gate.
+- Check `value_dim` / burndown consumers for kind-weight implications
+  (ADR-015) — a REQ is not schedulable work; it may need value-bearing
+  status without frontier membership.
+
+## Provenance
+
+Surfaced at SL-217 design (elicitation queue), Q2 discussion of decision
+contexts. Sequence before/with RFC-019 Phase E.
