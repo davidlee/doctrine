@@ -1,4 +1,4 @@
-mod? doctrine '.doctrine/doctrine.just'
+mod doctrine '.doctrine'
 
 # formt, lint, test, build
 default: fmt lint test build

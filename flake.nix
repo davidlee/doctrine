@@ -152,6 +152,15 @@
             extraOptions = jailEnvOptions;
           };
 
+          jailed-shell = jailLib.makeJailedAgent {
+            name = "shell";
+            agent = pkgs.zsh;
+            profile = "specDev";
+            extraPkgs = projectPkgs;
+            subagents = ["pi" "dirge" "claude"];
+            extraOptions = jailEnvOptions;
+          };
+
           bubblewrap = pkgs.bubblewrap;
         };
 
@@ -305,6 +314,16 @@
 
           commands = [
             {
+              name = "d";
+              help = "short for doctrine";
+              command = "doctrine $@";
+            }
+            {
+              name = "jd";
+              help = "just doctrine";
+              command = "just doctrine $@";
+            }
+            {
               name = "drn";
               help = "short for doctrine";
               command = "doctrine $@";
@@ -323,6 +342,11 @@
               name = "jcl";
               help = "jailed-claude --dangerously-skip-permissions";
               command = "jailed-claude --dangerously-skip-permissions $@";
+            }
+            {
+              name = "jail-zsh";
+              help = "jailed shell (zsh) in pi's context";
+              command = "jailed-shell $@";
             }
           ];
         };
