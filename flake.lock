@@ -91,22 +91,6 @@
         "type": "github"
       }
     },
-    "emacs-config": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1781598503,
-        "narHash": "sha256-5wVyss/YDGRgXSmbUpDFEXKHXR5zSQz8shVc2VOBsHI=",
-        "owner": "davidlee",
-        "repo": "emacs-config",
-        "rev": "860b7b1f700654b8e724acabca78b875cb80d400",
-        "type": "github"
-      },
-      "original": {
-        "owner": "davidlee",
-        "repo": "emacs-config",
-        "type": "github"
-      }
-    },
     "emacs-overlay": {
       "inputs": {
         "nixpkgs": "nixpkgs_4",
@@ -114,7 +98,7 @@
       },
       "locked": {
         "lastModified": 1781754837,
-        "narHash": "sha256-nPOeyZxDz0bptuplYXmUm1F9zt1Y7lcDQBgsFtk6J7o=",
+        "narHash": "sha256-5Gw4WcC7LLDr1Zsd6hU8FmQvoeBs5+eCZUkrIoRZBwo=",
         "type": "tarball",
         "url": "https://github.com/nix-community/emacs-overlay/archive/master.tar.gz"
       },
@@ -347,7 +331,6 @@
     },
     "pub": {
       "inputs": {
-        "emacs-config": "emacs-config",
         "emacs-overlay": "emacs-overlay",
         "flake-utils": "flake-utils",
         "jail-nix": "jail-nix",
@@ -355,11 +338,11 @@
       },
       "locked": {
         "dir": "flakes/pub",
-        "lastModified": 1783294103,
-        "narHash": "sha256-Jwg1KBnss13E96kSNS60GDnlrfvb1lHHdGspXljFats=",
+        "lastModified": 1783783175,
+        "narHash": "sha256-ds8uUrXSfOYz4XHlZ3KNftnsP4R7SIRUbFaVK+um5Fo=",
         "owner": "davidlee",
         "repo": "nix-config",
-        "rev": "7ec3b9d21f4f8e135289dc03fc8dd469605fcd3b",
+        "rev": "0983775d239eecadace903b179ea0269dd24129e",
         "type": "github"
       },
       "original": {

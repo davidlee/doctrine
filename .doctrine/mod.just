@@ -97,6 +97,16 @@ md:
 @boot:
   doctrine boot --emit | glow
 
+@back id='':
+  #!/usr/bin/env zsh
+  if [ -z "{{id}}" ]; then
+    just doctrine fuzzy ".doctrine/backlog" ""
+  else
+    glow `doctrine backlog paths {{id}} -m`
+  fi
+
+
+
 ## DOCTRINE CHECKS:
 ##
 ## doctrine check <type>

@@ -105,6 +105,8 @@
           (ro-bind "${doctrine}/bin/doctrine" (noescape "~/.cargo/bin/doctrine"))
           # Put cargo-bin on the jail PATH so the SessionStart hook's bare
           # `doctrine boot` resolves to the shared binary above.
+          #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
+          #(add-pkg-deps [pkgs.coreutils])
           (add-path "/home/david/.cargo/bin")
         ];
 
