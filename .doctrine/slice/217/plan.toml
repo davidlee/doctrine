@@ -1,0 +1,83 @@
+# Implementation plan for SL-217 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-217"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Query predicates"
+objective = "Implement design §1 in new pure leaf src/comparison/query.rs: Reachability (memoised condensed-DAG reachability), PairSide/SignRange, determined via the D9 pinned extremum algorithm (closure-vertex enumeration incl. coupling-boundary∩box-edge intersections and directional limits, then the open-interval range rule), hypothetical_yield as a signed delta via compile recompile (D10; Hypothetical = Answer | AnchorRemoved | RowsRetired), and indeterminate_pairs over a pool. compile.rs gains narrow read accessors only (class-of, edge iteration) — no semantic change. Synthetic hypothetical rows carry a fresh session identity (R3 trap). Ship the D8 marginal-exactness property suite backed by a test-only naive backtracking extension oracle (no LP/SMT dependency)."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked and plan approved; SL-213 constraint layer (compile/project) shipped and its suites green at baseline." },
+  { id = "EN-2", text = "Baseline recorded: full test suite green and `doctrine check gate` clean before any change." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "query.rs is a pure leaf: imports compile/wire only — no priority imports, no disk/clock/rng (ADR-001)." },
+  { id = "EX-2", text = "compile.rs diff is read accessors only; every pre-existing compile/project/resolve/store test passes unchanged (behaviour-preservation gate)." },
+  { id = "EX-3", text = "All new unit batteries green; `doctrine check gate` clean (clippy zero warnings, fmt)." },
+]
+verification = [
+  { id = "VT-1", expects = "Determinacy battery (§5.1): chain-ordered equal-weight determined; cheaper-winner determined; costlier-winner indeterminate unless anchor squeeze; box-overlapping-but-chain-coupled determined (box is not the oracle); both-anchored point evaluation; same-class differing weights over zero-spanning interval Mixed; unbounded-side limits Mixed; ZeroOnly constant; coupling_boundary_infimum golden (extremum on v_A=v_B attained at no box corner).", test_file = "src/comparison/query.rs", keywords = ["determined", "SignRange", "coupling_boundary_infimum"], patterns = ["^\\s*pub\\(crate\\) fn determined"], waived = false },
+  { id = "VT-2", expects = "D8 property suite: extension_oracle — naive backtracking oracle over generated small anchored DAGs (multiple anchored ancestors/descendants, shared intermediates, open + unbounded sides, equality merges) confirms every claimed joint-region point extends to a full feasible assignment.", test_file = "src/comparison/query.rs", keywords = ["extension_oracle"], waived = false },
+  { id = "VT-3", expects = "Yield battery (§5.2): guaranteed yield equals min-over-order-bearing-answers of newly-determined relevant pairs on hand-computed graphs; equal merges classes; equal between differently-anchored classes triggers C2 quarantine on recompile with the negative delta accounted; negative delta on chain contradiction (D10); incomparable yields 0, excluded from the min, disclosed; synthetic hypothetical rows carry fresh session identity and never trigger R3 supersession against real rows.", test_file = "src/comparison/query.rs", keywords = ["hypothetical_yield", "synthetic_session"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Queue assembly and ranking"
+objective = "Implement design §2 in new src/priority/elicit.rs: assemble(inputs, ctx) pure over (Pipeline, frontier order, est_cost map, statuses, config); DecisionContext::Sequencing{depth} seam (D3); three candidate sources — indeterminate top-K comparison pairs behind the existing capture admissibility gate, median-probe calibration (D14, stateless), anchor-review candidates one per distinct suspect anchor with min-over-resolving-answers yield (D12, not K-gated); ranking score = guaranteed_yield × guaranteed_impact × confirm_boost with guaranteed_impact = min over argmin-yield answers of rank-decay-weighted impact (D13); queue states with pinned precedence and m=0 exclusions scoped out of pool and stability obligation (D15/D6); bare-estimate mask annotation (D17). Config: [priority.elicit] depth parse per the gauge.step idiom plus named consts ELICIT_DEPTH, ELICIT_LIMIT, ELICIT_RANK_DECAY, ELICIT_CONFIRM_BOOST (STD-001)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 exit criteria met: query predicates available as a pure leaf with green batteries." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "elicit.rs is pure: no disk/clock/rng; BTree collections only, scores compared via total_cmp, id-lexicographic tiebreak, no float in any key." },
+  { id = "EX-2", text = "Every pre-existing priority suite passes unchanged; `doctrine check gate` clean." },
+  { id = "EX-3", text = "Constants and config keys named per STD-001; no magic numbers in assembly or ranking paths." },
+]
+verification = [
+  { id = "VT-1", expects = "Reprobe battery (§5.3): synthetic stale-anchor conflict yields an anchor-review candidate ranked by un-quarantine payoff; AnchorRemoved activates closure rows on recompile; RowsRetired counts the complete cited closure (pinned) and its smaller liberation; min-over-resolving-answers pinned by an uphold<removal case; estimate edit flips a determined pair back indeterminate and the reprobe comparison resurfaces (D18); determined top-K plus live suspect anchor stays Candidates (D15 precedence golden).", test_file = "src/priority/elicit.rs", keywords = ["AnchorReview", "assemble", "resolving"], waived = false },
+  { id = "VT-2", expects = "Median-probe battery (§5.4): un-constrained top-K item produces a candidate against the projected median of its comparable set with reason code median-probe; successive-refresh golden on a branching gauge graph documents heuristic (non-bisection) behaviour.", test_file = "src/priority/elicit.rs", keywords = ["median_probe"], waived = false },
+  { id = "VT-3", expects = "Ranking battery (§5.5): confirm-boost all-else-equal pair (agent-only outranks human-touched, reason agent-only-calibration); rank-decay impact ordering; guaranteed_impact = min over argmin-yield answers pinned by a two-answers-tie-on-yield case (RV-269 F-2); admission drops non-positive guaranteed yield; id tiebreak; m=0 pairs excluded from pool and stability obligation and annotated, incl. one-zero-weight over a negative-spanning interval (RV-269 F-4); policy goldens — high-yield/low-impact vs low-yield/prominent-pair, and boost-outranks-yield-gap at current constants.", test_file = "src/priority/elicit.rs", keywords = ["confirm_boost", "guaranteed_impact", "argmin"], waived = false },
+  { id = "VT-4", expects = "State machine (§5.3/D15): entries non-empty gives Candidates; empty and every value-sensitive top-K pair determined gives Stable{depth}; empty with an indeterminate pair gives Stalled{depth}; zero-yield bridge case is Stalled, never Stable.", test_file = "src/priority/elicit.rs", keywords = ["Stalled", "Stable", "QueueState"], waived = false },
+  { id = "VT-5", expects = "Config: [priority.elicit] depth parses with clamp per the gauge.step idiom; ELICIT_DEPTH default 8 applies when absent; consts exist as single-source named constants.", test_file = "src/priority/config.rs", keywords = ["ELICIT_DEPTH", "elicit"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "CLI surface, JSON, capture loop"
+objective = "Implement design §3: new Elicit(ElicitArgs) arm in src/commands/compare.rs (thin shell) — doctrine compare elicit [--depth K] [--limit N] [--kind comparison|anchor-review] [--json]; human render via the render.rs structured idiom (participants with fetched context, S3 value-source shapes reused, bare-estimate mask ⚠, exact answer command per entry, D15 state footer with internal-order stability wording and m=0 scoping); JSON schema v1 envelope exactly per §3 (kind-tagged entries, common spine, structural open/closed bounds, yield_basis, yield_note, exits as action arrays, lean participants); surface.rs mask plumb only if the S3 block carries it. elicit stays read-only end to end (D18). End-to-end coverage in tests/e2e_compare_elicit.rs: determinism, capture loop, cost ceiling."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 exit criteria met: assemble available and green." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "elicit is read-only: no runtime-state or authored-file writes on any code path (D18)." },
+  { id = "EX-2", text = "JSON output is byte-stable across repeated invocations on identical inputs; schema envelope matches design §3 v1 exactly." },
+  { id = "EX-3", text = "Full workspace suite green; `doctrine check gate` clean; no pre-existing test modified." },
+]
+verification = [
+  { id = "VT-1", expects = "Surface goldens (§5.7): render goldens for all three states (stall wording names depth and disclaims stability; stable wording claims value_dim order among current top-K members only); bare-estimate mask present on projected-but-bare participant and absent on estimated; JSON goldens for both kinds incl. anchor-review yield_note conditional-yield disclosure (RV-269 F-3); --kind filters post-ranking; --limit caps display while the full pool is ranked.", test_file = "tests/e2e_compare_elicit.rs", keywords = ["yield_note", "median", "stall"], waived = false },
+  { id = "VT-2", expects = "Determinism e2e (§5.6): same merged file set + statuses + config + invocation params yields byte-identical queue and --json output; shuffled_load_order invariance extending the SL-213 e2e pattern.", test_file = "tests/e2e_compare_elicit.rs", keywords = ["shuffled_load_order"], waived = false },
+  { id = "VT-3", expects = "Capture loop e2e: capture_loop_round_trip — elicit surfaces a candidate; answering via the existing compare record path appends a ledger row; the next elicit refresh consumes it (pair leaves the queue or yields update).", test_file = "tests/e2e_compare_elicit.rs", keywords = ["capture_loop_round_trip"], waived = false },
+  { id = "VT-4", expects = "Cost ceiling (§5.9): cost_ceiling_eval_corpus — elicit over the eval corpus (32 rows, K = 8) completes within the normal test-time envelope; assertion of completion, not a benchmark.", test_file = "tests/e2e_compare_elicit.rs", keywords = ["cost_ceiling_eval_corpus"], waived = false },
+  { id = "VA-1", expects = "Behaviour preservation audit (§5.8): agent confirms via git diff that no pre-existing test file was modified across the slice and that compile/project semantics changed only by read accessors; full suite green with no ledger / no invocation." },
+  { id = "VH-1", expects = "Dogfood acceptance: human runs doctrine compare elicit over this repo's live backlog ledger and confirms the queue renders answerable, reasons-attached questions with sane state wording." },
+]
+specs        = []
+requirements = []
