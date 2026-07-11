@@ -1186,3 +1186,41 @@ commits land on the checked-out coord ref without updating the working tree,
 leaving `.doctrine/dispatch/213/journal.toml` as a staged deletion. Standing
 post-land sync beat covered it, but every ref-writing dispatch verb appears
 to need the same follow-up restore.
+
+[close; SL-213-close-1]
+Dispatched-slice close hit a base-divergence deadlock the close skill's step-3a
+does not anticipate. Ritual (per SL-210 precedent + memory
+close-lands-via-candidate-integrate-trunk): promote edge→main FIRST so main
+carries the authored artifacts, then candidate create close_target --base main
+--source review/213. But the create 3-way merge CONFLICTED: review/213 was cut
+pre-reconcile and carried OLD .doctrine authored files (design.md/slice-213.toml
+selectors) that the promoted edge reconcile-edits had since moved — both sides
+touched the same regions ("trunk advanced 9 commits past this source"). SL-210
+dodged this only because its bundle's authored state == fork base. Recovery cost
+~10 extra commands, none in the skill: dispatch setup --dir (resume the removed
+coord worktree) → refresh-base (merge main into dispatch/213, conflict on
+slice-213.toml, resolve --theirs=main, commit --no-edit) → sync --prepare-review
+(CAS-refused 6 stale refs → git branch -D review/213 phase/213-02..06, re-run) →
+re-create/admit/integrate (clean). Root: reconcile edits landed on edge, not the
+coord branch, so review/<N> and trunk's authored .doctrine diverge whenever
+reconcile happens after prepare-review. The refresh-base recovery is documented
+in memory (close-deadlock-refresh-base-recovery) but the close skill step-3a
+presents the happy-path create as if it always merges clean.
+
+[close; SL-213-close-2]
+payload flag ambiguity: close skill step-3a says --payload code; memory
+close-lands-via-candidate-integrate-trunk shows --payload impl_bundle. Correct
+choice is provenance-dependent and non-obvious: `code` when authored artifacts
+reached trunk via edge→main promote (this case — impl_bundle would risk
+reverting trunk's reconciled .doctrine to the older bundle versions / g3
+clobber); `impl_bundle` when the orchestrator committed authored deliverables on
+the coord branch so they must ride the bundle. ~1 reasoning detour to resolve.
+Note: even with --payload code the integrate diff still carried
+.doctrine/slice/213/notes.md (bundle's fuller PHASE-02..06 notes vs edge's
+PHASE-01-only) — a benign union, but "code" does not mean "src-only".
+
+[close; SL-213-close-3]
+`doctrine check gate` fails on every run in-jail at the eslint leg
+(`web/map/node_modules/.bin/eslint: /usr/bin/env: bad interpreter`) — recurring
+noise for any Rust-only slice with no JS surface; the Rust fmt+clippy legs pass.
+Forces a manual "is this mine?" adjudication each close.
