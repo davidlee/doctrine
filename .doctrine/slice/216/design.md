@@ -50,6 +50,14 @@ Module doc note (`src/comparison/project.rs` header, lines 25–37) rewritten:
 no longer "follows the prototype / reported for orchestrator adjudication";
 states component scope as adjudicated (SL-216, IMP-279, RV-266 F-3 follow-on).
 
+**Amendment sweep, not point edits** (adversarial F1/F2): grep SL-213
+design.md and `src/` for `corpus-wide|global` gauge language. Known sites
+beyond the three headline P's: P8's rationale note (design lines ~310–315 —
+pins S2 0.8/0.4 verbatim and frames per-component as "new sliced work"; both
+now superseded by this slice), and the dead `AnchorGaugeDisconnect` variant
+doc (`src/priority/findings.rs:150-153` — "anchors existing ELSEWHERE in the
+graph" → component language; no producer exists, comment-only).
+
 Rejected: leaving SL-213 design as historical record with SL-216 as authority
 (splits the contract across a slice chain readers must chase); REV routing
 (design docs are per-slice artefacts, not governance kind — reconcile doctrine
@@ -62,7 +70,12 @@ tech spec once the comparison layer stabilises (post-RFC-019 Phase C).
 
 All changes inside `src/comparison/project.rs`; no signature changes above
 `place()`; `ProjectionCfg`, `ValueProvenance`, wire/explain surfaces untouched
-structurally.
+structurally. Value resolution is provenance-blind (`priority/graph.rs`
+D11 tests: Gauge and Projected resolve identically), so the s8-style
+provenance flips move **no** resolved values beyond the placement change
+itself. User-visible render delta (adversarial F5): island ladder nodes'
+explain reason flips `ValueProjected` → `ValueGauge { judgements }` — named
+here as accepted, part of the declared change.
 
 1. **New pure helper**
 
@@ -120,6 +133,9 @@ Evidence that must be added:
      (kills leak 2 explicitly; RED against the shipped global trigger).
 - **New golden `mixed_corpus_island`** — anchored diamond + free pendant;
   pendant takes the centred component spread, Gauge provenance.
+- **Singleton-island case** (adversarial F3) — a single anchor-free node in a
+  pure-gauge multi-component corpus: `2D/(H_global+2)` → `D` (h=0, H=0 ⇒
+  `2D·1/2`). Declared surface; pin it.
 - **Golden audit sweep** — every existing scenario with ≥2 components checked
   for silent re-pin; s2 and s8 are the known movers, sweep confirms no others.
 
