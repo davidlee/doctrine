@@ -109,3 +109,40 @@ resolution-keyed ordering — an honest fixture, not a masked regression.
   [F-1] — applied to the primary registry during this audit; recorded here so
   reconcile can confirm the conformance re-run stays at
   undeclared=1 (the tolerated F-2 cell) / undelivered=0.
+
+## Reconciliation Outcome
+
+User adjudication on F-3 (2026-07-11): the prototype is the validated
+artifact — the implementation followed it exactly; the drift was
+design-doc-internal (per-component prose never matched the global-H
+prototype it cited as validation). Implemented semantics blessed.
+
+### Direct edits applied (design.md)
+
+- §3 P8: reworded to global corpus-H semantics with the mixed-corpus
+  behaviour (P7 sinks + P5 ladders) stated, and a reconciled-note recording
+  the adjudication and the rejected per-component variant (RV-266 F-3).
+- §3 P12: scoped to the anchored regime; the gauge-regime coupling through
+  global H recorded as an accepted consequence (RV-266 F-3).
+- §3 P1: one-line pointer to the gauge-scale exception (RV-266 F-3).
+- §4 S2: token enumeration extended to ten with `malformed` (RV-266 F-4).
+- §1 inventory: `ResolutionStatus::Malformed` added with its R2
+  supersession-cycle comment (RV-266 F-4).
+
+### REVs completed
+
+- None required — no governance/spec drift (brief's REV section was empty).
+
+### Registry
+
+- F-1's selector add confirmed still in effect: conformance at 15 conformant /
+  0 undelivered / 1 undeclared (the tolerated F-2 cell).
+
+### Withdrawn / tolerated
+
+- F-2: tolerated — orchestrator selector-fix commit inside PHASE-05's
+  recorded range; rationale in the finding disposition.
+- F-5, F-6: aligned — no writes needed.
+- F-7, F-8: follow-up → CHR-041 (surface polish, pending human VH-1 pass).
+
+Reconcile pass complete — handoff to /close.

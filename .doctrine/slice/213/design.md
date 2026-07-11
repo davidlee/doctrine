@@ -74,6 +74,9 @@ pub const DOMAIN_PRIORITY: &str = "priority";
 // counts, and the future trust policy.
 pub enum ResolutionStatus {
   Active, Superseded { by: String }, Tombstoned,
+  Malformed,                          // R2 supersession-cycle participant — deactivated,
+                                      // cycle detail rides MalformedSupersession finding
+                                      // data (RV-266 F-4 catch-up)
   InertLens, InertDomain, InertLifecycle,
 }
 pub enum CompilationStatus {          // assigned by compile.rs, Active rows only
@@ -246,7 +249,8 @@ Structure:
 
 - **P1 Component scope** — per weakly-connected component of the post-
   quarantine `ConstraintSet`; components are independent (locality is
-  structural).
+  structural). One deliberate exception: the gauge scale in the all-anchor-
+  free regime is corpus-wide (P8, RV-266 F-3).
 - **P2 Processing order** — merged classes in reverse topological order (lowest
   first), uid-sorted tiebreak; every value is a pure function of already-placed
   descendants + anchors.
@@ -295,9 +299,20 @@ Anchored components:
 Anchor-free components:
 
 - **P8 Gauge spread** — `value = 2·DEFAULT_VALUE·(h + 1)/(H + 2)`, `h` =
-  longest-path height above the component's sinks, `H` = component max height.
-  Spread in `(0, 2·DEFAULT_VALUE)`, centred, positive, order-respecting.
-  Provenance `Gauge`.
+  longest-path height above the sinks, `H` = **corpus max height (global,
+  not per-component)**. The gauge-spread branch fires only when the corpus
+  has **no anchors anywhere**; an anchor-free component in a mixed corpus
+  takes P7 at its sinks (`DEFAULT_VALUE`) and P5 ladders above them instead.
+  Spread in `(0, 2·DEFAULT_VALUE)`, positive, order-respecting; dominance-
+  chain depth reads on one corpus-wide scale (P9's narrative applied across
+  components). Provenance `Gauge`.
+  *Reconciled (RV-266 F-3):* the original prose here read per-component, but
+  the validating prototype was global-H from birth and plan EX-1 pinned its
+  output verbatim (`s2_partial_order_gauge` golden: S2 pendant 0.8/0.4, not
+  the per-component 1.333/0.667). The implemented global-H semantics are
+  blessed; per-component gauge is the rejected variant — it would preserve
+  strict P12 locality in the gauge regime but was never validated, and
+  adopting it is new sliced work, not a reconcile edit.
 - **P9 Gauge narrative, stated (D10)** — cross-arm interleaving ranks by
   "longest demonstrated dominance chain"; a convention, not evidence. Ties land
   exactly where evidence is silent. First anchor in a component retires the
@@ -309,8 +324,11 @@ Contract (property-tested):
   equality exact. No NaN; total order extends the existing suite.
 - **P11 Determinism** — same active set ⇒ bitwise-identical projection on any
   replica.
-- **P12 Locality** — evidence delta in component X moves nothing in disjoint
-  component Y.
+- **P12 Locality (scoped, RV-266 F-3)** — in the anchored regime, an evidence
+  delta in component X moves nothing in disjoint component Y (property-tested
+  at exactly this scope). In the all-anchor-free gauge regime, global `H`
+  couples components: deepening one component's longest chain rescales every
+  gauge value — an accepted consequence of the corpus-wide gauge scale (P8).
 - **P14 Affine equivariance, scoped** — within anchor-bracketed spans,
   shifting/scaling anchors shifts/scales projections identically; unbounded
   tails move by absolute `GAUGE_STEP`. The scope limit is stated, not hidden.
@@ -343,7 +361,9 @@ gauge-fed burndown golden.
   charter one-liner. Breaking flag changes are free pre-release (D1).
 - **S2 `list`** — one display column derived by joining `RowState`'s two
   stages: `active`, `no-constraint`, `superseded→uid`, `tombstoned`,
-  `quarantined(cycle)`, `quarantined(anchors)`, `inert(lens|domain|lifecycle)`.
+  `malformed`, `quarantined(cycle)`, `quarantined(anchors)`,
+  `inert(lens|domain|lifecycle)` (ten tokens; `malformed` added with
+  `ResolutionStatus::Malformed`, RV-266 F-4).
   `--active-only` filters on `ResolutionStatus::Active` (quarantined and
   no-constraint rows *are* active — they show, visibly non-constraining).
   Existing listing `Format`/`RenderOpts` machinery.
