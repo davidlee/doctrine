@@ -17,16 +17,16 @@ five preflight dispositions baked into the slice scope (Q1–Q5).
 | D3 | Decision context is a pluggable seam: `DecisionContext::Sequencing { depth }` ships alone; `Scoping { budget }` is Phase E's slot | The agency fixed-scope case (~hundreds of items) is the *scoping* context — decision-relevance there is membership stability in the boundary band, self-limiting, never K² over the corpus. Yield machinery is context-blind (apply → recompile → count); only the relevant-pair predicate varies. Seam now, so Phase E composes without reshape. |
 | D4 | Module split by layer: `comparison/query.rs` (predicates, pure leaf) + `priority/elicit.rs` (queue assembly) + `commands/compare.rs` arm (thin shell) | Same rationale as `comparison_status_map` (graph.rs): the thing needing both tiers lives in the tier that legally sees both. Predicates test without priority fixtures; queue rides the priority fixtures it needs anyway. D12's "Phase C designs its own predicates" lands beside compile/project as anticipated. |
 | D5 | Determinacy = `value_dim`-order determinacy, NOT full-score-order | RFC-normative ("the decision the engine actually takes from value is the ordering of value_dim"). Full score couples items via risk/leverage/burndown — exact treatment is an LP over the order polytope. Frontier rank (full score at current projection) is pool selector + impact weight only, never a stability claim; renders say "value_dim order" precisely. |
-| D6 | Static multipliers fold into effective weight: pair objective `f = m_A·c_B·v_A − m_B·c_A·v_B` | Live `value_dim` = coeff × kind_weight × tag_term × v / est_cost; the multipliers are per-item constants ≥ 0, so the objective stays 2-variable and closed-form. `m = 0` (zeroed coefficient/weight) ⇒ pair excluded, annotated. |
+| D6 | Static multipliers fold into effective weight: pair objective `f = m_A·c_B·v_A − m_B·c_A·v_B` | Live `value_dim` = coeff × kind_weight × tag_term × v / est_cost; the multipliers are per-item constants ≥ 0, so the objective stays 2-variable and closed-form. `m = 0` accounting pinned (web review): the item's value cannot move its `value_dim`, so `m = 0` pairs are excluded from the pool AND from the stability obligation — they are value-insensitive, not indeterminate; when exclusions exist the stable render is scoped ("stable among value-sensitive items; N pairs value-insensitive (zero weight)"). Both-zero pairs are structurally tied for `value_dim`. |
 | D7 | Feasible region: one real per class, anchors exact, strict edges hold, **no positivity assumption**; costs are the scalar `est_cost` (bare-anchor ctx included), outside the region | Negative anchors are legal (`facet.rs` vt10 pins `value = -5.0`). RV-260 F-5: estimate uncertainty is not part of the region; an estimate edit moves `est_cost` and re-runs determinacy (the reprobe dynamic). |
-| D8 | Marginal exactness lemma: per-class feasible marginal = its C6 interval; pair joint region = `box(A) × box(B) ∩ coupling` (coupling from condensed-DAG reachability / same-class) | For strict-order edges + point anchors over dense reals, any point of that set extends to a full feasible assignment (no gap arithmetic, D8 of SL-213; intermediates always fit). This is what makes joint-set determinacy closed-form — no LP. The SL-213 "box is not the oracle" warning is about *decisions from marginals without the coupling term*; box + coupling **is** the joint set for a pair, for this vocabulary. Vocabulary growth (ratio rows, bands) voids the lemma — revisit trigger named in Deferred. |
-| D9 | `determined(a,b)`: sign-constancy of `f` over the pair joint region via corner/limit analysis; constant zero = `Tied`; open bounds are strict limits | Sup/inf of a linear 2-variable function over a box-with-one-coupling: corners + unbounded limits. Edge cases pinned as goldens: same-class pair with differing weights and interval spanning 0 ⇒ indeterminate; any `Unbounded` side with differing weights ⇒ indeterminate (limits dominate). |
+| D8 | Marginal exactness lemma: per-class feasible marginal = its C6 interval; pair joint region = `box(A) × box(B) ∩ coupling` (coupling from condensed-DAG reachability / same-class) — **proved in §1, not merely tested** (web review, mandatory) | For strict-order edges + point anchors over dense reals, any point of that set extends to a full feasible assignment (constructive proof, §1). This is what makes joint-set determinacy closed-form — no LP. The SL-213 "box is not the oracle" warning is about *decisions from marginals without the coupling term*; box + coupling **is** the joint set for a pair, for this vocabulary. Property test backs the proof with a naive backtracking extension oracle over generated small anchored DAGs (no LP/SMT dependency). Vocabulary growth (ratio rows, bands) voids the lemma — revisit trigger named in Deferred. |
+| D9 | `determined(a,b)`: `SignRange` of `f` over the pair joint region via the pinned extremum algorithm (§1): closure-vertex enumeration (box corners + coupling-boundary∩box-edge intersections + infinite limits) → open-interval range rule | Web review: "corner/limit analysis" alone under-specified — the coupling boundary `v_A = v_B` can define the infimum where no box corner does. Open convex region + non-constant linear `f` ⇒ range is the OPEN interval `(inf, sup)` of the closure extrema, so `Mixed ⇔ inf < 0 < sup` with no attainment bookkeeping; constant/degenerate rows handled explicitly. Returns `SignRange { NegativeOnly, ZeroOnly, PositiveOnly, Mixed }` — never pretends open-set infima are attained. |
 | D10 | `hypothetical_yield` returns a **signed delta**; negative is real (hypothetical contradiction quarantines evidence on recompile) | Honest accounting; no second propagation engine — recompile via `compile` (pure, evidence-sized). Queue admission filters `guaranteed_yield > 0`; the negative case is exercised by test, not hidden. |
-| D11 | Guaranteed yield = min over **order-bearing** answers (`prefer-a/prefer-b/equal`); `incomparable` disclosed separately in `yield_by_answer` | Strict min over the full v2 vocabulary degenerates: `incomparable` is always answerable and always yields 0 ⇒ every comparison scores 0. RFC's "certain progress whatever the human says" is read against the order-bearing space; the JSON discloses the exception rather than hiding it. |
-| D12 | Anchor-review candidates: one per distinct suspect anchor from `AnchorConflict` quarantine pairs; answer space {anchor-removed, rows-retired}; guaranteed yield = min over **resolving** answers; **not K-gated** | Eval C2: one stale anchor sterilised 28% of the ledger via D4 closure — evidence budget must not pool in quarantine. Removal is the *optimistic* revise model (an edit to a still-conflicting value un-forces nothing), so a strict min over "any edit" degenerates exactly as `incomparable` does for comparisons — same cure as D11: min over answers that *resolve* the tension (revise-to-consistent ≈ removal; uphold = rows retired); a still-conflicting re-author is a non-resolution, disclosed, outside the min. Impact still weights by frontier proximity of liberated rows. |
-| D13 | Ranking: `score = guaranteed_yield × guaranteed_impact × confirm_boost`; `guaranteed_impact` = **min over the argmin-yield answers** of Σ rank-decay weights over that answer's newly-determined pairs (RV-269 F-2: worst-case-coherent and answer-space invariant — never a token-spelling tiebreak); `confirm_boost > 1` iff both participants' constraining evidence is agent-only (`RaterCounts.human == 0`) | Q5/T7 without D7 semantics: agent rows still determine; the boost only biases selection order toward regions where no human has spoken. Numeric shapes (`ELICIT_RANK_DECAY`, `ELICIT_CONFIRM_BOOST`) are named consts, implementation-owned tuning (ADR-015 posture). Tiebreak: id lexicographic; scores compared `total_cmp`. |
-| D14 | Binary insertion is stateless: an un-constrained top-K item (zero constraining rows, no anchor) yields a comparison candidate against the projected median of its comparable set; the ledger *is* the bisection state | No session state, no cursor; each refresh re-derives the next probe from what the ledger now knows. Reason code `binary-insertion`. |
-| D15 | Queue states, precedence pinned: entries non-empty ⇒ `candidates` (all three sources count — anchor-review/binary-insertion can admit while every top-K pair is determined); entries empty ∧ every top-K pair determined ⇒ `stable`; entries empty ∧ some pair indeterminate ⇒ `stalled`. Stall render names the depth and disclaims stability; `stable` only via the determinacy predicate | RFC stall ≠ stable (zero one-step yield can hide a bridge question). Exhaustion and stability are different facts; the render says which. A determined top-K with a live stale-anchor suspect is NOT "stable" — the tension is standing evidence-debt. |
+| D11 | Guaranteed yield = min over **order-bearing** answers (`prefer-a/prefer-b/equal`); `incomparable` disclosed separately in `yield_by_answer`; every entry carries `yield_basis` naming the answer space its min ranges over | Strict min over the full v2 vocabulary degenerates: `incomparable` is always answerable and always yields 0 ⇒ every comparison scores 0. RFC's "certain progress whatever the human says" is read against the order-bearing space; the JSON discloses the exception rather than hiding it. `yield_basis` (web review): comparison = `order-bearing-answers`, anchor-review = `canonical-resolving-actions` — the numbers stay spine-comparable for ranking, but a curator is told the semantics differ. |
+| D12 | Anchor-review candidates: one per distinct suspect anchor from `AnchorConflict` quarantine pairs; answer space {anchor-removed, rows-retired}; guaranteed yield = min over **resolving** answers; **not K-gated** | Eval C2: one stale anchor sterilised 28% of the ledger via D4 closure — evidence budget must not pool in quarantine. Removal is the *optimistic* revise model (an edit to a still-conflicting value un-forces nothing), so a strict min over "any edit" degenerates exactly as `incomparable` does for comparisons — same cure as D11: min over answers that *resolve* the tension (revise-to-consistent ≈ removal; uphold = rows retired); a still-conflicting re-author is a non-resolution, disclosed, outside the min. `RowsRetired` set pinned precisely (web review): the COMPLETE set of rows cited in that suspect anchor's `AnchorConflict` quarantine entries — deliberately pessimistic (a user may supersede one stale row and restore most of the closure; the model retires all of it, so real uphold yield ≥ modelled). Impact still weights by frontier proximity of liberated rows. |
+| D13 | Ranking: `score = guaranteed_yield × guaranteed_impact × confirm_boost`; `guaranteed_impact` = **min over the argmin-yield answers** of Σ rank-decay weights over that answer's newly-determined pairs (RV-269 F-2: worst-case-coherent and answer-space invariant — never a token-spelling tiebreak); `confirm_boost > 1` iff both participants' constraining evidence is agent-only (`RaterCounts.human == 0`) — reason code/text says exactly that: `agent-only-calibration`, "both items currently calibrated only by agent evidence" | Q5/T7 without D7 semantics: agent rows still determine; the boost only biases selection order toward regions where no human has spoken. Web review: the predicate does NOT establish that this candidate confirms a load-bearing agent-authored ordering (that needs dependency tracing of determinacy on agent-only edges — a distinct future candidate type, Deferred); the reason wording claims only what `constraining_counts_by_class` knows. Boost-vs-yield interaction explicitly accepted: a tuned boost CAN outrank a yield gap — pinned by a policy golden at current constants, not fenced by an invariant (ADR-015 numeric posture). Numeric shapes (`ELICIT_RANK_DECAY`, `ELICIT_CONFIRM_BOOST`) are named consts, implementation-owned tuning. Tiebreak: id lexicographic; scores compared `total_cmp`. |
+| D14 | **Median-probe calibration** (renamed from "binary insertion" — web review): an un-constrained top-K item (zero constraining rows, no anchor) yields a comparison candidate against the projected median of its comparable set; stateless — each refresh re-derives the next probe from what the ledger now knows | Honest naming: this is median-guided calibration, NOT guaranteed logarithmic bisection — projection spacing is conventional, graphs branch, quarantines move values, `equal` merges classes, so successive probes need not halve a well-defined ordered set. Reason code `median-probe`. No session state, no cursor. |
+| D15 | Queue states, precedence pinned: entries non-empty ⇒ `candidates` (all three sources count — anchor-review/median-probe can admit while every top-K pair is determined); entries empty ∧ every top-K pair determined ⇒ `stable`; entries empty ∧ some pair indeterminate ⇒ `stalled`. Stall render names the depth and disclaims stability; `stable` only via the determinacy predicate, and the claim is **internal-order stability**: "value_dim order among the CURRENT top-K frontier items is stable" — never prefix-membership stability | RFC stall ≠ stable (zero one-step yield can hide a bridge question). Exhaustion and stability are different facts; the render says which. A determined top-K with a live stale-anchor suspect is NOT "stable" — the tension is standing evidence-debt. Web review: the algorithm establishes order stability among current members only; whether an outside item can DISPLACE into the top-K is a full-score question (risk/leverage/burndown coupling) that D5 already cut — claiming membership stability would contradict D5. Challenger-fringe extension (pairs against K+1‥K+F) is a named deferred seam. |
 | D16 | JSON schema v1 (§3): versioned envelope, kind-tagged entries, common spine (`rank/kind/guaranteed_yield/impact/score/reasons/ask`), kind payloads under distinct keys, structured `code`+`text` reasons; **lean participants** (ids + value/estimate block; no body summaries) | Curator sorts/filters on the spine without kind-switching; findings' JSON-parity idiom. Summaries are additive schema-versioned fields if ever wanted; human render fetches context itself. |
 | D17 | Bare-estimate mask (Q4/C1) is an annotation on participants (`projection masked by bare estimate`), never a candidate kind; no engine yield-ranking of estimate questions | Phase E gate (estimate feasible-region model, RV-260 F-5). Curator nominates estimates; engine only discloses the mask. |
 | D18 | `elicit` is read-only end to end: no runtime state, no persisted queue, derived output only | Capture loop = ledger round-trip; estimate/value edits re-surface reprobes through the same determinacy check with no clock and no staleness heuristic. |
@@ -66,6 +66,41 @@ Reachability is computed once per refresh over the retained class DAG
 (memoised — one forward pass per top-K class; the retained graph is a DAG
 post-C3) and shared across all pair checks and hypotheticals.
 
+**Proof of the lemma (D8 — the load-bearing claim).** Setting: retained class
+DAG `G` (satisfiable, C5), anchor function `α` on some classes. A point-anchor
+system over strict edges is satisfiable iff for every anchored pair `P ⇝ Q`,
+`α(P) > α(Q)` (standard: topologically assign unanchored classes strictly
+between the max assigned/anchored value strictly below and the min strictly
+above — dense reals always leave room in a non-empty open interval, and C5
+gives non-emptiness).
+
+*Augmentation step.* Claim: anchoring one unanchored class `X` at any
+`x ∈ (l_X, u_X)` (its C6 interval against the current anchor set) preserves
+satisfiability. `u_X` is the *minimum* anchor above, so every anchored
+`P ⇝ X` has `α(P) ≥ u_X > x`; symmetrically every anchored `X ⇝ Q` has
+`α(Q) ≤ l_X < x`; anchored pairs not involving `X` are untouched. So the
+augmented system satisfies the anchor-pair criterion. ∎(step)
+
+*Pair extension.* Take `(x, y) ∈ box(A) × box(B) ∩ coupling`. Anchor `A` at
+`x` — valid by the step. Now anchor `B` at `y` against the *augmented* system:
+`B`'s interval may have tightened only via the new anchor `x` on `A` — i.e.
+only when `A ⇝ B` (new upper `min(u_B, x)`) or `B ⇝ A` (new lower
+`max(l_B, x)`) or same class (forced `y = x`). In each case the coupling term
+supplies exactly the missing inequality (`y < x`, `y > x`, `y = x`
+respectively); incomparable classes tighten nothing. So `y` lies in `B`'s
+augmented interval, the step applies again, and the doubly-augmented system is
+satisfiable — a full feasible assignment extending `(x, y)` exists. The
+reviewer's shared-intermediate case is covered without special handling: an
+anchored `Z` with `A ⇝ Z ⇝ B` bounds BOTH boxes (`l_A ≥ α(Z)`, `u_B ≤ α(Z)`),
+and an unanchored intermediate keeps a non-empty open interval by C5 +
+density. ∎
+
+The lemma is vocabulary-scoped: strict edges + point anchors only. Ratio rows
+or band constraints void it (Deferred). Backing test: property suite with a
+naive backtracking extension oracle over generated small anchored DAGs — the
+production path stays closed-form; the oracle is test-only, no LP/SMT
+dependency.
+
 ### `determined`
 
 ```rust
@@ -75,17 +110,36 @@ pub(crate) struct PairSide {
   pub bounds: ValueBounds,    // C6 interval
   pub anchor: Option<f64>,
 }
-pub(crate) enum Determinacy { Determined(std::cmp::Ordering), Indeterminate }
-pub(crate) fn determined(reach: &Reachability, a: &PairSide, b: &PairSide) -> Determinacy
+pub(crate) enum SignRange { NegativeOnly, ZeroOnly, PositiveOnly, Mixed }   // web review: never
+pub(crate) fn determined(reach: &Reachability, a: &PairSide, b: &PairSide) -> SignRange
+// pretends an open-set infimum is attained; Determined ⇔ !Mixed
 ```
 
-`f(v_A, v_B) = a.eff_weight·v_A − b.eff_weight·v_B`; determined iff `f`'s sign
-is constant over `J(A,B)` — sup/inf via corner and limit analysis (both
-anchored ⇒ point evaluation; open bounds are strict limits; `Unbounded` sides
-evaluate limits at ±∞). Constant zero ⇒ `Determined(Equal)`. Pinned edge
-cases: same-class pair, differing weights, interval spanning 0 ⇒
-indeterminate (sign flips with the value's sign); unbounded side with
-differing weights ⇒ indeterminate.
+`f(v_A, v_B) = a.eff_weight·v_A − b.eff_weight·v_B`. Pinned extremum
+algorithm (web review — "corner analysis" alone is insufficient: under
+`v_A > v_B` the coupling boundary `v_A = v_B` can define the infimum where no
+box corner does):
+
+1. **Degenerate rows first.** Both weights zero ⇒ `ZeroOnly`. Same-class
+   coupling ⇒ substitute `v = v_A = v_B`: `g(v) = (w_A − w_B)·v` over the
+   class interval — 1-D sign read (point interval when anchored).
+2. **Closure extrema.** Over the CLOSURE of `J` (closed box ∩ closed
+   half-plane), a linear `f` attains its extrema on the finite vertex set:
+   box corners, intersections of `v_A = v_B` with box edges, plus directional
+   limits `±∞` for each `Unbounded` side (evaluate `f`'s growth sign along
+   the recession directions). Enumerate; take `inf`, `sup` (either may be
+   `±∞`).
+3. **Open-interval range rule.** `J`'s interior is open and convex and `f` is
+   non-constant there, so `f(J°) = (inf, sup)` exactly — attainment
+   bookkeeping is unnecessary: `Mixed ⇔ inf < 0 < sup`; `PositiveOnly ⇔
+   inf ≥ 0` (with `sup > 0`); `NegativeOnly ⇔ sup ≤ 0` (with `inf < 0`);
+   boundary zeros of the closure are outside the strict region.
+
+Pinned edge cases: same-class pair, differing weights, interval spanning 0 ⇒
+`Mixed` (sign flips with the value's sign); unbounded side with differing
+weights ⇒ `Mixed` (limits dominate); coupling-boundary infimum case (golden —
+the extremum on `v_A = v_B`, no corner attains it); both-anchored ⇒ point
+evaluation.
 
 ### `hypothetical_yield` (D10)
 
@@ -130,7 +184,8 @@ pub(crate) enum QueueState { Candidates, Stalled { depth: usize }, Stable { dept
 pub(crate) enum CandidateKind { Comparison, AnchorReview }
 pub(crate) struct QueueEntry {
   pub kind: CandidateKind,
-  pub guaranteed_yield: i64, pub impact: f64, pub score: f64,
+  pub guaranteed_yield: i64, pub guaranteed_impact: f64, pub score: f64,
+  pub yield_basis: YieldBasis,         // OrderBearingAnswers | CanonicalResolvingActions (D11)
   pub reasons: Vec<Reason>,            // { code, text } — findings JSON-parity idiom
   pub payload: EntryPayload,           // Comparison { a, b, ask } | AnchorReview { subject, exits }
 }
@@ -142,9 +197,10 @@ Candidate pool, three sources:
 1. **Comparison pairs** — `indeterminate_pairs` over the top-K frontier items
    (K from `DecisionContext::Sequencing`), filtered by the existing capture
    admissibility (same gate `compare record` applies — no second rule set).
-2. **Binary insertion (D14)** — top-K item with zero constraining rows and no
-   anchor: candidate against the projected median of its comparable set,
-   reason `binary-insertion`. Stateless; the ledger is the bisection state.
+2. **Median-probe calibration (D14)** — top-K item with zero constraining
+   rows and no anchor: candidate against the projected median of its
+   comparable set, reason `median-probe`. Stateless; each refresh re-derives
+   the probe from the ledger. Heuristic, not bisection (D14 rationale).
 3. **Anchor-review (D12)** — one candidate per distinct suspect anchor
    appearing in `AnchorConflict` quarantine pairs. Answer space per D12;
    guaranteed yield = min over the two *resolving* outcomes (revise-to-
@@ -169,11 +225,20 @@ constraining evidence is agent-only via `constraining_counts_by_class`, else
 `total_cmp` on scores, id-lexicographic tiebreak; no float in any key.
 
 States (D15, precedence pinned): entries non-empty ⇒ `Candidates`; entries
-empty ∧ every top-K pair `determined` ⇒ `Stable`; entries empty ∧ some pair
-indeterminate ⇒ `Stalled` (render: "greedy one-step yield exhausted at depth
-K — not a stability claim; bridge questions may exist"). All three candidate
-sources gate `Stable`: a determined top-K with a live stale-anchor suspect
-stays `Candidates` — the tension is standing evidence-debt.
+empty ∧ every value-sensitive top-K pair `determined` ⇒ `Stable`; entries
+empty ∧ some pair indeterminate ⇒ `Stalled` (render: "greedy one-step yield
+exhausted at depth K — not a stability claim; bridge questions may exist").
+All three candidate sources gate `Stable`: a determined top-K with a live
+stale-anchor suspect stays `Candidates` — the tension is standing
+evidence-debt. The `Stable` claim is internal-order only (D15): "value_dim
+order among the current top-K frontier items is stable" — membership
+displacement from outside K is a full-score question, out of scope by D5.
+`m = 0` exclusions scope the claim further and are disclosed (D6).
+
+Hypothetical-row hygiene (web review — implementation trap): synthetic
+answer rows carry a fresh synthetic session identity so they can never
+trigger R3 within-session implicit supersession against real rows; pinned by
+test.
 
 Cost (RV-269 F-1 — honest bound, wider than the RFC's): ≤ K(K−1)/2 + S
 candidates, S = distinct suspect anchors; ≤ 3 recompiles each, linear in
@@ -212,25 +277,31 @@ Existing `render.rs` structured idiom. Per entry: rank, kind, ask line,
 participants with fetched context — title, status, S3 value-source shapes
 reused verbatim, estimate-or-bare (with mask ⚠), deps/risk one-liner —
 reasons, answer command. Footer = state line (D15 wording; `Stable` says
-"top-K **value_dim order** stable over the joint set" — D5 precision).
+"**value_dim order among the current top-K frontier items** stable over the
+joint set" — D5/D15 precision: internal order, current members, never
+prefix-membership; scoped further when `m = 0` exclusions exist, D6).
 
 ### JSON schema v1 (D16)
 
 ```json
 {
-  "schema": 1,
+  "schema": "doctrine.elicit-queue",
+  "version": 1,
   "context": { "kind": "sequencing", "depth": 8 },
   "state": "candidates",
   "state_detail": "…",
   "entries": [
     {
       "rank": 1, "kind": "comparison",
-      "guaranteed_yield": 3, "impact": 2.4, "score": 7.2,
+      "guaranteed_yield": 3, "guaranteed_impact": 2.4, "score": 7.2,
+      "yield_basis": "order-bearing-answers",
       "reasons": [ { "code": "indeterminate-frontier-pair", "text": "…" },
-                   { "code": "human-confirmation", "text": "…" } ],
+                   { "code": "agent-only-calibration", "text": "both items currently calibrated only by agent evidence" } ],
       "participants": [
         { "id": "IMP-280",
-          "value": { "provenance": "projected", "point": 2.6, "bounds": [2.5, 2.8] },
+          "value": { "provenance": "projected", "point": 2.6,
+                     "bounds": { "lower": { "kind": "open", "value": 2.5 },
+                                 "upper": { "kind": "open", "value": 2.8 } } },
           "estimate": null,
           "annotations": ["projection masked by bare estimate"] },
         { "id": "IMP-270", "value": { "…": "…" }, "estimate": 3.5, "annotations": [] }
@@ -241,24 +312,32 @@ reasons, answer command. Footer = state line (D15 wording; `Stable` says
     },
     {
       "rank": 2, "kind": "anchor-review",
-      "guaranteed_yield": 6, "impact": 1.9, "score": 11.4,
+      "guaranteed_yield": 6, "guaranteed_impact": 1.9, "score": 11.4,
+      "yield_basis": "canonical-resolving-actions",
       "reasons": [ { "code": "stale-anchor-suspect", "text": "…" } ],
       "subject": { "id": "IMP-274", "anchor": 5.0,
                    "conflict_pairs": [["IMP-198", "IMP-274"]],
                    "quarantined_rows": ["uid…"] },
       "ask": { "answers": ["revise-anchor", "uphold-anchor"],
                "yield_by_answer": { "revise-anchor": 6, "uphold-anchor": 2 },
-               "yield_note": "revise-anchor yield assumes a RESOLVING revision (conflict removed); a still-conflicting value yields nothing and re-surfaces this candidate next refresh",
-               "exits": { "revise-anchor": "doctrine value set IMP-274 <v>",
-                          "uphold-anchor": "supersede or tombstone: <uids>" } }
+               "yield_note": "revise-anchor yield assumes a RESOLVING revision (conflict removed); a still-conflicting value yields nothing and re-surfaces this candidate next refresh. uphold-anchor models retiring the COMPLETE cited closure — real yield may exceed it",
+               "exits": { "revise-anchor": ["doctrine value set IMP-274 <v>"],
+                          "uphold-anchor": ["doctrine compare record … --supersedes <uid>",
+                                            "doctrine compare withdraw <uid>"] } }
     }
   ]
 }
 ```
 
-Byte-stable (BTree ordering); `null` estimate ⇒ bare. Bounds render `null` for
-`Unbounded` sides. Participants are lean (no titles/summaries in JSON —
-curator reads entities; additive schema-versioned fields later if wanted).
+Byte-stable (BTree ordering); `null` estimate ⇒ bare. Bounds are structural —
+`{ kind: open|closed|unbounded, value? }` mirrors the `Bound` enum (web
+review: `[null, 2.8]` loses open/closed semantics). `guaranteed_impact` is
+the D13 min-over-argmin-yield-answers value — named exactly. `yield_basis`
+names the answer space each entry's min ranges over (D11) — spine numbers
+stay comparable for ranking, semantics disclosed. `exits` values are arrays
+of suggested actions (uphold is not one executable command). Participants
+are lean (no titles/summaries in JSON — curator reads entities; additive
+version-gated fields later if wanted).
 
 ## §4 Code impact (design-target selectors)
 
@@ -284,30 +363,48 @@ Suites → rules pinned. VT/VA/VH ids minted at `/plan`.
    but chain-coupled pair ⇒ determined (the box is not the oracle — coupling
    term does the work); both-anchored ⇒ point evaluation; same-class +
    differing weights + interval spanning 0 ⇒ indeterminate (negative-domain
-   golden, D9); unbounded-side limits; `Tied` constant-zero.
+   golden, D9); unbounded-side limits; `ZeroOnly` constant-zero;
+   coupling-boundary infimum golden (extremum on `v_A = v_B`, unattained at
+   any box corner — web review); D8 property suite: naive backtracking
+   extension oracle over generated small anchored DAGs (multiple anchored
+   ancestors/descendants, shared intermediates, open + unbounded sides,
+   equality merges) confirms every claimed joint-region point extends.
 2. **Yield battery** (hand-computed small graphs): guaranteed yield =
    min-over-order-bearing-answers of newly-determined relevant pairs; `equal`
-   answer merging classes; negative delta when a hypothetical contradicts a
-   chain (D10); zero-yield bridge case ⇒ `Stalled`, not `Stable` (D15);
-   `incomparable` yields 0 and is excluded from the min but disclosed (D11).
+   answer merging classes; hypothetical `equal` between differently-anchored
+   classes ⇒ C2 quarantine on recompile, negative delta accounted (web
+   review); negative delta when a hypothetical contradicts a chain (D10);
+   zero-yield bridge case ⇒ `Stalled`, not `Stable` (D15); `incomparable`
+   yields 0 and is excluded from the min but disclosed (D11); synthetic
+   hypothetical rows carry a fresh session identity — never trigger R3
+   within-session supersession against real rows (web review).
 3. **Reprobe** (elicit + pipeline integration): synthetic stale-anchor
    conflict ⇒ anchor-review candidate ranked by un-quarantine payoff;
    `AnchorRemoved` hypothetical activates closure rows on recompile;
    `RowsRetired` counts its (smaller) liberation; min-over-resolving-answers
-   (D12) pinned by a case where uphold < removal; estimate edit flips a
-   determined pair back indeterminate ⇒ reprobe comparison resurfaces (D18);
-   determined top-K + live suspect anchor ⇒ state stays `Candidates` (D15
-   precedence golden).
-4. **Binary insertion**: un-constrained top-K item ⇒ candidate vs projected
-   median, reason `binary-insertion`; after answering, next refresh probes the
-   correct half (stateless bisection, D14).
+   (D12) pinned by a case where uphold < removal; `RowsRetired` = the
+   complete cited closure of the suspect anchor, pinned (web review);
+   estimate edit flips a determined pair back indeterminate ⇒ reprobe
+   comparison resurfaces (D18); determined top-K + live suspect anchor ⇒
+   state stays `Candidates` (D15 precedence golden); internally-determined
+   top-K with an indeterminate K-vs-(K+1) relation still renders `Stable`
+   with the internal-order wording — the wording golden pins that the claim
+   is member-scoped (web review).
+4. **Median-probe calibration**: un-constrained top-K item ⇒ candidate vs
+   projected median, reason `median-probe`; successive-refresh golden on a
+   *branching* gauge graph demonstrating the heuristic (probes narrow but
+   need not halve — documented behaviour, not a bisection contract; D14).
 5. **Ranking**: confirm-boost all-else-equal pair (agent-only outranks
    human-touched); impact rank-decay ordering; guaranteed-impact min over
    argmin-yield answers pinned by a case where two answers tie on yield with
    different impacts (RV-269 F-2); admission filter drops non-positive
    guaranteed yield; id tiebreak; zero-multiplier pair (`m = 0` via zeroed
-   coefficient/kind_weight/tag_term) excluded from the pool AND annotated
-   (RV-269 F-4, D6).
+   coefficient/kind_weight/tag_term) excluded from the pool AND the stability
+   obligation AND annotated, incl. the one-zero-weight case over a
+   negative-spanning interval (RV-269 F-4, D6, web review); policy goldens:
+   high-yield/low-impact vs low-yield/prominent-pair ordering, and a
+   boost-outranks-yield-gap case at current constants (documented behaviour,
+   D13).
 6. **Determinism**: same merged file set + statuses + config + invocation
    params ⇒ byte-identical queue and `--json` output; shuffled session-file
    load order invariance (extends the SL-213 suite).
@@ -356,6 +453,28 @@ Suites → rules pinned. VT/VA/VH ids minted at `/plan`.
   conditional yield disclosed via `yield_note` + render wording); F-4 *minor*
   (D6 zero-multiplier branch unpinned — VT added, §5.5). D8 lemma, D5 scope
   cut, negative-domain honesty, layering survived attack unfound.
+- **Web GPT-5.5 pass** (2026-07-12, same design version post-RV-269) —
+  verdict: approve with five mandatory clarifications, all accepted: D8
+  proof written into §1 (constructive augmentation + induction; backed by a
+  test-only backtracking extension oracle, no LP/SMT dep); D9 pinned as an
+  explicit extremum algorithm returning `SignRange` (closure-vertex
+  enumeration + open-interval range rule; coupling-boundary infimum golden);
+  stability claim narrowed to internal-order among current top-K members
+  (prefix-membership is a full-score question D5 already cut;
+  challenger-fringe deferred); anchor-review yield distinguished via
+  `yield_basis` + `RowsRetired` pinned to the complete cited closure
+  (pessimistic, stated); "binary insertion" renamed median-probe calibration
+  (heuristic, not bisection). Further accepted: `confirm_boost` reason
+  narrowed to `agent-only-calibration` (participant-level counts are all it
+  knows; true confirmation candidates deferred); boost-can-outrank-yield-gap
+  explicitly accepted + policy goldens; D6 `m = 0` pairs excluded from the
+  stability obligation with scoped render; JSON hardening (schema id string
+  + version int, structural open/closed bounds, `guaranteed_impact` named
+  exactly, exits as action arrays); verification additions §5.1/2/3/4/5
+  (extension oracle, boundary extremum, outsider wording golden, one-zero
+  negative-domain, closure label, branching median-probe, fresh-session
+  hypothetical identity, anchored-unequal `equal` quarantine). Lean-JSON
+  participant reads tolerated (prior user call; additive fields later).
 
 ## Deferred (named seams, not built)
 
@@ -371,5 +490,12 @@ Suites → rules pinned. VT/VA/VH ids minted at `/plan`.
 - D8 marginal-exactness lemma is vocabulary-scoped: ratio rows or band
   constraints void it — the phase admitting them must revisit `determined`
   (LP or richer propagation).
+- Challenger-fringe extension (pairs against K+1‥K+F) toward prefix-
+  membership stability — blocked on the full-score determinacy question D5
+  cut; internal-order is the honest shipped claim (D15, web review).
+- True human-confirmation candidate kind (dependency tracing of determinacy
+  on agent-only edges — offers a *determined* pair for confirmation) —
+  distinct from D13's `agent-only-calibration` selection bias; RFC territory
+  ("determined pairs may still deserve human attention"), post-D7.
 - Curation skill over the JSON surface — ships as skill text once the queue
   exists (Q1 posture).
