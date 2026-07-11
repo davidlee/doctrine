@@ -3,9 +3,9 @@
 ## Context
 
 The knowledge-record command surface ships (SPEC-019: `doctrine knowledge
-new|show|list|status`; kinds ASM/DEC/QUE/CON; SL-059), but no agent skill
-routes to it. Live census 2026-06-26: zero knowledge records, zero `shapes`
-edges. This is RFC-007 workstream 3 ("populate — make gating bite") and the
+new|show|list|status`; **seven** kinds since SL-159 — ASM/DEC/QUE/CON/EVD/HYP/CPT;
+IMP-182's "four kinds" is stale), but no agent skill routes to it. Live census
+2026-06-26: zero knowledge records, zero `shapes` edges. This is RFC-007 workstream 3 ("populate — make gating bite") and the
 root cause of the empty population blocking RFC-008 (trinary-actionability
 gating, SL-158) — the gate has nothing to gate on until records exist.
 
@@ -18,8 +18,9 @@ Originates from IMP-182.
   - "capture an assumption / decision / question / constraint" → `knowledge new`
   - "settle it" → `knowledge status`
   with the truth-vs-work boundary (PRD-010: records *shape* work, never *are*
-  work) and the relation seam (`shapes` / `spawns`, ADR-004 outbound-from-record)
-  made legible.
+  work), the relation seam (`shapes` / `spawns`, ADR-004 outbound-from-record),
+  and the gating model (ADR-017: association ≠ gating — the *dependent* authors
+  `needs → record`; records never author dep/seq) made legible.
 - Capture touchpoints in existing skills so records are authored *during*
   design/route, not as an afterthought (light pointers, not re-implementations).
 - Routing-table row in `install/routing-process.md` — **after** the skill is

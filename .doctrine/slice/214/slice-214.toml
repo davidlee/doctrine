@@ -39,11 +39,27 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "install/routing-process.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
-selector = ".claude-plugin/marketplace.json"
-intent = "scope-relevant"
+selector = "plugins/doctrine/skills/knowledge/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/design/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/consult/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/preflight/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/using-doctrine.md"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
