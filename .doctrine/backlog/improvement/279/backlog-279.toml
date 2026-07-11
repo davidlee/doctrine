@@ -9,7 +9,7 @@ status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-07-11"
 updated = "2026-07-11"
-tags = []
+tags = ["next"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -20,3 +20,10 @@ tags = []
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[estimate]
+lower = 1.0
+upper = 2.0
+
+[value]
+value = 2.0
