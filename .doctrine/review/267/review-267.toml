@@ -21,7 +21,7 @@ detail = "SL-216's preservation/risk rationale claims that only S2 among the val
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Compatibility analysis undercounts existing multi-component scenarios"
 detail = "SL-216s preservation/risk rationale claims that only S2 among the validated scenarios has >=2 disjoint components (.doctrine/slice/216/design.md:111), but the existing golden s8_incremental_locality already has two disjoint components in its base case: anchored x>y plus anchor-free island z>w (src/comparison/project.rs:542, src/comparison/project.rs:543, src/comparison/project.rs:546, src/comparison/project.rs:547). The same design later acknowledges S8 as a moving mixed-corpus case (.doctrine/slice/216/design.md:122). That makes the stated compatibility analysis and the only S2 moves style preservation rationale internally inconsistent."
@@ -30,7 +30,7 @@ response = "Design §2 corrected: IMP-279's 'only S2' scoped to the design-valid
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Live AnchorGaugeDisconnect surface is omitted from the declared change set"
 detail = "SL-216 says all changes stay inside src/comparison/project.rs and names the only accepted user-visible delta as the explain provenance flip (.doctrine/slice/216/design.md:71, .doctrine/slice/216/design.md:76, .doctrine/slice/216/design.md:77). It also calls the AnchorGaugeDisconnect site comment-only with no live producer (.doctrine/slice/216/design.md:57). The code disagrees: src/priority/findings.rs:561 emits AnchorGaugeDisconnect whenever any anchored corpus still contains Gauge-provenance entities, and src/priority/render.rs:495 renders that finding. Under the proposed per-component P8, a mixed-corpus island like S8 flips z from Projected to Gauge (src/comparison/project.rs:546), so this findings membership changes as well. That is a second user-visible surface change, and it breaks the claim that the implementation touch is confined to project.rs."
@@ -39,7 +39,7 @@ response = "Producer at findings.rs:561 confirmed live (prior 'dead variant' cla
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The proposed strict-P12 suite drops the anchored-versus-anchored witness"
 detail = "The new three-way locality plan covers anchored-X to gauge-Y, gauge-Y to anchored-X, and first-anchor-added-in-X to gauge-Y (.doctrine/slice/216/design.md:129, .doctrine/slice/216/design.md:130, .doctrine/slice/216/design.md:131, .doctrine/slice/216/design.md:132). That is not enough to justify the designs claimed strict, unscoped P12, because it no longer exercises the existing anchored-component locality case that is currently pinned by p12_locality_disjoint_anchored_components (src/comparison/project.rs:833). Unless the old anchored-versus-anchored witness is explicitly retained alongside the new cases, the verification weakens exactly where the design is claiming universal locality."
@@ -48,7 +48,7 @@ response = "p12 plan is now four-way: existing anchored↔anchored witness retai
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The amendment-sweep heuristic is too narrow to catch all stale global-scope wording"
 detail = "D2 says to grep SL-213 design.md and src/ for corpus-wide|global gauge language (.doctrine/slice/216/design.md:53). That pattern misses semantically equivalent stale wording already present in the code, for example the current p12 comments whole-graph spread rationale (src/comparison/project.rs:834, src/comparison/project.rs:835, src/comparison/project.rs:836) and the live AnchorGaugeDisconnect producer comments anchors existing SOMEWHERE in the graph text (src/priority/findings.rs:556, src/priority/findings.rs:557, src/priority/findings.rs:558). If the sweep is driven only by those literal tokens, SL-213s direct-amendment objective will leave contradictory source comments behind."
