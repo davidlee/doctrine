@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! `comparison` — the pairwise comparison-session wire model (SL-210 PHASE-01).
+//! `comparison::wire` — the pairwise comparison-session wire model, schema v2
+//! (SL-213 PHASE-01; v1 retired in place per design D1 — verified zero
+//! exposure, no release ever shipped it).
 //!
-//! Pure engine tier (ADR-001): depends only on `crate::kinds` (leaf) plus
-//! serde/toml. No clock, disk, rng, or git — dates and uids are function
-//! inputs; the command shell (PHASE-02) mints them.
+//! Pure leaf tier (ADR-001): depends only on `crate::kinds` plus serde/toml.
+//! No clock, disk, rng, or git — dates and uids are function inputs; the
+//! command shell mints them.
 //!
 //! The serde model IS the wire model: it serializes 1:1 to the documented
-//! session-file schema (SL-210 design § Session-file schema) — top-level
-//! `schema`/`version`, a nested `[session]` table, singular `[[judgement]]` /
-//! `[[tombstone]]` arrays-of-tables, lowercase enum tokens. `frame` and
-//! `domain` stay `String`-typed so unknown vocab in *future* files
-//! round-trips losslessly; `rater`/`form` are closed enums by design — an
-//! unknown token fails parse.
+//! session-file schema — top-level `schema`/`version`, a nested `[session]`
+//! table, singular `[[judgement]]` / `[[tombstone]]` arrays-of-tables,
+//! lowercase/kebab-case enum tokens. `frame` and `domain` stay `String`-typed
+//! so unknown vocab in *future* files round-trips losslessly; `response`,
+//! `rater` and `form` are closed enums by design — an unknown token fails
+//! parse.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,17 +23,45 @@ use crate::kinds;
 pub(crate) const COMPARISON_SCHEMA: &str = "doctrine.comparison-session";
 /// Session-file directory under `.doctrine/` (the shell joins the root).
 pub(crate) const COMPARISONS_DIR: &str = "comparisons";
-/// The only comparison domain the verb writes at ship (design D8).
+/// The value domain: rows compile to `v_winner > v_loser` (Phase B+).
 pub(crate) const DOMAIN_VALUE: &str = "value";
+/// The priority domain (design D2): capacity-cutoff testimony — value-oriented
+/// but cost-confounded, so never compiled to a value constraint; inert until a
+/// consumer with a cost model exists.
+pub(crate) const DOMAIN_PRIORITY: &str = "priority";
 /// Value frame: "equal effort assumed" — the default framing.
 pub(crate) const FRAME_EQUAL_EFFORT: &str = "equal-effort";
-/// Value frame: "prefer whichever ships first".
+/// Priority frame: "under a binding capacity cutoff, which do you keep?".
 pub(crate) const FRAME_PREFER_FIRST: &str = "prefer-first";
-/// The closed frame vocab for the value domain (design D7).
-pub(crate) const VALUE_FRAMES: &[&str] = &[FRAME_EQUAL_EFFORT, FRAME_PREFER_FIRST];
 
-/// The only wire version this model reads or writes.
-const COMPARISON_VERSION: u32 = 1;
+/// Per-domain closed frame vocabulary (design D2). The frame implies the
+/// domain at capture — users never type a domain; [`domain_for_frame`] is the
+/// single derivation seam and this table its single source (STD-001).
+pub(crate) const DOMAIN_FRAMES: &[(&str, &[&str])] = &[
+    (DOMAIN_VALUE, &[FRAME_EQUAL_EFFORT]),
+    (DOMAIN_PRIORITY, &[FRAME_PREFER_FIRST]),
+];
+
+/// The only wire version this model reads or writes (design D1: `version ≠ 2`
+/// is a parse error — v1 was never released).
+pub(crate) const COMPARISON_VERSION: u32 = 2;
+
+/// The domain a frame implies at capture (design S1: `--frame prefer-first`
+/// derives `domain = priority` silently).
+pub(crate) fn domain_for_frame(frame: &str) -> Option<&'static str> {
+    DOMAIN_FRAMES
+        .iter()
+        .find(|(_, frames)| frames.contains(&frame))
+        .map(|(domain, _)| *domain)
+}
+
+/// The closed frame set for a domain, if the domain is known.
+fn frames_for_domain(domain: &str) -> Option<&'static [&'static str]> {
+    DOMAIN_FRAMES
+        .iter()
+        .find(|(d, _)| *d == domain)
+        .map(|(_, frames)| *frames)
+}
 
 /// Who rendered the judgement. Closed by design: an unknown rater token
 /// fails parse (losslessness covers the frame/domain strings only).
@@ -42,13 +72,26 @@ pub(crate) enum RaterKind {
     Agent,
 }
 
-/// Row form. The verb exposes `order` only at ship; `ratio` keeps capture
-/// lossless for RFC-019 OQ-6 (design D8). Closed: unknown tokens fail parse.
+/// Row form. The verb exposes `order` only; `ratio` keeps capture lossless
+/// for RFC-019 OQ-6. Closed: unknown tokens fail parse.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum RowForm {
     Order,
     Ratio,
+}
+
+/// The elicited answer (design D1/S1): one of the two sides preferred, an
+/// exact-equality statement, or a considered "these don't compare" —
+/// `incomparable` is valid evidence that compiles to zero constraint.
+/// Closed: unknown tokens fail parse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Response {
+    PreferA,
+    PreferB,
+    Equal,
+    Incomparable,
 }
 
 /// The `[session]` header table.
@@ -61,19 +104,26 @@ pub(crate) struct SessionHeader {
     pub audience: Option<String>,
 }
 
-/// One `[[judgement]]` row: a single pairwise preference.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// One `[[judgement]]` row: a single pairwise judgement.
+///
+/// No `Eq`: `magnitude` is an `f64` column (parsed, uncompiled — RFC-019 OQ-6
+/// stays open; pure order semantics per design D8 ignore it).
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Judgement {
     pub uid: String,
     /// Row sequence within the file; ordering key is `(date, session_uid, seq)`.
     pub seq: u32,
     pub a: String,
     pub b: String,
-    /// Must equal `a` or `b` ([`validate_judgement`]).
-    pub preferred: String,
+    pub response: Response,
     pub domain: String,
     pub frame: String,
     pub form: RowForm,
+    /// Ratio column — carried losslessly, never compiled (design C1).
+    pub magnitude: Option<f64>,
+    /// Explicit supersession target: this row's uid replaces that row's
+    /// testimony (design R2 — a durable act, not testimony).
+    pub supersedes: Option<String>,
     /// Optional value lens — the IDE-035 seam.
     pub lens: Option<String>,
     pub rater: RaterKind,
@@ -95,8 +145,9 @@ pub(crate) struct Tombstone {
     pub note: Option<String>,
 }
 
-/// The file model — serializes 1:1 to the documented schema.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The file model — serializes 1:1 to the documented schema. No `Eq`
+/// (contains [`Judgement`]).
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ComparisonSession {
     /// [`COMPARISON_SCHEMA`], checked on parse.
     pub schema: String,
@@ -108,8 +159,9 @@ pub(crate) struct ComparisonSession {
     pub tombstones: Vec<Tombstone>,
 }
 
-/// Parse a session-file body. Rejects a wrong `schema` discriminator or an
-/// unsupported `version`; unknown frame/domain strings parse and round-trip.
+/// Parse a session-file body. Rejects a wrong `schema` discriminator or any
+/// version other than [`COMPARISON_VERSION`] with a remedy-naming message
+/// (design D1); unknown frame/domain strings parse and round-trip.
 pub(crate) fn parse(text: &str) -> anyhow::Result<ComparisonSession> {
     let s: ComparisonSession = toml::from_str(text)?;
     if s.schema != COMPARISON_SCHEMA {
@@ -120,7 +172,8 @@ pub(crate) fn parse(text: &str) -> anyhow::Result<ComparisonSession> {
     }
     if s.version != COMPARISON_VERSION {
         anyhow::bail!(
-            "unsupported comparison-session version {} (expected {COMPARISON_VERSION})",
+            "unsupported comparison-session version {} (expected {COMPARISON_VERSION}) — \
+             schema version 1 was never released; delete or recreate this session file",
             s.version
         );
     }
@@ -133,9 +186,9 @@ pub(crate) fn to_toml(s: &ComparisonSession) -> anyhow::Result<String> {
 }
 
 /// Build a session-of-one: a fresh session carrying exactly one judgement and
-/// no tombstones (design D2 — ad-hoc capture mints one file per invocation).
-/// Stamps the current [`COMPARISON_SCHEMA`] + version so the shell never
-/// hand-sets the wire discriminators.
+/// no tombstones (ad-hoc capture mints one file per invocation). Stamps the
+/// current [`COMPARISON_SCHEMA`] + version so the shell never hand-sets the
+/// wire discriminators.
 pub(crate) fn session_of_one(session: SessionHeader, judgement: Judgement) -> ComparisonSession {
     ComparisonSession {
         schema: COMPARISON_SCHEMA.to_string(),
@@ -146,8 +199,11 @@ pub(crate) fn session_of_one(session: SessionHeader, judgement: Judgement) -> Co
     }
 }
 
-/// Structural row validation: preferred ∈ {a,b}, a ≠ b, non-empty refs,
-/// closed domain/frame vocab. Admissibility is separate (needs kinds).
+/// Structural row validation: a ≠ b, non-empty refs, closed per-domain frame
+/// vocabulary (design D2 — the frame table is normative at capture; parse-level
+/// losslessness is separate). `response` needs no check — the closed enum
+/// makes an invalid answer unrepresentable. Admissibility is separate (needs
+/// kinds).
 pub(crate) fn validate_judgement(j: &Judgement) -> anyhow::Result<()> {
     if j.a.is_empty() || j.b.is_empty() {
         anyhow::bail!("both sides of the pair are required — empty ref");
@@ -155,41 +211,37 @@ pub(crate) fn validate_judgement(j: &Judgement) -> anyhow::Result<()> {
     if j.a == j.b {
         anyhow::bail!("cannot compare `{}` against itself", j.a);
     }
-    if j.preferred != j.a && j.preferred != j.b {
+    let Some(frames) = frames_for_domain(&j.domain) else {
+        let domains: Vec<&str> = DOMAIN_FRAMES.iter().map(|(d, _)| *d).collect();
         anyhow::bail!(
-            "preferred `{}` is not a side of the pair ({} / {})",
-            j.preferred,
-            j.a,
-            j.b
+            "unknown domain `{}` (expected one of: {})",
+            j.domain,
+            domains.join(", ")
         );
-    }
-    if j.domain != DOMAIN_VALUE {
+    };
+    if !frames.contains(&j.frame.as_str()) {
         anyhow::bail!(
-            "unknown domain `{}` — this verb writes `{DOMAIN_VALUE}` only",
-            j.domain
-        );
-    }
-    if !VALUE_FRAMES.contains(&j.frame.as_str()) {
-        anyhow::bail!(
-            "unknown value frame `{}` (expected one of: {})",
+            "frame `{}` is not admissible in domain `{}` (expected one of: {})",
             j.frame,
-            VALUE_FRAMES.join(", ")
+            j.domain,
+            frames.join(", ")
         );
     }
     Ok(())
 }
 
-/// Value-domain admissibility over already-resolved kinds (pure; the kind
-/// lookup happens in the shell). The admit set is `kinds::VALUE_BEARING`
-/// minus `kinds::RSK` (design D6) — derived from those constants, never a
-/// parallel list. `Err` carries the human-readable refusal.
+/// Pair admissibility over already-resolved kinds (pure; the kind lookup
+/// happens in the shell). The admit set is `kinds::VALUE_BEARING` minus
+/// `kinds::RSK` — derived from those constants, never a parallel list. The
+/// `priority` domain reuses this set initially (design D2 — widened only when
+/// a consumer exists to justify it). `Err` carries the human-readable refusal.
 pub(crate) fn admissible_value_pair(kind_a: &str, kind_b: &str) -> Result<(), String> {
     admissible_value_kind(kind_a)?;
     admissible_value_kind(kind_b)
 }
 
 /// One side of the pair: value-bearing, and not a risk (risk carries
-/// exposure on its own facet, not comparable value — design D6).
+/// exposure on its own facet, not comparable value).
 fn admissible_value_kind(kind: &str) -> Result<(), String> {
     if kind == kinds::RSK {
         return Err(format!(
@@ -211,7 +263,7 @@ mod tests {
     fn full_session() -> ComparisonSession {
         ComparisonSession {
             schema: COMPARISON_SCHEMA.to_string(),
-            version: 1,
+            version: 2,
             session: SessionHeader {
                 uid: "0197f3a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f".to_string(),
                 date: "2026-07-10".to_string(),
@@ -228,16 +280,20 @@ mod tests {
         }
     }
 
+    /// A judgement with EVERY optional set (magnitude, supersedes, lens, by,
+    /// note) — the golden's maximal row.
     fn full_judgement() -> Judgement {
         Judgement {
             uid: "0197f3a2-6c2f-7d4e-8f5a-2b3c4d5e6f7a".to_string(),
             seq: 0,
             a: "SL-204".to_string(),
             b: "IMP-118".to_string(),
-            preferred: "SL-204".to_string(),
+            response: Response::PreferA,
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
+            magnitude: Some(2.5),
+            supersedes: Some("0197f3a1-1111-7abc-8def-0a1b2c3d4e5f".to_string()),
             lens: Some("user-value".to_string()),
             rater: RaterKind::Agent,
             by: Some("david".to_string()),
@@ -253,10 +309,12 @@ mod tests {
             seq: 1,
             a: "IMP-118".to_string(),
             b: "CHR-042".to_string(),
-            preferred: "CHR-042".to_string(),
-            domain: DOMAIN_VALUE.to_string(),
+            response: Response::PreferB,
+            domain: DOMAIN_PRIORITY.to_string(),
             frame: FRAME_PREFER_FIRST.to_string(),
             form: RowForm::Order,
+            magnitude: None,
+            supersedes: None,
             lens: None,
             rater: RaterKind::Human,
             by: None,
@@ -271,17 +329,36 @@ mod tests {
     fn vocab_matches_documented_schema() {
         assert_eq!(COMPARISON_SCHEMA, "doctrine.comparison-session");
         assert_eq!(COMPARISONS_DIR, "comparisons");
+        assert_eq!(COMPARISON_VERSION, 2);
         assert_eq!(DOMAIN_VALUE, "value");
-        assert_eq!(VALUE_FRAMES, &["equal-effort", "prefer-first"]);
+        assert_eq!(DOMAIN_PRIORITY, "priority");
+        assert_eq!(
+            DOMAIN_FRAMES,
+            &[
+                ("value", &["equal-effort"][..]),
+                ("priority", &["prefer-first"][..])
+            ]
+        );
     }
 
-    /// Byte-exact wire shape (RV-262 F-1): nested `[session]`, singular
-    /// `[[judgement]]`/`[[tombstone]]`, lowercase enum tokens, fixed uids/dates.
+    /// The per-domain frame table drives capture derivation both ways
+    /// (design D2/S1): frame → domain is total over the closed vocab, and an
+    /// unknown frame derives nothing.
+    #[test]
+    fn domain_for_frame_derives_from_the_table() {
+        assert_eq!(domain_for_frame(FRAME_EQUAL_EFFORT), Some(DOMAIN_VALUE));
+        assert_eq!(domain_for_frame(FRAME_PREFER_FIRST), Some(DOMAIN_PRIORITY));
+        assert_eq!(domain_for_frame("opportunity-cost"), None);
+    }
+
+    /// Byte-exact wire shape: nested `[session]`, singular
+    /// `[[judgement]]`/`[[tombstone]]`, kebab-case response token, v2 columns
+    /// (`magnitude`, `supersedes`), fixed uids/dates.
     #[test]
     fn golden_shape_matches_documented_schema() {
         let expected = "\
 schema = \"doctrine.comparison-session\"
-version = 1
+version = 2
 
 [session]
 uid = \"0197f3a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f\"
@@ -293,10 +370,12 @@ uid = \"0197f3a2-6c2f-7d4e-8f5a-2b3c4d5e6f7a\"
 seq = 0
 a = \"SL-204\"
 b = \"IMP-118\"
-preferred = \"SL-204\"
+response = \"prefer-a\"
 domain = \"value\"
 frame = \"equal-effort\"
 form = \"order\"
+magnitude = 2.5
+supersedes = \"0197f3a1-1111-7abc-8def-0a1b2c3d4e5f\"
 lens = \"user-value\"
 rater = \"agent\"
 by = \"david\"
@@ -313,8 +392,40 @@ note = \"wrong way round\"
         assert_eq!(to_toml(&full_session()).unwrap(), expected);
     }
 
-    /// Losslessness: a row with ALL optionals set and a row with optionals
-    /// absent both survive parse(to_toml(s)) == s.
+    /// Every `Response` variant serializes to its documented kebab-case token
+    /// and parses back (VT-1: the response vocabulary is the wire contract).
+    #[test]
+    fn response_vocabulary_round_trips() {
+        let cases = [
+            (Response::PreferA, "prefer-a"),
+            (Response::PreferB, "prefer-b"),
+            (Response::Equal, "equal"),
+            (Response::Incomparable, "incomparable"),
+        ];
+        for (response, token) in cases {
+            let mut s = full_session();
+            s.judgements[0].response = response;
+            let text = to_toml(&s).unwrap();
+            assert!(
+                text.contains(&format!("response = \"{token}\"")),
+                "{token} on the wire:\n{text}"
+            );
+            assert_eq!(parse(&text).unwrap().judgements[0].response, response);
+        }
+    }
+
+    /// An unknown response token is a parse error — the enum is closed.
+    #[test]
+    fn parse_rejects_unknown_response_token() {
+        let text = to_toml(&full_session())
+            .unwrap()
+            .replace("response = \"prefer-a\"", "response = \"prefer-c\"");
+        assert!(parse(&text).is_err());
+    }
+
+    /// Losslessness: a row with ALL optionals set (incl. magnitude +
+    /// supersedes) and a row with optionals absent both survive
+    /// parse(to_toml(s)) == s.
     #[test]
     fn round_trip_preserves_all_fields() {
         let mut s = full_session();
@@ -324,7 +435,8 @@ note = \"wrong way round\"
     }
 
     /// Forward compatibility: an unknown frame string parses and round-trips
-    /// verbatim — losslessness applies to the frame/domain STRINGS.
+    /// verbatim — losslessness applies to the frame/domain STRINGS; the closed
+    /// table is enforced by [`validate_judgement`] at capture, not by parse.
     #[test]
     fn parse_preserves_unknown_frame_rows() {
         let mut s = full_session();
@@ -347,32 +459,57 @@ note = \"wrong way round\"
         );
     }
 
+    /// D1: version 1 is rejected with a message naming the remedy — v1 was
+    /// never released; the stray file is deleted or recreated, never migrated.
     #[test]
-    fn parse_rejects_wrong_version() {
+    fn parse_rejects_version_1_naming_remedy() {
         let mut s = full_session();
-        s.version = 2;
+        s.version = 1;
         let text = to_toml(&s).unwrap();
         let err = parse(&text).unwrap_err().to_string();
-        assert!(err.contains("version"), "err names version: {err}");
+        assert!(err.contains("never released"), "remedy named: {err}");
+        assert!(err.contains("delete or recreate"), "remedy named: {err}");
+    }
+
+    /// D1: ANY version ≠ 2 is a parse error, not only v1.
+    #[test]
+    fn parse_rejects_any_non_v2_version() {
+        let mut s = full_session();
+        s.version = 3;
+        let text = to_toml(&s).unwrap();
+        let err = parse(&text).unwrap_err().to_string();
+        assert!(err.contains("version 3"), "err names the version: {err}");
     }
 
     #[test]
-    fn validate_accepts_well_formed_row() {
+    fn validate_accepts_value_equal_effort() {
         assert!(validate_judgement(&full_judgement()).is_ok());
     }
 
     #[test]
-    fn validate_rejects_preferred_outside_pair() {
+    fn validate_accepts_priority_prefer_first() {
+        assert!(validate_judgement(&bare_judgement()).is_ok());
+    }
+
+    /// D2: the frame table is per-domain — each frame is inadmissible in the
+    /// other domain (VT-1 frame admissibility, both directions).
+    #[test]
+    fn validate_rejects_cross_domain_frames() {
         let mut j = full_judgement();
-        j.preferred = "ISS-001".to_string();
-        assert!(validate_judgement(&j).is_err());
+        j.frame = FRAME_PREFER_FIRST.to_string(); // domain stays `value`
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("not admissible"), "got: {err}");
+
+        let mut j = bare_judgement();
+        j.frame = FRAME_EQUAL_EFFORT.to_string(); // domain stays `priority`
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("not admissible"), "got: {err}");
     }
 
     #[test]
     fn validate_rejects_self_pair() {
         let mut j = full_judgement();
         j.b = j.a.clone();
-        j.preferred = j.a.clone();
         assert!(validate_judgement(&j).is_err());
     }
 
@@ -415,9 +552,9 @@ note = \"wrong way round\"
         assert!(admissible_value_pair(kinds::SL, kinds::RSK).is_err());
     }
 
-    /// Pins design D6 to the `kinds::` constants: the admit set IS
-    /// `VALUE_BEARING` minus `RSK` — for every census kind, admission holds
-    /// exactly when the derivation says so.
+    /// Pins the admit set to the `kinds::` constants: it IS `VALUE_BEARING`
+    /// minus `RSK` — for every census kind, admission holds exactly when the
+    /// derivation says so.
     #[test]
     fn admit_set_is_value_bearing_minus_rsk() {
         for &kind in kinds::ALL_KINDS {

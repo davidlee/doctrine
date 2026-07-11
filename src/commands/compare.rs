@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! `doctrine compare` — the pairwise value-comparison capture verb (SL-210
-//! PHASE-02). The impure command shell over the pure wire model in
-//! `crate::comparison`: it resolves refs to kinds, checks admissibility, mints
-//! the impure edge (uuid v7 session/row uids + today's date), and writes a
-//! merge-clean session-of-one file under `.doctrine/comparisons/`.
+//! `doctrine compare` — the pairwise comparison capture verb (SL-210
+//! PHASE-02; capture surface reworked for schema v2 in SL-213 PHASE-01). The
+//! impure command shell over the pure wire model in `crate::comparison`: it
+//! resolves refs to kinds, checks admissibility, mints the impure edge (uuid
+//! v7 session/row uids + today's date), and writes a merge-clean
+//! session-of-one file under `.doctrine/comparisons/`.
+//!
+//! v2 capture (SL-213 design S1): the response is a mutually-exclusive group
+//! `--prefer | --equal | --incomparable` (exactly one); `--supersedes <uid>`
+//! is validated against the loaded corpus (unknown uid = hard error — the
+//! only moment a human is present); the frame derives the domain silently
+//! (`prefer-first` ⇒ `priority`), via the wire tier's single table.
 //!
 //! Layering (ADR-001): a `command`-tier shell. Impurity (clock/uuid/disk) lives
 //! here; the pure model never sees a path or a clock.
@@ -25,8 +32,8 @@ use anyhow::Context;
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::comparison::{
-    self, COMPARISONS_DIR, ComparisonSession, DOMAIN_VALUE, FRAME_EQUAL_EFFORT, FRAME_PREFER_FIRST,
-    Judgement, RaterKind, RowForm, SessionHeader, Tombstone,
+    self, COMPARISONS_DIR, ComparisonSession, FRAME_EQUAL_EFFORT, FRAME_PREFER_FIRST, Judgement,
+    RaterKind, Response, RowForm, SessionHeader, Tombstone,
 };
 
 /// `doctrine compare <SUBCOMMAND>` — the comparison-ledger verb group.
@@ -49,20 +56,34 @@ pub(crate) enum CompareAction {
     Withdraw(WithdrawArgs),
 }
 
-/// `compare record <A> <B> --prefer <X> [flags]` — the full capture surface.
-/// Every schema column a row needs is settable here (RV-262 F-3); `domain` is
-/// fixed at `value` and `form` at `order` in Phase A (design D8 — no flag mints
-/// them).
+/// `compare record <A> <B> <response> [flags]` — the full capture surface.
+/// The response is a mutually-exclusive group (SL-213 S1): exactly one of
+/// `--prefer` / `--equal` / `--incomparable`. `domain` derives from the frame
+/// (never typed); `form` is fixed at `order` (no flag mints it; `--magnitude`
+/// awaits RFC-019 OQ-6).
 #[derive(Args)]
+#[command(group = clap::ArgGroup::new("response").required(true).multiple(false))]
 pub(crate) struct RecordArgs {
     /// First entity — full canonical ref (e.g. `SL-204`).
     pub(crate) a: String,
     /// Second entity — full canonical ref (e.g. `IMP-118`).
     pub(crate) b: String,
     /// Preferred side: the literal `a` / `b`, or the full ref of one side.
+    #[arg(long, group = "response")]
+    pub(crate) prefer: Option<String>,
+    /// The two sides carry exactly equal value (compiles to a class merge).
+    #[arg(long, group = "response")]
+    pub(crate) equal: bool,
+    /// Considered "these don't compare" — recorded as asked, zero constraint.
+    #[arg(long, group = "response")]
+    pub(crate) incomparable: bool,
+    /// Supersede a prior judgement row by uid (explicit revision — the target
+    /// must exist in the ledger).
     #[arg(long)]
-    pub(crate) prefer: String,
-    /// Comparison frame (closed vocab; default `equal-effort`).
+    pub(crate) supersedes: Option<String>,
+    /// Comparison frame (closed vocab; default `equal-effort`). `prefer-first`
+    /// asks "under a binding capacity cutoff, which do you keep?" and records
+    /// a priority-domain row — not value-bearing.
     #[arg(long, value_enum, default_value_t = FrameArg::EqualEffort)]
     pub(crate) frame: FrameArg,
     /// Who rendered the judgement (default `agent`).
@@ -166,18 +187,51 @@ fn resolve_participant(root: &Path, raw: &str) -> anyhow::Result<(String, &'stat
     Ok((canonical, kref.kind.prefix))
 }
 
-/// Resolve `--prefer` to the preferred side's canonical ref. Accepts the
-/// literal `a` / `b`, or the full ref of either side; anything else is refused.
-fn resolve_prefer(prefer: &str, canonical_a: &str, canonical_b: &str) -> anyhow::Result<String> {
+/// Resolve the response group to a wire [`Response`]. `--prefer` accepts the
+/// literal `a` / `b`, or the full ref of either side; anything else is
+/// refused. Clap enforces exactly-one-of, so the fallthrough is `--prefer`.
+fn resolve_response(
+    args: &RecordArgs,
+    canonical_a: &str,
+    canonical_b: &str,
+) -> anyhow::Result<Response> {
+    if args.equal {
+        return Ok(Response::Equal);
+    }
+    if args.incomparable {
+        return Ok(Response::Incomparable);
+    }
+    let prefer = args
+        .prefer
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("one of --prefer / --equal / --incomparable is required"))?;
     match prefer {
-        "a" => Ok(canonical_a.to_string()),
-        "b" => Ok(canonical_b.to_string()),
-        other if other == canonical_a => Ok(canonical_a.to_string()),
-        other if other == canonical_b => Ok(canonical_b.to_string()),
+        "a" => Ok(Response::PreferA),
+        "b" => Ok(Response::PreferB),
+        other if other == canonical_a => Ok(Response::PreferA),
+        other if other == canonical_b => Ok(Response::PreferB),
         other => anyhow::bail!(
             "--prefer `{other}` must be `a`, `b`, or one of the two refs ({canonical_a} / {canonical_b})"
         ),
     }
+}
+
+/// Validate `--supersedes` against the loaded corpus (SL-213 S1): the target
+/// must be an existing judgement row's uid — capture is the only moment a
+/// human is present, so an unknown uid is a hard error, not a load-time
+/// warning. Resolution happens here in the shell; the pure tiers never trust
+/// an unresolved ref.
+fn validate_supersedes(root: &Path, target: &str) -> anyhow::Result<()> {
+    let sessions = load_sessions(root)?;
+    let known = sessions
+        .iter()
+        .any(|s| s.judgements.iter().any(|j| j.uid == target));
+    if !known {
+        anyhow::bail!(
+            "--supersedes `{target}` names no judgement row — supersession targets an existing row uid (see `compare list`)"
+        );
+    }
+    Ok(())
 }
 
 /// The capture flow: resolve → admissibility → build → validate → mint (impure
@@ -192,11 +246,22 @@ fn run_capture(args: &RecordArgs) -> anyhow::Result<()> {
     let (canonical_a, kind_a) = resolve_participant(&root, &args.a)?;
     let (canonical_b, kind_b) = resolve_participant(&root, &args.b)?;
 
-    // Value-domain admissibility over the resolved kinds (record pairs / RSK
-    // participants refused, with the human-readable reason).
+    // Pair admissibility over the resolved kinds (record pairs / RSK
+    // participants refused, with the human-readable reason). The priority
+    // domain reuses the value-domain admit set (design D2).
     comparison::admissible_value_pair(kind_a, kind_b).map_err(|reason| anyhow::anyhow!(reason))?;
 
-    let preferred = resolve_prefer(&args.prefer, &canonical_a, &canonical_b)?;
+    let response = resolve_response(args, &canonical_a, &canonical_b)?;
+
+    // The frame implies the domain (S1) — the wire table is the single source.
+    let frame = args.frame.as_frame();
+    let domain = comparison::domain_for_frame(frame)
+        .ok_or_else(|| anyhow::anyhow!("frame `{frame}` maps to no domain"))?;
+
+    // Supersession target resolved against the corpus before any write.
+    if let Some(target) = args.supersedes.as_deref() {
+        validate_supersedes(&root, target)?;
+    }
 
     // Impure edge: v7 uids (hyphenated, per the schema) + today's date.
     let session_uid = uuid::Uuid::now_v7().to_string();
@@ -208,10 +273,12 @@ fn run_capture(args: &RecordArgs) -> anyhow::Result<()> {
         seq: 0,
         a: canonical_a,
         b: canonical_b,
-        preferred,
-        domain: DOMAIN_VALUE.to_string(),
-        frame: args.frame.as_frame().to_string(),
+        response,
+        domain: domain.to_string(),
+        frame: frame.to_string(),
         form: RowForm::Order,
+        magnitude: None,
+        supersedes: args.supersedes.clone(),
         lens: args.lens.clone(),
         rater: args.rater.to_kind(),
         by: args.by.clone(),
@@ -313,10 +380,14 @@ fn rater_token(rater: &RaterKind) -> &'static str {
 /// rater (+identity when present), date, note when present, and a `[withdrawn]`
 /// marker when a tombstone targets the row (display-only — resolution is Phase B).
 fn render_row(j: &Judgement, withdrawn: bool) -> String {
-    let pair = if j.preferred == j.a {
-        format!("{}* vs {}", j.a, j.b)
-    } else {
-        format!("{} vs {}*", j.a, j.b)
+    // Minimal v2 adaptation (SL-213 PHASE-01 EX-4): the `*` marks a preferred
+    // side; `=` / `~` render equal / incomparable. The derived RowState
+    // column is PHASE-06.
+    let pair = match j.response {
+        Response::PreferA => format!("{}* vs {}", j.a, j.b),
+        Response::PreferB => format!("{} vs {}*", j.a, j.b),
+        Response::Equal => format!("{} = {}", j.a, j.b),
+        Response::Incomparable => format!("{} ~ {}", j.a, j.b),
     };
     let by = j.by.as_deref().map(|b| format!(":{b}")).unwrap_or_default();
     let note = j
@@ -519,7 +590,10 @@ mod tests {
         RecordArgs {
             a: a.to_string(),
             b: b.to_string(),
-            prefer: prefer.to_string(),
+            prefer: Some(prefer.to_string()),
+            equal: false,
+            incomparable: false,
+            supersedes: None,
             frame: FrameArg::EqualEffort,
             rater: RaterArg::Agent,
             by: None,
@@ -553,11 +627,13 @@ mod tests {
         assert_eq!(j.seq, 0);
         assert_eq!(j.a, "SL-204");
         assert_eq!(j.b, "IMP-118");
-        assert_eq!(j.preferred, "SL-204");
-        assert_eq!(j.domain, DOMAIN_VALUE);
+        assert_eq!(j.response, Response::PreferA);
+        assert_eq!(j.domain, comparison::DOMAIN_VALUE);
         assert_eq!(j.frame, FRAME_EQUAL_EFFORT);
         assert_eq!(j.form, RowForm::Order);
         assert_eq!(j.rater, RaterKind::Agent);
+        assert_eq!(j.magnitude, None);
+        assert_eq!(j.supersedes, None);
     }
 
     #[test]
@@ -671,18 +747,17 @@ mod tests {
         run_capture(&capture(&root, "SL-204", "IMP-118", "a")).unwrap();
         run_capture(&capture(&root, "SL-204", "IMP-118", "b")).unwrap();
 
-        let mut preferred: Vec<String> = session_files(&root)
+        let mut responses: Vec<Response> = session_files(&root)
             .iter()
             .map(|p| {
                 comparison::parse(&std::fs::read_to_string(p).unwrap())
                     .unwrap()
                     .judgements[0]
-                    .preferred
-                    .clone()
+                    .response
             })
             .collect();
-        preferred.sort();
-        assert_eq!(preferred, vec!["IMP-118".to_string(), "SL-204".to_string()]);
+        responses.sort_by_key(|r| format!("{r:?}"));
+        assert_eq!(responses, vec![Response::PreferA, Response::PreferB]);
     }
 
     #[test]
@@ -693,7 +768,107 @@ mod tests {
         run_capture(&capture(&root, "SL-204", "IMP-118", "IMP-118")).unwrap();
         let files = session_files(&root);
         let session = comparison::parse(&std::fs::read_to_string(&files[0]).unwrap()).unwrap();
-        assert_eq!(session.judgements[0].preferred, "IMP-118");
+        assert_eq!(session.judgements[0].response, Response::PreferB);
+    }
+
+    /// S1: `--equal` and `--incomparable` land their wire responses; the
+    /// default frame keeps the value domain.
+    #[test]
+    fn equal_and_incomparable_capture() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 204, "accepted");
+        seed_entity(&root, "IMP", 118, "accepted");
+
+        let equal = RecordArgs {
+            prefer: None,
+            equal: true,
+            ..capture(&root, "SL-204", "IMP-118", "unused")
+        };
+        run_capture(&equal).unwrap();
+
+        let incomparable = RecordArgs {
+            prefer: None,
+            incomparable: true,
+            ..capture(&root, "SL-204", "IMP-118", "unused")
+        };
+        run_capture(&incomparable).unwrap();
+
+        let mut responses: Vec<Response> = session_files(&root)
+            .iter()
+            .map(|p| {
+                let s = comparison::parse(&std::fs::read_to_string(p).unwrap()).unwrap();
+                assert_eq!(s.judgements[0].domain, comparison::DOMAIN_VALUE);
+                s.judgements[0].response
+            })
+            .collect();
+        responses.sort_by_key(|r| format!("{r:?}"));
+        assert_eq!(responses, vec![Response::Equal, Response::Incomparable]);
+    }
+
+    /// S1: `--frame prefer-first` silently derives `domain = priority` —
+    /// users never type a domain (VT-3).
+    #[test]
+    fn prefer_first_frame_derives_priority_domain() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 204, "accepted");
+        seed_entity(&root, "IMP", 118, "accepted");
+
+        let args = RecordArgs {
+            frame: FrameArg::PreferFirst,
+            ..capture(&root, "SL-204", "IMP-118", "a")
+        };
+        run_capture(&args).unwrap();
+
+        let files = session_files(&root);
+        let session = comparison::parse(&std::fs::read_to_string(&files[0]).unwrap()).unwrap();
+        let j = &session.judgements[0];
+        assert_eq!(j.domain, comparison::DOMAIN_PRIORITY);
+        assert_eq!(j.frame, FRAME_PREFER_FIRST);
+    }
+
+    /// S1: `--supersedes` with an unknown uid is a hard error before any
+    /// write; a known judgement uid lands in the row (VT-3).
+    #[test]
+    fn supersedes_validated_against_corpus() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 204, "accepted");
+        seed_entity(&root, "IMP", 118, "accepted");
+
+        // Unknown uid — refused, nothing written.
+        let unknown = RecordArgs {
+            supersedes: Some("not-a-real-uid".to_string()),
+            ..capture(&root, "SL-204", "IMP-118", "a")
+        };
+        let err = run_capture(&unknown).unwrap_err();
+        assert!(
+            err.to_string().contains("names no judgement row"),
+            "unknown supersedes target refused: {err}"
+        );
+        assert!(session_files(&root).is_empty(), "no file on a bad target");
+
+        // Known uid — the edge lands in the new row.
+        run_capture(&capture(&root, "SL-204", "IMP-118", "a")).unwrap();
+        let target = only_judgement_uid(&root);
+        let known = RecordArgs {
+            supersedes: Some(target.clone()),
+            ..capture(&root, "SL-204", "IMP-118", "b")
+        };
+        run_capture(&known).unwrap();
+
+        let superseding: Vec<Option<String>> = session_files(&root)
+            .iter()
+            .map(|p| {
+                comparison::parse(&std::fs::read_to_string(p).unwrap())
+                    .unwrap()
+                    .judgements[0]
+                    .supersedes
+                    .clone()
+            })
+            .collect();
+        assert!(
+            superseding.contains(&Some(target)),
+            "the superseding row carries the target uid"
+        );
     }
 
     #[test]
@@ -760,14 +935,45 @@ mod tests {
             action: CompareAction,
         }
 
-        // record capture — positionals + required --prefer.
+        // record capture — positionals + one response arm.
         let w = Wrap::try_parse_from(["x", "record", "SL-204", "IMP-118", "--prefer", "a"])
             .expect("record form parses");
         let CompareAction::Record(r) = w.action else {
             panic!("expected record");
         };
         assert_eq!(r.a, "SL-204");
-        assert_eq!(r.prefer, "a");
+        assert_eq!(r.prefer.as_deref(), Some("a"));
+
+        // The other response arms parse alone.
+        for arm in ["--equal", "--incomparable"] {
+            Wrap::try_parse_from(["x", "record", "SL-204", "IMP-118", arm])
+                .unwrap_or_else(|e| panic!("{arm} parses alone: {e}"));
+        }
+
+        // The response group is mutually exclusive and required (VT-3).
+        assert!(
+            Wrap::try_parse_from([
+                "x", "record", "SL-204", "IMP-118", "--prefer", "a", "--equal"
+            ])
+            .is_err(),
+            "two response arms refused"
+        );
+        assert!(
+            Wrap::try_parse_from([
+                "x",
+                "record",
+                "SL-204",
+                "IMP-118",
+                "--equal",
+                "--incomparable"
+            ])
+            .is_err(),
+            "two flag arms refused"
+        );
+        assert!(
+            Wrap::try_parse_from(["x", "record", "SL-204", "IMP-118"]).is_err(),
+            "a response arm is required"
+        );
 
         // `list` subcommand — no positionals demanded.
         let w = Wrap::try_parse_from(["x", "list"]).expect("list subcommand parses");
@@ -787,18 +993,20 @@ mod tests {
 
     // ----- PHASE-03: list / withdraw --------------------------------------
 
-    /// A judgement row with the given key fields; optionals absent, `preferred`
-    /// pinned to `a`.
+    /// A judgement row with the given key fields; optionals absent, response
+    /// pinned to prefer-a.
     fn mk_judgement(uid: &str, seq: u32, a: &str, b: &str) -> Judgement {
         Judgement {
             uid: uid.to_string(),
             seq,
             a: a.to_string(),
             b: b.to_string(),
-            preferred: a.to_string(),
-            domain: DOMAIN_VALUE.to_string(),
+            response: Response::PreferA,
+            domain: comparison::DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
+            magnitude: None,
+            supersedes: None,
             lens: None,
             rater: RaterKind::Agent,
             by: None,
@@ -811,7 +1019,7 @@ mod tests {
     fn mk_session(date: &str, uid: &str, judgements: Vec<Judgement>) -> ComparisonSession {
         ComparisonSession {
             schema: comparison::COMPARISON_SCHEMA.to_string(),
-            version: 1,
+            version: comparison::COMPARISON_VERSION,
             session: SessionHeader {
                 uid: uid.to_string(),
                 date: date.to_string(),
