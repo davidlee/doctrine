@@ -1,0 +1,55 @@
+id = 214
+slug = "knowledge-authoring-skill"
+title = "Knowledge authoring skill"
+status = "design"
+created = "2026-07-11"
+updated = "2026-07-11"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IMP-182"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "knowledge command surface the skill routes to"
+target = "SPEC-019"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "workstream 3: populate the knowledge graph"
+target = "RFC-007"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "empty population blocks gating census; this slice is the ws3 half"
+target = "RFC-008"
+
+[[selector]]
+selector = "plugins/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/routing-process.md"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".claude-plugin/marketplace.json"
+intent = "scope-relevant"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
