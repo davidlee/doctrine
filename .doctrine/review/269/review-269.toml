@@ -14,7 +14,7 @@ ref   = "SL-217"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Anchor-review candidates break the RFC's O(K²·|active|) queue-cost bound"
 detail = "RFC-019's Phase C cost claim is explicitly bounded by an O(K²) candidate pool inside the decision-relevant region, yielding O(K²·|active rows|) per refresh (.doctrine/rfc/019/rfc-019.md:637-653). SL-217 instead adds one anchor-review candidate per distinct suspect anchor and states those candidates are 'not K-gated' (.doctrine/slice/217/design.md:148-153), then still concludes the whole refresh is O(K²·|active|) (.doctrine/slice/217/design.md:170-173). That conclusion does not follow: |suspect anchors| is an extra corpus-scaled term outside the K-bounded frontier pool, so worst-case refresh cost becomes O((K² + |suspect anchors|)·|active rows|), not the RFC budgeted bound. The evaluation input C2 is exactly the case that makes this matter: dense stale-anchor conflicts are not guaranteed to stay near the top-K frontier."
@@ -23,7 +23,7 @@ response = "Accepted. §2 cost paragraph restated: O((K² + S)·|active|), expli
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Impact is tied to answer-token lexicography instead of a semantic worst-case policy"
 detail = "The design defines ranking as score = guaranteed_yield × impact × confirm_boost, where impact is taken from 'the min-yield answer's newly-determined pairs'; if several answers share the same minimum yield, it picks the lexicographically smallest answer token (.doctrine/slice/217/design.md:27, 155-161). That makes impact depend on token spelling rather than on a defensible decision-policy. Two answers can have the same worst-case yield but very different frontier impact; the current rule silently credits whichever answer string sorts first, so the score is neither guaranteed-impact, nor expected-impact, nor answer-space invariant. Renaming tokens would change queue order. For the engine-owned ranking surface, that is a real semantic defect, not a harmless tie-break."
@@ -32,7 +32,7 @@ response = "Accepted. D13 + §2 ranking replaced the lexicographic tiebreak with
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Anchor-review 'edit-anchor' surface overstates guaranteed yield by hiding non-resolving edits"
 detail = "D12 says anchor-review guaranteed yield is the minimum over resolving outcomes only, and a still-conflicting re-author is a non-resolution that must be disclosed outside that minimum (.doctrine/slice/217/design.md:26, 149-153, 279-283). But the surface contract in §3 exposes only two answers, 'edit-anchor' and 'uphold-anchor', and binds 'edit-anchor' directly to  with a positive yield (.doctrine/slice/217/design.md:236-239).  does not imply a resolving edit; many edited values will preserve the conflict and yield nothing. As written, the queue would advertise guaranteed progress for an answer token whose actual command admits non-resolving outcomes, which is dishonest semantics at the user-facing contract. Either the answer must be constrained to a resolving edit, or the non-resolving branch has to be represented explicitly in the surface and yield accounting."
@@ -41,7 +41,7 @@ response = 'Accepted. Answer token renamed revise-anchor; yield disclosed as con
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "The verification plan leaves D6's zero-multiplier exclusion unpinned"
 detail = "D6 makes a normative behavioural claim: static multipliers fold into effective weight, and any pair with m = 0 from a zeroed coefficient/weight is excluded and annotated (.doctrine/slice/217/design.md:20). The verification plan never pins that branch: §5 covers chain coupling, same-class sign cases, yield semantics, reprobe, ranking, surfaces, and cost, but nothing exercises zero kind_weight / coefficient / tag_term, the exclusion path, or the required annotation (.doctrine/slice/217/design.md:266-305). Because this branch changes both admissibility and explanation semantics, leaving it untested weakens the design's claim that every normative rule is covered."
