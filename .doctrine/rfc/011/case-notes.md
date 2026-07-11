@@ -1278,3 +1278,10 @@ invalidate both.
 had to grep/re-read slices of the persisted file to reach §Pair selection.
 A `--section <heading>` filter on `show` (or heading-level TOC + range read)
 would have saved ~2 reads and the full-body emission.
+
+[design; SL-217-design-fable-0712]
+`backlog new` scaffolds `backlog-NNN.md` but the id reads IMP-NNN; agent wrote
+body to `imp-281.md` by analogy with `slice-217.md` (kind-slug pattern
+inconsistency: slice files use kind prefix, backlog files use generic
+`backlog-`). Cost: one fix commit. Scaffold output prints the dir but not the
+body filename — printing it would have prevented the miss.

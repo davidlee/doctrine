@@ -24,7 +24,7 @@ five preflight dispositions baked into the slice scope (Q1–Q5).
 | D10 | `hypothetical_yield` returns a **signed delta**; negative is real (hypothetical contradiction quarantines evidence on recompile) | Honest accounting; no second propagation engine — recompile via `compile` (pure, evidence-sized). Queue admission filters `guaranteed_yield > 0`; the negative case is exercised by test, not hidden. |
 | D11 | Guaranteed yield = min over **order-bearing** answers (`prefer-a/prefer-b/equal`); `incomparable` disclosed separately in `yield_by_answer` | Strict min over the full v2 vocabulary degenerates: `incomparable` is always answerable and always yields 0 ⇒ every comparison scores 0. RFC's "certain progress whatever the human says" is read against the order-bearing space; the JSON discloses the exception rather than hiding it. |
 | D12 | Anchor-review candidates: one per distinct suspect anchor from `AnchorConflict` quarantine pairs; answer space {anchor-removed, rows-retired}; guaranteed yield = min over **resolving** answers; **not K-gated** | Eval C2: one stale anchor sterilised 28% of the ledger via D4 closure — evidence budget must not pool in quarantine. Removal is the *optimistic* revise model (an edit to a still-conflicting value un-forces nothing), so a strict min over "any edit" degenerates exactly as `incomparable` does for comparisons — same cure as D11: min over answers that *resolve* the tension (revise-to-consistent ≈ removal; uphold = rows retired); a still-conflicting re-author is a non-resolution, disclosed, outside the min. Impact still weights by frontier proximity of liberated rows. |
-| D13 | Ranking: `score = guaranteed_yield × impact × confirm_boost`; impact = Σ rank-decay weights over the min-yield answer's newly-determined pairs (ties on min: lexicographically smallest answer token — deterministic); `confirm_boost > 1` iff both participants' constraining evidence is agent-only (`RaterCounts.human == 0`) | Q5/T7 without D7 semantics: agent rows still determine; the boost only biases selection order toward regions where no human has spoken. Numeric shapes (`ELICIT_RANK_DECAY`, `ELICIT_CONFIRM_BOOST`) are named consts, implementation-owned tuning (ADR-015 posture). Tiebreak: id lexicographic; scores compared `total_cmp`. |
+| D13 | Ranking: `score = guaranteed_yield × guaranteed_impact × confirm_boost`; `guaranteed_impact` = **min over the argmin-yield answers** of Σ rank-decay weights over that answer's newly-determined pairs (RV-269 F-2: worst-case-coherent and answer-space invariant — never a token-spelling tiebreak); `confirm_boost > 1` iff both participants' constraining evidence is agent-only (`RaterCounts.human == 0`) | Q5/T7 without D7 semantics: agent rows still determine; the boost only biases selection order toward regions where no human has spoken. Numeric shapes (`ELICIT_RANK_DECAY`, `ELICIT_CONFIRM_BOOST`) are named consts, implementation-owned tuning (ADR-015 posture). Tiebreak: id lexicographic; scores compared `total_cmp`. |
 | D14 | Binary insertion is stateless: an un-constrained top-K item (zero constraining rows, no anchor) yields a comparison candidate against the projected median of its comparable set; the ledger *is* the bisection state | No session state, no cursor; each refresh re-derives the next probe from what the ledger now knows. Reason code `binary-insertion`. |
 | D15 | Queue states, precedence pinned: entries non-empty ⇒ `candidates` (all three sources count — anchor-review/binary-insertion can admit while every top-K pair is determined); entries empty ∧ every top-K pair determined ⇒ `stable`; entries empty ∧ some pair indeterminate ⇒ `stalled`. Stall render names the depth and disclaims stability; `stable` only via the determinacy predicate | RFC stall ≠ stable (zero one-step yield can hide a bridge question). Exhaustion and stability are different facts; the render says which. A determined top-K with a live stale-anchor suspect is NOT "stable" — the tension is standing evidence-debt. |
 | D16 | JSON schema v1 (§3): versioned envelope, kind-tagged entries, common spine (`rank/kind/guaranteed_yield/impact/score/reasons/ask`), kind payloads under distinct keys, structured `code`+`text` reasons; **lean participants** (ids + value/estimate block; no body summaries) | Curator sorts/filters on the spine without kind-switching; findings' JSON-parity idiom. Summaries are additive schema-versioned fields if ever wanted; human render fetches context itself. |
@@ -148,16 +148,24 @@ Candidate pool, three sources:
 3. **Anchor-review (D12)** — one candidate per distinct suspect anchor
    appearing in `AnchorConflict` quarantine pairs. Answer space per D12;
    guaranteed yield = min over the two *resolving* outcomes (revise-to-
-   consistent modelled as removal; uphold as rows retired). Not K-gated;
-   impact weights by frontier proximity of the rows each outcome would
-   liberate.
+   consistent modelled as removal; uphold as rows retired). Surface honesty
+   (RV-269 F-3): the answer token is `revise-anchor`, and its yield is
+   explicitly conditional — the exit command (`value set`) admits
+   non-resolving values, so JSON carries a `yield_note` and the render says
+   "assumes the revision clears the conflict; a still-conflicting value
+   re-surfaces this candidate". A non-resolving revision is a non-answer, not
+   counted progress. Not K-gated; impact weights by frontier proximity of the
+   rows each outcome would liberate.
 
-Ranking (D13): `score = guaranteed_yield × impact × confirm_boost`;
-admission `guaranteed_yield > 0`; `impact = Σ w(r)` over the min-yield
-newly-determined pairs, `w(r) = 1/(1 + r)` with `r` = the better frontier rank
-in the pair (named const shape `ELICIT_RANK_DECAY`); `confirm_boost =
-ELICIT_CONFIRM_BOOST` iff both sides' constraining evidence is agent-only via
-`constraining_counts_by_class`, else `1.0`. Determinism: BTree everywhere,
+Ranking (D13): `score = guaranteed_yield × guaranteed_impact × confirm_boost`;
+admission `guaranteed_yield > 0`; per answer, `impact = Σ w(r)` over that
+answer's newly-determined pairs, `w(r) = 1/(1 + r)` with `r` = the better
+frontier rank in the pair (named const shape `ELICIT_RANK_DECAY`);
+`guaranteed_impact` = min impact over the answers attaining the min yield
+(RV-269 F-2 — worst-case both in count and in placement; invariant under
+answer-token renames); `confirm_boost = ELICIT_CONFIRM_BOOST` iff both sides'
+constraining evidence is agent-only via `constraining_counts_by_class`, else
+`1.0`. Determinism: BTree everywhere,
 `total_cmp` on scores, id-lexicographic tiebreak; no float in any key.
 
 States (D15, precedence pinned): entries non-empty ⇒ `Candidates`; entries
@@ -167,9 +175,14 @@ K — not a stability claim; bridge questions may exist"). All three candidate
 sources gate `Stable`: a determined top-K with a live stale-anchor suspect
 stays `Candidates` — the tension is standing evidence-debt.
 
-Cost: ≤ K(K−1)/2 + |suspect anchors| candidates; ≤ 3 recompiles each, linear
-in active rows; reachability memoised per hypothetical. O(K²·|active|) as the
-RFC budgeted. VT asserts completion on the eval corpus (32 rows, K = 8), not
+Cost (RV-269 F-1 — honest bound, wider than the RFC's): ≤ K(K−1)/2 + S
+candidates, S = distinct suspect anchors; ≤ 3 recompiles each, linear in
+active rows; reachability memoised per hypothetical. Total O((K² + S)·|active|)
+— NOT the RFC's bare O(K²·|active|), because anchor-review is deliberately not
+K-gated (D12). The extra term is **evidence-bounded, not corpus-scaled**: a
+suspect anchor exists only where an `AnchorConflict` quarantine pair cites it,
+so S ≤ |quarantined rows| ≤ |ledger| — the refresh stays evidence-sized end to
+end. VT asserts completion on the eval corpus (32 rows, K = 8), not
 benchmarks; the preflight assumption stands unless a corpus falsifies it.
 
 Bare-estimate mask (D17): a participant with a projected/gauge value and no
@@ -233,9 +246,10 @@ reasons, answer command. Footer = state line (D15 wording; `Stable` says
       "subject": { "id": "IMP-274", "anchor": 5.0,
                    "conflict_pairs": [["IMP-198", "IMP-274"]],
                    "quarantined_rows": ["uid…"] },
-      "ask": { "answers": ["edit-anchor", "uphold-anchor"],
-               "yield_by_answer": { "edit-anchor": 6, "uphold-anchor": 2 },
-               "exits": { "edit-anchor": "doctrine value set IMP-274 <v>",
+      "ask": { "answers": ["revise-anchor", "uphold-anchor"],
+               "yield_by_answer": { "revise-anchor": 6, "uphold-anchor": 2 },
+               "yield_note": "revise-anchor yield assumes a RESOLVING revision (conflict removed); a still-conflicting value yields nothing and re-surfaces this candidate next refresh",
+               "exits": { "revise-anchor": "doctrine value set IMP-274 <v>",
                           "uphold-anchor": "supersede or tombstone: <uids>" } }
     }
   ]
@@ -288,16 +302,21 @@ Suites → rules pinned. VT/VA/VH ids minted at `/plan`.
    median, reason `binary-insertion`; after answering, next refresh probes the
    correct half (stateless bisection, D14).
 5. **Ranking**: confirm-boost all-else-equal pair (agent-only outranks
-   human-touched); impact rank-decay ordering; admission filter drops
-   non-positive guaranteed yield; id tiebreak.
+   human-touched); impact rank-decay ordering; guaranteed-impact min over
+   argmin-yield answers pinned by a case where two answers tie on yield with
+   different impacts (RV-269 F-2); admission filter drops non-positive
+   guaranteed yield; id tiebreak; zero-multiplier pair (`m = 0` via zeroed
+   coefficient/kind_weight/tag_term) excluded from the pool AND annotated
+   (RV-269 F-4, D6).
 6. **Determinism**: same merged file set + statuses + config + invocation
    params ⇒ byte-identical queue and `--json` output; shuffled session-file
    load order invariance (extends the SL-213 suite).
 7. **Surfaces**: render goldens for all three states (stall wording names
    depth and disclaims stability; stable wording says "value_dim order");
    bare-estimate mask on projected-but-bare participant, absent on estimated;
-   JSON schema goldens for both kinds; `--kind` filter; `--limit` display cap
-   with full-pool ranking.
+   JSON schema goldens for both kinds incl. the anchor-review `yield_note`
+   conditional-yield disclosure (RV-269 F-3); `--kind` filter; `--limit`
+   display cap with full-pool ranking.
 8. **Behaviour preservation**: no ledger / no invocation ⇒ every existing
    priority + comparison suite passes unchanged; compile/project semantics
    untouched (accessors only).
@@ -322,6 +341,21 @@ Suites → rules pinned. VT/VA/VH ids minted at `/plan`.
 - Carried assumptions confirmed: recompile-per-hypothetical within budget
   (§2 cost, VT 9); one kind-tagged queue surface (D16); C3 cycle-path
   assurance stays the SL-213 prototype battery (unchanged here).
+
+## Review history
+
+- **Internal adversarial pass** (2026-07-12) — three fixes: D12 anchor-edit
+  yield reframed min-over-resolving-answers; D13 argmin tie pinned; D15 state
+  precedence pinned (all three candidate sources gate `Stable`).
+- **RV-269, codex GPT-5.5** (2026-07-12, hostile, ledgered) — verdict
+  approve-after-fixes; all four findings accepted fix-now: F-1 *major* (cost
+  bound understated — restated O((K² + S)·|active|), S evidence-bounded);
+  F-2 *major* (lexicographic argmin tie made score token-spelling-dependent —
+  replaced with guaranteed-impact = min over argmin-yield answers); F-3
+  *major* (`edit-anchor` yield hid non-resolving edits — token `revise-anchor`,
+  conditional yield disclosed via `yield_note` + render wording); F-4 *minor*
+  (D6 zero-multiplier branch unpinned — VT added, §5.5). D8 lemma, D5 scope
+  cut, negative-domain honesty, layering survived attack unfound.
 
 ## Deferred (named seams, not built)
 
