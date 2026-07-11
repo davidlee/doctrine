@@ -1224,3 +1224,24 @@ PHASE-01-only) — a benign union, but "code" does not mean "src-only".
 (`web/map/node_modules/.bin/eslint: /usr/bin/env: bad interpreter`) — recurring
 noise for any Rust-only slice with no JS surface; the Rust fmt+clippy legs pass.
 Forces a manual "is this mine?" adjudication each close.
+
+[slice; SL-216-scope-2026-07-11]
+memory_retrieve query "comparison projection gauge value_dim tier-3 P8" returned 4/5
+irrelevant hits (dispatch/seatbelt memories) — comparison subsystem too new to have
+corpus coverage; BM25 drift cost ~3k tokens. Also `slice new` slug symlink lands
+untracked with no hint it's a committed convention; verified against git ls-files
+(~2 probes).
+
+[design; SL-216-design-2026-07-11]
+`backlog new` scaffolds body as `backlog-NNN.md` but the kind dir is `idea/037/`
+— guessed `idea-037.md` for a body append, created stray file, cost a fix commit.
+Scaffold output prints only the dir; printing the body filename would prevent.
+
+[design; SL-216-design-2026-07-11]
+Internal adversarial pass declared AnchorGaugeDisconnect a dead variant from a
+partial grep (read enum region + grepped wrong files; producer lived at
+findings.rs:561 in the SAME file grep -l had already flagged). Codex external
+pass caught it (RV-267 F-3). Lesson cost ~2k tokens of wrong-claim + fix;
+grep -l hit deserves full-file symbol grep before "no producer" claims.
+Also codex duplicated its first finding verbatim (F-1 withdrawn dup of F-2) —
+ledger noise, harmless.
