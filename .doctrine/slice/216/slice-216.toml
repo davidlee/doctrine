@@ -25,11 +25,11 @@ target = "IMP-279"
 
 [[selector]]
 selector = "src/comparison/project.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = ".doctrine/slice/213/design.md"
-intent = "scope-relevant"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
