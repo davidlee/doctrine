@@ -1,0 +1,42 @@
+memory_uid = "mem_019f519d0b0e7180866e083910bceda5"
+memory_key = "mem.fact.env.jail-lint-js-bad-interpreter"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Jail breaks lint-js: gate recipes fail on eslint /usr/bin/env shebang"
+summary = "just gate / doctrine check gate fail in the bubblewrap jail at lint-js (web/map eslint shebang needs /usr/bin/env, absent in jail) — env breakage, not a work defect; rust gate (just lint, fmt-check, cargo test) is the in-jail gate."
+created = "2026-07-11"
+updated = "2026-07-11"
+
+[scope]
+paths = []
+globs = []
+commands = ["just gate", "doctrine check gate", "just lint-js"]
+tags = ["jail", "gate", "lint-js", "eslint", "footgun", "environment"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "66ba4a4538e87b6770cac4b5e4e115898db0676a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "1bc3069e66920d61b393875a4e188ac1507a0f8ad8645060b6861c8bbbb4996d"
+base_commit = "f499ce692def7a71286137f7958ebd55b5d9f240"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
