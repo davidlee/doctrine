@@ -1,0 +1,21 @@
+schema = "doctrine.comparison-session"
+version = 2
+tombstone = []
+
+[session]
+uid = "019f51dd-7eef-71d0-8d23-121a1b412e28"
+date = "2026-07-11"
+audience = "chr-042-eval"
+
+[[judgement]]
+uid = "019f51dd-7eef-71d0-8d23-1223f446e450"
+seq = 0
+a = "IMP-260"
+b = "IMP-167"
+response = "prefer-a"
+domain = "value"
+frame = "equal-effort"
+form = "order"
+rater = "agent"
+by = "opus48-chr042"
+date = "2026-07-11"

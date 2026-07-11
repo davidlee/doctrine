@@ -1257,3 +1257,18 @@ rewritten and shifted — the executing agent spent a grep round confirming the
 site was dead. Designs enumerating comment-sweep sites for a LATER phase
 should cite stable tokens, not line numbers; earlier phases of the same slice
 invalidate both.
+
+[canon/backlog · chr-042-eval] RFC-019 Phase B evaluation. Three doctrine-side friction points:
+- `explain <ID>` is per-item (~0.5s) with no bulk/value-source query; a full-corpus
+  anchor scan (232 items) timed out at 2min. Observing inference across a subset
+  meant N serial CLI calls. A `doctrine explain --value-source <IDs...>` or a
+  `compare list --with-projection` batch surface would collapse the observation loop.
+- Command-surface drift: CHR-042 task text and the boot spine both write
+  `doctrine reports next` / `reports explain`, but `reports` is not a subcommand —
+  the verbs are top-level (`doctrine next`, `doctrine explain`, `doctrine findings`).
+  Cost a round-trip to discover. Either alias `reports` or fix the prose.
+- `slice design SL-213` (no sub-verb) is the *author* path and refused with
+  "Refusing to overwrite existing design.md" — expected, but the read path for a
+  design body is non-obvious (had to Read the .md directly; `show` synthesises but
+  the routing guidance says never read raw files). A `slice design --show` or clear
+  read verb for the prose tier would remove the tension.

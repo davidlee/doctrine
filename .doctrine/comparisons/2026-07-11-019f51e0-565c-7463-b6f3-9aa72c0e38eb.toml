@@ -1,0 +1,13 @@
+schema = "doctrine.comparison-session"
+version = 2
+judgement = []
+
+[session]
+uid = "019f51e0-565c-7463-b6f3-9aa72c0e38eb"
+date = "2026-07-11"
+
+[[tombstone]]
+uid = "019f51e0-565c-7463-b6f3-9ab2b165f3ed"
+seq = 0
+target = "019f51df-bdc9-72e2-b195-757879e9ce78"
+date = "2026-07-11"
