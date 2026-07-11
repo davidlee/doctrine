@@ -90,3 +90,32 @@ comments).
 - None. SL-213 design.md §3 was amended directly in PHASE-02 per locked D2
   (per-slice artefact, not governance kind); no ADR/policy/standard/spec is
   touched by this slice.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **Selector registry** (`slice-216.toml`): added
+  `tests/e2e_compare_inference.rs` (intent `design-target`) — the load-bearing
+  write. Conformance now reads the delivered PHASE-02 sweep site as
+  `conformant` (was spurious `undeclared`). Drives RV-268 F-1.
+- **design.md D2** (known-sites list): prose mirror gains the e2e ISS-050
+  narrative (`tests/e2e_compare_inference.rs:458-462`) alongside the
+  `findings.rs` and `p12` sites. Drives RV-268 F-1.
+
+### REVs completed
+- None. No governance/spec surface touched by this slice; SL-213 design.md §3
+  was amended directly in PHASE-02 per locked D2 (per-slice artefact).
+
+### Withdrawn / tolerated
+- RV-268 F-2 (nit, aligned): remaining undeclared paths (case-notes.md,
+  notes.md, slice-216.toml) are inherent lifecycle/process writes, not scope
+  creep — no registry action owed.
+- RV-268 F-3 (major, tolerated): gate `lint-js` leg fails on pre-existing jail
+  env breakage (eslint `/usr/bin/env` shebang); ISS-222 minted. Rust legs
+  clean. Host-side gate run owed before trusting lint-js — carried as tolerated
+  disposition, not a reconcile write.
+
+### Conformance after reconcile
+4 conformant, 0 undelivered, 3 undeclared (all F-2 lifecycle/process).
+
+Reconcile pass complete — handoff to /close.

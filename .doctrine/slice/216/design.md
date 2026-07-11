@@ -58,8 +58,10 @@ sites beyond the three headline P's: P8's rationale note (design lines
 work"; both superseded by this slice), the `AnchorGaugeDisconnect` variant
 doc + producer doc (`src/priority/findings.rs:150-153`, `:556-560` —
 "ELSEWHERE/SOMEWHERE in the graph" and the "P8 whole-graph spread" base-state
-rationale → component language), and the `p12` test comment's "whole-graph
-spread is a documented artifact" framing (`project.rs:834-836`).
+rationale → component language), the `p12` test comment's "whole-graph
+spread is a documented artifact" framing (`project.rs:834-836`), and the e2e
+ISS-050 narrative (`tests/e2e_compare_inference.rs:458-462` — the anchor-free
+component spreads by its own height, component-scoped hint).
 
 Rejected: leaving SL-213 design as historical record with SL-216 as authority
 (splits the contract across a slice chain readers must chase); REV routing
