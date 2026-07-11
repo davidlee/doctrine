@@ -1247,4 +1247,56 @@ mod tests {
             "None betas ⇒ β-family silent: {fs:?}"
         );
     }
+
+    #[test]
+    fn anchor_gauge_disconnect_lists_whole_island() {
+        // Mixed corpus (the s8 shape): anchored chain x>y (x=4.0) plus an
+        // anchor-free island z>w, through the REAL compile+project seam. The
+        // P7 hint ("compare against an anchored item") applies island-wide
+        // (SL-216 D1): every member of the island is gauge-placed, so the
+        // finding lists z AND w — not only the floorless sink.
+        use crate::comparison::{
+            AnchorMap, DOMAIN_VALUE, FRAME_EQUAL_EFFORT, Judgement, ProjectionCfg,
+            QuarantinePolicy, RaterKind, Response, RowForm, compile, project,
+        };
+        let judgement = |uid: &str, winner: &str, loser: &str| Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: winner.to_string(),
+            b: loser.to_string(),
+            response: Response::PreferA,
+            domain: DOMAIN_VALUE.to_string(),
+            frame: FRAME_EQUAL_EFFORT.to_string(),
+            form: RowForm::Order,
+            magnitude: None,
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Human,
+            by: None,
+            note: None,
+            date: "2026-07-12".to_string(),
+        };
+        let rows = [judgement("j0", "x", "y"), judgement("j1", "z", "w")];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let anchors: AnchorMap = [("x".to_string(), 4.0)].into_iter().collect();
+        let cs = compile(&refs, &anchors, QuarantinePolicy::Symmetric);
+        let projection = project(
+            &cs,
+            &ProjectionCfg {
+                gauge_step: 0.25,
+                default_value: 1.0,
+            },
+        );
+
+        let fs = anchor_gauge_disconnect_findings(&cs, &projection);
+        assert_eq!(fs.len(), 1, "one disconnect finding: {fs:?}");
+        let Finding::AnchorGaugeDisconnect { entities } = &fs[0] else {
+            panic!("wrong finding kind: {fs:?}");
+        };
+        assert_eq!(
+            entities,
+            &vec!["w".to_string(), "z".to_string()],
+            "the finding must list the WHOLE island, not only the P7 sink"
+        );
+    }
 }

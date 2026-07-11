@@ -1245,3 +1245,8 @@ pass caught it (RV-267 F-3). Lesson cost ~2k tokens of wrong-claim + fix;
 grep -l hit deserves full-file symbol grep before "no producer" claims.
 Also codex duplicated its first finding verbatim (F-1 withdrawn dup of F-2) —
 ledger noise, harmless.
+[phase-plan; SL-216-p01-fable]
+plan.md cites `e2e_compare_inference` by bare test name; locating the file cost
+3 grep rounds (name is the FILE stem, not a #[test] fn — grep for the fn name
+misses). Plans citing test evidence should carry the path
+(tests/e2e_compare_inference.rs) alongside the name.

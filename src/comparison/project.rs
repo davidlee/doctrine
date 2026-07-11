@@ -17,8 +17,8 @@
 //! ceiling), by **budgeted** interpolation `f + (c − f)/(d_up + 1)` (P4).
 //! Anchors are exact (P3). Unbounded tails step by `gauge_step` off a synthetic
 //! floor/off the floor (P5/P6). A class with neither floor nor ceiling is
-//! gauged to `default_value` (P7). An anchor-free graph is spread by height
-//! (P8). This is a faithful port of `.doctrine/slice/213/projection-prototype.py`,
+//! gauged to `default_value` (P7). An anchor-free component is spread by
+//! height (P8, component `H`). This is a faithful port of `.doctrine/slice/213/projection-prototype.py`,
 //! whose scenario battery (S1–S8, Y1–Y7, N1–N4) is the golden suite below.
 //!
 //! ## Gauge scope — a flagged design/prototype tension
@@ -251,9 +251,65 @@ fn count_f64(n: usize) -> f64 {
     f64::from(u32::try_from(n).unwrap_or(u32::MAX))
 }
 
-/// Place every class (P3–P8). Anchor-free graph → gauge spread (P8);
-/// otherwise reverse-topological budgeted interpolation with gauge tails.
+/// Weakly-connected components of the merged-class graph (undirected
+/// reachability over `out ∪ inn`), ordered by minimum member id (determinism;
+/// the result map is a `BTreeMap`, so the order is internal-only).
+fn components(nodes: &BTreeSet<ClassId>, out: &Adj, inn: &Adj) -> Vec<BTreeSet<ClassId>> {
+    let mut unvisited: BTreeSet<ClassId> = nodes.clone();
+    let mut comps = Vec::new();
+    // pop_first yields the globally smallest unvisited id; every member of
+    // its component is still unvisited, so each seed is its component's min.
+    while let Some(seed) = unvisited.pop_first() {
+        let mut comp = BTreeSet::new();
+        let mut frontier = vec![seed];
+        while let Some(n) = frontier.pop() {
+            for adj in [out, inn] {
+                if let Some(neighbours) = adj.get(&n) {
+                    for m in neighbours {
+                        if unvisited.remove(m) {
+                            frontier.push(m.clone());
+                        }
+                    }
+                }
+            }
+            comp.insert(n);
+        }
+        comps.push(comp);
+    }
+    comps
+}
+
+/// Place every class (P3–P8), per weakly-connected component (SL-216 D1):
+/// each component picks its regime by its OWN anchors — no anchor →
+/// component gauge spread; ≥1 anchor → the anchored pipeline restricted to
+/// its members. No cross-component edges exist by construction, so the
+/// anchored machinery per component is bitwise-identical to running it
+/// globally.
 fn place(
+    nodes: &BTreeSet<ClassId>,
+    out: &Adj,
+    inn: &Adj,
+    anchors: &BTreeMap<ClassId, f64>,
+    cfg: &ProjectionCfg,
+) -> BTreeMap<ClassId, (f64, ValueProvenance)> {
+    let mut result = BTreeMap::new();
+    for members in components(nodes, out, inn) {
+        let component_anchors: BTreeMap<ClassId, f64> = anchors
+            .iter()
+            .filter(|(class, _)| members.contains(*class))
+            .map(|(class, &v)| (class.clone(), v))
+            .collect();
+        result.extend(place_component(&members, out, inn, &component_anchors, cfg));
+    }
+    result
+}
+
+/// Place one component's classes (P3–P8). Anchor-free component → gauge
+/// spread over the component's height range (P8); otherwise
+/// reverse-topological budgeted interpolation with gauge tails. `out`/`inn`
+/// are the whole-graph adjacencies — safe, since every neighbour of a member
+/// is a member.
+fn place_component(
     nodes: &BTreeSet<ClassId>,
     out: &Adj,
     inn: &Adj,
@@ -262,8 +318,7 @@ fn place(
 ) -> BTreeMap<ClassId, (f64, ValueProvenance)> {
     let order = topo_order(nodes, out, inn);
 
-    // P8: anchor-free spread over the whole node set (see module note on the
-    // global-vs-per-component gauge scope).
+    // P8: anchor-free component spread, `H` = component max height.
     if anchors.is_empty() {
         let h = heights(&order, out);
         let big_h = h.values().copied().max().unwrap_or(0);
@@ -436,11 +491,10 @@ mod tests {
 
     #[test]
     fn s2_partial_order_gauge() {
-        // Diamond a>b,a>c,b>d,c>d,d>e PLUS a disjoint pendant f>g. The gauge
-        // spread here uses the GLOBAL height H=3 (prototype ground truth) —
-        // f/g are pinned at 0.8/0.4 (not the 1.3333/0.6667 a per-component H
-        // would give). This transparently pins the global-gauge coupling
-        // flagged in the module note (design P8/P12 read per-component).
+        // Diamond a>b,a>c,b>d,c>d,d>e PLUS a disjoint pendant f>g. Each
+        // component takes its own spread (P8: component H — SL-216): the
+        // diamond over H=3, the pendant over H=1, so f/g land at the 2-chain
+        // scale 1.3333/0.6667, not on rungs of the diamond's taller ladder.
         let edges = [
             ("a", "b"),
             ("a", "c"),
@@ -454,9 +508,9 @@ mod tests {
         golden(&p, "b", 1.2000, Gauge);
         golden(&p, "c", 1.2000, Gauge);
         golden(&p, "d", 0.8000, Gauge);
-        golden(&p, "f", 0.8000, Gauge);
+        golden(&p, "f", 1.3333, Gauge);
         golden(&p, "e", 0.4000, Gauge);
-        golden(&p, "g", 0.4000, Gauge);
+        golden(&p, "g", 0.6667, Gauge);
     }
 
     #[test]
@@ -539,18 +593,67 @@ mod tests {
 
     #[test]
     fn s8_incremental_locality() {
+        // The anchor-free island {z>w} picks its own regime (D1): the P8
+        // component spread over H=1, both Gauge — not P7+P5 off the corpus's
+        // anchored component. The anchored side is untouched.
         let base = [("x", "y"), ("z", "w")];
         let islands = project_scenario(&base, &[("x", 4.0)]);
         golden(&islands, "x", 4.0000, Authored);
         golden(&islands, "y", 3.7500, Projected);
-        golden(&islands, "z", 1.2500, Projected);
-        golden(&islands, "w", 1.0000, Gauge);
+        golden(&islands, "z", 1.3333, Gauge);
+        golden(&islands, "w", 0.6667, Gauge);
 
         let joined = project_scenario(&[("x", "y"), ("z", "w"), ("y", "z")], &[("x", 4.0)]);
         golden(&joined, "x", 4.0000, Authored);
         golden(&joined, "y", 3.7500, Projected);
         golden(&joined, "z", 3.5000, Projected);
         golden(&joined, "w", 3.2500, Projected);
+    }
+
+    #[test]
+    fn mixed_corpus_island() {
+        // Anchored diamond (a=2.0) + anchor-free pendant f>g (SL-216 D1).
+        // The pendant is its own component: centred P8 spread over its H=1,
+        // Gauge provenance — it ignores the neighbour component's anchor
+        // entirely (f sits ABOVE the diamond's interior values). The loser g
+        // lands BELOW default (0.6667 < 1.0): judged-and-lost ranks below
+        // unjudged, the adjudicated behavioural change.
+        let edges = [
+            ("a", "b"),
+            ("a", "c"),
+            ("b", "d"),
+            ("c", "d"),
+            ("d", "e"),
+            ("f", "g"),
+        ];
+        let p = project_scenario(&edges, &[("a", 2.0)]);
+        golden(&p, "a", 2.0000, Authored);
+        golden(&p, "b", 1.7500, Projected);
+        golden(&p, "c", 1.7500, Projected);
+        golden(&p, "d", 1.5000, Projected);
+        golden(&p, "e", 1.2500, Projected);
+        golden(&p, "f", 1.3333, Gauge);
+        golden(&p, "g", 0.6667, Gauge);
+    }
+
+    #[test]
+    fn singleton_island_lands_on_default_value() {
+        // An edge-free class (equal-merged pair) in a pure-gauge
+        // multi-component corpus is its own component: h=0, H=0 ⇒
+        // 2·D·(0+1)/(0+2) = D (default_value) — not a rung of a neighbouring
+        // component's ladder (SL-216, design internal F3).
+        let mut rows = vec![judgement("j0", "a", "b")];
+        let mut eq = judgement("j1", "s1", "s2");
+        eq.response = Response::Equal;
+        rows.push(eq);
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let cs = compile(&refs, &AnchorMap::new(), QuarantinePolicy::Symmetric);
+        assert!(cs.quarantined.is_empty(), "fixture must be a feasible DAG");
+        let p = project(&cs, &CFG);
+        golden(&p, "a", 1.3333, Gauge);
+        golden(&p, "b", 0.6667, Gauge);
+        golden(&p, "s1", 1.0000, Gauge);
+        golden(&p, "s2", 1.0000, Gauge);
     }
 
     #[test]
@@ -831,10 +934,9 @@ mod tests {
 
     #[test]
     fn p12_locality_disjoint_anchored_components() {
-        // Scope: the evidence-bearing (anchored) regime — the gauge
-        // convention's whole-graph spread is a documented artifact (module
-        // note, s2 golden). Component X = {A>B, A=10}; component Y = {P>Q,
-        // P=5}. Perturbing X (append B>C) must not move Y's values.
+        // Anchored↔anchored witness (retained verbatim, SL-216 / RV-267 F-4).
+        // Component X = {A>B, A=10}; component Y = {P>Q, P=5}. Perturbing X
+        // (append B>C) must not move Y's values.
         let y_edges = [("P", "Q")];
         let x_before = [("A", "B")];
         let anchors = [("A", 10.0), ("P", 5.0)];
@@ -850,6 +952,66 @@ mod tests {
                 base.get(e),
                 perturbed.get(e),
                 "component Y entity {e} moved under a disjoint-X evidence delta"
+            );
+        }
+    }
+
+    #[test]
+    fn p12_locality_anchored_perturbation_freezes_gauge_island() {
+        // Universal locality (SL-216 D1): an evidence delta inside anchored
+        // X = {A>B, A=10} must not move the anchor-free island Y = {P>Q} —
+        // values OR provenance.
+        let combined = |x: &[(&str, &str)]| -> Projection {
+            let edges: Vec<(&str, &str)> = x.iter().chain([("P", "Q")].iter()).copied().collect();
+            project_scenario(&edges, &[("A", 10.0)])
+        };
+        let base = combined(&[("A", "B")]);
+        let perturbed = combined(&[("A", "B"), ("B", "C")]);
+        for e in ["P", "Q"] {
+            assert_eq!(
+                base.get(e),
+                perturbed.get(e),
+                "gauge island entity {e} moved under a disjoint anchored-X delta"
+            );
+        }
+    }
+
+    #[test]
+    fn p12_locality_gauge_island_perturbation_freezes_anchored() {
+        // The reverse direction: growing the anchor-free island Y (append
+        // Q>R) must not move anchored X's values.
+        let combined = |y: &[(&str, &str)]| -> Projection {
+            let edges: Vec<(&str, &str)> = [("A", "B")].iter().chain(y.iter()).copied().collect();
+            project_scenario(&edges, &[("A", 10.0)])
+        };
+        let base = combined(&[("P", "Q")]);
+        let perturbed = combined(&[("P", "Q"), ("Q", "R")]);
+        for e in ["A", "B"] {
+            assert_eq!(
+                base.get(e),
+                perturbed.get(e),
+                "anchored entity {e} moved under a disjoint gauge-island delta"
+            );
+        }
+    }
+
+    #[test]
+    fn p12_locality_first_anchor_leaves_disjoint_island_frozen() {
+        // Leak 2 (SL-216 D1): the corpus's FIRST anchor landing in component
+        // X must not flip disjoint island Y's regime — Y keeps its component
+        // spread (1.3333/0.6667, Gauge), it does not fall to P7+P5 (1.25/1.0).
+        // Regime membership is itself local.
+        let edges = [("A", "B"), ("P", "Q")];
+        let pure = project_scenario(&edges, &[]);
+        golden(&pure, "P", 1.3333, Gauge);
+        golden(&pure, "Q", 0.6667, Gauge);
+
+        let first_anchor = project_scenario(&edges, &[("A", 10.0)]);
+        for e in ["P", "Q"] {
+            assert_eq!(
+                pure.get(e),
+                first_anchor.get(e),
+                "island entity {e} moved when the corpus's first anchor landed in X"
             );
         }
     }
