@@ -147,10 +147,11 @@ pub(crate) enum Finding {
         anchors: Vec<(String, f64)>,
         rows: Vec<String>,
     },
-    /// SL-213 PHASE-06 (comparison P7) — entities placed by the gauge
-    /// convention despite anchors existing ELSEWHERE in the graph (no
-    /// directed order path connects them to any anchor). The P7 hint: compare
-    /// against an anchored item to place it.
+    /// SL-213 PHASE-06 (comparison P7/P8) — entities placed by the gauge
+    /// convention despite anchors existing in OTHER components (no directed
+    /// order path connects them to any anchor). Under per-component placement
+    /// (SL-216) this is every member of an anchor-free component, not just
+    /// its P7 sinks. The hint: compare against an anchored item to place it.
     AnchorGaugeDisconnect { entities: Vec<String> },
     /// SL-213 PHASE-06 (comparison R2) — a supersession cycle deactivated
     /// every participating row (`ResolutionStatus::Malformed`). `rows` are
@@ -553,11 +554,13 @@ fn anchor_conflict_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
         .collect()
 }
 
-/// **`AnchorGaugeDisconnect`** (comparison P7) — entities placed by the gauge
-/// convention despite anchors existing SOMEWHERE in the graph. When `cs.anchors`
-/// is empty, EVERY class takes the P8 whole-graph gauge spread (project.rs) —
-/// that is the base state, not a disconnect, so the detector stays silent (it
-/// would otherwise flag every entity in a comparison-free-of-anchors ledger).
+/// **`AnchorGaugeDisconnect`** (comparison P7/P8) — entities placed by the
+/// gauge convention despite anchors existing in other components: under
+/// per-component placement (SL-216) that is every member of each anchor-free
+/// component. When `cs.anchors` is empty the corpus is pure-gauge by
+/// construction (no component has an anchor) — that is the base state, not a
+/// disconnect, so the detector stays silent (it would otherwise flag every
+/// entity in a comparison-free-of-anchors ledger).
 fn anchor_gauge_disconnect_findings(
     cs: &comparison::ConstraintSet,
     projection: &comparison::Projection,

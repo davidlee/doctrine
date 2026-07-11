@@ -18,23 +18,24 @@
 //! Anchors are exact (P3). Unbounded tails step by `gauge_step` off a synthetic
 //! floor/off the floor (P5/P6). A class with neither floor nor ceiling is
 //! gauged to `default_value` (P7). An anchor-free component is spread by
-//! height (P8, component `H`). This is a faithful port of `.doctrine/slice/213/projection-prototype.py`,
-//! whose scenario battery (S1–S8, Y1–Y7, N1–N4) is the golden suite below.
+//! height (P8, component `H`). Ported from `.doctrine/slice/213/projection-prototype.py`,
+//! whose scenario battery (S1–S8, Y1–Y7, N1–N4) is the golden suite below —
+//! except gauge scope, where the port is per-component (SL-216; the
+//! multi-component goldens `s2`/`s8` are re-pinned off the prototype's
+//! global-`H` output — see below).
 //!
-//! ## Gauge scope — a flagged design/prototype tension
-//! The prototype computes the P8 gauge spread over the **whole** node set
-//! (single global height `H`), and takes the anchored branch whenever ANY
-//! anchor exists anywhere. Design P1/P8/P12 read this per weakly-connected
-//! component (independent components, `H` = component max height, universal
-//! locality). They agree on every case EXCEPT a graph with ≥2 disjoint
-//! anchor-free components (only golden `S2`'s `f`/`g` pendant): the prototype's
-//! global `H` couples them, which a strict reading of P12 (locality) forbids.
-//! This port follows the prototype (the executable ground truth the task pins
-//! as the verbatim golden). The gauge tier is explicitly "a convention, not
-//! evidence" (design P9) and its artifacts are accepted (D14/P15); locality is
-//! property-tested for the evidence-bearing (anchored) regime, and the global
-//! coupling is pinned transparently by the `s2_*` golden. Reported for
-//! orchestrator adjudication.
+//! ## Gauge scope — per-component, adjudicated
+//! Placement runs per weakly-connected component (P1): each component picks
+//! its regime by its OWN anchors — no anchor → P8 spread with `H` = component
+//! max height; ≥1 anchor → the anchored pipeline over its members. Locality
+//! (P12) is universal, both regimes, including regime membership (the
+//! corpus's first anchor never moves a disjoint island). The original port
+//! followed the prototype's global-`H` / any-anchor-anywhere semantics; that
+//! tension was adjudicated for the per-component reading (SL-216, IMP-279,
+//! RV-266 F-3 follow-on), the `s2`/`s8` goldens re-pinned to component scale,
+//! and SL-213 design §3 amended in place. Accepted consequence: in a mixed
+//! corpus an anchor-free island's loser lands below `default_value`
+//! (judged-and-lost ranks below unjudged).
 
 use std::collections::{BTreeMap, BTreeSet};
 

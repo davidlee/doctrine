@@ -41,3 +41,30 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
   breakage in lint-js (node_modules eslint shebang `/usr/bin/env` absent in
   jail) — web/map untouched by this slice; rust gate fully clean. Flag for
   host-side gate run or jail fix.
+
+## PHASE-02 — contract amendment sweep (2026-07-12)
+
+- Prose-only phase, zero behaviour change: 4043 tests pass / 0 fail unchanged,
+  clippy zero warnings, fmt clean.
+- SL-213 design.md §3 amended in place, 4 `[amended by SL-216]` tags: P1
+  exception clause retired; P8 → component max height + per-component trigger,
+  RV-266 F-3 reconciled note superseded (SL-216 IS the "new sliced work" it
+  named); P12 → unscoped universal locality incl. regime membership.
+- project.rs module header: "Gauge scope" ¶ rewritten as adjudicated (SL-216,
+  IMP-279, RV-266 F-3 follow-on); no follows-the-prototype / reported-for-
+  adjudication residue. Extra site beyond design's list: the Method ¶'s
+  "faithful port" claim — qualified (port diverges from prototype on gauge
+  scope; s2/s8 re-pinned off global-H output).
+- findings.rs AnchorGaugeDisconnect variant + producer docs → component
+  language (whole anchor-free component, not P7 sinks; anchors-empty guard =
+  pure-gauge base state per-corpus by construction).
+- e2e ISS-050 narrative rewritten (whole island Gauge 1.3333/0.6667 via
+  component P8); assertions untouched.
+- Sweep audit (EX-4): rg `corpus-wide|whole-graph|global` — survivors all
+  legit (amendment-note history in 213 design, components() BFS "globally
+  smallest", place() "bitwise-identical to running it globally" preservation
+  note, place_component() "whole-graph adjacencies — safe", findings dedup
+  test's unrelated "globally"). P7/P8/P12/gauge comment audit across
+  graph.rs/store.rs/render.rs/view.rs/compile.rs/config.rs/surface.rs/mod.rs:
+  scope-neutral or single-component-true; render hint already "no anchor in
+  component". p12 test-comment residue confirmed pre-swept by PHASE-01.

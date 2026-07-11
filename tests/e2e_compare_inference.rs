@@ -455,12 +455,11 @@ fn vt2_explain_value_source_shapes_and_json_parity() {
         &["--prefer", "a", "--rater", "agent"],
     );
 
-    // Gauge: ISS-050 > ISS-051, disconnected from ISS-040's anchored
-    // component. ISS-051 is the edge's SINK — no successor (floor None) and
-    // no ancestor anchor (ceiling None) — P7 fires exactly there; ISS-050
-    // (the source) still has a floor (ISS-051's placed value) and is
-    // Projected, not Gauge (design P7's precise neither-floor-nor-ceiling
-    // trigger, RV-265 F-2).
+    // Gauge: ISS-050 > ISS-051, an anchor-free component disjoint from
+    // ISS-040's anchored one. Per-component placement (SL-216) spreads the
+    // whole island by its own height (P8, component H): both entities are
+    // Gauge (1.3333/0.6667). The explain assertion below targets ISS-051,
+    // whose render carries the component-scoped hint.
     seed_issue(root, 50, "");
     seed_issue(root, 51, "");
     capture(root, &iss(50), &iss(51), &["--prefer", "a"]);

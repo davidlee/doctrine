@@ -1250,3 +1250,10 @@ plan.md cites `e2e_compare_inference` by bare test name; locating the file cost
 3 grep rounds (name is the FILE stem, not a #[test] fn — grep for the fn name
 misses). Plans citing test evidence should carry the path
 (tests/e2e_compare_inference.rs) alongside the name.
+[phase-plan; SL-216-p02-fable]
+Design D2 cited a sweep site by line range (project.rs:834-836 "whole-graph
+spread is a documented artifact" p12 comment) that PHASE-01 had already
+rewritten and shifted — the executing agent spent a grep round confirming the
+site was dead. Designs enumerating comment-sweep sites for a LATER phase
+should cite stable tokens, not line numbers; earlier phases of the same slice
+invalidate both.
