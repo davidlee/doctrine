@@ -1089,3 +1089,12 @@ multi-line inline table ("{ id = ..., \n expects = ..., \n ... }") — invalid
 TOML if followed literally; cost one failed `slice phases` + a reformat pass.
 Scaffold comment should show a single-line row or use [[phase.verification]]
 array-of-tables syntax.
+
+[route/phase-plan/execute; fable-SL213-p01]
+Boot snapshot "floor directive" says `doctrine prompt resolve --band model
+--model <id>` — but `--role` is required, so the verbatim command fails
+(exit 2) and costs a retry + --help round-trip. Directive should carry the
+full shape (`--role orchestrator --harness <h>`). Also: resolve for
+claude-fable-5 returned empty (no model band in hymns corpus) — silent
+degradation is fine, but a one-line "no band for <model>" would save the
+agent wondering whether the invocation was wrong.
