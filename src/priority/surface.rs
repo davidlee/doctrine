@@ -20,6 +20,7 @@
 use std::path::Path;
 
 use crate::catalog::scan::ScanMode;
+use crate::comparison::{self, Projection as ValueProjection};
 use crate::relation_graph::{self, EntityKey};
 
 use super::channels;
@@ -462,9 +463,18 @@ pub(crate) fn blockers(root: &Path, id: &str, transitive: bool) -> anyhow::Resul
 /// `explain <ID>` (design §5.4 / D11) — always walked to root: the eligibility
 /// reason, the transitive blocker chain, the evicted seq edges, and the score
 /// breakdown. Each a structured reason.
+///
+/// SL-213 PHASE-06: also loads the comparison-tier pipeline over the SAME
+/// scan (mirrors `findings`'s one-scan style — no shared-scan seam exists
+/// across verbs; each surface fn already re-scans independently, e.g.
+/// `blockers`/`actionability_block_from` above) to compose the value-source
+/// block + the corpus-global inert priority-domain disclosure.
 pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
     let key = parse_key(id)?;
-    let g = graph::build(root)?;
+    let scanned = relation_graph::scan_entities(root, &mut vec![], ScanMode::default())?;
+    let cfg = super::config::load(root);
+    let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
+    let g = graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.projection)?;
     // Existence gate (SL-050 F6): a well-formed but never-minted id errors rather than
     // explaining a phantom node.
     relation_graph::require_minted(&g.projection, key)?;
@@ -501,13 +511,135 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
         blocker_chain.push(ReasonKind::CycleDegraded { nodes });
     }
 
+    let value_source = value_source_reason(&g, key, &pipeline);
+    let priority_disclosure =
+        (pipeline.priority_domain_count > 0).then_some(ReasonKind::PriorityDomainDisclosure {
+            count: pipeline.priority_domain_count,
+        });
+
     Ok(Explanation {
         id: key.canonical(),
         eligibility,
         blocker_chain,
         evictions,
         score,
+        value_source,
+        priority_disclosure,
     })
+}
+
+/// The SL-213 PHASE-06 value-source block for one entity (design §4 S3):
+/// authored (own `[value]` facet — possibly an anchor hoisted onto a shared
+/// class) > projected (bounds + rater split) > gauge (judgement count) >
+/// the implicit default tier (D11). `None` for a non-value-bearing kind.
+fn value_source_reason(
+    g: &PriorityGraph,
+    key: EntityKey,
+    pipeline: &comparison::Pipeline,
+) -> Option<ReasonKind> {
+    let attrs = g.attrs.get(&key)?;
+    if !crate::kinds::is_value_bearing(key.prefix) {
+        return None;
+    }
+    let canonical = key.canonical();
+    if let Some(v) = attrs.facets.value.as_ref() {
+        return Some(ReasonKind::ValueAuthored {
+            value: v.value,
+            conflict: anchor_conflict_citation(&pipeline.constraint_set, &canonical),
+        });
+    }
+    if let Some(&(value, provenance)) = pipeline.projection.get(&canonical) {
+        return Some(match provenance {
+            comparison::ValueProvenance::Authored => ReasonKind::ValueAuthored {
+                value,
+                conflict: anchor_conflict_citation(&pipeline.constraint_set, &canonical),
+            },
+            comparison::ValueProvenance::Projected => {
+                let (lower, upper) = class_bounds(&pipeline.constraint_set, &canonical);
+                let counts = class_rater_counts(pipeline, &canonical);
+                ReasonKind::ValueProjected {
+                    value,
+                    lower,
+                    upper,
+                    human: counts.human,
+                    agent: counts.agent,
+                }
+            }
+            comparison::ValueProvenance::Gauge => {
+                let counts = class_rater_counts(pipeline, &canonical);
+                ReasonKind::ValueGauge {
+                    value,
+                    judgements: counts.total(),
+                }
+            }
+        });
+    }
+    // No own facet, no comparison-tier engagement at all: nothing to disclose
+    // (design §4 S3 names three shapes only — the scoring-tier `DEFAULT_VALUE`
+    // fallback `effective_raw_value` applies for `value_dim` is a NUMERIC
+    // floor, not a value-SOURCE worth a citation; showing one here for every
+    // untouched value-bearing entity would regress every existing `explain`
+    // golden that carries no comparison evidence).
+    None
+}
+
+/// The constraining-judgement rater split for the class `canonical` belongs
+/// to, or a zero split when the entity carries no comparison evidence.
+fn class_rater_counts(
+    pipeline: &comparison::Pipeline,
+    canonical: &str,
+) -> crate::comparison::RaterCounts {
+    pipeline
+        .constraint_set
+        .classes
+        .get(canonical)
+        .and_then(|class| pipeline.constraining_by_class.get(class))
+        .copied()
+        .unwrap_or_default()
+}
+
+/// The C6 display bounds for `canonical`'s class, as plain scalars (`None` =
+/// unbounded that side) — the value-source "projected" shape's `bounds
+/// (lower ‥ upper)` fragment.
+fn class_bounds(cs: &comparison::ConstraintSet, canonical: &str) -> (Option<f64>, Option<f64>) {
+    let Some(class) = cs.classes.get(canonical) else {
+        return (None, None);
+    };
+    let Some(bounds) = cs.bounds.get(class) else {
+        return (None, None);
+    };
+    (bound_value(bounds.lower), bound_value(bounds.upper))
+}
+
+fn bound_value(b: comparison::Bound) -> Option<f64> {
+    match b {
+        comparison::Bound::Unbounded => None,
+        comparison::Bound::Open(v) | comparison::Bound::Closed(v) => Some(v),
+    }
+}
+
+/// Every OTHER class this `canonical`'s class was found to conflict with (an
+/// `AnchorConflict` citation) — the value-source "authored" shape's optional
+/// finding reference. Empty when the entity carries no comparison anchor
+/// conflict.
+fn anchor_conflict_citation(cs: &comparison::ConstraintSet, canonical: &str) -> Vec<String> {
+    let Some(class) = cs.classes.get(canonical) else {
+        return Vec::new();
+    };
+    let mut others = std::collections::BTreeSet::new();
+    for reason in cs.quarantined.values() {
+        if let comparison::QuarantineReason::AnchorConflict { pairs } = reason {
+            for (x, y) in pairs {
+                if x == class {
+                    others.insert(y.clone());
+                }
+                if y == class {
+                    others.insert(x.clone());
+                }
+            }
+        }
+    }
+    others.into_iter().collect()
 }
 
 /// The `inspect` actionability block over a PRE-SCANNED entity slice (design §5.4 /
@@ -544,9 +676,22 @@ pub(crate) fn actionability_block_from(
 pub(crate) fn findings(root: &Path) -> anyhow::Result<Vec<super::findings::Finding>> {
     let scanned = relation_graph::scan_entities(root, &mut vec![], ScanMode::default())?;
     let cfg = super::config::load(root);
-    let base = graph::build_from_with_cfg(&scanned, root, &cfg)?;
-    let betas = beta_endpoints(&scanned, root, &cfg)?;
-    Ok(super::findings::detect(&base, &cfg, betas.as_ref()))
+    // SL-213 PHASE-05/06: ONE comparison-tier PIPELINE over the shared scan,
+    // reused across the base build, the β endpoint sweep, AND the new
+    // comparison-domain detectors (the pipeline is scan-derived, not
+    // cfg-swept — a second load would just re-read the same ledger for the
+    // same answer).
+    let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
+    let base = graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.projection)?;
+    let betas = beta_endpoints(&scanned, root, &cfg, &pipeline.projection)?;
+    let mut findings = super::findings::detect(&base, &cfg, betas.as_ref());
+    findings.extend(super::findings::comparison_findings(&pipeline));
+    findings.sort_by(|a, b| {
+        a.kind_label()
+            .cmp(b.kind_label())
+            .then(b.magnitude().total_cmp(&a.magnitude()))
+    });
+    Ok(findings)
 }
 
 /// Whether the corpus carries a NON-terminal interval estimate (`lower < upper`) — the
@@ -566,10 +711,15 @@ fn has_nonterminal_interval(scanned: &[relation_graph::ScannedEntity]) -> bool {
 /// wasted builds, and the β-family stays silent (starved-until-estimates, R1). The
 /// three reads (base + lo + hi) share the one scan; dep/seq topology is re-read per build
 /// under the quiescent-tree precondition (R4).
+///
+/// `projected` (SL-213 PHASE-05) is the ONE comparison-tier projection the caller
+/// loaded over the shared scan — shared across both endpoint builds rather than
+/// re-derived per build (the projection is scan-derived, not cfg-swept).
 pub(crate) fn beta_endpoints(
     scanned: &[relation_graph::ScannedEntity],
     root: &Path,
     cfg: &super::config::PriorityConfig,
+    projected: &ValueProjection,
 ) -> anyhow::Result<Option<super::findings::BetaEndpoints>> {
     if !has_nonterminal_interval(scanned) {
         return Ok(None);
@@ -578,8 +728,8 @@ pub(crate) fn beta_endpoints(
     lo_cfg.estimate.skew = super::findings::BETA_LO;
     let mut hi_cfg = cfg.clone();
     hi_cfg.estimate.skew = super::findings::BETA_HI;
-    let lo = graph::build_from_with_cfg(scanned, root, &lo_cfg)?;
-    let hi = graph::build_from_with_cfg(scanned, root, &hi_cfg)?;
+    let lo = graph::build_from_with_cfg(scanned, root, &lo_cfg, projected)?;
+    let hi = graph::build_from_with_cfg(scanned, root, &hi_cfg, projected)?;
     Ok(Some(super::findings::BetaEndpoints { lo, hi }))
 }
 
@@ -1076,7 +1226,9 @@ mod tests {
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = super::super::config::load(root);
         assert!(
-            beta_endpoints(&scanned, root, &cfg).unwrap().is_some(),
+            beta_endpoints(&scanned, root, &cfg, &ValueProjection::new())
+                .unwrap()
+                .is_some(),
             "a non-terminal interval estimate yields Some"
         );
 
@@ -1089,7 +1241,9 @@ mod tests {
             relation_graph::scan_entities(root2, &mut vec![], ScanMode::default()).unwrap();
         let cfg2 = super::super::config::load(root2);
         assert!(
-            beta_endpoints(&scanned2, root2, &cfg2).unwrap().is_none(),
+            beta_endpoints(&scanned2, root2, &cfg2, &ValueProjection::new())
+                .unwrap()
+                .is_none(),
             "an estimate-free corpus yields None"
         );
     }
@@ -1113,7 +1267,9 @@ mod tests {
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = super::super::config::load(root);
         assert!(
-            beta_endpoints(&scanned, root, &cfg).unwrap().is_none(),
+            beta_endpoints(&scanned, root, &cfg, &ValueProjection::new())
+                .unwrap()
+                .is_none(),
             "a terminal-only interval does not arm the sweep"
         );
     }

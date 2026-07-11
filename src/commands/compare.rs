@@ -25,7 +25,6 @@
 //! subcommand group is cosmetic, not structural. `list` / `withdraw` are stubbed
 //! here and land in PHASE-03 — their arg shapes are fixed now.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -33,7 +32,8 @@ use clap::{Args, Subcommand, ValueEnum};
 
 use crate::comparison::{
     self, COMPARISONS_DIR, ComparisonSession, FRAME_EQUAL_EFFORT, FRAME_PREFER_FIRST, Judgement,
-    RaterKind, Response, RowForm, SessionHeader, Tombstone,
+    RaterKind, ResolutionStatus, Response, RowForm, RowSummary, SessionHeader, Tombstone,
+    load_sessions,
 };
 
 /// `doctrine compare <SUBCOMMAND>` — the comparison-ledger verb group.
@@ -106,12 +106,18 @@ pub(crate) struct RecordArgs {
     pub(crate) path: Option<PathBuf>,
 }
 
-/// `compare list [<ID>]` — arg shape for PHASE-03.
+/// `compare list [<ID>] [--active-only]` — arg shape for PHASE-03, status
+/// column + `--active-only` filter SL-213 PHASE-06 (design §4 S2).
 #[derive(Args)]
 pub(crate) struct ListArgs {
     /// Optional participation filter — a canonical ref; rows where `a` or `b`
     /// equals it.
     pub(crate) id: Option<String>,
+    /// Show only `ResolutionStatus::Active` rows — quarantined and
+    /// no-constraint rows ARE active (they still show; they are visibly
+    /// non-constraining, design D13/S2).
+    #[arg(long)]
+    pub(crate) active_only: bool,
     /// Explicit project root (default: auto-detect).
     #[arg(short = 'p', long)]
     pub(crate) path: Option<PathBuf>,
@@ -333,122 +339,70 @@ fn write_session_file(
     Ok(path)
 }
 
-/// Scan `.doctrine/comparisons/*.toml` and parse every session. A missing
-/// directory yields an empty listing (not an error — the ledger is created
-/// lazily on first capture). Files are read in filename order for determinism;
-/// row ordering is imposed later by the total key, so file order is immaterial.
-fn load_sessions(root: &Path) -> anyhow::Result<Vec<ComparisonSession>> {
-    let dir = root.join(".doctrine").join(COMPARISONS_DIR);
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => {
-            return Err(
-                anyhow::Error::new(e).context(format!("read comparisons dir {}", dir.display()))
-            );
-        }
-    };
-    let mut paths: Vec<PathBuf> = entries
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|x| x == "toml"))
-        .collect();
-    paths.sort();
-
-    let mut sessions = Vec::new();
-    for path in paths {
-        let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("read comparison session {}", path.display()))?;
-        let session = comparison::parse(&text)
-            .with_context(|| format!("parse comparison session {}", path.display()))?;
-        sessions.push(session);
-    }
-    Ok(sessions)
-}
-
-/// The wire token for a rater kind — mirrors the serde `rename_all = "lowercase"`
-/// on [`RaterKind`] (the enum is the single source; no parallel vocab).
-fn rater_token(rater: &RaterKind) -> &'static str {
-    match rater {
-        RaterKind::Human => "human",
-        RaterKind::Agent => "agent",
-    }
-}
-
-/// Render one judgement row for `list`: the FULL row uid (never a prefix —
-/// uuid-v7 prefixes share a timestamp bucket and collide, and this line feeds
-/// `withdraw`, RV-262 F-6), the pair with the preferred side marked `*`, frame,
-/// rater (+identity when present), date, note when present, and a `[withdrawn]`
-/// marker when a tombstone targets the row (display-only — resolution is Phase B).
-fn render_row(j: &Judgement, withdrawn: bool) -> String {
+/// Render one joined row for `list` (SL-213 PHASE-06, design §4 S2): the FULL
+/// row uid (never a prefix — uuid-v7 prefixes share a timestamp bucket and
+/// collide, and this line feeds `withdraw`, RV-262 F-6), the joined
+/// [`RowState`] display token, the pair with the preferred side marked `*`,
+/// frame, rater (+identity when present), date, note when present, and a
+/// `[withdrawn]` marker when the row is `ResolutionStatus::Tombstoned`
+/// (retained verbatim alongside the new `status=tombstoned` token —
+/// pre-existing golden text, extend-don't-replace).
+fn render_row(row: &RowSummary) -> String {
     // Minimal v2 adaptation (SL-213 PHASE-01 EX-4): the `*` marks a preferred
-    // side; `=` / `~` render equal / incomparable. The derived RowState
-    // column is PHASE-06.
-    let pair = match j.response {
-        Response::PreferA => format!("{}* vs {}", j.a, j.b),
-        Response::PreferB => format!("{} vs {}*", j.a, j.b),
-        Response::Equal => format!("{} = {}", j.a, j.b),
-        Response::Incomparable => format!("{} ~ {}", j.a, j.b),
+    // side; `=` / `~` render equal / incomparable.
+    let pair = match row.response {
+        Response::PreferA => format!("{}* vs {}", row.a, row.b),
+        Response::PreferB => format!("{} vs {}*", row.a, row.b),
+        Response::Equal => format!("{} = {}", row.a, row.b),
+        Response::Incomparable => format!("{} ~ {}", row.a, row.b),
     };
-    let by = j.by.as_deref().map(|b| format!(":{b}")).unwrap_or_default();
-    let note = j
+    let by = row
+        .by
+        .as_deref()
+        .map(|b| format!(":{b}"))
+        .unwrap_or_default();
+    let note = row
         .note
         .as_deref()
         .map(|n| format!("  note: {n}"))
         .unwrap_or_default();
+    let withdrawn = matches!(row.state.resolution, ResolutionStatus::Tombstoned);
     let tomb = if withdrawn { "  [withdrawn]" } else { "" };
     format!(
-        "{uid}  {pair}  frame={frame}  rater={rater}{by}  {date}{note}{tomb}",
-        uid = j.uid,
-        frame = j.frame,
-        rater = rater_token(&j.rater),
-        date = j.date,
+        "{uid}  status={status}  {pair}  frame={frame}  rater={rater}{by}  {date}{note}{tomb}",
+        uid = row.uid,
+        status = row.state.display_token(),
+        frame = row.frame,
+        rater = row.rater_token,
+        date = row.date,
     )
 }
 
-/// Order and render the judgement rows across all sessions. Pure — no clock,
-/// disk, or IO — so the total-order and filter behaviour is unit-testable
-/// without capturing stdout. Rows sort by the total key `(date, session_uid,
-/// seq)` (RV-260 F-4); the optional `filter` keeps rows where either side is
-/// that id. Tombstone targets are uid-referencing, so marking is
-/// file-order-independent.
-fn list_lines(sessions: &[ComparisonSession], filter: Option<&str>) -> Vec<String> {
-    let withdrawn: BTreeSet<&str> = sessions
-        .iter()
-        .flat_map(|s| s.tombstones.iter().map(|t| t.target.as_str()))
-        .collect();
-
-    let mut rows: Vec<(&str, &str, &Judgement)> = sessions
-        .iter()
-        .flat_map(|s| {
-            let uid = s.session.uid.as_str();
-            let date = s.session.date.as_str();
-            s.judgements.iter().map(move |j| (date, uid, j))
-        })
-        .filter(|(_, _, j)| match filter {
-            Some(id) => j.a == id || j.b == id,
-            None => true,
-        })
-        .collect();
-    rows.sort_by(|(da, ua, ja), (db, ub, jb)| {
-        da.cmp(db)
-            .then_with(|| ua.cmp(ub))
-            .then_with(|| ja.seq.cmp(&jb.seq))
-    });
-
-    rows.into_iter()
-        .map(|(_, _, j)| render_row(j, withdrawn.contains(j.uid.as_str())))
+/// Filter + render the pipeline's joined rows for `list` (design §4 S2, D13:
+/// "the pipeline computes it anyway"). `filter` keeps rows where either side
+/// matches the participation ref; `active_only` keeps `ResolutionStatus::
+/// Active` rows only — quarantined and no-constraint rows ARE active (design
+/// A2), so they still show under `--active-only`. Ordering comes for free
+/// from `resolve`'s own total-key sort (`(date, session_uid, seq)`) that
+/// `RowSummary`s are already in.
+fn list_lines(rows: &[RowSummary], filter: Option<&str>, active_only: bool) -> Vec<String> {
+    rows.iter()
+        .filter(|r| filter.is_none_or(|id| r.a == id || r.b == id))
+        .filter(|r| !active_only || matches!(r.state.resolution, ResolutionStatus::Active))
+        .map(render_row)
         .collect()
 }
 
-/// `compare list [<ID>]` — read the ledger back. Scans every session, flattens
-/// judgement rows, orders by the total key, applies the optional participation
-/// filter, and prints one line per row. A missing directory is an empty
-/// listing, not an error.
+/// `compare list [<ID>] [--active-only]` — read the ledger back through the
+/// SAME resolve → compile pipeline `explain`/`findings` consume (SL-213
+/// PHASE-06, design D13): every row joins its [`ResolutionStatus`] with its
+/// (Active-only) `CompilationStatus` into ONE display token. A missing
+/// comparisons directory is an empty listing, not an error.
 fn run_list(args: &ListArgs) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let sessions = load_sessions(&root)?;
-    let lines = list_lines(&sessions, args.id.as_deref());
+    let pipeline = crate::priority::graph::load_comparison_pipeline_for_root(&root)?;
+    let lines = list_lines(&pipeline.rows, args.id.as_deref(), args.active_only);
 
     let mut out = std::io::stdout();
     if lines.is_empty() {
@@ -1030,6 +984,24 @@ mod tests {
         }
     }
 
+    /// Build render-ready [`RowSummary`] rows over in-memory sessions (no
+    /// disk) — the SAME pipeline `run_list` composes, minus the entity scan
+    /// (empty `StatusMap`/`AnchorMap`; `list`'s own unit tests exercise
+    /// ordering/filtering, not R6/anchors).
+    fn rows_of(sessions: &[ComparisonSession]) -> Vec<RowSummary> {
+        comparison::pipeline_from_sessions(
+            sessions,
+            &comparison::StatusMap::new(),
+            &comparison::AnchorMap::new(),
+            &comparison::ProjectionCfg {
+                gauge_step: 0.25,
+                default_value: 1.0,
+            },
+        )
+        .unwrap()
+        .rows
+    }
+
     fn withdraw_args(root: &Path, uid: &str, note: Option<&str>) -> WithdrawArgs {
         WithdrawArgs {
             uid: uid.to_string(),
@@ -1060,6 +1032,18 @@ mod tests {
             .expect("a tombstone row exists")
     }
 
+    /// `mk_judgement` with an explicit row date — the total-key order (design
+    /// §2 R3: `(date, session_uid, seq)`) sorts on the JUDGEMENT row's own
+    /// `date` field (`resolve.rs`'s tested behaviour), which a real capture
+    /// always stamps identically to its session's date (one shared
+    /// `clock::today()` call, `run_capture`) — this fixture keeps that
+    /// invariant honest rather than decoupling the two dates.
+    fn mk_judgement_dated(uid: &str, seq: u32, a: &str, b: &str, date: &str) -> Judgement {
+        let mut j = mk_judgement(uid, seq, a, b);
+        j.date = date.to_string();
+        j
+    }
+
     #[test]
     fn compare_list_orders_by_total_key() {
         // Cross-file ordering by (date, session_uid, seq) — independent of the
@@ -1068,24 +1052,36 @@ mod tests {
         let late = mk_session(
             "2026-07-10",
             "sess-b",
-            vec![mk_judgement("row-late", 0, "SL-204", "IMP-118")],
+            vec![mk_judgement_dated(
+                "row-late",
+                0,
+                "SL-204",
+                "IMP-118",
+                "2026-07-10",
+            )],
         );
         let early = mk_session(
             "2026-07-08",
             "sess-a",
-            vec![mk_judgement("row-early", 0, "SL-204", "CHR-042")],
+            vec![mk_judgement_dated(
+                "row-early",
+                0,
+                "SL-204",
+                "CHR-042",
+                "2026-07-08",
+            )],
         );
         // Same-date tie broken by session uid then seq.
         let same_date = mk_session(
             "2026-07-08",
             "sess-c",
             vec![
-                mk_judgement("row-seq1", 1, "IDE-001", "IMP-118"),
-                mk_judgement("row-seq0", 0, "IDE-001", "SL-204"),
+                mk_judgement_dated("row-seq1", 1, "IDE-001", "IMP-118", "2026-07-08"),
+                mk_judgement_dated("row-seq0", 0, "IDE-001", "SL-204", "2026-07-08"),
             ],
         );
 
-        let lines = list_lines(&[late, same_date, early], None);
+        let lines = list_lines(&rows_of(&[late, same_date, early]), None, false);
         let order: Vec<&str> = lines
             .iter()
             .map(|l| l.split_whitespace().next().unwrap())
@@ -1104,7 +1100,7 @@ mod tests {
                 mk_judgement("drop", 1, "SL-999", "CHR-042"),
             ],
         );
-        let lines = list_lines(&[session], Some("IMP-118"));
+        let lines = list_lines(&rows_of(&[session]), Some("IMP-118"), false);
         assert_eq!(lines.len(), 1, "only the participating row survives");
         assert!(
             lines[0].contains("keep"),
@@ -1123,7 +1119,7 @@ mod tests {
             "sess-1",
             vec![mk_judgement(uid, 0, "SL-204", "IMP-118")],
         );
-        let lines = list_lines(&[session], None);
+        let lines = list_lines(&rows_of(&[session]), None, false);
         assert_eq!(lines.len(), 1);
         assert!(
             lines[0].contains(uid),
@@ -1168,7 +1164,7 @@ mod tests {
         assert_eq!(tomb.note.as_deref(), Some("wrong way round"));
 
         // list now marks that row withdrawn (display-only interpretation).
-        let lines = list_lines(&sessions, None);
+        let lines = list_lines(&rows_of(&sessions), None, false);
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains(&uid), "full uid present: {}", lines[0]);
         assert!(
@@ -1227,9 +1223,10 @@ mod tests {
         // No comparisons dir at all — an empty listing, not a failure.
         let sessions = load_sessions(&root).unwrap();
         assert!(sessions.is_empty());
-        assert!(list_lines(&sessions, None).is_empty());
+        assert!(list_lines(&rows_of(&sessions), None, false).is_empty());
         run_list(&ListArgs {
             id: None,
+            active_only: false,
             path: Some(root),
         })
         .unwrap();

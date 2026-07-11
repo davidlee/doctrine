@@ -38,6 +38,9 @@ use cordage::{
     OverlayConfig, OverlayId,
 };
 
+use crate::comparison::{
+    self, AnchorMap, EntityLifecycle, Projection as ValueProjection, ProjectionCfg, StatusMap,
+};
 use crate::facet::EntityFacets;
 use crate::priority::config;
 use crate::priority::partition::{self, StatusClass};
@@ -102,14 +105,25 @@ fn est_cost(bounds: Option<(f64, f64)>, ctx: CostCtx, ec: &config::EstimateCost)
 /// an authored value (incl. < 1.0 and 0.0) is returned untouched.
 pub(crate) const DEFAULT_VALUE: f64 = 1.0;
 
-/// Single definition of an entity's value for priority purposes. Authored value
-/// wins; a value-bearing kind with no facet defaults to `DEFAULT_VALUE`; any other
-/// valueless kind (records, governance, REV) is None. Consumed by `base_score`'s
-/// `value_dim` now and SL-176 burndown later (RV-191 F-1).
-fn effective_raw_value(kind: &entity::Kind, f: &EntityFacets) -> Option<f64> {
+/// Single definition of an entity's value for priority purposes (SL-213 design
+/// D11): authored value wins; else the comparison-tier PROJECTED value (either
+/// tier — `Projected` interpolation or its `Gauge` sub-tier, D11: "gauge is a
+/// sub-tier of projected for ADR-015 purposes"); else a value-bearing kind with
+/// no facet and no projection defaults to `DEFAULT_VALUE`; any other valueless
+/// kind (records, governance, REV) is None. `projected` empty ⇒ bitwise-identical
+/// to the pre-SL-213 two-tier resolution (behaviour-preservation gate). Consumed
+/// by `base_score`'s `value_dim` AND the burndown accessor identically (design
+/// "governed policy": gauge participates in burndown, RV-191 F-1 / SL-213 D11).
+fn effective_raw_value(
+    kind: &entity::Kind,
+    f: &EntityFacets,
+    key: EntityKey,
+    projected: &ValueProjection,
+) -> Option<f64> {
     f.value
         .as_ref()
         .map(|v| v.value)
+        .or_else(|| projected.get(&key.canonical()).map(|&(v, _)| v))
         .or_else(|| crate::kinds::is_value_bearing(kind.prefix).then_some(DEFAULT_VALUE))
 }
 
@@ -118,6 +132,8 @@ fn effective_raw_value(kind: &entity::Kind, f: &EntityFacets) -> Option<f64> {
 fn base_score(
     f: &EntityFacets,
     kind: &entity::Kind,
+    key: EntityKey,
+    projected: &ValueProjection,
     cfg: &config::PriorityConfig,
     ctx: CostCtx,
 ) -> BaseScore {
@@ -128,7 +144,7 @@ fn base_score(
     // negative multiplier from many demoting tags.
     let tag_term = (1.0 + f.tags.iter().map(|t| cfg.tag_coeff(t) - 1.0).sum::<f64>()).max(0.0);
     let value_dim = {
-        let raw = match effective_raw_value(kind, f) {
+        let raw = match effective_raw_value(kind, f, key, projected) {
             Some(v) => {
                 let cost = est_cost(
                     f.estimate.as_ref().map(|e| (e.lower, e.upper)),
@@ -265,10 +281,17 @@ pub(crate) fn build(root: &std::path::Path) -> anyhow::Result<PriorityGraph> {
 /// NOT part of `scan_entities`, so the body still needs disk access. The mint/edge order
 /// is unchanged (the scan order the caller supplies), preserving byte-identical output.
 ///
+/// SL-213 PHASE-05: also composes the comparison-tier value projection
+/// (`comparison::load_pipeline`, the ONE disk touch for the comparisons
+/// ledger) and threads it into [`build_from_with_cfg`]. No comparisons on disk
+/// ⇒ `load_pipeline` short-circuits to an empty pipeline ⇒ byte-identical to
+/// the pre-SL-213 build (behaviour-preservation gate).
+///
 /// # Errors
 ///
-/// Propagates a read error, or an internal cordage rejection of well-formed adapter
-/// input (an adapter bug, not a recoverable condition).
+/// Propagates a read error, a malformed comparison ledger, or an internal
+/// cordage rejection of well-formed adapter input (an adapter bug, not a
+/// recoverable condition).
 pub(crate) fn build_from(
     scanned: &[relation_graph::ScannedEntity],
     root: &std::path::Path,
@@ -276,7 +299,118 @@ pub(crate) fn build_from(
     // The single config load lives HERE (D4) and is threaded into the build seam.
     // SL-194 PHASE-01 lifted it to a parameter so a β sweep can inject a swept
     // `estimate.skew`; every existing caller routes through this byte-identical wrapper.
-    build_from_with_cfg(scanned, root, &config::load(root))
+    let cfg = config::load(root);
+    let projected = load_comparison_projection(root, scanned, &cfg)?;
+    build_from_with_cfg(scanned, root, &cfg, &projected)
+}
+
+/// Compose the comparison-tier `StatusMap`/`AnchorMap` from the raw scan
+/// (design §1 integration point) and load the projection
+/// (`comparison::load_pipeline`) — the ONE call the priority build shell
+/// makes into the comparison pipeline. `pub(crate)` so a caller sweeping `cfg`
+/// over a shared scan (the β endpoint sweep, `surface::beta_endpoints`) can
+/// load ONE projection and pass it to every `build_from_with_cfg` call,
+/// rather than re-deriving it (and re-reading the comparisons ledger) per
+/// build.
+pub(crate) fn load_comparison_projection(
+    root: &std::path::Path,
+    scanned: &[relation_graph::ScannedEntity],
+    cfg: &config::PriorityConfig,
+) -> anyhow::Result<ValueProjection> {
+    Ok(load_comparison_pipeline(root, scanned, cfg)?.projection)
+}
+
+/// Load the comparison-tier PIPELINE (SL-213 PHASE-06): the compiled
+/// `ConstraintSet` (bounds + quarantine ledger), the constraining-judgement
+/// rater split by class, the resolve-tier finding streams, and the final
+/// `Projection` — the richer bundle `explain`'s value-source block and
+/// `findings`' comparison detectors need beyond the projected scalar
+/// [`load_comparison_projection`] returns. Same layering rationale as its
+/// siblings (this file's doc on [`comparison_status_map`]): needs
+/// `partition::status_class` + `ScannedEntity`, both above `comparison`.
+pub(crate) fn load_comparison_pipeline(
+    root: &std::path::Path,
+    scanned: &[relation_graph::ScannedEntity],
+    cfg: &config::PriorityConfig,
+) -> anyhow::Result<comparison::Pipeline> {
+    let statuses = comparison_status_map(scanned);
+    let anchors = comparison_anchor_map(scanned);
+    let proj_cfg = ProjectionCfg {
+        gauge_step: cfg.gauge.step,
+        default_value: DEFAULT_VALUE,
+    };
+    comparison::load_pipeline(root, &statuses, &anchors, &proj_cfg)
+}
+
+/// Convenience one-call wrapper over [`load_comparison_pipeline`] for callers
+/// with no pre-existing scan to share — `compare list` (SL-213 PHASE-06),
+/// which needs the pipeline alone, not a `PriorityGraph`. Mirrors [`build`]'s
+/// relationship to [`build_from`].
+pub(crate) fn load_comparison_pipeline_for_root(
+    root: &std::path::Path,
+) -> anyhow::Result<comparison::Pipeline> {
+    let scanned = relation_graph::scan_entities(root, &mut vec![], ScanMode::default())?;
+    let cfg = config::load(root);
+    load_comparison_pipeline(root, &scanned, &cfg)
+}
+
+/// Build the comparison-tier [`StatusMap`] from the raw entity scan (design §1
+/// integration point): terminal status via [`partition::status_class`];
+/// supersession via outbound `supersedes` edges — an edge A→B (A's outbound
+/// `Supersedes` relation names B) means B is superseded BY A
+/// (`comparison::resolve` R6 "superseded entity").
+///
+/// **Home, stated:** this builder lives here, in `priority::graph` — NOT in
+/// `comparison::store` — because it depends on `partition::status_class` and
+/// `ScannedEntity`, both of which sit above `comparison` in the ADR-001
+/// layering (design §1: `comparison::store` depends on `wire, fs` only).
+/// `priority::graph` already depends on both `priority::partition` and
+/// `comparison`, so it is the layering-safe home for the bridge; building it
+/// inside `comparison::store` would put `comparison` in a two-way dependency
+/// with `priority` (a cycle), since `priority::graph` also calls
+/// `comparison::load_pipeline`.
+fn comparison_status_map(scanned: &[relation_graph::ScannedEntity]) -> StatusMap {
+    let mut map = StatusMap::new();
+    for entity in scanned {
+        if partition::status_class(entity.kind, entity.status.as_deref()) == StatusClass::Terminal {
+            map.insert(entity.key.canonical(), EntityLifecycle::Terminal);
+        }
+    }
+    for entity in scanned {
+        for edge in &entity.outbound {
+            if edge.label == RelationLabel::Supersedes
+                && let Ok((kref, id)) = integrity::parse_canonical_ref(&edge.target)
+            {
+                let target_key = EntityKey {
+                    prefix: kref.kind.prefix,
+                    id,
+                };
+                map.insert(
+                    target_key.canonical(),
+                    EntityLifecycle::Superseded {
+                        by: entity.key.canonical(),
+                    },
+                );
+            }
+        }
+    }
+    map
+}
+
+/// Build the comparison-tier [`AnchorMap`] from the raw entity scan: each
+/// entity's authored `[value]` facet (design C1 — anchors are the only
+/// magnitude source). Same layering rationale as
+/// [`comparison_status_map`] — home stated there.
+fn comparison_anchor_map(scanned: &[relation_graph::ScannedEntity]) -> AnchorMap {
+    scanned
+        .iter()
+        .filter_map(|entity| {
+            entity
+                .value
+                .as_ref()
+                .map(|v| (entity.key.canonical(), v.value))
+        })
+        .collect()
 }
 
 /// Build the priority graph from a PRE-SCANNED entity slice with an INJECTED
@@ -291,6 +425,16 @@ pub(crate) fn build_from(
 /// consequence coeffs. Byte-identical to the pre-extraction `build_from` when passed
 /// `&config::load(root)` (the behaviour-preservation gate, VT-1).
 ///
+/// SL-213 PHASE-05: `projected` is the comparison-tier value projection
+/// (entity id → `(value, provenance)`, `authored > projected > gauge` — D11),
+/// consulted by [`effective_raw_value`] at BOTH the base-score `value_dim` site
+/// and the burndown accessor identically (governed policy: gauge participates
+/// in burndown). An empty `projected` map is bitwise-identical to the
+/// pre-SL-213 two-tier resolution (the behaviour-preservation gate). A caller
+/// sweeping `cfg` (the β endpoint sweep, `surface::beta_endpoints`) loads ONE
+/// projection over the shared scan and passes it to every build — the
+/// projection is scan-derived, not cfg-swept.
+///
 /// # Errors
 ///
 /// Propagates a read error, or an internal cordage rejection of well-formed adapter
@@ -299,6 +443,7 @@ pub(crate) fn build_from_with_cfg(
     scanned: &[relation_graph::ScannedEntity],
     root: &std::path::Path,
     cfg: &config::PriorityConfig,
+    projected: &ValueProjection,
 ) -> anyhow::Result<PriorityGraph> {
     // 2b. Anchor fold (SL-172 §5.4): max upper among non-terminal estimated items.
     //      If none, fall back to 1.0 (empty-corpus fallback). Terminals (closed/done)
@@ -331,6 +476,8 @@ pub(crate) fn build_from_with_cfg(
                     tags: entity.tags.clone(),
                 },
                 entity.kind,
+                entity.key,
+                projected,
                 cfg,
                 ctx,
             );
@@ -477,8 +624,15 @@ pub(crate) fn build_from_with_cfg(
     //      needs-leverage (recursive DP) + ref-optionality (one-hop).
     //      Reads NodeAttr.base_score from `attrs` (the field is consumed here —
     //      no dead_code).
-    let (leverage, optionality, score) =
-        consequence_post_pass(&graph, &projection, &attrs, &ref_by_label, dep_overlay, cfg);
+    let (leverage, optionality, score) = consequence_post_pass(
+        &graph,
+        &projection,
+        &attrs,
+        &ref_by_label,
+        dep_overlay,
+        cfg,
+        projected,
+    );
 
     Ok(PriorityGraph {
         graph,
@@ -501,6 +655,7 @@ fn consequence_post_pass(
     ref_by_label: &BTreeMap<RelationLabel, OverlayId>,
     dep_overlay: OverlayId,
     cfg: &config::PriorityConfig,
+    projected: &ValueProjection,
 ) -> (
     BTreeMap<EntityKey, f64>,
     BTreeMap<EntityKey, f64>,
@@ -526,13 +681,19 @@ fn consequence_post_pass(
             .and_then(|k| attrs.get(&k))
             .map_or(0.0, |a| a.base_score.risk_dim)
     };
-    // SL-176 PHASE-03 / SL-177 PHASE-02: raw value accessor routed through the
-    // priority-tier seam — authored value wins, value-bearing kind defaults to 1.0,
-    // valueless kind is 0.0. The burndown numerator and denominator both use this.
+    // SL-176 PHASE-03 / SL-177 PHASE-02 / SL-213 PHASE-05: raw value accessor
+    // routed through the priority-tier seam — authored value wins, else the
+    // comparison-tier projection (D11), else a value-bearing kind defaults to
+    // 1.0, valueless kind is 0.0. The burndown numerator and denominator both
+    // use this — SAME source as `value_dim` (SL-213 design "governed policy":
+    // gauge participates in burndown identically).
     let raw_value_of = |nid: cordage::NodeId| -> f64 {
-        ek(nid)
-            .and_then(|k| attrs.get(&k))
-            .and_then(|a| effective_raw_value(a.kind, &a.facets))
+        let Some(key) = ek(nid) else {
+            return 0.0;
+        };
+        attrs
+            .get(&key)
+            .and_then(|a| effective_raw_value(a.kind, &a.facets, key, projected))
             .unwrap_or(0.0)
     };
 
@@ -1463,27 +1624,46 @@ mod tests {
             .find(|k| k.kind.prefix == "ISS")
             .map(|k| k.kind)
             .expect("ISS in KINDS");
-        assert_eq!(effective_raw_value(asm_kind, &facets), None);
-        assert_eq!(effective_raw_value(rev_kind, &facets), None);
+        let no_projection = ValueProjection::new();
+        let asm_key = EntityKey {
+            prefix: asm_kind.prefix,
+            id: 1,
+        };
+        let rev_key = EntityKey {
+            prefix: rev_kind.prefix,
+            id: 1,
+        };
+        let iss_key = EntityKey {
+            prefix: iss_kind.prefix,
+            id: 1,
+        };
         assert_eq!(
-            effective_raw_value(iss_kind, &facets),
+            effective_raw_value(asm_kind, &facets, asm_key, &no_projection),
+            None
+        );
+        assert_eq!(
+            effective_raw_value(rev_kind, &facets, rev_key, &no_projection),
+            None
+        );
+        assert_eq!(
+            effective_raw_value(iss_kind, &facets, iss_key, &no_projection),
             Some(DEFAULT_VALUE),
             "ISS is value-bearing → default"
         );
         // value_dim for ASM/REV is 0.
         let cfg = config::PriorityConfig::default();
         let ctx = CostCtx { absent: 1.0 };
-        let bs = base_score(&facets, asm_kind, &cfg, ctx);
+        let bs = base_score(&facets, asm_kind, asm_key, &no_projection, &cfg, ctx);
         assert!(
             (bs.value_dim - 0.0).abs() < 1e-9,
             "ASM value_dim should be 0"
         );
-        let bs = base_score(&facets, rev_kind, &cfg, ctx);
+        let bs = base_score(&facets, rev_kind, rev_key, &no_projection, &cfg, ctx);
         assert!(
             (bs.value_dim - 0.0).abs() < 1e-9,
             "REV value_dim should be 0"
         );
-        let bs = base_score(&facets, iss_kind, &cfg, ctx);
+        let bs = base_score(&facets, iss_kind, iss_key, &no_projection, &cfg, ctx);
         assert!(
             (bs.value_dim - 1.0).abs() < 1e-9,
             "ISS value_dim should be 1.0 (default)"
@@ -1510,6 +1690,194 @@ mod tests {
             (bs2.value_dim - 0.0).abs() < 1e-9,
             "authored 0.0 stays 0.0 (not defaulted to 1.0)"
         );
+    }
+
+    // ── SL-213 PHASE-05: comparison-tier value projection ───────────────
+
+    /// VT-1: `effective_raw_value`'s provenance chain (D11) — authored beats a
+    /// projected-map entry beats `DEFAULT_VALUE`; a `Gauge`-provenance map
+    /// entry resolves IDENTICALLY to a `Projected` one (D11: "gauge is a
+    /// sub-tier of projected"). An empty projected map is the identity case
+    /// (byte-identical to the pre-SL-213 two-tier resolution). The authored
+    /// facet is obtained via a real disk scan (never naming the facet type
+    /// directly — `EntityFacets.value` stays untyped here, mirroring the
+    /// production base pre-pass at `build_from_with_cfg` — NF-001's structural
+    /// tripwire keeps facet-symbol exposure to its allowlisted surface).
+    #[test]
+    fn effective_raw_value_provenance_chain_authored_over_projected_over_gauge_over_default() {
+        let iss_kind = crate::integrity::KINDS
+            .iter()
+            .find(|k| k.kind.prefix == "ISS")
+            .map(|k| k.kind)
+            .expect("ISS in KINDS");
+        let key1 = EntityKey {
+            prefix: "ISS",
+            id: 1,
+        };
+        let no_facets = crate::facet::EntityFacets {
+            estimate: None,
+            value: None,
+            risk: None,
+            tags: vec![],
+        };
+
+        // Empty map: value-bearing kind with no facet ⇒ DEFAULT_VALUE (identity).
+        let empty = ValueProjection::new();
+        assert_eq!(
+            effective_raw_value(iss_kind, &no_facets, key1, &empty),
+            Some(DEFAULT_VALUE)
+        );
+
+        // Projected-tier map entry wins over the default.
+        let mut projected = ValueProjection::new();
+        projected.insert(
+            key1.canonical(),
+            (2.5, crate::comparison::ValueProvenance::Projected),
+        );
+        assert_eq!(
+            effective_raw_value(iss_kind, &no_facets, key1, &projected),
+            Some(2.5)
+        );
+
+        // Gauge-tier map entry resolves IDENTICALLY (same tier for D11's purposes).
+        let mut gauged = ValueProjection::new();
+        gauged.insert(
+            key1.canonical(),
+            (2.5, crate::comparison::ValueProvenance::Gauge),
+        );
+        assert_eq!(
+            effective_raw_value(iss_kind, &no_facets, key1, &gauged),
+            Some(2.5),
+            "Gauge and Projected provenance resolve to the same raw value"
+        );
+
+        // Authored facet beats EVERY projected-map entry, regardless of provenance.
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue_with_facets(root, 1, "", "", "value = 9.0", "");
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let authored = scanned
+            .iter()
+            .find(|e| e.key == key1)
+            .expect("ISS-001 scanned");
+        let authored_facets = crate::facet::EntityFacets {
+            estimate: authored.estimate.clone(),
+            value: authored.value.clone(),
+            risk: authored.risk.clone(),
+            tags: authored.tags.clone(),
+        };
+        assert_eq!(
+            effective_raw_value(iss_kind, &authored_facets, key1, &gauged),
+            Some(9.0),
+            "authored value wins over a projected/gauge map entry"
+        );
+    }
+
+    /// VT-2: a real comparison session on disk flows end to end through
+    /// `store::load_pipeline` into `build`'s `value_dim` — a two-node,
+    /// anchor-free chain projects via the P8 gauge spread (`comparison::project`
+    /// golden `s1_chain8_gauge`'s two-node case: winner 4/3, loser 2/3 of
+    /// `DEFAULT_VALUE`), and the preferred side scores higher.
+    #[test]
+    fn ledger_fed_comparison_projects_into_value_dim() {
+        let dir = tmp();
+        let root = dir.path();
+        // Two bare issues — value-bearing, no authored [value] facet, no
+        // [estimate] anywhere in the corpus (est_cost = absent = 1.0).
+        seed_issue(root, 1, "open", "", "");
+        seed_issue(root, 2, "open", "", "");
+        write_comparison_session(root, "ISS-001", "ISS-002");
+
+        let pg = build(root).unwrap();
+        let bs1 = pg.attrs[&key("ISS", 1)].base_score;
+        let bs2 = pg.attrs[&key("ISS", 2)].base_score;
+        let expected_winner = 2.0 * DEFAULT_VALUE * 2.0 / 3.0;
+        let expected_loser = 2.0 * DEFAULT_VALUE * 1.0 / 3.0;
+        assert!(
+            (bs1.value_dim - expected_winner).abs() < 1e-9,
+            "preferred ISS-001 gauge-projects to 4/3, got {}",
+            bs1.value_dim
+        );
+        assert!(
+            (bs2.value_dim - expected_loser).abs() < 1e-9,
+            "non-preferred ISS-002 gauge-projects to 2/3, got {}",
+            bs2.value_dim
+        );
+        assert!(bs1.value_dim > bs2.value_dim);
+    }
+
+    /// VT-2: the governed policy (design §3, D11) — a Gauge-provenance
+    /// projected value participates in burndown IDENTICALLY to an authored
+    /// value, via the SAME `raw_value_of` source `value_dim` uses. A done
+    /// slice fulfilling the gauge-valued issue burns it down by the same
+    /// formula `burndown_lowers_score` pins for an authored value.
+    #[test]
+    fn gauge_fed_burndown_golden() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue(root, 1, "open", "", "");
+        seed_issue(root, 2, "open", "", "");
+        write_comparison_session(root, "ISS-001", "ISS-002");
+        // ISS-001 gauge-projects to 4/3 (see ledger_fed_comparison_projects_into_value_dim).
+        // SL-001 (done, authored value = 2/3) fulfils it: delivered = 2/3,
+        // r = (2/3)/(4/3) = 0.5, burn = (4/3)*0.5 = 2/3.
+        write(
+            root,
+            ".doctrine/slice/001/slice-001.toml",
+            "id = 1\nslug = \"s\"\ntitle = \"S\"\nstatus = \"done\"\n\
+             created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+             [value]\nvalue = 0.6666666666666666\n\
+             [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n",
+        );
+        write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+
+        let pg = build(root).unwrap();
+        let s1 = pg.score[&key("ISS", 1)];
+        let expected_value_dim = 2.0 * DEFAULT_VALUE * 2.0 / 3.0;
+        let expected_burn = expected_value_dim * 0.5;
+        assert!(
+            (s1 - expected_burn).abs() < 1e-6,
+            "gauge-fed value burns down identically to an authored one, got {s1}"
+        );
+    }
+
+    /// Write a two-row-free, single-judgement comparison session preferring
+    /// `winner` over `loser` (order form, value domain, agent-rated) straight
+    /// to `.doctrine/comparisons/` — bypasses `commands::compare::run_capture`
+    /// (its admissibility gate is a capture-time-only concern, design §1) so
+    /// the graph-adapter tests exercise the pipeline seam directly.
+    fn write_comparison_session(root: &Path, winner: &str, loser: &str) {
+        let judgement = comparison::Judgement {
+            uid: "j1".to_string(),
+            seq: 0,
+            a: winner.to_string(),
+            b: loser.to_string(),
+            response: comparison::Response::PreferA,
+            domain: comparison::DOMAIN_VALUE.to_string(),
+            frame: comparison::FRAME_EQUAL_EFFORT.to_string(),
+            form: comparison::RowForm::Order,
+            magnitude: None,
+            supersedes: None,
+            lens: None,
+            rater: comparison::RaterKind::Agent,
+            by: None,
+            note: None,
+            date: "2026-07-11".to_string(),
+        };
+        let session = comparison::ComparisonSession {
+            schema: comparison::COMPARISON_SCHEMA.to_string(),
+            version: comparison::COMPARISON_VERSION,
+            session: comparison::SessionHeader {
+                uid: "s1".to_string(),
+                date: "2026-07-11".to_string(),
+                audience: None,
+            },
+            judgements: vec![judgement],
+            tombstones: Vec::new(),
+        };
+        let text = comparison::to_toml(&session).unwrap();
+        write(root, ".doctrine/comparisons/2026-07-11-s1.toml", &text);
     }
 
     // ── VT-4: directions & classes ──────────────────────────────────────
@@ -2339,11 +2707,33 @@ mod tests {
             .find(|k| k.kind.prefix == "ISS")
             .map(|k| k.kind)
             .expect("ISS in KINDS");
+        let no_projection = ValueProjection::new();
+        let rev_key = EntityKey {
+            prefix: rev_kind.prefix,
+            id: 1,
+        };
+        let asm_key = EntityKey {
+            prefix: asm_kind.prefix,
+            id: 1,
+        };
+        let iss_key = EntityKey {
+            prefix: iss_kind.prefix,
+            id: 1,
+        };
         // Non-value-bearing → None → raw_value_of returns 0.0 (via unwrap_or).
-        assert_eq!(effective_raw_value(rev_kind, &facets), None);
-        assert_eq!(effective_raw_value(asm_kind, &facets), None);
+        assert_eq!(
+            effective_raw_value(rev_kind, &facets, rev_key, &no_projection),
+            None
+        );
+        assert_eq!(
+            effective_raw_value(asm_kind, &facets, asm_key, &no_projection),
+            None
+        );
         // Value-bearing without authored value → Some(1.0) (default).
-        assert_eq!(effective_raw_value(iss_kind, &facets), Some(DEFAULT_VALUE));
+        assert_eq!(
+            effective_raw_value(iss_kind, &facets, iss_key, &no_projection),
+            Some(DEFAULT_VALUE)
+        );
         // When routed through the burndown closure (raw_value_of), these map to:
         //   effective_raw_value(None) → unwrap_or(0.0) → 0.0 (can't deliver value)
         //   effective_raw_value(Some(1.0)) → unwrap_or(0.0) → 1.0 (delivers default)
@@ -2380,7 +2770,11 @@ mod tests {
         let scanned =
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let via_load = build_from(&scanned, root).unwrap();
-        let via_cfg = build_from_with_cfg(&scanned, root, &config::load(root)).unwrap();
+        // No comparisons dir in this fixture: an empty projection is exactly
+        // what `build_from` computes internally (behaviour-preservation gate).
+        let via_cfg =
+            build_from_with_cfg(&scanned, root, &config::load(root), &ValueProjection::new())
+                .unwrap();
 
         assert_eq!(via_load.score, via_cfg.score, "score map identical");
         assert_eq!(

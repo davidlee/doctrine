@@ -317,6 +317,57 @@ fn reason_line(reason: &ReasonKind) -> String {
         ReasonKind::EvictedEdge { .. } | ReasonKind::CycleDegraded { .. } => {
             format!("  {}\n", provenance_fragment(reason).unwrap_or_default())
         }
+        ReasonKind::ValueAuthored { .. }
+        | ReasonKind::ValueProjected { .. }
+        | ReasonKind::ValueGauge { .. } => {
+            format!("  {}\n", value_source_fragment(reason).unwrap_or_default())
+        }
+        ReasonKind::PriorityDomainDisclosure { count } => format!(
+            "  {count} prefer-first judgements recorded — not value-bearing; no consumer yet\n"
+        ),
+    }
+}
+
+/// The SL-213 PHASE-06 value-source fragment (design §4 S3, the three shapes'
+/// literal templates) — the SINGLE source shared by `reason_line` (human) and
+/// [`value_source_json`] (`--json`). Bare text (no indent, no newline — the
+/// caller frames it); `None` for any non-value-source reason.
+fn value_source_fragment(reason: &ReasonKind) -> Option<String> {
+    match reason {
+        ReasonKind::ValueAuthored { value, conflict } => {
+            let suffix = if conflict.is_empty() {
+                String::new()
+            } else {
+                format!(" (see anchor-conflict finding: {})", conflict.join(", "))
+            };
+            Some(format!("value {value:.1} — authored{suffix}"))
+        }
+        ReasonKind::ValueProjected {
+            value,
+            lower,
+            upper,
+            human,
+            agent,
+        } => Some(format!(
+            "value {value:.1} — projected · bounds ({} ‥ {}) · from {} constraining judgements \
+             ({human} human, {agent} agent)",
+            bound_fragment(*lower),
+            bound_fragment(*upper),
+            human + agent,
+        )),
+        ReasonKind::ValueGauge { value, judgements } => Some(format!(
+            "value {value:.1} — gauge · ordered by {judgements} judgements, no anchor in \
+             component · set a value on any member to calibrate"
+        )),
+        _ => None,
+    }
+}
+
+/// One C6 display bound as text — `"unbounded"` for `None`.
+fn bound_fragment(bound: Option<f64>) -> String {
+    match bound {
+        Some(v) => format!("{v:.1}"),
+        None => "unbounded".to_string(),
     }
 }
 
@@ -338,7 +389,9 @@ fn provenance_fragment(reason: &ReasonKind) -> Option<String> {
 }
 
 /// Render `explain` for human reading — every structured reason in a fixed section
-/// order: eligibility, blocker chain, evicted edges, score.
+/// order: eligibility, blocker chain, evicted edges, score, SL-213 PHASE-06's
+/// value-source block, then the inert priority-domain disclosure (last —
+/// corpus-global, not entity-scoped, design §4 S4).
 pub(crate) fn explain_human(ex: &Explanation) -> String {
     let mut parts: Vec<String> = vec![format!("{} — explain\n", ex.id)];
     parts.push(reason_line(&ex.eligibility));
@@ -349,6 +402,12 @@ pub(crate) fn explain_human(ex: &Explanation) -> String {
         parts.push(reason_line(r));
     }
     parts.push(reason_line(&ex.score));
+    if let Some(r) = &ex.value_source {
+        parts.push(reason_line(r));
+    }
+    if let Some(r) = &ex.priority_disclosure {
+        parts.push(reason_line(r));
+    }
     parts.concat()
 }
 
@@ -414,6 +473,35 @@ fn finding_line(f: &Finding) -> String {
         Finding::Provenance(reason) => {
             format!("  {}\n", provenance_fragment(reason).unwrap_or_default())
         }
+        Finding::PreferenceCycle { classes, rows } => format!(
+            "  cycle among {{{}}} — quarantines {{{}}} ({} rows); exit: supersede one row \
+             (`--supersedes <uid>`) or tombstone one to break the cycle\n",
+            classes.join(", "),
+            rows.join(", "),
+            rows.len()
+        ),
+        Finding::AnchorConflict { anchors, rows } => {
+            let anchor_text = anchors
+                .iter()
+                .map(|(e, v)| format!("{e}={v:.1}"))
+                .collect::<Vec<_>>()
+                .join(" vs ");
+            format!(
+                "  anchors {anchor_text} conflict — quarantines {{{}}}; exit: supersede a \
+                 conflicting row, tombstone one, or edit an anchor\n",
+                rows.join(", ")
+            )
+        }
+        Finding::AnchorGaugeDisconnect { entities } => format!(
+            "  {{{}}} placed by gauge convention — no order path to any anchor; compare against \
+             an anchored item to place it\n",
+            entities.join(", ")
+        ),
+        Finding::MalformedSupersession { rows } => format!(
+            "  supersession cycle among {{{}}} — all deactivated; exit: tombstone one row to \
+             break the cycle\n",
+            rows.join(", ")
+        ),
     }
 }
 
@@ -479,6 +567,18 @@ fn finding_json(f: &Finding) -> serde_json::Value {
             ..
         } => serde_json::json!({ "hub": hub, "order_lo": order_lo, "order_hi": order_hi }),
         Finding::Provenance(reason) => serde_json::json!({ "detail": reason_json(reason) }),
+        Finding::PreferenceCycle { classes, rows } => {
+            serde_json::json!({ "classes": classes, "rows": rows })
+        }
+        Finding::AnchorConflict { anchors, rows } => {
+            let anchors: Vec<serde_json::Value> = anchors
+                .iter()
+                .map(|(e, v)| serde_json::json!({ "entity": e, "value": v }))
+                .collect();
+            serde_json::json!({ "anchors": anchors, "rows": rows })
+        }
+        Finding::AnchorGaugeDisconnect { entities } => serde_json::json!({ "entities": entities }),
+        Finding::MalformedSupersession { rows } => serde_json::json!({ "rows": rows }),
     };
     if let Some(obj) = value.as_object_mut() {
         obj.insert("kind".to_string(), serde_json::json!(f.kind_label()));
@@ -559,6 +659,34 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
         ReasonKind::CycleDegraded { nodes } => {
             serde_json::json!({ "kind": "cycle_degraded", "nodes": nodes })
         }
+        ReasonKind::ValueAuthored { value, conflict } => serde_json::json!({
+            "kind": "value_authored",
+            "value": value,
+            "conflict": conflict,
+        }),
+        ReasonKind::ValueProjected {
+            value,
+            lower,
+            upper,
+            human,
+            agent,
+        } => serde_json::json!({
+            "kind": "value_projected",
+            "value": value,
+            "lower": lower,
+            "upper": upper,
+            "human": human,
+            "agent": agent,
+        }),
+        ReasonKind::ValueGauge { value, judgements } => serde_json::json!({
+            "kind": "value_gauge",
+            "value": value,
+            "judgements": judgements,
+        }),
+        ReasonKind::PriorityDomainDisclosure { count } => serde_json::json!({
+            "kind": "priority_domain_disclosure",
+            "count": count,
+        }),
     }
 }
 
@@ -630,7 +758,10 @@ pub(crate) fn blockers_json(view: &BlockersView) -> anyhow::Result<String> {
     }))
 }
 
-/// `explain --json` — every structured reason faithfully serialized.
+/// `explain --json` — every structured reason faithfully serialized. SL-213
+/// PHASE-06's `value_source`/`priority_disclosure` are `null` when absent —
+/// the same structural fields as human, `--json` carries them, never a
+/// re-derivation (design §4 S3).
 pub(crate) fn explain_json(ex: &Explanation) -> anyhow::Result<String> {
     finish(&serde_json::json!({
         "kind": "explain",
@@ -640,6 +771,8 @@ pub(crate) fn explain_json(ex: &Explanation) -> anyhow::Result<String> {
         "blocker_chain": ex.blocker_chain.iter().map(reason_json).collect::<Vec<_>>(),
         "evictions": ex.evictions.iter().map(reason_json).collect::<Vec<_>>(),
         "score": reason_json(&ex.score),
+        "value_source": ex.value_source.as_ref().map(reason_json),
+        "priority_disclosure": ex.priority_disclosure.as_ref().map(reason_json),
     }))
 }
 

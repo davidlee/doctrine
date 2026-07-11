@@ -93,6 +93,29 @@ fn default_margin() -> f64 {
     1.0
 }
 
+/// The additive gauge step for unbounded projection tails/heads (SL-213 design
+/// P5): a quarter of `priority::graph::DEFAULT_VALUE` — visible, subordinate
+/// to authored magnitudes. Named const (STD-001); config-overridable via
+/// `[priority.gauge]`.
+pub(crate) const GAUGE_STEP: f64 = 0.25;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub(crate) struct GaugeConfig {
+    #[serde(default = "default_gauge_step")]
+    pub(crate) step: f64,
+}
+
+impl Default for GaugeConfig {
+    fn default() -> Self {
+        Self { step: GAUGE_STEP }
+    }
+}
+
+fn default_gauge_step() -> f64 {
+    GAUGE_STEP
+}
+
 // ── top-level config ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -108,6 +131,8 @@ pub(crate) struct PriorityConfig {
     pub(crate) consequence: ConsequenceCoeffs,
     #[serde(default)]
     pub(crate) estimate: EstimateCost,
+    #[serde(default)]
+    pub(crate) gauge: GaugeConfig,
 }
 
 // ── accessors ─────────────────────────────────────────────────────────────
@@ -156,6 +181,9 @@ pub(crate) fn load_from_table(table: &toml::value::Table) -> PriorityConfig {
     if let Some(t) = table.get("estimate").and_then(|v| v.as_table()) {
         cfg.estimate.skew = f64_or(t, "skew", 0.65);
         cfg.estimate.margin = f64_or(t, "margin", 1.0);
+    }
+    if let Some(t) = table.get("gauge").and_then(|v| v.as_table()) {
+        cfg.gauge.step = f64_or(t, "step", GAUGE_STEP);
     }
     if let Some(t) = table.get("kind_weights").and_then(|v| v.as_table()) {
         for (k, v) in t {
@@ -207,6 +235,9 @@ fn clamp(mut cfg: PriorityConfig) -> PriorityConfig {
     // estimate: skew → [0.0, 1.0]; margin → non-negative (reuse clamp_general)
     cfg.estimate.skew = clamp_skew(cfg.estimate.skew);
     cfg.estimate.margin = clamp_general(cfg.estimate.margin, 1.0);
+
+    // gauge.step: non-finite/negative/over-max clamp like any general coefficient.
+    cfg.gauge.step = clamp_general(cfg.gauge.step, GAUGE_STEP);
 
     // kind_weights and tag_coefficients: clamp each value
     for v in cfg.kind_weights.values_mut() {
@@ -465,5 +496,35 @@ mod tests {
         let cfg = load_from("[priority]\nestimate = { skew = 0.7, margin = 2 }\n");
         assert_eq!(cfg.estimate.skew, 0.7);
         assert_eq!(cfg.estimate.margin, 2.0);
+    }
+
+    // ---- gauge_step (SL-213 PHASE-05 VT-4) ----
+
+    /// VT-4: absent file AND a `[priority]` with no `gauge` sub-table ⇒ `GAUGE_STEP` default.
+    #[test]
+    fn gauge_step_absent_uses_default() {
+        let cfg = load_from("[priority]\ncoefficients = { value = 3.0 }\n");
+        assert_eq!(cfg.gauge.step, GAUGE_STEP);
+
+        let dir = tempfile::tempdir().unwrap();
+        let cfg2 = load(dir.path());
+        assert_eq!(cfg2.gauge.step, GAUGE_STEP);
+    }
+
+    /// VT-4: a config-authored `[priority.gauge] step` overrides the default.
+    #[test]
+    fn gauge_step_override_roundtrips() {
+        let cfg = load_from("[priority]\ngauge = { step = 0.5 }\n");
+        assert_eq!(cfg.gauge.step, 0.5);
+    }
+
+    /// VT-4: non-finite/negative gauge_step clamps like any general coefficient.
+    #[test]
+    fn gauge_step_clamps_non_finite_and_negative() {
+        let cfg = load_from("[priority]\ngauge = { step = nan }\n");
+        assert_eq!(cfg.gauge.step, GAUGE_STEP);
+
+        let cfg2 = load_from("[priority]\ngauge = { step = -0.1 }\n");
+        assert_eq!(cfg2.gauge.step, 0.0);
     }
 }

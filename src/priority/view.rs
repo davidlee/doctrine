@@ -61,6 +61,33 @@ pub(crate) enum ReasonKind {
     /// The node sits in a diagnosed dep cycle — its order degraded to the fallback
     /// rather than a false topological order (REQ-076 / F2).
     CycleDegraded { nodes: Vec<String> },
+    /// SL-213 PHASE-06 value-source shape 1 (design §4 S3) — the value came
+    /// from an authored `[value]` facet (an anchor, possibly hoisted from
+    /// another class member). `conflict` names the other class(es) this
+    /// class's anchor was found to violate order against (an `AnchorConflict`
+    /// citation) — empty when none.
+    ValueAuthored { value: f64, conflict: Vec<String> },
+    /// SL-213 PHASE-06 value-source shape 2 — projected: budgeted
+    /// interpolation between order neighbours. `lower`/`upper` are the C6
+    /// display bounds (`None` = unbounded that side); `human`/`agent` are the
+    /// constraining-judgement rater split (the T7 disclosure; `NoConstraint`
+    /// rows excluded).
+    ValueProjected {
+        value: f64,
+        lower: Option<f64>,
+        upper: Option<f64>,
+        human: u32,
+        agent: u32,
+    },
+    /// SL-213 PHASE-06 value-source shape 3 — gauge: placed by the P7/P8
+    /// convention, not evidence. `judgements` is the constraining-judgement
+    /// count (human + agent) that ordered it.
+    ValueGauge { value: f64, judgements: u32 },
+    /// SL-213 PHASE-06 (design §4 S4) — the inert `priority`-domain
+    /// disclosure: `count` prefer-first judgements recorded corpus-wide.
+    /// NOT a finding (nothing is wrong) — `explain`-only, corpus-global (not
+    /// entity-scoped).
+    PriorityDomainDisclosure { count: usize },
 }
 
 /// Whether an eligible node is ready to start now, or held by a blocker (design
@@ -168,6 +195,13 @@ pub(crate) struct Explanation {
     pub(crate) blocker_chain: Vec<ReasonKind>,
     pub(crate) evictions: Vec<ReasonKind>,
     pub(crate) score: ReasonKind,
+    /// SL-213 PHASE-06 (design §4 S3) — the comparison-tier value-source
+    /// block. `None` for a non-value-bearing kind.
+    pub(crate) value_source: Option<ReasonKind>,
+    /// SL-213 PHASE-06 (design §4 S4) — the inert priority-domain
+    /// disclosure, corpus-global. `None` when no `priority`-domain rows
+    /// exist.
+    pub(crate) priority_disclosure: Option<ReasonKind>,
 }
 
 // ── SL-089 actionability-graph view types ──────────────────────────────────
