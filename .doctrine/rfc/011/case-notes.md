@@ -1098,3 +1098,91 @@ full shape (`--role orchestrator --harness <h>`). Also: resolve for
 claude-fable-5 returned empty (no model band in hymns corpus) — silent
 degradation is fine, but a one-line "no band for <model>" would save the
 agent wondering whether the invocation was wrong.
+
+[/slice; fable-sl214-215]
+Skill routing friction: /slice appears in boot routing table but is not
+registered in the harness Skill tool list, so the agent must locate and Read
+.agents/skills/slice/SKILL.md manually (~2 tool calls + full file read).
+Also: `git commit -- <paths> -F -` fails ("pathspec '-F'") — flags must
+precede the `--` pathspec separator; AGENTS.md shows `git commit <paths> -F -`
+which invites the broken ordering when combined with `--`.
+
+[dispatch; SL-213-drive-1]
+Fresh coord worktree materialises phase sheets with status=planned even for
+phases completed pre-dispatch on edge (runtime state is gitignored, not
+inherited). Orchestrator must notice and manually re-flip (in_progress →
+completed) before plan-next points at the right phase. Cost: one confused
+plan-next read + two CLI calls. Setup could seed status from the committed
+conformance registry (boundary rows exist for completed phases).
+
+[dispatch; SL-213-drive-2]
+Worker-side observation (relayed): boot snapshot's RFC-011 instrumentation
+directive ("append to the primary working tree case-notes") structurally
+conflicts with the dispatch worker negative contract (no .doctrine/ writes,
+confinement wall). Workers must relay case notes through the hand-back for
+the orchestrator to transcribe — directive could say so explicitly.
+
+[dispatch; SL-213-drive-3]
+`doctrine check commit` red in-jail for workers: 3 e2e_adr_cli_golden tests
+spawn the doctrine binary and hit the worker-confinement write refusal —
+environmental false-negative, disjoint from any delta. Worker relied on
+cargo gate + server-side worker_commit gate (green). Recurring confusion
+source for confined workers.
+
+[dispatch; SL-213-drive-4]
+REFUSED dispatch_import (undeclared-scope) left the coord WORKING TREE +
+INDEX reset toward the fork base: every file created on dispatch/213 since
+the fork point (src/comparison/{resolve,compile,project}.rs, mod.rs content,
+.doctrine/dispatch/213/boundaries.toml) showed as staged deletions and was
+gone from the working tree. HEAD/history intact — "nothing lands on a
+refusal" held for the graph, NOT for the working tree. Recovered via
+`git restore --source=HEAD --staged --worktree -- <paths>`. Danger pattern:
+a subsequent pathless commit would have committed the deletions. Also the
+undeclared-scope refusal itself: selector had src/priority/** only as
+scope-relevant while plan VT-4 mandates src/priority/config.rs as a
+test_file — intent taxonomy (scope-relevant vs design-target) not derivable
+from the plan's own VT mandates.
+
+[dispatch; SL-213-drive-4-correction]
+Root cause of drive-4 revised: NOT refusal-specific. dispatch_import and
+dispatch_conclude_phase are object-db only — they advance the CHECKED-OUT
+dispatch/<n> ref without updating the coord working tree/index, so after
+every funnel landing the coord tree shows the inverse delta as staged
+reversions and the on-disk content is one-or-more commits stale. Orchestrator
+verify beats (check prove / regression diff) after import therefore ran on
+STALE content for PHASE-02..04 (workers' own full-suite runs + worker_commit
+server gate were the real coverage; final re-run at true tip was green).
+Funnel needs an explicit post-land sync beat (git restore --source=HEAD
+--staged --worktree -- <paths>) or the tools should refresh the checked-out
+tree. Severe footgun: any pathless commit in that window commits mass
+reversions.
+
+[/design; fable-sl214-215]
+IMP-182 stale by the time of design: "four kinds" vs shipped seven (SL-159),
+and its shapes/spawns framing predates ADR-017's inbound-needs gating model —
+both required re-derivation from SPEC-019 + ADR-017 (~2 long reads). Backlog
+items describing moving surfaces rot fast; a freshness pointer ("verify kind
+count against `doctrine knowledge new --help`") would have saved most of it.
+SPEC-019 show front-loads ~90 lines of structured responsibilities before
+prose; head -200 needed for key facts.
+
+[dispatch; SL-213-drive-5]
+prepare-review completeness gate reads completed-phase statuses from the
+PRIMARY tree runtime state (`registry_completeness(&primary, &primary, ..)`,
+dispatch.rs:1918), but the funnel's `slice phase --status` flips ran in the
+coord tree — runtime state is gitignored and per-worktree, so primary still
+read `planned` for PHASE-02..06 and the gate refused with the misleading
+"recorded row … not a completed phase" (rows were fine; statuses were in the
+wrong tree). Cost: ~6 tool calls of source-reading to establish which tree
+each side of the gate reads, plus verifying the primary-side re-flip wouldn't
+clobber registry rows (it doesn't — the live-coord-worktree arm guard,
+state.rs:542, suppresses solo capture). Mirror of drive-1 (setup doesn't seed
+coord status from registry); the two together suggest phase status for a
+dispatched slice should have one home, or the funnel should flip both trees.
+
+[dispatch; SL-213-drive-6]
+prepare-review itself exhibits the drive-4 object-db pattern: its journal
+commits land on the checked-out coord ref without updating the working tree,
+leaving `.doctrine/dispatch/213/journal.toml` as a staged deletion. Standing
+post-land sync beat covered it, but every ref-writing dispatch verb appears
+to need the same follow-up restore.

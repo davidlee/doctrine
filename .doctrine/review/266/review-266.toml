@@ -1,0 +1,88 @@
+id    = 266
+slug  = "sl-213-conformance-audit-comparison-constraint-layer"
+title = "SL-213 conformance audit — comparison constraint layer"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-213"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Conformance: src/priority/config.rs undeclared — selector fix never mirrored to primary authored registry"
+detail = "Expected: every path recorded in the slice's source-deltas is covered by a design-target selector in the authored registry (slice-213.toml), so `slice conformance 213` reports it conformant. Observed: `src/priority/config.rs` reports undeclared. Root cause: the drive-time correction (`slice selector add 213 src/priority/config.rs --intent design-target`) was committed on the coord tree's copy of slice-213.toml (dispatch/213 commit 56e092bb) but never applied to the primary tree's authored registry, which is what `slice conformance` reads. The touch itself is design-mandated (plan PHASE-05 VT-4 names src/priority/config.rs as test_file; GAUGE_STEP homing is design §3 tail). Load-bearing fix is the registry verb in the primary tree; design.md §6 mirror already names priority files individually."
+disposition = "fix-now"
+response = "Fixed in-audit: `doctrine slice selector add 213 src/priority/config.rs --intent design-target` applied to the primary authored registry (the load-bearing surface `slice conformance` reads). Re-run reports src/priority/config.rs conformant (15 conformant, undelivered 0). design.md §6 mirror already lists priority files individually — no prose edit needed. The dispatch-branch copy of slice-213.toml carries the same selector (56e092bb); the edits converge at integrate."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Conformance: .doctrine/slice/213/slice-213.toml undeclared — orchestrator selector-fix commit rides PHASE-05 recorded range"
+detail = "Expected: recorded phase ranges contain only worker source deltas over design-target paths. Observed: PHASE-05's recorded range (a4954a1f..9641872c) contains coord commit 56e092bb touching .doctrine/slice/213/slice-213.toml — the orchestrator's own selector-registry correction, committed mid-funnel so the retried import could pass the belt. Not scope creep and not worker code: it is maintenance of the conformance mechanism itself, authored-tier, path-limited. Declaring .doctrine/slice/213/** as design-target would be circular."
+disposition = "tolerated"
+response = "Accepted drift, with rationale: the touch is the orchestrator's own conformance-registry maintenance (selector add required for the PHASE-05 import to pass the belt), committed path-limited on the coordination branch inside PHASE-05's recorded range. Declaring .doctrine/slice/213/** design-target would make the conformance mechanism self-referential; excluding orchestrator funnel commits from recorded ranges is a dispatch-machinery question (RFC-011 territory), not this slice's. The single remaining undeclared cell is this file, understood and documented here."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "P8 gauge scope: design §3 per-component wording vs implemented prototype global-H semantics"
+detail = "Expected: design.md §3 P1/P8/P12 read as per weakly-connected component — gauge spread computed over each component's own height, anchored branch taken per component. Observed: implementation follows the prototype verbatim (plan EX-1 pins prototype output as goldens): gauge spread uses GLOBAL height H and the anchored branch triggers when any anchor exists anywhere. Divergence manifests only with ≥2 disjoint anchor-free components: S2's f/g pendant couples to the diamond's H=3 giving 0.8/0.4, vs per-component 1.333/0.667. Pinned transparently by the s2_partial_order_gauge golden + module-header note; P12 locality property-tested in the anchored regime with scope stated. The two normative sources (design prose, prototype-as-golden via EX-1) conflict; implementation cannot satisfy both. Design wording is the artifact to reconcile — either bless global-H (edit §3 P8/P12 wording) or mandate per-component (code change + new goldens). Worker and orchestrator both flag this as needing human adjudication."
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile via the Reconciliation Brief (per-slice direct edit, design.md §3). The implementation is pinned to prototype semantics by plan EX-1 (verbatim goldens) and transparently documented (s2_partial_order_gauge golden + module-header note); the divergence window is narrow (≥2 disjoint anchor-free components). Brief entry: adjudicate global-H vs per-component; the recommended resolution is to bless the implemented global-H semantics by rewording §3 P8/P12 (prototype is the validated normative source under EX-1), noting the per-component alternative as a rejected variant. If adjudication instead mandates per-component, that is new sliced work, not a reconcile edit."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Design §4 S2 enumerates nine status tokens; implementation renders a tenth (malformed)"
+detail = "Expected: compare list status column tokens match design §4 S2's enumeration (nine tokens). Observed: PHASE-02 added ResolutionStatus::Malformed (R2 supersession-cycle participants — the design enum had no deactivated-by-cycle variant) and the PHASE-06 list surface renders `malformed` as a tenth token. Implementation is right — a cycle participant must be visibly non-constraining and distinguishable; design §4 S2 (and the §1 enum inventory) simply predate the variant. Design prose catch-up at reconcile."
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile via the Reconciliation Brief (per-slice direct edit, design.md §4 S2 + §1 enum inventory): add the tenth token `malformed` (ResolutionStatus::Malformed, R2 supersession-cycle participants) to the S2 enumeration and the §1 RowState/ResolutionStatus inventory. Implementation is correct — the design prose predates the variant."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "PHASE-06 corrected existing fixture compare_list_orders_by_total_key — behaviour delta review"
+detail = "Expected: existing test assertions stay byte-identical (behaviour preservation); any fixture edit is scrutinized. Observed: the fixture previously varied SessionHeader.date while holding Judgement.date constant; list now orders by resolve()'s display key (judgement date, per design D13 — list rides resolution ordering), so the fixture was re-stamped with matching dates to capture reality. The ORDER assertion itself is unchanged. The behaviour delta (list ordering keyed off judgement date rather than session-header date) is design-intended under D13, and the fixture edit makes the test honest rather than masking the change."
+disposition = "aligned"
+response = "The behaviour delta is design-intended (D13: list rides resolution ordering, keyed off judgement date) and the fixture edit is honest — it re-stamps dates to capture reality rather than masking a change; the ORDER assertion is unchanged. Reviewed the worker's rationale against design D13; no drift."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = 'Design R6 "decomposed" rule is a behavioural no-op — resolved vacuous at phase-plan'
+detail = """Expected: R6's "decomposed" entity handling has a data source and detection path. Observed (PHASE-05 phase-plan resolution): decomposition encodes only as spec `parent` edges (src/registry.rs:36); for comparison rows the design rule "stay parent-scoped, children inherit nothing" is satisfied by doing nothing — no detection code exists or is needed. The R6 row is vacuously satisfied; workers noted audit should confirm-and-close on this basis. No code or design change required; recording the confirmation here is the closure."""
+disposition = "aligned"
+response = """Confirm-and-close per the worker's phase-plan resolution: decomposition encodes only as spec parent edges (src/registry.rs:36); "stay parent-scoped, children inherit nothing" is satisfied by the absence of any inheritance code. R6's row is vacuously satisfied; no code or design change. This disposition is the recorded confirmation the notes asked audit for."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "VH-1 cosmetic candidates on surface output (worker pre-screen; human eyeball pending)"
+detail = 'Expected: list/explain/findings output reads cleanly to a human on a real mini-ledger (plan VH-1). Observed — three worker-noted candidates, none functional: (1) a tombstoned row renders status=tombstoned AND the legacy [withdrawn] marker on one line — redundant; (2) AnchorConflict finding phrasing "anchors X=1.0 vs Y=2.0 conflict" is terse; (3) the explain gauge line says "no anchor in component" for both the P7 case (anchors exist elsewhere, none bracket this entity) and the P8 case (no anchors at all) — distinguishable if desired. All are polish, individually cheap, none blocks reconciliation; human pass decides which to take.'
+disposition = "follow-up"
+response = """Owned future work: CHR-041 "Comparison surface polish (VH-1)" carries all three candidates (tombstoned/[withdrawn] redundancy, P7-vs-P8 gauge-line wording, AnchorConflict phrasing) plus F-8's additions. Cosmetic only — none blocks reconciliation; the human VH-1 pass decides which to take. Not deferred for size: deferred because the adjudicator is the human eyeball, which is pending."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "VH-1 agent pre-screen: pluralization and disclosure-scope nits in explain output"
+detail = """Ran the candidate binary over a synthesized 7-entity/15-row mini-ledger exercising all four findings, all ten list tokens reachable in the fixture, and all three explain value-source shapes (+ --json parity). Everything renders correctly per design §4; two new nits beyond F-7's list: (1) singular/plural — "1 prefer-first judgements recorded" (count=1 takes plural); the gauge line's "ordered by 0 judgements" is grammatical but reads oddly for a fully-quarantined entity. (2) The priority-domain disclosure line is a GLOBAL corpus count rendered on every entity's explain (appears on ISS-003 and ISS-007 explains though the sole prefer-first row names ISS-001/ISS-006) — design D2/§4 says "one-line disclosure in explain" without pinning scope; per-entity scoping would be quieter. Neither is functional; both are candidates for the same polish pass as F-7."""
+disposition = "follow-up"
+response = "Same route as F-7: CHR-041 carries the pluralization nit and the disclosure-scope question (global corpus count vs per-entity). Both are template-level tweaks touching pinned goldens; bundling them with the VH-1 outcome avoids churning the goldens twice."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

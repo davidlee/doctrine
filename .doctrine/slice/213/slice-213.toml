@@ -1,9 +1,9 @@
 id = 213
 slug = "comparison-constraint-layer"
 title = "Comparison constraint layer"
-status = "started"
+status = "reconcile"
 created = "2026-07-10"
-updated = "2026-07-10"
+updated = "2026-07-11"
 tags = []
 
 [relationships]
@@ -72,6 +72,10 @@ intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_compare*.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/config.rs"
 intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed

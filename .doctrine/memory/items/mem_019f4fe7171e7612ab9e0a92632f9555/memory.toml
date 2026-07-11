@@ -1,0 +1,42 @@
+memory_uid = "mem_019f4fe7171e7612ab9e0a92632f9555"
+memory_key = "mem.fact.dispatch.prepare-review-reads-primary-phase-status"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Dispatch phase statuses must be completed in the primary tree before prepare-review"
+summary = """prepare-review's completeness gate reads completed-phase ids from the PRIMARY tree's runtime state; funnel status flips made only in the coord tree leave it refusing with "recorded row … not a completed phase"."""
+created = "2026-07-11"
+updated = "2026-07-11"
+
+[scope]
+paths = ["src/dispatch.rs", "src/state.rs"]
+globs = []
+commands = ["dispatch sync", "slice phase"]
+tags = ["dispatch", "worktree", "phase-status", "prepare-review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "a8a65f2086fb9815a4b46392ff985b759fadc40f"
+ref_name = "refs/heads/edge"
+checkout_state_id = "28d3c0b0d0f5bddc90184cc4b6a8be42e5eacbea222ace6eb79e5f7407e0f93a"
+base_commit = "a7177173d0fae1f12b4f00609ef246326399e792"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
