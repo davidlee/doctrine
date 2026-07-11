@@ -50,13 +50,16 @@ Module doc note (`src/comparison/project.rs` header, lines 25–37) rewritten:
 no longer "follows the prototype / reported for orchestrator adjudication";
 states component scope as adjudicated (SL-216, IMP-279, RV-266 F-3 follow-on).
 
-**Amendment sweep, not point edits** (adversarial F1/F2): grep SL-213
-design.md and `src/` for `corpus-wide|global` gauge language. Known sites
-beyond the three headline P's: P8's rationale note (design lines ~310–315 —
-pins S2 0.8/0.4 verbatim and frames per-component as "new sliced work"; both
-now superseded by this slice), and the dead `AnchorGaugeDisconnect` variant
-doc (`src/priority/findings.rs:150-153` — "anchors existing ELSEWHERE in the
-graph" → component language; no producer exists, comment-only).
+**Amendment sweep, not point edits** (internal F1/F2; broadened per RV-267
+F-5): the token grep (`corpus-wide|global`) is a seed, not the boundary —
+additionally audit every comment citing P7/P8/P12/gauge semantics. Known
+sites beyond the three headline P's: P8's rationale note (design lines
+~310–315 — pins S2 0.8/0.4 verbatim and frames per-component as "new sliced
+work"; both superseded by this slice), the `AnchorGaugeDisconnect` variant
+doc + producer doc (`src/priority/findings.rs:150-153`, `:556-560` —
+"ELSEWHERE/SOMEWHERE in the graph" and the "P8 whole-graph spread" base-state
+rationale → component language), and the `p12` test comment's "whole-graph
+spread is a documented artifact" framing (`project.rs:834-836`).
 
 Rejected: leaving SL-213 design as historical record with SL-216 as authority
 (splits the contract across a slice chain readers must chase); REV routing
@@ -73,9 +76,20 @@ All changes inside `src/comparison/project.rs`; no signature changes above
 structurally. Value resolution is provenance-blind (`priority/graph.rs`
 D11 tests: Gauge and Projected resolve identically), so the s8-style
 provenance flips move **no** resolved values beyond the placement change
-itself. User-visible render delta (adversarial F5): island ladder nodes'
-explain reason flips `ValueProjected` → `ValueGauge { judgements }` — named
-here as accepted, part of the declared change.
+itself. Two user-visible surface deltas, both accepted and declared:
+
+- **Explain render** (internal F5): island ladder nodes' reason flips
+  `ValueProjected` → `ValueGauge { judgements }`.
+- **`AnchorGaugeDisconnect` membership** (RV-267 F-3): the producer at
+  `src/priority/findings.rs:561` is **live** — it lists every
+  Gauge-provenance entity whenever the corpus has any anchor. Its code is
+  untouched, but per-component placement grows its membership from P7 nodes
+  only to **every member of an anchor-free island** (s8: w → z+w). Semantics
+  stay coherent — the P7 hint ("compare against an anchored item to place
+  it") applies island-wide; the detector's anchors-empty silence guard still
+  matches the pure-gauge base state, which is now per-corpus by construction
+  (a corpus with no anchors has no anchored components). Doc comments
+  reworked to component language (D2 sweep).
 
 1. **New pure helper**
 
@@ -109,8 +123,11 @@ here as accepted, part of the declared change.
    multi-component corpus — exactly the declared change surface.
 
 Single-component corpora are unaffected in all regimes; live-data migration
-risk low (IMP-279 compatibility analysis: of 22 validated scenarios only S2
-has ≥2 disjoint components).
+risk low. Multi-component surface, corrected (RV-267 F-2 — IMP-279's "only
+S2" counted the design-validated scenario set only): the shipped suite has
+**two** multi-component cases, `s2` (pure-gauge, 2 components) and `s8`
+(mixed, anchor-free island). Both are declared movers in §3; the golden
+audit sweep exists to prove the list ends there.
 
 ## §3 Verification
 
@@ -126,16 +143,22 @@ Evidence that must change (pinned re-pins, part of the declared change):
 
 Evidence that must be added:
 
-- **`p12` unscoped + strengthened** — three-way:
-  1. perturb anchored X → gauge island Y frozen;
-  2. perturb gauge island Y → anchored X frozen;
-  3. add the corpus's **first anchor** to X → disjoint gauge Y frozen
+- **`p12` unscoped + strengthened** — four-way (RV-267 F-4: the existing
+  anchored↔anchored witness is retained, not replaced):
+  1. perturb anchored X → disjoint anchored Y frozen (the existing
+     `p12_locality_disjoint_anchored_components` case, kept verbatim);
+  2. perturb anchored X → gauge island Y frozen;
+  3. perturb gauge island Y → anchored X frozen;
+  4. add the corpus's **first anchor** to X → disjoint gauge Y frozen
      (kills leak 2 explicitly; RED against the shipped global trigger).
 - **New golden `mixed_corpus_island`** — anchored diamond + free pendant;
   pendant takes the centred component spread, Gauge provenance.
-- **Singleton-island case** (adversarial F3) — a single anchor-free node in a
+- **Singleton-island case** (internal F3) — a single anchor-free node in a
   pure-gauge multi-component corpus: `2D/(H_global+2)` → `D` (h=0, H=0 ⇒
   `2D·1/2`). Declared surface; pin it.
+- **`AnchorGaugeDisconnect` membership assertion** (RV-267 F-3) — the mixed
+  island case asserts the finding lists the **whole** island (s8 shape:
+  z+w, not w alone); RED against shipped placement.
 - **Golden audit sweep** — every existing scenario with ≥2 components checked
   for silent re-pin; s2 and s8 are the known movers, sweep confirms no others.
 
