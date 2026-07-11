@@ -1,0 +1,50 @@
+memory_uid = "mem_019f518e027770319100fb92d0f87ef2"
+memory_key = "mem.pattern.reviewing.no-producer-claims-need-full-file-symbol-grep"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dead-symbol claims need full-file symbol grep, not definition-region reads"
+summary = "Before claiming an enum variant/symbol is dead, grep the symbol across EVERY file grep -l flagged in full — a definition-region read plus targeted greps of OTHER files misses a producer later in the same file"
+created = "2026-07-11"
+updated = "2026-07-11"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["reviewing", "grep", "adversarial-review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1e0a992c35aa8303ee388353923b4bc80114b0d7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d2deb5d9f833b5b67633311ed179f1985a2d08c21ea61ef3d545cfcebef04b1c"
+base_commit = "98736bdb8afc8cfa0d56d9f491378f4b2aae88e7"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-267"
+
+[[relation]]
+label = "related"
+target = "mem_019ec3285f9c77e1a678e1571fd70199"
+
