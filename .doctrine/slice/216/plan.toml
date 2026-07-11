@@ -1,0 +1,63 @@
+# Implementation plan for SL-216 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-216"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Per-component placement"
+objective = "Restructure place() to per-weakly-connected-component regime selection (design D1): components() helper, per-component anchored/P8 branch, re-pinned movers, four-way locality, new goldens, disconnect-membership assertion. TDD: new cases RED against shipped global trigger first."
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (RV-267 done); D1/D2 adjudicated" },
+  { id = "EN-2", text = "Baseline green: comparison + priority suites pass unchanged at the branch point" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "components() pure helper (undirected BFS over out ∪ inn, min-member order, BTree collections) and place() outer component loop shipped; anchored machinery invoked per component unchanged" },
+  { id = "EX-2", text = "Declared movers re-pinned: s2 pendant f/g 1.3333/0.6667; s8 island z/w 1.3333/0.6667 both Gauge; comments rewritten to component scale" },
+  { id = "EX-3", text = "New evidence green: p12 four-way locality (anchored↔anchored retained verbatim), mixed_corpus_island golden, singleton-island pin, AnchorGaugeDisconnect whole-island membership unit test" },
+  { id = "EX-4", text = "Preservation: single-component goldens (s1, s3–s7, y1, y2), p10/p11/p14, priority suites, e2e_compare_inference all green without edits (comment-only edits exempt)" },
+  { id = "EX-5", text = "just gate clean" },
+]
+verification = [
+  { id = "VT-1", expects = "components() helper and per-component anchor filter exist and drive place()", test_file = "src/comparison/project.rs", keywords = ["fn components", "component_anchors"], waived = false },
+  { id = "VT-2", expects = "new goldens: mixed-corpus island centred spread; singleton island lands on default_value", test_file = "src/comparison/project.rs", keywords = ["mixed_corpus_island", "singleton_island"], waived = false },
+  { id = "VT-3", expects = "four-way locality incl. first-anchor regime-flip case (leak 2) and re-pinned component-H values", test_file = "src/comparison/project.rs", keywords = ["first_anchor", "1.3333"], waived = false },
+  { id = "VT-4", expects = "anchor_gauge_disconnect_findings lists every member of an anchor-free island, not just P7 sinks", test_file = "src/priority/findings.rs", keywords = ["anchor_gauge_disconnect_findings", "island"], waived = false },
+  { id = "VA-1", expects = "git diff audit: no test bodies edited except the declared movers (s2, s8) and new tests; preservation set untouched" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Contract amendment sweep"
+objective = "Amend the P1–P15 contract and every stale global-scope narrative to component language (design D2): SL-213 design.md §3 P1/P8/P12 + rationale note, project.rs module header, findings.rs variant/producer docs, e2e ISS-050 narrative."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed green (code semantics are the new ground truth the prose must match)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SL-213 design.md §3 amended in place, each edit tagged [amended by SL-216]: P1 exception clause dropped, P8 component H + per-component trigger, P12 unscoped universal locality, P8 rationale note superseded" },
+  { id = "EX-2", text = "project.rs module header states component scope as adjudicated (SL-216, IMP-279, RV-266 F-3 follow-on) — no 'follows the prototype / reported for adjudication' residue" },
+  { id = "EX-3", text = "Comment sweep complete: findings.rs AnchorGaugeDisconnect variant + producer docs, p12 test comment, e2e_compare_inference ISS-050 narrative — component language throughout" },
+  { id = "EX-4", text = "Sweep audit clean: token grep (corpus-wide|global gauge) plus review of every comment citing P7/P8/P12 finds no stale global-scope claim" },
+]
+verification = [
+  { id = "VT-1", expects = "SL-213 design carries the amendment markers and component-H wording", test_file = ".doctrine/slice/213/design.md", keywords = ["amended by SL-216", "component max height"], waived = false },
+  { id = "VA-1", expects = "sweep audit: grep seed + P7/P8/P12 comment review, zero stale global-scope statements" },
+  { id = "VA-2", expects = "module doc, findings docs, e2e narrative read component-scoped and cite SL-216" },
+]
+specs        = []
+requirements = []
