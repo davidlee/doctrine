@@ -23,10 +23,10 @@ five preflight dispositions baked into the slice scope (Q1–Q5).
 | D9 | `determined(a,b)`: sign-constancy of `f` over the pair joint region via corner/limit analysis; constant zero = `Tied`; open bounds are strict limits | Sup/inf of a linear 2-variable function over a box-with-one-coupling: corners + unbounded limits. Edge cases pinned as goldens: same-class pair with differing weights and interval spanning 0 ⇒ indeterminate; any `Unbounded` side with differing weights ⇒ indeterminate (limits dominate). |
 | D10 | `hypothetical_yield` returns a **signed delta**; negative is real (hypothetical contradiction quarantines evidence on recompile) | Honest accounting; no second propagation engine — recompile via `compile` (pure, evidence-sized). Queue admission filters `guaranteed_yield > 0`; the negative case is exercised by test, not hidden. |
 | D11 | Guaranteed yield = min over **order-bearing** answers (`prefer-a/prefer-b/equal`); `incomparable` disclosed separately in `yield_by_answer` | Strict min over the full v2 vocabulary degenerates: `incomparable` is always answerable and always yields 0 ⇒ every comparison scores 0. RFC's "certain progress whatever the human says" is read against the order-bearing space; the JSON discloses the exception rather than hiding it. |
-| D12 | Anchor-review candidates: one per distinct suspect anchor from `AnchorConflict` quarantine pairs; answer space {anchor-removed, rows-retired}; **not K-gated** | Eval C2: one stale anchor sterilised 28% of the ledger via D4 closure — evidence budget must not pool in quarantine. Anchor-edit hypothetical modelled conservatively as anchor *removal* (any edit un-forces the closure at least as much); uphold modelled as conflicting rows retired. Impact still weights by frontier proximity of liberated rows. |
-| D13 | Ranking: `score = guaranteed_yield × impact × confirm_boost`; impact = Σ rank-decay weights over the min-yield newly-determined pairs; `confirm_boost > 1` iff both participants' constraining evidence is agent-only (`RaterCounts.human == 0`) | Q5/T7 without D7 semantics: agent rows still determine; the boost only biases selection order toward regions where no human has spoken. Numeric shapes (`ELICIT_RANK_DECAY`, `ELICIT_CONFIRM_BOOST`) are named consts, implementation-owned tuning (ADR-015 posture). Tiebreak: id lexicographic; scores compared `total_cmp`. |
+| D12 | Anchor-review candidates: one per distinct suspect anchor from `AnchorConflict` quarantine pairs; answer space {anchor-removed, rows-retired}; guaranteed yield = min over **resolving** answers; **not K-gated** | Eval C2: one stale anchor sterilised 28% of the ledger via D4 closure — evidence budget must not pool in quarantine. Removal is the *optimistic* revise model (an edit to a still-conflicting value un-forces nothing), so a strict min over "any edit" degenerates exactly as `incomparable` does for comparisons — same cure as D11: min over answers that *resolve* the tension (revise-to-consistent ≈ removal; uphold = rows retired); a still-conflicting re-author is a non-resolution, disclosed, outside the min. Impact still weights by frontier proximity of liberated rows. |
+| D13 | Ranking: `score = guaranteed_yield × impact × confirm_boost`; impact = Σ rank-decay weights over the min-yield answer's newly-determined pairs (ties on min: lexicographically smallest answer token — deterministic); `confirm_boost > 1` iff both participants' constraining evidence is agent-only (`RaterCounts.human == 0`) | Q5/T7 without D7 semantics: agent rows still determine; the boost only biases selection order toward regions where no human has spoken. Numeric shapes (`ELICIT_RANK_DECAY`, `ELICIT_CONFIRM_BOOST`) are named consts, implementation-owned tuning (ADR-015 posture). Tiebreak: id lexicographic; scores compared `total_cmp`. |
 | D14 | Binary insertion is stateless: an un-constrained top-K item (zero constraining rows, no anchor) yields a comparison candidate against the projected median of its comparable set; the ledger *is* the bisection state | No session state, no cursor; each refresh re-derives the next probe from what the ledger now knows. Reason code `binary-insertion`. |
-| D15 | Queue states: `candidates` / `stalled` / `stable`; stall render names the depth and disclaims stability; `stable` only via the determinacy predicate over every top-K pair | RFC stall ≠ stable (zero one-step yield can hide a bridge question). Exhaustion and stability are different facts; the render says which. |
+| D15 | Queue states, precedence pinned: entries non-empty ⇒ `candidates` (all three sources count — anchor-review/binary-insertion can admit while every top-K pair is determined); entries empty ∧ every top-K pair determined ⇒ `stable`; entries empty ∧ some pair indeterminate ⇒ `stalled`. Stall render names the depth and disclaims stability; `stable` only via the determinacy predicate | RFC stall ≠ stable (zero one-step yield can hide a bridge question). Exhaustion and stability are different facts; the render says which. A determined top-K with a live stale-anchor suspect is NOT "stable" — the tension is standing evidence-debt. |
 | D16 | JSON schema v1 (§3): versioned envelope, kind-tagged entries, common spine (`rank/kind/guaranteed_yield/impact/score/reasons/ask`), kind payloads under distinct keys, structured `code`+`text` reasons; **lean participants** (ids + value/estimate block; no body summaries) | Curator sorts/filters on the spine without kind-switching; findings' JSON-parity idiom. Summaries are additive schema-versioned fields if ever wanted; human render fetches context itself. |
 | D17 | Bare-estimate mask (Q4/C1) is an annotation on participants (`projection masked by bare estimate`), never a candidate kind; no engine yield-ranking of estimate questions | Phase E gate (estimate feasible-region model, RV-260 F-5). Curator nominates estimates; engine only discloses the mask. |
 | D18 | `elicit` is read-only end to end: no runtime state, no persisted queue, derived output only | Capture loop = ledger round-trip; estimate/value edits re-surface reprobes through the same determinacy check with no clock and no staleness heuristic. |
@@ -147,8 +147,10 @@ Candidate pool, three sources:
    reason `binary-insertion`. Stateless; the ledger is the bisection state.
 3. **Anchor-review (D12)** — one candidate per distinct suspect anchor
    appearing in `AnchorConflict` quarantine pairs. Answer space per D12;
-   guaranteed yield = min of the two outcomes. Not K-gated; impact weights by
-   frontier proximity of the rows each outcome would liberate.
+   guaranteed yield = min over the two *resolving* outcomes (revise-to-
+   consistent modelled as removal; uphold as rows retired). Not K-gated;
+   impact weights by frontier proximity of the rows each outcome would
+   liberate.
 
 Ranking (D13): `score = guaranteed_yield × impact × confirm_boost`;
 admission `guaranteed_yield > 0`; `impact = Σ w(r)` over the min-yield
@@ -158,10 +160,12 @@ ELICIT_CONFIRM_BOOST` iff both sides' constraining evidence is agent-only via
 `constraining_counts_by_class`, else `1.0`. Determinism: BTree everywhere,
 `total_cmp` on scores, id-lexicographic tiebreak; no float in any key.
 
-States (D15): `Candidates`; `Stalled` when the pool is non-empty but no
-candidate admits (render: "greedy one-step yield exhausted at depth K — not a
-stability claim; bridge questions may exist"); `Stable` when every top-K pair
-is `determined` over the joint set — the only path to a stability claim.
+States (D15, precedence pinned): entries non-empty ⇒ `Candidates`; entries
+empty ∧ every top-K pair `determined` ⇒ `Stable`; entries empty ∧ some pair
+indeterminate ⇒ `Stalled` (render: "greedy one-step yield exhausted at depth
+K — not a stability claim; bridge questions may exist"). All three candidate
+sources gate `Stable`: a determined top-K with a live stale-anchor suspect
+stays `Candidates` — the tension is standing evidence-debt.
 
 Cost: ≤ K(K−1)/2 + |suspect anchors| candidates; ≤ 3 recompiles each, linear
 in active rows; reachability memoised per hypothetical. O(K²·|active|) as the
@@ -275,8 +279,11 @@ Suites → rules pinned. VT/VA/VH ids minted at `/plan`.
 3. **Reprobe** (elicit + pipeline integration): synthetic stale-anchor
    conflict ⇒ anchor-review candidate ranked by un-quarantine payoff;
    `AnchorRemoved` hypothetical activates closure rows on recompile;
-   `RowsRetired` counts its (smaller) liberation; estimate edit flips a
-   determined pair back indeterminate ⇒ reprobe comparison resurfaces (D18).
+   `RowsRetired` counts its (smaller) liberation; min-over-resolving-answers
+   (D12) pinned by a case where uphold < removal; estimate edit flips a
+   determined pair back indeterminate ⇒ reprobe comparison resurfaces (D18);
+   determined top-K + live suspect anchor ⇒ state stays `Candidates` (D15
+   precedence golden).
 4. **Binary insertion**: un-constrained top-K item ⇒ candidate vs projected
    median, reason `binary-insertion`; after answering, next refresh probes the
    correct half (stateless bisection, D14).
