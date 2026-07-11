@@ -1,0 +1,43 @@
+id    = 268
+slug  = "audit-sl-216-per-component-gauge-scope-conformance"
+title = "Audit SL-216 — per-component gauge scope (conformance)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-216"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Declared sweep target tests/e2e_compare_inference.rs absent from design-target selectors — conformance reports it undeclared"
+detail = "Expected: every surface the slice's plan declares as an amendment target is covered by a design-target selector, so `slice conformance` reads clean on delivery. Observed: plan.toml PHASE-02 objective/EX-3 names the e2e ISS-050 narrative (tests/e2e_compare_inference.rs:458-463) as a sweep site, and PHASE-02 edited it (comment-only), but the selector registry carries only src/comparison/project.rs, src/priority/findings.rs, .doctrine/slice/213/design.md — conformance flags the file undeclared. Registry gap, not scope creep: the design's D2 known-sites list omitted the e2e file while the plan carried it."
+disposition = "verified"
+response = "Registry gap confirmed; remediation delegated to /reconcile via the Reconciliation Brief (per-slice surface): the load-bearing change is `doctrine slice selector add SL-216 tests/e2e_compare_inference.rs` (design-target role) so conformance reads the delivered sweep site as conformant; SL-216 design.md D2 known-sites list gains the e2e narrative as its prose mirror. Comment-only edit itself is correct and in plan scope (PHASE-02 EX-3)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Conformance undeclared cell carries lifecycle/process artifacts (notes.md, slice-216.toml, RFC-011 case-notes)"
+detail = "Expected: undeclared paths are potential scope creep. Observed: three of four undeclared paths are inherent lifecycle writes — .doctrine/slice/216/notes.md (slice scratchpad), .doctrine/slice/216/slice-216.toml (status flips by the CLI), .doctrine/rfc/011/case-notes.md (boot-mandated session instrumentation, out of slice scope by construction). None is a source edit; none belongs in design-target selectors (adding them would dilute the selector signal)."
+disposition = "aligned"
+response = "Lifecycle/process artifacts are inherent writes, not scope creep: notes.md and slice-216.toml are the slice's own lifecycle surface (scratchpad + CLI status flips), case-notes.md is boot-mandated RFC-011 session instrumentation orthogonal to any slice. Design-target selectors stay source-focused; adding these would dilute the conformance signal. No change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = 'EX-5 "just gate clean" not fully satisfiable in jail — lint-js leg fails on pre-existing env breakage'
+detail = 'Expected: `doctrine check gate` / `just gate` clean (PHASE-01 EX-5). Observed: gate fails at lint-js — web/map/node_modules/.bin/eslint shebang needs /usr/bin/env, absent in the NixOS bubblewrap jail ("bad interpreter", exit 126). Pre-existing environment breakage, not introduced by this slice (web/map untouched; recorded as mem.fact.env.jail-lint-js-bad-interpreter). Rust legs fully clean: cargo fmt, clippy zero warnings, 4043 tests pass / 0 fail. The js leg is unverified in this environment; a host-side gate run (or jail fix) remains outstanding.'
+disposition = "tolerated"
+response = "Tolerated with rationale: the failing leg is pre-existing jail environment breakage (eslint /usr/bin/env shebang, exit 126), not slice regression — web/map untouched by SL-216; every leg the slice can affect is clean (fmt, clippy zero warnings, 4043/0 tests). Residual risk owned: ISS-222 captures the jail fix; the js leg needs a host-side gate run until then. Memory mem.fact.env.jail-lint-js-bad-interpreter records the gotcha."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
