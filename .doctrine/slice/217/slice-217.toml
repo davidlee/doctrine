@@ -22,6 +22,38 @@ intent = "scope-relevant"
 selector = "src/priority/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/comparison/query.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/compile.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/elicit.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/config.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/surface.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/compare.rs"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-280"

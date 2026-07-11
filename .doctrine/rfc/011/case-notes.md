@@ -1272,3 +1272,9 @@ invalidate both.
   design body is non-obvious (had to Read the .md directly; `show` synthesises but
   the routing guidance says never read raw files). A `slice design --show` or clear
   read verb for the prose tier would remove the tension.
+
+[design; SL-217-design-fable-0712]
+`doctrine rfc show RFC-019` emits 63KB — harness persisted it to a side file;
+had to grep/re-read slices of the persisted file to reach §Pair selection.
+A `--section <heading>` filter on `show` (or heading-level TOC + range read)
+would have saved ~2 reads and the full-body emission.
