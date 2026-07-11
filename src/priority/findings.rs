@@ -32,6 +32,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::backlog_order::OverrideReason;
+use crate::comparison;
 use crate::relation_graph::EntityKey;
 
 use super::channels;
@@ -129,6 +130,33 @@ pub(crate) enum Finding {
     /// SCC. Reuses [`ReasonKind::EvictedEdge`] / [`ReasonKind::CycleDegraded`] (DRY;
     /// shares the `explain` render fragment).
     Provenance(ReasonKind),
+    /// SL-213 PHASE-06 (design §4 S4, comparison C3) — a preference cycle
+    /// quarantined every row on it. `classes` are the cyclic equality classes
+    /// (entity ids); `rows` the quarantined row uids. Exit (C7/D6): supersede
+    /// one row (`--supersedes <uid>`) or tombstone one to break the cycle —
+    /// re-asking alone cannot clear it (R3 concurrency).
+    PreferenceCycle {
+        classes: Vec<String>,
+        rows: Vec<String>,
+    },
+    /// SL-213 PHASE-06 (comparison C2/C4) — retained rows contradict a pair
+    /// of authored anchors. `anchors` names both conflicting entities WITH
+    /// their authored values; `rows` the quarantined row uids. Exit (C7/D6):
+    /// supersede a conflicting row, tombstone one, or edit an anchor.
+    AnchorConflict {
+        anchors: Vec<(String, f64)>,
+        rows: Vec<String>,
+    },
+    /// SL-213 PHASE-06 (comparison P7) — entities placed by the gauge
+    /// convention despite anchors existing ELSEWHERE in the graph (no
+    /// directed order path connects them to any anchor). The P7 hint: compare
+    /// against an anchored item to place it.
+    AnchorGaugeDisconnect { entities: Vec<String> },
+    /// SL-213 PHASE-06 (comparison R2) — a supersession cycle deactivated
+    /// every participating row (`ResolutionStatus::Malformed`). `rows` are
+    /// the participant uids. Exit (C7/D6): tombstone one row to break the
+    /// cycle.
+    MalformedSupersession { rows: Vec<String> },
 }
 
 /// `f64` magnitude of a count, cast losslessly via `u32` (avoids the denied `as`
@@ -157,6 +185,11 @@ impl Finding {
             }
             // An evicted edge — the two endpoints; ranks below any multi-node cycle.
             Finding::Provenance(_) => 2.0,
+            Finding::PreferenceCycle { rows, .. } | Finding::MalformedSupersession { rows } => {
+                count_magnitude(rows.len())
+            }
+            Finding::AnchorConflict { rows, .. } => count_magnitude(rows.len()),
+            Finding::AnchorGaugeDisconnect { entities } => count_magnitude(entities.len()),
         }
     }
 
@@ -173,6 +206,10 @@ impl Finding {
             Finding::OrderInstability { .. } => "order instability",
             Finding::ArmResequencing { .. } => "arm resequencing",
             Finding::Provenance(_) => "provenance",
+            Finding::PreferenceCycle { .. } => "preference cycles",
+            Finding::AnchorConflict { .. } => "anchor conflicts",
+            Finding::AnchorGaugeDisconnect { .. } => "anchor/gauge disconnects",
+            Finding::MalformedSupersession { .. } => "malformed supersessions",
         }
     }
 }
@@ -459,6 +496,113 @@ fn provenance(g: &PriorityGraph) -> Vec<Finding> {
     out
 }
 
+// ── SL-213 PHASE-06 comparison-domain detectors ─────────────────────────────
+//
+// These four read the comparison-tier PIPELINE directly (§ design D12), not the
+// `PriorityGraph`/`channels` substrate the detectors above share — the comparison
+// tier sits BELOW `priority` (ADR-001), so its own artifacts (the compiled
+// `ConstraintSet`, the resolve-tier finding streams) are the honest source, not a
+// re-derivation over the graph.
+
+/// **`PreferenceCycle`** (comparison C3) — every `QuarantineReason::PreferenceCycle`
+/// entry, grouped by its cyclic class set (one finding per distinct SCC — several
+/// rows on the same cycle share one finding, C3's `classes` payload is identical
+/// across them).
+fn preference_cycle_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
+    let mut groups: BTreeMap<Vec<String>, BTreeSet<String>> = BTreeMap::new();
+    for (uid, reason) in &cs.quarantined {
+        if let comparison::QuarantineReason::PreferenceCycle { classes } = reason {
+            groups
+                .entry(classes.clone())
+                .or_default()
+                .insert(uid.clone());
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(classes, rows)| Finding::PreferenceCycle {
+            classes,
+            rows: rows.into_iter().collect(),
+        })
+        .collect()
+}
+
+/// **`AnchorConflict`** (comparison C2/C4) — one finding per DISTINCT conflicting
+/// anchor pair, gathering every row quarantined for that pair (a row serving
+/// several conflicts appears in several findings, C4's "quarantined once, finding
+/// lists every pair" — here inverted to "one finding per pair, listing every row").
+fn anchor_conflict_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
+    let mut by_pair: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
+    for (uid, reason) in &cs.quarantined {
+        if let comparison::QuarantineReason::AnchorConflict { pairs } = reason {
+            for pair in pairs {
+                by_pair.entry(pair.clone()).or_default().insert(uid.clone());
+            }
+        }
+    }
+    by_pair
+        .into_iter()
+        .map(|((x, y), rows)| {
+            let ax = cs.anchors.get(&x).copied().unwrap_or(f64::NAN);
+            let ay = cs.anchors.get(&y).copied().unwrap_or(f64::NAN);
+            Finding::AnchorConflict {
+                anchors: vec![(x, ax), (y, ay)],
+                rows: rows.into_iter().collect(),
+            }
+        })
+        .collect()
+}
+
+/// **`AnchorGaugeDisconnect`** (comparison P7) — entities placed by the gauge
+/// convention despite anchors existing SOMEWHERE in the graph. When `cs.anchors`
+/// is empty, EVERY class takes the P8 whole-graph gauge spread (project.rs) —
+/// that is the base state, not a disconnect, so the detector stays silent (it
+/// would otherwise flag every entity in a comparison-free-of-anchors ledger).
+fn anchor_gauge_disconnect_findings(
+    cs: &comparison::ConstraintSet,
+    projection: &comparison::Projection,
+) -> Vec<Finding> {
+    if cs.anchors.is_empty() {
+        return Vec::new();
+    }
+    let entities: Vec<String> = projection
+        .iter()
+        .filter(|(_, (_, prov))| matches!(prov, comparison::ValueProvenance::Gauge))
+        .map(|(e, _)| e.clone())
+        .collect();
+    if entities.is_empty() {
+        return Vec::new();
+    }
+    vec![Finding::AnchorGaugeDisconnect { entities }]
+}
+
+/// **`MalformedSupersession`** (comparison R2) — one finding per supersession
+/// cycle the resolve tier already grouped (`Resolution::malformed`).
+fn malformed_supersession_findings(pipeline: &comparison::Pipeline) -> Vec<Finding> {
+    pipeline
+        .malformed
+        .iter()
+        .map(|m| Finding::MalformedSupersession {
+            rows: m.cycle.clone(),
+        })
+        .collect()
+}
+
+/// Run the four SL-213 PHASE-06 comparison-domain detectors over the loaded
+/// pipeline (design §4 S4). The caller ([`super::surface::findings`]) merges
+/// these into the graph-domain catalogue and re-sorts.
+pub(crate) fn comparison_findings(pipeline: &comparison::Pipeline) -> Vec<Finding> {
+    let mut out = Vec::new();
+    out.extend(preference_cycle_findings(&pipeline.constraint_set));
+    out.extend(anchor_conflict_findings(&pipeline.constraint_set));
+    out.extend(anchor_gauge_disconnect_findings(
+        &pipeline.constraint_set,
+        &pipeline.projection,
+    ));
+    out.extend(malformed_supersession_findings(pipeline));
+    out
+}
+
 // ── β-family detectors (PHASE-02 — over the pre-built BetaEndpoints) ──────────
 
 /// A `key → index` position map for a frontier order (the sort position each node holds).
@@ -677,13 +821,17 @@ mod tests {
         let scanned =
             crate::relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = config::load(root);
-        let base = graph::build_from_with_cfg(&scanned, root, &cfg).unwrap();
+        // Mechanical call-site update (SL-213 PHASE-05): build_from_with_cfg gained a
+        // projected-values param; no comparisons dir in this fixture, so the empty map
+        // is byte-identical to the pre-SL-213 behaviour.
+        let no_projection = crate::comparison::Projection::new();
+        let base = graph::build_from_with_cfg(&scanned, root, &cfg, &no_projection).unwrap();
         let mut lo_cfg = cfg.clone();
         lo_cfg.estimate.skew = BETA_LO;
         let mut hi_cfg = cfg.clone();
         hi_cfg.estimate.skew = BETA_HI;
-        let lo = graph::build_from_with_cfg(&scanned, root, &lo_cfg).unwrap();
-        let hi = graph::build_from_with_cfg(&scanned, root, &hi_cfg).unwrap();
+        let lo = graph::build_from_with_cfg(&scanned, root, &lo_cfg, &no_projection).unwrap();
+        let hi = graph::build_from_with_cfg(&scanned, root, &hi_cfg, &no_projection).unwrap();
         let betas = BetaEndpoints { lo, hi };
         detect(&base, &cfg, Some(&betas))
     }
