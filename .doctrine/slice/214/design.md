@@ -53,8 +53,15 @@ skills route, reference docs explain). POL-002 binds: no repo-local couplings.
 - **Intent→verb table:** capture → `knowledge new <kind> [title]`; survey →
   `knowledge list`; read → `knowledge show <ID>`; settle → `knowledge status
   <ID> <STATE>`; relate → `link <REC-ID> shapes|spawns <TARGET>`; evidentiary →
-  `link EVD-n supports|disputes <REC-ID>`. CLI is source of truth for flags and
+  `link EVD-n supports|disputes <REC-ID>`; replace → `doctrine supersede`
+  (SPEC-019 cross-kind supersession). CLI is source of truth for flags and
   per-kind status vocabularies — the skill does not enumerate them.
+- **Wrong-home cross-pointers** (adversarial finding 1): work intent →
+  `/backlog`; reusable agent guidance/recipe/gotcha → `/record-memory`.
+  Discriminator: a record is a citable epistemic *entity* in the relation
+  graph (relatable, gateable, supersedable); a memory is retrieval-layer
+  guidance. CPT vs memory-`concept` rides this line — one discriminator
+  sentence only; deeper guidance out of scope (IDE-007-adjacent).
 - **Gating section (the one non-obvious teaching, ADR-017):** association ≠
   gating. `shapes` records influence, never blocks. To gate work on an
   unsettled record, the *dependent* authors the edge: `doctrine needs SL-x
@@ -97,13 +104,14 @@ full install), then routing row, then `doctrine boot`. Source of truth is
 
 ## Verification alignment
 
-- **VA — POL-002 reflex:** skill resolves in a fresh client — no justfile
-  commands, no repo-local memory uids, no `edge`/`main` assumptions; any
-  `[[mem.…]]` citation must exist in the shipped corpus.
-- **VA — dogfood capture:** author this slice's own design outcomes as the
-  first real records via the new skill's verb table: DEC (placement, D1), DEC
-  (touchpoint strategy, D3), ASM (touchpoint pointers suffice to drive
-  population — the census is the eventual test). Census non-zero at close.
+- **VA — POL-002 reflex, concrete:** grep the new/edited skill files for
+  `just `, repo-local paths, and branch names; `comm -23` any `[[mem.…]]` keys
+  against the shipped `memory/` corpus keys. Zero hits.
+- **VA — dogfood capture, cross-slice-reach only** (adversarial finding 2 —
+  don't teach record-spam from record #1): one DEC (the SL-214/SL-215
+  capture-vs-harvest boundary; `link DEC-n shapes SL-215`) + one ASM
+  (touchpoint pointers drive population; validation plan = re-census after
+  SL-215 lands). Census non-zero at close.
 - **VH — sequencing:** routing row only after install; `doctrine boot --check`
   clean; skill visible in installed skill list.
 
