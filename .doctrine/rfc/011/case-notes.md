@@ -1385,3 +1385,13 @@ be clearer.
   text lists them unprefixed ("you see `review_new` … in your tool list"), so a
   literal select on the skill's spelling misses. Had to re-query with the full
   prefix. Skill wording vs deferred-tool id spelling diverge.
+
+[/design; SL-219-design-session]
+`doctrine memory retrieve` rejects a positional uid (`error: unexpected
+argument`) — retrieval by uid actually lives on `memory show`. Cost one
+failed round-trip; boot snapshot lists both verbs with no signature hint.
+
+[/design; SL-219-design-session]
+Backlog body filename is `backlog-NNN.md` under `idea/NNN/`, not
+`idea-NNN.md` — path guess failed one Read. `backlog new` output prints the
+dir, not the file names.
