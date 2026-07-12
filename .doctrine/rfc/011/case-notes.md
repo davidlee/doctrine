@@ -1375,3 +1375,13 @@ be clearer.
   happened) — pattern-completion from writing evidence-shaped prose in a
   planning context. Caught immediately; 9 edit calls to repair. Template
   affordance idea: seed task lists as `[ ]` in the sheet skeleton.
+
+[audit; SL-218-audit-opus]
+- `doctrine slice selector SL-218` (no subcommand) errors — selector needs a
+  verb (`list`/`add`/…) then the id, unlike `slice conformance <id>`. One wasted
+  probe. Inconsistent id-position across slice subcommands costs a retry.
+- ToolSearch `select:review_new,...` (bare names) returned "No matching deferred
+  tools" — the deferred names carry the `mcp__doctrine__` prefix. The audit skill
+  text lists them unprefixed ("you see `review_new` … in your tool list"), so a
+  literal select on the skill's spelling misses. Had to re-query with the full
+  prefix. Skill wording vs deferred-tool id spelling diverge.
