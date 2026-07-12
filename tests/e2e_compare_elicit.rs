@@ -558,3 +558,55 @@ fn cost_ceiling_eval_corpus_completes() {
     assert_eq!(json["context"]["depth"], 8, "default frontier K = 8");
     assert_eq!(json["schema"], "doctrine.elicit-queue");
 }
+
+// =============================================================================
+// SL-218 PHASE-01 — VT-F: demote_agent_evidence on the elicit surface
+// =============================================================================
+
+/// VT-F: knob-on, a pair previously retired by agent testimony re-enters the
+/// queue as a live comparison candidate, the state line follows, and the
+/// surface carries the demotion disclosure line.
+#[test]
+fn demote_agent_evidence_reenters_pair_with_disclosure() {
+    let dir = project();
+    let root = dir.path();
+    seed(root, 80, "");
+    seed(root, 81, "");
+    capture(root, "kd", &iss(80), &iss(81)); // rater = agent (fixture wire shape)
+
+    let before = elicit(root, &[]);
+    assert!(
+        before.contains("stable: value_dim order"),
+        "knob-off: the agent row retires the pair: {before}"
+    );
+    assert!(
+        !before.contains("agent evidence demoted"),
+        "no disclosure when the knob is off: {before}"
+    );
+
+    write(
+        root,
+        ".doctrine/doctrine.toml",
+        "[priority.compare]\ndemote_agent_evidence = true\n",
+    );
+    let after = elicit(root, &[]);
+    assert!(
+        after.contains("[comparison]") && after.contains(&iss(80)) && after.contains(&iss(81)),
+        "knob-on: the pair re-enters as a candidate: {after}"
+    );
+    assert!(
+        after.contains("candidates outstanding"),
+        "state line reflects the reopened queue: {after}"
+    );
+    assert!(
+        after.contains(
+            "agent evidence demoted: agent judgements propose orderings but do not retire \
+             questions"
+        ),
+        "disclosure line present knob-on: {after}"
+    );
+
+    // JSON parity: the disclosure rides an ADDITIVE key, knob-on only.
+    let json: serde_json::Value = serde_json::from_str(&elicit(root, &["--json"])).unwrap();
+    assert_eq!(json["agent_evidence_demoted"], true);
+}

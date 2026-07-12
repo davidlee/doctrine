@@ -88,6 +88,11 @@ pub(crate) enum ReasonKind {
     /// NOT a finding (nothing is wrong) — `explain`-only, corpus-global (not
     /// entity-scoped).
     PriorityDomainDisclosure { count: usize },
+    /// SL-218 D2 — the `[priority.compare] demote_agent_evidence` knob is on:
+    /// determinacy verdicts are read over the human-rows-only system. Knob
+    /// state, not entity evidence — present only when on, so knob-off
+    /// surfaces stay byte-identical (INV-1).
+    AgentEvidenceDemoted,
 }
 
 /// Whether an eligible node is ready to start now, or held by a blocker (design
@@ -202,6 +207,9 @@ pub(crate) struct Explanation {
     /// disclosure, corpus-global. `None` when no `priority`-domain rows
     /// exist.
     pub(crate) priority_disclosure: Option<ReasonKind>,
+    /// SL-218 D2 — the agent-demotion disclosure. `None` when the knob is
+    /// off (surfaces byte-identical to shipped behaviour).
+    pub(crate) agent_demotion: Option<ReasonKind>,
 }
 
 // ── SL-089 actionability-graph view types ──────────────────────────────────

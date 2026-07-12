@@ -325,8 +325,15 @@ fn reason_line(reason: &ReasonKind) -> String {
         ReasonKind::PriorityDomainDisclosure { count } => format!(
             "  {count} prefer-first judgements recorded — not value-bearing; no consumer yet\n"
         ),
+        ReasonKind::AgentEvidenceDemoted => format!("  {AGENT_DEMOTION_DISCLOSURE}\n"),
     }
 }
+
+/// SL-218 D2 disclosure — the SINGLE wording source for the knob-on line on
+/// `compare elicit` and `explain` (design §1: shared fragment, never
+/// per-surface prose).
+pub(crate) const AGENT_DEMOTION_DISCLOSURE: &str =
+    "agent evidence demoted: agent judgements propose orderings but do not retire questions";
 
 /// The SL-213 PHASE-06 value-source fragment (design §4 S3, the three shapes'
 /// literal templates) — the SINGLE source shared by `reason_line` (human), the
@@ -407,6 +414,9 @@ pub(crate) fn explain_human(ex: &Explanation) -> String {
         parts.push(reason_line(r));
     }
     if let Some(r) = &ex.priority_disclosure {
+        parts.push(reason_line(r));
+    }
+    if let Some(r) = &ex.agent_demotion {
         parts.push(reason_line(r));
     }
     parts.concat()
@@ -688,6 +698,10 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
             "kind": "priority_domain_disclosure",
             "count": count,
         }),
+        ReasonKind::AgentEvidenceDemoted => serde_json::json!({
+            "kind": "agent_evidence_demoted",
+            "text": AGENT_DEMOTION_DISCLOSURE,
+        }),
     }
 }
 
@@ -764,7 +778,7 @@ pub(crate) fn blockers_json(view: &BlockersView) -> anyhow::Result<String> {
 /// the same structural fields as human, `--json` carries them, never a
 /// re-derivation (design §4 S3).
 pub(crate) fn explain_json(ex: &Explanation) -> anyhow::Result<String> {
-    finish(&serde_json::json!({
+    let mut envelope = serde_json::json!({
         "kind": "explain",
         "policy_version": PRIORITY_POLICY_VERSION,
         "id": ex.id,
@@ -774,7 +788,15 @@ pub(crate) fn explain_json(ex: &Explanation) -> anyhow::Result<String> {
         "score": reason_json(&ex.score),
         "value_source": ex.value_source.as_ref().map(reason_json),
         "priority_disclosure": ex.priority_disclosure.as_ref().map(reason_json),
-    }))
+    });
+    // SL-218 D2: ADDITIVE key, knob-on only — knob-off bytes stay identical
+    // to shipped output (INV-1), unlike the always-present nullable fields.
+    if let Some(r) = &ex.agent_demotion
+        && let Some(obj) = envelope.as_object_mut()
+    {
+        obj.insert("agent_demotion".to_string(), reason_json(r));
+    }
+    finish(&envelope)
 }
 
 /// The actionability block as a JSON value (NOT a standalone envelope) — embedded

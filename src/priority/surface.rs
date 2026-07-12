@@ -525,6 +525,10 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
         score,
         value_source,
         priority_disclosure,
+        agent_demotion: cfg
+            .compare
+            .demote_agent_evidence
+            .then_some(ReasonKind::AgentEvidenceDemoted),
     })
 }
 

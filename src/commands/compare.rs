@@ -685,6 +685,15 @@ fn render_elicit_human(
     }
     let (_, detail) = state_footer(queue);
     writeln!(out, "state: {detail}")?;
+    // SL-218 D2: knob-on disclosure — shared fragment, appended only when on
+    // so knob-off output stays byte-identical (INV-1).
+    if ctx.cfg.compare.demote_agent_evidence {
+        writeln!(
+            out,
+            "{}",
+            crate::priority::render::AGENT_DEMOTION_DISCLOSURE
+        )?;
+    }
     Ok(())
 }
 
@@ -893,7 +902,7 @@ fn elicit_envelope(
         .enumerate()
         .map(|(i, e)| entry_json(i + 1, e, ctx))
         .collect();
-    serde_json::json!({
+    let mut envelope = serde_json::json!({
         "schema": "doctrine.elicit-queue",
         "version": 1,
         "context": { "kind": "sequencing", "depth": depth },
@@ -901,7 +910,17 @@ fn elicit_envelope(
         "state_detail": state_detail,
         "excluded_value_insensitive": queue.excluded_value_insensitive,
         "entries": entries,
-    })
+    });
+    // SL-218 D2: ADDITIVE key, knob-on only (knob-off bytes identical, INV-1).
+    if ctx.cfg.compare.demote_agent_evidence
+        && let Some(obj) = envelope.as_object_mut()
+    {
+        obj.insert(
+            "agent_evidence_demoted".to_string(),
+            serde_json::Value::Bool(true),
+        );
+    }
+    envelope
 }
 
 /// One entry's JSON (spine + kind payload + kind-specific ask). Reason/ask codes

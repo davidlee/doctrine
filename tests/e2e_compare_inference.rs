@@ -771,3 +771,39 @@ fn vt_b_anchored_pair_determined_both_knob_states() {
         assert!(q["entries"].as_array().expect("entries").is_empty());
     }
 }
+
+/// SL-218 D2: knob-on, `explain` appends the agent-demotion disclosure line
+/// (shared fragment) and `--json` carries an ADDITIVE `agent_demotion` reason;
+/// knob-off both are absent — existing goldens untouched.
+#[test]
+fn knob_on_explain_carries_agent_demotion_disclosure() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_issue(root, 75, "");
+
+    let off = explain(root, &iss(75), &[]);
+    assert!(!off.contains("agent evidence demoted"), "{off}");
+    let off_json: serde_json::Value =
+        serde_json::from_str(&explain(root, &iss(75), &["--json"])).expect("json");
+    assert!(
+        off_json.get("agent_demotion").is_none(),
+        "knob-off: no additive key: {off_json}"
+    );
+
+    write(
+        root,
+        ".doctrine/doctrine.toml",
+        "[priority.compare]\ndemote_agent_evidence = true\n",
+    );
+    let on = explain(root, &iss(75), &[]);
+    assert!(
+        on.contains(
+            "agent evidence demoted: agent judgements propose orderings but do not retire \
+             questions"
+        ),
+        "knob-on: disclosure line: {on}"
+    );
+    let on_json: serde_json::Value =
+        serde_json::from_str(&explain(root, &iss(75), &["--json"])).expect("json");
+    assert_eq!(on_json["agent_demotion"]["kind"], "agent_evidence_demoted");
+}
