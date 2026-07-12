@@ -1331,3 +1331,23 @@ run + source spelunking to confirm compile-time embed. Fix: `touch
 src/install.rs` (PluginAssets decl) then rebuild. Sibling of the flake
 srcWithDist gotcha in AGENTS.md; consider build.rs rerun-if-changed on embed
 roots.
+
+[/slice; sl218-scope-95f6eb92]
+Boot snapshot floor directive shows `doctrine prompt resolve --band model
+--model <id>` but the command requires `--role` — directive as printed fails
+(exit 2), costing a retry round-trip. Snapshot should carry the full shape.
+
+[/slice; sl218-scope-95f6eb92]
+`doctrine link SL-x originates_from IMP-y` rejected — SL may not author
+`originates_from`; correct authored direction is `fulfils`. ADR-018 language
+("neutral originates_from provenance") and backlog-item prose ("Originates
+from IMP-280") both suggest the wrong verb first. Error message listed legal
+labels (good), but "references" appears three times in that list (dedup bug,
+minor token noise).
+
+[/design; sl218-scope-95f6eb92]
+cavecrew-investigator (priority render-seam map) returned its summary with the
+same "Human annotation: view::ReasonKind…" line repeated ~12 times and three
+near-identical "Compact table"/"Summary" restatements — one map cost ~69k
+subagent tokens and a bloated notification. Duplication looks like the agent
+re-emitting its final block per edit; wasted maybe 40% of the report.
