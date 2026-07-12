@@ -173,6 +173,33 @@ pub(crate) fn constraining_counts_by_class(
     out
 }
 
+/// Compile the human-rows-only subset into its own [`ConstraintSet`]
+/// (SL-218 D1: excluded-from-determinacy). The subset runs the full C1–C8
+/// pipeline — its own quarantine verdicts, honest per-system: a human row
+/// quarantined in the full system (e.g. cycling with agent rows) may
+/// legitimately survive here. Anchors are authored, so they are always
+/// present in both systems.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by the elicit verdict-system seam (SL-218 PHASE-01 T3), \
+                  landing later in this phase; keeps the intermediate commit lintable"
+    )
+)]
+pub(crate) fn compile_human_only(
+    active: &[&Judgement],
+    anchors: &AnchorMap,
+    policy: QuarantinePolicy,
+) -> ConstraintSet {
+    let human: Vec<&Judgement> = active
+        .iter()
+        .copied()
+        .filter(|j| matches!(j.rater, RaterKind::Human))
+        .collect();
+    compile(&human, anchors, policy)
+}
+
 /// Compile the active set into a [`ConstraintSet`] (design §2, C1–C8).
 /// Deterministic across input order; pure over its inputs.
 pub(crate) fn compile(
@@ -794,7 +821,7 @@ mod tests {
     use super::{
         AnchorMap, Bound, CompilationStatus, ConstraintSet, EdgeMap, QuarantinePolicy,
         QuarantineReason, ValueBounds, anchor_violations_path_form, anchor_violations_two_pass,
-        compile,
+        compile, compile_human_only,
     };
     use crate::comparison::{
         DOMAIN_VALUE, FRAME_EQUAL_EFFORT, Judgement, RaterKind, Response, RowForm,
@@ -1420,5 +1447,70 @@ mod tests {
         let cs1 = compile(&forward, &anchor_map, QuarantinePolicy::Symmetric);
         let cs2 = compile(&backward, &anchor_map, QuarantinePolicy::Symmetric);
         assert_eq!(cs1, cs2);
+    }
+
+    // ---- human-only subset compile (SL-218 PHASE-01 VT-3) ----------------------
+
+    fn agent_prefer(uid: &str, winner: &str, loser: &str) -> Judgement {
+        Judgement {
+            rater: RaterKind::Agent,
+            ..prefer(uid, winner, loser)
+        }
+    }
+
+    /// VT-3: a human row caught in an agent-involved preference cycle is
+    /// quarantined in the FULL system but retained in the human-only system —
+    /// the subset compile runs its own C2–C4 rather than inheriting the full
+    /// system's quarantine verdicts.
+    #[test]
+    fn human_only_retains_human_row_from_agent_involved_cycle() {
+        // Cycle A>B>C>A: the A>B leg is human testimony, the rest agent.
+        let rows = [
+            prefer("h1", "A", "B"),
+            agent_prefer("g1", "B", "C"),
+            agent_prefer("g2", "C", "A"),
+        ];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let anchor_map = anchors(&[]);
+
+        let full = compile(&refs, &anchor_map, QuarantinePolicy::Symmetric);
+        assert!(
+            matches!(
+                full.status_of(&rows[0]),
+                CompilationStatus::Quarantined(QuarantineReason::PreferenceCycle { .. })
+            ),
+            "full system: the human leg rides the cycle quarantine"
+        );
+
+        let human = compile_human_only(&refs, &anchor_map, QuarantinePolicy::Symmetric);
+        assert_eq!(
+            human.status_of(&rows[0]),
+            CompilationStatus::Constraining,
+            "human-only system: no cycle, the row constrains"
+        );
+        assert_eq!(edge_keys(&human), vec![("A".to_string(), "B".to_string())]);
+        assert!(human.quarantined.is_empty());
+        // Agent-row entities never entered the subset: no class for C.
+        assert!(!human.classes.contains_key("C"));
+    }
+
+    /// VT-3: the subset still quarantines on its OWN violations — a human-only
+    /// cycle does not survive the human-only compile.
+    #[test]
+    fn human_only_runs_its_own_quarantine_passes() {
+        let rows = [
+            prefer("h1", "X", "Y"),
+            prefer("h2", "Y", "X"),
+            agent_prefer("g1", "X", "Z"),
+        ];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let human = compile_human_only(&refs, &anchors(&[]), QuarantinePolicy::Symmetric);
+        assert!(
+            matches!(
+                human.status_of(&rows[0]),
+                CompilationStatus::Quarantined(QuarantineReason::PreferenceCycle { .. })
+            ),
+            "human-only 2-cycle quarantined by the subset's own C3"
+        );
     }
 }
