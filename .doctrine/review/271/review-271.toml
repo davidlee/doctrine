@@ -50,7 +50,7 @@ response = "Window widened: surfaced member must be on the rendered page; prefer
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The proposed pair-grade seam is under-specified and cannot return the promised data"
 detail = "D7 says command tier will map ids to comparison classes and call one comparison query function with pair ids plus effective multipliers and costs, returning the grade data, while priority stays free of comparison imports. The current comparison seam does not work that way. determined in src/comparison/query.rs:152 needs PairSide values built from class ids, bounds, anchors, and a Reachability derived from a compiled system, and D6 counts come from constraining_counts_by_class in src/comparison/compile.rs:156-173, which also needs the active rows plus the compiled set. priority/mod.rs:98-176 does not own that assembled comparison pipeline today; surface.rs does. As written, the proposed API signature does not carry enough state to compute knob-aware grades plus counts without either recompiling internally, leaking more comparison state across the boundary, or moving more assembly than the design acknowledges. That is an implementation gap in a load-bearing seam, not a formatting detail."
