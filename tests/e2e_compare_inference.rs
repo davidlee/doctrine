@@ -697,3 +697,77 @@ fn vt3_component_split_after_quarantine_discontinuity_is_finite_and_total_ordere
         "D still carries a value-source line: {d_explain}"
     );
 }
+
+// =============================================================================
+// SL-218 PHASE-01 — VT-B: demote_agent_evidence determinacy semantics
+// =============================================================================
+
+/// VT-B: one agent row fully orders the pair. Knob-off the queue reads it
+/// determined (stable); knob-on the determinacy verdict comes from the
+/// human-rows-only system, so the same pair reopens as a comparison candidate.
+#[test]
+fn vt_b_agent_only_pair_reopens_under_demote_agent_evidence() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_issue(root, 70, "");
+    seed_issue(root, 71, "");
+    capture(root, &iss(70), &iss(71), &[]); // rater defaults to agent
+
+    let off: serde_json::Value =
+        serde_json::from_str(&ok(&run(root, &["compare", "elicit", "--json"])))
+            .expect("elicit --json parses");
+    assert_eq!(
+        off["state"], "stable",
+        "knob-off: the agent row retires the pair"
+    );
+    assert!(off["entries"].as_array().expect("entries").is_empty());
+
+    write(
+        root,
+        ".doctrine/doctrine.toml",
+        "[priority.compare]\ndemote_agent_evidence = true\n",
+    );
+    let on: serde_json::Value =
+        serde_json::from_str(&ok(&run(root, &["compare", "elicit", "--json"])))
+            .expect("elicit --json parses");
+    assert_eq!(
+        on["state"], "candidates",
+        "knob-on: agent evidence proposes orderings, never retires the question"
+    );
+    let entries = on["entries"].as_array().expect("entries");
+    assert_eq!(entries.len(), 1, "exactly the reopened pair: {on}");
+    let entry = entries[0].to_string();
+    assert!(
+        entry.contains(&iss(70)) && entry.contains(&iss(71)),
+        "the candidate names the agent-ordered pair: {entry}"
+    );
+}
+
+/// VT-B: an anchored pair reads determined in BOTH knob states — authored
+/// anchors are human authority (point constraints, no special case). A human
+/// row names both entities so each system carries their classes.
+#[test]
+fn vt_b_anchored_pair_determined_both_knob_states() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_issue(root, 72, "[value]\nvalue = 2.0\n");
+    seed_issue(root, 73, "[value]\nvalue = 1.0\n");
+    capture(
+        root,
+        &iss(72),
+        &iss(73),
+        &["--incomparable", "--rater", "human"],
+    );
+
+    for knob in ["", "[priority.compare]\ndemote_agent_evidence = true\n"] {
+        write(root, ".doctrine/doctrine.toml", knob);
+        let q: serde_json::Value =
+            serde_json::from_str(&ok(&run(root, &["compare", "elicit", "--json"])))
+                .expect("elicit --json parses");
+        assert_eq!(
+            q["state"], "stable",
+            "anchors determine the pair (knob body: {knob:?})"
+        );
+        assert!(q["entries"].as_array().expect("entries").is_empty());
+    }
+}
