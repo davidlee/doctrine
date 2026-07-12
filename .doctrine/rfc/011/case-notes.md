@@ -1322,3 +1322,12 @@ commit" until `check gate` (clippy+test+fmt) — not just `cargo test` — is ex
   --detail broke quoting mid-chain (F-8), costing a partial-failure retry via
   MCP. MCP raise verbs avoid shell quoting entirely; for multi-raise batches the
   CLI chain trades one round trip for quoting fragility.
+
+[execute-quick-path; IMP-284-elicit-skill]
+RustEmbed staleness: adding a NEW file under an embed root (plugins/) does not
+trigger recompile — cargo tracks only .rs changes, so `doctrine install`
+enumerated a stale roster (32 skills, no elicit). Cost: one confused install
+run + source spelunking to confirm compile-time embed. Fix: `touch
+src/install.rs` (PluginAssets decl) then rebuild. Sibling of the flake
+srcWithDist gotcha in AGENTS.md; consider build.rs rerun-if-changed on embed
+roots.
