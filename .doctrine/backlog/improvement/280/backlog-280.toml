@@ -5,10 +5,10 @@ id = 280
 slug = "rfc-019-phase-c-elicitation-queue-and-capture-loop"
 title = "RFC-019 Phase C: elicitation queue and capture loop"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-11"
-updated = "2026-07-11"
+updated = "2026-07-12"
 tags = ["area:priority", "elicitation"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
