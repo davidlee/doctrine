@@ -143,3 +143,24 @@ Durable gotchas / decisions (see [[mem.pattern.priority.tension-render-reachabil
   order claim grade-qualified, `projected order — no determining evidence`
   explicitly disclaims manufactured spacing (critique #6). External adversarial
   pass deferred to slice `/audit`.
+
+## AUDIT — close-out (2026-07-12, inline/Opus) → RV-272
+
+`doctrine check gate` exit 0, 4145 tests, tree clean. Slice `started → audit`.
+Conformance: 13 conformant, 1 undeclared source (`src/status.rs` — NextView
+call-site ripple), 1 undelivered (`query.rs` design fence). 8 findings, **no
+blockers**, all terminal.
+
+- **VA-1 PASSES** (the outstanding design VA). External adversarial pass = codex
+  (GPT-5.x, read-only) on render wording vs critique #3 (agent authority) / #6
+  (cardinal-from-ordinal). 5 concerns raised; all adjudicated to the design's
+  favour (D6 three-grade vocabulary answers the overclaim objection; provenance +
+  projection disclaimers present and golden-pinned). Two with teeth run to ground
+  in code: `AgentProposed` agent-share render (F-7, deliberate/conservative — human
+  system indeterminate) and `Determined+(0,0)` "no constraining judgements" edge
+  (F-8 → IMP-288).
+- **Reconcile brief** (RV-272): F-1 selector-add `src/status.rs` + design
+  §Code-impact mirror; F-7 optional D6 prose tighten. No REV (no governance/spec
+  drift). F-8 → IMP-288 backlog.
+- Intentional golden diff (off-frontier explain disclosure, F-3) confirmed
+  intended (EX-1/INV-1). Reachability unit-vs-e2e coverage (F-4) accepted faithful.

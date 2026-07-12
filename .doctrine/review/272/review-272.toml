@@ -1,0 +1,88 @@
+id    = 272
+slug  = "sl-218-close-out-audit-tension-narrative"
+title = "SL-218 close-out audit — tension narrative"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-218"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Undeclared source edit — src/status.rs not in design-target selectors"
+detail = 'conformance reports src/status.rs undeclared. Change (394a15c4): the status `next_up` caller adapts to surface::next now returning NextView { rows, tensions, zero_weight } (design §3) via `.map(|v| v.rows)`. A necessary mechanical ripple of the designed return-type change — design §Code-impact declared src/priority/surface.rs ("thread tensions into next/explain rows") but did not enumerate the downstream status.rs caller. No behaviour change; gate green. Registry + design-mirror should record the touch.'
+disposition = "verified"
+response = "Observation confirmed: status.rs is a real undeclared touch, a necessary call-site ripple of the designed NextView return-type change — no defect, gate green. Remediation is reconcile's (per-slice write surface): `doctrine slice selector add src/status.rs` (the load-bearing change conformance reads) + mirror row in design §Code-impact. Delegated to /reconcile brief (Per-slice / direct edit)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Undelivered selector — src/comparison/query.rs (conscious design fence)"
+detail = 'conformance reports src/comparison/query.rs undelivered. design §Code-impact declares it "no new API expected — existing determined()/PairSide reused by priority-side grading; row retained as fence in case exports need widening." The fence did not fire (F-5 held: no new comparison/query.rs API — notes PHASE-02). undelivered is the expected/desired outcome, not dropped work or a stale design.'
+disposition = "tolerated"
+response = """Conscious design fence, not dropped work. design §Code-impact explicitly retained the src/comparison/query.rs row as a contingency ("no new API expected … in case exports need widening"); F-5 held (no new query.rs API), so the fence correctly did not fire. undelivered is the desired outcome; the row is documentation of a considered-and-not-needed export widening. Accepted drift — leaving the selector preserves the fence's intent; no registry change."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Intentional golden diff — off-frontier explain now emits disclosure line"
+detail = 'explain of a blocked/off-frontier id (ISS-001) now emits "not on the current frontier — no tension analysis" (render.rs:648); one existing e2e_priority_golden explain golden updated (394a15c4). Intended per design §2 considered-set + EX-1/INV-1 rescope; the test comment documents the rescope. Confirm captured as intended, not a regression.'
+disposition = "aligned"
+response = 'Intended, not a regression. design §2 considered-set + EX-1/INV-1 rescope: an off-frontier (blocked) id has no tension analysis and now says so ("not on the current frontier — no tension analysis", render.rs:648). The single updated e2e explain golden (ISS-001) carries a test comment documenting the rescope; commit 394a15c4 names it intentional. Behaviour is more honest than the prior silent output.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "needs/Dep structure tensions unreachable on actionable frontier — pinned as unit goldens"
+detail = "An actionable frontier item has no non-terminal blocker, so no needs(dep) edge holds between two actionable members; graded_tensions only ever emits Seq(after) structure e2e. The pure detect Dep branch + the needs/projected wording sample are pinned as UNIT goldens (render + PHASE-02 detect, VT-D), not black-box e2e. Structure-after, composition, and all three grades ARE e2e-golden'd. Recorded in mem.pattern.priority.tension-render-reachability. Auditor question: is the unit-level coverage faithful, not a gap?"
+disposition = "aligned"
+response = """Faithful coverage, not a gap. VT-D is a unit-fixture criterion by design ("detection unit fixtures — … direct + transitive edge … m=0 …"); the needs/Dep branch is proven UNREACHABLE on the actionable frontier (no non-terminal blocker between two actionable members ⇒ no dep edge), so a black-box e2e for it cannot be constructed with valid inputs. Pinning the Dep branch + needs/projected wording at the pure/render unit level exercises the exact code path; structure-after, composition, and all three grades are additionally e2e-golden'd. Recorded in mem.pattern.priority.tension-render-reachability."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "next --verbose (D5) — no spec/help-doc surface to update"
+detail = "New composition-callout verbosity flag on `next` (design D5, src/commands/cli.rs, matches `doctor`). clap self-documents the flag; no spec enumerates `next` command flags (the install/*.md `next` hits are the /next skill, unrelated). No PRD/tech-spec/help surface requires an update."
+disposition = "aligned"
+response = "No surface to update. The `next --verbose` flag (design D5) is a clap-declared CLI option (mirrors `doctor --verbose`); clap self-documents it in --help. No PRD/tech-spec enumerates `next` command flags; the install/*.md `next` references are the unrelated /next workflow skill. Nothing to reconcile."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "VA-1 (external, codex): ranks-above verb + grade clause — overclaim risk across grades"
+detail = 'External adversarial pass (codex GPT-5.x) flagged that each callout leads with a hard ordering verb ("ranks above"/"ranks higher") before the grade qualifier, for Projected ("projected order — no determining evidence") and AgentProposed ("agent-proposed — N agent judgements, unconfirmed"). Adjudication: design D6 consciously replaced the two-state vocabulary with the three-grade one for exactly this reason; the grade clause is parenthetical and adjacent, directly negating determinacy; "ranks" names the value_dim computation result, not a feasible-set determinacy claim (the grade states the latter). Critique #3 provenance disclosure + critique #6 projection disclaimer are both present; goldens pin the shapes (design §3).'
+disposition = "aligned"
+response = 'VA-1 passes. The concern is the design-adjudicated grade vocabulary (D6), authored precisely to answer critiques #3/#6: two-state was replaced by three grades so demoted agent evidence reads "agent-proposed … unconfirmed" (not "no determining evidence"), and projection reads "projected order — no determining evidence". The grade clause is parenthetical, adjacent, and directly qualifies the ordering; "ranks above" names the value_dim computation result while the grade states the determinacy standing. Critique #3 provenance disclosure and critique #6 projection disclaimer are both present; the shapes are golden-pinned (design §3). No overclaim survives adjudication.'
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = 'VA-1: AgentProposed render shows agent-share only vs D6 "full-system counts"'
+detail = 'codex #2: TensionGradeView::AgentProposed{agent} (view.rs:150) narrows the pure EvidenceGrade::AgentProposed{counts: RaterCounts} full counts (tension.rs:88) to the agent share (surface.rs:702-704). A full basis {2 human, 4 agent} would render "agent-proposed — 4 agent judgements, unconfirmed", hiding the humans. Adjudication: AgentProposed means the human-only system is INDETERMINATE for the pair — the present human rows are non-decisive, so naming them would imply an endorsement the "unconfirmed" grade explicitly denies; the direction is conservative (understates, never inflates, agent authority — no critique #3 violation). The pure model retains D6 full counts. design D6 prose "counts always come from the system that produced the verdict" reads loosely vs the deliberate agent-share render — optional prose clarification.'
+disposition = "aligned"
+response = """Deliberate and conservative. AgentProposed is by definition the state where the human-only verdict system is INDETERMINATE for the pair — the present human rows do not close it, so they are non-decisive; the render's agent-share ("N agent judgements, unconfirmed") avoids implying a human endorsement the grade explicitly denies. Direction never inflates agent authority (it understates human input), so critique #3 is not violated. The pure model (EvidenceGrade::AgentProposed{counts: RaterCounts}) retains the D6 full counts; the view narrows by intent. Optional (non-blocking) reconcile note: tighten design D6 prose "counts come from the producing system" to state the render surfaces the agent share for AgentProposed."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = 'VA-1: Determined + zero judgements renders "determined — no constraining judgements"'
+detail = 'codex #5: an anchor-determined tension pair with zero judgement rows yields RaterCounts (0,0); tension_counts_clause (render.rs:456) emits "determined — no constraining judgements" — technically accurate (anchors are point constraints, not judgement rows; D6) but reads self-undermining. Rare (anchor-determined + zero judgements + a surviving value/delivery inversion) and not exercised by current fixtures. A durable wording improvement (e.g. "determined — anchor-constrained" when counts are 0,0) rather than an audit-scope fix.'
+disposition = "follow-up"
+response = 'Real but out-of-audit-scope wording edge; captured as IMP-288. The "determined — no constraining judgements" phrase is accurate (anchor point-constraints, not judgement rows) but reads self-undermining; rare (anchor-determined + zero judgements + surviving inversion), unfixtured. IMP-288 carries the fix sketch (anchor-aware clause when counts are (0,0)) — small render change + unit golden, no semantics change.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
