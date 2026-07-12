@@ -1546,4 +1546,100 @@ mod tests {
             "human explain renders the full breakdown: {human}"
         );
     }
+
+    // ── VT-3: tension grading assembly (design VT-G) ──────────────────────────
+    //
+    // The pure grade vocabulary is unit-tested in `tension.rs` (VT-2); these
+    // exercise the SURFACE assembly end-to-end over a real graph + comparison
+    // pipeline: detection flags a value_dim-vs-delivery inversion, and
+    // `grade_pair` threads `eff_weight = m·c_other` through the shipped
+    // `pair_side`/`determined()` machinery so the grade tracks the value_dim
+    // claim (never a raw v/c one — SL-217 D6's multiplier-folded objective is the
+    // sole predicate).
+
+    /// Hand-author a session-of-one: ISS-001 preferred over ISS-002 on value, by
+    /// `rater` (the wire shape `compare record` mints).
+    fn prefer_a_over_b(root: &Path, rater: &str) {
+        write(
+            root,
+            ".doctrine/comparisons/2026-01-01-vt3.toml",
+            &format!(
+                "schema = \"doctrine.comparison-session\"\nversion = 2\n\n\
+                 [session]\nuid = \"vt3-sess\"\ndate = \"2026-01-01\"\n\n\
+                 [[judgement]]\nuid = \"vt3-row\"\nseq = 0\na = \"ISS-001\"\nb = \"ISS-002\"\n\
+                 response = \"prefer-a\"\ndomain = \"value\"\nframe = \"equal-effort\"\n\
+                 form = \"order\"\nrater = \"{rater}\"\ndate = \"2026-01-01\"\n"
+            ),
+        );
+    }
+
+    /// The explain-path assembly: scan → pipeline → graph → `graded_tensions`
+    /// over the full frontier (mirrors `explain()`).
+    fn assemble_tensions(root: &Path) -> Vec<Tension> {
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = crate::priority::config::load(root);
+        let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg).unwrap();
+        let g = graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.projection).unwrap();
+        graded_tensions(&g, &pipeline, &cfg, usize::MAX)
+    }
+
+    #[test]
+    fn vt3_structural_tension_human_row_graded_determined() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 (high value) is sequenced AFTER ISS-002 (low value): structure
+        // forces the higher-value item to surface behind the lower one, so
+        // ISS-002 surfaces first while ISS-001 outranks it on value_dim — the
+        // tension. A HUMAN prefer-a row determines that value_dim ordering.
+        seed_valued(root, 1, 8.0, "after = [{ to = \"ISS-002\", rank = 0 }]\n");
+        seed_valued(root, 2, 1.0, "");
+        prefer_a_over_b(root, "human");
+
+        let ts = assemble_tensions(root);
+        assert_eq!(ts.len(), 1, "one structural tension: {ts:?}");
+        assert_eq!(ts[0].surfaced.canonical(), "ISS-002");
+        assert_eq!(ts[0].preferred.canonical(), "ISS-001");
+        assert!(matches!(
+            ts[0].cause,
+            tension::TensionCause::Structure { .. }
+        ));
+        match ts[0].grade {
+            EvidenceGrade::Determined { counts } => assert!(
+                counts.human >= 1 && counts.agent == 0,
+                "human-determined ⇒ human counts only (no agent rows cited): {counts:?}"
+            ),
+            other => panic!("expected Determined, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn vt3_agent_row_knob_on_graded_agent_proposed() {
+        let dir = tmp();
+        let root = dir.path();
+        // Same corpus, but the deciding row is an AGENT and the demotion knob is
+        // on: the human system has no rows to retire the question (indeterminate),
+        // the full system determines it ⇒ AgentProposed with the full system's
+        // (agent) counts, labelled unconfirmed (SL-218 D1 / RV-271 F-2).
+        write(
+            root,
+            ".doctrine/doctrine.toml",
+            "[priority.compare]\ndemote_agent_evidence = true\n",
+        );
+        seed_valued(root, 1, 8.0, "after = [{ to = \"ISS-002\", rank = 0 }]\n");
+        seed_valued(root, 2, 1.0, "");
+        prefer_a_over_b(root, "agent");
+
+        let ts = assemble_tensions(root);
+        assert_eq!(ts.len(), 1, "one structural tension: {ts:?}");
+        match ts[0].grade {
+            EvidenceGrade::AgentProposed { counts } => assert!(
+                counts.agent >= 1,
+                "agent-proposed carries the full-system agent counts: {counts:?}"
+            ),
+            other => {
+                panic!("expected AgentProposed (human system indeterminate), got {other:?}")
+            }
+        }
+    }
 }

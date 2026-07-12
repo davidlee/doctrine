@@ -49,3 +49,45 @@ Durable gotchas for PHASE-02/03 (also in phase sheet Findings):
   hypothetical answers always constrain the verdict system (VT-F needs this).
 - Grading (PHASE-02) must consume the SAME VerdictSystem selection: reuse the
   seam, don't re-derive (design F-1/F-7 one-truth-per-question).
+
+## PHASE-02 — tension detection + evidence grading (2026-07-12, inline/Opus)
+
+Commit: 9435bd87 (detection + grading) + follow-up (VT-3). Branch-point 4a143d55.
+
+**Baseline** 82 suites / 4112 passed. **Close** 82 suites / 4129 passed / 0 failed
+(+17: VT-1 ten + VT-2 five + VT-3 two). `just gate` clean. Priority goldens
+byte-identical (EX-3) — no render this phase.
+
+Shape shipped:
+
+- `src/priority/tension.rs` (new, pure): `detect(&DetectInputs)` — the D4 pair
+  scan (surfaced on-page × preferred over full frontier; m=0 excluded;
+  equal-full-score tiebreak excluded; Structure via BFS reachability over merged
+  surviving seq+dep preds, citing the first forward edge from surfaced; else
+  Composition with surfaced−preferred component deltas). `grade(...)` — the pure
+  D6 vocabulary (Determined / AgentProposed / Projected). Detection emits
+  grade-free `DetectedTension`; `.with_grade()` → `Tension`.
+- **D1 realized as `elicit::pair_side(cs, id, eff_weight)`** — the SINGLE PairSide
+  resolver; `side_in` delegates. NO shared `VerdictSystem` struct (its knob-off
+  arm borrows caller-owned state — lifetime friction; the selection rule is one
+  line). The reuse that matters is the resolver + `determined` + `compile_human_only`,
+  all shared. F-5 fence held: no new comparison/query.rs API.
+- `surface::graded_tensions`/`grade_pair`/`pair_counts` — the assembly (elicit
+  pattern): full pipeline compile always; fresh human-only compile knob-on;
+  verdict = human-when-knob-on; `AgentProposed` fallback reads the full system.
+  Wired LIVE into `explain()` as `Explanation.tensions` (UNRENDERED this phase —
+  render is PHASE-03; goldens byte-identical).
+
+Durable gotchas for PHASE-03:
+
+- **`Explanation.tensions` is already populated** (full-frontier, `page_k =
+  usize::MAX`). PHASE-03 renders it (filter to the explained id per design §2
+  considered-set) — do NOT recompute. `next()` still needs its own K-capped
+  `graded_tensions(g, pipeline, cfg, K)` call (structure-only default, verbosity
+  adds composition).
+- **Crate is `unused = deny`**: a computed-but-unrendered value must reach a
+  non-test caller. That forced the live `explain()` attach (the `#[serde]`-free
+  field costs nothing at render). Keep that in mind if PHASE-03 adds fields.
+- Grade counts come from the producing system: human-determined ⇒ human counts
+  only; `AgentProposed` ⇒ full-system counts labelled unconfirmed. `pair_counts`
+  sums the pair's two classes (deduped) via the resolved `PairSide.class`.
