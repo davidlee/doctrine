@@ -91,3 +91,55 @@ Durable gotchas for PHASE-03:
 - Grade counts come from the producing system: human-determined ⇒ human counts
   only; `AgentProposed` ⇒ full-system counts labelled unconfirmed. `pair_counts`
   sums the pair's two classes (deduped) via the resolved `PairSide.class`.
+
+## PHASE-03 — tension narrative render (2026-07-12, inline/Opus)
+
+Commits: 394a15c4 (render machinery), 24bec61a (goldens + m=0 units).
+Branch-point 24bec61a follows a08df3f6. **Close** `doctrine check gate` exit 0,
+4145 tests pass (+21: 6 render-sample/json/zero-weight units, 2 tension zero-weight
+units, 7 e2e tension goldens, +6 elsewhere from pipeline refactor; 1 existing
+explain golden updated intentionally).
+
+Shape shipped:
+
+- `ReasonKind::{Tension, ZeroWeightExcluded}` (view.rs) with render-local
+  `TensionCauseView{Structure{edge_from,verb:EdgeVerb},Composition{risk_dim,
+  leverage,optionality}}` + `TensionGradeView{Determined{h,a},AgentProposed{a},
+  Projected}`. Canonical String ids (surface shell maps `tension::Tension`).
+- Single wording source (REQ-072 AC3): `tension_fragment` (human, both class
+  shapes) + `tension_json` (design §3 schema `{preferred,surfaced,cause,edge?|
+  deltas?,grade,counts?}`) in render.rs; `reason_line`/`reason_json` delegate.
+- `NextView{rows,tensions,zero_weight}`: `surface::next` moved to the pipeline-
+  load path (byte-identical graph — `build_from` already loads `pipeline.
+  projection`) so it can grade; JSON carries the FULL frontier list, human
+  page-filters to visible rows + caps at `TENSION_MAX_CALLOUTS=3`.
+- `explain`: tensions filtered to the id (`surfaced||preferred==id`) after score;
+  `on_frontier` gates the "not on the current frontier" disclosure.
+- `--verbose` flag (matches `doctor`) adds Composition to `next` (D5).
+- `frontier_projections` extracted so `graded_tensions` + `frontier_zero_weight`
+  share ONE projection basis; `tension::zero_weight_excluded` sibling pure fn.
+
+Durable gotchas / decisions (see [[mem.pattern.priority.tension-render-reachability]]):
+
+- **`needs`/Dep structure tensions are UNREACHABLE on the actionable frontier.**
+  An actionable item has no non-terminal blocker by definition, so no `needs`
+  (dep) edge holds between two actionable members — `graded_tensions` only ever
+  emits Seq(`after`) structure. The pure `detect` Dep branch + the `needs`/
+  projected wording sample are therefore pinned as UNIT tests (render + PHASE-02
+  detect), not black-box e2e. Structure-after, composition, and all three grades
+  ARE reachable and e2e-golden'd.
+- **Callout layout = trailing block** (not interleaved per-row) — comfy-table
+  `ContentArrangement` makes interleaving impractical; matches `explain`'s
+  section model. VA-accepted read of design §3 "under the affected rows".
+- **m=0 scoped disclosure is next-only** (page-scoped pair phrasing per EX-2/
+  VT-D); explain omits it (an m=0 explained id simply shows no tensions — its
+  value-source block already discloses gauge/projected standing). Not reachable
+  via authored facets (multiplier comes from kind/tag costing), so pinned at the
+  pure `zero_weight_excluded` + fragment unit level.
+- **The D7 knob lives in `.doctrine/doctrine.toml`, NOT project-root
+  `doctrine.toml`** — `config::load` reads the former. (Cost me a probe cycle.)
+- VA-1 self-attested: agent authority always disclosed (agent counts named;
+  `agent-proposed … unconfirmed` + demotion line knob-on — critique #3); every
+  order claim grade-qualified, `projected order — no determining evidence`
+  explicitly disclaims manufactured spacing (critique #6). External adversarial
+  pass deferred to slice `/audit`.
