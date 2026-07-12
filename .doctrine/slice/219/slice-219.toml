@@ -30,6 +30,54 @@ intent = "scope-relevant"
 selector = "src/estimate/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/comparison/wire.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/store.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/project.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/resolve.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/surface.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/elicit.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/config.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/findings.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/render.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/compare.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_compare_estimate.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-015"

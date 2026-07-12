@@ -29,15 +29,17 @@ Strictly additive; same purity posture as SL-213/217 — pure over
   *range* `[lower, upper]` with skew β (ADR-015 §1), not a scalar — the
   semantics of an ordering row over ranges, and how authored ranges act as
   bounds/anchors, is the core design work.
-- **Range projection.** Tier-3 projection for the estimate domain: derived
+- **Cost projection.** Tier-3 projection for the estimate domain: derived
   cost + diagnostics, degrading deterministically, feeding `est_cost` where
-  authored estimates are absent (mirror of the value-domain resolution
-  policy — authored wins; projection fills absence; engine default fills the
-  rest).
-- **Elicit frames for comparative sizing.** Team-facing frames ("which is
-  more work?") in the closed frame vocabulary, wired through `compare
-  record` admissibility and the elicit render; records included in the
-  candidate pool per A2.
+  authored estimates are absent. Resolution ladder (design D2, REV against
+  ADR-015): `authored (operator pin) > projected (non-Gauge) > bare anchor` —
+  source precedence only; gauge tier renders, never divides.
+- **Elicit frames for comparative sizing.** Team-facing frame (`more-work`)
+  in the closed frame vocabulary, wired through `compare record`
+  admissibility and the elicit render; `sizing-probe` candidate kind in the
+  existing queue (existence-admitted, no yield claim — design §4). Records
+  admissible per A2 (capture + anchor mass; not probe subjects — records
+  are not frontier members).
 - **Coupling honesty.** `prefer-first` compiles to the weighted inequality
   `v_A·c_B > v_B·c_A` over *current costs* (Phase B obligation) — est-domain
   inference that moves projected costs must not silently invalidate
@@ -68,27 +70,32 @@ Strictly additive; same purity posture as SL-213/217 — pure over
 
 ## Risks, assumptions, open questions
 
-- **R1** — range-valued facet breaks the scalar assumptions of the SL-213
-  interval machinery; naive reuse may be unsound (D-bounds warning: joint
-  set, not marginal boxes).
-- **R2** — projection feeding `est_cost` perturbs `value_dim` for *every*
-  scored item; behaviour-preservation for corpora with no est-domain rows
-  is a hard gate.
+- **R1** *(resolved at design, D1)* — dissolved: the est-domain latent is the
+  operative scalar cost, not the range; point-anchor machinery applies.
+  Estimate *uncertainty* is deliberately out (Phase E feasible-region model).
+- **R2** *(bounded at design, §6.6)* — behaviour preservation is a hard VT:
+  zero est-domain rows ⇒ bitwise-identical scoring; the feed only ever adds
+  cost sources for evidenced items.
 - **A1** — one ledger, one schema (v2); domain is carried per row by frame,
-  no parallel store.
-- **OQ-1** — separate `ConstraintSet` per domain vs a domain-tagged unified
-  set (design decision).
-- **OQ-2** — do est-domain candidates enter the SL-217 queue (value-only per
-  Q4) or remain a distinct curator surface until Phase E?
+  no parallel store. *(Confirmed at design.)*
+- **OQ-1** *(resolved at design, §2)* — two independent per-domain systems
+  (`DomainSystem`), shared resolution pass.
+- **OQ-2** *(resolved at design, Q3=C, §4)* — `sizing-probe` candidate kind
+  in the existing queue, existence-admitted; engine yield-ranking of estimate
+  questions stays Phase-E-gated (SL-217 D17).
 
 ## Verification / closure intent
 
-- Unit: est-domain compile/project semantics (ordering, equality,
-  anchors/ranges, contradiction surfacing, deterministic degradation).
+- Unit: est-domain compile/project semantics (ordering, equality, cost
+  anchors, contradiction surfacing, deterministic degradation) — design §6.
+- Scoring-feed ladder goldens incl. regime-flip and INV-2 restatement pins;
+  fed-costs > 0 property (design §6.5).
 - Behaviour preservation: existing suites green unchanged; corpora without
-  est-domain rows score identically.
-- E2E: capture → compile → project → elicit round-trip for a sizing frame.
+  est-domain rows score bitwise-identically (design §6.6).
+- E2E: capture → compile → project → feed → visible score shift; probe
+  round-trip (design §6.10).
 - VA: RFC-019 posture holds (capture-everything, infer-only-what-is-sound).
+- Governance: REV against ADR-015 approved before the scoring-feed phase.
 
 ## Summary
 
