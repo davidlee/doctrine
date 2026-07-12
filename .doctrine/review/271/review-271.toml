@@ -14,7 +14,7 @@ ref   = "SL-218"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "D6 contradicts the shipped multiplier-aware determinacy semantics"
 detail = "SL-218 §2 'Objective generalisation' says the new query must switch from SL-217's supposedly raw  objective, and explicitly says 'Existing elicit-queue determinacy is NOT touched — it keeps SL-217's raw objective and semantics.' That is false against the inherited design and code seam. SL-217 D6 already fixed determinacy to the multiplier-aware objective, and the shipped queue builds  in , then calls  with those weights at . If this design is implemented as written, / grades and  will be allowed to answer different questions about the same pair: the narrative may call a  order determined while the queue still treats it as open, or vice versa. That breaks D1's own 'one truth per question' claim and makes the inherited SL-217 semantics internally inconsistent."
@@ -23,7 +23,7 @@ response = "Verified against src/priority/elicit.rs:258 (side_vs builds eff_weig
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Evidence grade collapses demoted agent evidence into false no-evidence wording"
 detail = "SL-218 D1 says knob-on keeps the full system for bounds and projection while human-only determinacy decides whether a value order is settled. But D6 gives only two grades: Determined and Projected, and the projected wording in PHASE-03 is no determining evidence. That conflates two different states: no evidence at all versus evidence that exists only in demoted agent rows. Under T7 those are not equivalent. A pair can be fully ordered by agent judgements in the full system, produce the rendered value_dim order, and still be forced into the Projected bucket solely because the human-only system does not retire it. Calling that no determining evidence is false, and it makes the new disclosure line fight the tension wording instead of clarifying it."
@@ -32,7 +32,7 @@ response = "Grade vocabulary extended to three states: Determined / AgentPropose
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Determined counts are sourced from the wrong system under the D7 knob"
 detail = "SL-218 D1 makes knob-on determinacy explicitly human-only: every settled-or-open verdict consumed by surfaces is supposed to come from a compile over human rows only. But the same design then says D6 counts in Determined come from the existing constraining_counts_by_class seam in src/comparison/compile.rs:156-173, summed over the pair classes. That seam counts every active constraining row, human and agent, in the compile it is given. So the proposed render can say a pair is determined and then cite agent rows that were deliberately excluded from the determinacy verdict that made it determined. That is not a small wording nit; it misstates which evidence actually retired the question, which is exactly the trust-policy boundary T7 is trying to make explicit."
@@ -41,7 +41,7 @@ response = "Counts now sourced from the system that produced the verdict: knob-o
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Page-bounding the counterparty leaves a forbidden silent-resolution path"
 detail = "SL-218 D4 says tension detection runs only over pairs whose two members are both on the rendered frontier page, and the explain considered set is the same default page as next; if the explained item is off-page, the design emits no tension analysis. RFC-019 Phase D is stricter: render where surviving seq structure overrides the value order rather than letting structure win silently. With the proposed page rule, a surfaced row can still be ahead of a higher-value item that sits just below the page cutoff, and explain on the surfaced row will omit that disagreement entirely because the preferred counterparty is off-page. That is exactly the silent resolution path Phase D was meant to remove."
@@ -55,11 +55,11 @@ severity = "major"
 title = "The proposed pair-grade seam is under-specified and cannot return the promised data"
 detail = "D7 says command tier will map ids to comparison classes and call one comparison query function with pair ids plus effective multipliers and costs, returning the grade data, while priority stays free of comparison imports. The current comparison seam does not work that way. determined in src/comparison/query.rs:152 needs PairSide values built from class ids, bounds, anchors, and a Reachability derived from a compiled system, and D6 counts come from constraining_counts_by_class in src/comparison/compile.rs:156-173, which also needs the active rows plus the compiled set. priority/mod.rs:98-176 does not own that assembled comparison pipeline today; surface.rs does. As written, the proposed API signature does not carry enough state to compute knob-aware grades plus counts without either recompiling internally, leaking more comparison state across the boundary, or moving more assembly than the design acknowledges. That is an implementation gap in a load-bearing seam, not a formatting detail."
 disposition = "accepted-fixed"
-response = "Root cause was a false layering premise: priority already imports comparison (elicit.rs:39, graph.rs:41, surface.rs:23, findings.rs:35); ADR-001 constrains leaf←engine←command, not these co-tier modules. Command-tier injection seam deleted from the design — grading assembles inside priority following the elicit pattern (same PairSide construction, same determined()); detection stays a pure fn over passed-in data. Ledger D7 rewritten."
+response = "Contest upheld: the code-impact table still carried the pre-fix 'pair-grade query fn (id-keyed, knob-aware)' row for src/comparison/query.rs, contradicting the rewritten grading section. Row corrected: no new query API expected — existing determined()/PairSide reused by priority-side grading; row retained only as a conformance fence in case exports need widening."
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Zero-multiplier items are reintroduced into value-order claims without a policy justification"
 detail = "SL-217 D6 deliberately scoped m = 0 items out of the stability obligation: value-insensitive pairs are excluded from the elicit pool and the stable wording is narrowed to value-sensitive items. SL-218 instead says the new grade query will let m = 0 degenerate gracefully by dropping one term and then use that result in tension callouts. The math is fine, but the product claim is not automatically fine: a callout that one item ranks above another on value_dim becomes very thin when one side has zero weight and cannot move its own value_dim at all. The inherited policy was to disclose those cases as value-insensitive, not to fold them back into ordinary order claims. If the design wants to reverse that policy for next and explain, it needs to say so explicitly and add verification for the wording."
@@ -68,7 +68,7 @@ response = "SL-217 D6 policy inherited, not reversed: m=0 pairs excluded from te
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The design invents a raw-objective split that the shipped queue does not have"
 detail = "SL-218 says the new pair-grade query must generalise the objective because SL-217 elicit supposedly still uses the raw v over cost test, and it explicitly says existing elicit-queue determinacy is not touched and keeps the raw objective. The inherited design and code say the opposite. SL-217 D6 already folded static multipliers into determinacy, and the shipped queue constructs PairSide weights as multiplier times the partner cost in src/priority/elicit.rs:256-264 before calling determined at src/priority/elicit.rs:489-520. That matters because the new design then treats pair grading and queue determinacy as separable semantics. They are not separable in the current system. Shipping from this document would let next or explain and compare elicit disagree about whether the same value_dim ordering is settled, which directly violates the one-truth claim in D1."

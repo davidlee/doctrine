@@ -266,7 +266,7 @@ counts disclosed when they constrain (T7 disclosure posture). New
 | `src/priority/mod.rs` | wiring: detection + grading on next/explain paths |
 | `src/priority/elicit.rs` | determinacy source switch (knob-aware); disclosure line |
 | `src/comparison/compile.rs` | human-subset compile entry |
-| `src/comparison/query.rs` | pair-grade query fn (id-keyed, knob-aware) |
+| `src/comparison/query.rs` | no new API expected — existing `determined()`/`PairSide` reused by priority-side grading; row retained as fence in case exports need widening |
 | `src/commands/cli.rs` | `next` verbosity flag |
 | `src/commands/compare.rs` | disclosure line on elicit render |
 | `tests/e2e_priority_golden.rs` | tension callout goldens |
