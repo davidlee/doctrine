@@ -15,10 +15,10 @@ unchanged); ADR-001 (layering).
 | D1 | D7 knob = **excluded-from-determinacy**: knob-on, every `determined()` verdict consumed by surfaces comes from a constraint system compiled from **human rows only**; agent rows keep constraining bounds, projection, and queue seeding. | RFC-019 T7's named variant that preserves the operator-and-agent product: agent evidence proposes orderings, never retires a question. Inert-until-confirmed guts projection; quarantine-on-rank needs the dependency tracing SL-217 parked post-D7. `confirm_boost` (D13) keeps its no-determinacy-semantics contract untouched. |
 | D2 | Knob ships as plain config: `doctrine.toml [priority.compare] demote_agent_evidence` (bool, default `false` = current behaviour). Contract recorded here: **any stakeholder-facing surface (session mode, web elicitation — the OQ-1 slice) MUST require knob-on**; the gate lands with that slice, not this one. | T7: demotion is mandatory before stakeholder sessions treat the ordering as elicited truth. Default-off keeps SL-213/217 behaviour and goldens byte-identical. |
 | D3 | D7 = **PHASE-01** of this slice, entrance for the narrative phases. | Contained change (human-subset compile + predicate variant + knob + disclosure); a separate slice repeats full ceremony for ~one phase and buys no isolation the seam maps show a need for. |
-| D4 | Tension predicate = `value_dim`-order vs delivery-order inversions **over the rendered frontier top-K**, classified by cause: **Structure** (surviving seq/dep constraint forces the inversion; callout cites the edge) vs **Composition** (full-score dimensions — risk_dim, leverage, optionality — lift the surfaced item; callout cites component deltas). Wording never dresses a full-score claim as a value claim. | RFC-019 Phase D targets structure overrides ("never silently resolved"). Composition divergence is ADR-015 working as designed but surprising — accurate to show, only when asked (D5 of this ledger). D5/SL-217 compliance: divergence attributed to named score dimensions is not a value-order claim. |
+| D4 | Tension predicate = `value_dim`-order vs delivery-order inversions where the **surfaced member is on the rendered page and the preferred counterparty ranges over the full frontier order** (RV-271 F-4), classified by cause: **Structure** (surviving seq/dep constraint forces the inversion; callout cites the edge) vs **Composition** (full-score dimensions — risk_dim, leverage, optionality — lift the surfaced item; callout cites component deltas). Wording never dresses a full-score claim as a value claim. | RFC-019 Phase D targets structure overrides ("never silently resolved"). Composition divergence is ADR-015 working as designed but surprising — accurate to show, only when asked (D5 of this ledger). D5/SL-217 compliance: divergence attributed to named score dimensions is not a value-order claim. |
 | D5 | Render defaults: `explain` renders **both** classes; `next` renders **structure-only** by default, a verbosity flag additionally pulls composition callouts in. Flag spelling settled at implementation against existing `next` CLI conventions. | `explain` is the drill-down where "why is this above that" is being asked. Composition-divergence always-on in `next` would drown the structure signal. |
-| D6 | Every callout carries an **evidence grade** for the value_dim ordering it asserts: `Determined` (joint-feasible-set predicate, knob-aware, with constraining-evidence counts) vs `Projected` (gauge spacing / default values — no determining evidence). | Critique #6: point-projected value_dim can invert on manufactured cardinal spacing the feasible set does not support; the render must not overclaim. Anchored pairs come out `Determined` through the same predicate (anchors are point constraints) — one predicate, no special case. |
-| D7 | Detection = **pure fn** in new `src/priority/tension.rs`; the priority layer never imports `comparison` — evidence grades are computed at command tier and injected as data. Render via new `ReasonKind` arm(s); all human wording through `reason_line()` fragments (single source, REQ-072 AC3). | ADR-001 layering; pure/imperative split; REQ-072 render discipline. |
+| D6 | Every callout carries an **evidence grade** for the value_dim ordering it asserts: `Determined` (joint-feasible-set predicate over the verdict system, with that system's constraining counts), `AgentProposed` (knob-on only: determined in the full system, not in the human system — order proposed by agent evidence, unconfirmed), or `Projected` (gauge spacing / defaults — no determining evidence in any system). Counts always come from **the system that produced the verdict** (RV-271 F-2/F-3). | Critique #6: point-projected value_dim can invert on manufactured cardinal spacing the feasible set does not support; the render must not overclaim. Two-state vocabulary collapsed demoted agent evidence into "no determining evidence" — false under T7, and it made the disclosure line fight the wording. Anchored pairs come out `Determined` through the same predicate (anchors are point constraints) — one predicate, no special case. |
+| D7 | Detection = **pure fn** in new `src/priority/tension.rs`. Grading reuses the **shipped** determinacy machinery exactly as the elicit queue does: `PairSide { eff_weight = m·c_other }` + `determined()` (SL-217 D6 — the predicate is already multiplier-aware; there is no "raw objective" to generalise, RV-271 F-1/F-7). Assembly lives where elicit's does — the priority layer already imports `comparison` (elicit.rs, graph.rs, surface.rs, findings.rs); ADR-001 governs leaf ← engine ← command, and both modules are engine-tier. Render via new `ReasonKind` arm(s); all human wording through `reason_line()` fragments (single source, REQ-072 AC3). | One predicate, one truth per question: grades and elicit-queue verdicts must never disagree about the same pair (both knob-aware, same system selection). An earlier draft posited a command-tier injection seam on a false layering premise (RV-271 F-5) — dissolved, not built. |
 
 ## §1 PHASE-01 — D7 demotion knob
 
@@ -106,20 +106,42 @@ pub enum TensionCause {
 }
 
 pub enum EvidenceGrade {
-  Determined { counts: RaterCounts },  // joint-set predicate, knob-aware
-  Projected,                           // gauge spacing / defaults only
+  /// Verdict system determines the ordering; counts are THAT system's
+  /// constraining rows (human system when knob-on — RV-271 F-3).
+  Determined { counts: RaterCounts },
+  /// Knob-on only: full system determines, human system does not — the
+  /// ordering is proposed by agent evidence, unconfirmed (RV-271 F-2).
+  /// Counts are the full system's, labelled as agent-proposed.
+  AgentProposed { counts: RaterCounts },
+  /// No determining evidence in any consulted system.
+  Projected,
 }
 ```
 
 ### Predicate
 
-Inputs: the rendered frontier page `F` in delivery order (`frontier_order`,
-`src/priority/order.rs:76`), per-node `value_dim` (`BaseScore`,
+Inputs: the **full** frontier order `F` in delivery order (`frontier_order`,
+`src/priority/order.rs:76` — the complete actionable list, not the page),
+the rendered page bound `K`, per-node `value_dim` (`BaseScore`,
 `src/priority/graph.rs:62`), surviving seq/dep edges
 (`surviving_seq_predecessors`, order.rs:39, plus dep edges), score component
 maps.
 
-For each pair `(A, B)` with `pos(B) < pos(A)` in `F` and
+**Window (RV-271 F-4):** the *surfaced* member `B` must be on the rendered
+page (`pos(B) < K`); the *preferred* counterparty `A` ranges over the whole
+frontier order, on-page or below the cutoff. Page-bounding both members
+would let a surfaced row silently outrank a higher-value item sitting just
+below the cutoff — exactly the silent-resolution path Phase D exists to
+close. Complexity `O(K·N)` pair scan — still trivial.
+
+**Zero-multiplier exclusion (RV-271 F-6, inherits SL-217 D6):** pairs where
+either member has `m = 0` are excluded from tension claims — the item's
+value cannot move its own `value_dim`, so a "ranks above on value_dim" claim
+is value-insensitive, not a tension. When exclusions occur on the page, the
+render scopes itself the way SL-217 D6 pinned ("N pairs value-insensitive,
+zero weight") rather than silently narrowing.
+
+For each remaining pair `(A, B)` with `pos(B) < pos(A)` and
 `value_dim(A) > value_dim(B)`:
 
 - **Structure** iff `A` is reachable from `B` over the **full** surviving
@@ -132,49 +154,64 @@ For each pair `(A, B)` with `pos(B) < pos(A)` in `F` and
   assert a cause that does not exist.
 - else **Composition**; deltas = per-dimension score differences.
 
-Ties (`value_dim` equal) are not tensions. Complexity `O(K²)` pair scan with
-per-pair bounded reachability (DFS over surviving edges, memoized) —
-trivial at page scale. Determinism: pairs emitted in delivery-order position
-order; `total_cmp` for float comparisons (house style).
+Ties (`value_dim` equal) are not tensions. Per-pair bounded reachability
+(DFS over surviving edges, memoized). Determinism: pairs emitted in
+delivery-order position order; `total_cmp` for float comparisons (house
+style).
 
-**`explain` considered set**: same default page as `next`. If the explained
-id is on the page, its tensions (both classes) render; if not, the section
-discloses "not on the current frontier — no tension analysis" rather than
-inventing a hypothetical position for a non-surfaced item.
+**`explain` considered set (RV-271 F-4)**: the explained id participates if
+it is anywhere on the frontier order — as surfaced member (its page-rank
+position vs higher-value items anywhere) or as preferred counterparty
+(off-page but outranking a page row on value_dim; explain is exactly where
+that displaced-item story must surface). Only ids not on the frontier at all
+(not actionable) get the disclosure line "not on the current frontier — no
+tension analysis".
 
 `value_dim` here is the point projection the engine actually consumed —
 detection does not re-derive value. The *grade* (D6) is what keeps the
 callout honest when the projection's ordering is not feasible-set-backed.
 
-### Grade injection (command tier)
+### Grading (in-priority, shipped machinery — RV-271 F-1/F-5/F-7)
 
-`run_next` / `run_explain` (`src/priority/mod.rs`) already own the impure
-assembly. After detection returns pairs, command tier maps entity →
-comparison class and calls the determinacy predicate (human system when
-knob-on) **only for detected pairs** (≤ K² checks, no corpus sweep);
-entities with no class / no evidence ⇒ `Projected`. Grades decorate the
-`Tension` rows before they reach the view. Priority stays free of
-`comparison` imports (ADR-001); comparison exposes one query fn taking pair
-ids **plus per-item effective multipliers and costs**, returning grade data.
+The shipped determinacy predicate is **already multiplier-aware**: SL-217 D6
+folded static multipliers into the pair objective
+`f = m_A·c_B·v_A − m_B·c_A·v_B`, and the elicit queue builds
+`PairSide { eff_weight = m_self · c_other }` (`side_vs`,
+`src/priority/elicit.rs:258`) before calling `determined()`
+(`src/priority/query`-seam, consumed at elicit.rs:489-520). There is no raw
+`v/c` objective to generalise; an earlier draft of this section claimed
+otherwise and is corrected. `m = 0` accounting is likewise already pinned by
+SL-217 D6 (value-insensitive, excluded — see §2 predicate).
 
-**Objective generalisation (multiplier correctness).** The grade asserts a
-claim about `value_dim` order, and `value_dim = m·v / est_cost` where
-`m = value_coeff × kind_weight × tag_multiplier` (ADR-015) — per-item
-config-derived constants, `m ≥ 0` (tag floor). SL-217's determinacy
-objective `v_A·c_B − v_B·c_A` tests raw `v/c` order, which multipliers can
-invert relative to `value_dim` order. The pair-grade query therefore
-evaluates the sign range of **`m_A·v_A·c_B − m_B·v_B·c_A`** over the joint
-region — still linear in `(v_A, v_B)`, same closed-form machinery (SL-217
-D8 lemma unaffected: the region is unchanged, only the objective's constant
-coefficients differ). `m = 0` degenerates gracefully (term drops; sign from
-the surviving term). Existing elicit-queue determinacy is NOT touched — it
-keeps SL-217's raw objective and semantics; the generalised objective exists
-only behind the pair-grade query this slice adds.
+Grading therefore **reuses that exact machinery** — same `PairSide`
+construction, same `determined()`, same closed-form joint-region evaluation
+(D8 lemma untouched). Assembly follows the elicit pattern *inside* the
+priority layer, which already imports `comparison` (elicit.rs, graph.rs,
+surface.rs, findings.rs — ADR-001 constrains leaf ← engine ← command, not
+these co-tier engine modules); no command-tier injection seam, no new
+cross-layer API. Grades are computed **only for detected pairs** (no corpus
+sweep); entities with no comparison class ⇒ `Projected`.
 
-**Counts** in `Determined { counts }` come from the existing
-`constraining_counts_by_class` seam (`src/comparison/compile.rs:156`),
-summed over the pair's classes — the same provenance surface `explain`
-already discloses ("bounds from 2 human + 14 agent judgements").
+**One truth per question (F-1/F-7 obligation):** the tension grade and the
+elicit queue consult the *same* predicate under the *same* system selection.
+Knob-on, **both** read the human system for determinacy verdicts — the
+elicit queue's determinacy source moves with the knob (PHASE-01, §1), so
+`next`/`explain` can never call an ordering determined while `compare
+elicit` still offers the pair, or vice versa. A cross-surface agreement
+golden pins this (VT-I).
+
+**System selection per grade (F-2/F-3):**
+
+- Knob-off: one system (full). `Determined` counts = the full system's
+  `constraining_counts_by_class` (`src/comparison/compile.rs:156`) summed
+  over the pair's classes — agent rows disclosed in the count, T7 ship
+  posture. `AgentProposed` is unreachable.
+- Knob-on: verdicts from the human system. `Determined` counts = the
+  **human system's** counts (the rows that actually retired the question —
+  never agent rows the verdict excluded). Pair determined in the full
+  system but not the human system ⇒ `AgentProposed` with the full system's
+  counts, labelled as unconfirmed agent proposal. Determined in neither ⇒
+  `Projected`.
 
 ## §3 PHASE-03 — render
 
@@ -200,6 +237,12 @@ Structure, projected:
 > tension: SL-014 ranks above SL-009 on value_dim (projected order — no
 > determining evidence); SL-009 surfaces first — `needs SL-009` holds.
 
+Structure, agent-proposed (knob-on):
+
+> tension: SL-014 ranks above SL-009 on value_dim (agent-proposed — 4 agent
+> judgements, unconfirmed); SL-009 surfaces first — `after SL-009` sequence
+> survives.
+
 Composition (explain / verbose next):
 
 > SL-009 surfaces above SL-014 on full score (leverage +2.1, risk +0.8);
@@ -219,8 +262,8 @@ counts disclosed when they constrain (T7 disclosure posture). New
 | `src/priority/config.rs` | `CompareConfig` + `[priority.compare]` load |
 | `src/priority/view.rs` | `ReasonKind` tension arm(s) |
 | `src/priority/render.rs` | tension fragments; explain section; next callouts + cap |
-| `src/priority/surface.rs` | thread tensions into next/explain rows |
-| `src/priority/mod.rs` | command-tier wiring: detection + grade injection |
+| `src/priority/surface.rs` | thread tensions into next/explain rows; grading assembly (elicit pattern) |
+| `src/priority/mod.rs` | wiring: detection + grading on next/explain paths |
 | `src/priority/elicit.rs` | determinacy source switch (knob-aware); disclosure line |
 | `src/comparison/compile.rs` | human-subset compile entry |
 | `src/comparison/query.rs` | pair-grade query fn (id-keyed, knob-aware) |
@@ -240,12 +283,25 @@ counts disclosed when they constrain (T7 disclosure posture). New
   agent-involved cycle: quarantined full-system, retained human-system.
 - VT-D: detection unit fixtures — no-tension, structure (direct + transitive
   edge, incl. path through an off-page node), composition, mixed, value_dim
-  tie (not a tension), equal-full-score tiebreak (excluded), determinism.
-- VT-G: grade objective with multipliers — fixture where kind/tag
-  multipliers invert value_dim order relative to raw v/c order; grade
-  reflects the value_dim claim (raw objective would answer wrongly); `m = 0`
-  degeneracy case.
-- VT-H: explain off-frontier id — disclosure line, no invented tensions.
+  tie (not a tension), equal-full-score tiebreak (excluded),
+  **off-page preferred counterparty detected** (F-4), `m = 0` pair excluded
+  with scoped disclosure (F-6), determinism.
+- VT-G: grade multiplier correctness — fixture where kind/tag multipliers
+  invert value_dim order relative to raw v/c order; grade tracks the
+  value_dim claim (shipped eff_weight machinery, SL-217 D6).
+- VT-H: explain — off-frontier id gets disclosure line, no invented
+  tensions; off-page-but-on-frontier id renders its displaced-counterparty
+  tension.
+- VT-I: cross-surface agreement (F-1/F-7) — same corpus, both knob states:
+  every pair the tension render grades `Determined` is absent from the
+  elicit queue's indeterminate set, and every `AgentProposed`/`Projected`
+  tension pair with admissible members is offerable; grades and queue never
+  disagree.
+- VT-J: grade vocabulary (F-2/F-3) — knob-on fixture: agent-only-determined
+  pair reads `AgentProposed` (full-system counts, "unconfirmed" wording),
+  human-determined pair reads `Determined` with human-system counts only
+  (no agent rows cited); knob-off same corpus reads `Determined` with mixed
+  counts disclosed.
 - VT-E: wording goldens — the three shapes above + cap behaviour + JSON
   schema fields; D5/D15 phrasing pinned.
 - VT-F: knob-on elicit — previously agent-determined pair re-enters queue as
