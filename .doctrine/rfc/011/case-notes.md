@@ -1351,3 +1351,15 @@ same "Human annotation: view::ReasonKind…" line repeated ~12 times and three
 near-identical "Compact table"/"Summary" restatements — one map cost ~69k
 subagent tokens and a bloated notification. Duplication looks like the agent
 re-emitting its final block per edit; wasted maybe 40% of the report.
+
+[/plan; sl218-scope-95f6eb92]
+plan.toml verification rows: multi-line inline tables parse-fail (TOML spec)
+but the scaffold comment block shows the mandate example wrapped across
+lines — invites the error; cost one failed `slice phases` round-trip.
+
+[/plan; sl218-scope-95f6eb92]
+`slice verify-vt` pre-implementation says "keyword present but <file> not
+modified by this slice" even for keywords verified absent from the tree
+(e.g. demote_agent_evidence) — wording ambiguous/likely wrong pre-phase;
+tempts a chase. A "pre-implementation: gate not yet applicable" state would
+be clearer.
