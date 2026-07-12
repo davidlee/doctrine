@@ -1,0 +1,34 @@
+id    = 273
+slug  = "design-review-of-sl-219"
+title = "design review of SL-219"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "hostile-whole-doc"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-219"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected sizing probes to cover the bare-estimate mask they claim to target; observed gauge-masked items are explicitly excluded from probe admission"
+detail = 'SL-219 D4 says the new sizing-probe kind "targets the C1 mask payoff exactly" because bare items are where estimate evidence changes scoring (.doctrine/slice/219/design.md:20). But §4 then excludes gauge-component items from probing entirely (.doctrine/slice/219/design.md:209-210), and the state semantics demote those gauge-masked items to disclosed-but-non-gating residual sizing debt with no entry (.doctrine/slice/219/design.md:231-236). Under SL-217 D17, the bare-estimate mask explicitly covers projected/gauge items with no estimate facet (.doctrine/slice/217/design.md:31,277-279). The assembled document therefore overclaims probe coverage: one of the mask cases it cites as the rationale is deliberately outside the probe mechanism.'
+disposition = "fixed"
+response = "Accepted. D4 rationale overclaimed: probes cover the un-evidenced subset of masked items only. D4 reworded — targets the mask payoff where actionable without curator judgement; gauge-masked/sizing-declined items are disclosed residual debt per §4."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected probe fallback targets to preserve the non-Gauge postcondition; observed the fallback wording permits projected-only targets that do not anchor the subject"
+detail = """§4 promises that an order-bearing sizing answer lands the subject in the target's anchored component and yields "anchored membership or nothing — never a gauge component" (.doctrine/slice/219/design.md:216-220), and VT-8 repeats that the subject must be fed next refresh with non-Gauge provenance (.doctrine/slice/219/design.md:311-316). That contract holds only if the probe target is guaranteed to carry an authored estimate / anchor. The primary rule has that property (.doctrine/slice/219/design.md:212-213), but the first fallback widens to "all admissible estimated items" (.doctrine/slice/219/design.md:214-215), which naturally includes projected-only items unless narrowed. Against such a target, a prefer/equal answer need not anchor anything, so the document's own postcondition is no longer guaranteed in the no-top-K-estimate case."""
+disposition = "fixed"
+response = "Accepted as wording defect. Fallback pinned to 'all admissible items with authored estimates' — never projected/gauge-costed targets — so the anchored-membership postcondition holds by construction. (Nuance noted: a Projected-tier target sits in an anchored component by definition, so even the ambiguous reading anchors; a Gauge-tier target would not. Clean rule chosen over the nuance.)"
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

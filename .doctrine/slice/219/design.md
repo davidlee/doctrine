@@ -17,7 +17,7 @@ the anchor seam is kept honest for it (§2), never built here.
 | D1 | Est-domain latent = the **operative scalar cost** per class — the quantity scoring divides by — NOT the authored range or its uncertainty (Phase E's feasible-region model, RV-260 F-5). Point anchors = β-resolved `est_cost` of authored estimates. Owned consequence: a sizing row can conflict with resolved points even where raw ranges overlap — correct under this latent; the `AnchorConflict` wording says so. Machinery (compile/project, D8 lemma) transfers; *consumption* differs (D2). RFC's "adjusts ranges minimally" superseded → scalar projection + C6 bounds display (deviation recorded) | Evidence is judged against what the engine actually charges. Interval anchors = band constraints — void the D8 lemma, rejected. Stale estimate is the likeliest defect; loudness is a feature (SL-213 D4 posture) |
 | D2 | Scoring feed: `est_cost` ladder `authored > projected (non-Gauge) > bare anchor` — **source precedence only, no numeric-dominance claim**. Gauge renders, never divides. Projected may exceed or undercut the bare anchor; INV-2 restates to "bare anchor dominates every *authored* estimate". First-anchor regime flip (component members bare-anchor → projected) is a real scoring discontinuity, owned, regime-flip golden. REV against ADR-015 carries the restatements (Q1=A, Q2=A) | Conventional magnitudes may fill a numerator, never a denominator — value multiplies, cost divides; P8 gauge spread near zero in a divisor explodes `value_dim`. INV-2's intent (unpriced items must not win by default) is preserved: bare-no-evidence keeps the dominating divisor |
 | D3 | Admissibility = `VALUE_BEARING + RECORD` derived from kind constants; RSK admitted; REV-kind deferred (trigger: a consumer of revision costing) (Q4=A) | A4's RSK exclusion is value-specific (worth = exposure, `risk_dim`); settling a risk is plain effort. Records: settle-cost is intrinsic (RFC A2). No parallel list — derivation property-tested |
-| D4 | Elicit integration = `sizing-probe` candidate kind, existence-admitted (SL-217 D12 precedent), zero yield claim, `yield_basis: "calibration"`; engine yield-ranking of estimate questions stays Phase-E-gated (SL-217 D17 restated) (Q3=C) | Sizing session gets a deterministic driver without touching what Phase E owns; targets the C1 mask payoff exactly (bare items are where est evidence changes scoring under D2) |
+| D4 | Elicit integration = `sizing-probe` candidate kind, existence-admitted (SL-217 D12 precedent), zero yield claim, `yield_basis: "calibration"`; engine yield-ranking of estimate questions stays Phase-E-gated (SL-217 D17 restated) (Q3=C) | Sizing session gets a deterministic driver without touching what Phase E owns; targets the C1 mask payoff **where it is actionable without curator judgement** — un-evidenced bare items. Gauge-masked / sizing-declined items are disclosed residual debt, not probe subjects (§4) |
 | D5 | Frame `more-work` ("which is more work?"); `prefer-a` ⇒ edge `c_A > c_B` (winner = costlier); `equal` ⇒ cost-equality merge; `incomparable` ⇒ `NoConstraint` | Winner > loser matches the value-domain compile convention — `compile()` reused with zero semantic change |
 | D6 | Pipeline order: est system compiles/projects first; every cost consumer reads **one resolved cost per item** — the post-ladder `est_cost` at the single consumption seam (`graph::est_cost`). Est system never reads values; no cycle. Priority-domain rows stay inert (SL-213 D2 stands); the future priority compiler MUST consume post-ladder resolved costs and ride this ordering (Deferred). Projected-cost movement re-runs value determinacy via the existing D18 reprobe dynamic | The `prefer-first` coupling is not hand-waved: no priority compiler exists, so nothing recompiles on cost movement; the contract for when one does is pinned now |
 | D7 | `CostCtx` bare anchor (`max_upper + margin`) computed from authored uppers only — projected costs never move it | No feedback loop through the default |
@@ -211,8 +211,10 @@ never probed — mask annotation only; component-calibration probes deferred.
 
 **Probe target, deterministic.** Median-cost item among top-K items with
 authored estimates (even count → lower-cost middle; ties id-lexicographic).
-Fallbacks: none estimated in top-K → median over all admissible estimated
-items; none anywhere → no probes + state detail "no estimated item to
+Fallbacks: none estimated in top-K → median over all admissible items **with
+authored estimates** (never projected- or gauge-costed targets — the anchored-
+membership postcondition below must hold by construction, not by luck); none
+anywhere → no probes + state detail "no estimated item to
 calibrate against — estimate any item to seed sizing". Order-bearing answers
 land the subject in the target's anchored component (`prefer` ⇒ Projected
 placement; `equal` ⇒ anchored-class membership, provenance Authored);
@@ -369,6 +371,15 @@ Suites → rules pinned. VT/VA/VH ids minted at `/plan`.
     vs gauge-masked items (major — disclosed-not-gating via D7 posture).
   - §5–§6: probe postcondition wrong for `equal` (major — non-Gauge
     provenance contract). §5 surfaces survived unfound.
+- **RV-273, codex GPT-5.5** (2026-07-13, hostile whole-doc pass, fresh
+  context, ledgered) — two majors, both accepted as wording fixes: F-1 (D4
+  rationale overclaimed "targets the mask exactly" vs §4's gauge-masked
+  exclusion — D4 scoped to actionable-without-curator); F-2 (fallback
+  target rule said "estimated items", ambiguous over projected-costed
+  targets — pinned to authored estimates so the anchored-membership
+  postcondition holds by construction). Cross-section D1/D2/D6 consistency,
+  P-rule parameterization, SL-217 D15 interaction, and REV content survived
+  unfound.
 
 ## Deferred (named seams, not built)
 
