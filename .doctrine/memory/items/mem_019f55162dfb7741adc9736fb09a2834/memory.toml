@@ -1,0 +1,46 @@
+memory_uid = "mem_019f55162dfb7741adc9736fb09a2834"
+memory_key = "mem.fact.comparison.anchor-attachment-row-gated-per-system"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Anchor attachment is row-gated per compiled constraint system"
+summary = "Anchors attach only to entities present in >=1 row of THAT compile; a subset system (e.g. human-only, SL-218 D1) silently drops anchors of entities with no subset rows -> indeterminate"
+created = "2026-07-12"
+updated = "2026-07-12"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["comparison", "determinacy", "sl-218", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "356d66ea9066128452331f4658ab1564413c9766"
+ref_name = "refs/heads/edge"
+checkout_state_id = "79d019edfd33f9edee941fc169bd1a40ccd3c8b4005905049765c0e933ff49fb"
+base_commit = "4e0ad80908cebc43805909fd6fb9b9f3f35c50cc"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-218"
+

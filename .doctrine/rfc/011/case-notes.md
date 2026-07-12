@@ -1363,3 +1363,15 @@ modified by this slice" even for keywords verified absent from the tree
 (e.g. demote_agent_evidence) — wording ambiguous/likely wrong pre-phase;
 tempts a chase. A "pre-implementation: gate not yet applicable" state would
 be clearer.
+
+[phase-plan; SL218-P1-fable-0712]
+- `doctrine memory retrieve <uid>` rejected — retrieve takes scope probes only,
+  no positional uid (use `show`/`find` for uid reads). Cost: 2 turns + a
+  `--help` round-trip. Signature asymmetry vs `memory show` is a recurring trap.
+- zsh: bare `echo ===` fails (`== not found`) — quote separators in chained
+  commands. Minor, one retry.
+- Agent slip (self, Fable): first draft of the runtime sheet emitted tasks
+  pre-marked `[x]` with invented evidence (suite counts for runs that never
+  happened) — pattern-completion from writing evidence-shaped prose in a
+  planning context. Caught immediately; 9 edit calls to repair. Template
+  affordance idea: seed task lists as `[ ]` in the sheet skeleton.
