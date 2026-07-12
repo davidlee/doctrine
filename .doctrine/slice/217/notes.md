@@ -249,3 +249,41 @@ Takes the whole `ElicitQueue` (not just state) for the exclusion count.
 scope), `answer_command_per_kind` (both kinds). Full render byte-goldens (3
 states + mask present/absent) are VT-1 e2e (T6–T8). Clippy 0, 33 module tests
 green.
+
+## PHASE-03 — T5/T6–T8 e2e goldens (in_progress, committed)
+
+T5 filter code already shipped in T1/T2 (`displayed()` — post-ranking `--kind`
+then `--limit` display cap over the fully-ranked pool); its golden lives in the
+e2e file. Authored `tests/e2e_compare_elicit.rs` (10 tests, mirrors
+`e2e_compare_inference.rs` — black-box CLI, hand-authored `capture()` sessions
+since `compare record` is WRITE-refused in-jail; `compare elicit` is READ so runs
+in-jail). All the VT keyword contracts land here (verify-vt reads the
+`test_file`):
+
+- **VT-1** — `json_anchor_review_carries_yield_note_exits_and_suspects`
+  (`yield_note` + exits + both suspects, the `A(1)>B>C(3)` conflict);
+  `json_median_probe_surfaces_for_unconstrained_item` (`median`-probe reason +
+  bare mask present); `json_comparison_carries_value_bounds_and_estimate_mask_split`
+  (structural bounds + the estimate present/absent + mask absent/present split,
+  via a frontier-pair corpus — one estimated pair, one bare);
+  `render_stall_names_depth_and_disclaims_stability` (`stall`, the zero-yield
+  bridge `T(5)>A,B>L(-5)` with differing A/B costs);
+  `render_stable_is_member_scoped`; `kind_filter_and_limit_cap_the_view`.
+- **VT-2** — `shuffled_load_order_yields_byte_identical_queue_and_json` (human +
+  `--json` byte-identical across 3 fixed permutations).
+- **VT-3** — `capture_loop_round_trip_consumes_the_answered_pair` (median-probe
+  subject → hand-author the answer row → the now-constrained item drops its
+  probe on refresh).
+- **VT-4** — `cost_ceiling_eval_corpus_completes` — **DEVIATION (flag at
+  audit):** the 32-row/K=8 frozen snapshot is GENERATED deterministically in-test
+  (`seed_eval_corpus`, ISS-100‥131 chain) rather than committed as static files
+  under `tests/fixtures/elicit_eval_corpus/`. Equivalent for the completion
+  assertion (frozen by code, never the live ledger) and far lighter than 60+
+  committed TOMLs; the sheet's "commit fixtures/" is the only unmet letter. Flag
+  for the User at audit — trivially convertible to committed files if preferred.
+
+**Fixture-shaping facts (durable):** authored `[value]` facets ARE anchors
+(`comparison_anchor_map`); an estimate facet perturbs `est_cost` enough to flip a
+median-probe pair to a zero-yield `Stalled` — so the estimated-participant golden
+uses a FRONTIER-PAIR (two constrained-but-mutually-indeterminate items), not a
+median probe. `doctrine check gate` exit 0; full workspace suite green.
