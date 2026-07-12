@@ -51,8 +51,8 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "DomainSystem split; est anchors from authored_est_cost; C2 cost-anchor merge conflict; C4 stale-estimate violation-closure golden; disjoint quarantine maps", test_file = "src/comparison/store.rs", keywords = ["DomainSystem", "authored_est_cost"], waived = false },
   { id = "VT-2", expects = "one formula site: anchor-builder value equals graph.rs authored-branch est_cost for the same bounds+cfg", test_file = "src/priority/graph.rs", keywords = ["authored_est_cost"], waived = false },
-  { id = "VT-3", expects = "compare list status column routes per-row to owning domain system; est-domain quarantined row renders quarantined while value rows unaffected", test_file = "src/commands/compare.rs", keywords = ["estimate"], waived = false },
-  { id = "VT-4", expects = "findings domain discriminator present in render + JSON parity", test_file = "src/priority/findings.rs", keywords = ["domain"], waived = false },
+  { id = "VT-3", expects = "compare list status column routes per-row to owning domain system; est-domain quarantined row renders quarantined while value rows unaffected (test seeds est rows via DOMAIN_ESTIMATE)", test_file = "src/commands/compare.rs", keywords = ["DOMAIN_ESTIMATE"], waived = false },
+  { id = "VT-4", expects = "findings domain discriminator (intended symbol ComparisonDomain — amend keyword at phase-plan if named otherwise) present in render + JSON parity", test_file = "src/priority/findings.rs", keywords = ["ComparisonDomain"], waived = false },
   { id = "VA-1", expects = "diff shows src/comparison/compile.rs untouched across the phase (design D9: domain enters at finding construction)" },
 ]
 specs        = []

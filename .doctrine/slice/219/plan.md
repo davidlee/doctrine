@@ -39,6 +39,13 @@ behaviour-preservation gate is per-phase, not slice-end).
 
 ## Notes
 
+- **VT mandate teeth**: every mandate keyword was checked against the current
+  tree — all name symbols with zero occurrences today (the phase must mint
+  them) except deliberately-paired trivial ones (`est_cost` rides beside the
+  toothy `cost_feed`). Where a mandate names an *intended* symbol
+  (`ComparisonDomain`), /phase-plan binds or amends it before execution —
+  criterion ids are immutable, mandate content is not.
+
 - REV timing (design §3): drafted during PHASE-04's first task, approved
   before its ladder commit. Phases 01–03 are REV-independent by construction.
 - `compile.rs` must show an empty diff across the slice (design D9); PHASE-02
