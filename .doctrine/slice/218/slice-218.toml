@@ -1,0 +1,52 @@
+id = 218
+slug = "tension-narrative"
+title = "Tension narrative"
+status = "design"
+created = "2026-07-12"
+updated = "2026-07-12"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[relation]]
+label = "fulfils"
+target = "IMP-285"
+
+[[selector]]
+selector = "src/priority/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/comparison/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/compare.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_compare_elicit.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_compare_inference.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_priority_golden.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_priority_cross_kind.rs"
+intent = "scope-relevant"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
