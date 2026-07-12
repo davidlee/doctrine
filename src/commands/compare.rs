@@ -613,6 +613,7 @@ fn build_elicit_inputs<'a>(
         projection: pipeline.projection.clone(),
         rank_decay: cfg.elicit.rank_decay,
         confirm_boost: cfg.elicit.confirm_boost,
+        demote_agent_evidence: cfg.compare.demote_agent_evidence,
     }
 }
 

@@ -173,31 +173,28 @@ pub(crate) fn constraining_counts_by_class(
     out
 }
 
+/// The `rater == human` row subset (SL-218 D1) — the evidence the verdict
+/// system compiles from when agent demotion is on.
+pub(crate) fn human_rows<'a>(active: &[&'a Judgement]) -> Vec<&'a Judgement> {
+    active
+        .iter()
+        .copied()
+        .filter(|j| matches!(j.rater, RaterKind::Human))
+        .collect()
+}
+
 /// Compile the human-rows-only subset into its own [`ConstraintSet`]
 /// (SL-218 D1: excluded-from-determinacy). The subset runs the full C1–C8
 /// pipeline — its own quarantine verdicts, honest per-system: a human row
 /// quarantined in the full system (e.g. cycling with agent rows) may
 /// legitimately survive here. Anchors are authored, so they are always
 /// present in both systems.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by the elicit verdict-system seam (SL-218 PHASE-01 T3), \
-                  landing later in this phase; keeps the intermediate commit lintable"
-    )
-)]
 pub(crate) fn compile_human_only(
     active: &[&Judgement],
     anchors: &AnchorMap,
     policy: QuarantinePolicy,
 ) -> ConstraintSet {
-    let human: Vec<&Judgement> = active
-        .iter()
-        .copied()
-        .filter(|j| matches!(j.rater, RaterKind::Human))
-        .collect();
-    compile(&human, anchors, policy)
+    compile(&human_rows(active), anchors, policy)
 }
 
 /// Compile the active set into a [`ConstraintSet`] (design §2, C1–C8).

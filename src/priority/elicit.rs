@@ -39,8 +39,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::comparison::{
     AnchorMap, Bound, ClassId, ConstraintSet, Hypothetical, Judgement, PairSide, Projection,
     QuarantinePolicy, QuarantineReason, Reachability, Response, RowUid, ValueBounds,
-    ValueProvenance, admissible_value_pair, compile, constraining_counts_by_class, determined,
-    hypothetical_outcome, synthetic_answer_row,
+    ValueProvenance, admissible_value_pair, compile, compile_human_only,
+    constraining_counts_by_class, determined, human_rows, hypothetical_outcome,
+    synthetic_answer_row,
 };
 
 // ── inputs ──────────────────────────────────────────────────────────────────
@@ -87,6 +88,10 @@ pub(crate) struct ElicitInputs<'a> {
     pub projection: Projection,
     pub rank_decay: f64,
     pub confirm_boost: f64,
+    /// SL-218 D1: knob-on, every determinacy verdict is read over the
+    /// human-rows-only system; the full system keeps bounds, projection,
+    /// and the queue pool.
+    pub demote_agent_evidence: bool,
 }
 
 // ── queue model ─────────────────────────────────────────────────────────────
@@ -217,15 +222,14 @@ const UNBOUNDED: ValueBounds = ValueBounds {
 // ── pool items ──────────────────────────────────────────────────────────────
 
 /// A top-K value-sensitive item, resolved against the compiled baseline.
+/// Class and interval facts are NOT stored: a [`PairSide`] is resolved per
+/// verdict system via [`side_in`] (SL-218 D1).
 #[derive(Debug, Clone)]
 struct PoolItem {
     id: String,
     kind: String,
-    class: ClassId,
     multiplier: f64,
     cost: f64,
-    bounds: ValueBounds,
-    anchor: Option<f64>,
     constrained: bool,
     agent_only: bool,
     bare: bool,
@@ -253,14 +257,34 @@ fn class_rank(rank_map: &BTreeMap<ClassId, usize>, class: &ClassId, depth: usize
     rank_map.get(class).copied().unwrap_or(depth)
 }
 
+/// The system that issues determinacy verdicts (SL-218 D1): the baseline full
+/// system knob-off; the fresh human-rows-only system knob-on. Pool
+/// composition, bounds display, projection, and confirm-boost stay on the
+/// full system (INV-3) — only `determined()` and its hypothetical diffs move.
+struct VerdictSystem<'s, 'a> {
+    cs: &'s ConstraintSet,
+    reach: &'s Reachability,
+    rows: &'s [&'a Judgement],
+}
+
 /// The pool item's [`PairSide`] against a partner whose cost is `cost_other`
-/// (design D6: `eff_weight = m_self · c_other`, built per pair).
-fn side_vs(item: &PoolItem, cost_other: f64) -> PairSide {
+/// (design D6: `eff_weight = m_self · c_other`, built per pair), resolved in
+/// `cs` — the verdict system's constraint set. An entity absent from that
+/// system falls back to a singleton class with unbounded interval, so the
+/// pair reads indeterminate rather than panicking (SL-218 D1).
+fn side_in(cs: &ConstraintSet, item: &PoolItem, cost_other: f64) -> PairSide {
+    let class = cs
+        .classes
+        .get(&item.id)
+        .cloned()
+        .unwrap_or_else(|| item.id.clone());
+    let bounds = cs.bounds.get(&class).copied().unwrap_or(UNBOUNDED);
+    let anchor = cs.anchors.get(&class).copied();
     PairSide {
-        class: item.class.clone(),
+        class,
         eff_weight: item.multiplier * cost_other,
-        bounds: item.bounds,
-        anchor: item.anchor,
+        bounds,
+        anchor,
     }
 }
 
@@ -322,6 +346,27 @@ pub(crate) fn assemble(inputs: &ElicitInputs<'_>, ctx: DecisionContext) -> Elici
     let reach = Reachability::build(&cs);
     let counts = constraining_counts_by_class(&cs, &inputs.active);
 
+    // The verdict system (SL-218 D1): knob-on, determinacy is read over a
+    // fresh human-rows-only compile (its own C2–C4); knob-off it IS the
+    // baseline — no second compile, shipped behaviour bit-for-bit.
+    let human = inputs.demote_agent_evidence.then(|| {
+        let vcs = compile_human_only(&inputs.active, &inputs.anchors, QuarantinePolicy::Symmetric);
+        let vreach = Reachability::build(&vcs);
+        (vcs, vreach, human_rows(&inputs.active))
+    });
+    let verdict = match &human {
+        Some((vcs, vreach, vrows)) => VerdictSystem {
+            cs: vcs,
+            reach: vreach,
+            rows: vrows,
+        },
+        None => VerdictSystem {
+            cs: &cs,
+            reach: &reach,
+            rows: &inputs.active,
+        },
+    };
+
     // Top-K frontier band and its class → best-rank map (all members, not just
     // value-sensitive ones — rank is a frontier fact).
     let band: Vec<&FrontierItem> = inputs.frontier.iter().take(depth).collect();
@@ -354,14 +399,15 @@ pub(crate) fn assemble(inputs: &ElicitInputs<'_>, ctx: DecisionContext) -> Elici
     let excluded_value_insensitive = pairs(value_bearing).saturating_sub(pairs(n_pool));
 
     // The relevant pair set for every yield: ALL pool pairs (flips counted both
-    // directions by `hypothetical_outcome`). Keyed off the baseline classes.
-    let relevant = relevant_pairs(&pool);
+    // directions by `hypothetical_outcome`). Keyed off the VERDICT system's
+    // classes — determinacy diffs must live where the verdicts do (SL-218 D1).
+    let relevant = relevant_pairs(verdict.cs, &pool);
 
     let mut candidates: Vec<Candidate> = Vec::new();
     comparison_candidates(
         inputs,
         &pool,
-        &reach,
+        &verdict,
         &relevant,
         &rank_map,
         depth,
@@ -370,7 +416,7 @@ pub(crate) fn assemble(inputs: &ElicitInputs<'_>, ctx: DecisionContext) -> Elici
     median_probe_candidates(
         inputs,
         &pool,
-        &reach,
+        &verdict,
         &relevant,
         &rank_map,
         depth,
@@ -379,7 +425,7 @@ pub(crate) fn assemble(inputs: &ElicitInputs<'_>, ctx: DecisionContext) -> Elici
     anchor_review_candidates(
         inputs,
         &cs,
-        &reach,
+        &verdict,
         &relevant,
         &rank_map,
         depth,
@@ -397,7 +443,7 @@ pub(crate) fn assemble(inputs: &ElicitInputs<'_>, ctx: DecisionContext) -> Elici
 
     let state = if !entries.is_empty() {
         QueueState::Candidates
-    } else if pool_has_indeterminate(&pool, &reach) {
+    } else if pool_has_indeterminate(&pool, &verdict) {
         QueueState::Stalled { depth }
     } else {
         QueueState::Stable { depth }
@@ -446,7 +492,6 @@ fn resolve_item(
         .get(&item.id)
         .cloned()
         .unwrap_or_else(|| item.id.clone());
-    let bounds = cs.bounds.get(&class).copied().unwrap_or(UNBOUNDED);
     let anchor = cs.anchors.get(&class).copied();
     let class_counts = counts.get(&class).copied().unwrap_or_default();
     let constrained = class_counts.total() > 0 || anchor.is_some();
@@ -455,11 +500,8 @@ fn resolve_item(
     PoolItem {
         id: item.id.clone(),
         kind: item.kind.clone(),
-        class,
         multiplier: costing.multiplier,
         cost: costing.est_cost,
-        bounds,
-        anchor,
         constrained,
         agent_only,
         bare,
@@ -475,22 +517,27 @@ fn is_masked(projected: Option<&(f64, ValueProvenance)>) -> bool {
     )
 }
 
-/// Every pool pair as a `(PairSide, PairSide)` with per-pair effective weights.
-fn relevant_pairs(pool: &[PoolItem]) -> Vec<(PairSide, PairSide)> {
+/// Every pool pair as a `(PairSide, PairSide)` with per-pair effective
+/// weights, resolved in the verdict system's constraint set.
+fn relevant_pairs(cs: &ConstraintSet, pool: &[PoolItem]) -> Vec<(PairSide, PairSide)> {
     let mut out = Vec::new();
     for (i, a) in pool.iter().enumerate() {
         for b in pool.iter().skip(i + 1) {
-            out.push((side_vs(a, b.cost), side_vs(b, a.cost)));
+            out.push((side_in(cs, a, b.cost), side_in(cs, b, a.cost)));
         }
     }
     out
 }
 
 /// Is any pool pair indeterminate (design D15 stall/stable discriminator)?
-fn pool_has_indeterminate(pool: &[PoolItem], reach: &Reachability) -> bool {
+fn pool_has_indeterminate(pool: &[PoolItem], verdict: &VerdictSystem<'_, '_>) -> bool {
     for (i, a) in pool.iter().enumerate() {
         for b in pool.iter().skip(i + 1) {
-            if !determined(reach, &side_vs(a, b.cost), &side_vs(b, a.cost)).is_determined() {
+            let (sa, sb) = (
+                side_in(verdict.cs, a, b.cost),
+                side_in(verdict.cs, b, a.cost),
+            );
+            if !determined(verdict.reach, &sa, &sb).is_determined() {
                 return true;
             }
         }
@@ -503,7 +550,7 @@ fn pool_has_indeterminate(pool: &[PoolItem], reach: &Reachability) -> bool {
 fn comparison_candidates(
     inputs: &ElicitInputs<'_>,
     pool: &[PoolItem],
-    reach: &Reachability,
+    verdict: &VerdictSystem<'_, '_>,
     relevant: &[(PairSide, PairSide)],
     rank_map: &BTreeMap<ClassId, usize>,
     depth: usize,
@@ -517,12 +564,16 @@ fn comparison_candidates(
             if admissible_value_pair(&a.kind, &b.kind).is_err() {
                 continue;
             }
-            if determined(reach, &side_vs(a, b.cost), &side_vs(b, a.cost)).is_determined() {
+            let (sa, sb) = (
+                side_in(verdict.cs, a, b.cost),
+                side_in(verdict.cs, b, a.cost),
+            );
+            if determined(verdict.reach, &sa, &sb).is_determined() {
                 continue; // already fixed — nothing to ask
             }
             if let Some(entry) = build_comparison(
                 inputs,
-                reach,
+                verdict,
                 a,
                 b,
                 relevant,
@@ -541,7 +592,7 @@ fn comparison_candidates(
 fn median_probe_candidates(
     inputs: &ElicitInputs<'_>,
     pool: &[PoolItem],
-    reach: &Reachability,
+    verdict: &VerdictSystem<'_, '_>,
     relevant: &[(PairSide, PairSide)],
     rank_map: &BTreeMap<ClassId, usize>,
     depth: usize,
@@ -553,7 +604,7 @@ fn median_probe_candidates(
         };
         if let Some(entry) = build_comparison(
             inputs,
-            reach,
+            verdict,
             u,
             target,
             relevant,
@@ -610,7 +661,7 @@ fn median_target<'p>(
 )]
 fn build_comparison(
     inputs: &ElicitInputs<'_>,
-    reach: &Reachability,
+    verdict: &VerdictSystem<'_, '_>,
     a: &PoolItem,
     b: &PoolItem,
     relevant: &[(PairSide, PairSide)],
@@ -626,10 +677,12 @@ fn build_comparison(
     let mut evals: Vec<AnswerEval> = Vec::new();
     let mut yield_by_answer: BTreeMap<String, i64> = BTreeMap::new();
     for (token, response) in order_bearing {
+        // The synthetic answer joins the VERDICT system's rows: fresh
+        // testimony always constrains — post-filter, its rater is moot.
         let row = synthetic_answer_row(&a.id, &b.id, response);
         let outcome = hypothetical_outcome(
-            reach,
-            &inputs.active,
+            verdict.reach,
+            verdict.rows,
             &inputs.anchors,
             &Hypothetical::Answer(Box::new(row)),
             relevant,
@@ -725,24 +778,27 @@ fn participant(item: &PoolItem) -> Participant {
 fn anchor_review_candidates(
     inputs: &ElicitInputs<'_>,
     cs: &ConstraintSet,
-    reach: &Reachability,
+    verdict: &VerdictSystem<'_, '_>,
     relevant: &[(PairSide, PairSide)],
     rank_map: &BTreeMap<ClassId, usize>,
     depth: usize,
     out: &mut Vec<Candidate>,
 ) {
+    // Suspects come from the FULL system's quarantine diagnostics (the pool
+    // stays full-system, SL-218 D1); only the yield evaluation — a
+    // determinacy diff — moves to the verdict system.
     for suspect in suspect_anchors(cs, &inputs.anchors) {
         let rows = rows_citing(cs, &suspect);
         let removed = hypothetical_outcome(
-            reach,
-            &inputs.active,
+            verdict.reach,
+            verdict.rows,
             &inputs.anchors,
             &Hypothetical::AnchorRemoved(&suspect),
             relevant,
         );
         let retired = hypothetical_outcome(
-            reach,
-            &inputs.active,
+            verdict.reach,
+            verdict.rows,
             &inputs.anchors,
             &Hypothetical::RowsRetired(&rows),
             relevant,
@@ -950,6 +1006,7 @@ mod tests {
                 .collect(),
             rank_decay: 1.0,
             confirm_boost: 1.5,
+            demote_agent_evidence: false,
         }
     }
 
@@ -1263,5 +1320,100 @@ mod tests {
         } else {
             panic!("expected comparison payload");
         }
+    }
+
+    // ---- SL-218 PHASE-01 D7: demotion knob (design INV-2 / VT-B unit level) -----
+
+    #[test]
+    fn demote_reopens_agent_only_determined_pair() {
+        // One agent row A>B determines the pair in the full system. Knob-on,
+        // determinacy verdicts come from the human-rows-only system: the pair
+        // reads indeterminate, re-enters the queue as a comparison candidate
+        // (VT-F seed), and the queue state follows.
+        let rows = vec![win_agent("g0", "A", "B")];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let mut inputs = mk(
+            refs.clone(),
+            &[],
+            &["A", "B"],
+            &[("A", 1.0, 1.0), ("B", 1.0, 1.0)],
+            &[],
+        );
+
+        let off = assemble(&inputs, seq(2));
+        assert_eq!(
+            off.state,
+            QueueState::Stable { depth: 2 },
+            "knob-off: the agent row retires the pair"
+        );
+        assert!(off.entries.is_empty());
+
+        inputs.demote_agent_evidence = true;
+        let on = assemble(&inputs, seq(2));
+        assert_eq!(
+            on.state,
+            QueueState::Candidates,
+            "knob-on: agent evidence proposes, never retires (INV-2)"
+        );
+        assert_eq!(on.entries.len(), 1);
+        assert_eq!(on.entries[0].kind, CandidateKind::Comparison);
+        assert!(
+            on.entries[0].guaranteed_yield >= 1,
+            "a fresh answer closes the pair in the human system"
+        );
+    }
+
+    #[test]
+    fn anchored_pair_stays_determined_both_knob_states() {
+        // Authored anchors are human authority (design D6: point constraints,
+        // no special case). A human row names both entities so classes exist
+        // in both systems; the anchored order reads determined either way.
+        let rows = vec![jrow(
+            "h0",
+            "A",
+            "B",
+            Response::Incomparable,
+            RaterKind::Human,
+        )];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let mut inputs = mk(
+            refs.clone(),
+            &[("A", 2.0), ("B", 1.0)],
+            &["A", "B"],
+            &[("A", 1.0, 1.0), ("B", 1.0, 1.0)],
+            &[],
+        );
+
+        let off = assemble(&inputs, seq(2));
+        assert_eq!(off.state, QueueState::Stable { depth: 2 });
+        assert!(off.entries.is_empty());
+
+        inputs.demote_agent_evidence = true;
+        let on = assemble(&inputs, seq(2));
+        assert_eq!(
+            on.state,
+            QueueState::Stable { depth: 2 },
+            "knob-on: anchors still determine — human authority"
+        );
+        assert!(on.entries.is_empty());
+    }
+
+    #[test]
+    fn human_determined_pair_survives_knob_on() {
+        // Mixed evidence on the same pair: the human row alone determines it,
+        // so demotion changes nothing.
+        let rows = vec![win("h0", "A", "B"), win_agent("g0", "A", "B")];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let mut inputs = mk(
+            refs.clone(),
+            &[],
+            &["A", "B"],
+            &[("A", 1.0, 1.0), ("B", 1.0, 1.0)],
+            &[],
+        );
+        inputs.demote_agent_evidence = true;
+        let on = assemble(&inputs, seq(2));
+        assert_eq!(on.state, QueueState::Stable { depth: 2 });
+        assert!(on.entries.is_empty());
     }
 }
