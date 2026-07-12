@@ -35,6 +35,12 @@ use crate::comparison::{
     RaterKind, ResolutionStatus, Response, RowForm, RowSummary, SessionHeader, Tombstone,
     load_sessions,
 };
+use crate::priority::config::PriorityConfig;
+use crate::priority::elicit::{
+    CandidateKind, DecisionContext, ElicitInputs, ElicitQueue, EntryPayload, FrontierItem,
+    ItemCosting, QueueEntry, QueueState, assemble,
+};
+use crate::priority::graph::{self, PriorityGraph};
 
 /// `doctrine compare <SUBCOMMAND>` — the comparison-ledger verb group.
 #[derive(Args)]
@@ -54,6 +60,9 @@ pub(crate) enum CompareAction {
     List(ListArgs),
     /// Withdraw a judgement row by uid (SL-210 PHASE-03).
     Withdraw(WithdrawArgs),
+    /// Surface the ranked elicitation queue — the next comparisons/anchor
+    /// reviews worth asking (SL-217 PHASE-03; read-only, D18).
+    Elicit(ElicitArgs),
 }
 
 /// `compare record <A> <B> <response> [flags]` — the full capture surface.
@@ -136,6 +145,48 @@ pub(crate) struct WithdrawArgs {
     pub(crate) path: Option<PathBuf>,
 }
 
+/// `compare elicit [--depth K] [--limit N] [--kind …] [--json]` — surface the
+/// ranked elicitation queue (design §3). Read-only end to end (D18): every entry
+/// carries the exact answer command; no TTY interaction, no writes.
+#[derive(Args)]
+pub(crate) struct ElicitArgs {
+    /// Frontier band depth to probe (top-K). Overrides `[priority.elicit] depth`
+    /// (default `ELICIT_DEPTH`); clamped to ≥ 1.
+    #[arg(long)]
+    pub(crate) depth: Option<usize>,
+    /// Cap the number of entries DISPLAYED (default `ELICIT_LIMIT`). The full
+    /// pool is still ranked — the cap is display-only.
+    #[arg(long)]
+    pub(crate) limit: Option<usize>,
+    /// Show only entries of this kind (filter applied POST-ranking).
+    #[arg(long, value_enum)]
+    pub(crate) kind: Option<KindArg>,
+    /// Emit the schema-v1 JSON envelope instead of the human render.
+    #[arg(long)]
+    pub(crate) json: bool,
+    /// Explicit project root (default: auto-detect).
+    #[arg(short = 'p', long)]
+    pub(crate) path: Option<PathBuf>,
+}
+
+/// Clap adapter for the candidate-kind filter — keeps clap out of the pure
+/// `priority::elicit` tier. Ties back to [`CandidateKind`] (no magic strings).
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum KindArg {
+    Comparison,
+    AnchorReview,
+}
+
+impl KindArg {
+    fn matches(self, kind: CandidateKind) -> bool {
+        matches!(
+            (self, kind),
+            (KindArg::Comparison, CandidateKind::Comparison)
+                | (KindArg::AnchorReview, CandidateKind::AnchorReview)
+        )
+    }
+}
+
 /// Clap adapter for the closed frame vocab — keeps clap out of the pure
 /// `comparison` engine tier (ADR-001). The kebab-cased variant names are the
 /// CLI tokens; [`Self::as_frame`] ties them back to the engine constants (no
@@ -178,6 +229,7 @@ pub(crate) fn run_compare(args: CompareArgs) -> anyhow::Result<()> {
         CompareAction::Record(record) => run_capture(&record),
         CompareAction::List(list) => run_list(&list),
         CompareAction::Withdraw(withdraw) => run_withdraw(&withdraw),
+        CompareAction::Elicit(elicit) => run_elicit(&elicit),
     }
 }
 
@@ -485,6 +537,243 @@ fn run_withdraw(args: &WithdrawArgs) -> anyhow::Result<()> {
         path.display()
     )?;
     Ok(())
+}
+
+/// `compare elicit` — assemble the ranked queue over the SAME resolve→compile
+/// pipeline the read surfaces consume, then render (design §3). Read-only (D18):
+/// no session or authored write on any path. The `PriorityGraph` supplies the
+/// frontier ranking + per-item costing (D6); the comparison `Pipeline` supplies
+/// the active evidence + anchors + projection the assembler recompiles over.
+fn run_elicit(args: &ElicitArgs) -> anyhow::Result<()> {
+    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
+    let cfg = crate::priority::config::load(&root);
+    let graph = graph::build(&root)?;
+    let pipeline = graph::load_comparison_pipeline_for_root(&root)?;
+    let depth = args.depth.unwrap_or(cfg.elicit.depth).max(1);
+
+    let inputs = build_elicit_inputs(&graph, &pipeline, &cfg, depth);
+    let queue = assemble(&inputs, DecisionContext::Sequencing { depth });
+
+    if args.json {
+        render_elicit_json(&queue, depth, args)
+    } else {
+        render_elicit_human(&queue, args)
+    }
+}
+
+/// Compose the pure [`ElicitInputs`] from the built graph + loaded pipeline
+/// (design §2 shell seam). The frontier is the top-`depth` band by final score
+/// (id-lex tiebreak — determinism); costing is the D6 `(multiplier, est_cost,
+/// bare_estimate)` per entity; active evidence + anchors + projection come
+/// straight off the pipeline. Borrows the pipeline's owned `active_judgements`,
+/// so the returned inputs live no longer than `pipeline`.
+fn build_elicit_inputs<'a>(
+    graph: &PriorityGraph,
+    pipeline: &'a comparison::Pipeline,
+    cfg: &PriorityConfig,
+    depth: usize,
+) -> ElicitInputs<'a> {
+    // Frontier: final score DESC, canonical-id ASC — the deterministic top-K band.
+    let mut ranked: Vec<(&_, f64)> = graph.score.iter().map(|(k, &s)| (k, s)).collect();
+    ranked.sort_by(|(ka, sa), (kb, sb)| sb.total_cmp(sa).then_with(|| ka.cmp(kb)));
+    let frontier: Vec<FrontierItem> = ranked
+        .iter()
+        .take(depth)
+        .filter_map(|(key, _)| {
+            graph.attrs.get(key).map(|attr| FrontierItem {
+                id: key.canonical(),
+                kind: attr.kind.prefix.to_string(),
+            })
+        })
+        .collect();
+
+    // Costing: D6 multiplier + β-skewed est_cost + bare flag, for every scored entity.
+    let mut costing: std::collections::BTreeMap<String, ItemCosting> =
+        std::collections::BTreeMap::new();
+    for key in graph.attrs.keys() {
+        if let Some((multiplier, est_cost, bare_estimate)) = graph.item_costing(key, cfg) {
+            costing.insert(
+                key.canonical(),
+                ItemCosting {
+                    multiplier,
+                    est_cost,
+                    bare_estimate,
+                },
+            );
+        }
+    }
+
+    ElicitInputs {
+        active: pipeline.active_judgements.iter().collect(),
+        anchors: pipeline.anchors.clone(),
+        frontier,
+        costing,
+        projection: pipeline.projection.clone(),
+        rank_decay: cfg.elicit.rank_decay,
+        confirm_boost: cfg.elicit.confirm_boost,
+    }
+}
+
+/// The display slice after the POST-ranking `--kind` filter + `--limit` display
+/// cap (the full pool is ranked; only the view is capped, design §3).
+fn displayed<'q>(queue: &'q ElicitQueue, args: &ElicitArgs) -> Vec<&'q QueueEntry> {
+    let limit = args.limit.unwrap_or(crate::priority::config::ELICIT_LIMIT);
+    queue
+        .entries
+        .iter()
+        .filter(|e| args.kind.is_none_or(|k| k.matches(e.kind)))
+        .take(limit)
+        .collect()
+}
+
+/// The D15 state token + a one-line detail (skeleton wording — T4 enriches the
+/// stability/stall/outsider/m=0 precision).
+fn state_line(state: &QueueState) -> (&'static str, String) {
+    match state {
+        QueueState::Candidates => (
+            "candidates",
+            "candidates outstanding — comparisons worth asking".to_string(),
+        ),
+        QueueState::Stalled { depth } => (
+            "stalled",
+            format!(
+                "stalled at depth {depth}: greedy one-step yield exhausted — NOT a stability claim"
+            ),
+        ),
+        QueueState::Stable { depth } => (
+            "stable",
+            format!("stable: value_dim order among the current top-{depth} frontier members"),
+        ),
+    }
+}
+
+/// Human render (design §3). SKELETON (SL-217 PHASE-03 T2): rank/kind/score/yield
+/// spine + participants + answer hint + D15 footer. T4 enriches with fetched
+/// entity context, S3 value shapes, the bare-estimate mask, and reasons prose.
+fn render_elicit_human(queue: &ElicitQueue, args: &ElicitArgs) -> anyhow::Result<()> {
+    use std::io::Write;
+    let mut out = std::io::stdout();
+    let shown = displayed(queue, args);
+    if shown.is_empty() {
+        writeln!(out, "elicit: no candidates")?;
+    }
+    for (i, entry) in shown.iter().enumerate() {
+        let rank = i + 1;
+        match &entry.payload {
+            EntryPayload::Comparison { a, b, ask } => {
+                writeln!(
+                    out,
+                    "{rank}. [comparison] score {:.3}  yield {:+}  {} vs {}",
+                    entry.score, entry.guaranteed_yield, a.id, b.id
+                )?;
+                writeln!(out, "   ↳ answers: {}", ask.answers.join(" | "))?;
+            }
+            EntryPayload::AnchorReview { subject, ask } => {
+                writeln!(
+                    out,
+                    "{rank}. [anchor-review] score {:.3}  yield {:+}  {} (anchor {})",
+                    entry.score,
+                    entry.guaranteed_yield,
+                    subject.id,
+                    subject
+                        .anchor
+                        .map_or_else(|| "—".to_string(), |v| format!("{v}"))
+                )?;
+                writeln!(out, "   ↳ answers: {}", ask.answers.join(" | "))?;
+            }
+        }
+    }
+    let (_, detail) = state_line(&queue.state);
+    writeln!(out, "state: {detail}")?;
+    Ok(())
+}
+
+/// JSON schema-v1 envelope (design §3 / D16). SKELETON (SL-217 PHASE-03 T2):
+/// the versioned envelope + spine + ask block. T3 enriches participants with S3
+/// value shapes + structural bounds + annotations, and adds anchor `exits`.
+/// Byte-stable (`BTree` key order from `serde_json::Value`); NO trailing newline
+/// (the golden contract, mirrors `render.rs::finish`).
+fn render_elicit_json(queue: &ElicitQueue, depth: usize, args: &ElicitArgs) -> anyhow::Result<()> {
+    use std::io::Write;
+    let (state_token, state_detail) = state_line(&queue.state);
+    let entries: Vec<serde_json::Value> = displayed(queue, args)
+        .iter()
+        .enumerate()
+        .map(|(i, e)| entry_json(i + 1, e))
+        .collect();
+    let envelope = serde_json::json!({
+        "schema": "doctrine.elicit-queue",
+        "version": 1,
+        "context": { "kind": "sequencing", "depth": depth },
+        "state": state_token,
+        "state_detail": state_detail,
+        "excluded_value_insensitive": queue.excluded_value_insensitive,
+        "entries": entries,
+    });
+    let text = serde_json::to_string_pretty(&envelope)?;
+    write!(std::io::stdout(), "{text}")?;
+    Ok(())
+}
+
+/// One entry's JSON (spine + kind payload + ask). Reason/ask codes ride the
+/// engine's structured shapes verbatim (D16 findings-parity).
+fn entry_json(rank: usize, entry: &QueueEntry) -> serde_json::Value {
+    let kind = match entry.kind {
+        CandidateKind::Comparison => "comparison",
+        CandidateKind::AnchorReview => "anchor-review",
+    };
+    let reasons: Vec<serde_json::Value> = entry
+        .reasons
+        .iter()
+        .map(|r| serde_json::json!({ "code": r.code, "text": r.text }))
+        .collect();
+    let payload = match &entry.payload {
+        EntryPayload::Comparison { a, b, ask } => serde_json::json!({
+            "participants": [
+                { "id": a.id, "annotations": a.annotations },
+                { "id": b.id, "annotations": b.annotations },
+            ],
+            "ask": ask_json(ask),
+        }),
+        EntryPayload::AnchorReview { subject, ask } => serde_json::json!({
+            "subject": {
+                "id": subject.id,
+                "anchor": subject.anchor,
+                "conflict_pairs": subject.conflict_pairs,
+                "quarantined_rows": subject.quarantined_rows,
+            },
+            "ask": ask_json(ask),
+        }),
+    };
+    let mut obj = serde_json::json!({
+        "rank": rank,
+        "kind": kind,
+        "guaranteed_yield": entry.guaranteed_yield,
+        "guaranteed_impact": entry.guaranteed_impact,
+        "score": entry.score,
+        "yield_basis": match entry.yield_basis {
+            crate::priority::elicit::YieldBasis::OrderBearingAnswers => "order-bearing-answers",
+            crate::priority::elicit::YieldBasis::CanonicalResolvingActions => {
+                "canonical-resolving-actions"
+            }
+        },
+        "reasons": reasons,
+    });
+    if let (Some(map), serde_json::Value::Object(pmap)) = (obj.as_object_mut(), payload) {
+        for (k, v) in pmap {
+            map.insert(k, v);
+        }
+    }
+    obj
+}
+
+/// The ask block JSON (answers + per-answer yield + optional anchor `yield_note`).
+fn ask_json(ask: &crate::priority::elicit::AskSpec) -> serde_json::Value {
+    serde_json::json!({
+        "answers": ask.answers,
+        "yield_by_answer": ask.yield_by_answer,
+        "yield_note": ask.yield_note,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1230,5 +1519,100 @@ mod tests {
             path: Some(root),
         })
         .unwrap();
+    }
+
+    // ── SL-217 PHASE-03: the elicit shell ────────────────────────────────────
+
+    /// Seed a value-bearing slice (`.toml` + `.md`) the priority scan discovers —
+    /// no value facet ⇒ `DEFAULT_VALUE`, so it earns a score and enters the
+    /// frontier. Returns its canonical id.
+    fn seed_scored_slice(root: &Path, id: u32) -> String {
+        let p = format!("{id:03}");
+        let dir = root.join(".doctrine").join("slice").join(&p);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("slice-{p}.toml")),
+            format!(
+                "id = {id}\nslug = \"s{p}\"\ntitle = \"S\"\nstatus = \"proposed\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("slice-{p}.md")), "scope\n").unwrap();
+        crate::listing::canonical_id("SL", id)
+    }
+
+    /// `ElicitArgs` with everything defaulted (no filters, human render).
+    fn elicit_args(root: &Path) -> ElicitArgs {
+        ElicitArgs {
+            depth: None,
+            limit: None,
+            kind: None,
+            json: false,
+            path: Some(root.to_path_buf()),
+        }
+    }
+
+    /// T2: the shell composes deterministic, D6-costed [`ElicitInputs`] from the
+    /// built graph + loaded pipeline. Pins the frontier ordering (id-lex tiebreak),
+    /// the multiplier decomposition (`coeff.value × kind_weight × tag_term`), and
+    /// the bare-estimate flag for an estimate-free value-bearing item.
+    #[test]
+    fn build_elicit_inputs_is_deterministic_and_d6_costed() {
+        let (_tmp, root) = mk_project_root();
+        let id1 = seed_scored_slice(&root, 1);
+        let id2 = seed_scored_slice(&root, 2);
+        let cfg = crate::priority::config::load(&root);
+        let graph = graph::build(&root).unwrap();
+        let pipeline = graph::load_comparison_pipeline_for_root(&root).unwrap();
+
+        let a = build_elicit_inputs(&graph, &pipeline, &cfg, 8);
+        let b = build_elicit_inputs(&graph, &pipeline, &cfg, 8);
+        // Determinism: byte-identical inputs across repeated builds.
+        assert_eq!(format!("{a:?}"), format!("{b:?}"));
+
+        // Frontier holds both seeded items; equal score ⇒ id-lex order (SL-001 first).
+        let ids: Vec<&String> = a.frontier.iter().map(|f| &f.id).collect();
+        assert!(ids.contains(&&id1) && ids.contains(&&id2));
+        assert_eq!(a.frontier.first().map(|f| &f.id), Some(&id1));
+
+        // D6 costing: no tags ⇒ tag_term = 1, no estimate ⇒ bare + empty-corpus
+        // cost anchor; multiplier collapses to coeff.value × kind_weight(SL).
+        let c = a.costing.get(&id1).expect("id1 is costed");
+        let expected_m = cfg.coefficients.value * cfg.kind_weight("SL");
+        assert!(
+            (c.multiplier - expected_m).abs() < 1e-9,
+            "m={}",
+            c.multiplier
+        );
+        assert!(c.bare_estimate, "no estimate facet ⇒ bare");
+        assert!(c.est_cost > 0.0);
+    }
+
+    /// T2: `--depth` clamps the frontier band; a depth of 1 keeps only the top item.
+    #[test]
+    fn build_elicit_inputs_respects_depth_band() {
+        let (_tmp, root) = mk_project_root();
+        let id1 = seed_scored_slice(&root, 1);
+        let _id2 = seed_scored_slice(&root, 2);
+        let cfg = crate::priority::config::load(&root);
+        let graph = graph::build(&root).unwrap();
+        let pipeline = graph::load_comparison_pipeline_for_root(&root).unwrap();
+
+        let inputs = build_elicit_inputs(&graph, &pipeline, &cfg, 1);
+        assert_eq!(inputs.frontier.len(), 1);
+        assert_eq!(inputs.frontier.first().map(|f| &f.id), Some(&id1));
+    }
+
+    /// T1/T2: the arm runs read-only end-to-end over an empty ledger and renders
+    /// a state line without error (EX-1 read-only: no session file is written).
+    #[test]
+    fn elicit_over_empty_ledger_is_read_only_and_ok() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "IMP", 1, "open");
+        run_elicit(&elicit_args(&root)).unwrap();
+        assert!(
+            session_files(&root).is_empty(),
+            "elicit is read-only — no session file minted"
+        );
     }
 }

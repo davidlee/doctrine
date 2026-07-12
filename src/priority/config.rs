@@ -125,15 +125,8 @@ fn default_gauge_step() -> f64 {
 pub(crate) const ELICIT_DEPTH: usize = 8;
 
 /// The default `--limit` display cap for `doctrine compare elicit` (design §3);
-/// the full pool is always ranked, only the render is capped. PHASE-03's
-/// consumer (the command arm); staged one phase ahead, self-clearing gate.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "display cap consumed by the PHASE-03 `compare elicit` arm (SL-217)"
-    )
-)]
+/// the full pool is always ranked, only the render is capped. Consumed by the
+/// PHASE-03 `compare elicit` arm (SL-217) as the `--limit` display default.
 pub(crate) const ELICIT_LIMIT: usize = 5;
 
 /// The impact rank-decay shape (design D13): a newly-determined pair at better

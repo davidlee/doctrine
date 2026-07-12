@@ -127,6 +127,15 @@ fn effective_raw_value(
         .or_else(|| crate::kinds::is_value_bearing(kind.prefix).then_some(DEFAULT_VALUE))
 }
 
+/// The per-entity tag multiplier term: `(1.0 + Σ(tag_coeff − 1.0)).max(0.0)` —
+/// identity base for absent tags, each configured tag pushes the multiplier by
+/// its excess over default, floored at zero so many demoting tags cannot make it
+/// negative. Extracted (SL-217 PHASE-03) so `base_score` and the elicit shell's
+/// `item_costing` share ONE definition (no parallel impl).
+fn tag_term(f: &EntityFacets, cfg: &config::PriorityConfig) -> f64 {
+    (1.0 + f.tags.iter().map(|t| cfg.tag_coeff(t) - 1.0).sum::<f64>()).max(0.0)
+}
+
 /// Pure base-score computation per entity (design §5.1). Returns the SPLIT
 /// `BaseScore` so `explain` can surface `value_dim` / `risk_dim`. No IO.
 fn base_score(
@@ -142,7 +151,7 @@ fn base_score(
     // each configured tag pushes the multiplier by its excess over default.
     // Default coeff (1.0) → delta 0 → no effect. Floor at zero prevents a
     // negative multiplier from many demoting tags.
-    let tag_term = (1.0 + f.tags.iter().map(|t| cfg.tag_coeff(t) - 1.0).sum::<f64>()).max(0.0);
+    let tag_term = tag_term(f, cfg);
     let value_dim = {
         let raw = match effective_raw_value(kind, f, key, projected) {
             Some(v) => {
@@ -206,6 +215,32 @@ pub(crate) struct PriorityGraph {
     pub(crate) score: BTreeMap<EntityKey, f64>,
     pub(crate) dep_overlay: OverlayId,
     pub(crate) seq_overlay: OverlayId,
+    /// The build-time bare-item cost anchor (max non-terminal `upper` + margin),
+    /// retained so the elicit shell's [`PriorityGraph::item_costing`] reproduces
+    /// the SAME `est_cost` for bare items the base pre-pass used (SL-217 PHASE-03).
+    pub(crate) cost_ctx: CostCtx,
+}
+
+impl PriorityGraph {
+    /// Per-item costing for the elicit shell (SL-217 PHASE-03): the value-free
+    /// multiplier `m = coeff.value × kind_weight × tag_term` (design D6), the
+    /// β-skewed `est_cost` (reusing the build-time `cost_ctx` bare-item anchor),
+    /// and the bare-estimate flag (no estimate facet). `None` for an unknown key.
+    /// Additive READ accessor — no change to `base_score`/compile/project
+    /// (behaviour-preservation, VA-1).
+    pub(crate) fn item_costing(
+        &self,
+        key: &EntityKey,
+        cfg: &config::PriorityConfig,
+    ) -> Option<(f64, f64, bool)> {
+        let attr = self.attrs.get(key)?;
+        let f = &attr.facets;
+        let multiplier =
+            cfg.coefficients.value * cfg.kind_weight(attr.kind.prefix) * tag_term(f, cfg);
+        let bounds = f.estimate.as_ref().map(|e| (e.lower, e.upper));
+        let est = est_cost(bounds, self.cost_ctx, &cfg.estimate);
+        Some((multiplier, est, f.estimate.is_none()))
+    }
 }
 
 /// The reference/lineage relation labels that back a consequence-input overlay — the
@@ -643,6 +678,7 @@ pub(crate) fn build_from_with_cfg(
         score,
         dep_overlay,
         seq_overlay,
+        cost_ctx: ctx,
     })
 }
 

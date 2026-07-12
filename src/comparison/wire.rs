@@ -65,7 +65,7 @@ fn frames_for_domain(domain: &str) -> Option<&'static [&'static str]> {
 
 /// Who rendered the judgement. Closed by design: an unknown rater token
 /// fails parse (losslessness covers the frame/domain strings only).
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum RaterKind {
     Human,
@@ -74,7 +74,7 @@ pub(crate) enum RaterKind {
 
 /// Row form. The verb exposes `order` only; `ratio` keeps capture lossless
 /// for RFC-019 OQ-6. Closed: unknown tokens fail parse.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum RowForm {
     Order,
@@ -108,7 +108,7 @@ pub(crate) struct SessionHeader {
 ///
 /// No `Eq`: `magnitude` is an `f64` column (parsed, uncompiled — RFC-019 OQ-6
 /// stays open; pure order semantics per design D8 ignore it).
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Judgement {
     pub uid: String,
     /// Row sequence within the file; ordering key is `(date, session_uid, seq)`.

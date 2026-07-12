@@ -96,6 +96,14 @@ pub(crate) struct Pipeline {
     pub constraining_by_class: BTreeMap<ClassId, RaterCounts>,
     pub malformed: Vec<MalformedSupersession>,
     pub priority_domain_count: usize,
+    /// The resolved-ACTIVE judgements, owned (SL-217 PHASE-03). `resolve` borrows
+    /// the loaded `sessions`, which drop on return — so the elicit shell cannot
+    /// borrow `active` back out. Owned clones let `assemble` recompile its own
+    /// baseline `ConstraintSet` from the SAME evidence, no re-resolve (DRY).
+    pub active_judgements: Vec<Judgement>,
+    /// The anchor map compiled into `constraint_set` (SL-217 PHASE-03) — exposed
+    /// so the elicit shell feeds `assemble` the identical anchors.
+    pub anchors: AnchorMap,
 }
 
 /// Compose the full pipeline (design §1 integration point): [`load_sessions`]
@@ -133,6 +141,8 @@ pub(crate) fn pipeline_from_sessions(
             constraining_by_class: BTreeMap::new(),
             malformed: Vec::new(),
             priority_domain_count: 0,
+            active_judgements: Vec::new(),
+            anchors: anchors.clone(),
         });
     }
 
@@ -172,6 +182,10 @@ pub(crate) fn pipeline_from_sessions(
         })
         .collect();
 
+    // Owned clones of the active evidence for the elicit shell (SL-217 PHASE-03):
+    // taken while `resolution` (which `active` borrows) is still alive.
+    let active_judgements: Vec<Judgement> = active.iter().map(|&j| j.clone()).collect();
+
     Ok(Pipeline {
         rows,
         constraint_set: cs,
@@ -179,6 +193,8 @@ pub(crate) fn pipeline_from_sessions(
         constraining_by_class,
         malformed: resolution.malformed,
         priority_domain_count,
+        active_judgements,
+        anchors: anchors.clone(),
     })
 }
 

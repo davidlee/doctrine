@@ -139,3 +139,43 @@ median index) + one `#[expect(clippy::too_many_arguments)]` on the private
 **Design-note for audit:** `rank_map` + `depth` thread through four assembler
 fns as one impact-band context — a bundling opportunity deferred to keep the
 finish-line behaviour-neutral (would reshape four call sites).
+
+## PHASE-03 — T1/T2 walking skeleton (in_progress, committed)
+
+Landed the `compare elicit` arm + the input-assembly shell (design §3), green +
+gated. Remaining: full render/JSON fidelity (T3/T4 goldens), `--kind`/`--limit`
+golden (T5), determinism/capture-loop/cost-ceiling e2e (T6–T8), VA-1/VH-1.
+
+**Three additive, behaviour-neutral exposures (STOP did NOT fire; VA-1 holds —
+3433 pre-existing bin tests green UNCHANGED):**
+
+- `comparison::Pipeline.active_judgements: Vec<Judgement>` + `anchors: AnchorMap`
+  — `load_pipeline` computes `active: Vec<&Judgement>` (store.rs:140) borrowing
+  the locally-loaded `sessions`, which drop on return (that lifetime is WHY it
+  couldn't be exposed by reference). Store OWNED clones; the shell borrows them
+  into `assemble`. Required deriving `Clone` on `Judgement` (+ `Clone` on its
+  `RaterKind`/`RowForm` fields — **`Clone` only, NOT `Copy`**: `Copy` trips
+  `trivially_copy_pass_by_ref` on the pre-existing `&RaterKind`/`&RowForm`
+  params).
+- `PriorityGraph.cost_ctx: CostCtx` (additive field) + `item_costing(key, cfg)
+  -> (multiplier, est_cost, bare_estimate)` read method. `m = coeff.value ×
+  kind_weight × tag_term` (D6) is derivable from PUBLIC `cfg` + `NodeAttr.
+  {facets,kind}` — no `base_score` change. `tag_term` extracted to a free fn so
+  `base_score` + `item_costing` share ONE definition (no parallel impl). Bare
+  `est_cost` reuses the build-time `cost_ctx` anchor (identical to the base
+  pre-pass).
+- `assemble` recompiles its ConstraintSet internally from `active` — it does NOT
+  consume `Pipeline.constraint_set` (self-contained pure; shell supplies raw
+  `active`).
+
+**Shell shape:** `run_elicit` = scan→`graph::build` + `load_comparison_pipeline_
+for_root` → `build_elicit_inputs` (frontier top-K by final score, id-lex
+tiebreak; costing over all scored entities; active/anchors/projection off the
+pipeline) → `assemble(Sequencing{depth})` → human/JSON render. `compare elicit`
+is READ-classed in `guard.rs` (D18). Verified end-to-end on the live ledger.
+
+**Deferred to T3/T4 (marked in `compare.rs` doc comments):** JSON participant S3
+value shapes + structural bounds + annotations + anchor `exits`; human render
+fetched-context/mask/reasons prose + full D15 footer wording (stall/stable/
+outsider/m=0). Current render is a spartan-but-real spine; T3/T4 ENRICH (additive
+fields), not rewrite.

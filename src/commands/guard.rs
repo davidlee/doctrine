@@ -384,7 +384,10 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         // under `.doctrine/comparisons/` — authored writes, funnelled through the
         // orchestrator; `list` is a read-only view (mirrors Coverage's split).
         Command::Compare(args) => match args.action {
-            crate::commands::compare::CompareAction::List(_) => Read,
+            // `list` and `elicit` are read-only views (elicit is D18 read-only,
+            // SL-217 PHASE-03); `record`/`withdraw` are the authored writes.
+            crate::commands::compare::CompareAction::List(_)
+            | crate::commands::compare::CompareAction::Elicit(_) => Read,
             crate::commands::compare::CompareAction::Record(_)
             | crate::commands::compare::CompareAction::Withdraw(_) => Write("compare"),
         },
