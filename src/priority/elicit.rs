@@ -196,8 +196,11 @@ const ANSWER_PREFER_A: &str = "prefer-a";
 const ANSWER_PREFER_B: &str = "prefer-b";
 const ANSWER_EQUAL: &str = "equal";
 const ANSWER_INCOMPARABLE: &str = "incomparable";
-const ANSWER_REVISE_ANCHOR: &str = "revise-anchor";
-const ANSWER_UPHOLD_ANCHOR: &str = "uphold-anchor";
+// Anchor-review answer tokens are `pub(crate)` — the elicit JSON surface keys
+// each entry's `exits` action list by answer token (design §3), so the shell
+// shares this ONE definition rather than restating the strings (STD-001).
+pub(crate) const ANSWER_REVISE_ANCHOR: &str = "revise-anchor";
+pub(crate) const ANSWER_UPHOLD_ANCHOR: &str = "uphold-anchor";
 
 const MASK_ANNOTATION: &str = "projection masked by bare estimate";
 const ANCHOR_YIELD_NOTE: &str = "revise-anchor yield assumes a RESOLVING revision (conflict \

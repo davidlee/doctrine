@@ -179,3 +179,44 @@ value shapes + structural bounds + annotations + anchor `exits`; human render
 fetched-context/mask/reasons prose + full D15 footer wording (stall/stable/
 outsider/m=0). Current render is a spartan-but-real spine; T3/T4 ENRICH (additive
 fields), not rewrite.
+
+## PHASE-03 — T3 JSON schema-v1 fidelity (in_progress, committed)
+
+Enriched the `--json` envelope to design §3/D16 exactly. STOP did NOT fire — the
+handover's readiness question (every §3 field has a source) resolved cleanly:
+
+- **Participant `value` block** — shell join `Participant.id → value source`.
+  `provenance`+`point` map from `surface::value_source_reason` (the SINGLE
+  authored>projected>gauge precedence, now `pub(crate)`; body untouched so
+  `explain` goldens hold). Structural `bounds {kind: open|closed|unbounded,
+  value?}` from a NEW `surface::class_bounds_structural` (reads
+  `constraint_set.bounds[class]` — the `Bound` enum survives here; the human
+  `explain` path deliberately flattens via the pre-existing lossy `class_bounds`,
+  which stays). Web-review requirement: `[null, 2.8]` erases open/closed, so this
+  surface keeps the structural form. `bounds` omitted when the entity has no
+  compiled class (authored floor, no interval).
+- **`estimate` field — DESIGN CALL, flag at audit.** §3 draws a SCALAR (`3.5`) +
+  null-when-bare, and D7 says "costs are the scalar `est_cost`". So
+  `estimate = bare ? null : est_cost` (from `graph.item_costing`), NOT the raw
+  `{lower,upper}` facet. The value/estimate asymmetry is intentional: value
+  bounds are decision-relevant (structural, web review); estimate is disclosure
+  context (scalar). Bare disclosed by the D17 mask annotation, never a
+  synthesized number. Verified live: IMP-202 authored point 2.8 no-bounds (no
+  class) + est 1.15; IMP-255 authored closed/closed@2.5 + est 1.155.
+- **Kind-specific ask (schema fidelity).** Split the shared `ask_json`:
+  comparison ask carries `frame`(equal-effort)/`domain`(value) constants (D1),
+  NO `yield_note`/`exits`; anchor ask carries `yield_note` + `exits` (per-answer
+  suggested-action arrays keyed by the answer tokens, now `pub(crate)` on
+  `elicit` — STD-001 one definition). This fixes the T2 spine emitting
+  `yield_note: null` on comparison entries.
+- **Testability refactor:** `render_elicit_json` split into pure
+  `elicit_envelope(...) -> Value` (byte-stable anchor) + thin writer (no trailing
+  newline, `render.rs::finish` contract). `RenderCtx` carries graph+pipeline+cfg
+  + a canonical→`EntityKey` map, built once from the same load (no second scan).
+
+**Tests:** 5 pure shaper goldens in `compare.rs` (`bound_json`,
+`value_block_json` projected+classless, `anchor_exits_json` populated+empty,
+`comparison_ask_json` frame/no-anchor-fields). Full both-kind ENVELOPE goldens
+(VT-1 keywords `yield_note`/`median`/`stall`) live in `tests/e2e_compare_elicit.rs`
+by `plan.toml` VT-1 `test_file` contract — authored in T6–T8. Priority (180) +
+inference e2e (5) green unchanged (behaviour-preservation).

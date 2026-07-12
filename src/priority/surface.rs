@@ -532,7 +532,12 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
 /// authored (own `[value]` facet — possibly an anchor hoisted onto a shared
 /// class) > projected (bounds + rater split) > gauge (judgement count) >
 /// the implicit default tier (D11). `None` for a non-value-bearing kind.
-fn value_source_reason(
+///
+/// The SINGLE precedence source (SL-217 PHASE-03): the elicit participant
+/// value block maps this `ReasonKind` to `{provenance, point}` and reads the
+/// STRUCTURAL bounds via [`class_bounds_structural`] separately (this variant
+/// has already flattened them for the human explain contract).
+pub(crate) fn value_source_reason(
     g: &PriorityGraph,
     key: EntityKey,
     pipeline: &comparison::Pipeline,
@@ -616,6 +621,20 @@ fn bound_value(b: comparison::Bound) -> Option<f64> {
         comparison::Bound::Unbounded => None,
         comparison::Bound::Open(v) | comparison::Bound::Closed(v) => Some(v),
     }
+}
+
+/// The C6 value interval for `canonical`'s class as the STRUCTURAL
+/// [`comparison::ValueBounds`] (open/closed/unbounded retained) — the elicit
+/// JSON surface's `value.bounds` source (SL-217 PHASE-03, design §3/D16). The
+/// human `explain` path deliberately flattens via [`class_bounds`]; this keeps
+/// the open/closed distinction the web review required (`[null, 2.8]` loses
+/// it). `None` when the entity is not (yet) in a compiled class.
+pub(crate) fn class_bounds_structural(
+    cs: &comparison::ConstraintSet,
+    canonical: &str,
+) -> Option<comparison::ValueBounds> {
+    let class = cs.classes.get(canonical)?;
+    cs.bounds.get(class).copied()
 }
 
 /// Every OTHER class this `canonical`'s class was found to conflict with (an

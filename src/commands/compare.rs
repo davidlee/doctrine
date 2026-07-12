@@ -38,9 +38,10 @@ use crate::comparison::{
 use crate::priority::config::PriorityConfig;
 use crate::priority::elicit::{
     CandidateKind, DecisionContext, ElicitInputs, ElicitQueue, EntryPayload, FrontierItem,
-    ItemCosting, QueueEntry, QueueState, assemble,
+    ItemCosting, Participant, QueueEntry, QueueState, assemble,
 };
 use crate::priority::graph::{self, PriorityGraph};
+use crate::priority::view::ReasonKind;
 
 /// `doctrine compare <SUBCOMMAND>` — the comparison-ledger verb group.
 #[derive(Args)]
@@ -555,7 +556,8 @@ fn run_elicit(args: &ElicitArgs) -> anyhow::Result<()> {
     let queue = assemble(&inputs, DecisionContext::Sequencing { depth });
 
     if args.json {
-        render_elicit_json(&queue, depth, args)
+        let ctx = RenderCtx::new(&graph, &pipeline, &cfg);
+        render_elicit_json(&queue, depth, args, &ctx)
     } else {
         render_elicit_human(&queue, args)
     }
@@ -688,20 +690,108 @@ fn render_elicit_human(queue: &ElicitQueue, args: &ElicitArgs) -> anyhow::Result
     Ok(())
 }
 
-/// JSON schema-v1 envelope (design §3 / D16). SKELETON (SL-217 PHASE-03 T2):
-/// the versioned envelope + spine + ask block. T3 enriches participants with S3
-/// value shapes + structural bounds + annotations, and adds anchor `exits`.
-/// Byte-stable (`BTree` key order from `serde_json::Value`); NO trailing newline
-/// (the golden contract, mirrors `render.rs::finish`).
-fn render_elicit_json(queue: &ElicitQueue, depth: usize, args: &ElicitArgs) -> anyhow::Result<()> {
+/// The join context the elicit render needs beyond the pure [`ElicitQueue`]:
+/// per-participant value source + estimate come from a shell join
+/// (`Participant.id → PriorityGraph / Pipeline`), since `assemble` keeps
+/// participants LEAN (design D16). Built once per render from the same graph +
+/// pipeline `run_elicit` already loaded (no second scan).
+struct RenderCtx<'a> {
+    graph: &'a PriorityGraph,
+    pipeline: &'a comparison::Pipeline,
+    cfg: &'a PriorityConfig,
+    keys: std::collections::BTreeMap<String, crate::relation_graph::EntityKey>,
+}
+
+impl<'a> RenderCtx<'a> {
+    fn new(
+        graph: &'a PriorityGraph,
+        pipeline: &'a comparison::Pipeline,
+        cfg: &'a PriorityConfig,
+    ) -> Self {
+        let keys = graph.attrs.keys().map(|k| (k.canonical(), *k)).collect();
+        Self {
+            graph,
+            pipeline,
+            cfg,
+            keys,
+        }
+    }
+
+    /// The structural value block for a participant (design §3 / D16):
+    /// `{provenance, point}` from the SINGLE value-source precedence
+    /// (`surface::value_source_reason` — authored > projected > gauge), plus the
+    /// STRUCTURAL bounds (`surface::class_bounds_structural`, open/closed/unbounded
+    /// retained — the human `explain` path flattens, this surface must not, web
+    /// review). `None` when the entity has no citable value source (an
+    /// un-constrained bare item — the numeric default floor is not a source,
+    /// surface.rs S3).
+    fn value_block(&self, canonical: &str) -> Option<serde_json::Value> {
+        let key = *self.keys.get(canonical)?;
+        let (provenance, point) =
+            match crate::priority::surface::value_source_reason(self.graph, key, self.pipeline)? {
+                ReasonKind::ValueAuthored { value, .. } => ("authored", value),
+                ReasonKind::ValueProjected { value, .. } => ("projected", value),
+                ReasonKind::ValueGauge { value, .. } => ("gauge", value),
+                _ => return None,
+            };
+        let bounds = crate::priority::surface::class_bounds_structural(
+            &self.pipeline.constraint_set,
+            canonical,
+        );
+        Some(value_block_json(provenance, point, bounds))
+    }
+
+    /// The participant's scalar cost estimate (`est_cost`, D7) — `None` when the
+    /// estimate is BARE (no authored facet); the bare case is disclosed instead
+    /// by the `projection masked by bare estimate` annotation on the participant
+    /// (D17), never by a synthesized number here.
+    fn estimate(&self, canonical: &str) -> Option<f64> {
+        let key = *self.keys.get(canonical)?;
+        let (_, est_cost, bare) = self.graph.item_costing(&key, self.cfg)?;
+        (!bare).then_some(est_cost)
+    }
+
+    /// One lean participant (design D16): id + value/estimate block + the
+    /// engine's annotations (the bare-estimate mask rides these).
+    fn participant_json(&self, p: &Participant) -> serde_json::Value {
+        serde_json::json!({
+            "id": p.id,
+            "value": self.value_block(&p.id),
+            "estimate": self.estimate(&p.id),
+            "annotations": p.annotations,
+        })
+    }
+}
+
+/// JSON schema-v1 envelope (design §3 / D16). Byte-stable (`BTree` key order
+/// from `serde_json::Value`); NO trailing newline (the golden contract, mirrors
+/// `render.rs::finish`).
+fn render_elicit_json(
+    queue: &ElicitQueue,
+    depth: usize,
+    args: &ElicitArgs,
+    ctx: &RenderCtx<'_>,
+) -> anyhow::Result<()> {
     use std::io::Write;
+    let text = serde_json::to_string_pretty(&elicit_envelope(queue, depth, args, ctx))?;
+    write!(std::io::stdout(), "{text}")?;
+    Ok(())
+}
+
+/// The schema-v1 envelope value (pure — the byte-stability + golden anchor).
+fn elicit_envelope(
+    queue: &ElicitQueue,
+    depth: usize,
+    args: &ElicitArgs,
+    ctx: &RenderCtx<'_>,
+) -> serde_json::Value {
     let (state_token, state_detail) = state_line(&queue.state);
     let entries: Vec<serde_json::Value> = displayed(queue, args)
         .iter()
         .enumerate()
-        .map(|(i, e)| entry_json(i + 1, e))
+        .map(|(i, e)| entry_json(i + 1, e, ctx))
         .collect();
-    let envelope = serde_json::json!({
+    serde_json::json!({
         "schema": "doctrine.elicit-queue",
         "version": 1,
         "context": { "kind": "sequencing", "depth": depth },
@@ -709,15 +799,12 @@ fn render_elicit_json(queue: &ElicitQueue, depth: usize, args: &ElicitArgs) -> a
         "state_detail": state_detail,
         "excluded_value_insensitive": queue.excluded_value_insensitive,
         "entries": entries,
-    });
-    let text = serde_json::to_string_pretty(&envelope)?;
-    write!(std::io::stdout(), "{text}")?;
-    Ok(())
+    })
 }
 
-/// One entry's JSON (spine + kind payload + ask). Reason/ask codes ride the
-/// engine's structured shapes verbatim (D16 findings-parity).
-fn entry_json(rank: usize, entry: &QueueEntry) -> serde_json::Value {
+/// One entry's JSON (spine + kind payload + kind-specific ask). Reason/ask codes
+/// ride the engine's structured shapes verbatim (D16 findings-parity).
+fn entry_json(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> serde_json::Value {
     let kind = match entry.kind {
         CandidateKind::Comparison => "comparison",
         CandidateKind::AnchorReview => "anchor-review",
@@ -729,11 +816,8 @@ fn entry_json(rank: usize, entry: &QueueEntry) -> serde_json::Value {
         .collect();
     let payload = match &entry.payload {
         EntryPayload::Comparison { a, b, ask } => serde_json::json!({
-            "participants": [
-                { "id": a.id, "annotations": a.annotations },
-                { "id": b.id, "annotations": b.annotations },
-            ],
-            "ask": ask_json(ask),
+            "participants": [ctx.participant_json(a), ctx.participant_json(b)],
+            "ask": comparison_ask_json(ask),
         }),
         EntryPayload::AnchorReview { subject, ask } => serde_json::json!({
             "subject": {
@@ -742,7 +826,7 @@ fn entry_json(rank: usize, entry: &QueueEntry) -> serde_json::Value {
                 "conflict_pairs": subject.conflict_pairs,
                 "quarantined_rows": subject.quarantined_rows,
             },
-            "ask": ask_json(ask),
+            "ask": anchor_ask_json(ask, subject),
         }),
     };
     let mut obj = serde_json::json!({
@@ -767,13 +851,81 @@ fn entry_json(rank: usize, entry: &QueueEntry) -> serde_json::Value {
     obj
 }
 
-/// The ask block JSON (answers + per-answer yield + optional anchor `yield_note`).
-fn ask_json(ask: &crate::priority::elicit::AskSpec) -> serde_json::Value {
+/// The comparison ask block (design §3): the canonical equal-effort/value frame
+/// (D1 — comparison entries carry no other frame), the answer tokens, and each
+/// token's disclosed yield. No `yield_note`/`exits` (those are anchor-only).
+fn comparison_ask_json(ask: &crate::priority::elicit::AskSpec) -> serde_json::Value {
+    serde_json::json!({
+        "frame": FRAME_EQUAL_EFFORT,
+        "domain": comparison::DOMAIN_VALUE,
+        "answers": ask.answers,
+        "yield_by_answer": ask.yield_by_answer,
+    })
+}
+
+/// The anchor-review ask block (design §3, RV-269 F-3): answers + per-answer
+/// yield + the conditional-yield `yield_note` + `exits` (suggested resolving
+/// actions per answer token; uphold is not one executable command).
+fn anchor_ask_json(
+    ask: &crate::priority::elicit::AskSpec,
+    subject: &crate::priority::elicit::AnchorSubject,
+) -> serde_json::Value {
     serde_json::json!({
         "answers": ask.answers,
         "yield_by_answer": ask.yield_by_answer,
         "yield_note": ask.yield_note,
+        "exits": anchor_exits_json(subject),
     })
+}
+
+/// The per-answer suggested resolving actions for an anchor-review entry
+/// (design §3): `revise-anchor` re-authors the suspect value; `uphold-anchor`
+/// retires the cited closure (supersede or withdraw each quarantined row) —
+/// arrays of suggested commands, not a single executable, keyed by answer token
+/// (STD-001: tokens shared with `elicit`).
+fn anchor_exits_json(subject: &crate::priority::elicit::AnchorSubject) -> serde_json::Value {
+    let revise = vec![format!("doctrine value set {} <v>", subject.id)];
+    let mut uphold: Vec<String> = Vec::new();
+    if let Some(first) = subject.quarantined_rows.first() {
+        uphold.push(format!(
+            "doctrine compare record <a> <b> <response> --supersedes {first}"
+        ));
+    }
+    for uid in &subject.quarantined_rows {
+        uphold.push(format!("doctrine compare withdraw {uid}"));
+    }
+    serde_json::json!({
+        crate::priority::elicit::ANSWER_REVISE_ANCHOR: revise,
+        crate::priority::elicit::ANSWER_UPHOLD_ANCHOR: uphold,
+    })
+}
+
+/// A structural C6 bound as `{kind, value?}` (design §3): mirrors the `Bound`
+/// enum so the open/closed distinction survives (`[null, 2.8]` would lose it —
+/// web review).
+fn bound_json(b: comparison::Bound) -> serde_json::Value {
+    match b {
+        comparison::Bound::Unbounded => serde_json::json!({ "kind": "unbounded" }),
+        comparison::Bound::Open(v) => serde_json::json!({ "kind": "open", "value": v }),
+        comparison::Bound::Closed(v) => serde_json::json!({ "kind": "closed", "value": v }),
+    }
+}
+
+/// The participant value block (design §3): `{provenance, point}` always, plus
+/// structural `bounds` when the entity sits in a compiled class.
+fn value_block_json(
+    provenance: &str,
+    point: f64,
+    bounds: Option<comparison::ValueBounds>,
+) -> serde_json::Value {
+    let mut v = serde_json::json!({ "provenance": provenance, "point": point });
+    if let (Some(b), Some(map)) = (bounds, v.as_object_mut()) {
+        map.insert(
+            "bounds".to_string(),
+            serde_json::json!({ "lower": bound_json(b.lower), "upper": bound_json(b.upper) }),
+        );
+    }
+    v
 }
 
 // ---------------------------------------------------------------------------
@@ -1614,5 +1766,127 @@ mod tests {
             session_files(&root).is_empty(),
             "elicit is read-only — no session file minted"
         );
+    }
+
+    // ── T3: JSON schema-v1 shapers (design §3 / D16) ────────────────────────
+
+    /// A structural C6 bound serializes to `{kind, value?}` — open/closed carry
+    /// the value, unbounded omits it (the web-review distinction `[null, 2.8]`
+    /// would erase).
+    #[test]
+    fn bound_json_carries_open_closed_unbounded() {
+        assert_eq!(
+            bound_json(comparison::Bound::Open(2.5)),
+            serde_json::json!({ "kind": "open", "value": 2.5 })
+        );
+        assert_eq!(
+            bound_json(comparison::Bound::Closed(5.0)),
+            serde_json::json!({ "kind": "closed", "value": 5.0 })
+        );
+        assert_eq!(
+            bound_json(comparison::Bound::Unbounded),
+            serde_json::json!({ "kind": "unbounded" })
+        );
+    }
+
+    /// The participant value block carries `{provenance, point}` always, and
+    /// STRUCTURAL `bounds` when the entity sits in a compiled class; a class-less
+    /// value (authored floor, no interval) omits `bounds` entirely.
+    #[test]
+    fn value_block_json_shapes_projected_and_classless() {
+        let projected = value_block_json(
+            "projected",
+            2.6,
+            Some(comparison::ValueBounds {
+                lower: comparison::Bound::Open(2.5),
+                upper: comparison::Bound::Open(2.8),
+            }),
+        );
+        assert_eq!(
+            projected,
+            serde_json::json!({
+                "provenance": "projected",
+                "point": 2.6,
+                "bounds": {
+                    "lower": { "kind": "open", "value": 2.5 },
+                    "upper": { "kind": "open", "value": 2.8 },
+                },
+            })
+        );
+
+        let classless = value_block_json("authored", 4.0, None);
+        assert_eq!(
+            classless,
+            serde_json::json!({ "provenance": "authored", "point": 4.0 })
+        );
+        assert!(
+            classless.get("bounds").is_none(),
+            "no compiled class ⇒ no bounds key"
+        );
+    }
+
+    /// Anchor-review `exits` is keyed by the two answer tokens: revise re-authors
+    /// the suspect value; uphold suggests superseding then withdrawing each cited
+    /// row (arrays of suggested actions, not one executable — design §3).
+    #[test]
+    fn anchor_exits_json_keys_by_answer_token() {
+        let subject = crate::priority::elicit::AnchorSubject {
+            id: "IMP-274".to_string(),
+            anchor: Some(5.0),
+            conflict_pairs: vec![("IMP-198".to_string(), "IMP-274".to_string())],
+            quarantined_rows: vec!["uid-1".to_string(), "uid-2".to_string()],
+        };
+        assert_eq!(
+            anchor_exits_json(&subject),
+            serde_json::json!({
+                "revise-anchor": ["doctrine value set IMP-274 <v>"],
+                "uphold-anchor": [
+                    "doctrine compare record <a> <b> <response> --supersedes uid-1",
+                    "doctrine compare withdraw uid-1",
+                    "doctrine compare withdraw uid-2",
+                ],
+            })
+        );
+    }
+
+    /// A suspect anchor with no cited rows yields a revise action and an empty
+    /// uphold list (nothing to retire) — no panic on the empty closure.
+    #[test]
+    fn anchor_exits_json_empty_closure_has_no_uphold_actions() {
+        let subject = crate::priority::elicit::AnchorSubject {
+            id: "IMP-9".to_string(),
+            anchor: None,
+            conflict_pairs: vec![],
+            quarantined_rows: vec![],
+        };
+        assert_eq!(
+            anchor_exits_json(&subject),
+            serde_json::json!({
+                "revise-anchor": ["doctrine value set IMP-9 <v>"],
+                "uphold-anchor": [],
+            })
+        );
+    }
+
+    /// The comparison ask block carries the canonical equal-effort/value frame
+    /// and NO `yield_note`/`exits` (those are anchor-only — schema fidelity).
+    #[test]
+    fn comparison_ask_json_carries_frame_and_no_anchor_fields() {
+        let ask = crate::priority::elicit::AskSpec {
+            answers: vec!["prefer-a", "prefer-b", "equal", "incomparable"],
+            yield_by_answer: [("prefer-a".to_string(), 3)].into_iter().collect(),
+            yield_note: None,
+        };
+        let v = comparison_ask_json(&ask);
+        assert_eq!(
+            v.get("frame").and_then(|f| f.as_str()),
+            Some("equal-effort")
+        );
+        assert_eq!(v.get("domain").and_then(|d| d.as_str()), Some("value"));
+        assert!(
+            v.get("yield_note").is_none(),
+            "comparison ask omits yield_note"
+        );
+        assert!(v.get("exits").is_none(), "comparison ask omits exits");
     }
 }
