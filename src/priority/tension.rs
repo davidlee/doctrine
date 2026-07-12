@@ -261,6 +261,33 @@ pub(crate) fn detect(inputs: &DetectInputs<'_>) -> Vec<DetectedTension> {
     out
 }
 
+/// Count the value inversions on the page that [`detect`] excluded *solely*
+/// because a member is value-insensitive (`m = 0`) — the F-6 scoped disclosure
+/// ("N pairs value-insensitive, zero weight", SL-217 D6). Same window as
+/// [`detect`] (surfaced on page, preferred later, `value_dim` inversion) but
+/// counting exactly the pairs the m=0 guard dropped. Pure.
+pub(crate) fn zero_weight_excluded(inputs: &DetectInputs<'_>) -> usize {
+    let val = |k: &EntityKey| inputs.value_dim.get(k).copied().unwrap_or(0.0);
+    let mult = |k: &EntityKey| inputs.multiplier.get(k).copied().unwrap_or(0.0);
+    let mut count = 0;
+    for (bi, &surfaced) in inputs.delivery_order.iter().enumerate() {
+        if bi >= inputs.page_k {
+            continue;
+        }
+        for &preferred in inputs.delivery_order.iter().skip(bi + 1) {
+            // Only the pairs the m=0 guard dropped: a genuine value_dim inversion
+            // where a member is value-insensitive.
+            if !(is_zero(mult(&preferred)) || is_zero(mult(&surfaced))) {
+                continue;
+            }
+            if val(&preferred).total_cmp(&val(&surfaced)) == Ordering::Greater {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
 /// Grade a detected tension's `value_dim` ordering (design D6) — a pure decision
 /// over two determinacy verdicts and their rater counts. The impure work of
 /// building those verdicts (`compile` → `side_in` → `determined`) is the surface

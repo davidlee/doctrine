@@ -338,7 +338,9 @@ pub(crate) fn run(path: Option<PathBuf>, format: Format, json: bool) -> anyhow::
     };
 
     // --- Next up (top 5) ---
-    let next_rows = crate::priority::surface::next(&root).unwrap_or_default();
+    let next_rows = crate::priority::surface::next(&root)
+        .map(|v| v.rows)
+        .unwrap_or_default();
     let next_up: Vec<NextItem> = next_rows
         .iter()
         .take(5)

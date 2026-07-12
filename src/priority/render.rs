@@ -18,7 +18,10 @@ use owo_colors::{
 };
 
 use super::findings::Finding;
-use super::view::{ActionabilityBlock, BlockersView, Explanation, NextRow, ReasonKind, SurveyRow};
+use super::view::{
+    ActionabilityBlock, BlockersView, EdgeVerb, Explanation, NextRow, NextView, ReasonKind,
+    SurveyRow, TensionCauseView, TensionGradeView,
+};
 
 /// The priority policy version stamped into every `--json` envelope (D6 / REQ-094).
 /// A consumer keys behaviour off this; bump it whenever the policy (partition,
@@ -165,6 +168,11 @@ fn estimate_cell(r: &NextRow) -> String {
 /// authored value of the same magnitude (IMP-211).
 const DEFAULT_VALUE_MARKER: &str = "*";
 
+/// Max tension callouts rendered under a `next` page (SL-218 PHASE-03, design §3
+/// / VT-6). A HUMAN-render bound only — `next --json` carries the full list
+/// uncapped.
+pub(crate) const TENSION_MAX_CALLOUTS: usize = 3;
+
 /// Render the value column cell. An authored value renders bare
 /// (`format_bound(v.value)`). With no authored value the cell must still reflect
 /// what the score used (`graph::effective_raw_value`): a value-bearing kind is
@@ -242,16 +250,17 @@ fn paginated<T>(rows: &[T], limit: usize, offset: usize) -> (&[T], Option<String
 /// `limit == 0` is uncapped — all rows from `offset` onward, no footer.
 /// `--json` path does not reach here (the caller bypasses pagination).
 pub(crate) fn next_human(
-    rows: &[NextRow],
+    view: &NextView,
     opts: RenderOpts,
     columns: Option<&[String]>,
     limit: usize,
     offset: usize,
+    verbose: bool,
 ) -> anyhow::Result<String> {
-    if rows.is_empty() {
+    if view.rows.is_empty() {
         return Ok("(nothing actionable)\n".to_string());
     }
-    let (visible, footer) = paginated(rows, limit, offset);
+    let (visible, footer) = paginated(&view.rows, limit, offset);
 
     // D7 (SL-171 PHASE-02): any_tagged computed over the VISIBLE (post-slice) page.
     let any_tagged = visible.iter().any(|r| !r.tags.is_empty());
@@ -262,7 +271,57 @@ pub(crate) fn next_human(
     if let Some(f) = footer {
         out.push_str(&f);
     }
+    out.push_str(&next_tension_block(view, visible, verbose));
     Ok(out)
+}
+
+/// The `next` tension callout block (design §3): structure callouts under the
+/// visible page by default, composition added with `--verbose`, capped at
+/// [`TENSION_MAX_CALLOUTS`]; then the F-6 m=0 scoped disclosure. Callouts attach
+/// to their SURFACED row, so only tensions whose surfaced member is on the
+/// visible page appear. Empty string when the page has nothing to say.
+fn next_tension_block(view: &NextView, visible: &[NextRow], verbose: bool) -> String {
+    let on_page: std::collections::BTreeSet<&str> = visible.iter().map(|r| r.id.as_str()).collect();
+    let callouts: Vec<String> = view
+        .tensions
+        .iter()
+        .filter(|t| tension_surfaced(t).is_some_and(|s| on_page.contains(s)))
+        .filter(|t| verbose || tension_is_structure(t))
+        .take(TENSION_MAX_CALLOUTS)
+        .filter_map(tension_fragment)
+        .collect();
+    if callouts.is_empty() && view.zero_weight.is_none() {
+        return String::new();
+    }
+    // House style: `Vec<String>` parts each carrying their own newline, joined by
+    // `concat` (avoids the `push_str(&format!)` lint).
+    let mut parts: Vec<String> = vec!["\ntensions:\n".to_string()];
+    parts.extend(callouts.iter().map(|c| format!("  {c}\n")));
+    if let Some(z) = &view.zero_weight {
+        parts.push(reason_line(z));
+    }
+    parts.concat()
+}
+
+/// The surfaced-member id of a [`ReasonKind::Tension`] (the row a callout attaches
+/// to); `None` for any other reason.
+fn tension_surfaced(reason: &ReasonKind) -> Option<&str> {
+    match reason {
+        ReasonKind::Tension { surfaced, .. } => Some(surfaced),
+        _ => None,
+    }
+}
+
+/// Whether a tension is a Structure cause (`next`'s default class; Composition is
+/// verbose-only, design D5).
+fn tension_is_structure(reason: &ReasonKind) -> bool {
+    matches!(
+        reason,
+        ReasonKind::Tension {
+            cause: TensionCauseView::Structure { .. },
+            ..
+        }
+    )
 }
 
 /// Render `blockers` for human reading — the blocked-by and blocking lists (direct or
@@ -326,7 +385,162 @@ fn reason_line(reason: &ReasonKind) -> String {
             "  {count} prefer-first judgements recorded — not value-bearing; no consumer yet\n"
         ),
         ReasonKind::AgentEvidenceDemoted => format!("  {AGENT_DEMOTION_DISCLOSURE}\n"),
+        ReasonKind::Tension { .. } => {
+            format!("  {}\n", tension_fragment(reason).unwrap_or_default())
+        }
+        ReasonKind::ZeroWeightExcluded { count } => {
+            format!("  {}\n", zero_weight_fragment(*count))
+        }
     }
+}
+
+/// The SL-218 PHASE-03 tension line (design §3) — the SINGLE wording source
+/// shared by `reason_line` (human `explain`), the `next` callout block, and the
+/// `--json` surfaces map their structure off the SAME [`ReasonKind::Tension`].
+/// Bare text (no indent / newline — the caller frames it); `None` for any
+/// non-tension reason. Structure and Composition have distinct shapes (design's
+/// four samples); the grade clause and counts are shared.
+pub(crate) fn tension_fragment(reason: &ReasonKind) -> Option<String> {
+    let ReasonKind::Tension {
+        preferred,
+        surfaced,
+        cause,
+        grade,
+    } = reason
+    else {
+        return None;
+    };
+    let g = tension_grade_clause(grade);
+    Some(match cause {
+        TensionCauseView::Structure { edge_from, verb } => {
+            let (kw, tail) = match verb {
+                EdgeVerb::After => ("after", "sequence survives"),
+                EdgeVerb::Needs => ("needs", "holds"),
+            };
+            format!(
+                "tension: {preferred} ranks above {surfaced} on value_dim ({g}); \
+                 {surfaced} surfaces first — `{kw} {edge_from}` {tail}."
+            )
+        }
+        TensionCauseView::Composition {
+            risk_dim,
+            leverage,
+            optionality,
+        } => {
+            let deltas = tension_deltas_clause(*leverage, *risk_dim, *optionality);
+            format!(
+                "{surfaced} surfaces above {preferred} on full score ({deltas}); \
+                 on value_dim alone {preferred} ranks higher ({g})."
+            )
+        }
+    })
+}
+
+/// The grade clause inside a tension callout's parentheses (design §3 samples).
+fn tension_grade_clause(grade: &TensionGradeView) -> String {
+    match grade {
+        TensionGradeView::Determined { human, agent } => {
+            format!("determined — {}", tension_counts_clause(*human, *agent))
+        }
+        TensionGradeView::AgentProposed { agent } => {
+            format!("agent-proposed — {agent} agent judgements, unconfirmed")
+        }
+        TensionGradeView::Projected => "projected order — no determining evidence".to_string(),
+    }
+}
+
+/// The rater-count clause (T7 disclosure): mixed rows read `H human + A agent`;
+/// a single class reads `N human judgements` / `N agent judgements`.
+fn tension_counts_clause(human: u32, agent: u32) -> String {
+    match (human, agent) {
+        (0, 0) => "no constraining judgements".to_string(),
+        (h, 0) => format!("{h} human judgements"),
+        (0, a) => format!("{a} agent judgements"),
+        (h, a) => format!("{h} human + {a} agent"),
+    }
+}
+
+/// The Composition component-delta clause (surfaced − preferred): nonzero
+/// dimensions only, in `leverage, risk, optionality` order, sign-prefixed.
+fn tension_deltas_clause(leverage: f64, risk_dim: f64, optionality: f64) -> String {
+    [
+        ("leverage", leverage),
+        ("risk", risk_dim),
+        ("optionality", optionality),
+    ]
+    .into_iter()
+    .filter(|&(_, v)| v.total_cmp(&0.0) != std::cmp::Ordering::Equal)
+    .map(|(label, v)| format!("{label} {v:+.1}"))
+    .collect::<Vec<_>>()
+    .join(", ")
+}
+
+/// The m=0 scoped-disclosure line (design §2 / F-6, SL-217 D6 wording).
+fn zero_weight_fragment(count: usize) -> String {
+    let noun = if count == 1 { "pair" } else { "pairs" };
+    format!("{count} {noun} value-insensitive, zero weight")
+}
+
+/// The design-schema JSON for a [`ReasonKind::Tension`] (design §3:
+/// `{preferred, surfaced, cause, edge?, deltas?, grade, counts?}`) — the SINGLE
+/// structure source shared by `next --json`'s `tensions` array and `explain
+/// --json`. `None` for any non-tension reason.
+pub(crate) fn tension_json(reason: &ReasonKind) -> Option<serde_json::Value> {
+    let ReasonKind::Tension {
+        preferred,
+        surfaced,
+        cause,
+        grade,
+    } = reason
+    else {
+        return None;
+    };
+    let mut obj = serde_json::json!({
+        "preferred": preferred,
+        "surfaced": surfaced,
+    });
+    let map = obj.as_object_mut()?;
+    match cause {
+        TensionCauseView::Structure { edge_from, verb } => {
+            map.insert("cause".into(), serde_json::json!("structure"));
+            let verb = match verb {
+                EdgeVerb::After => "after",
+                EdgeVerb::Needs => "needs",
+            };
+            map.insert(
+                "edge".into(),
+                serde_json::json!({ "from": edge_from, "verb": verb }),
+            );
+        }
+        TensionCauseView::Composition {
+            risk_dim,
+            leverage,
+            optionality,
+        } => {
+            map.insert("cause".into(), serde_json::json!("composition"));
+            map.insert(
+                "deltas".into(),
+                serde_json::json!({
+                    "risk_dim": risk_dim,
+                    "leverage": leverage,
+                    "optionality": optionality,
+                }),
+            );
+        }
+    }
+    let (grade_tok, counts) = match grade {
+        TensionGradeView::Determined { human, agent } => ("determined", Some((*human, *agent))),
+        TensionGradeView::AgentProposed { agent } => ("agent_proposed", Some((0, *agent))),
+        TensionGradeView::Projected => ("projected", None),
+    };
+    map.insert("grade".into(), serde_json::json!(grade_tok));
+    if let Some((human, agent)) = counts {
+        map.insert(
+            "counts".into(),
+            serde_json::json!({ "human": human, "agent": agent }),
+        );
+    }
+    Some(obj)
 }
 
 /// SL-218 D2 disclosure — the SINGLE wording source for the knob-on line on
@@ -410,6 +624,9 @@ pub(crate) fn explain_human(ex: &Explanation) -> String {
         parts.push(reason_line(r));
     }
     parts.push(reason_line(&ex.score));
+    // SL-218 PHASE-03 (design §3): the tensions section, after score. Both classes
+    // for a frontier id; the "not on the current frontier" disclosure otherwise.
+    parts.push(explain_tension_section(ex));
     if let Some(r) = &ex.value_source {
         parts.push(reason_line(r));
     }
@@ -420,6 +637,17 @@ pub(crate) fn explain_human(ex: &Explanation) -> String {
         parts.push(reason_line(r));
     }
     parts.concat()
+}
+
+/// The `explain` tensions section (design §3): every tension involving the id
+/// (both classes, already filtered in the surface shell) as reason lines; or the
+/// "not on the current frontier" disclosure when the id is not actionable. Empty
+/// for a frontier id with no tensions (nothing to say).
+fn explain_tension_section(ex: &Explanation) -> String {
+    if !ex.on_frontier {
+        return "  not on the current frontier — no tension analysis\n".to_string();
+    }
+    ex.tensions.iter().map(reason_line).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -702,6 +930,17 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
             "kind": "agent_evidence_demoted",
             "text": AGENT_DEMOTION_DISCLOSURE,
         }),
+        ReasonKind::Tension { .. } => {
+            let mut v = tension_json(reason).unwrap_or_else(|| serde_json::json!({}));
+            if let Some(obj) = v.as_object_mut() {
+                obj.insert("kind".into(), serde_json::json!("tension"));
+            }
+            v
+        }
+        ReasonKind::ZeroWeightExcluded { count } => serde_json::json!({
+            "kind": "zero_weight_excluded",
+            "count": count,
+        }),
     }
 }
 
@@ -738,8 +977,9 @@ pub(crate) fn survey_json(rows: &[SurveyRow]) -> anyhow::Result<String> {
 }
 
 /// `next --json` — actionable rows in the score-aware frontier order, full surface.
-pub(crate) fn next_json(rows: &[NextRow]) -> anyhow::Result<String> {
-    let rows: Vec<serde_json::Value> = rows
+pub(crate) fn next_json(view: &NextView) -> anyhow::Result<String> {
+    let rows: Vec<serde_json::Value> = view
+        .rows
         .iter()
         .map(|r| {
             serde_json::json!({
@@ -754,10 +994,16 @@ pub(crate) fn next_json(rows: &[NextRow]) -> anyhow::Result<String> {
             })
         })
         .collect();
+    // SL-218 PHASE-03: the FULL structured tension list, uncapped (the
+    // `TENSION_MAX_CALLOUTS` cap is a human-render bound only, design §3). Both
+    // classes; the page-scoped m=0 disclosure rides alongside as `zero_weight`.
+    let tensions: Vec<serde_json::Value> = view.tensions.iter().filter_map(tension_json).collect();
     finish(&serde_json::json!({
         "kind": "next",
         "policy_version": PRIORITY_POLICY_VERSION,
         "rows": rows,
+        "tensions": tensions,
+        "zero_weight": view.zero_weight.as_ref().map(reason_json),
     }))
 }
 
@@ -788,6 +1034,10 @@ pub(crate) fn explain_json(ex: &Explanation) -> anyhow::Result<String> {
         "score": reason_json(&ex.score),
         "value_source": ex.value_source.as_ref().map(reason_json),
         "priority_disclosure": ex.priority_disclosure.as_ref().map(reason_json),
+        // SL-218 PHASE-03: tensions involving this id (both classes, filtered in
+        // the surface shell) + frontier participation (design §2 considered-set).
+        "on_frontier": ex.on_frontier,
+        "tensions": ex.tensions.iter().filter_map(tension_json).collect::<Vec<_>>(),
     });
     // SL-218 D2: ADDITIVE key, knob-on only — knob-off bytes stay identical
     // to shipped output (INV-1), unlike the always-present nullable fields.
@@ -824,6 +1074,16 @@ mod tests {
     use crate::value::ValueFacet;
 
     /// Build a bare NextRow with no facets (estimate/value/tags absent).
+    /// Wrap rows in a tension-free `NextView` for the table/pagination tests
+    /// (SL-218 PHASE-03 — tension rendering is covered by the e2e goldens).
+    fn nv(rows: &[NextRow]) -> NextView {
+        NextView {
+            rows: rows.to_vec(),
+            tensions: Vec::new(),
+            zero_weight: None,
+        }
+    }
+
     fn bare_row(id: &str) -> NextRow {
         NextRow {
             id: id.to_string(),
@@ -873,11 +1133,12 @@ mod tests {
     fn vt1_columns_id_score_emits_exact_headers() {
         let rows = vec![bare_row("ISS-001")];
         let out = next_human(
-            &rows,
+            &nv(&rows),
             RenderOpts::default(),
             Some(&["id".to_string(), "score".to_string()]),
             20,
             0,
+            false,
         )
         .unwrap();
         assert!(header(&out).contains("id"), "header has id: {out}");
@@ -889,11 +1150,12 @@ mod tests {
     fn vt1_columns_bogus_errors_with_available_set() {
         let rows = vec![bare_row("ISS-001")];
         let err = next_human(
-            &rows,
+            &nv(&rows),
             RenderOpts::default(),
             Some(&["bogus".to_string()]),
             20,
             0,
+            false,
         )
         .unwrap_err()
         .to_string();
@@ -906,7 +1168,7 @@ mod tests {
     #[test]
     fn vt2_default_headers_no_kind_no_unblocks() {
         let rows = vec![bare_row("ISS-001")];
-        let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
         let h = header(&out);
         assert!(h.contains("id"), "header has id: {h}");
         assert!(h.contains("status"), "header has status: {h}");
@@ -922,11 +1184,12 @@ mod tests {
     fn vt2_columns_unblocks_errors_no_such_column() {
         let rows = vec![bare_row("ISS-001")];
         let err = next_human(
-            &rows,
+            &nv(&rows),
             RenderOpts::default(),
             Some(&["unblocks".to_string()]),
             20,
             0,
+            false,
         )
         .unwrap_err()
         .to_string();
@@ -941,7 +1204,7 @@ mod tests {
             bare_row("ISS-001"),
             faceted_row("ISS-002", 0.0, 10.0, 5.0, &["cli:command"]),
         ];
-        let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
         assert!(
             header(&out).contains("tags"),
             "tags column appears when any row tagged: {out}"
@@ -951,7 +1214,7 @@ mod tests {
     #[test]
     fn vt3_tags_column_hidden_when_none_tagged() {
         let rows = vec![bare_row("ISS-001"), bare_row("ISS-002")];
-        let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
         assert!(
             !header(&out).contains("tags"),
             "tags column hidden when none tagged: {out}"
@@ -962,11 +1225,12 @@ mod tests {
     fn vt3_columns_tags_forces_column_even_all_empty() {
         let rows = vec![bare_row("ISS-001")];
         let out = next_human(
-            &rows,
+            &nv(&rows),
             RenderOpts::default(),
             Some(&["id".to_string(), "tags".to_string()]),
             20,
             0,
+            false,
         )
         .unwrap();
         assert!(
@@ -980,14 +1244,14 @@ mod tests {
     #[test]
     fn vt4_format_bound_estimate_fractional() {
         let rows = vec![faceted_row("ISS-001", 3.2, 4.8, 5.0, &[])];
-        let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
         assert!(out.contains(" 3.2 -  4.8"), "fractional estimate: {out}");
     }
 
     #[test]
     fn vt4_format_bound_estimate_integral() {
         let rows = vec![faceted_row("ISS-001", 3.0, 8.0, 5.0, &[])];
-        let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
         assert!(
             out.contains(" 3.0 -  8.0"),
             "integral estimate shows .0: {out}"
@@ -997,7 +1261,7 @@ mod tests {
     #[test]
     fn vt4_format_bound_value_integral() {
         let rows = vec![faceted_row("ISS-001", 3.0, 8.0, 5.0, &[])];
-        let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
         // value 5.0 → "5.0" via format_bound (always one decimal)
         assert!(
             out.contains(" 5.0 ") || out.contains("│5.0│"),
@@ -1008,14 +1272,14 @@ mod tests {
     #[test]
     fn vt4_format_bound_value_fractional() {
         let rows = vec![faceted_row("ISS-001", 3.0, 8.0, 5.5, &[])];
-        let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
         assert!(out.contains("5.5"), "fractional value 5.5: {out}");
     }
 
     #[test]
     fn vt4_absent_cell_for_bare_row() {
         let rows = vec![bare_row("ISS-001")];
-        let out = next_human(&rows, RenderOpts::default(), None, 20, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
         assert!(out.contains(ABSENT_CELL), "bare row has ABSENT_CELL: {out}");
     }
 
@@ -1061,7 +1325,7 @@ mod tests {
     #[test]
     fn vt_pagination_limit_shows_footer() {
         let rows = five_rows();
-        let out = next_human(&rows, RenderOpts::default(), None, 2, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 2, 0, false).unwrap();
         assert!(out.contains("ISS-001"), "page 1 row 1: {out}");
         assert!(out.contains("ISS-002"), "page 1 row 2: {out}");
         assert!(!out.contains("ISS-003"), "row 3 clipped: {out}");
@@ -1073,7 +1337,7 @@ mod tests {
     #[test]
     fn vt_pagination_offset_slices_and_advances_page() {
         let rows = five_rows();
-        let out = next_human(&rows, RenderOpts::default(), None, 2, 2).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 2, 2, false).unwrap();
         assert!(out.contains("ISS-003"), "offset page row 3: {out}");
         assert!(out.contains("ISS-004"), "offset page row 4: {out}");
         assert!(!out.contains("ISS-001"), "row 1 skipped: {out}");
@@ -1086,7 +1350,7 @@ mod tests {
     #[test]
     fn vt_pagination_limit_zero_uncapped_no_footer() {
         let rows = five_rows();
-        let out = next_human(&rows, RenderOpts::default(), None, 0, 0).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 0, 0, false).unwrap();
         for n in 1..=5 {
             assert!(out.contains(&format!("ISS-00{n}")), "row {n} shown: {out}");
         }
@@ -1097,7 +1361,7 @@ mod tests {
     fn vt_pagination_limit_zero_with_offset_no_panic_no_footer() {
         // F1 guard: limit==0 with offset>0 must not divide by zero in the footer.
         let rows = five_rows();
-        let out = next_human(&rows, RenderOpts::default(), None, 0, 2).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 0, 2, false).unwrap();
         assert!(!out.contains("ISS-001"), "offset honoured: {out}");
         assert!(out.contains("ISS-003"), "rows[2..] shown: {out}");
         assert!(
@@ -1111,7 +1375,7 @@ mod tests {
     #[test]
     fn vt_pagination_offset_exceeds_total() {
         let rows = five_rows();
-        let out = next_human(&rows, RenderOpts::default(), None, 2, 10).unwrap();
+        let out = next_human(&nv(&rows), RenderOpts::default(), None, 2, 10, false).unwrap();
         assert!(
             out.contains("no results at this offset"),
             "offset-branch footer: {out}"
@@ -1130,12 +1394,12 @@ mod tests {
             bare_row("ISS-002"),
             faceted_row("ISS-003", 0.0, 1.0, 1.0, &["cli:command"]),
         ];
-        let page1 = next_human(&rows, RenderOpts::default(), None, 2, 0).unwrap();
+        let page1 = next_human(&nv(&rows), RenderOpts::default(), None, 2, 0, false).unwrap();
         assert!(
             !page1.lines().next().unwrap_or("").contains("tags"),
             "page 1 (no tagged row) hides tags column: {page1}"
         );
-        let page2 = next_human(&rows, RenderOpts::default(), None, 2, 2).unwrap();
+        let page2 = next_human(&nv(&rows), RenderOpts::default(), None, 2, 2, false).unwrap();
         assert!(
             page2.lines().next().unwrap_or("").contains("tags"),
             "page 2 (tagged row) shows tags column: {page2}"
@@ -1328,11 +1592,12 @@ mod tests {
         // Explicit --columns tags forces the column even on a page with no tagged row.
         let rows = vec![bare_row("ISS-001"), bare_row("ISS-002")];
         let out = next_human(
-            &rows,
+            &nv(&rows),
             RenderOpts::default(),
             Some(&["id".to_string(), "tags".to_string()]),
             2,
             0,
+            false,
         )
         .unwrap();
         assert!(

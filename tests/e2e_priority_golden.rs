@@ -333,12 +333,15 @@ fn explain_human_byte_exact() {
 
     let out = run(dir.path(), &["explain", "ISS-001"]);
     assert!(out.status.success(), "stderr: {}", stderr(&out));
+    // SL-218 PHASE-03: ISS-001 is blocked (not actionable) ⇒ off the frontier, so
+    // it gets the "not on the current frontier" tension disclosure (design §2).
     assert_eq!(
         stdout(&out),
         "ISS-001 — explain\n\
          \x20\x20eligibility: open → Workable\n\
          \x20\x20blocked by: RSK-001\n\
-         \x20\x20score: 1.0 (base 1.0 [value 1.0, risk 0.0], leverage 0.0, optionality 0.0)\n"
+         \x20\x20score: 1.0 (base 1.0 [value 1.0, risk 0.0], leverage 0.0, optionality 0.0)\n\
+         \x20\x20not on the current frontier — no tension analysis\n"
     );
 }
 

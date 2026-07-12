@@ -95,7 +95,11 @@ pub(crate) fn run_survey(
 /// `doctrine next [--json] [--columns <CSV>] [--limit N] [--offset N] [--page N]`
 /// (design §5.4) — the actionable-only advisory worklist. `columns` is the
 /// `--columns` projection; `limit`/`offset` are the pagination slice
-/// (ignored under `--json`).
+/// (ignored under `--json`); `verbose` adds composition tension callouts (SL-218).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "CLI surface: path+format+json+render+columns+limit+offset+verbose = 8 — each independently meaningful, no natural sub-struct (mirrors run_survey)"
+)]
 pub(crate) fn run_next(
     path: Option<PathBuf>,
     format: Format,
@@ -104,13 +108,21 @@ pub(crate) fn run_next(
     columns: Option<&Vec<String>>,
     limit: usize,
     offset: usize,
+    verbose: bool,
 ) -> anyhow::Result<()> {
     let root = root(path)?;
-    let rows = surface::next(&root)?;
+    let view = surface::next(&root)?;
     let out = if json || format == Format::Json {
-        render::next_json(&rows)?
+        render::next_json(&view)?
     } else {
-        render::next_human(&rows, render, columns.map(Vec::as_slice), limit, offset)?
+        render::next_human(
+            &view,
+            render,
+            columns.map(Vec::as_slice),
+            limit,
+            offset,
+            verbose,
+        )?
     };
     write!(io::stdout(), "{out}")?;
     Ok(())

@@ -36,10 +36,13 @@ use super::graph::{self, NodeAttr, PriorityGraph};
 // reuses them byte-identically (the detectors share the same implementation).
 use super::order::{frontier_order, surviving_seq_predecessors};
 use super::partition::{StatusClass, status_class};
-use super::tension::{self, DetectInputs, EdgeKind, EvidenceGrade, PredEdge, Tension};
+use super::tension::{
+    self, DetectInputs, EdgeKind, EvidenceGrade, PredEdge, Tension, TensionCause,
+};
 use super::view::{
     Actionability, ActionabilityBlock, ActionabilityEdge, ActionabilityNode, ActionabilityView,
-    BlockersView, Explanation, NextRow, ReasonKind, SurveyRow,
+    BlockersView, EdgeVerb, Explanation, NextRow, NextView, ReasonKind, SurveyRow,
+    TensionCauseView, TensionGradeView,
 };
 
 /// The per-node attrs entry, or the defensive `None` path (a caller bug — every
@@ -381,8 +384,15 @@ pub(crate) fn survey_view_for_map(g: &PriorityGraph, all: bool) -> Actionability
 /// induced-frontier order over the SURVIVING seq edges (`seq_overlay` − evictions). The
 /// workable-but-BLOCKED items are ABSENT (the divergence feature). Advisory; mutates
 /// nothing. NOT cordage `order_key` (it ranks Level before `NodeId`; RV-132 F-3).
-pub(crate) fn next(root: &Path) -> anyhow::Result<Vec<NextRow>> {
-    let g = graph::build(root)?;
+pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
+    // Load via the comparison pipeline (like `explain`) — the tension grades need
+    // the compiled determinacy view. The graph is byte-identical to the old
+    // `graph::build` path (`build_from` loads the SAME `pipeline.projection`), so
+    // row order/score are unchanged; only the additive tension surfaces are new.
+    let scanned = relation_graph::scan_entities(root, &mut vec![], ScanMode::default())?;
+    let cfg = super::config::load(root);
+    let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
+    let g = graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.projection)?;
     // The actionable, non-promoted set (a promoted item is excluded by its own reason,
     // F1 / REQ-075 AC2 — the same exclusion `survey` applies).
     let actionable_set: std::collections::BTreeSet<EntityKey> = g
@@ -430,7 +440,22 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<Vec<NextRow>> {
             }
         })
         .collect();
-    Ok(rows)
+
+    // Tensions: the FULL frontier (design §3 — JSON carries the uncapped list);
+    // the renderer page-filters to visible rows and caps the human callout block.
+    let tensions = graded_tensions(&g, &pipeline, &cfg, usize::MAX)
+        .iter()
+        .map(tension_reason)
+        .collect();
+    let zero_weight = match frontier_zero_weight(&g, &cfg, usize::MAX) {
+        0 => None,
+        count => Some(ReasonKind::ZeroWeightExcluded { count }),
+    };
+    Ok(NextView {
+        rows,
+        tensions,
+        zero_weight,
+    })
 }
 
 /// Resolve the canonical ref `id` to an [`EntityKey`] — a clean error for an unknown
@@ -525,8 +550,21 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
             count: pipeline.priority_domain_count,
         });
 
+    // Tensions: explain considers the WHOLE frontier (design §2 considered-set —
+    // `page_k = usize::MAX`), then keeps only those involving this id, as surfaced
+    // member OR off-page preferred counterparty (the displaced-item story explain
+    // exists to tell). `on_frontier` gates the "not on the current frontier"
+    // disclosure for non-actionable ids.
+    let id_ref = key.canonical();
+    let on_frontier = channels::actionable(&g, key) && !channels::promoted(&g, key);
+    let tensions: Vec<ReasonKind> = graded_tensions(&g, &pipeline, &cfg, usize::MAX)
+        .iter()
+        .filter(|t| t.preferred == key || t.surfaced == key)
+        .map(tension_reason)
+        .collect();
+
     Ok(Explanation {
-        id: key.canonical(),
+        id: id_ref,
         eligibility,
         blocker_chain,
         evictions,
@@ -537,29 +575,46 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
             .compare
             .demote_agent_evidence
             .then_some(ReasonKind::AgentEvidenceDemoted),
-        // explain considers the WHOLE frontier (design §2 considered-set): every
-        // frontier member is on-page, so `page_k = usize::MAX`. PHASE-03 filters
-        // to the explained id at render.
-        tensions: graded_tensions(&g, &pipeline, &cfg, usize::MAX),
+        tensions,
+        on_frontier,
     })
 }
 
-/// Detect and grade the frontier's tensions (SL-218 PHASE-02, design §2). The
-/// pure [`tension::detect`] scan over the frontier's `value_dim` vs delivery
-/// orders, each inversion graded through the SHIPPED determinacy machinery (the
-/// elicit pattern): the verdict system is the human-rows-only compile when the
-/// knob is on, the full pipeline compile otherwise (SL-218 D1). Grade and elicit
-/// queue therefore read the SAME predicate over the SAME system selection
-/// (design F-1/F-7, one truth per question). `page_k` bounds the surfaced
-/// member's delivery rank (`usize::MAX` = the full frontier, explain's view).
-pub(crate) fn graded_tensions(
-    g: &PriorityGraph,
-    pipeline: &comparison::Pipeline,
-    cfg: &PriorityConfig,
-    page_k: usize,
-) -> Vec<Tension> {
-    // Frontier delivery order over the actionable, non-promoted set — the SAME
-    // basis `next`/`explain` render (surviving-seq precedence, score tiebreak).
+/// The owned detection projections for the actionable frontier (design §2) —
+/// built once off the graph, borrowed by [`DetectInputs`]. Shared by
+/// [`graded_tensions`] and [`frontier_zero_weight`] so both scan the SAME basis.
+struct FrontierProjections {
+    order: Vec<EntityKey>,
+    value_dim: BTreeMap<EntityKey, f64>,
+    multiplier: BTreeMap<EntityKey, f64>,
+    full_score: BTreeMap<EntityKey, f64>,
+    risk_dim: BTreeMap<EntityKey, f64>,
+    leverage: BTreeMap<EntityKey, f64>,
+    optionality: BTreeMap<EntityKey, f64>,
+    preds: BTreeMap<EntityKey, Vec<PredEdge>>,
+}
+
+impl FrontierProjections {
+    fn inputs(&self, page_k: usize) -> DetectInputs<'_> {
+        DetectInputs {
+            delivery_order: &self.order,
+            page_k,
+            value_dim: &self.value_dim,
+            multiplier: &self.multiplier,
+            full_score: &self.full_score,
+            risk_dim: &self.risk_dim,
+            leverage: &self.leverage,
+            optionality: &self.optionality,
+            preds: &self.preds,
+        }
+    }
+}
+
+/// Build the frontier delivery order + per-node projection maps + the merged
+/// surviving seq(`after`)+dep(`needs`) predecessor graph — the SAME basis
+/// `next`/`explain` render (surviving-seq precedence, score tiebreak). Read once
+/// off the graph, never re-derived.
+fn frontier_projections(g: &PriorityGraph, cfg: &PriorityConfig) -> FrontierProjections {
     let actionable_set: BTreeSet<EntityKey> = g
         .attrs
         .keys()
@@ -570,20 +625,10 @@ pub(crate) fn graded_tensions(
     let seq_preds = surviving_seq_predecessors(g, &actionable_set);
     let order = frontier_order(&actionable, &|k| channels::score(g, k), &seq_preds);
 
-    // Detection projections (read once off the graph — never re-derived).
     let map = |f: &dyn Fn(EntityKey) -> f64| -> BTreeMap<EntityKey, f64> {
         actionable.iter().map(|&k| (k, f(k))).collect()
     };
-    let value_dim = map(&|k| channels::value_dim(g, k));
-    let risk_dim = map(&|k| channels::risk_dim(g, k));
-    let leverage = map(&|k| channels::leverage(g, k));
-    let optionality = map(&|k| channels::optionality(g, k));
-    let full_score = map(&|k| channels::score(g, k));
-    let multiplier = map(&|k| g.item_costing(&k, cfg).map_or(0.0, |(m, _, _)| m));
 
-    // Merged surviving seq+dep predecessor graph restricted to the frontier:
-    // seq (`after`) from the order primitive, dep (`needs`) from the direct
-    // blocked-by set. Structure reachability walks this graph (design D4).
     let mut preds: BTreeMap<EntityKey, Vec<PredEdge>> = BTreeMap::new();
     for &k in &actionable {
         let mut edges: Vec<PredEdge> = seq_preds
@@ -608,17 +653,81 @@ pub(crate) fn graded_tensions(
         }
     }
 
-    let detected = tension::detect(&DetectInputs {
-        delivery_order: &order,
-        page_k,
-        value_dim: &value_dim,
-        multiplier: &multiplier,
-        full_score: &full_score,
-        risk_dim: &risk_dim,
-        leverage: &leverage,
-        optionality: &optionality,
-        preds: &preds,
-    });
+    FrontierProjections {
+        value_dim: map(&|k| channels::value_dim(g, k)),
+        risk_dim: map(&|k| channels::risk_dim(g, k)),
+        leverage: map(&|k| channels::leverage(g, k)),
+        optionality: map(&|k| channels::optionality(g, k)),
+        full_score: map(&|k| channels::score(g, k)),
+        multiplier: map(&|k| g.item_costing(&k, cfg).map_or(0.0, |(m, _, _)| m)),
+        order,
+        preds,
+    }
+}
+
+/// The F-6 m=0 scoped-disclosure count for the frontier page (design §2) — the
+/// value inversions [`tension::detect`] dropped because a member is
+/// value-insensitive. Same projection basis as [`graded_tensions`].
+pub(crate) fn frontier_zero_weight(
+    g: &PriorityGraph,
+    cfg: &PriorityConfig,
+    page_k: usize,
+) -> usize {
+    tension::zero_weight_excluded(&frontier_projections(g, cfg).inputs(page_k))
+}
+
+/// Convert a graded [`Tension`] into its render arm (design §3). The surface
+/// shell canonicalizes the `EntityKey`s here (view.rs convention) so the renderer
+/// only formats — never recomputes ids or wording (REQ-072 AC3).
+pub(crate) fn tension_reason(t: &Tension) -> ReasonKind {
+    let cause = match t.cause {
+        TensionCause::Structure { edge } => TensionCauseView::Structure {
+            edge_from: edge.from.canonical(),
+            verb: match edge.kind {
+                EdgeKind::Seq => EdgeVerb::After,
+                EdgeKind::Dep => EdgeVerb::Needs,
+            },
+        },
+        TensionCause::Composition { deltas } => TensionCauseView::Composition {
+            risk_dim: deltas.risk_dim,
+            leverage: deltas.leverage,
+            optionality: deltas.optionality,
+        },
+    };
+    let grade = match t.grade {
+        EvidenceGrade::Determined { counts } => TensionGradeView::Determined {
+            human: counts.human,
+            agent: counts.agent,
+        },
+        EvidenceGrade::AgentProposed { counts } => TensionGradeView::AgentProposed {
+            agent: counts.agent,
+        },
+        EvidenceGrade::Projected => TensionGradeView::Projected,
+    };
+    ReasonKind::Tension {
+        preferred: t.preferred.canonical(),
+        surfaced: t.surfaced.canonical(),
+        cause,
+        grade,
+    }
+}
+
+/// Detect and grade the frontier's tensions (SL-218 PHASE-02, design §2). The
+/// pure [`tension::detect`] scan over the frontier's `value_dim` vs delivery
+/// orders, each inversion graded through the SHIPPED determinacy machinery (the
+/// elicit pattern): the verdict system is the human-rows-only compile when the
+/// knob is on, the full pipeline compile otherwise (SL-218 D1). Grade and elicit
+/// queue therefore read the SAME predicate over the SAME system selection
+/// (design F-1/F-7, one truth per question). `page_k` bounds the surfaced
+/// member's delivery rank (`usize::MAX` = the full frontier, explain's view).
+pub(crate) fn graded_tensions(
+    g: &PriorityGraph,
+    pipeline: &comparison::Pipeline,
+    cfg: &PriorityConfig,
+    page_k: usize,
+) -> Vec<Tension> {
+    let proj = frontier_projections(g, cfg);
+    let detected = tension::detect(&proj.inputs(page_k));
     if detected.is_empty() {
         return Vec::new();
     }
@@ -1201,7 +1310,7 @@ mod tests {
     }
 
     fn next_ids(root: &Path) -> Vec<String> {
-        next(root).unwrap().into_iter().map(|r| r.id).collect()
+        next(root).unwrap().rows.into_iter().map(|r| r.id).collect()
     }
 
     fn survey_ids(root: &Path) -> Vec<String> {

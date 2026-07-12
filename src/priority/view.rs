@@ -93,6 +93,63 @@ pub(crate) enum ReasonKind {
     /// state, not entity evidence — present only when on, so knob-off
     /// surfaces stay byte-identical (INV-1).
     AgentEvidenceDemoted,
+    /// SL-218 PHASE-03 (design §3) — one rendered frontier tension: `preferred`
+    /// outranks `surfaced` on `value_dim` yet `surfaced` surfaces first. Canonical
+    /// ids (the surface shell maps `tension::Tension`'s `EntityKey`s here). The
+    /// render SOURCE OF TRUTH for every tension line — `reason_line` (human) and
+    /// `reason_json` format from this, never recompute (REQ-072 AC3).
+    Tension {
+        preferred: String,
+        surfaced: String,
+        cause: TensionCauseView,
+        grade: TensionGradeView,
+    },
+    /// SL-218 PHASE-03 (design §2 / F-6) — the page-scoped m=0 disclosure: `count`
+    /// value inversions were excluded because a member is value-insensitive
+    /// (`m = 0`). Present only when `count > 0` (SL-217 D6 scoped-disclosure).
+    ZeroWeightExcluded { count: usize },
+}
+
+/// The render-facing cause of a [`ReasonKind::Tension`] (design §3). Structure
+/// cites the surviving edge (its keyword + tail drive the callout); Composition
+/// cites the full-score component deltas (surfaced − preferred).
+///
+/// NOT `Eq` — Composition carries `f64` deltas; `PartialEq` suffices.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum TensionCauseView {
+    /// A surviving seq/dep edge forces the inversion. `edge_from` is the cited
+    /// constraint's tail (the surfaced member — the first forward hop leaves it).
+    Structure { edge_from: String, verb: EdgeVerb },
+    /// No structural path — full-score dimensions lift the surfaced member.
+    Composition {
+        risk_dim: f64,
+        leverage: f64,
+        optionality: f64,
+    },
+}
+
+/// Which precedence overlay a Structure edge rode in on — drives the callout
+/// keyword (`after` vs `needs`) and tail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EdgeVerb {
+    /// A `seq` (`after`) edge — tail "sequence survives".
+    After,
+    /// A `dep` (`needs`) edge — tail "holds".
+    Needs,
+}
+
+/// The render-facing evidence grade of a [`ReasonKind::Tension`] (design D6).
+/// Counts come from the system that produced the verdict (RV-271 F-2/F-3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TensionGradeView {
+    /// The verdict system determines the order — that system's constraining
+    /// rater split.
+    Determined { human: u32, agent: u32 },
+    /// Knob-on: the full system determines, the human system does not — an
+    /// unconfirmed agent proposal. `agent` is the full system's agent split.
+    AgentProposed { agent: u32 },
+    /// No determining evidence in any consulted system.
+    Projected,
 }
 
 /// Whether an eligible node is ready to start now, or held by a blocker (design
@@ -161,6 +218,19 @@ pub(crate) struct NextRow {
     pub(crate) tags: Vec<String>,
 }
 
+/// The `next` command's full render model (SL-218 PHASE-03) — the actionable
+/// rows plus the frontier's graded tensions and the page's m=0 scoped
+/// disclosure. The tension list is the FULL frontier (design §3: JSON uncapped);
+/// the renderer page-filters to the visible rows and caps the human callout
+/// block. `tensions` are all [`ReasonKind::Tension`]; `zero_weight` is
+/// `Some(ReasonKind::ZeroWeightExcluded)` only when exclusions occurred.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct NextView {
+    pub(crate) rows: Vec<NextRow>,
+    pub(crate) tensions: Vec<ReasonKind>,
+    pub(crate) zero_weight: Option<ReasonKind>,
+}
+
 /// The `blockers <ID>` result (design §5.4 / REQ-073) — the node's direct (or
 /// `--transitive`) blocked-by set and blocking set, in canonical refs. Display depth
 /// (`transitive`) is a presentation flag carried for the renderer; it NEVER reorders
@@ -210,10 +280,14 @@ pub(crate) struct Explanation {
     /// SL-218 D2 — the agent-demotion disclosure. `None` when the knob is
     /// off (surfaces byte-identical to shipped behaviour).
     pub(crate) agent_demotion: Option<ReasonKind>,
-    /// SL-218 PHASE-02 — the graded frontier tensions (design §2). Assembled on
-    /// the explain path but NOT rendered until PHASE-03, so human/JSON output is
-    /// byte-identical this phase (EX-3).
-    pub(crate) tensions: Vec<crate::priority::tension::Tension>,
+    /// SL-218 PHASE-03 — the frontier tensions involving this id (design §3),
+    /// both classes, already converted to the render arm and filtered to this id
+    /// (`surfaced == id || preferred == id`). Empty when the id has none.
+    pub(crate) tensions: Vec<ReasonKind>,
+    /// SL-218 PHASE-03 (design §2 considered-set) — is this id on the current
+    /// frontier at all? `false` ⇒ render the "not on the current frontier"
+    /// disclosure instead of an (empty) tensions section.
+    pub(crate) on_frontier: bool,
 }
 
 // ── SL-089 actionability-graph view types ──────────────────────────────────

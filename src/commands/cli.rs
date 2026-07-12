@@ -347,6 +347,11 @@ pub(crate) enum Command {
         /// Page number (1-based; sugar over --offset). Mutually exclusive with --offset.
         #[arg(long, conflicts_with = "offset")]
         page: Option<usize>,
+
+        /// Also surface composition tension callouts (SL-218 — `value_dim` vs
+        /// full-score divergences), not only structure ones. JSON always carries both.
+        #[arg(long)]
+        verbose: bool,
     },
 
     /// Read-only blocker view.
@@ -1224,6 +1229,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             limit,
             offset,
             page,
+            verbose,
         } => {
             let resolved_offset = crate::priority::resolve_page_offset(page, limit, offset)?;
             crate::priority::run_next(
@@ -1237,6 +1243,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 columns.as_ref(),
                 limit,
                 resolved_offset,
+                verbose,
             )
         }
         Command::Blockers {
