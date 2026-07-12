@@ -287,3 +287,31 @@ in-jail). All the VT keyword contracts land here (verify-vt reads the
 median-probe pair to a zero-yield `Stalled` — so the estimated-participant golden
 uses a FRONTIER-PAIR (two constrained-but-mutually-indeterminate items), not a
 median probe. `doctrine check gate` exit 0; full workspace suite green.
+
+## PHASE-03 — T9/T10 behaviour preservation + finish
+
+**VA-1 (EX-3) evidence — behaviour-preservation holds:**
+- `git diff c9818d71..HEAD -- src/comparison/compile.rs src/comparison/project.rs`
+  is EMPTY — the propagation engine is untouched (not even accessors). The only
+  comparison-tier change is `store.rs` (+16, the T2 owned-`active_judgements` /
+  `anchors` exposures) + `wire.rs` (+6, the T2 `Clone` derives).
+- surface/render changes are additive read accessors + visibility only
+  (`value_source_reason` body UNCHANGED → explain goldens hold;
+  `class_bounds_structural` new; `value_source_fragment` `pub(crate)`).
+- No pre-existing test file modified: `e2e_compare_inference.rs` /
+  `e2e_priority_golden.rs` diff EMPTY; grep of all `src/**` deletions for
+  `#[test]` / `fn *test` / `mod tests` is EMPTY (no pre-existing test body
+  removed — all test changes are additive).
+- Full workspace suite green with no ledger / no invocation (`doctrine check
+  gate` exit 0).
+
+**T10:** `doctrine check gate` exit 0 (clippy 0 + full test + fmt). PHASE-03
+flipped `completed`. `verify-vt 217` VT-1..4 attributed PASS once the phase
+completed (before completion they read `UNATTRIBUTABLE` — the conformance range
+`[code_start, code_end]` is only closed by the flip). **VH-1 (human dogfood) is
+NOT agent-closable** — flagged for the User: run `doctrine compare elicit` over
+this repo's live backlog and confirm the queue renders answerable,
+reasons-attached questions with sane state wording. Verified live during dev
+(the queue rendered median-probe comparisons with structural value blocks +
+answer commands + the stable/candidates footer), but the acceptance is the
+User's.
