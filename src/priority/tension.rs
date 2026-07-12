@@ -615,4 +615,32 @@ mod tests {
             }
         );
     }
+
+    // ── SL-218 PHASE-03: F-6 m=0 scoped-disclosure count (design VT-D) ────────
+
+    #[test]
+    fn zero_weight_excluded_counts_m0_value_inversions() {
+        // B=1 has m=0; A=2 outranks B on value_dim ⇒ NOT a tension (detect drops it),
+        // but the render must disclose it: zero_weight counts exactly this pair.
+        let fx = Fx::new(&[
+            (1, 5.0, 0.0, 8.0, 0.0, 0.0, 0.0),
+            (2, 10.0, 1.0, 4.0, 0.0, 0.0, 0.0),
+        ]);
+        assert_eq!(zero_weight_excluded(&fx.inputs(2)), 1);
+        assert!(
+            detect(&fx.inputs(2)).is_empty(),
+            "m=0 pair is not a tension"
+        );
+    }
+
+    #[test]
+    fn zero_weight_excluded_ignores_full_weight_and_non_inversions() {
+        // Full-weight inversion is a tension (not zero-weight); an m=0 pair whose
+        // value order MATCHES delivery is no inversion ⇒ neither counted.
+        let fx = Fx::new(&[
+            (1, 10.0, 1.0, 8.0, 0.0, 0.0, 0.0), // higher value, surfaces first
+            (2, 5.0, 0.0, 4.0, 0.0, 0.0, 0.0),  // m=0 but lower value ⇒ no inversion
+        ]);
+        assert_eq!(zero_weight_excluded(&fx.inputs(2)), 0);
+    }
 }

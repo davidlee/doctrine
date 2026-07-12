@@ -606,3 +606,259 @@ fn inspect_json_additive_actionability_key() {
     // denominate (default 1.0) → score 1.0 (no fulfils r=0, burn = value_dim).
     assert_eq!(v["actionability"]["score"], 1.0);
 }
+
+// =============================================================================
+// SL-218 PHASE-03 — tension narrative render (design §3)
+// =============================================================================
+
+/// Seed a value-bearing issue with a verbatim `[relationships]` tail (may carry
+/// `after`/`needs` + a `[value]` table). The tail is appended after
+/// `[relationships]\n`, so it can open new tables (`[value]`).
+fn seed_val(root: &Path, id: u32, tail: &str) {
+    seed_issue(root, id, &format!("Issue {id}"), "open", "", tail);
+}
+
+/// Hand-author a one-row prefer-a comparison session (the wire shape `compare
+/// record` mints), `a` preferred over `b` in the value domain, by `rater`.
+fn capture(root: &Path, slot: &str, a: &str, b: &str, rater: &str) {
+    write(
+        root,
+        &format!(".doctrine/comparisons/2026-01-01-{slot}.toml"),
+        &format!(
+            "schema = \"doctrine.comparison-session\"\nversion = 2\n\n\
+             [session]\nuid = \"sess-{slot}\"\ndate = \"2026-01-01\"\n\n\
+             [[judgement]]\nuid = \"row-{slot}\"\nseq = 0\na = \"{a}\"\nb = \"{b}\"\n\
+             response = \"prefer-a\"\ndomain = \"value\"\nframe = \"equal-effort\"\n\
+             form = \"order\"\nrater = \"{rater}\"\ndate = \"2026-01-01\"\n"
+        ),
+    );
+}
+
+/// Turn the D7 knob on (`.doctrine/doctrine.toml` — the config load path, NOT the
+/// project-root `doctrine.toml`).
+fn knob_on(root: &Path) {
+    write(
+        root,
+        ".doctrine/doctrine.toml",
+        "[priority.compare]\ndemote_agent_evidence = true\n",
+    );
+}
+
+/// The structure-determined callout (design §3 sample 1) reaches BOTH `next` and
+/// `explain` (surfaced + off-page preferred), byte-exact, from a real corpus:
+/// ISS-014 (value 5, `after ISS-010`) outranks ISS-010 (value 1) on value_dim, but
+/// the surviving `after` sequence surfaces ISS-010 first (VT-1 / VT-2 / VT-E).
+#[test]
+fn next_structure_tension_reaches_next_and_explain() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_val(root, 10, "[value]\nvalue = 1.0\n");
+    seed_val(
+        root,
+        14,
+        "after = [[\"ISS-010\", 0]]\n[value]\nvalue = 5.0\n",
+    );
+    capture(root, "h1", "ISS-014", "ISS-010", "human");
+
+    let callout = "tension: ISS-014 ranks above ISS-010 on value_dim \
+                   (determined — 2 human judgements); ISS-010 surfaces first — \
+                   `after ISS-010` sequence survives.";
+
+    // next: the callout rides a trailing block under the page.
+    let next = stdout(&run(root, &["next"]));
+    assert!(
+        next.contains(&format!("\ntensions:\n  {callout}\n")),
+        "next tension block: {next}"
+    );
+
+    // explain of the SURFACED member (ISS-010) renders its tension after score.
+    let ex_surfaced = stdout(&run(root, &["explain", "ISS-010"]));
+    assert!(
+        ex_surfaced.contains(&format!("  {callout}\n")),
+        "{ex_surfaced}"
+    );
+
+    // explain of the PREFERRED member (ISS-014) — off the page but on the frontier
+    // — renders the same displaced-counterparty tension (F-4 / VT-H).
+    let ex_pref = stdout(&run(root, &["explain", "ISS-014"]));
+    assert!(ex_pref.contains(&format!("  {callout}\n")), "{ex_pref}");
+}
+
+/// `next --json` carries the full structured tension list (design §3 schema:
+/// preferred/surfaced/cause/edge/grade/counts) — additive, uncapped (VT-5).
+#[test]
+fn next_json_carries_structured_tensions() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_val(root, 10, "[value]\nvalue = 1.0\n");
+    seed_val(
+        root,
+        14,
+        "after = [[\"ISS-010\", 0]]\n[value]\nvalue = 5.0\n",
+    );
+    capture(root, "h1", "ISS-014", "ISS-010", "human");
+
+    let out = run(root, &["next", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid JSON");
+    let t = &v["tensions"][0];
+    assert_eq!(t["cause"], "structure");
+    assert_eq!(t["preferred"], "ISS-014");
+    assert_eq!(t["surfaced"], "ISS-010");
+    assert_eq!(t["edge"]["from"], "ISS-010");
+    assert_eq!(t["edge"]["verb"], "after");
+    assert_eq!(t["grade"], "determined");
+    assert_eq!(t["counts"]["human"], 2);
+    assert_eq!(t["counts"]["agent"], 0);
+    // Existing row surface is unchanged (lean-JSON reads tolerate the new key).
+    assert_eq!(v["rows"][0]["id"], "ISS-010");
+    assert!(v["zero_weight"].is_null());
+}
+
+/// Composition tensions are `next`-suppressed by default and pulled in by
+/// `--verbose` (design D5): ISS-024 (value 2, leverage from unblocking 3) surfaces
+/// above ISS-020 (value 3) on full score, but ISS-020 outranks it on value_dim
+/// alone. No structural path ⇒ Composition (VT-1 verbose clause).
+#[test]
+fn next_composition_hidden_by_default_shown_verbose() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_val(root, 20, "[value]\nvalue = 3.0\n");
+    seed_val(root, 24, "[value]\nvalue = 2.0\n");
+    for d in [30u32, 31, 32] {
+        seed_val(root, d, "needs = [\"ISS-024\"]\n");
+    }
+
+    // Default: structure-only ⇒ no tension block at all.
+    let default = stdout(&run(root, &["next"]));
+    assert!(
+        !default.contains("tensions:"),
+        "no callout by default: {default}"
+    );
+
+    // --verbose pulls the composition callout in.
+    let verbose = stdout(&run(root, &["next", "--verbose"]));
+    assert!(
+        verbose.contains(
+            "ISS-024 surfaces above ISS-020 on full score (leverage +1.5); on value_dim \
+             alone ISS-020 ranks higher (projected order — no determining evidence)."
+        ),
+        "verbose composition callout: {verbose}"
+    );
+    // JSON carries composition regardless of --verbose.
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout(&run(root, &["next", "--json"]))).expect("json");
+    assert_eq!(v["tensions"][0]["cause"], "composition");
+    assert_eq!(v["tensions"][0]["deltas"]["leverage"], 1.5);
+}
+
+/// The human callout block caps at `TENSION_MAX_CALLOUTS` (3); `--json` carries
+/// the full uncapped list (VT-6). Four higher-value items all `after` a single
+/// low-value item ⇒ four structure tensions on one page.
+#[test]
+fn next_tension_callouts_capped_json_uncapped() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_val(root, 1, "[value]\nvalue = 1.0\n");
+    for d in [2u32, 3, 4, 5] {
+        seed_val(
+            root,
+            d,
+            &format!("after = [[\"ISS-001\", 0]]\n[value]\nvalue = {}.0\n", d + 5),
+        );
+    }
+
+    let human = stdout(&run(root, &["next"]));
+    let callouts = human.matches("  tension:").count();
+    assert_eq!(callouts, 3, "human callouts capped at 3: {human}");
+
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout(&run(root, &["next", "--json"]))).expect("json");
+    assert_eq!(
+        v["tensions"].as_array().expect("array").len(),
+        4,
+        "JSON tension list uncapped"
+    );
+}
+
+/// Knob-state wording (design VT-J): an agent-only-determined pair reads
+/// `agent-proposed … unconfirmed` with the demotion disclosure when the D7 knob is
+/// on; the SAME corpus reads `determined … agent judgements` (T7 disclosure) with
+/// the knob off (VT-4).
+#[test]
+fn tension_grade_tracks_knob_agent_proposed_vs_determined() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_val(root, 10, "");
+    seed_val(root, 14, "after = [[\"ISS-010\", 0]]\n");
+    capture(root, "a1", "ISS-014", "ISS-010", "agent");
+
+    // Knob OFF: agent evidence determines the order, disclosed (T7 ship posture).
+    let off = stdout(&run(root, &["next"]));
+    assert!(
+        off.contains("(determined — 2 agent judgements)"),
+        "knob-off determined: {off}"
+    );
+
+    // Knob ON: the human system cannot retire it ⇒ agent-proposed, unconfirmed.
+    knob_on(root);
+    let on = stdout(&run(root, &["explain", "ISS-010"]));
+    assert!(
+        on.contains("(agent-proposed — 2 agent judgements, unconfirmed)"),
+        "knob-on agent-proposed: {on}"
+    );
+    assert!(
+        on.contains("agent evidence demoted:"),
+        "knob-on disclosure present: {on}"
+    );
+}
+
+/// Cross-surface agreement (design VT-I / F-1/F-7): grades and the elicit queue
+/// never disagree about the same pair. Knob-off, the agent-determined pair is
+/// retired (`next` grades it `determined`, `compare elicit` offers nothing); knob-on
+/// it is `agent-proposed` and re-enters the elicit queue as a live candidate.
+#[test]
+fn tension_grade_agrees_with_elicit_queue_both_knob_states() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_val(root, 10, "");
+    seed_val(root, 14, "after = [[\"ISS-010\", 0]]\n");
+    capture(root, "a1", "ISS-014", "ISS-010", "agent");
+
+    // Knob off: determined ⇒ elicit retires it (no candidate for the pair).
+    let next_off = stdout(&run(root, &["next", "--json"]));
+    let v: serde_json::Value = serde_json::from_str(&next_off).expect("json");
+    assert_eq!(v["tensions"][0]["grade"], "determined");
+    let elicit_off = stdout(&run(root, &["compare", "elicit"]));
+    assert!(
+        !elicit_off.contains("ISS-014 vs ISS-010") && !elicit_off.contains("ISS-010 vs ISS-014"),
+        "knob-off: determined pair NOT offered: {elicit_off}"
+    );
+
+    // Knob on: agent-proposed ⇒ elicit offers the pair (human confirmation pressure).
+    knob_on(root);
+    let v_on: serde_json::Value =
+        serde_json::from_str(&stdout(&run(root, &["next", "--json"]))).expect("json");
+    assert_eq!(v_on["tensions"][0]["grade"], "agent_proposed");
+    let elicit_on = stdout(&run(root, &["compare", "elicit"]));
+    assert!(
+        elicit_on.contains("ISS-014 vs ISS-010") || elicit_on.contains("ISS-010 vs ISS-014"),
+        "knob-on: agent-proposed pair offered: {elicit_on}"
+    );
+}
+
+/// A minted-but-non-actionable id (blocked ⇒ off the frontier) gets the "not on
+/// the current frontier" disclosure, never invented tensions (design §2 / VT-H).
+#[test]
+fn explain_off_frontier_id_gets_disclosure() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_risk(root, 1, "Prereq", "open", "");
+    seed_val(root, 10, "needs = [\"RSK-001\"]\n"); // blocked ⇒ not actionable
+
+    let out = stdout(&run(root, &["explain", "ISS-010"]));
+    assert!(
+        out.contains("  not on the current frontier — no tension analysis\n"),
+        "off-frontier disclosure: {out}"
+    );
+    assert!(!out.contains("tension:"), "no invented tensions: {out}");
+}

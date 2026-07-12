@@ -1605,4 +1605,144 @@ mod tests {
             "explicit --columns tags overrides the visible-page gate: {out}"
         );
     }
+
+    // ── SL-218 PHASE-03: the four design §3 wording samples (VT-E) ────────────
+    // The render source of truth (REQ-072 AC3) — `reason_line` over a
+    // `ReasonKind::Tension` must produce each sample byte-exact. Pinned here as
+    // pure unit tests (the `needs`/agent-proposed determinacy states are awkward
+    // to reach through a black-box corpus; the e2e goldens cover the reachable
+    // integration paths). Constraints: `value_dim` named (SL-217 D5), no
+    // stability/membership language (D15), grade + counts always present (D6).
+
+    fn structure(edge_from: &str, verb: EdgeVerb, grade: TensionGradeView) -> ReasonKind {
+        ReasonKind::Tension {
+            preferred: "SL-014".to_string(),
+            surfaced: "SL-009".to_string(),
+            cause: TensionCauseView::Structure {
+                edge_from: edge_from.to_string(),
+                verb,
+            },
+            grade,
+        }
+    }
+
+    #[test]
+    fn tension_sample_structure_determined() {
+        let r = structure(
+            "SL-009",
+            EdgeVerb::After,
+            TensionGradeView::Determined { human: 3, agent: 0 },
+        );
+        assert_eq!(
+            reason_line(&r),
+            "  tension: SL-014 ranks above SL-009 on value_dim (determined — 3 human \
+             judgements); SL-009 surfaces first — `after SL-009` sequence survives.\n"
+        );
+    }
+
+    #[test]
+    fn tension_sample_structure_projected() {
+        let r = structure("SL-009", EdgeVerb::Needs, TensionGradeView::Projected);
+        assert_eq!(
+            reason_line(&r),
+            "  tension: SL-014 ranks above SL-009 on value_dim (projected order — no \
+             determining evidence); SL-009 surfaces first — `needs SL-009` holds.\n"
+        );
+    }
+
+    #[test]
+    fn tension_sample_structure_agent_proposed() {
+        let r = structure(
+            "SL-009",
+            EdgeVerb::After,
+            TensionGradeView::AgentProposed { agent: 4 },
+        );
+        assert_eq!(
+            reason_line(&r),
+            "  tension: SL-014 ranks above SL-009 on value_dim (agent-proposed — 4 agent \
+             judgements, unconfirmed); SL-009 surfaces first — `after SL-009` sequence \
+             survives.\n"
+        );
+    }
+
+    #[test]
+    fn tension_sample_composition() {
+        let r = ReasonKind::Tension {
+            preferred: "SL-014".to_string(),
+            surfaced: "SL-009".to_string(),
+            cause: TensionCauseView::Composition {
+                risk_dim: 0.8,
+                leverage: 2.1,
+                optionality: 0.0,
+            },
+            grade: TensionGradeView::Determined { human: 2, agent: 1 },
+        };
+        assert_eq!(
+            reason_line(&r),
+            "  SL-009 surfaces above SL-014 on full score (leverage +2.1, risk +0.8); on \
+             value_dim alone SL-014 ranks higher (determined — 2 human + 1 agent).\n"
+        );
+    }
+
+    #[test]
+    fn tension_json_schema_structure_and_composition() {
+        // The design §3 JSON schema: {preferred, surfaced, cause, edge?|deltas?, grade, counts?}.
+        let s = tension_json(&structure(
+            "SL-009",
+            EdgeVerb::After,
+            TensionGradeView::Determined { human: 3, agent: 0 },
+        ))
+        .unwrap();
+        assert_eq!(s["preferred"], "SL-014");
+        assert_eq!(s["surfaced"], "SL-009");
+        assert_eq!(s["cause"], "structure");
+        assert_eq!(s["edge"]["from"], "SL-009");
+        assert_eq!(s["edge"]["verb"], "after");
+        assert_eq!(s["grade"], "determined");
+        assert_eq!(s["counts"]["human"], 3);
+        assert_eq!(s["counts"]["agent"], 0);
+        assert!(s.get("deltas").is_none(), "structure carries no deltas");
+
+        let c = tension_json(&ReasonKind::Tension {
+            preferred: "SL-014".to_string(),
+            surfaced: "SL-009".to_string(),
+            cause: TensionCauseView::Composition {
+                risk_dim: 0.8,
+                leverage: 2.1,
+                optionality: 0.0,
+            },
+            grade: TensionGradeView::AgentProposed { agent: 4 },
+        })
+        .unwrap();
+        assert_eq!(c["cause"], "composition");
+        assert_eq!(c["deltas"]["leverage"], 2.1);
+        assert_eq!(c["grade"], "agent_proposed");
+        assert_eq!(c["counts"]["agent"], 4);
+        assert!(c.get("edge").is_none(), "composition carries no edge");
+    }
+
+    #[test]
+    fn tension_projected_json_omits_counts() {
+        let p = tension_json(&structure(
+            "SL-009",
+            EdgeVerb::After,
+            TensionGradeView::Projected,
+        ))
+        .unwrap();
+        assert_eq!(p["grade"], "projected");
+        assert!(p.get("counts").is_none(), "projected has no counts");
+    }
+
+    #[test]
+    fn zero_weight_disclosure_line_singular_and_plural() {
+        // F-6 scoped disclosure (SL-217 D6 wording); singular for count == 1.
+        assert_eq!(
+            reason_line(&ReasonKind::ZeroWeightExcluded { count: 3 }),
+            "  3 pairs value-insensitive, zero weight\n"
+        );
+        assert_eq!(
+            reason_line(&ReasonKind::ZeroWeightExcluded { count: 1 }),
+            "  1 pair value-insensitive, zero weight\n"
+        );
+    }
 }
