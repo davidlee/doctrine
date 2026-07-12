@@ -172,6 +172,22 @@ fn default_confirm_boost() -> f64 {
     ELICIT_CONFIRM_BOOST
 }
 
+// ── comparison determinacy (SL-218 D1/D2) ───────────────────────────────────
+
+/// The `[priority.compare]` knob key, single-sourced (STD-001). `true` demotes
+/// `rater = agent` ledger rows at the determinacy level: every determinacy
+/// verdict is read over a fresh human-rows-only constraint system, so agent
+/// evidence proposes orderings but never retires a question (RFC-019 T7).
+/// Bounds, projection, and the elicit queue pool stay on the full system.
+pub(crate) const DEMOTE_AGENT_EVIDENCE_KEY: &str = "demote_agent_evidence";
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub(crate) struct CompareConfig {
+    #[serde(default)]
+    pub(crate) demote_agent_evidence: bool,
+}
+
 // ── top-level config ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -191,6 +207,8 @@ pub(crate) struct PriorityConfig {
     pub(crate) gauge: GaugeConfig,
     #[serde(default)]
     pub(crate) elicit: ElicitConfig,
+    #[serde(default)]
+    pub(crate) compare: CompareConfig,
 }
 
 // ── accessors ─────────────────────────────────────────────────────────────
@@ -248,6 +266,9 @@ pub(crate) fn load_from_table(table: &toml::value::Table) -> PriorityConfig {
         cfg.elicit.rank_decay = f64_or(t, "rank_decay", ELICIT_RANK_DECAY);
         cfg.elicit.confirm_boost = f64_or(t, "confirm_boost", ELICIT_CONFIRM_BOOST);
     }
+    if let Some(t) = table.get("compare").and_then(|v| v.as_table()) {
+        cfg.compare.demote_agent_evidence = bool_or(t, DEMOTE_AGENT_EVIDENCE_KEY, false);
+    }
     if let Some(t) = table.get("kind_weights").and_then(|v| v.as_table()) {
         for (k, v) in t {
             if let Some(f) = f64_val(v) {
@@ -279,6 +300,15 @@ fn f64_val(v: &toml::Value) -> Option<f64> {
 
 fn f64_or(table: &toml::value::Table, key: &str, default: f64) -> f64 {
     table.get(key).and_then(f64_val).unwrap_or(default)
+}
+
+/// Extract a bool from a TOML value; absent / non-boolean → `default`
+/// (the config never errors).
+fn bool_or(table: &toml::value::Table, key: &str, default: bool) -> bool {
+    table
+        .get(key)
+        .and_then(toml::Value::as_bool)
+        .unwrap_or(default)
 }
 
 /// Extract a `usize` from a TOML integer, rejecting negatives and non-integers.
@@ -657,5 +687,38 @@ mod tests {
         let cfg = load_from("[priority]\nelicit = { rank_decay = nan, confirm_boost = -2.0 }\n");
         assert_eq!(cfg.elicit.rank_decay, ELICIT_RANK_DECAY);
         assert_eq!(cfg.elicit.confirm_boost, 0.0);
+    }
+
+    // ---- compare sub-table (SL-218 PHASE-01 VT-1) ----
+
+    /// VT-1: knob absent — no file, no `[priority]`, and a `[priority]` with no
+    /// `compare` sub-table — all read `false` (shipped behaviour).
+    #[test]
+    fn demote_agent_evidence_absent_is_false() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!load(dir.path()).compare.demote_agent_evidence);
+
+        let cfg = load_from("[priority]\ncoefficients = { value = 3.0 }\n");
+        assert!(!cfg.compare.demote_agent_evidence);
+    }
+
+    /// VT-1: `[priority.compare] demote_agent_evidence = true` parses; the TOML
+    /// body is built from the named key const, proving the const matches the
+    /// key the loader actually reads (STD-001, non-vacuous).
+    #[test]
+    fn demote_agent_evidence_parses_via_named_const() {
+        let body = format!("[priority.compare]\n{DEMOTE_AGENT_EVIDENCE_KEY} = true\n");
+        assert!(load_from(&body).compare.demote_agent_evidence);
+    }
+
+    /// VT-1: a non-boolean value falls back to the default (the config never
+    /// errors), and `false` round-trips.
+    #[test]
+    fn demote_agent_evidence_malformed_or_false_is_false() {
+        let cfg = load_from("[priority.compare]\ndemote_agent_evidence = \"yes\"\n");
+        assert!(!cfg.compare.demote_agent_evidence);
+
+        let cfg2 = load_from("[priority.compare]\ndemote_agent_evidence = false\n");
+        assert!(!cfg2.compare.demote_agent_evidence);
     }
 }
