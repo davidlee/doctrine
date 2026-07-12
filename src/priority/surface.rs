@@ -19,16 +19,24 @@
 
 use std::path::Path;
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::catalog::scan::ScanMode;
-use crate::comparison::{self, Projection as ValueProjection};
+use crate::comparison::{
+    self, ConstraintSet, Judgement, Projection as ValueProjection, QuarantinePolicy, RaterCounts,
+    Reachability, compile_human_only, constraining_counts_by_class, determined,
+};
 use crate::relation_graph::{self, EntityKey};
 
 use super::channels;
+use super::config::PriorityConfig;
+use super::elicit::pair_side;
 use super::graph::{self, NodeAttr, PriorityGraph};
 // SL-194: the frontier-order primitives moved to the pure `order` module; `next`
 // reuses them byte-identically (the detectors share the same implementation).
 use super::order::{frontier_order, surviving_seq_predecessors};
 use super::partition::{StatusClass, status_class};
+use super::tension::{self, DetectInputs, EdgeKind, EvidenceGrade, PredEdge, Tension};
 use super::view::{
     Actionability, ActionabilityBlock, ActionabilityEdge, ActionabilityNode, ActionabilityView,
     BlockersView, Explanation, NextRow, ReasonKind, SurveyRow,
@@ -529,7 +537,198 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
             .compare
             .demote_agent_evidence
             .then_some(ReasonKind::AgentEvidenceDemoted),
+        // explain considers the WHOLE frontier (design §2 considered-set): every
+        // frontier member is on-page, so `page_k = usize::MAX`. PHASE-03 filters
+        // to the explained id at render.
+        tensions: graded_tensions(&g, &pipeline, &cfg, usize::MAX),
     })
+}
+
+/// Detect and grade the frontier's tensions (SL-218 PHASE-02, design §2). The
+/// pure [`tension::detect`] scan over the frontier's `value_dim` vs delivery
+/// orders, each inversion graded through the SHIPPED determinacy machinery (the
+/// elicit pattern): the verdict system is the human-rows-only compile when the
+/// knob is on, the full pipeline compile otherwise (SL-218 D1). Grade and elicit
+/// queue therefore read the SAME predicate over the SAME system selection
+/// (design F-1/F-7, one truth per question). `page_k` bounds the surfaced
+/// member's delivery rank (`usize::MAX` = the full frontier, explain's view).
+pub(crate) fn graded_tensions(
+    g: &PriorityGraph,
+    pipeline: &comparison::Pipeline,
+    cfg: &PriorityConfig,
+    page_k: usize,
+) -> Vec<Tension> {
+    // Frontier delivery order over the actionable, non-promoted set — the SAME
+    // basis `next`/`explain` render (surviving-seq precedence, score tiebreak).
+    let actionable_set: BTreeSet<EntityKey> = g
+        .attrs
+        .keys()
+        .copied()
+        .filter(|&k| channels::actionable(g, k) && !channels::promoted(g, k))
+        .collect();
+    let actionable: Vec<EntityKey> = actionable_set.iter().copied().collect();
+    let seq_preds = surviving_seq_predecessors(g, &actionable_set);
+    let order = frontier_order(&actionable, &|k| channels::score(g, k), &seq_preds);
+
+    // Detection projections (read once off the graph — never re-derived).
+    let map = |f: &dyn Fn(EntityKey) -> f64| -> BTreeMap<EntityKey, f64> {
+        actionable.iter().map(|&k| (k, f(k))).collect()
+    };
+    let value_dim = map(&|k| channels::value_dim(g, k));
+    let risk_dim = map(&|k| channels::risk_dim(g, k));
+    let leverage = map(&|k| channels::leverage(g, k));
+    let optionality = map(&|k| channels::optionality(g, k));
+    let full_score = map(&|k| channels::score(g, k));
+    let multiplier = map(&|k| g.item_costing(&k, cfg).map_or(0.0, |(m, _, _)| m));
+
+    // Merged surviving seq+dep predecessor graph restricted to the frontier:
+    // seq (`after`) from the order primitive, dep (`needs`) from the direct
+    // blocked-by set. Structure reachability walks this graph (design D4).
+    let mut preds: BTreeMap<EntityKey, Vec<PredEdge>> = BTreeMap::new();
+    for &k in &actionable {
+        let mut edges: Vec<PredEdge> = seq_preds
+            .get(&k)
+            .into_iter()
+            .flatten()
+            .map(|&pred| PredEdge {
+                pred,
+                kind: EdgeKind::Seq,
+            })
+            .collect();
+        for pred in channels::blocked_by(g, k) {
+            if actionable_set.contains(&pred) {
+                edges.push(PredEdge {
+                    pred,
+                    kind: EdgeKind::Dep,
+                });
+            }
+        }
+        if !edges.is_empty() {
+            preds.insert(k, edges);
+        }
+    }
+
+    let detected = tension::detect(&DetectInputs {
+        delivery_order: &order,
+        page_k,
+        value_dim: &value_dim,
+        multiplier: &multiplier,
+        full_score: &full_score,
+        risk_dim: &risk_dim,
+        leverage: &leverage,
+        optionality: &optionality,
+        preds: &preds,
+    });
+    if detected.is_empty() {
+        return Vec::new();
+    }
+
+    // Verdict systems (SL-218 D1): the full pipeline compile always; a fresh
+    // human-rows-only compile when the knob is on. The knob-on verdict reads the
+    // human system; the full system stays available for the AgentProposed fallback.
+    let active: Vec<&Judgement> = pipeline.active_judgements.iter().collect();
+    let full_reach = Reachability::build(&pipeline.constraint_set);
+    let knob_on = cfg.compare.demote_agent_evidence;
+    let human = knob_on.then(|| {
+        let cs = compile_human_only(&active, &pipeline.anchors, QuarantinePolicy::Symmetric);
+        let reach = Reachability::build(&cs);
+        let counts = constraining_counts_by_class(&cs, &active);
+        (cs, reach, counts)
+    });
+    let (verdict_cs, verdict_reach, verdict_counts) = match &human {
+        Some((cs, reach, counts)) => (cs, reach, counts),
+        None => (
+            &pipeline.constraint_set,
+            &full_reach,
+            &pipeline.constraining_by_class,
+        ),
+    };
+
+    detected
+        .into_iter()
+        .map(|t| {
+            let grade = grade_pair(
+                g,
+                cfg,
+                t.preferred,
+                t.surfaced,
+                (verdict_cs, verdict_reach, verdict_counts),
+                (
+                    &pipeline.constraint_set,
+                    &full_reach,
+                    &pipeline.constraining_by_class,
+                ),
+                knob_on,
+            );
+            t.with_grade(grade)
+        })
+        .collect()
+}
+
+/// The full compiled determinacy view of one system: its constraint set,
+/// reachability, and per-class rater counts.
+type SystemView<'a> = (
+    &'a ConstraintSet,
+    &'a Reachability,
+    &'a BTreeMap<comparison::ClassId, RaterCounts>,
+);
+
+/// Grade one detected pair's `value_dim` ordering (design D6) via the SHIPPED
+/// machinery: build each member's [`PairSide`](crate::comparison::PairSide) with
+/// `eff_weight = m_self·c_other` through the shared [`pair_side`] resolver (the
+/// elicit queue's own seam), evaluate [`determined`] over the verdict system,
+/// then over the full system for the knob-on `AgentProposed` fallback. Counts come
+/// from the system that issued the verdict (RV-271 F-2/F-3). A member with no
+/// costing ⇒ `Projected` (no comparison class to grade).
+fn grade_pair(
+    g: &PriorityGraph,
+    cfg: &PriorityConfig,
+    preferred: EntityKey,
+    surfaced: EntityKey,
+    verdict: SystemView<'_>,
+    full: SystemView<'_>,
+    knob_on: bool,
+) -> EvidenceGrade {
+    let (Some((ma, ca, _)), Some((mb, cb, _))) = (
+        g.item_costing(&preferred, cfg),
+        g.item_costing(&surfaced, cfg),
+    ) else {
+        return EvidenceGrade::Projected;
+    };
+    let (pa, pb) = (preferred.canonical(), surfaced.canonical());
+    // `eff_weight = m_self · c_other` (design D6), tracked for each member.
+    let evaluate = |sys: SystemView<'_>| -> (bool, RaterCounts) {
+        let (cs, reach, by_class) = sys;
+        let sa = pair_side(cs, &pa, ma * cb);
+        let sb = pair_side(cs, &pb, mb * ca);
+        let det = determined(reach, &sa, &sb).is_determined();
+        (det, pair_counts(by_class, &sa.class, &sb.class))
+    };
+    let (det_verdict, verdict_counts) = evaluate(verdict);
+    // The full system is only consulted for the knob-on `AgentProposed` fallback;
+    // knob-off it IS the verdict system (grade ignores these).
+    let (det_full, full_counts) = if knob_on {
+        evaluate(full)
+    } else {
+        (det_verdict, verdict_counts)
+    };
+    tension::grade(knob_on, det_verdict, verdict_counts, det_full, full_counts)
+}
+
+/// Sum the constraining rater counts of a pair's two classes (deduped when the
+/// pair shares a class), from the producing system's per-class map.
+fn pair_counts(
+    by_class: &BTreeMap<comparison::ClassId, RaterCounts>,
+    a: &str,
+    b: &str,
+) -> RaterCounts {
+    let mut out = by_class.get(a).copied().unwrap_or_default();
+    if a != b {
+        let other = by_class.get(b).copied().unwrap_or_default();
+        out.human += other.human;
+        out.agent += other.agent;
+    }
+    out
 }
 
 /// The SL-213 PHASE-06 value-source block for one entity (design §4 S3):

@@ -24,6 +24,7 @@ pub(crate) mod order;
 pub(crate) mod partition;
 pub(crate) mod render;
 pub(crate) mod surface;
+pub(crate) mod tension;
 pub(crate) mod view;
 
 use std::io::{self, Write};

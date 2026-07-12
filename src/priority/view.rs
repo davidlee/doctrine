@@ -210,6 +210,10 @@ pub(crate) struct Explanation {
     /// SL-218 D2 — the agent-demotion disclosure. `None` when the knob is
     /// off (surfaces byte-identical to shipped behaviour).
     pub(crate) agent_demotion: Option<ReasonKind>,
+    /// SL-218 PHASE-02 — the graded frontier tensions (design §2). Assembled on
+    /// the explain path but NOT rendered until PHASE-03, so human/JSON output is
+    /// byte-identical this phase (EX-3).
+    pub(crate) tensions: Vec<crate::priority::tension::Tension>,
 }
 
 // ── SL-089 actionability-graph view types ──────────────────────────────────

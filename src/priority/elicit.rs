@@ -267,25 +267,34 @@ struct VerdictSystem<'s, 'a> {
     rows: &'s [&'a Judgement],
 }
 
-/// The pool item's [`PairSide`] against a partner whose cost is `cost_other`
-/// (design D6: `eff_weight = m_self · c_other`, built per pair), resolved in
-/// `cs` — the verdict system's constraint set. An entity absent from that
-/// system falls back to a singleton class with unbounded interval, so the
-/// pair reads indeterminate rather than panicking (SL-218 D1).
-fn side_in(cs: &ConstraintSet, item: &PoolItem, cost_other: f64) -> PairSide {
+/// Resolve an entity's [`PairSide`] in `cs` — its class, C6 interval, and anchor
+/// — carrying the given pre-computed `eff_weight` (design D6: `m_self·c_other`).
+/// An entity absent from that system falls back to a singleton class with
+/// unbounded interval, so the pair reads indeterminate rather than panicking
+/// (SL-218 D1). The SINGLE [`PairSide`] resolver — the elicit queue ([`side_in`])
+/// and the PHASE-02 tension grader ([`super::surface`]) both go through it, so
+/// grade and queue read one predicate over one system (design F-1/F-7).
+pub(crate) fn pair_side(cs: &ConstraintSet, id: &str, eff_weight: f64) -> PairSide {
     let class = cs
         .classes
-        .get(&item.id)
+        .get(id)
         .cloned()
-        .unwrap_or_else(|| item.id.clone());
+        .unwrap_or_else(|| id.to_string());
     let bounds = cs.bounds.get(&class).copied().unwrap_or(UNBOUNDED);
     let anchor = cs.anchors.get(&class).copied();
     PairSide {
         class,
-        eff_weight: item.multiplier * cost_other,
+        eff_weight,
         bounds,
         anchor,
     }
+}
+
+/// The pool item's [`PairSide`] against a partner whose cost is `cost_other`
+/// (design D6: `eff_weight = m_self · c_other`, built per pair), resolved in
+/// `cs` — the verdict system's constraint set.
+fn side_in(cs: &ConstraintSet, item: &PoolItem, cost_other: f64) -> PairSide {
+    pair_side(cs, &item.id, item.multiplier * cost_other)
 }
 
 /// One answer's evaluated determinacy outcome over the relevant pool pairs.
