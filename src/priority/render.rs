@@ -329,10 +329,11 @@ fn reason_line(reason: &ReasonKind) -> String {
 }
 
 /// The SL-213 PHASE-06 value-source fragment (design §4 S3, the three shapes'
-/// literal templates) — the SINGLE source shared by `reason_line` (human) and
-/// [`value_source_json`] (`--json`). Bare text (no indent, no newline — the
-/// caller frames it); `None` for any non-value-source reason.
-fn value_source_fragment(reason: &ReasonKind) -> Option<String> {
+/// literal templates) — the SINGLE source shared by `reason_line` (human), the
+/// SL-217 elicit human render (participant value line), and the `--json`
+/// surfaces. Bare text (no indent, no newline — the caller frames it); `None`
+/// for any non-value-source reason.
+pub(crate) fn value_source_fragment(reason: &ReasonKind) -> Option<String> {
     match reason {
         ReasonKind::ValueAuthored { value, conflict } => {
             let suffix = if conflict.is_empty() {

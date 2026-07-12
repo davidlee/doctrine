@@ -220,3 +220,32 @@ handover's readiness question (every §3 field has a source) resolved cleanly:
 (VT-1 keywords `yield_note`/`median`/`stall`) live in `tests/e2e_compare_elicit.rs`
 by `plan.toml` VT-1 `test_file` contract — authored in T6–T8. Priority (180) +
 inference e2e (5) green unchanged (behaviour-preservation).
+
+## PHASE-03 — T4 human render fidelity (in_progress, committed)
+
+Enriched `render_elicit_human` to the design §3 structured idiom. Per entry:
+spine (rank/kind/score/yield/impact) → ask line → participants with fetched
+context (title + status from `NodeAttr`, S3 value shape via the reused
+`render::value_source_fragment` — now `pub(crate)`, the SINGLE value-shape
+template shared with `explain`, estimate cell or `est —`) → reasons prose →
+the exact `answer:` command (comparison → `compare record` over the pair;
+anchor → revise/uphold, mirroring the JSON `exits`). Mask ⚠ line rides the
+participant annotations (single source — the engine's bare flag, not
+re-derived).
+
+`state_footer` replaces the T2 skeleton `state_line` with the full D15 wording:
+stall names the depth + disclaims stability; **stable** claims value_dim order
+among the CURRENT top-K members and explicitly says "not membership"
+(D5/D15 — the outsider case needs no separate branch, the member-scoping IS the
+disclaimer); scoped by `excluded_value_insensitive` when m=0 pairs exist (D6).
+Takes the whole `ElicitQueue` (not just state) for the exclusion count.
+
+**House idiom:** human builders return `Vec<String>` + `.concat()` (mirrors
+`render::explain_human`) — the repo clippy denies BOTH `push_str(&format!())`
+(`format_push_string`) and `let _ = writeln!()` (`let_underscore_must_use`), so
+`push(format!())` into a Vec is the sanctioned append.
+
+**Tests:** `state_footer_names_depth_disclaims_and_scopes_m0` (3 states + m=0
+scope), `answer_command_per_kind` (both kinds). Full render byte-goldens (3
+states + mask present/absent) are VT-1 e2e (T6–T8). Clippy 0, 33 module tests
+green.

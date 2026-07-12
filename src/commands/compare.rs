@@ -555,11 +555,11 @@ fn run_elicit(args: &ElicitArgs) -> anyhow::Result<()> {
     let inputs = build_elicit_inputs(&graph, &pipeline, &cfg, depth);
     let queue = assemble(&inputs, DecisionContext::Sequencing { depth });
 
+    let ctx = RenderCtx::new(&graph, &pipeline, &cfg);
     if args.json {
-        let ctx = RenderCtx::new(&graph, &pipeline, &cfg);
         render_elicit_json(&queue, depth, args, &ctx)
     } else {
-        render_elicit_human(&queue, args)
+        render_elicit_human(&queue, args, &ctx)
     }
 }
 
@@ -628,31 +628,51 @@ fn displayed<'q>(queue: &'q ElicitQueue, args: &ElicitArgs) -> Vec<&'q QueueEntr
         .collect()
 }
 
-/// The D15 state token + a one-line detail (skeleton wording — T4 enriches the
-/// stability/stall/outsider/m=0 precision).
-fn state_line(state: &QueueState) -> (&'static str, String) {
-    match state {
+/// The bare-estimate mask glyph (D17) — the ⚠ marker on a projected-but-bare
+/// participant (STD-001: one definition for the human render).
+const MASK_MARK: &str = "⚠";
+
+/// The D15 state token + footer detail (design §3 / D15 — the precise stall /
+/// stable / m=0 wording). Takes the whole queue so `Stable` can scope its claim
+/// by the `excluded_value_insensitive` (`m = 0`, D6) count.
+fn state_footer(queue: &ElicitQueue) -> (&'static str, String) {
+    match &queue.state {
         QueueState::Candidates => (
             "candidates",
-            "candidates outstanding — comparisons worth asking".to_string(),
+            "candidates outstanding — comparisons / anchor-reviews worth asking".to_string(),
         ),
         QueueState::Stalled { depth } => (
             "stalled",
             format!(
-                "stalled at depth {depth}: greedy one-step yield exhausted — NOT a stability claim"
+                "stalled at depth {depth}: greedy one-step yield exhausted — NOT a stability \
+                 claim (a bridge question may remain)"
             ),
         ),
-        QueueState::Stable { depth } => (
-            "stable",
-            format!("stable: value_dim order among the current top-{depth} frontier members"),
-        ),
+        QueueState::Stable { depth } => {
+            // D15: the claim is INTERNAL order among the CURRENT top-K members —
+            // never prefix-membership (D5). Scoped further when m=0 exclusions
+            // exist (D6): those pairs are value-insensitive, outside the claim.
+            let base = format!(
+                "stable: value_dim order among the current top-{depth} frontier members is \
+                 stable over the joint set (internal order, current members — not membership)"
+            );
+            let scope = match queue.excluded_value_insensitive {
+                0 => String::new(),
+                n => format!("; {n} pair(s) value-insensitive (zero weight), outside the claim"),
+            };
+            ("stable", format!("{base}{scope}"))
+        }
     }
 }
 
-/// Human render (design §3). SKELETON (SL-217 PHASE-03 T2): rank/kind/score/yield
-/// spine + participants + answer hint + D15 footer. T4 enriches with fetched
-/// entity context, S3 value shapes, the bare-estimate mask, and reasons prose.
-fn render_elicit_human(queue: &ElicitQueue, args: &ElicitArgs) -> anyhow::Result<()> {
+/// Human render (design §3): per entry the rank/kind spine, ask line,
+/// participants with fetched context (title/status/S3 value shape/estimate-or-
+/// bare ⚠), reasons prose, and the exact answer command; then the D15 footer.
+fn render_elicit_human(
+    queue: &ElicitQueue,
+    args: &ElicitArgs,
+    ctx: &RenderCtx<'_>,
+) -> anyhow::Result<()> {
     use std::io::Write;
     let mut out = std::io::stdout();
     let shown = displayed(queue, args);
@@ -660,34 +680,84 @@ fn render_elicit_human(queue: &ElicitQueue, args: &ElicitArgs) -> anyhow::Result
         writeln!(out, "elicit: no candidates")?;
     }
     for (i, entry) in shown.iter().enumerate() {
-        let rank = i + 1;
-        match &entry.payload {
-            EntryPayload::Comparison { a, b, ask } => {
-                writeln!(
-                    out,
-                    "{rank}. [comparison] score {:.3}  yield {:+}  {} vs {}",
-                    entry.score, entry.guaranteed_yield, a.id, b.id
-                )?;
-                writeln!(out, "   ↳ answers: {}", ask.answers.join(" | "))?;
-            }
-            EntryPayload::AnchorReview { subject, ask } => {
-                writeln!(
-                    out,
-                    "{rank}. [anchor-review] score {:.3}  yield {:+}  {} (anchor {})",
-                    entry.score,
-                    entry.guaranteed_yield,
-                    subject.id,
-                    subject
-                        .anchor
-                        .map_or_else(|| "—".to_string(), |v| format!("{v}"))
-                )?;
-                writeln!(out, "   ↳ answers: {}", ask.answers.join(" | "))?;
-            }
-        }
+        write!(out, "{}", entry_human(i + 1, entry, ctx))?;
     }
-    let (_, detail) = state_line(&queue.state);
+    let (_, detail) = state_footer(queue);
     writeln!(out, "state: {detail}")?;
     Ok(())
+}
+
+/// One entry's human block (design §3): spine line, ask line, participants with
+/// fetched context, reasons prose, and the exact answer command. Returns the
+/// framed multi-line string (trailing newline) — the render loop concatenates.
+fn entry_human(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> String {
+    let kind = match entry.kind {
+        CandidateKind::Comparison => "comparison",
+        CandidateKind::AnchorReview => "anchor-review",
+    };
+    let mut parts = vec![format!(
+        "{rank}. [{kind}] score {:.3}  yield {:+}  impact {:.3}\n",
+        entry.score, entry.guaranteed_yield, entry.guaranteed_impact
+    )];
+    match &entry.payload {
+        EntryPayload::Comparison { a, b, .. } => {
+            parts.push(format!("   ask: {} vs {}\n", a.id, b.id));
+            parts.push(participant_human(ctx, a));
+            parts.push(participant_human(ctx, b));
+        }
+        EntryPayload::AnchorReview { subject, .. } => {
+            let anchor = subject
+                .anchor
+                .map_or_else(|| "—".to_string(), |v| format!("{v}"));
+            parts.push(format!(
+                "   review: anchor on {} (value {anchor})\n",
+                subject.id
+            ));
+        }
+    }
+    let reasons: Vec<&str> = entry.reasons.iter().map(|r| r.text.as_str()).collect();
+    if !reasons.is_empty() {
+        parts.push(format!("   reasons: {}\n", reasons.join("; ")));
+    }
+    parts.push(format!("   answer: {}\n", answer_command(entry)));
+    parts.concat()
+}
+
+/// One participant's human context lines (design §3): id + title + status, then
+/// the S3 value shape and the estimate cell; a trailing ⚠-mask line when the
+/// engine flagged the participant (bare estimate masks the projection, D17).
+fn participant_human(ctx: &RenderCtx<'_>, p: &Participant) -> String {
+    let (title, status) = ctx.context(&p.id).unwrap_or(("", None));
+    let status = status.unwrap_or("—");
+    let value = ctx
+        .value_fragment(&p.id)
+        .unwrap_or_else(|| "value —".to_string());
+    let est = ctx.estimate_display(&p.id);
+    let mut parts = vec![format!(
+        "   • {} \"{title}\" ({status})\n     {value}  ·  {est}\n",
+        p.id
+    )];
+    if !p.annotations.is_empty() {
+        parts.push(format!("     {MASK_MARK} {}\n", p.annotations.join("; ")));
+    }
+    parts.concat()
+}
+
+/// The exact answer command a curator runs to record the judgement (design §3 —
+/// no TTY, the command IS the capture leg). Comparison → the `compare record`
+/// call over the pair; anchor-review → the revise/uphold resolving actions
+/// (mirrors the JSON `exits`).
+fn answer_command(entry: &QueueEntry) -> String {
+    match &entry.payload {
+        EntryPayload::Comparison { a, b, .. } => format!(
+            "doctrine compare record {} {} --prefer a   (| --prefer b | --equal | --incomparable)",
+            a.id, b.id
+        ),
+        EntryPayload::AnchorReview { subject, .. } => format!(
+            "doctrine value set {} <v>   (revise)   |   supersede/withdraw the cited rows (uphold)",
+            subject.id
+        ),
+    }
 }
 
 /// The join context the elicit render needs beyond the pure [`ElicitQueue`]:
@@ -751,6 +821,37 @@ impl<'a> RenderCtx<'a> {
         (!bare).then_some(est_cost)
     }
 
+    /// Fetched display context for the human render (design §3): the entity's
+    /// title + status. `None` for an id absent from the graph (defensive — a
+    /// participant is always a scored entity).
+    fn context(&self, canonical: &str) -> Option<(&str, Option<&str>)> {
+        let key = self.keys.get(canonical)?;
+        let attr = self.graph.attrs.get(key)?;
+        Some((attr.title.as_str(), attr.status.as_deref()))
+    }
+
+    /// The human S3 value-source fragment — reuses `render::value_source_fragment`
+    /// verbatim (the SINGLE value-shape template, shared with `explain`). `None`
+    /// when the entity has no citable value source.
+    fn value_fragment(&self, canonical: &str) -> Option<String> {
+        let key = *self.keys.get(canonical)?;
+        let reason = crate::priority::surface::value_source_reason(self.graph, key, self.pipeline)?;
+        crate::priority::render::value_source_fragment(&reason)
+    }
+
+    /// The human estimate cell: the scalar `est_cost`, or a dash when bare (the
+    /// ⚠ mask itself rides the participant annotations, D17 — not re-derived here).
+    fn estimate_display(&self, canonical: &str) -> String {
+        match self
+            .keys
+            .get(canonical)
+            .and_then(|k| self.graph.item_costing(k, self.cfg))
+        {
+            Some((_, est, false)) => format!("est {est:.2}"),
+            _ => "est —".to_string(),
+        }
+    }
+
     /// One lean participant (design D16): id + value/estimate block + the
     /// engine's annotations (the bare-estimate mask rides these).
     fn participant_json(&self, p: &Participant) -> serde_json::Value {
@@ -785,7 +886,7 @@ fn elicit_envelope(
     args: &ElicitArgs,
     ctx: &RenderCtx<'_>,
 ) -> serde_json::Value {
-    let (state_token, state_detail) = state_line(&queue.state);
+    let (state_token, state_detail) = state_footer(queue);
     let entries: Vec<serde_json::Value> = displayed(queue, args)
         .iter()
         .enumerate()
@@ -1888,5 +1989,113 @@ mod tests {
             "comparison ask omits yield_note"
         );
         assert!(v.get("exits").is_none(), "comparison ask omits exits");
+    }
+
+    // ── T4: human render footer + answer command (design §3 / D15) ──────────
+
+    fn empty_queue(state: QueueState, excluded: usize) -> ElicitQueue {
+        ElicitQueue {
+            state,
+            entries: vec![],
+            excluded_value_insensitive: excluded,
+        }
+    }
+
+    /// The D15 footer: stall names the depth and disclaims stability; stable
+    /// claims value_dim order among the CURRENT top-K members (not membership),
+    /// scoped by the m=0 exclusion count when present (D6).
+    #[test]
+    fn state_footer_names_depth_disclaims_and_scopes_m0() {
+        let (cand_tok, cand) = state_footer(&empty_queue(QueueState::Candidates, 0));
+        assert_eq!(cand_tok, "candidates");
+        assert!(cand.contains("candidates outstanding"));
+
+        let (stall_tok, stall) = state_footer(&empty_queue(QueueState::Stalled { depth: 8 }, 0));
+        assert_eq!(stall_tok, "stalled");
+        assert!(
+            stall.contains("depth 8") && stall.contains("NOT a stability claim"),
+            "stall names depth + disclaims: {stall}"
+        );
+
+        let (stable_tok, stable) = state_footer(&empty_queue(QueueState::Stable { depth: 5 }, 0));
+        assert_eq!(stable_tok, "stable");
+        assert!(
+            stable.contains("top-5 frontier members") && stable.contains("not membership"),
+            "stable is member-scoped: {stable}"
+        );
+        assert!(
+            !stable.contains("value-insensitive"),
+            "no m=0 clause when none excluded"
+        );
+
+        let (_, scoped) = state_footer(&empty_queue(QueueState::Stable { depth: 5 }, 3));
+        assert!(
+            scoped.contains("3 pair(s) value-insensitive (zero weight), outside the claim"),
+            "m=0 exclusions scope + disclose: {scoped}"
+        );
+    }
+
+    fn bare_participant(id: &str) -> Participant {
+        Participant {
+            id: id.to_string(),
+            annotations: vec![],
+        }
+    }
+
+    fn empty_ask() -> crate::priority::elicit::AskSpec {
+        crate::priority::elicit::AskSpec {
+            answers: vec![],
+            yield_by_answer: std::collections::BTreeMap::new(),
+            yield_note: None,
+        }
+    }
+
+    fn spine(payload: EntryPayload, kind: CandidateKind) -> QueueEntry {
+        QueueEntry {
+            kind,
+            guaranteed_yield: 1,
+            guaranteed_impact: 0.5,
+            score: 0.5,
+            yield_basis: crate::priority::elicit::YieldBasis::OrderBearingAnswers,
+            reasons: vec![],
+            payload,
+        }
+    }
+
+    /// The exact answer command: comparison → the `compare record` call over the
+    /// pair; anchor-review → the revise/uphold resolving actions.
+    #[test]
+    fn answer_command_per_kind() {
+        let cmp = spine(
+            EntryPayload::Comparison {
+                a: bare_participant("IMP-1"),
+                b: bare_participant("IMP-2"),
+                ask: empty_ask(),
+            },
+            CandidateKind::Comparison,
+        );
+        assert_eq!(
+            answer_command(&cmp),
+            "doctrine compare record IMP-1 IMP-2 --prefer a   \
+             (| --prefer b | --equal | --incomparable)"
+        );
+
+        let anchor = spine(
+            EntryPayload::AnchorReview {
+                subject: crate::priority::elicit::AnchorSubject {
+                    id: "IMP-3".to_string(),
+                    anchor: Some(5.0),
+                    conflict_pairs: vec![],
+                    quarantined_rows: vec![],
+                },
+                ask: empty_ask(),
+            },
+            CandidateKind::AnchorReview,
+        );
+        assert!(
+            answer_command(&anchor).starts_with("doctrine value set IMP-3 <v>"),
+            "anchor revise action: {}",
+            answer_command(&anchor)
+        );
     }
 }
