@@ -67,6 +67,12 @@
       "skillPath": "plugins/doctrine/skills/dreaming/SKILL.md",
       "computedHash": "6b3e71be78ceea1e926fe3ee5cc8b80381693c70859e4add7a56e7215820c5b0"
     },
+    "elicit": {
+      "source": "davidlee/doctrine",
+      "sourceType": "github",
+      "skillPath": "plugins/doctrine/skills/elicit/SKILL.md",
+      "computedHash": "3c95ec749ce0e44c25c0ff77eae376d212052b1bc1c1cdf9f3013c6d43f76cb5"
+    },
     "execute": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
