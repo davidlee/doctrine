@@ -35,7 +35,7 @@ verification = [
   { id = "VT-2", expects = "knob-on: agent-only-evidence pair indeterminate, same pair knob-off determined; anchored pair determined both states (design VT-B)",
     test_file = "tests/e2e_compare_inference.rs", keywords = ["demote_agent_evidence", "agent"], waived = false },
   { id = "VT-3", expects = "human-subset compile self-consistency: human row quarantined in full system (cycle with agent rows) is retained in human-only system; subset runs its own C2-C4 (design VT-C)",
-    test_file = "src/comparison/compile.rs", keywords = ["human", "RaterKind::Human"], waived = false },
+    test_file = "src/comparison/compile.rs", keywords = ["human_only"], waived = false },
   { id = "VT-4", expects = "knob-on elicit: previously agent-determined pair re-enters queue as candidate; state line reflects it; disclosure line 'agent evidence demoted' present (design VT-F)",
     test_file = "tests/e2e_compare_elicit.rs", keywords = ["demote_agent_evidence", "agent evidence demoted"], waived = false },
   { id = "VA-1", expects = "Full suite run knob-off at phase close: zero diffs vs EN-2 baseline (byte-identity, design VT-A/INV-1)" },

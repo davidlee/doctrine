@@ -44,9 +44,10 @@ parallelism is offered — PHASE-02/03 both touch `src/priority/`.
   VT-E/H/I/J-wording → PHASE-03 VT-1/VT-2/VT-3/VT-4.
 - VT keyword mandates name identifiers the design commits to
   (`CompareConfig`, `demote_agent_evidence`, `TensionCause`,
-  `AgentProposed`, `TENSION_MAX_CALLOUTS`, the disclosure and
-  off-frontier literals). Workers satisfy the mandate by using the
-  designed names — divergence from them is a design deviation, not a
-  naming preference.
+  `AgentProposed`, `TENSION_MAX_CALLOUTS`, `human_only` for the subset
+  compile entry, the disclosure and off-frontier literals). Workers
+  satisfy the mandate by using the designed names — divergence from them
+  is a design deviation, not a naming preference. Keywords were checked
+  non-vacuous against the pre-phase tree (none match today).
 - The `next` verbosity flag spelling is implementation-owned (design D5);
   the PHASE-03 VT-1 golden pins behaviour, not the flag name.
