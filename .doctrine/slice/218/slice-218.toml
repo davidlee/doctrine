@@ -82,6 +82,11 @@ intent = "design-target"
 selector = "src/commands/cli.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/status.rs"
+intent = "design-target"
+note = "NextView call-site ripple: next_up caller adapts to surface::next return-type (PHASE-03, RV-272 F-1)"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload

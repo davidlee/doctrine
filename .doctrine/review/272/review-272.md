@@ -93,3 +93,24 @@ accurate but self-undermining, a rare unfixtured wording edge captured as IMP-28
 - **F-8 → IMP-288** (backlog improvement): anchor-determined zero-judgement
   callout wording. Out of audit scope; fix sketch recorded on the item.
 - **F-2, F-3, F-4** — aligned/tolerated, no write required.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **selector registry** (`slice-218.toml`): `slice selector add SL-218
+  src/status.rs` (intent design-target) — conformance now reads clean
+  (status.rs → conformant 14; RV-272 F-1, load-bearing).
+- **design.md §Code impact**: added `src/status.rs` mirror row (RV-272 F-1).
+- **design.md D6**: appended agent-share clarifier for `AgentProposed` counts
+  (RV-272 F-7).
+
+### REVs completed
+- None. No governance/spec surface diverged.
+
+### Withdrawn / tolerated / follow-up
+- RV-272 F-2: tolerated — `src/comparison/query.rs` conscious design fence
+  (undelivered is the desired outcome); rationale in finding disposition.
+- RV-272 F-3, F-4, F-5, F-6: aligned — no write.
+- RV-272 F-8: follow-up → IMP-288 (backlog improvement).
+
+Reconcile pass complete — handoff to /close.
