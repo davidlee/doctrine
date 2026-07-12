@@ -1312,3 +1312,13 @@ the "finish-line" agent paid a full read+fix+re-gate loop that the executing
 agent could have absorbed at zero marginal context by running the gate before
 writing the handover. Lesson: a handover must not label a phase "green / needs
 commit" until `check gate` (clippy+test+fmt) — not just `cargo test` — is exit 0.
+
+[audit; SL-217-audit-rv270]
+- `slice conformance` flags the slice's OWN `notes.md` and the RFC-011
+  `case-notes.md` instrumentation file as undeclared paths — every audit must
+  re-disposition the same process noise; tokens spent explaining expected
+  artifacts (filed IMP as harvest).
+- Chaining 9 `review raise` calls in one shell invocation: an apostrophe in a
+  --detail broke quoting mid-chain (F-8), costing a partial-failure retry via
+  MCP. MCP raise verbs avoid shell quoting entirely; for multi-raise batches the
+  CLI chain trades one round trip for quoting fragility.

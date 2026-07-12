@@ -1,0 +1,93 @@
+id    = 270
+slug  = "sl-217-audit-elicitation-queue-conformance-reconciliation"
+title = "SL-217 audit — elicitation queue conformance & reconciliation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-217"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Conformance: 6 undeclared source paths vs design §4 selectors"
+detail = "Expected: design-target selectors cover every touched source path. Observed: src/commands/guard.rs (elicit READ-classing, D18), src/comparison/store.rs (T2 owned active_judgements/anchors exposure), src/comparison/wire.rs (Clone derives), src/priority/graph.rs (cost_ctx + item_costing), src/priority/render.rs (T4 human render, §3 prose names it but §4 table omits), tests/e2e_compare_elicit.rs (plan VT test_file) all edited outside the registry. All additive/behaviour-neutral, documented in notes.md at the phase they landed. Load-bearing fix is the selector registry (slice selector add), design §4 is the mirror. (.doctrine/rfc/011/case-notes.md and slice/217/notes.md also flagged undeclared — process artifacts, expected noise, no selector warranted.)"
+disposition = "verified"
+response = "Confirmed. Remediation via reconciliation brief (per-slice): slice selector add for the six source paths; design §4 table edit is the mirror. Registry verb is the load-bearing change — conformance reads slice-217.toml, not prose."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Conformance: undelivered selector src/comparison/compile.rs"
+detail = "Expected: compile.rs gains narrow read accessors (design §4). Observed: untouched — ConstraintSet pub fields sufficed (PHASE-01 notes); behaviour preservation holds by construction, stronger than declared. Stale selector: slice selector rm + §4 mirror note."
+disposition = "verified"
+response = "Confirmed stale selector. Remediation via reconciliation brief (per-slice): slice selector rm src/comparison/compile.rs; §4 mirror note that pub fields sufficed and the propagation engine is untouched (VA-1 evidence: diff empty c9818d71..HEAD)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Design §1 API sketch vs as-built query surface"
+detail = "Expected: §1 signatures as drawn (hypothetical_yield -> i64, recompute baseline internally). Observed: hypothetical_outcome -> {newly_determined, no_longer_determined} added beneath a thin hypothetical_yield wrapper (D13 guaranteed_impact needs the pair SETS, not a count — avoids re-recompiling per answer, preserves the §2 cost bound); baseline &Reachability is a caller-held parameter (keeps ≤3 recompiles per candidate honest); hypothetical remap keys on PairSide.class (class id = smallest member), pinned by test. All recorded in-phase with rationale. Design §1 prose should reflect the as-built API."
+disposition = "verified"
+response = "Deviations warranted and recorded in-phase; design intent (closed-form determinacy, cost bound, honest deltas) intact. Remediation via reconciliation brief (per-slice): design.md §1 as-built update — hypothetical_outcome pair-set primitive, baseline Reachability parameter, class-keyed remap."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Design §2 silent on source partition and anchor-review admission split"
+detail = 'Expected: §2 pins candidate-source dedup and admission. Observed (in-phase calls, recorded in notes + elicit.rs module doc): (a) comparison source enumerates indeterminate pairs among CONSTRAINED pool items only; un-constrained top-K items are owned by median-probe — stops a zero-row item flooding K comparison pairs, honours D14 calibration intent; (b) the D13 admission filter guaranteed_yield > 0 applies to yield-motivated sources only; anchor-review admits on suspect EXISTENCE (score = max(gy,0)·impact so zero/negative suspects sink, never vanish) — a blanket filter would drop the typical single-path suspect and contradict D15 ("anchor-review can admit while every top-K pair is determined"; "live stale-anchor suspect stays Candidates") and eval C2. Design §2/D13 text still reads as a blanket admission filter — pin both rules.'
+disposition = "verified"
+response = "Both in-phase calls follow from D14/D15/eval-C2 and are pinned by tests; the blanket admission sentence in §2 is the stale text. Remediation via reconciliation brief (per-slice): pin source partition and anchor-review existence-admission in design.md §2 (D13/D14 adjacent)."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "RowsRetired uphold yield can go negative (−1) — honest D10 accounting"
+detail = 'Expected per D10/D12: signed deltas, min over resolving answers. Observed: in A(1)>B>C(3), uphold retires the complete cited closure {j0,j1}, leaving A and C rowless — compile drops anchor-without-rows classes (C1) and the anchored (A,C) pair REOPENS: uphold −1, guaranteed_yield = min(+2, −1) = −1. Pinned by anchor_review_min_over_resolving_uphold_below_removal. Consistent with D10 honest negative-delta and D12 pessimistic RowsRetired; any future "uphold keeps the anchor live" refinement changes this number (noted in notes.md).'
+disposition = "aligned"
+response = "Behaviour is the design: D10 signed deltas are normative, D12 RowsRetired is deliberately pessimistic, admission-on-existence (F-4) keeps the suspect visible while the negative min sinks its rank. Test-pinned. Refinement trigger already noted in notes.md — no change."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "JSON estimate field: scalar est_cost, null-when-bare (T3 design call)"
+detail = 'Expected: §3 participant example draws "estimate": 3.5 / null; D7 pins costs as the scalar est_cost. Observed: estimate = bare ? null : est_cost from graph.item_costing — NOT the raw {lower,upper} facet. Value/estimate asymmetry intentional: value bounds decision-relevant (structural, web review); estimate is disclosure context. Bare disclosed via the D17 mask annotation, never a synthesized number. Matches the design as written.'
+disposition = "aligned"
+response = "Matches design as written: §3 example draws scalar/null estimate; D7 pins the scalar est_cost; D17 mask discloses bareness. Verified live (IMP-202 bare, IMP-255 estimated). No change."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "VT-4 corpus generated in-test, not committed fixture files"
+detail = 'Expected (PHASE-03 VT-4 letter): "committed fixture snapshot of the eval corpus" under tests/fixtures/. Observed: 32-row/K=8 snapshot generated deterministically in-test (seed_eval_corpus, ISS-100..131 chain) — frozen by code, never the live ledger; equivalent for the completion assertion and far lighter than 60+ committed TOMLs. Plan criteria are immutable-append, so the letter stands unmet; trivially convertible to committed files if the User prefers the letter.'
+disposition = "tolerated"
+response = "Deterministic in-test generation is equivalent for the completion assertion (frozen by code, never the live ledger) and avoids 60+ committed TOMLs; VT-4 attributes PASS. Plan letter stands unmet — plan criteria are immutable-append, so recorded as conscious drift. Convertible to committed fixtures on User request; flagged in the audit report."
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "major"
+title = "VH-1 dogfood acceptance outstanding — not agent-closable"
+detail = "Expected: human runs doctrine compare elicit over the live backlog and confirms answerable, reasons-attached questions with sane state wording (PHASE-03 VH-1). Observed: verified live during dev (median-probe comparisons, structural value blocks, answer commands, stable/candidates footer rendered cleanly) but the acceptance is the User's. Open pending User."
+
+[[finding]]
+id = "F-9"
+status = "open"
+severity = "minor"
+title = 'product-critique.md provenance — landed in 15c816e2 though handover marked it "not ours"'
+detail = 'Expected: commit 15c816e2 carries only slice-owned artifacts. Observed: .doctrine/slice/217/product-critique.md (196 lines, an external product-lens critique of the design) + slice-217.toml rode the commit; the prior handover had marked product-critique.md "not ours". User call: keep it co-located with the slice (it is a substantive critique of D5/D15 surface language) or git rm --cached. Open pending User.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
