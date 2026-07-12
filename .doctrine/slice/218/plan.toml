@@ -30,14 +30,10 @@ exit_criteria = [
   { id = "EX-3", text = "Knob-on: no pair whose determining constraints require an agent row reads determined (design INV-2); elicit determinacy source moves with the knob; disclosure line renders" },
 ]
 verification = [
-  { id = "VT-1", expects = "CompareConfig parse + default: knob absent => false; [priority.compare] demote_agent_evidence = true parses; key name is a named const",
-    test_file = "src/priority/config.rs", keywords = ["CompareConfig", "demote_agent_evidence"], waived = false },
-  { id = "VT-2", expects = "knob-on: agent-only-evidence pair indeterminate, same pair knob-off determined; anchored pair determined both states (design VT-B)",
-    test_file = "tests/e2e_compare_inference.rs", keywords = ["demote_agent_evidence", "agent"], waived = false },
-  { id = "VT-3", expects = "human-subset compile self-consistency: human row quarantined in full system (cycle with agent rows) is retained in human-only system; subset runs its own C2-C4 (design VT-C)",
-    test_file = "src/comparison/compile.rs", keywords = ["human_only"], waived = false },
-  { id = "VT-4", expects = "knob-on elicit: previously agent-determined pair re-enters queue as candidate; state line reflects it; disclosure line 'agent evidence demoted' present (design VT-F)",
-    test_file = "tests/e2e_compare_elicit.rs", keywords = ["demote_agent_evidence", "agent evidence demoted"], waived = false },
+  { id = "VT-1", expects = "CompareConfig parse + default: knob absent => false; [priority.compare] demote_agent_evidence = true parses; key name is a named const", test_file = "src/priority/config.rs", keywords = ["CompareConfig", "demote_agent_evidence"], waived = false },
+  { id = "VT-2", expects = "knob-on: agent-only-evidence pair indeterminate, same pair knob-off determined; anchored pair determined both states (design VT-B)", test_file = "tests/e2e_compare_inference.rs", keywords = ["demote_agent_evidence", "agent"], waived = false },
+  { id = "VT-3", expects = "human-subset compile self-consistency: human row quarantined in full system (cycle with agent rows) is retained in human-only system; subset runs its own C2-C4 (design VT-C)", test_file = "src/comparison/compile.rs", keywords = ["human_only"], waived = false },
+  { id = "VT-4", expects = "knob-on elicit: previously agent-determined pair re-enters queue as candidate; state line reflects it; disclosure line 'agent evidence demoted' present (design VT-F)", test_file = "tests/e2e_compare_elicit.rs", keywords = ["demote_agent_evidence", "agent evidence demoted"], waived = false },
   { id = "VA-1", expects = "Full suite run knob-off at phase close: zero diffs vs EN-2 baseline (byte-identity, design VT-A/INV-1)" },
 ]
 specs        = []
@@ -56,12 +52,9 @@ exit_criteria = [
   { id = "EX-3", text = "Priority render surfaces untouched: existing priority goldens green unchanged this phase" },
 ]
 verification = [
-  { id = "VT-1", expects = "detection fixtures: no-tension, structure (direct + transitive + path through off-page node), composition, mixed, value_dim tie excluded, equal-full-score tiebreak excluded, off-page preferred counterparty detected, m=0 pair excluded, determinism (design VT-D)",
-    test_file = "src/priority/tension.rs", keywords = ["TensionCause", "Composition"], waived = false },
-  { id = "VT-2", expects = "grade vocabulary states: knob-on agent-only-determined pair => AgentProposed; human-determined => Determined with human-system counts only; neither => Projected; knob-off AgentProposed unreachable (design VT-J state-level)",
-    test_file = "src/priority/tension.rs", keywords = ["AgentProposed", "EvidenceGrade"], waived = false },
-  { id = "VT-3", expects = "multiplier correctness: kind/tag multipliers invert value_dim order relative to raw v/c; grade tracks the value_dim claim via eff_weight = m·c_other (design VT-G)",
-    test_file = "src/priority/surface.rs", keywords = ["eff_weight", "EvidenceGrade"], waived = false },
+  { id = "VT-1", expects = "detection fixtures: no-tension, structure (direct + transitive + path through off-page node), composition, mixed, value_dim tie excluded, equal-full-score tiebreak excluded, off-page preferred counterparty detected, m=0 pair excluded, determinism (design VT-D)", test_file = "src/priority/tension.rs", keywords = ["TensionCause", "Composition"], waived = false },
+  { id = "VT-2", expects = "grade vocabulary states: knob-on agent-only-determined pair => AgentProposed; human-determined => Determined with human-system counts only; neither => Projected; knob-off AgentProposed unreachable (design VT-J state-level)", test_file = "src/priority/tension.rs", keywords = ["AgentProposed", "EvidenceGrade"], waived = false },
+  { id = "VT-3", expects = "multiplier correctness: kind/tag multipliers invert value_dim order relative to raw v/c; grade tracks the value_dim claim via eff_weight = m·c_other (design VT-G)", test_file = "src/priority/surface.rs", keywords = ["eff_weight", "EvidenceGrade"], waived = false },
   { id = "VA-1", expects = "layering check: tension.rs pure (no comparison compile calls inside the pure fn); grading assembly follows elicit pattern in surface.rs; no new cross-layer API added to comparison/query.rs (design F-5 fence)" },
 ]
 specs        = []
@@ -79,18 +72,12 @@ exit_criteria = [
   { id = "EX-2", text = "Wording goldens pin the four design samples (structure determined / structure projected / agent-proposed / composition) and the m=0 scoped disclosure" },
 ]
 verification = [
-  { id = "VT-1", expects = "wording goldens: four design §3 samples + cap behaviour + verbosity flag pulls composition into next (design VT-E)",
-    test_file = "tests/e2e_priority_golden.rs", keywords = ["tension", "value_dim"], waived = false },
-  { id = "VT-2", expects = "explain: non-actionable id gets 'not on the current frontier' disclosure, no invented tensions; off-page-but-on-frontier id renders its displaced-counterparty tension (design VT-H)",
-    test_file = "tests/e2e_priority_golden.rs", keywords = ["not on the current frontier"], waived = false },
-  { id = "VT-3", expects = "cross-surface agreement, both knob states: pairs graded Determined absent from elicit indeterminate set; AgentProposed/Projected admissible pairs offerable; grades and queue never disagree (design VT-I)",
-    test_file = "tests/e2e_priority_golden.rs", keywords = ["cross_surface_agreement"], waived = false },
-  { id = "VT-4", expects = "knob-state wording: knob-on agent-proposed callout with 'unconfirmed'; knob-off same corpus Determined with mixed counts disclosed (design VT-J wording-level)",
-    test_file = "tests/e2e_priority_golden.rs", keywords = ["agent-proposed", "unconfirmed"], waived = false },
-  { id = "VT-5", expects = "JSON: tensions array additive (schema fields preferred/surfaced/cause/edge/deltas/grade/counts); lean-JSON participant reads tolerate the new field",
-    test_file = "tests/e2e_priority_golden.rs", keywords = ["tensions"], waived = false },
-  { id = "VT-6", expects = "human callout cap: TENSION_MAX_CALLOUTS named const bounds next callouts; JSON list uncapped",
-    test_file = "src/priority/render.rs", keywords = ["TENSION_MAX_CALLOUTS"], waived = false },
+  { id = "VT-1", expects = "wording goldens: four design §3 samples + cap behaviour + verbosity flag pulls composition into next (design VT-E)", test_file = "tests/e2e_priority_golden.rs", keywords = ["tension", "value_dim"], waived = false },
+  { id = "VT-2", expects = "explain: non-actionable id gets 'not on the current frontier' disclosure, no invented tensions; off-page-but-on-frontier id renders its displaced-counterparty tension (design VT-H)", test_file = "tests/e2e_priority_golden.rs", keywords = ["not on the current frontier"], waived = false },
+  { id = "VT-3", expects = "cross-surface agreement, both knob states: pairs graded Determined absent from elicit indeterminate set; AgentProposed/Projected admissible pairs offerable; grades and queue never disagree (design VT-I)", test_file = "tests/e2e_priority_golden.rs", keywords = ["cross_surface_agreement"], waived = false },
+  { id = "VT-4", expects = "knob-state wording: knob-on agent-proposed callout with 'unconfirmed'; knob-off same corpus Determined with mixed counts disclosed (design VT-J wording-level)", test_file = "tests/e2e_priority_golden.rs", keywords = ["agent-proposed", "unconfirmed"], waived = false },
+  { id = "VT-5", expects = "JSON: tensions array additive (schema fields preferred/surfaced/cause/edge/deltas/grade/counts); lean-JSON participant reads tolerate the new field", test_file = "tests/e2e_priority_golden.rs", keywords = ["tensions"], waived = false },
+  { id = "VT-6", expects = "human callout cap: TENSION_MAX_CALLOUTS named const bounds next callouts; JSON list uncapped", test_file = "src/priority/render.rs", keywords = ["TENSION_MAX_CALLOUTS"], waived = false },
   { id = "VA-1", expects = "render wording reviewed against product-critique tensions #3 (agent authority disclosed, never silently authoritative) and #6 (no cardinal-spacing overclaim; grades qualify every order claim) (design VA)" },
 ]
 specs        = []
