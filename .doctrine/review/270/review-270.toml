@@ -77,17 +77,21 @@ response = "Deterministic in-test generation is equivalent for the completion as
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "verified"
 severity = "major"
 title = "VH-1 dogfood acceptance outstanding — not agent-closable"
 detail = "Expected: human runs doctrine compare elicit over the live backlog and confirms answerable, reasons-attached questions with sane state wording (PHASE-03 VH-1). Observed: verified live during dev (median-probe comparisons, structural value blocks, answer commands, stable/candidates footer rendered cleanly) but the acceptance is the User's. Open pending User."
+disposition = "aligned"
+response = "User ran the VH-1 dogfood and accepted (2026-07-12): queue renders answerable, reasons-attached questions with sane state wording. Acceptance granted."
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "verified"
 severity = "minor"
 title = 'product-critique.md provenance — landed in 15c816e2 though handover marked it "not ours"'
 detail = 'Expected: commit 15c816e2 carries only slice-owned artifacts. Observed: .doctrine/slice/217/product-critique.md (196 lines, an external product-lens critique of the design) + slice-217.toml rode the commit; the prior handover had marked product-critique.md "not ours". User call: keep it co-located with the slice (it is a substantive critique of D5/D15 surface language) or git rm --cached. Open pending User.'
+disposition = "aligned"
+response = "User confirmed (2026-07-12): product-critique.md stays tracked, co-located with the slice. Commit 15c816e2 inclusion intended."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
