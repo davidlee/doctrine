@@ -149,11 +149,23 @@ pub(crate) enum Hypothetical<'a> {
   AnchorRemoved(&'a str),              // anchor-review: edit modelled as removal (D12)
   RowsRetired(&'a BTreeSet<RowUid>),   // anchor-review: uphold — conflicting rows dropped
 }
-pub(crate) fn hypothetical_yield(
-  active: &[&Judgement], anchors: &AnchorMap,
+pub(crate) fn hypothetical_outcome(
+  active: &[&Judgement], anchors: &AnchorMap, baseline: &Reachability,
   hypo: &Hypothetical, relevant: &[(PairSide, PairSide)],
-) -> i64   // |determined_after| − |determined_before| over `relevant`; signed
+) -> HypotheticalOutcome   // { newly_determined, no_longer_determined } pair sets
+// hypothetical_yield(…) -> i64: thin wrapper, |newly| − |no_longer| (signed)
 ```
+
+As built (PHASE-01, RV-270 F-3): the primitive returns the *pair sets*, not a
+bare count — D13's `guaranteed_impact` rank-decays over the newly-determined
+pairs, and a count-only API would force a second recompile per answer,
+breaking the §2 cost bound. The baseline `&Reachability` is caller-held (the
+memoised per-refresh baseline), keeping ≤3 recompiles per candidate honest.
+The hypothetical remap keys on `PairSide.class` (class id = smallest member
+entity id); under a C2-split hypothetical an anchor hoisted from a
+non-representative member correctly stays with the representative's fragment
+(battery-pinned). Per-ITEM fidelity under class splits would need the item
+entity on `PairSide` — not required for class-level pairs.
 
 Recompiles via `compile` (pure, evidence-sized — no second propagation
 engine); rebuilds reachability for the hypothetical set; counts. Negative
@@ -197,6 +209,11 @@ Candidate pool, three sources:
 1. **Comparison pairs** — `indeterminate_pairs` over the top-K frontier items
    (K from `DecisionContext::Sequencing`), filtered by the existing capture
    admissibility (same gate `compare record` applies — no second rule set).
+   **Source partition (as built, RV-270 F-4):** this source enumerates pairs
+   among *constrained* pool items only; an *un-constrained* top-K item (zero
+   constraining rows, no anchor) is owned by median-probe — one probe each.
+   Stops a brand-new item flooding K comparison pairs; honours D14's
+   calibration intent.
 2. **Median-probe calibration (D14)** — top-K item with zero constraining
    rows and no anchor: candidate against the projected median of its
    comparable set, reason `median-probe`. Stateless; each refresh re-derives
@@ -214,7 +231,14 @@ Candidate pool, three sources:
    rows each outcome would liberate.
 
 Ranking (D13): `score = guaranteed_yield × guaranteed_impact × confirm_boost`;
-admission `guaranteed_yield > 0`; per answer, `impact = Σ w(r)` over that
+admission `guaranteed_yield > 0` for the *yield-motivated* sources (comparison,
+median-probe). **Anchor-review admits on suspect EXISTENCE** (as built,
+RV-270 F-4): `score = max(guaranteed_yield, 0) × impact`, so zero/negative
+suspects sink to the bottom but never vanish — a blanket filter would drop the
+typical single-path suspect (complete cited-closure retirement reactivates
+nothing) and contradict D15 ("anchor-review can admit while every top-K pair
+is determined"; a live suspect is standing evidence-debt) and eval C2's
+warrant. Per answer, `impact = Σ w(r)` over that
 answer's newly-determined pairs, `w(r) = 1/(1 + r)` with `r` = the better
 frontier rank in the pair (named const shape `ELICIT_RANK_DECAY`);
 `guaranteed_impact` = min impact over the answers attaining the min yield
@@ -345,12 +369,23 @@ version-gated fields later if wanted).
 |---|---|
 | `src/comparison/query.rs` | new — §1 predicates + reachability |
 | `src/comparison/mod.rs` | `mod query` + re-exports |
-| `src/comparison/compile.rs` | narrow read accessors only; no semantic change |
 | `src/priority/elicit.rs` | new — §2 queue assembly |
 | `src/priority/config.rs` | `ELICIT_DEPTH`, `ELICIT_LIMIT`, `ELICIT_RANK_DECAY`, `ELICIT_CONFIRM_BOOST` + `[priority.elicit]` parse |
-| `src/priority/surface.rs` | bare-estimate mask plumb if S3 block carries it |
+| `src/priority/surface.rs` | bare-estimate mask plumb if S3 block carries it; `value_source_reason` visibility + `class_bounds_structural` |
 | `src/commands/compare.rs` | `Elicit` arm, render, JSON emit |
 | `src/priority/mod.rs` | `mod elicit` |
+| `src/commands/guard.rs` | `compare elicit` READ-classed (D18) |
+| `src/comparison/store.rs` | owned `active_judgements` + `anchors` exposure on `Pipeline` (additive) |
+| `src/comparison/wire.rs` | `Clone` derives on `Judgement`/`RaterKind`/`RowForm` (Clone only, not Copy) |
+| `src/priority/graph.rs` | `cost_ctx` field + `item_costing` read accessor (D6 costing; shared `tag_term`) |
+| `src/priority/render.rs` | human render idiom; `value_source_fragment` `pub(crate)` |
+| `tests/e2e_compare_elicit.rs` | new — e2e goldens (plan PHASE-03 VT-1..4) |
+
+As-built (reconcile, RV-270 F-1/F-2): the six rows below `priority/mod.rs`
+were touched but undeclared at design time — added here and to the selector
+registry. `src/comparison/compile.rs` was declared ("narrow read accessors")
+but needed NO change — `ConstraintSet` pub fields sufficed; the propagation
+engine is untouched (selector removed; VA-1: diff empty across the slice).
 
 ## §5 Verification plan
 

@@ -31,10 +31,6 @@ selector = "src/comparison/mod.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/comparison/compile.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/priority/elicit.rs"
 intent = "design-target"
 
@@ -52,6 +48,30 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/commands/compare.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/store.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/wire.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/render.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_compare_elicit.rs"
 intent = "design-target"
 
 [[relation]]

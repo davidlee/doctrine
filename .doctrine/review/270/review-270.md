@@ -103,3 +103,35 @@ acceptance; F-9 `product-critique.md` keep-or-untrack.
 - None. No ADR, policy, standard, or spec is touched by any finding; RFC-019
   deviations were already recorded at design time (design.md §RFC-019
   deviations) and re-verified here.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+
+- **Selector registry (F-1, F-2 — load-bearing):** `slice selector add`
+  design-target ×6 (`src/commands/guard.rs`, `src/comparison/store.rs`,
+  `src/comparison/wire.rs`, `src/priority/graph.rs`, `src/priority/render.rs`,
+  `tests/e2e_compare_elicit.rs`); `slice selector rm src/comparison/compile.rs`.
+  Conformance now 13 conformant / 0 undelivered; residual undeclared = the two
+  expected process artifacts (`rfc/011/case-notes.md`, `slice/217/notes.md` —
+  IMP-282 filed).
+- **design.md §4 (F-1/F-2 mirror):** six as-built rows added; compile.rs row
+  removed with an as-built note (pub fields sufficed, engine untouched).
+- **design.md §1 (F-3):** `hypothetical_outcome` pair-set primitive documented
+  (signature block replaced); caller-held baseline `&Reachability`; class-keyed
+  hypothetical remap + per-item-fidelity caveat.
+- **design.md §2 (F-4):** source partition pinned (constrained→comparison,
+  un-constrained→median-probe); anchor-review existence-admission pinned
+  (`score = max(gy, 0) × impact`; D15 + eval C2 warrant).
+
+### REVs completed
+
+- None needed — brief carried no governance/spec items.
+
+### Withdrawn / tolerated
+
+- F-7: tolerated — VT-4 corpus generated deterministically in-test rather than
+  committed fixtures; rationale in the finding disposition; User declined
+  conversion at audit report.
+
+Reconcile pass complete — handoff to /close.
