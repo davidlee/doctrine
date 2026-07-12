@@ -15,13 +15,6 @@
 
 mod compile;
 mod project;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "SL-217 PHASE-01 stages the query predicates one phase ahead of their consumer (priority::elicit, PHASE-02); until then every item is test-only (mem.pattern.lint.dead-code-staged-ahead-cfg-test)"
-    )
-)]
 mod query;
 mod resolve;
 mod store;
@@ -29,9 +22,12 @@ mod wire;
 
 pub(crate) use compile::*;
 pub(crate) use project::*;
-// `query` is not re-exported yet: its first non-test consumer is SL-217
-// PHASE-02 (`priority::elicit`), which adds `pub(crate) use query::*;` — the
-// same self-clearing staging as the PHASE-01..04 note above.
+// SL-217 PHASE-02 retires the staged-ahead `dead_code` gate: `priority::elicit`
+// is `query`'s first non-test consumer. `hypothetical_yield` stays the lone
+// exception — a thin signed-count wrapper over `hypothetical_outcome`, which is
+// what elicit actually needs (D13 impact wants the pair sets) — so it carries
+// its own per-item gate at its definition.
+pub(crate) use query::*;
 pub(crate) use resolve::*;
 pub(crate) use store::*;
 pub(crate) use wire::*;

@@ -17,6 +17,14 @@
 //! PHASE-01/02 self-clearing `dead_code` scopes.
 pub(crate) mod channels;
 pub(crate) mod config;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "SL-217 PHASE-02 stages the queue assembler one phase ahead of its consumer (the `compare elicit` command arm, PHASE-03); until then every item is test-only (mem.pattern.lint.dead-code-staged-ahead-cfg-test)"
+    )
+)]
+pub(crate) mod elicit;
 pub(crate) mod findings;
 pub(crate) mod graph;
 pub(crate) mod order;

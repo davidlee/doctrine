@@ -116,6 +116,69 @@ fn default_gauge_step() -> f64 {
     GAUGE_STEP
 }
 
+// ── elicitation queue (SL-217 D2/D13) ──────────────────────────────────────
+
+/// The default elicitation frontier depth K (design D2): the team's standing
+/// pull-horizon. Config-overridable via `[priority.elicit] depth`; a
+/// per-invocation `--depth` overrides that again (PHASE-03). Named const
+/// (STD-001).
+pub(crate) const ELICIT_DEPTH: usize = 8;
+
+/// The default `--limit` display cap for `doctrine compare elicit` (design §3);
+/// the full pool is always ranked, only the render is capped. PHASE-03's
+/// consumer (the command arm); staged one phase ahead, self-clearing gate.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "display cap consumed by the PHASE-03 `compare elicit` arm (SL-217)"
+    )
+)]
+pub(crate) const ELICIT_LIMIT: usize = 5;
+
+/// The impact rank-decay shape (design D13): a newly-determined pair at better
+/// frontier rank `r` (0-based) contributes `w(r) = 1/(1 + ELICIT_RANK_DECAY·r)`.
+/// `1.0` gives the design's `1/(1 + r)`. Implementation-owned tuning
+/// (ADR-015 numeric posture).
+pub(crate) const ELICIT_RANK_DECAY: f64 = 1.0;
+
+/// The confirm-boost multiplier (design D13): applied to a comparison
+/// candidate whose both participants are calibrated by agent-only evidence,
+/// biasing selection toward regions no human has spoken to. `> 1`;
+/// implementation-owned tuning.
+pub(crate) const ELICIT_CONFIRM_BOOST: f64 = 1.5;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub(crate) struct ElicitConfig {
+    #[serde(default = "default_elicit_depth")]
+    pub(crate) depth: usize,
+    #[serde(default = "default_rank_decay")]
+    pub(crate) rank_decay: f64,
+    #[serde(default = "default_confirm_boost")]
+    pub(crate) confirm_boost: f64,
+}
+
+impl Default for ElicitConfig {
+    fn default() -> Self {
+        Self {
+            depth: ELICIT_DEPTH,
+            rank_decay: ELICIT_RANK_DECAY,
+            confirm_boost: ELICIT_CONFIRM_BOOST,
+        }
+    }
+}
+
+fn default_elicit_depth() -> usize {
+    ELICIT_DEPTH
+}
+fn default_rank_decay() -> f64 {
+    ELICIT_RANK_DECAY
+}
+fn default_confirm_boost() -> f64 {
+    ELICIT_CONFIRM_BOOST
+}
+
 // ── top-level config ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -133,6 +196,8 @@ pub(crate) struct PriorityConfig {
     pub(crate) estimate: EstimateCost,
     #[serde(default)]
     pub(crate) gauge: GaugeConfig,
+    #[serde(default)]
+    pub(crate) elicit: ElicitConfig,
 }
 
 // ── accessors ─────────────────────────────────────────────────────────────
@@ -185,6 +250,11 @@ pub(crate) fn load_from_table(table: &toml::value::Table) -> PriorityConfig {
     if let Some(t) = table.get("gauge").and_then(|v| v.as_table()) {
         cfg.gauge.step = f64_or(t, "step", GAUGE_STEP);
     }
+    if let Some(t) = table.get("elicit").and_then(|v| v.as_table()) {
+        cfg.elicit.depth = usize_or(t, "depth", ELICIT_DEPTH);
+        cfg.elicit.rank_decay = f64_or(t, "rank_decay", ELICIT_RANK_DECAY);
+        cfg.elicit.confirm_boost = f64_or(t, "confirm_boost", ELICIT_CONFIRM_BOOST);
+    }
     if let Some(t) = table.get("kind_weights").and_then(|v| v.as_table()) {
         for (k, v) in t {
             if let Some(f) = f64_val(v) {
@@ -218,6 +288,21 @@ fn f64_or(table: &toml::value::Table, key: &str, default: f64) -> f64 {
     table.get(key).and_then(f64_val).unwrap_or(default)
 }
 
+/// Extract a `usize` from a TOML integer, rejecting negatives and non-integers.
+/// Absent / malformed / negative → `default` (the config never errors).
+#[expect(
+    clippy::as_conversions,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    reason = "TOML depth is a small positive count, far from usize bounds"
+)]
+fn usize_or(table: &toml::value::Table, key: &str, default: usize) -> usize {
+    match table.get(key).and_then(toml::Value::as_integer) {
+        Some(i) if i >= 0 => i as usize,
+        _ => default,
+    }
+}
+
 // ── clamping ──────────────────────────────────────────────────────────────
 
 /// Clamp every coefficient in-place so downstream products stay finite.
@@ -238,6 +323,12 @@ fn clamp(mut cfg: PriorityConfig) -> PriorityConfig {
 
     // gauge.step: non-finite/negative/over-max clamp like any general coefficient.
     cfg.gauge.step = clamp_general(cfg.gauge.step, GAUGE_STEP);
+
+    // elicit: depth floored at 1 (K = 0 has no frontier to probe); the two
+    // numeric shapes clamp like any general coefficient.
+    cfg.elicit.depth = cfg.elicit.depth.max(1);
+    cfg.elicit.rank_decay = clamp_general(cfg.elicit.rank_decay, ELICIT_RANK_DECAY);
+    cfg.elicit.confirm_boost = clamp_general(cfg.elicit.confirm_boost, ELICIT_CONFIRM_BOOST);
 
     // kind_weights and tag_coefficients: clamp each value
     for v in cfg.kind_weights.values_mut() {
@@ -526,5 +617,52 @@ mod tests {
 
         let cfg2 = load_from("[priority]\ngauge = { step = -0.1 }\n");
         assert_eq!(cfg2.gauge.step, 0.0);
+    }
+
+    // ---- elicit sub-table (SL-217 PHASE-02 VT-5) ----
+
+    /// VT-5: absent file AND a `[priority]` with no `elicit` sub-table ⇒ the
+    /// `ELICIT_DEPTH` default (8) and the named numeric-shape defaults.
+    #[test]
+    fn elicit_absent_uses_named_const_defaults() {
+        let cfg = load_from("[priority]\ncoefficients = { value = 3.0 }\n");
+        assert_eq!(cfg.elicit.depth, ELICIT_DEPTH);
+        assert_eq!(cfg.elicit.depth, 8);
+        assert_eq!(ELICIT_LIMIT, 5); // named display-cap const exists (STD-001)
+        assert_eq!(cfg.elicit.rank_decay, ELICIT_RANK_DECAY);
+        assert_eq!(cfg.elicit.confirm_boost, ELICIT_CONFIRM_BOOST);
+
+        let dir = tempfile::tempdir().unwrap();
+        let cfg2 = load(dir.path());
+        assert_eq!(cfg2.elicit.depth, ELICIT_DEPTH);
+    }
+
+    /// VT-5: a config-authored `[priority.elicit] depth` overrides the default.
+    #[test]
+    fn elicit_depth_override_roundtrips() {
+        let cfg = load_from("[priority]\nelicit = { depth = 12 }\n");
+        assert_eq!(cfg.elicit.depth, 12);
+    }
+
+    /// VT-5: depth clamps to ≥ 1 per the gauge.step clamp idiom — `0` (no
+    /// frontier to probe) and a negative token both floor to 1.
+    #[test]
+    fn elicit_depth_floors_at_one() {
+        let cfg = load_from("[priority]\nelicit = { depth = 0 }\n");
+        assert_eq!(cfg.elicit.depth, 1);
+
+        // A negative integer is not a valid usize count → the default, then
+        // floored (still ≥ 1).
+        let cfg2 = load_from("[priority]\nelicit = { depth = -4 }\n");
+        assert_eq!(cfg2.elicit.depth, ELICIT_DEPTH);
+    }
+
+    /// VT-5: the numeric shapes clamp like any general coefficient
+    /// (non-finite → named default, negative → 0.0).
+    #[test]
+    fn elicit_numeric_shapes_clamp() {
+        let cfg = load_from("[priority]\nelicit = { rank_decay = nan, confirm_boost = -2.0 }\n");
+        assert_eq!(cfg.elicit.rank_decay, ELICIT_RANK_DECAY);
+        assert_eq!(cfg.elicit.confirm_boost, 0.0);
     }
 }

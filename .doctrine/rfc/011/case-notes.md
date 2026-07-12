@@ -1285,3 +1285,30 @@ body to `imp-281.md` by analogy with `slice-217.md` (kind-slug pattern
 inconsistency: slice files use kind prefix, backlog files use generic
 `backlog-`). Cost: one fix commit. Scaffold output prints the dir but not the
 body filename — printing it would have prevented the miss.
+[plan; SL-217-plan-2026-07-12]
+plan.toml scaffold comment (verification rows) shows a VT mandate inline table
+wrapped across multiple lines — invalid TOML 1.0 if copied literally (inline
+tables are single-line). Cost a verification pause + external TOML parse check
+before trusting the format. Suggest: single-line example or array-of-tables
+syntax in the scaffold comment.
+
+[execute; SL-217-PH02-a] PHASE-02 onboarding cost: assemble()'s three candidate
+sources each need a different slice of the compiled world (constraining counts,
+quarantine pairs, projection, per-pair eff_weight), and the design lists the
+sources without an explicit dedup rule between "all indeterminate pairs" and
+"median-probe for unconstrained items" — resolving that overlap required
+cross-reading D14/D15 + query.rs semantics before a single test could be
+written. ~2500 lines read (query/compile/config/graph/order/project/store/wire)
+to establish the exact input shape. The pre-implementation decisions in notes.md
+saved re-deriving the admission split, but the source-partition reading is a
+fresh in-phase call.
+
+[execute; SL-217-P02-finish]
+Handover framed PHASE-02 as a pure finish-line ("15 tests green, needs gate +
+commit"), but `cargo test` green ≠ `clippy` green. First `doctrine check gate`
+surfaced six pedantic/style errors in the new elicit.rs (integer_division,
+too_many_arguments, trivially_copy_pass_by_ref, map_or, doc-backticks). Cost:
+the "finish-line" agent paid a full read+fix+re-gate loop that the executing
+agent could have absorbed at zero marginal context by running the gate before
+writing the handover. Lesson: a handover must not label a phase "green / needs
+commit" until `check gate` (clippy+test+fmt) — not just `cargo test` — is exit 0.

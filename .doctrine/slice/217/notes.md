@@ -77,3 +77,65 @@ phase sheet and commit):**
 - **Classless frontier item** (zero rows): PairSide { class: own entity id,
   bounds unbounded, no anchor } — Free coupling; compile mints the class under
   any hypothetical.
+
+## PHASE-02 — implementation findings (code written, NOT yet gated/committed)
+
+Landed `src/priority/elicit.rs` (`assemble` + queue model), `[priority.elicit]`
+config (consts `ELICIT_DEPTH/LIMIT/RANK_DECAY/CONFIRM_BOOST` + `ElicitConfig`
+parse/clamp), retired the `comparison/query.rs` staged `dead_code` gate
+(`pub(crate) use query::*;`), gated `hypothetical_yield` + `indeterminate_pairs`
+per-item (elicit uses `hypothetical_outcome` + per-pair weights instead), and
+gated the whole `elicit` module staged-ahead of its PHASE-03 command consumer.
+15 tests green (11 elicit + 4 config). Gate + full suite NOT yet run.
+
+**Design deviations / in-phase readings to surface at audit:**
+
+- **Source partition (in-phase call, NOT design-pinned):** comparison source
+  enumerates indeterminate pairs among *constrained* pool items only;
+  *un-constrained* top-K items are owned by median-probe (one probe each). The
+  design lists the three sources without a dedup rule; this partition stops a
+  brand-new (zero-row, no-anchor) item flooding K comparison pairs — honours
+  D14's calibration intent. Recorded in `elicit.rs` module doc.
+- **Admission split** already recorded above (comparison/median-probe gate on
+  `guaranteed_yield > 0`; anchor-review admits on existence). Implemented:
+  anchor-review entries always emit, `score = max(gy,0)·impact` so zero/negative
+  suspects sink but never vanish.
+- **`ElicitInputs` carries `rank_decay` + `confirm_boost`** (the D13 numeric
+  shapes) as pure config inputs alongside `depth` (from `DecisionContext`). The
+  PHASE-03 shell fills them from `cfg.elicit`.
+- **Costing is an input, not computed here:** `ItemCosting { multiplier,
+  est_cost, bare_estimate }` per entity id. PHASE-03 builds it from
+  `PriorityGraph` (`m = coeff.value × kind_weight × tag_term`, D6). Keeps
+  `assemble` pure/graph-free.
+
+**Behaviour findings (pinned by tests):**
+
+- **RowsRetired can go NEGATIVE when it retires an anchored entity's ONLY
+  rows.** In the A(1)>B>C(3) conflict, uphold (retire the complete cited
+  closure {j0,j1}) leaves A and C with no row evidence, so `compile` drops
+  their anchors (anchor-without-rows ⇒ no class, `compile.rs` C1) and the
+  anchored (A,C) pair *reopens* → uphold yield −1, not 0. `guaranteed_yield =
+  min(revise +2, uphold −1) = −1`. This is the honest D10 negative-delta; the
+  test (`anchor_review_min_over_resolving_uphold_below_removal`) pins it. Any
+  future "uphold keeps the anchor live" refinement changes this number.
+- **Zero-yield comparison bridge is real and self-demonstrating:** with
+  differing per-pair costs over a value interval spanning zero (T>A,B>L, L<0),
+  the objective `2·v_A − v_B` stays sign-mixed under *every* order-bearing
+  answer, so guaranteed yield is 0 → admission drops it → `Stalled`, never
+  `Stable` (one test covers both admission-drop and the D15 stall/stable split).
+- **Two suspects per conflict:** an `AnchorConflict` always names two anchors,
+  so a single stale-anchor conflict yields TWO anchor-review candidates (both
+  suspects surfaced; the model can't tell which is stale — D12 accepts this).
+
+**Gate outcome (T8):** `doctrine check gate` exit 0 — clippy zero-warnings,
+full workspace suite green (3433 + all pre-existing priority/comparison suites,
+UNCHANGED — behaviour-preservation holds; no pre-existing test file touched).
+Gate surfaced six pedantic/style fixes in the new `elicit.rs`, all
+behaviour-neutral: `assemble(ctx: DecisionContext)` now by-value (Copy 8-byte,
+`trivially_copy_pass_by_ref`); `map_or` over `map().unwrap_or`; a `PairSide`
+doc backtick; and two `#[expect(clippy::integer_division)]` (pair-count `/2`,
+median index) + one `#[expect(clippy::too_many_arguments)]` on the private
+`build_comparison` helper (repo-sanctioned idiom, cf. governance.rs/spec.rs).
+**Design-note for audit:** `rank_map` + `depth` thread through four assembler
+fns as one impact-band context — a bundling opportunity deferred to keep the
+finish-line behaviour-neutral (would reshape four call sites).

@@ -492,6 +492,19 @@ pub(crate) fn hypothetical_outcome(
 
 /// The signed determinacy delta of one hypothetical (design D10). Negative
 /// is real: a contradicting hypothetical quarantines structure on recompile.
+///
+/// A thin wrapper over [`hypothetical_outcome`]: `elicit` consumes the outcome
+/// directly (D13 impact needs the pair sets, not a bare count), so this stays
+/// production-unused and carries a self-clearing per-item gate
+/// (mem.pattern.lint.dead-code-staged-ahead-cfg-test) until a count-only caller
+/// lands.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "signed-count convenience wrapper; elicit uses hypothetical_outcome directly (SL-217 PHASE-02)"
+    )
+)]
 pub(crate) fn hypothetical_yield(
     baseline_reach: &Reachability,
     active: &[&Judgement],
@@ -504,6 +517,17 @@ pub(crate) fn hypothetical_yield(
 
 /// Enumerate the indeterminate pairs within a candidate pool (design §1):
 /// all pairs over the pool (≤ K(K−1)/2), filtered by [`determined`].
+///
+/// `elicit` carries per-PAIR effective weights (D6: `m_self · c_other`), so it
+/// pairs its pool by hand rather than through this fixed-weight helper; the
+/// predicate stays for a same-weight caller and keeps its own battery green.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "fixed-weight pool helper; elicit pairs with per-pair weights (SL-217 PHASE-02)"
+    )
+)]
 pub(crate) fn indeterminate_pairs(
     reach: &Reachability,
     pool: &[PairSide],
