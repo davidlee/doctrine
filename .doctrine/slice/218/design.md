@@ -75,8 +75,12 @@ per hypothetical; no algorithmic change.
 ### Invariants
 
 - INV-1 (knob-off identity): `demote_agent_evidence = false` ⇒ all existing
-  outputs byte-identical (SL-213/217 suites are the proof — behaviour-
-  preservation gate).
+  **comparison / elicit / inference** outputs byte-identical (SL-213/217
+  suites are the proof — behaviour-preservation gate). Scope note: priority
+  `next`/`explain` goldens change *intentionally* at PHASE-03 where tension
+  callouts appear (knob-independent feature); those diffs are reviewed, not
+  covered by this invariant. At PHASE-01 close, **all** existing suites are
+  byte-identical knob-off.
 - INV-2 (agent evidence never retires): knob-on, no pair whose determining
   constraint set requires an agent row reads `Determined`.
 - INV-3 (D13 unchanged): `confirm_boost` still consulted only in selection
@@ -118,14 +122,25 @@ maps.
 For each pair `(A, B)` with `pos(B) < pos(A)` in `F` and
 `value_dim(A) > value_dim(B)`:
 
-- **Structure** iff `A` is reachable from `B` over surviving seq/dep edges
-  restricted to the considered set (transitive — Kahn honours paths, not
-  just direct edges). Cite the first edge on one such path.
+- **Structure** iff `A` is reachable from `B` over the **full** surviving
+  seq/dep graph (transitive; NOT page-restricted — a path routing through a
+  node outside the top-K is still structure, and page-restriction would
+  misclassify it as Composition). Only the *pair* must be on the page. Cite
+  the first edge on one such path.
+- else, if full scores compare equal (`total_cmp`) — **excluded**: the
+  inversion is an id-tiebreak artifact, not an override; rendering it would
+  assert a cause that does not exist.
 - else **Composition**; deltas = per-dimension score differences.
 
-Ties (`value_dim` equal) are not tensions. Complexity `O(K² + K·E)` over the
-page — trivial. Determinism: pairs emitted in delivery-order position order;
-`total_cmp` for float comparisons (house style).
+Ties (`value_dim` equal) are not tensions. Complexity `O(K²)` pair scan with
+per-pair bounded reachability (DFS over surviving edges, memoized) —
+trivial at page scale. Determinism: pairs emitted in delivery-order position
+order; `total_cmp` for float comparisons (house style).
+
+**`explain` considered set**: same default page as `next`. If the explained
+id is on the page, its tensions (both classes) render; if not, the section
+discloses "not on the current frontier — no tension analysis" rather than
+inventing a hypothetical position for a non-surfaced item.
 
 `value_dim` here is the point projection the engine actually consumed —
 detection does not re-derive value. The *grade* (D6) is what keeps the
@@ -134,13 +149,32 @@ callout honest when the projection's ordering is not feasible-set-backed.
 ### Grade injection (command tier)
 
 `run_next` / `run_explain` (`src/priority/mod.rs`) already own the impure
-assembly. After detection returns pairs, command tier maps entity → 
-comparison class and calls the existing determinacy predicate (human system
-when knob-on) **only for detected pairs** (≤ K² checks, no corpus sweep);
+assembly. After detection returns pairs, command tier maps entity →
+comparison class and calls the determinacy predicate (human system when
+knob-on) **only for detected pairs** (≤ K² checks, no corpus sweep);
 entities with no class / no evidence ⇒ `Projected`. Grades decorate the
 `Tension` rows before they reach the view. Priority stays free of
 `comparison` imports (ADR-001); comparison exposes one query fn taking pair
-ids, returning grade data.
+ids **plus per-item effective multipliers and costs**, returning grade data.
+
+**Objective generalisation (multiplier correctness).** The grade asserts a
+claim about `value_dim` order, and `value_dim = m·v / est_cost` where
+`m = value_coeff × kind_weight × tag_multiplier` (ADR-015) — per-item
+config-derived constants, `m ≥ 0` (tag floor). SL-217's determinacy
+objective `v_A·c_B − v_B·c_A` tests raw `v/c` order, which multipliers can
+invert relative to `value_dim` order. The pair-grade query therefore
+evaluates the sign range of **`m_A·v_A·c_B − m_B·v_B·c_A`** over the joint
+region — still linear in `(v_A, v_B)`, same closed-form machinery (SL-217
+D8 lemma unaffected: the region is unchanged, only the objective's constant
+coefficients differ). `m = 0` degenerates gracefully (term drops; sign from
+the surviving term). Existing elicit-queue determinacy is NOT touched — it
+keeps SL-217's raw objective and semantics; the generalised objective exists
+only behind the pair-grade query this slice adds.
+
+**Counts** in `Determined { counts }` come from the existing
+`constraining_counts_by_class` seam (`src/comparison/compile.rs:156`),
+summed over the pair's classes — the same provenance surface `explain`
+already discloses ("bounds from 2 human + 14 agent judgements").
 
 ## §3 PHASE-03 — render
 
@@ -205,7 +239,13 @@ counts disclosed when they constrain (T7 disclosure posture). New
 - VT-C: human-subset quarantine self-consistency — human row in an
   agent-involved cycle: quarantined full-system, retained human-system.
 - VT-D: detection unit fixtures — no-tension, structure (direct + transitive
-  edge), composition, mixed, value_dim tie (not a tension), determinism.
+  edge, incl. path through an off-page node), composition, mixed, value_dim
+  tie (not a tension), equal-full-score tiebreak (excluded), determinism.
+- VT-G: grade objective with multipliers — fixture where kind/tag
+  multipliers invert value_dim order relative to raw v/c order; grade
+  reflects the value_dim claim (raw objective would answer wrongly); `m = 0`
+  degeneracy case.
+- VT-H: explain off-frontier id — disclosure line, no invented tensions.
 - VT-E: wording goldens — the three shapes above + cap behaviour + JSON
   schema fields; D5/D15 phrasing pinned.
 - VT-F: knob-on elicit — previously agent-determined pair re-enters queue as
