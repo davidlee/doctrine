@@ -55,17 +55,21 @@ treats the ordering as elicited truth.
 - True human-confirmation candidate kind (dependency tracing of determinacy
   on agent-only edges) — post-D7, RFC territory.
 
-## Open questions (design to settle)
+## Open questions (settled at design, 2026-07-12)
 
-- OQ-1: D7 knob shape — demote at determinacy level (which variant:
-  inert-until-confirmed / excluded-from-determinacy / quarantine-on-rank)
-  vs render-level disclosure only. Does the knob gate stakeholder surfaces
-  or ship as plain config?
-- OQ-2: D7 placement — PHASE-01 entrance for the narrative phases (current
-  assumption), or split into its own preceding slice if design shows the
-  determinacy-semantics change sprawls.
-- OQ-3: Tension detection seam — exact boundary between the pure detection
-  fn (priority layer) and the render seam in `next`/`explain`.
+- OQ-1 → design D1/D2: excluded-from-determinacy (human-only system for
+  determinacy verdicts; agent rows keep constraining bounds/projection/
+  queue); plain config `[priority.compare] demote_agent_evidence`, default
+  off; knob-on gate contract recorded for the future stakeholder-surface
+  slice.
+- OQ-2 → design D3: PHASE-01 of this slice.
+- OQ-3 → design D7: pure detection fn in `src/priority/tension.rs`;
+  grading reuses shipped `PairSide`/`determined()` machinery in-priority
+  (elicit pattern); render via new `ReasonKind` arm(s) through
+  `reason_line()`.
+
+Design adversarially reviewed: RV-271 (gpt-5.5, 7 findings, all
+accepted-fixed and verified; ledger done).
 
 ## Risks & Assumptions
 
