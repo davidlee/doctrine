@@ -1,28 +1,22 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 133
-slug = "cli-usability-shortfall-ux-review"
-title = "CLI usability shortfall UX review (agent run)"
+id = 289
+slug = "value-burndown-blind-to-ad-hoc-completion"
+title = "Value-burndown blind to ad-hoc completion"
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
-created = "2026-06-21"
-updated = "2026-06-21"
-tags = ["area:cli", "area:ux"]
+created = "2026-07-13"
+updated = "2026-07-13"
+tags = ["area:backlog", "area:priority", "facets", "quality"]
 
-# outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
-# `[[relation]]` rows now (SL-048 "the cut") — author them with
+# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
 # `doctrine link ITEM-NNN <label> <target>`; `doctrine inspect ITEM-NNN` renders
 # them. The dep/seq axes below stay typed (they carry per-edge payloads).
 [relationships]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[value]
-value = 1.0
-
-[estimate]
-lower = 1.5
-upper = 4.0

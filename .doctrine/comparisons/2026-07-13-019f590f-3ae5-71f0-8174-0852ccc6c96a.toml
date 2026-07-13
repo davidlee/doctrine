@@ -1,0 +1,20 @@
+schema = "doctrine.comparison-session"
+version = 2
+tombstone = []
+
+[session]
+uid = "019f590f-3ae5-71f0-8174-0852ccc6c96a"
+date = "2026-07-13"
+
+[[judgement]]
+uid = "019f590f-3ae5-71f0-8174-0867e47f8394"
+seq = 0
+a = "IMP-220"
+b = "IMP-202"
+response = "prefer-b"
+domain = "value"
+frame = "equal-effort"
+form = "order"
+rater = "human"
+by = "david"
+date = "2026-07-13"

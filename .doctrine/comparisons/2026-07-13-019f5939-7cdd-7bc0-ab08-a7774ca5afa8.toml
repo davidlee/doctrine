@@ -1,0 +1,22 @@
+schema = "doctrine.comparison-session"
+version = 2
+tombstone = []
+
+[session]
+uid = "019f5939-7cdd-7bc0-ab08-a7774ca5afa8"
+date = "2026-07-13"
+
+[[judgement]]
+uid = "019f5939-7cdd-7bc0-ab08-a7858f4eacb2"
+seq = 0
+a = "IMP-260"
+b = "IMP-263"
+response = "prefer-a"
+domain = "value"
+frame = "equal-effort"
+form = "order"
+supersedes = "019f51dd-7eec-7963-ad39-3964438ced2a"
+rater = "human"
+by = "david"
+note = "spec-req reader less common than phase-criteria reader"
+date = "2026-07-13"

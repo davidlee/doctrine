@@ -8,7 +8,7 @@ kind = "improvement"
 status = "started"
 resolution = ""
 created = "2026-07-04"
-updated = "2026-07-06"
+updated = "2026-07-13"
 tags = ["area:dispatch", "area:skills", "area:testing"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
@@ -26,7 +26,7 @@ lower = 0.7
 upper = 1.4
 
 [value]
-value = 2.5
+value = 3.0
 
 [[relation]]
 label = "references"
