@@ -113,6 +113,30 @@ Inputs:
    `refs/heads/main`); a difference means trunk does not hold the projected tip, so
    integration did not land.
 
+3b. **Split lineage — the payload reached trunk out-of-band
+   (`--record-integration`).** If the reviewed code already sits on trunk by a
+   sanctioned route the dispatch journal never recorded — an operator direct-land,
+   a manual `--no-ff` merge of the payload, an external integration — then
+   `--integrate` (step 3a) **cannot** run: it advances trunk fast-forward-only, but
+   a landed payload is an *ancestor*, not a descendant, of the trunk merge tip
+   (non-ff → refused). The close gate still refuses `done` ("dispatched but no
+   trunk row"). Record the earned row instead of hand-editing `journal.toml`:
+
+   ```bash
+   trunk=$(doctrine dispatch deliver-to)
+   doctrine dispatch sync --slice <N> --record-integration --trunk "$trunk"
+   ```
+
+   It resolves the earned trunk payload (phase-chain tip, or the admitted
+   `close_target` when a candidate workflow is active — **never** `review/<N>`, a
+   review surface SPEC-022 forbids as a trunk payload), asserts it is **already an
+   ancestor** of trunk, and commits a single **Verified** trunk row — mutating no
+   ref. Then `slice status <N> done` reads that row and passes. This is the
+   sanctioned replacement for the SL-190 hand-written journal row (SL-211 /
+   IMP-236); land the payload out-of-band as `git merge --no-ff phase/<N>-NN` (or
+   the admitted candidate), not `review/<N>`. Deep recovery detail:
+   `doctrine memory show mem.pattern.dispatch.split-lineage-close-conflict-direct-land`.
+
 4. **Transition lifecycle:** confirm the slice is in `reconcile` (flip it with
    `doctrine slice status <id> reconcile` if `/audit` didn't), then
    `doctrine slice status <id> done` (`<id>` is the bare number, e.g. `40`).

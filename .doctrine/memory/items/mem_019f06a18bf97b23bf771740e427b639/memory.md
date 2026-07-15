@@ -27,6 +27,17 @@ reconciled truth, then let the *standard* close_target merge absorb it:
    status seam. Then the ISS-030 tree-true checks
    ([[mem_019ec912f7fd746284bfaef00717443e]]): `--show-journal-trunk-oid` == `main`.
 
+**Lighter still — `dispatch sync --record-integration` (SL-211).** This route's
+step 3 `--integrate` does no code work; its sole job is to *record* the journal
+trunk row. Once the earned payload (phase-chain tip / admitted `close_target` —
+never `review/<slice>`, a review surface SPEC-022 forbids as a trunk payload) is
+**already an ancestor of trunk**, that recording is exactly what `dispatch sync
+--slice N --record-integration --trunk refs/heads/main` does directly: it asserts
+the payload sits on trunk and commits the Verified row, no advancing `--integrate`
+or content-no-op candidate needed. **Never hand-write the row** — that was the
+pre-SL-211 stopgap (IMP-236, shipped as this verb). See
+[[mem_019ee4bac0597bf0809caf56b0e59466]].
+
 **Why this is consistent, not a hack.** The standard close_target is *always*
 `merge(review/<slice>, current-trunk)` — its tip routinely differs from the
 `review/<slice>` tip (cf. SL-098: close_target `ac93dc58` ≠ review `ff037f`). This

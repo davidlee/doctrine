@@ -42,6 +42,22 @@ a near-empty FF whose real job is to write the ledger row:
    Verify (b): `sync --show-journal-trunk-oid --trunk <trunk>` == trunk ref.
 6. `slice status N done` → close the originating backlog item.
 
+**Lighter path when the payload already landed — `dispatch sync
+--record-integration` (SL-211).** Steps 2–5 re-cut `review/<N>`, rebuild a
+candidate, admit, and `--integrate`; but when the reviewed **payload** (the
+phase-chain tip / admitted `close_target` — never `review/<N>`, a review surface
+SPEC-022 forbids as a trunk payload) is **already an ancestor of trunk** (the
+"delta is near-empty" case at step 3 — the code has landed and integrate would
+only *record*, not advance), skip that ceremony:
+
+    dispatch sync --slice N --record-integration --trunk <trunk>
+
+resolves the earned payload from the ledger, asserts it already sits on trunk,
+and commits the Verified trunk row directly. Reserve the full
+candidate→admit→`--integrate` path for when integrate must genuinely **advance**
+trunk. **Never hand-write the row** — that was the pre-SL-211 stopgap (IMP-236,
+shipped as this verb). See [[mem_019ee4bac0597bf0809caf56b0e59466]].
+
 **Cost consciously paid.** Re-cutting `review/<N>` changes the audited surface's
 **ref OID** but not its **code** — the divergent file is instrumentation, not a code
 unit, so the audit (RV) stays valid. No trunk reset, no history rewrite.

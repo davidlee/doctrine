@@ -199,6 +199,29 @@ failures bite — both report-and-halt by design:
 The trunk ladder defaults to the remote's `origin/HEAD`, which lags a local
 trunk; point dispatch verbs at the intended local trunk ref explicitly.
 
+## Split lineage — record an already-landed payload, don't advance trunk
+
+`--integrate` advances trunk fast-forward-only. When the reviewed code reached
+trunk by a sanctioned route the dispatch journal never recorded — an operator
+direct-land, a manual `--no-ff` merge of the payload, an external integration —
+the landed payload is an **ancestor** of the trunk tip, not a descendant, so
+`--integrate` can only refuse (non-ff) and the close gate refuses `done`
+("dispatched but no trunk row"). The reviewed code *is* on trunk; only the ledger
+row is missing.
+
+`dispatch sync --slice N --record-integration --trunk <ref>` fills exactly that
+gap. It resolves the earned trunk payload from the ledger — identical to
+`--integrate`'s planning: the phase-chain tip, or the admitted `close_target` when
+a candidate workflow is active (**never** `review/<N>`, a review surface that is
+never a trunk payload) — asserts that payload is **already an ancestor** of trunk
+(the same `is_ancestor` standard the close gate holds), and commits one
+**Verified** trunk row to `dispatch/<N>`, mutating no external ref. It is the
+sanctioned replacement for a hand-edited `journal.toml` trunk row (SL-211). It
+*records*; it never *advances* — landing the payload is a separate, out-of-band
+step (`git merge --no-ff phase/<N>-NN`, or the admitted candidate). Retrieve
+`mem.pattern.dispatch.split-lineage-close-conflict-direct-land` for the full
+recovery.
+
 ## Worker-spawn identity is accident-fenced, not fail-closed
 
 A `SubagentStart`-style spawn hook that stamps a worker-identity marker runs

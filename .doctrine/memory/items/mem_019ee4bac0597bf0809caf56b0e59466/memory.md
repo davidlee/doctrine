@@ -24,34 +24,47 @@ lineages created independently is the tell. Same family: a sibling slice closing
 first, any dirty-tree rescue commit. Root prevention: don't author a slice's
 phases in the main tree while its dispatch bundle is in flight.
 
-**Escape (user-approved, SL-104).** Abandon the candidate/admitted-OID seam and
-direct-land:
-1. In the parked worktree, `git merge --no-ff review/<N>`, resolve conflicts so
-   no work is lost — for each conflicted file decide *which lineage owns it*:
-   take the audited bundle's version where it's the matured slice deliverable;
-   take main's where main carries unrelated newer work (e.g. a sibling slice's
-   tests) the bundle's stale base lacks.
-2. **Verify the resolution equals the intended delta**: from main,
-   `git diff --cached` of `git checkout <merge> -- <files>` must show *only* the
-   slice's intended additions, no reversions of sibling work.
-3. Apply those files to main, finish any deferred reconcile code-edits, `just
-   check`, commit `close(SL-<N>)`, then `slice status <N> done`.
+**Escape (updated at SL-211 — land the *payload*, then record).** Abandon the
+candidate/admitted-OID seam and direct-land the earned **trunk payload** — never
+`review/<N>`. `review/<N>` is a *review surface*, a different lineage the close
+gate rejects as a trunk payload (SPEC-022); the payload is the
+`.doctrine`-stripped cumulative code cut `phase/<N>-NN` (legacy) or the admitted
+`close_target` candidate ref (candidate-active):
+1. Land the payload out-of-band so it becomes an ancestor of trunk: `git merge
+   --no-ff phase/<N>-NN` (legacy) or `git merge --no-ff <admitted-close_target>`
+   (candidate-active). Resolve conflicts so no work is lost — for each conflicted
+   file decide *which lineage owns it*: take the payload's version where it is the
+   matured slice deliverable; take trunk's where trunk carries unrelated newer
+   work (e.g. a sibling slice's tests) the stale base lacks.
+2. **Verify the resolution equals the intended delta**: `git diff --cached` must
+   show *only* the slice's intended additions, no reversions of sibling work.
+3. Finish any deferred reconcile code-edits, `just check`, commit `close(SL-<N>)`.
 
-**Does `done` pass? Depends on the journal — CORRECTED at SL-190.** The SL-126
-close-integration gate (`ledger.rs::trunk_integration`) distinguishes two cases,
-not one: a journal that is **absent / zero rows** → `NotDispatched` (waves
-through — the SL-104 case); a journal that **has rows but none target trunk** →
-`Blocked("no trunk row")` (refuses). A funnel-driven dispatched slice journals
-`review/<N>` + `phase/<N>-NN` rows, so it hits the *second* arm and `done`
-**refuses** after a direct-land — even though main genuinely holds the reviewed
-code. SL-104 waved through only because its bundle was never journal-integrated;
-do not generalise that to a phase-journaled slice. SL-190 had to additionally
-**hand-write a verified trunk row** onto `dispatch/<N>`'s `journal.toml`
-(`target_ref = trunk`, `planned_new_oid` = the landed merge tip, an ancestor of
-trunk) before `done` passed. Neither integrate path can write that row for a
-split-lineage slice (candidate path needs the IMP-127-blocked admit; legacy
-`plan_trunk_row` needs a ff the split lineage forbids). Tracked as **IMP-236**
-(give IMP-127's fix a sanctioned record-completed-integration path).
+**Then record the trunk row — `dispatch sync --record-integration` (SL-211,
+supersedes the SL-190 hand-write).** The SL-126 close-integration gate
+(`ledger.rs::trunk_integration`) distinguishes two cases: a journal that is
+**absent / zero rows** → `NotDispatched` (waves through — the SL-104 case); a
+journal that **has rows but none target trunk** → `Blocked("no trunk row")`
+(refuses). A funnel-driven dispatched slice journals `review/<N>` + `phase/<N>-NN`
+rows, so it hits the *second* arm and `done` **refuses** after a direct-land —
+even though trunk genuinely holds the reviewed code (SL-104 waved through only
+because its bundle was never journal-integrated; do not generalise that to a
+phase-journaled slice). The sanctioned remedy is now:
+
+    dispatch sync --slice N --record-integration --trunk <ref>
+
+It resolves the earned payload from the ledger (identical to `--integrate`'s trunk
+planning), asserts that payload is **already an ancestor** of trunk (the earned
+check — the same `is_ancestor` standard the gate holds), and commits a single
+**Verified** trunk row to `dispatch/<N>`, mutating no external ref. `slice status
+N done` then reads that row and passes. **Do not hand-write the row.** SL-190 had
+to hand-edit `journal.toml` (`target_ref = trunk`, `planned_new_oid` = the landed
+payload tip) only because the verb did not yet exist — that gap was **IMP-236**,
+shipped as this `--record-integration` stage (SL-211). (Neither *advancing*
+integrate path can write the row for a split-lineage slice: the candidate path
+needs the IMP-127-blocked admit; legacy `plan_trunk_row` needs a ff the split
+lineage forbids — the recorder sidesteps both by *recording* the already-landed
+payload rather than advancing trunk.)
 
 **Cost.** Skips the admitted-OID CAS provenance the close skill prescribes for
 dispatched slices; the conflicted candidate row lingers as gitignored runtime
