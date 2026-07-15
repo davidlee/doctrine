@@ -6,7 +6,7 @@ status = "active"
 title = "Dispatch candidate verb can't ingest a hand-resolved merge conflict — close dead-ends"
 summary = "candidate create is all-or-nothing: a conflicted close_target auto-merge dead-ends (admit refuses, re-create re-conflicts, no manual-resolve path). Base drift / split lineage is the trigger; escape = direct-land. Fix tracked IMP-127"
 created = "2026-06-20"
-updated = "2026-06-20"
+updated = "2026-07-15"
 
 [scope]
 paths = []
@@ -25,12 +25,12 @@ tree = "91e6cbb6d0cba61a7a590d5b59031e0f9bec1fa8"
 ref_name = "refs/heads/main"
 checkout_state_id = ""
 base_commit = "b8c303fa6df694683cee14826b1d0e42b364d537"
-verified_sha = ""
+verified_sha = "9fbf4e7084097409be5b697e4829b65573b611c7786cf2d43cc7fbe56dcb51a1"
 normalizer = ""
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-07-15"
 review_by = ""
 
 [trust]
