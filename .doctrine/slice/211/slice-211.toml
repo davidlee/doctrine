@@ -22,6 +22,14 @@ intent = "scope-relevant"
 selector = "src/slice.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_dispatch_sync.rs"
+intent = "scope-relevant"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
