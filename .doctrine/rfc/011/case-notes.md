@@ -1395,3 +1395,32 @@ failed round-trip; boot snapshot lists both verbs with no signature hint.
 Backlog body filename is `backlog-NNN.md` under `idea/NNN/`, not
 `idea-NNN.md` — path guess failed one Read. `backlog new` output prints the
 dir, not the file names.
+
+[/dispatch (claude arm); SL-211-drive-a-f94e08ed]
+Two token sinks driving SL-211 phases 01–03 via main-thread /dispatch.
+
+1. /drive-slice workflow unusable on the claude arm, twice over. First the
+   `/drive-slice SL-211` command glue passed the raw token "SL-211" as workflow
+   args; the script's F2 guard `JSON.parse("SL-211")`s and the workflow dies
+   before bootstrap (filed ISS-223). Relaunch with {slice:211} then cleanly halts
+   coord:unknown-slice — the driver requires `dispatch setup` first (fine), but
+   the deeper wall is IMP-277 (the workflow never arms the worker spawn on the
+   claude arm), so /drive-slice is a dead end here regardless. Net: two failed
+   workflow launches + diagnosis before falling back to the working /dispatch
+   main-thread path. The /drive-slice entrypoint should either reject the claude
+   arm up front or marshal args + arm the spawn.
+
+2. Selector under-declaration blocked the PHASE-03 import through TWO refresh-base
+   cycles. The authored SL-211 selector listed only dispatch.rs/ledger.rs/slice.rs,
+   but the plan's own VT-1 (tests/e2e_dispatch_sync.rs) and VT-3 (src/main.rs)
+   mandate touching two more files. The import scope belt (classify_import) counts
+   ONLY design-target selectors, reads them from the coord tip, and — the costly
+   part — a coord-branch selector edit is non-durable (authored .doctrine changes
+   on dispatch/<N> are advisory/never-merged), so the fix must go on edge →
+   promote → `dispatch refresh-base` to reach the coord tree. I paid that full
+   promote+refresh cycle TWICE: once to add the two selectors, again because I'd
+   added the e2e as scope-relevant (belt ignores it) and had to flip it to
+   design-target. Two signposts: (a) a pre-spawn check that the phase's plan-VT
+   `test_file`s are all design-target selectors would catch this before a worker
+   ever runs; (b) `dispatch refresh-base` for a one-line authored selector edit is
+   a heavy hammer — a lighter "sync authored selector into coord" seam would help.
