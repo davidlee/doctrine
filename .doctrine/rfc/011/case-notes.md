@@ -1562,3 +1562,18 @@ would save the double-take and the wasted first run.
 `doctrine dispatch candidate status` errored without `--slice` where sibling
 verbs infer scope; cost one retry. Its own error usage line was sufficient to
 recover — low severity.
+
+[slice; SL-220-fable-a]
+`doctrine link` role/target vocabulary needed trial-and-error: `references --role
+originates_from` vs `implements` target-kind constraints (RFC not referenceable,
+IMP not implementable) surfaced only via two failed invocations. A `doctrine link
+--vocabulary` dump (legal label × source-kind × target-kind × role table) would
+have saved both round-trips.
+[plan; SL220-plan-fable]
+Handover prompt asserted "SL-219 is at reconcile; its machinery is on edge" —
+false at plan time: the SL-219 impl bundle sits unintegrated on
+candidate/219/review-001 (merge-base c3a21b17); edge/main have no DomainSystem.
+Cost: ~4 verification probes (grep tree, main vs edge, branch census, candidate
+diff stat) to establish the real substrate location before phase sequencing
+could be pinned. Root cause: handover text stated lifecycle status as code
+location; dispatch integration state should be checked, not asserted.

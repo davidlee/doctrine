@@ -1,0 +1,171 @@
+# Implementation plan for SL-220 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-220"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Phase 0 scripts + baseline evidence"
+objective = "Author the two throwaway Python scripts (design §5): scripts/value_baseline.py (snapshot/diff over ranking) and scripts/migrate_value_facets.py (scan/emit/verify/census/strip, --check vs --execute). Operator then captures the pre-flip baseline (snapshot live + snapshot --neutral + diff) and commits the evidence to .doctrine/slice/220/ — the R2 accepted-evidence base every later ranking delta is judged against."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (2026-07-17) — satisfied at plan time" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Both scripts committed under scripts/: Python 3 stdlib only (tomllib parse, no write-capable TOML dep), both refuse to run on a dirty git tree naming the precondition" },
+  { id = "EX-2", text = "value_baseline.py supports snapshot <out.json> [--neutral] and diff <a.json> <b.json> [--top N] exactly per design §5; --neutral operates on a temp copy and never touches the live corpus" },
+  { id = "EX-3", text = "migrate_value_facets.py implements scan → emit (one session file per run, rater=migrated, observed_at, git-blame basis best-effort) → doctrine-binary parse gate → census (facet-state idempotency key, counts reconcile or abort pre-strip) → strip (line-level surgery + per-file tomllib re-parse equality minus the value key); --check reports without writing, strip requires --execute" },
+  { id = "EX-4", text = "Baseline evidence committed to .doctrine/slice/220/: phase0-baseline.md + raw JSONs (live, neutral, diff) — operator/orchestrator action in the primary tree, before any code phase lands" },
+]
+verification = [
+  { id = "VA-1", text = "Operational script checks per §8.9: dirty-tree refusal (staged + unstaged fixtures); --neutral live-corpus safety proven by before/after tree-hash comparison; migration --check census reconciles on a fixture corpus" },
+  { id = "VH-1", text = "Operator accepts the committed baseline diff as the flip's evidence base (scope R2) and confirms it precedes every code phase" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Wire schema v3 + resolution semantics"
+objective = "Design §1: form=anchor joins the wire — Judgement field motion (b/response/date optionalised, observed_at/basis/admission/rater=migrated added), per-domain payload column sets, the full validation matrix at capture (parse stays lossless), version gate {2,3}→writes 3, FRAME_VALUE_ANCHOR frame-table row. resolve.rs semantic motion: ordering_date() in the tier-1 ordering key, degenerate IdentityKey (pair_hi: Option), form_key/rater_key tokens, single-subject lifecycle inertness, supersession/tombstones over anchor rows."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-219 implementation integrated to trunk: candidate/219/review-001 landed on main so the dispatch base carries the DomainSystem split, estimate domain, and v2 goldens the design builds on (design header: substrate, executes unchanged). NOT satisfied at plan time — SL-220 code phases fork only from a trunk containing SL-219" },
+  { id = "EN-2", text = "PHASE-01 EX-4: baseline evidence committed (sequencing pin, design §5)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.1 wire suite green: golden battery (live human anchor, pin, migrated, maximal/bare), round-trip losslessness incl. new optionals, version gate accepts {2,3} rejects others with remedy, every validation-matrix rule tested in both directions" },
+  { id = "EX-2", text = "§8.2 resolution suite green: ordering_date totality + deterministic mixed migrated/live ordering, R3 implicit revision on degenerate keys, anchor vs order rows never collide, supersession chains + cycle detection over anchor rows" },
+  { id = "EX-3", text = "v2 fixture files parse unchanged; SL-219 v2 goldens byte-identical (D2); all existing suites green (engine gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "wire v3 battery — anchor/pin/migrated goldens, version-gate set {2,3}, validation matrix both directions (payload exactness, form⇔frame, migrated⇔observed_at, date-unless-migrated, pin⇒human∧anchor, b/response by form)", test_file = "src/comparison/wire.rs", keywords = ["FRAME_VALUE_ANCHOR", "validate_judgement", "observed_at"], waived = false },
+  { id = "VT-2", expects = "resolution semantics — ordering_date totality, degenerate IdentityKey R3 revision, form/rater key tokens, single-subject lifecycle inertness, anchor supersession chains", test_file = "src/comparison/resolve.rs", keywords = ["ordering_date", "anchor"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Claims resolution pass + RV-275 F-1 gate battery"
+objective = "Design §2: new pure leaf src/comparison/claims.rs — own input selection over post-resolve rows ({Active, InertLens} anchor rows), per-lens partition, tiering (Pin>Human>Agent>Migrated, ascending-declaration Ord), winning-tier resolution with D3 multiset-mean conflict + D14 tier-gated nomination, ClaimResolution {anchored, priors, lensed, findings}, anchor_map() = anchored exactly (D4). Additive pipeline wiring: Pipeline carries value_claims + the pairwise/anchor view split of active_judgements; compile takes PairRow views (zero rule/golden churn); elicit assemble consumes the pairwise view; RowSummary joins anchor rows against ClaimResolution for display tokens; RowState.compilation becomes Option. ADDITIVITY BOUNDARY: compile's anchor input stays the facet builder this phase — the source swap + comparison_anchor_map deletion ride PHASE-05 (D12: no resolution outcome changes before the flip)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed on trunk (v3 rows parse and resolve)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.3 gate battery green in full — this IS the RV-275 F-1 design-gate obligation and must be green before the flip phase: tier ordering pinned, permutation invariance, corroboration vs conflict (multiset mean, interval, distinct count), contested pin, cross-session concurrency never latest-wins, lens isolation non-vacuous both directions (RV-278 F-2), anti-laundering property (anchor_map ≡ anchored), anchor rows reach no compile consumer incl. elicit assemble (RV-278 F-6), duplicate-merge posture (D10)" },
+  { id = "EX-2", text = "Existing compile suite green with zero golden churn under the PairRow adaptation (RV-278 F-3 behaviour-preservation proof)" },
+  { id = "EX-3", text = "compare list renders the extended token set (anchored/prior/conflicted from the RowSummary join, never a CompilationStatus token for anchors — RV-278 F-8); scoring outcomes unchanged corpus-wide (no consumer of ClaimResolution exists yet)" },
+]
+verification = [
+  { id = "VT-1", expects = "the §8.3 gate battery in claims.rs — tier Ord pin, permutation, corroboration/conflict/contested-pin, cross-session, lens isolation both directions, anti-laundering, duplicate-merge", test_file = "src/comparison/claims.rs", keywords = ["pin_outranks_all_tiers_under_derived_ord", "ClaimResolution", "anchor_map"], waived = false },
+  { id = "VT-2", expects = "PairRow pairwise projection type adapts compile input with zero rule churn; compile suite green unchanged", test_file = "src/comparison/compile.rs", keywords = ["PairRow"], waived = false },
+  { id = "VT-3", expects = "no-compile-consumer proof reaches the elicit path: assemble recompiles from the pairwise view; an anchor-bearing ledger yields a baseline ConstraintSet identical to the same ledger without anchors", test_file = "src/priority/elicit.rs", keywords = ["pairwise"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Verb surface: value set | pin | clear"
+objective = "Design §4: re-plumb run_value_set/run_value_clear from facet_write to the session mint (compare record path verbatim — shell mints uid+date, stamps frame/domain/form); mandatory --rater with no default; every invocation mints (D10). New value pin / pin --retire: admission=pin + rater=human stamped, mandatory --by, D13 gate = interactive-TTY check (is_interactive: bool threaded from the shell as a pure input) + worker-refused WriteClass (exact variant adjudicated at phase-plan against guard.rs taxonomy). value clear tombstones all active unlensed rows, refuses under an active pin naming the remedy, --lens for lensed rows. Supersession scope (subject, domain, lens) enforced at capture. Capture admissibility mirrors value set warn-posture (D7), paired test over ALL_KINDS. Magnitude mirrors value::validate exactly (finite f64 incl. negatives)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 landed on trunk (minted rows must resolve through the claims pass)" },
+  { id = "EN-2", text = "WriteClass variant for pin verbs adjudicated at phase-plan (D13 open item — guard.rs taxonomy: Write/Orchestrator/MarkerClear/Hookmint at plan time)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.6 verb suite green: session-of-one mint with stamped frame/domain/form, parse-level mandatory --rater, two identical sets ⇒ two rows, --supersedes scope refusals (foreign subject, cross-domain, pairwise target, cross-lens), pin non-TTY refusal (both is_interactive branches unit + piped-stdin e2e naming the posture), worker-mode refusal, mandatory --by, clear semantics + active-pin refusal, pin --retire gated + ladder fall-through, non-finite magnitude refused" },
+  { id = "EX-2", text = "main.rs write-class regression green: value_is_write stays true; pin verbs assert the refused class" },
+  { id = "EX-3", text = "Paired capture/consumption admissibility test over ALL_KINDS: claim-capture admissibility ≡ facet-write admissibility, scoring_inert_warning preserved verbatim (D7)" },
+]
+verification = [
+  { id = "VT-1", expects = "verb suite — mint semantics, TTY gate both branches, supersession scope refusals, clear/retire semantics, validate mirror", test_file = "src/commands/facet.rs", keywords = ["is_interactive", "supersedes", "ALL_KINDS"], waived = false },
+  { id = "VT-2", expects = "write-class regression — pin verbs in the worker-refused class, value_is_write true", test_file = "src/main.rs", keywords = ["pin"], waived = false },
+  { id = "VT-3", expects = "e2e piped-stdin pin refusal naming the posture (file minted this phase, extended at PHASE-06)", test_file = "tests/e2e_value_claims.rs", keywords = ["pin"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Resolver flip + consumption ladder (REV-gated)"
+objective = "Design §3: effective_raw_value rewired to the T3 ladder (anchored claim → projection → agent prior → migrated prior → unmigrated facet transitional rung 5 → DEFAULT_VALUE); build_from_with_cfg gains the claims parameter (pure input threaded from the shell); compile's value-anchor source swaps to claims.anchor_map() and graph.rs::comparison_anchor_map is DELETED (facets stop anchoring/shaping projection — the flip stated without euphemism, RV-278 F-4); UnmigratedFacet finding fires on presence; demote_agent_evidence widens to claims (rungs 3–5 probe-eligible when set); anchored-tier conflicts enter the reprobe queue knob-independently, agent/migrated never (D14). ReasonKind motion: ValueAuthored retired; ValuePin/ValueClaim/ValueFacetUnmigrated added; JSON value_source breaking token-set change (D11) rides this phase."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 §8.3 gate battery green on trunk (RV-275 F-1: the claims algebra is proven before the flip)" },
+  { id = "EN-2", text = "REV-024 approved AND SPEC-020 normative value-surface amendments approved (D12) — canon precedes the flip landing" },
+  { id = "EN-3", text = "PHASE-04 landed on trunk (re-assertion verbs exist before facet authority is demoted)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.4 ladder suite green: each rung wins in isolation, adjacent-rung dominance pairs, facet consulted only at zero claim rows, compared facet-bearing item (rung 2 wins, presence finding still fires — RV-278 F-4), row-less human claim resolves at rung 1 (scope R1), ALL_KINDS paired capture/consumption, demotion-knob semantics both settings, D14 reprobe gating both directions" },
+  { id = "EX-2", text = "§8.5 behaviour preservation: no-anchor-no-facet corpora score bitwise-identically (empty-claims property); every existing suite green EXCEPT the enumerated goldens authoring [value] facets — churn list produced and pinned as flip evidence (scope R2)" },
+  { id = "EX-3", text = "JSON value_source full post-flip vocabulary golden (authored removed; pin/human-claim/agent-claim/migrated-claim/unmigrated-facet added; projected/gauge/default byte-stable)" },
+]
+verification = [
+  { id = "VT-1", expects = "ladder + rung-5 transitional semantics + UnmigratedFacet presence finding + R1 row-less claim + D14 reprobe gating", test_file = "src/priority/graph.rs", keywords = ["effective_raw_value", "UnmigratedFacet"], waived = false },
+  { id = "VT-2", expects = "empty-claims bitwise-preservation property + demote_agent_evidence widening over claims", test_file = "src/priority/graph.rs", keywords = ["ClaimResolution", "demote_agent_evidence"], waived = false },
+  { id = "VT-3", expects = "value_source post-flip vocabulary golden — breaking token-set change pinned (D11)", test_file = "src/priority/view.rs", keywords = ["migrated-claim", "unmigrated-facet"], waived = false },
+  { id = "VA-1", text = "REV-024 + SPEC-020 amendment approval verified against the phase log before landing (checked again at audit, §8.10)" },
+  { id = "VA-2", text = "Golden churn list reviewed: every churned fixture authors a [value] facet; deltas justified against the PHASE-01 baseline, not waved through (scope R2)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Provenance rendering surfaces"
+objective = "Design §6: explain value-source block one shape per rung (conflict + contested-pin variants; agent/migrated conflict renders calibrate-via-comparison guidance, D14); survey/next/blockers value cells re-path to the resolved (value, tier) with source markers; show re-sources from the comparison pipeline (capture-lossless — records render with scoring-inert annotation; absent evidence omits the line, never 1.0 default); compare list mixed-fixture goldens + elicit RenderCtx fragments with tier tokens; ClaimConflict/UnmigratedFacet through the findings render + JSON with domain tags; AGENT_DEMOTION_DISCLOSURE widens to claims; grep-gate: no display surface reads EntityFacets.value. Full e2e battery (§8.8)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 landed on trunk (the ladder the renders disclose exists)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.7 render suite green: explain shapes per rung, row-surface goldens with markers, show resolved line + absent-omission + scoring-inert annotation, compare list mixed-fixture token routing (anchor rows never render a CompilationStatus token), elicit fragments with tier tokens incl. anchor-review + conflict-reprobe entries, findings render/JSON parity, demotion disclosure line" },
+  { id = "EX-2", text = "§8.8 e2e green: set → resolution → explain provenance; pin overrides projection; human beats agent; migrated loses to projection; conflict → finding → superseding row resolves; clear → tombstone → fall-through; capture-to-scoring round trip" },
+  { id = "EX-3", text = "Grep-gate holds: no display surface reads EntityFacets.value (named verification step, design §6)" },
+]
+verification = [
+  { id = "VT-1", expects = "explain shape battery incl. contested-pin and agent-conflict guidance variants + demotion disclosure", test_file = "src/priority/render.rs", keywords = ["contested", "unmigrated"], waived = false },
+  { id = "VT-2", expects = "compare list mixed-fixture goldens — full token routing over anchor + order + superseded + tombstoned + lensed rows", test_file = "src/commands/compare.rs", keywords = ["anchored", "conflicted"], waived = false },
+  { id = "VT-3", expects = "e2e battery — capture→resolve→explain, tier dominance end-to-end, conflict lifecycle, clear fall-through", test_file = "tests/e2e_value_claims.rs", keywords = ["explain", "supersed"], waived = false },
+  { id = "VA-1", text = "Repo-wide grep confirms no display surface reads EntityFacets.value post-phase; exceptions enumerated (rung-5 read path + migration census serve §3, not display)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Migration run + census (operator — NOT a worker phase)"
+objective = "Design §5 executed against the live corpus by the operator/orchestrator in the primary tree (workers never write .doctrine): migrate_value_facets.py --check (census preview) → --execute (emit session, doctrine parse gate, census reconciliation, [value] strip with per-file verification) → operator reviews and commits. Post-flip regression evidence: value_baseline.py snapshot + diff against the PHASE-01 baseline, attached to the slice dir for audit. REV-024 applied (ADR-015 + SPEC-020/PRD-014 text amendments) no later than this phase."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 landed; the shipped binary parses v3 and resolves migrated rows (§5 sequencing: after claims machinery, before /audit)" },
+  { id = "EN-2", text = "Clean git tree at each script invocation (scripts enforce; operator confirms)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Census reconciles on the live corpus: facets_found == imported + already-imported + re-imported; one active migrated row per source facet; zero provenance conversions (script writes rater=migrated only)" },
+  { id = "EX-2", text = "[value] tables physically stripped (D9); per-file strip verification passed (tomllib re-parse equality minus the value key); post-strip corpus committed by the operator" },
+  { id = "EX-3", text = "Re-run after --execute is a no-op; interrupted-state semantics verified on a fixture (rows-without-strip scores via the rung-5 shadow rule)" },
+  { id = "EX-4", text = "Post-flip regression diff (value_baseline.py) committed to .doctrine/slice/220/ as audit evidence; ranking deltas justified against the PHASE-01 baseline (scope R2)" },
+  { id = "EX-5", text = "REV-024 applied: ADR-015, SPEC-020 (REQ-278/279/280/286 + prose), PRD-014 amendments landed via revision apply" },
+]
+verification = [
+  { id = "VA-1", text = "Census counts + one-active-migrated-row-per-facet verified against the emitted session and the strip diff; rollback losslessness spot-checked (rows cite source facet paths + magnitudes)" },
+  { id = "VA-2", text = "Idempotency + interrupted-state checks per §8.9 executed and recorded" },
+  { id = "VH-1", text = "Operator reviews the --check census, authorises --execute, and commits the post-strip corpus + evidence" },
+  { id = "VH-2", text = "Operator confirms REV-024 apply landed and canon (ADR-015/SPEC-020/PRD-014) tells the same story as the shipped resolver" },
+]
+specs        = []
+requirements = []

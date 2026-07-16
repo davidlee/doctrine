@@ -1,7 +1,7 @@
 id = 220
 slug = "value-claims"
 title = "Ledgered value claims"
-status = "design"
+status = "plan"
 created = "2026-07-16"
 updated = "2026-07-16"
 tags = []
@@ -9,28 +9,6 @@ tags = []
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
-
-[[relation]]
-label = "governed_by"
-target = "ADR-015"
-
-[[relation]]
-label = "governed_by"
-target = "ADR-001"
-
-[[relation]]
-label = "references"
-role = "originates_from"
-target = "IMP-290"
-
-[[relation]]
-label = "references"
-role = "originates_from"
-target = "IDE-039"
-
-[[relation]]
-label = "related"
-target = "RFC-020"
 
 [[selector]]
 selector = "src/comparison/**"
@@ -131,6 +109,32 @@ intent = "design-target"
 [[selector]]
 selector = "tests/e2e_value_claims.rs"
 intent = "design-target"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-015"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-001"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IMP-290"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "IDE-039"
+
+[[relation]]
+label = "related"
+target = "RFC-020"
+
+[[relation]]
+label = "related"
+target = "REV-024"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
