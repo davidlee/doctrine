@@ -1452,3 +1452,113 @@ next after Phase C" required paging the whole document in three chunks. A
 `--section`/TOC affordance on `show` for long RFC/spec bodies would cut this
 class of read substantially. Also: `echo ===` as a separator between compound
 commands breaks under zsh eval (`== not found`) — cost one retry round-trip.
+
+[dispatch; SL-219-drive-1e5229fa]
+Object-db import (`dispatch_import`) leaves the coord working tree + index at B
+while the branch ref advances to S — orchestrator must notice the reverse-diff
+`git status` and hand-sync the imported paths (`git restore --source=HEAD
+--staged --worktree -- <paths>`) before the regression-diff verify beat can run
+at S. Extra status/diff/restore round-trips every batch; a `--sync-worktree`
+flag on the import (safe: tree is belt-verified clean pre-import) would remove
+the manual beat.
+
+[dispatch; SL-219-drive-1e5229fa]
+Worker reports `doctrine check commit` cannot go fully green inside a marked
+worker fork: 36 e2e binaries spawn the doctrine bin for authored writes, which
+the worker-mode guard refuses (`worker fork (signal: marker)`). The designed
+skip helper keys on DOCTRINE_WORKER env, but the claude arm marks via marker
+file without propagating the env — skip never engages. Worker burned tokens
+diagnosing environmental red before recognising it as non-delta.
+
+[dispatch-worker via orchestrator relay; SL-219-drive-1e5229fa]
+PHASE-02 worker notes (worker jail mounts primary tree ro — cannot self-append):
+graph.rs (2843 lines) exceeds the Read cap forcing paged reads; a fresh
+worktree reds `test_support::doctrine_bin_returns_existing_executable` until
+first `cargo build`; three divergent `seed_issue` fixture arities across test
+modules force per-module fixture archaeology; CHR-044 pre-declaration in the
+worker prompt saved all investigation cost on the 31 environmental e2e reds.
+
+[dispatch; sl219-p04-fable]
+Worker relay (PHASE-04): `doctrine check commit` cannot go green locally under
+the worker marker while CHR-044 stands — the recipe hard-stops at the first e2e
+write-golden binary (`worker fork (signal: marker): refusing authored write`),
+so a worker never sees the rest of the commit gate locally and must rely on the
+server-side worker_commit gate. Token cost: worker ran the full check twice to
+confirm. A marker-aware skip (the CHR-044 fix) would restore local gate parity.
+
+[dispatch; sl219-p04-fable]
+Orchestrator: `doctrine revision new` creates the numbered dir AND a sibling
+slug symlink, but prints only the dir path — path-limited commits miss the
+symlink on the first pass (cost: one extra status/ls/commit round-trip).
+Printing both created paths would remove the guesswork.
+
+[dispatch; sl219-p05-opus]
+Worker relay (PHASE-05, round 2): the orchestrator's remedial instruction
+prescribed a MECHANISM ("remove the target estimates → tier 2") that was
+empirically wrong for the golden's structure — the estimates were load-bearing
+(removing them flipped the corpus stable, not stalled). The worker caught it
+with a scratch-corpus probe before editing, but the lesson stands: remedial
+instructions should prescribe the POSTCONDITION ("make it genuinely stall,
+assert real output") and leave mechanism to the agent holding the tree.
+
+[dispatch; sl219-p05-opus]
+Orchestrator: phase touch-sets vs live selectors — the PHASE-05 prompt's
+"expected touch set" was narrower than reality (behaviour change invalidated
+an e2e golden outside it), producing a full halt→consult→SendMessage→selector
+add→re-import cycle (~1 extra worker round + 5 orchestrator steps). The
+declared-scope belt worked exactly as designed, but pre-phase selector review
+against "which goldens could this behaviour change touch?" would have priced
+the file in up front.
+
+[dispatch; sl219-p05-opus]
+Worker relay: session scratchpad dir vanished between agent rounds (resume via
+SendMessage) — first redirect into it fails until mkdir -p. Trivial but a
+guaranteed one-command tax on any resumed worker relying on the advertised path.
+
+[dispatch; sl219-p06-opus]
+Worker relay (PHASE-06): phase brief declared surface/render/findings/compare/
+e2e but omitted view.rs — yet a "surface a new ReasonKind family" phase
+structurally cannot avoid view.rs (Explanation/ReasonKind live there; SL-213's
+value-source block edited the same file). Undeclared-scope escape valve worked
+cleanly (worker flags, orchestrator declares, import retries) but the
+selector-vs-reality gap now recurred in BOTH surface-ish phases (P5 e2e golden,
+P6 view.rs): plan-time selector authoring should ask "which files hold the
+types this phase's render must extend?" and "which goldens can this behaviour
+flip?".
+
+[dispatch; sl219-p06-opus]
+Worker relay (positive signal): the brief's "polish and pin; do not rebuild —
+strands 2/3 already landed" note was accurate and saved real effort; two
+declared files needed zero edits. Cost that remains: a read-pass to verify
+"already landed". Keep that signal in surface-phase briefs.
+
+[dispatch; sl219-conclude]
+Conclude cadence hit the known prepare-review split-brain (gate reads PRIMARY
+phase sheets; funnel flips live in the coord tree) — refused with "recorded row
+… not a completed phase" for all six phases. Cost: ~4 steps + one memory
+retrieval. mem.fact.dispatch.prepare-review-reads-primary-phase-status had the
+exact cure (re-flip completed from primary; capture self-skips while coord
+lives) — memory corpus paid for itself; the residual inefficiency is that the
+cure is still manual per drive. Also reproduced its sibling: prepare-review's
+journal commit left a phantom staged deletion of journal.toml in the coord tree
+(object-db ref advance), cleared by the usual git restore.
+
+[audit; aud-219-rv276]
+Conformance signal unreadable from either available surface at audit time:
+parent tree lacked the two late design-target rows (they ride dispatch/219
+until stage-2 integrate) → false undeclared; candidate worktree lacked
+provisioned phase-completion state → wholesale "incomplete" verdict. Manual
+two-run reconstruction cost ~3 extra tool calls + reasoning; minted IMP-292.
+
+[audit; aud-219-rv276]
+`slice verify-vt` from the session root fails all 17 VTs pre-integrate (code
+lives on evidence refs, not edge) — expected under the dispatch topology but
+alarming output for a fresh auditor; the skill routes to the candidate
+surface only via the dispatched-slice callout. A one-line hint in verify-vt
+output ("working tree lacks the slice's deltas — dispatched? see candidate")
+would save the double-take and the wasted first run.
+
+[audit; aud-219-rv276]
+`doctrine dispatch candidate status` errored without `--slice` where sibling
+verbs infer scope; cost one retry. Its own error usage line was sufficient to
+recover — low severity.

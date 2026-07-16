@@ -1,9 +1,9 @@
 id = 219
 slug = "estimate-comparison-domain"
 title = "Estimate comparison domain"
-status = "ready"
+status = "reconcile"
 created = "2026-07-12"
-updated = "2026-07-12"
+updated = "2026-07-16"
 tags = []
 
 [relationships]

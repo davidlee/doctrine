@@ -1,0 +1,70 @@
+id    = 276
+slug  = "sl-219-audit-estimate-comparison-domain-reconciliation"
+title = "SL-219 audit — estimate comparison domain reconciliation"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-219"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "§6.7 reprobe expected a single round-trip pin; landed as two unit tests at the consumption seam (worker va1_map: PARTIAL)"
+detail = 'Design §6.7: authored range edit / β edit ⇒ est projection + value determinacy re-run (D18 spanning both domains). Worker va1_map flagged PARTIAL: no single e2e pins the round-trip. Observed coverage: elicit.rs `authored_range_edit_rederives_cost_feed_into_eff_weights` (range edit → anchor moves → est projection re-derives → fed cost moves → eff-weight m·c entering every value-determinacy verdict asserted moved) and `beta_edit_rederives_cost_feed` (β edit → fed cost re-derived through the same seam). Determinacy is a pure function of eff-weights (query.rs untouched, verified no diff main...review/219); graph::build re-derives per build — no cache to invalidate, so "re-run" holds by construction.'
+disposition = "aligned"
+response = "§6.7's intent — one reprobe dynamic spanning both domains — is pinned where the dynamic actually lives: the single consumption seam. The range-edit test asserts the full chain (authored edit → anchor → est projection → fed cost → eff-weight entering value-determinacy verdicts), and the β-edit test rides the identical seam; a separate e2e would re-prove the same path through a slower harness without adding a new seam. VA-1 (PHASE-06) is satisfied: §6.1–§6.10 all map to landed tests with §6.7 verified here, no waiver needed."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Parent-tree conformance expected clean; observed 2 undeclared paths because the late selector declarations live only on dispatch/219"
+detail = "`slice conformance 219` from the parent tree (edge) reports src/priority/view.rs and tests/e2e_compare_elicit.rs undeclared. Both were declared during the drive — commits a44daea5 (PHASE-05 Option B adjudication) and 63f5d7ca (PHASE-06 cost-source block) — but those commits ride the coordination branch dispatch/219 only; edge's slice-219.toml lacks the rows. The candidate tree's provisioned slice-219.toml carries all 14 design-target selectors; with that set the algebra is 14 conformant / 0 undelivered. The rows are authored truth that stage-2 integrate (/close) lands on trunk; edge converges at integrate. No reconcile write needed — a duplicate direct edit on edge would collide with the integrate merge."
+disposition = "aligned"
+response = "Authored truth is already correct on the surface that integrates: dispatch/219 (and the provisioned candidate) carry all 14 design-target rows. The parent-tree red is the expected pre-integrate state under the dispatch topology (ADR-012) — stage-2 integrate at /close lands the coordination branch's authored state on trunk and edge converges. No reconcile write: a duplicate selector add on edge would collide with the integrate merge. /close verification item recorded in the synthesis: re-run `slice conformance 219` post-integrate and expect 14 conformant / 0 undeclared source paths / 0 undelivered."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Conformance registry expected source-only deltas; observed .doctrine/slice/219/slice-219.toml in the undeclared cell, and neither tree yields a clean mechanical verdict"
+detail = """Two mechanical-signal defects, both environmental, neither slice drift: (1) the recorded boundary ranges for PHASE-05/06 include the orchestrator's selector-declaration commits, so the authored-metadata path .doctrine/slice/219/slice-219.toml surfaces as an undeclared source delta — registry noise; the path is the selector registry itself. (2) The candidate worktree run reports "conformance incomplete — recorded row for PHASE-01..06, which is not a completed phase": phase-completion state is runtime tier and is not provisioned into candidate worktrees, so the mechanical verdict is unreadable there; the parent tree (complete registry + completed phases) is readable but pre-integrate (F-2). Clean algebra required manually combining both runs."""
+disposition = "tolerated"
+response = 'Tolerated for this audit with the algebra reconstructed manually and recorded (14 conformant / 0 undelivered / slice-219.toml the sole undeclared residue, which is the selector registry itself riding the funnel boundary ranges — not slice drift). The two signal defects are platform behaviour, not SL-219 work: (a) conformance does not classify .doctrine/** authored-metadata paths out of the undeclared cell; (b) candidate worktrees lack provisioned phase-completion state so the verdict degrades to "incomplete" exactly where audits run. Both captured as backlog improvement IMP (minted at harvest) so the next audit gets a clean mechanical read.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = 'Design §5 pins "three cost-source shapes + one flag" and the §2 module table omits two touched files; landed surface has four shapes, an est-engagement gate, and two extra design-targets'
+detail = """Three prose-vs-landed divergences in design.md, all behaviour-correct and drive-log-documented, leaving canon stale: (1) PHASE-06 shipped a fourth cost-source shape `authored (via class anchor)` for facet-less members hoisted by an `equal` merge — a real design §4 path (cost-feed tier table row P3 "members merged in without own facet", provenance Authored) that §5's three-shape enumeration missed; exercised by the probe round-trip e2e. (2) The cost-source block is gated on est engagement (est projection non-empty) — mirrors the value-source "bare divisor is a floor, not a citable source" posture and keeps every pre-SL-219 explain golden byte-identical; §5 states no such gating. (3) The §2 module-impact table (the human mirror of the design-target selectors) lacks rows for src/priority/view.rs (cost-source ReasonKind + Explanation.cost_source, SL-213 precedent) and tests/e2e_compare_elicit.rs (Option B golden reconciliation). Registry side is already correct on dispatch/219 (F-2); only the prose mirror is stale."""
+disposition = "design-wrong"
+response = "The prose, not the code, is the defect: the fourth shape follows from the design's own §2 cost-feed tier table (P3 merge-hoisted member, provenance Authored), the est-engagement gate extends the design's own D2 honesty posture, and the §2 module table is the human mirror of a registry that was legitimately extended mid-drive under user adjudication. All three go to the reconciliation brief as per-slice direct edits to design.md (§5 enumeration + gating sentence; §2 table rows for view.rs and e2e_compare_elicit.rs). Registry side needs no write (F-2). No governance/spec surface is touched — ADR-015 post-REV-023 already tells the truth about the ladder."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Accepted implementation deviations (PHASE-02/03/04) expected exact design shapes; observed documented, behaviour-preserving departures"
+detail = "Drive-log-documented deviations held against design intent: (1) PHASE-02 — `constraining_by_class`/`active_judgements` stay top-level on Pipeline, value-scoped, rather than moving into DomainSystem; design pins DomainSystem to exactly three fields and both consumers are value-system (an est leak into elicit/human-only recompile would reproduce the PHASE-01 pre-split defect). PHASE-06 adds `est_constraining_by_class` beside it — a naming asymmetry, not a domain leak. (2) PHASE-03 — `VALUE_PROJECTION_PARAMS` threads the shipped `[priority.gauge] step` knob via functional update instead of passing the const verbatim (verbatim would silently kill a tested knob; goldens byte-identical either way — D8's invariant is established by the goldens, not the const). (3) PHASE-03/04 — `pipeline_from_sessions`/`load_pipeline` grew `value_cfg`/`est_cfg` params and `build_from_with_cfg`'s signature growth forced mechanical findings.rs test call-site touches; store cannot compute `ctx.absent` (needs ScannedEntity + status_class, above comparison per ADR-001). (4) PHASE-04 — `surface.rs::beta_endpoints` gains a shared cost_feed param so next/explain/findings derive the feed once per pipeline load."
+disposition = "aligned"
+response = "Each deviation preserves the design's actual invariants and is documented at the code site: DomainSystem keeps its pinned three fields with value-scoped consumers staying top-level (the alternative reproduces the PHASE-01 leak); the D8 invariant is defined by byte-identical goldens, which hold under the functional-update threading (const-verbatim would have regressed a shipped, tested knob); signature growth is forced by ADR-001 layering (ctx.absent needs status_class above the comparison layer); beta_endpoints' shared cost_feed param derives the feed once per pipeline, honouring D6's one-consumption-seam rule. The naming asymmetry (constraining_by_class vs est_constraining_by_class) is cosmetic and not worth a rename churn against green suites. No design prose pins any of these shapes, so no reconcile edit arises."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "PHASE-05 stall golden expected untouched out-of-scope files; observed user-adjudicated Option B reconciliation of tests/e2e_compare_elicit.rs"
+detail = """The sizing-probe queue invalidated one pre-existing e2e stall golden by design (its corpus was sizing-eligible, so the queue now mints a probe — intended behaviour). Worker correctly refused the out-of-scope edit and halted commit-gate-red; orchestrator ran /consult; USER adjudicated Option B: preserve each golden's original intent. Refinement (worker-verified): stripping the corpus estimates would have flipped the golden STABLE (they were load-bearing for the zero-yield bridge); instead the corpus gains one est-domain `incomparable` row — asked-once retires the probe with zero cost movement, so the golden genuinely stalls AND pins residual sizing-debt disclosure. Tier-2 "no estimated item to calibrate against" wording pinned separately in `render_stable_is_member_scoped`. Selector declared (a44daea5); import initially Refused{undeclared-scope} until declared — the funnel guard worked as designed."""
+disposition = "aligned"
+response = "The golden invalidation was the intended behaviour change arriving at an out-of-scope test file; every control worked: the worker refused the out-of-scope edit, the funnel refused the undeclared import, /consult escalated rather than improvising, and the user adjudicated the route (Option B). The chosen reconciliation is strictly better than the naive one — the `incomparable` row preserves the golden's stall intent AND pins the residual sizing-debt disclosure wording, where stripping estimates would have silently changed what the golden tests. Scope extension is recorded in the selector registry with a note (a44daea5). Nothing further; the design.md §2 mirror row rides F-4's brief item."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
