@@ -22,10 +22,12 @@ STD-002.
 | D6 | Transitional rung: an **unmigrated `[value]` facet** reads at the bottom of the evidence ladder (below attributed agent claims), consulted only when zero claim rows exist for the item; `UnmigratedFacet` finding fires on facet **presence**, not consumption. For compared items, projection out-ranks the facet permanently — the flip's semantics, stated without euphemism (§3). Facet read path deletes when both domains have migrated (Phase 2 exit criterion) | Shipping the binary IS the flip for unmigrated corpora (IMP-290); uncompared values contribute instead of vanishing; compared guesses are calibrated by evidence — the point |
 | D7 | Capture admissibility mirrors today's `value set` surface exactly (warn-never-refuse, REV-022); consumption is gated at the scoring surface (`effective_raw_value`'s caller contract — value-bearing scored kinds only). Paired test over `ALL_KINDS` | Records' claims: capture-lossless, consumption-inert; Phase 3 widens consumption, not capture |
 | D8 | Migration + Phase 0 diagnostic are throwaway Python scripts in `scripts/`, not product verbs *(operator-adjudicated)*. Idempotency key = **facet state** (source path + magnitude): changed-facet re-runs import a superseding row; census `facets_found == imported + already-imported + re-imported`, one active migrated row per source facet | One-shot machinery stays out of the product; path-only skip keys strip un-imported edits (review finding) |
-| D9 | `[value]` tables are **physically stripped** by the migration pass after its census *(operator-adjudicated)*; `value pin` / `pin --retire` ride the worker-refused write class (the `worker_commit` gating precedent); `value clear` refuses while a pin is active | Dead authored-looking data is a standing lie; pin admission is a contract, not a column (RV-275 F-5) |
+| D9 | `[value]` tables are **physically stripped** by the migration pass after its census *(operator-adjudicated)*; `value pin` / `pin --retire` ride the worker-refused write class AND the D13 interactive-TTY gate; `value clear` refuses while a pin is active | Dead authored-looking data is a standing lie; pin admission is a contract, not a column (RV-275 F-5) |
 | D10 | No capture no-op guard: every `value set` invocation mints a row | The guard cannot key on identity without the optional-`by` inference D3 forbids; identical re-fires change no resolved value |
 | D11 | JSON `value_source` is a disclosed **breaking token-set change**: `authored` removed; `pin`/`human-claim`/`agent-claim`/`migrated-claim`/`unmigrated-facet` added; `projected`/`gauge`/`default` byte-stable | Honest: no code path emits `authored` post-flip; "additive" would be false |
 | D12 | The ADR-015 REV **and SPEC-020's normative value-surface amendments** gate the flip phase — approved before it lands; earlier phases are strictly additive and REV-independent. Additive/documentary spec REQs remain reconciliation obligations | Canon must never be stale about what `value set` does while the corpus is live (review finding) |
+| D13 | Pin admission gate = **interactive-TTY check + worker-mode refusal** *(operator-adjudicated 2026-07-17, RV-278 F-1)*: `value pin`/`--retire` refuse when stdin is not an interactive terminal, naming the posture. Honest caveat: a posture bar, not authentication — the append-only attributed ledger is the backstop. Gate check is a pure-input seam (`is_interactive: bool` threaded from the shell) so both branches unit-test | Worker-refusal gates workers, not agents; the agent population that wrote the unattributed corpus drives doctrine via non-TTY tool shells — the TTY bar covers the threat that matters at one `isatty` call |
+| D14 | Conflict findings fire at **every** tier (surfaced-never-silent holds); **reprobe nomination and the "contested" render treatment are anchored-tiers-only (Pin/Human)** *(operator-adjudicated 2026-07-17, RV-278 F-5)*. Agent/migrated conflicts render as ordinary findings with "calibrate via comparison" guidance | The reprobe queue is human attention; agent self-contradiction is exactly what projection calibrates — routing it to humans inverts the RFC's intent |
 
 ## §1 Wire schema v3: the anchor row
 
@@ -254,9 +256,12 @@ anchoring the compile entirely; where unmigrated facets still enter is
 §3's transitional rung, not here.
 
 **Findings.** `ClaimFinding::Conflict { item, tier, low, high, distinct,
-rows }` — surfaced through the existing findings render with a
-reprobe-candidate hook (SL-217 stale-anchor precedent; a conflicted item is
-a "the humans must talk" probe). Domain-tagged at construction (SL-219 D9).
+rows }` — fires at every tier, surfaced through the existing findings
+render. **Reprobe nomination is anchored-tiers-only (D14)**: a Pin/Human
+conflict is a "the humans must talk" probe (SL-217 stale-anchor precedent);
+an Agent/Migrated conflict is an ordinary finding carrying "calibrate via
+comparison" guidance and never enters the human reprobe queue.
+Domain-tagged at construction (SL-219 D9).
 
 **Code impact (§2):** new `src/comparison/claims.rs` (+ the RV-275 F-1
 gate battery — §8.3); `src/comparison/store.rs` (value-system wiring,
@@ -332,8 +337,8 @@ demote_agent_evidence` extends to claims: when set, agent- and
 migrated-tier resolved values do not *retire* elicitation — an item on
 rungs 3–5 stays probe-eligible (it has a number, not an answer). When
 unset, rungs 3–5 still rank below projection but count as valued for queue
-purposes. `ClaimFinding::Conflict` items enter the reprobe queue
-knob-independently (§2).
+purposes. **Anchored-tier** `ClaimFinding::Conflict` items enter the
+reprobe queue knob-independently; agent/migrated conflicts never do (D14).
 
 **Behaviour-change accounting (scope R2), three VT classes:** (a) corpora
 with no anchor rows and no `[value]` facets score **bitwise-identically**
@@ -376,12 +381,19 @@ re-fire changes no resolved value and raises no conflict.
 [--supersedes <row-uid>]`**
 Appends an anchor row with `admission = pin`, `rater = human` stamped (not
 flags — the verb IS the admission path, RV-275 F-5). `--by` **mandatory**:
-a pin is a deliberate, attributed, auditable operator act. Gating: `value
-pin` and `--retire` join the worker-refused `WriteClass` (the
-`worker_commit` gating precedent; exact variant confirmed at phase-plan
-against the current taxonomy). `value set` stays in the ordinary write
-class: agents *should* claim — that's the ladder's point; they just can't
-mint constitutional weight.
+a pin is a deliberate, attributed, auditable operator act. Gating (D13,
+resolves RV-278 F-1 — worker-refusal alone gates workers, not agents):
+`value pin` and `--retire` require **an interactive operator session** —
+refused when stdin is not a TTY, with a message naming the posture — AND
+join the worker-refused `WriteClass` (exact variant confirmed at
+phase-plan). The TTY check reaches the pure layer as an `is_interactive:
+bool` input (shell seam, date/uid pattern) so both branches unit-test; the
+e2e asserts the piped-stdin refusal. Stated honestly: this is a posture
+bar, not authentication — an agent driving a PTY can defeat it; the
+append-only, attributed, supersedable ledger and the reprobe/contest path
+are the backstop. `value set` stays in the ordinary write class: agents
+*should* claim — that's the ladder's point; they just can't mint
+constitutional weight from a tool shell.
 
 **`value clear <id> [--note <text>] [--lens <lens>]`**
 Appends tombstones for **all active unlensed value-domain anchor rows on
@@ -497,8 +509,10 @@ never depends on it having run.
 
 - `value 6.5 — pin (david, 2026-07-16, basis REQ-059)`
 - `value 6.0 — contested pin · 2 claims, interval (5.0 ‥ 7.0), mean —
-  resolve by superseding row` (conflict variant, any tier: tier token +
-  interval + row count; the reprobe nomination disclosed here)
+  resolve by superseding row` (conflict variant: tier token + interval +
+  row count; the "contested" framing and reprobe disclosure apply to
+  anchored tiers only — an agent/migrated-tier conflict renders its
+  interval with "calibrate via comparison" guidance instead, D14)
 - `value 6.2 — human claim (david, 2026-07-16)`
 - `value 6.2 — projected · bounds (3.2 ‥ 9.1) · from 9 constraining
   judgements (7 human, 2 agent)` (unchanged)
@@ -644,8 +658,9 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
    resolves at rung 1 (scope R1 — the row-gating footgun test);
    scoring-inert kinds — paired capture/consumption test over `ALL_KINDS`;
    `demote_agent_evidence` — rungs 3–5 leave items probe-eligible when set,
-   retire them when unset; conflict items enter the reprobe queue
-   knob-independently.
+   retire them when unset; anchored-tier conflict items enter the reprobe
+   queue knob-independently, agent/migrated-tier conflicts never do (D14 —
+   both directions tested).
 5. **Behaviour preservation**: corpora with no anchor rows and no `[value]`
    facets score bitwise-identically (empty-claims property); the compile
    suite green with **zero golden churn** under the `PairRow` input
@@ -657,7 +672,9 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
    frame/domain/form; mandatory `--rater` (parse-level); every invocation
    mints (two identical sets ⇒ two rows); `--supersedes` scope refusals
    (foreign subject, cross-domain, pairwise target, cross-lens); `value
-   pin` worker-mode refusal (guard test) + mandatory `--by`; `value clear`
+   pin` non-TTY refusal (unit: both `is_interactive` branches; e2e:
+   piped-stdin refusal naming the posture) + worker-mode refusal (guard
+   test) + mandatory `--by`; `value clear`
    tombstones all active unlensed rows, refuses under active pin naming
    remedy, `--lens` variant; `pin --retire` gated + ladder falls through
    after; non-finite magnitude refused; write-class regression (`main.rs`
@@ -772,11 +789,13 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
   collides re-imports on the R3 identity key → one session file per run,
   explicit supersedes sole channel); F-8 (minor — `display_token` cannot
   see `ClaimResolution` → tokens originate at the `RowSummary` join;
-  resolve.rs claim corrected). **Pending operator adjudication:** F-1
-  (blocker — worker-mode refusal does not gate non-worker agents; the pin
-  admission path needs a real operator gate) and F-5 (major — agent
-  self-contradiction floods the human reprobe queue) — both touch
-  adjudicated ground (D9 gating mechanism; D3 conflict routing).
+  resolve.rs claim corrected). Adjudicated by the operator 2026-07-17 and
+  integrated: F-1 (blocker — worker-mode refusal does not gate non-worker
+  agents → D13 interactive-TTY gate + worker refusal, honestly framed as a
+  posture bar with the ledger as backstop); F-5 (major — agent
+  self-contradiction floods the human reprobe queue → D14 findings at
+  every tier, reprobe nomination + contested framing anchored-tiers-only).
+  **Design locked 2026-07-17** (operator: "lock & hand over for dispatch").
 
 ## Deferred (named seams, not built)
 

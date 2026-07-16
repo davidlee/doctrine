@@ -46,8 +46,10 @@ the scan seam.
   attributed, auditable rows. Same-tier conflict never resolves silently
   (RV-275 F-1) — deterministic, surfaced, no invented winner, no fall-through.
 - **Pin admission as a contract** (RV-275 F-5): `value pin` mints pin-admitted
-  claims only through an operator-gated path (the `worker_commit` gating
-  precedent); authority is derived from provenance, never a row column.
+  claims only through an operator-gated path — interactive-TTY check +
+  worker-mode refusal (design D13, adjudicated 2026-07-17: a posture bar,
+  with the auditable append-only ledger as backstop); authority is derived
+  from provenance, never a row column.
 - **Verb re-plumbing.** `value set` appends an anchor claim; `value clear`
   appends a tombstone; correction is supersession, never in-place edit.
 - **Migration import** per the census contract, as a throwaway `scripts/`
@@ -118,7 +120,8 @@ cross-session, conflicting-pin, and lens-isolation tests before implementation.
   the winning tier's active claims with distinct magnitudes resolve to their
   arithmetic **mean** (over the deduplicated row multiset — corroboration
   counts, exact duplicates collapse) as the point anchor (D8-safe); the disagreement
-  interval renders as bounds; a loud finding + reprobe candidate fires;
+  interval renders as bounds; a loud finding fires at every tier, with
+  reprobe nomination anchored-tiers-only (design D14, adjudicated 2026-07-17);
   resolution is a superseding row. Uniform across tiers (a conflicted pin is
   a contested pin, named as such). Rationale: independent human assessments —
   the average likely beats either guess; don't break the graph pending
