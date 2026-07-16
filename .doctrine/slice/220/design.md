@@ -19,7 +19,7 @@ STD-002.
 | D3 | Same-tier conflict → arithmetic **mean over the full active winning-tier row multiset** as point anchor (D8-safe); interval `{min, max}` as rendered bounds; loud `ClaimConflict` finding + reprobe candidate; uniform across tiers (conflicted pin = "contested pin"). **No identity-based dedupe anywhere** — `by` is optional; every active row is evidence; identical re-fires are harmless corroboration. *(Operator-adjudicated 2026-07-16: average likely beats either guess; don't break the graph pending a conversation)* | Deterministic, surfaced, never silent; no lower tier wins because a higher tier disagrees; no invented winner among claims — the mean is an aggregate, not a pick |
 | D4 | **Anti-laundering**: `anchor_map()` exposes pin/human tiers only; agent/migrated claims never enter `compile` — they bypass the constraint layer and re-enter at the graph ladder below projection | A point anchor pins projection to itself; anchoring an agent guess launders it into the tier that outranks it (the exact RFC-020 §Context failure) |
 | D5 | Ladder × lens (RFC-020 OQ-2 answered): independent per-partition resolution; the unlensed partition feeds everything; lensed partitions resolve into an inert `lensed` output (IDE-035 seam) — no cross-partition mixing, ever | RFC-019 T5 pooling discipline, extended to claims |
-| D6 | Transitional rung: an **unmigrated `[value]` facet** reads at the bottom of the evidence ladder (below attributed agent claims), consulted only when zero claim rows exist for the item, firing an `UnmigratedFacet` finding naming the script. Facet read path deletes when both domains have migrated (Phase 2 exit criterion) | Shipping the binary IS the flip for unmigrated corpora (IMP-290); values contribute instead of vanishing |
+| D6 | Transitional rung: an **unmigrated `[value]` facet** reads at the bottom of the evidence ladder (below attributed agent claims), consulted only when zero claim rows exist for the item; `UnmigratedFacet` finding fires on facet **presence**, not consumption. For compared items, projection out-ranks the facet permanently — the flip's semantics, stated without euphemism (§3). Facet read path deletes when both domains have migrated (Phase 2 exit criterion) | Shipping the binary IS the flip for unmigrated corpora (IMP-290); uncompared values contribute instead of vanishing; compared guesses are calibrated by evidence — the point |
 | D7 | Capture admissibility mirrors today's `value set` surface exactly (warn-never-refuse, REV-022); consumption is gated at the scoring surface (`effective_raw_value`'s caller contract — value-bearing scored kinds only). Paired test over `ALL_KINDS` | Records' claims: capture-lossless, consumption-inert; Phase 3 widens consumption, not capture |
 | D8 | Migration + Phase 0 diagnostic are throwaway Python scripts in `scripts/`, not product verbs *(operator-adjudicated)*. Idempotency key = **facet state** (source path + magnitude): changed-facet re-runs import a superseding row; census `facets_found == imported + already-imported + re-imported`, one active migrated row per source facet | One-shot machinery stays out of the product; path-only skip keys strip un-imported edits (review finding) |
 | D9 | `[value]` tables are **physically stripped** by the migration pass after its census *(operator-adjudicated)*; `value pin` / `pin --retire` ride the worker-refused write class (the `worker_commit` gating precedent); `value clear` refuses while a pin is active | Dead authored-looking data is a standing lie; pin admission is a contract, not a column (RV-275 F-5) |
@@ -151,19 +151,40 @@ compilation: active anchor rows → per-item tier resolution → (a) the
 ladder (§3), (c) findings. This IS the "claims + comparisons + config →
 AnchorMap + bounds + projection" builder RFC-020 T2 names; SL-219 §2's
 non-foreclosure clause ("a future claim ledger replaces the builders, never
-the seam") is honoured literally — `compile` and `project` are untouched.
+the seam") is honoured **at the seam**: `compile` and `project` keep their
+rule structure and behaviour unchanged. Honesty about source (RV-278 F-3):
+§1's `b`/`response` optionalisation mechanically touches `compile`'s field
+accessors; the design closes that with a **pairwise projection type** — the
+filter seam constructs `PairRow { a, b, response, … }` views for
+order/ratio rows (field presence guaranteed by type), so `compile`'s rule
+code stays total with no `Option` handling inside the constraint layer.
+Proof obligation: the existing compile suite green with **zero golden
+churn** — behaviour preservation is behavioural, not byte-of-source; the
+SL-219 D-NF "reused as-is" deviation is recorded here.
 
-**Input filter, explicit:** `compile` receives only active value-domain
-`order|ratio` rows — **anchor rows terminate at `claims` and never enter
-the constraint layer**. Consequence: anchor rows never acquire a
-`CompilationStatus`; their `RowState` display token comes from the claims
-pass (`anchored` / `prior` / `conflicted`, plus the existing resolution
-tokens for superseded/tombstoned/inert rows).
+**Input filter, at every consumer (RV-278 F-6):** `compile` receives only
+active value-domain `order|ratio` rows (as `PairRow` views) — **anchor rows
+terminate at `claims` and never reach any compile consumer**: the store's
+own pipeline AND the SL-217 elicit `assemble` path, which recompiles its
+baseline from `Pipeline.active_judgements`. That field splits into
+pairwise/anchor views; every recompiler consumes the pairwise view.
+`src/priority/elicit.rs` joins the code-impact list. Consequence: anchor
+rows never acquire a `CompilationStatus`; their display token (`anchored` /
+`prior` / `conflicted`, plus the existing resolution tokens) is produced at
+the store's `RowSummary` join — the seam that holds `ClaimResolution` —
+NOT in `resolve.rs::display_token`, which changes only for
+`Option<CompilationStatus>` handling (RV-278 F-8).
 
 **Module.** `src/comparison/claims.rs`, pure leaf beside
 `resolve`/`compile`/`project` (ADR-001): no clock, disk, config reads.
-Input: the post-resolve active row set (value-domain anchor rows), already
-reduced by supersession/tombstones/implicit revision. Output:
+Input: the claims pass performs its **own input selection** over the
+post-resolve row set (RV-278 F-2): value-domain anchor rows with resolution
+status `Active` **or `InertLens`** — R5's lens inertness is a *constraint
+compilation* gate, not a claim-capture gate; without this, `resolve.rs:
+176`'s unconditional InertLens marking would empty the `lensed` output
+forever and make the lens-isolation gate test pass vacuously.
+Superseded/tombstoned rows stay excluded (supersession reduces lensed
+threads too). Order rows' R5 semantics are untouched. Output:
 
 ```rust
 // Ascending declaration order so derived Ord + Iterator::max are correct
@@ -239,13 +260,15 @@ a "the humans must talk" probe). Domain-tagged at construction (SL-219 D9).
 
 **Code impact (§2):** new `src/comparison/claims.rs` (+ the RV-275 F-1
 gate battery — §8.3); `src/comparison/store.rs` (value-system wiring,
-`Pipeline` field, `RowSummary` joins anchor rows against `ClaimResolution`
-instead of the quarantine maps); `src/comparison/mod.rs` (module decl);
+`Pipeline` pairwise/anchor view split, `RowSummary` joins anchor rows
+against `ClaimResolution` — where the claims display tokens originate);
+`src/comparison/compile.rs` (mechanical `PairRow` input adaptation, zero
+rule/golden churn); `src/comparison/mod.rs` (module decl);
 `src/comparison/resolve.rs` (`RowState.compilation` →
-`Option<CompilationStatus>`, `display_token()` gains claims-derived
-tokens); `src/commands/compare.rs` (list render consumes the extended token
-set, goldens); deletion of the facet→AnchorMap path in
-`src/priority/surface.rs`/`graph.rs`.
+`Option<CompilationStatus>` only); `src/priority/elicit.rs` (assemble
+consumes the pairwise view); `src/commands/compare.rs` (list render
+consumes the extended token set, goldens); deletion of the facet→AnchorMap
+path in `src/priority/surface.rs`/`graph.rs`.
 
 ## §3 The resolver flip: consumption ladder and determinacy
 
@@ -272,13 +295,29 @@ pinned by a paired test over `ALL_KINDS`.
 3. **Agent-tier prior** — `priors` with `tier = Agent`.
 4. **Migrated-tier prior** — `tier = Migrated`.
 5. **Unmigrated `[value]` facet** (transitional, D6) — reads at the bottom
-   of the evidence ladder, below attributed agent claims; fires
-   `UnmigratedFacet` naming the script; consulted only when zero claim rows
-   exist for the item (a coexisting claim means the facet is residue
-   awaiting its strip). This makes shipping the binary safe for corpora
-   that never run the script: their facets stop being constitutional at
-   upgrade — the IMP-290 flip — but keep contributing instead of vanishing.
+   of the evidence ladder, below attributed agent claims; consulted only
+   when zero claim rows exist for the item (a coexisting claim means the
+   facet is residue awaiting its strip). The `UnmigratedFacet` finding
+   fires on facet **presence**, not rung-5 consumption (RV-278 F-4) — a
+   facet shadowed by projection is still unmigrated debt.
 6. **`DEFAULT_VALUE`** (1.0).
+
+**Compared facet-bearing items — the flip stated without euphemism (RV-278
+F-4).** For an item with an unmigrated facet AND comparison rows, rung 2
+wins: the facet's absolute magnitude stops anchoring the value scale the
+moment the binary ships, and migration does not restore it (a migrated
+claim sits below projection identically — this is the flip's permanent
+semantics for evidence-out-ranked guesses, not a migration-window
+artifact). A corpus whose only absolute magnitudes were facets loses its
+projection *anchoring* entirely until a human re-asserts (`value set
+--rater human`, or a pin) — projection degrades deterministically to
+gauge/bounds placements per the existing P-rules, disclosed by provenance.
+D6's "keeps contributing" is scoped honestly: the facet contributes at rung
+5 where no higher-rung evidence exists; where evidence exists, evidence
+wins — that is the design, and the loud presence-based finding plus the
+`explain` provenance line are the operator's re-assertion prompts. The
+rejected-"discard" framing does not recur: nothing is deleted, everything
+renders, rollback holds.
 
 **Code motion.** `effective_raw_value` takes the claims output;
 `build_from_with_cfg` gains the claims parameter (SL-219 cost-feed
@@ -389,12 +428,17 @@ holds.
 1. **Scan** — every `[value]` table under the authored entity dirs
    (`.doctrine/` entity TOMLs, excluding `comparisons/`, `state/`, derived
    caches) — the surface `facet_write` ever wrote.
-2. **Emit** — ONE session file (many rows) in `.doctrine/comparisons/`:
-   per facet, an anchor row `rater = migrated`, `magnitude = <facet
-   value>`, `observed_at = <run date>`, no `date`, `basis = "facet [value]
-   <relpath> @ <commit> <author> <date>"` from `git blame` of the
-   `value =` line (best-effort; on failure the basis carries the path only —
-   recovered context, never asserted provenance).
+2. **Emit** — one session file **per run** (RV-278 F-7) in
+   `.doctrine/comparisons/`: per facet, an anchor row `rater = migrated`,
+   `magnitude = <facet value>`, `observed_at = <run date>`, no `date`,
+   `basis = "facet [value] <relpath> @ <commit> <author> <date>"` from
+   `git blame` of the `value =` line (best-effort; on failure the basis
+   carries the path only — recovered context, never asserted provenance).
+   Session-per-run means a re-import's superseding row lives in a *later
+   session* — it can never collide with its target on the within-session R3
+   identity key, so the explicit `supersedes` edge is the sole supersession
+   channel and no seq-ordering subtlety is load-bearing. A re-run that
+   imports nothing writes no file.
 3. **Verify** — shell out to the doctrine binary to prove the emitted
    session parses and resolves (exit-0 gate) **before** any strip.
 4. **Census** — every facet found accounted exactly once: `imported` /
@@ -580,22 +624,33 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
    magnitude, rows = N); conflict (multiset mean, interval {min,max},
    distinct count); conflicting pins ⇒ contested-pin finding; cross-session
    concurrency (two sessions, same subject/tier ⇒ conflict, never
-   latest-wins); lens isolation (property: deleting all lensed rows leaves
-   `anchored`/`priors` byte-identical); anti-laundering (property over
-   generated ledgers: `anchor_map()` ≡ `anchored`, agent/migrated absent by
-   construction); duplicate-merge posture (identical re-fire changes no
-   resolved value, raises no conflict).
+   latest-wins); lens isolation — **non-vacuous** (RV-278 F-2): with
+   lens-tagged anchor rows present, `lensed` is non-empty AND deleting all
+   lensed rows leaves `anchored`/`priors` byte-identical (both directions
+   asserted, so InertLens-input regressions fail loudly instead of passing
+   vacuously); anti-laundering (property over generated ledgers:
+   `anchor_map()` ≡ `anchored`, agent/migrated absent by construction);
+   anchor rows reach **no** compile consumer (store pipeline and elicit
+   `assemble` — an anchor-bearing ledger yields a baseline `ConstraintSet`
+   identical to the same ledger without its anchor rows, RV-278 F-6);
+   duplicate-merge posture (identical re-fire changes no resolved value,
+   raises no conflict).
 4. **Ladder (graph)**: each rung wins in isolation; adjacent-rung dominance
    pairs (pin > human > projection > agent > migrated > facet > default);
-   facet consulted only when zero claim rows exist; row-less human claim
+   facet consulted only when zero claim rows exist; **compared
+   facet-bearing item** (RV-278 F-4): facet neither anchors the compile nor
+   fills the ladder (rung 2 wins), `UnmigratedFacet` finding fires anyway
+   (presence-based); row-less human claim
    resolves at rung 1 (scope R1 — the row-gating footgun test);
    scoring-inert kinds — paired capture/consumption test over `ALL_KINDS`;
    `demote_agent_evidence` — rungs 3–5 leave items probe-eligible when set,
    retire them when unset; conflict items enter the reprobe queue
    knob-independently.
 5. **Behaviour preservation**: corpora with no anchor rows and no `[value]`
-   facets score bitwise-identically (empty-claims property); every existing
-   suite green unchanged EXCEPT the enumerated goldens that author
+   facets score bitwise-identically (empty-claims property); the compile
+   suite green with **zero golden churn** under the `PairRow` input
+   adaptation (RV-278 F-3 — the "rule structure unchanged" proof); every
+   existing suite green unchanged EXCEPT the enumerated goldens that author
    `[value]` facets — churn list produced at the flip phase and pinned as
    evidence (scope R2 classes a/b/c).
 6. **Verbs**: `value set` mints session-of-one with stamped
@@ -698,6 +753,30 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
     (D12).
   - §8 (2 majors): `compare list`/elicit render commitments unverified →
     §8.7 pins; script dirty-tree/live-corpus safety unverified → §8.9 pins.
+
+- **Opus (fresh-context, whole-doc, hostile) — "RV-278"** (2026-07-17,
+  cross-section pass over the codex-cleared draft): 2 blockers, 4 majors,
+  2 minors. Integrated in this revision: F-2 (blocker — R5 InertLens
+  marking would empty `lensed` forever; lens-isolation gate test vacuous →
+  claims pass performs its own input selection over {Active, InertLens}
+  anchor rows; test asserts non-vacuity both directions); F-3 (major —
+  `b`/`response` optionalisation mechanically touches `compile`,
+  contradicting "untouched" → `PairRow` pairwise projection type; invariant
+  restated behaviourally; zero-golden-churn proof; SL-219 D-NF deviation
+  recorded); F-4 (major — compared facet-bearing items lose anchoring with
+  no VT covering it → flip semantics stated without euphemism, D6 scoped,
+  presence-based finding, dedicated ladder VT); F-6 (major — anchor rows
+  leak into elicit `assemble` via `Pipeline.active_judgements` →
+  pairwise/anchor view split enforced at every compile consumer, elicit.rs
+  in code impact, no-consumer test); F-7 (minor — single-session migration
+  collides re-imports on the R3 identity key → one session file per run,
+  explicit supersedes sole channel); F-8 (minor — `display_token` cannot
+  see `ClaimResolution` → tokens originate at the `RowSummary` join;
+  resolve.rs claim corrected). **Pending operator adjudication:** F-1
+  (blocker — worker-mode refusal does not gate non-worker agents; the pin
+  admission path needs a real operator gate) and F-5 (major — agent
+  self-contradiction floods the human reprobe queue) — both touch
+  adjudicated ground (D9 gating mechanism; D3 conflict routing).
 
 ## Deferred (named seams, not built)
 
