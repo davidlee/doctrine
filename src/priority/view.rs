@@ -83,6 +83,49 @@ pub(crate) enum ReasonKind {
     /// convention, not evidence. `judgements` is the constraining-judgement
     /// count (human + agent) that ordered it.
     ValueGauge { value: f64, judgements: u32 },
+    /// SL-219 PHASE-06 cost-source shape 1 (design §5) — the `est_cost` came
+    /// from an authored `[estimate]` facet (the operator pin, D2), OR was
+    /// inherited from the class anchor by an `equal` sizing merge. `pin`
+    /// carries the OWN authored bounds `(lower, upper, β)` when the entity
+    /// authored its own facet; `None` for the facet-less member hoisted onto
+    /// an anchored class (provenance Authored — design §4, no bounds to show).
+    CostAuthored {
+        est_cost: f64,
+        pin: Option<(f64, f64, f64)>,
+    },
+    /// SL-219 PHASE-06 cost-source shape 2 — projected: the deterministic
+    /// point projection in an anchored est component. `lower`/`upper` are the
+    /// C6 display bounds (`None` = unbounded that side); `human`/`agent` are
+    /// the constraining sizing-judgement rater split (the T7 disclosure;
+    /// `NoConstraint` rows excluded — S3 precedent).
+    CostProjected {
+        est_cost: f64,
+        lower: Option<f64>,
+        upper: Option<f64>,
+        human: u32,
+        agent: u32,
+    },
+    /// SL-219 PHASE-06 cost-source shape 3 — the bare anchor `max_upper +
+    /// margin` (D7): the divisor a bare item with no sizing evidence takes.
+    /// `max_estimate` is `None` in the empty-corpus fallback (`est_cost` is
+    /// then the `1.0` default, no authored upper to cite).
+    CostBareAnchor {
+        est_cost: f64,
+        max_estimate: Option<f64>,
+        margin: f64,
+    },
+    /// SL-219 PHASE-06 gauge flag (D2 honesty) — the item sits in a gauge est
+    /// component (ordered by `judgements`, no anchor in the component), so
+    /// scoring used the BARE ANCHOR (`est_cost`/`max_estimate`/`margin`, the
+    /// shape-3 fields); the render NEVER implies gauge fed the divisor. Emits
+    /// TWO lines: the bare-anchor cost-source + the `sizing: gauge …`
+    /// disclosure.
+    CostGauge {
+        est_cost: f64,
+        max_estimate: Option<f64>,
+        margin: f64,
+        judgements: u32,
+    },
     /// SL-213 PHASE-06 (design §4 S4) — the inert `priority`-domain
     /// disclosure: `count` prefer-first judgements recorded corpus-wide.
     /// NOT a finding (nothing is wrong) — `explain`-only, corpus-global (not
@@ -273,6 +316,11 @@ pub(crate) struct Explanation {
     /// SL-213 PHASE-06 (design §4 S3) — the comparison-tier value-source
     /// block. `None` for a non-value-bearing kind.
     pub(crate) value_source: Option<ReasonKind>,
+    /// SL-219 PHASE-06 (design §5) — the comparison-tier cost-source block,
+    /// beside the value-source block. `None` when the corpus carries no
+    /// est-domain projection (byte-identical to pre-SL-219 explain, S3
+    /// precedent) or the kind is not value-bearing (no divisor consumed).
+    pub(crate) cost_source: Option<ReasonKind>,
     /// SL-213 PHASE-06 (design §4 S4) — the inert priority-domain
     /// disclosure, corpus-global. `None` when no `priority`-domain rows
     /// exist.

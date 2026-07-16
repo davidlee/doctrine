@@ -29,10 +29,19 @@ pub(crate) const DOMAIN_VALUE: &str = "value";
 /// but cost-confounded, so never compiled to a value constraint; inert until a
 /// consumer with a cost model exists.
 pub(crate) const DOMAIN_PRIORITY: &str = "priority";
+/// The estimate domain (SL-219 D1): settle-cost testimony — rows answer
+/// "which is more work?" and compile (a later phase) to cost order
+/// `c_winner > c_loser`, the same winner-is-greater convention as the value
+/// domain, with cost as the currency.
+pub(crate) const DOMAIN_ESTIMATE: &str = "estimate";
 /// Value frame: "equal effort assumed" — the default framing.
 pub(crate) const FRAME_EQUAL_EFFORT: &str = "equal-effort";
 /// Priority frame: "under a binding capacity cutoff, which do you keep?".
 pub(crate) const FRAME_PREFER_FIRST: &str = "prefer-first";
+/// Estimate frame (SL-219 D5): "which is more work?" — the winner is the
+/// COSTLIER item. `prefer-a` ⇒ edge `c_A > c_B`; `equal` ⇒ cost-equality;
+/// `incomparable` ⇒ no constraint.
+pub(crate) const FRAME_MORE_WORK: &str = "more-work";
 
 /// Per-domain closed frame vocabulary (design D2). The frame implies the
 /// domain at capture — users never type a domain; [`domain_for_frame`] is the
@@ -40,6 +49,7 @@ pub(crate) const FRAME_PREFER_FIRST: &str = "prefer-first";
 pub(crate) const DOMAIN_FRAMES: &[(&str, &[&str])] = &[
     (DOMAIN_VALUE, &[FRAME_EQUAL_EFFORT]),
     (DOMAIN_PRIORITY, &[FRAME_PREFER_FIRST]),
+    (DOMAIN_ESTIMATE, &[FRAME_MORE_WORK]),
 ];
 
 /// The only wire version this model reads or writes (design D1: `version ≠ 2`
@@ -240,6 +250,27 @@ pub(crate) fn admissible_value_pair(kind_a: &str, kind_b: &str) -> Result<(), St
     admissible_value_kind(kind_b)
 }
 
+/// Estimate-pair admissibility (SL-219 D3): the admit set is the UNION of
+/// `kinds::VALUE_BEARING` and `kinds::RECORD` — derived from those constants,
+/// never a parallel hand-list. RSK is admitted, unlike the value domain:
+/// settle-cost is comparable even where value is not. `Err` carries the
+/// human-readable refusal naming the currency.
+pub(crate) fn admissible_estimate_pair(kind_a: &str, kind_b: &str) -> Result<(), String> {
+    admissible_estimate_kind(kind_a)?;
+    admissible_estimate_kind(kind_b)
+}
+
+/// One side of the pair: a work (value-bearing) or knowledge-record kind —
+/// everything that carries a settle-cost worth sizing.
+fn admissible_estimate_kind(kind: &str) -> Result<(), String> {
+    if kinds::VALUE_BEARING.contains(&kind) || kinds::RECORD.contains(&kind) {
+        return Ok(());
+    }
+    Err(format!(
+        "{kind} has no comparable settle-cost — estimate comparison admits work and record kinds"
+    ))
+}
+
 /// One side of the pair: value-bearing, and not a risk (risk carries
 /// exposure on its own facet, not comparable value).
 fn admissible_value_kind(kind: &str) -> Result<(), String> {
@@ -302,6 +333,28 @@ mod tests {
         }
     }
 
+    /// An estimate-domain judgement (SL-219 D1/D5): `more-work` frame, order
+    /// form — the winner is the costlier item.
+    fn estimate_judgement() -> Judgement {
+        Judgement {
+            uid: "0197f3a2-8f52-7a71-9c8d-5e6f7a8b9c0d".to_string(),
+            seq: 2,
+            a: "SL-204".to_string(),
+            b: "RSK-004".to_string(),
+            response: Response::PreferB,
+            domain: DOMAIN_ESTIMATE.to_string(),
+            frame: FRAME_MORE_WORK.to_string(),
+            form: RowForm::Order,
+            magnitude: None,
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Human,
+            by: None,
+            note: None,
+            date: "2026-07-10".to_string(),
+        }
+    }
+
     /// A judgement with every optional absent.
     fn bare_judgement() -> Judgement {
         Judgement {
@@ -332,22 +385,27 @@ mod tests {
         assert_eq!(COMPARISON_VERSION, 2);
         assert_eq!(DOMAIN_VALUE, "value");
         assert_eq!(DOMAIN_PRIORITY, "priority");
+        assert_eq!(DOMAIN_ESTIMATE, "estimate");
+        assert_eq!(FRAME_MORE_WORK, "more-work");
         assert_eq!(
             DOMAIN_FRAMES,
             &[
                 ("value", &["equal-effort"][..]),
-                ("priority", &["prefer-first"][..])
+                ("priority", &["prefer-first"][..]),
+                ("estimate", &["more-work"][..])
             ]
         );
     }
 
     /// The per-domain frame table drives capture derivation both ways
     /// (design D2/S1): frame → domain is total over the closed vocab, and an
-    /// unknown frame derives nothing.
+    /// unknown frame derives nothing. SL-219 D1: `more-work` derives the
+    /// estimate domain.
     #[test]
     fn domain_for_frame_derives_from_the_table() {
         assert_eq!(domain_for_frame(FRAME_EQUAL_EFFORT), Some(DOMAIN_VALUE));
         assert_eq!(domain_for_frame(FRAME_PREFER_FIRST), Some(DOMAIN_PRIORITY));
+        assert_eq!(domain_for_frame(FRAME_MORE_WORK), Some(DOMAIN_ESTIMATE));
         assert_eq!(domain_for_frame("opportunity-cost"), None);
     }
 
@@ -491,6 +549,45 @@ note = \"wrong way round\"
         assert!(validate_judgement(&bare_judgement()).is_ok());
     }
 
+    #[test]
+    fn validate_accepts_estimate_more_work() {
+        assert!(validate_judgement(&estimate_judgement()).is_ok());
+    }
+
+    /// SL-219 D1: `more-work` is estimate-only, and the estimate domain admits
+    /// no other frame — the closed table scopes per domain, both directions.
+    #[test]
+    fn validate_rejects_more_work_outside_estimate_domain() {
+        let mut j = full_judgement();
+        j.frame = FRAME_MORE_WORK.to_string(); // domain stays `value`
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("not admissible"), "got: {err}");
+
+        let mut j = estimate_judgement();
+        j.frame = FRAME_EQUAL_EFFORT.to_string(); // domain stays `estimate`
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("not admissible"), "got: {err}");
+    }
+
+    /// SL-219 VT-1: an estimate-domain row rides the v2 wire losslessly —
+    /// the documented tokens on the wire, and parse(to_toml(s)) == s (the
+    /// existing round-trip idiom extended with an est-domain row).
+    #[test]
+    fn round_trip_preserves_estimate_domain_rows() {
+        let mut s = full_session();
+        s.judgements.push(estimate_judgement());
+        let text = to_toml(&s).unwrap();
+        assert!(
+            text.contains(&format!("domain = \"{DOMAIN_ESTIMATE}\"")),
+            "estimate domain on the wire:\n{text}"
+        );
+        assert!(
+            text.contains(&format!("frame = \"{FRAME_MORE_WORK}\"")),
+            "more-work frame on the wire:\n{text}"
+        );
+        assert_eq!(parse(&text).unwrap(), s);
+    }
+
     /// D2: the frame table is per-domain — each frame is inadmissible in the
     /// other domain (VT-1 frame admissibility, both directions).
     #[test]
@@ -565,5 +662,44 @@ note = \"wrong way round\"
                 "{kind}: admitted iff value-bearing minus RSK"
             );
         }
+    }
+
+    // ---- SL-219: estimate-domain admissibility (VT-1) ------------------------
+
+    /// RSK is admitted in the estimate domain (unlike the value domain — SL-219
+    /// D3: settle-cost is comparable even where value is not), and record
+    /// kinds size against work kinds.
+    #[test]
+    fn admissible_estimate_pair_admits_rsk_and_records() {
+        assert!(admissible_estimate_pair(kinds::SL, kinds::RSK).is_ok());
+        assert!(admissible_estimate_pair(kinds::QUE, kinds::SL).is_ok());
+        assert!(admissible_estimate_pair(kinds::QUE, kinds::CON).is_ok());
+    }
+
+    /// SL-219 D3 census property: the estimate admit set IS the union
+    /// `kinds::VALUE_BEARING` + `kinds::RECORD` — for every census kind,
+    /// admission holds exactly when the derivation says so (no parallel list).
+    #[test]
+    fn estimate_admit_set_is_value_bearing_union_record() {
+        for &kind in kinds::ALL_KINDS {
+            let admitted = admissible_estimate_pair(kind, kind).is_ok();
+            let expected = kinds::VALUE_BEARING.contains(&kind) || kinds::RECORD.contains(&kind);
+            assert_eq!(
+                admitted, expected,
+                "{kind}: admitted iff value-bearing or record"
+            );
+        }
+    }
+
+    /// The refusal names the currency (settle-cost) and the offending kind.
+    #[test]
+    fn admissible_estimate_pair_refusal_names_the_currency() {
+        let err = admissible_estimate_pair(kinds::REV, kinds::SL).unwrap_err();
+        assert!(err.contains(kinds::REV), "names the kind: {err}");
+        assert!(err.contains("settle-cost"), "names the currency: {err}");
+        assert!(
+            err.contains("work and record kinds"),
+            "names the admit set: {err}"
+        );
     }
 }

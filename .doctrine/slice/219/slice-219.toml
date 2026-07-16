@@ -78,6 +78,16 @@ intent = "design-target"
 selector = "tests/e2e_compare_estimate.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "tests/e2e_compare_elicit.rs"
+intent = "design-target"
+note = "PHASE-05 Option B adjudication: stall/stable elicit goldens reconciled to sizing-probe behaviour (user-approved)"
+
+[[selector]]
+selector = "src/priority/view.rs"
+intent = "design-target"
+note = "PHASE-06: cost-source ReasonKind variants + Explanation.cost_source — SL-213 value-source precedent; additive"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-015"
