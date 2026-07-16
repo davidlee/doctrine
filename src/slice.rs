@@ -1013,10 +1013,20 @@ pub(crate) fn run_status(
         match crate::ledger::trunk_integration(&root, id, &deliver_to)? {
             crate::ledger::TrunkIntegration::NotDispatched
             | crate::ledger::TrunkIntegration::Integrated => {}
+            // SL-211 prescription (design §7): the close gate now names BOTH
+            // remedies. `--integrate` fast-forwards trunk for a still-forwardable
+            // lineage; `--record-integration` records an already-landed (ancestor,
+            // non-ff) payload for split lineage — the shape `--integrate` cannot
+            // serve. Unconditional signpost — earnedness is re-derived by the verbs,
+            // not here (D4).
             crate::ledger::TrunkIntegration::Blocked(reason) => anyhow::bail!(
-                "slice {} → {to}: refused — dispatched code not integrated to trunk: \
-                 {reason} (run close step-3a `dispatch sync --integrate`, verify, retry)",
-                canonical_id(id)
+                "slice {sl} → {to}: refused — dispatched code not integrated to trunk: \
+                 {reason}\n  • if trunk can still fast-forward: \
+                 `dispatch sync --integrate --trunk {deliver_to}`, verify, retry\n  \
+                 • if the trunk payload already landed out-of-band (manual merge of the \
+                 payload / direct-land): \
+                 `dispatch sync --slice {id} --record-integration --trunk {deliver_to}`",
+                sl = canonical_id(id),
             ),
         }
     }
@@ -6449,6 +6459,12 @@ mod tests {
         assert!(
             err.contains("dispatch sync --integrate"),
             "carries the retry guidance: {err}"
+        );
+        // SL-211 VT-4: the Blocked refusal ALSO names the split-lineage remedy so a
+        // non-ff (already-landed) payload has a signposted recovery, not a dead end.
+        assert!(
+            err.contains("--record-integration"),
+            "names the split-lineage recovery verb: {err}"
         );
         // Refused BEFORE the write — status stays at reconcile.
         assert_eq!(read_status(&slice_root(root), 1).unwrap(), "reconcile");

@@ -73,11 +73,24 @@ pub(crate) enum DispatchCommand {
         #[arg(long, group = "stage", required = true)]
         show_journal_trunk_oid: bool,
 
+        /// Stage: record an out-of-band trunk integration (split-lineage close
+        /// recovery, SL-211). The trunk payload (phase-chain tip / admitted
+        /// `close_target`) must ALREADY be an ancestor of `--trunk`; commits a
+        /// Verified trunk row to `dispatch/<slice>` and advances NO external ref.
+        /// `--trunk` required.
+        #[arg(long, group = "stage", required = true)]
+        record_integration: bool,
+
         /// Project the cumulative code units onto this trunk ref, fast-forward-only +
         /// expected-tip CAS (e.g. `refs/heads/main`). Also names the row to read
         /// under `--show-journal-trunk-oid`. Omit to leave trunk untouched — useful
-        /// as a safety check or when only `--edge` is desired.
-        #[arg(long, conflicts_with = "prepare_review")]
+        /// as a safety check or when only `--edge` is desired. Required for
+        /// `--record-integration` (the recorded row must name the gate's ref).
+        #[arg(
+            long,
+            conflicts_with = "prepare_review",
+            required_if_eq("record_integration", "true")
+        )]
         trunk: Option<String>,
 
         /// Stage-2 only: advance this standing aggregate ref to the `review/<slice>`
@@ -339,6 +352,7 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
     match cmd {
         DispatchCommand::Sync {
             slice,
+            record_integration,
             integrate,
             show_journal_trunk_oid,
             trunk,
@@ -348,13 +362,17 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
             ..
         } => {
             // The `stage` group is `required = true` single-choice: exactly one
-            // of `--prepare-review` / `--integrate` / `--show-journal-trunk-oid`
-            // is set, so the booleans select the stage in order (no unreachable
-            // arm).
+            // of `--prepare-review` / `--integrate` / `--show-journal-trunk-oid` /
+            // `--record-integration` is set, so the booleans select the stage in
+            // order (no unreachable arm).
             if show_journal_trunk_oid {
                 // SL-128 D3: absent `--trunk` defaults from `[dispatch] deliver_to`;
                 // explicit `--trunk` still wins. `--integrate` is unchanged.
                 run_show_journal_trunk_oid(path, slice, trunk.as_deref())
+            } else if record_integration {
+                // SL-211: record an out-of-band trunk land; advances no external
+                // ref (INV-1). `--trunk` is `required_if_eq` at the CLI.
+                run_record_integration(path, slice, trunk.as_deref())
             } else if integrate {
                 let allow: BTreeSet<String> = allow_corpus_clobber.into_iter().collect();
                 run_integrate(path, slice, trunk.as_deref(), edge.as_deref(), &allow)
@@ -659,6 +677,101 @@ pub(crate) fn run_show_journal_trunk_oid(
             format!("show-journal-trunk-oid: no journal row for {trunk} on dispatch/{slice3}")
         })?;
     writeln!(io::stdout(), "{oid}")?;
+    Ok(())
+}
+
+/// SL-211 — the `--record-integration` stage handler (split-lineage close
+/// recovery). Records that the trunk payload (phase-chain tip / admitted
+/// `close_target`, via the shared [`resolve_trunk_payload`] seam) has ALREADY
+/// landed out-of-band as an ancestor of `trunk`, committing a single Verified
+/// trunk row to `dispatch/<slice>`. It advances **no external ref** (INV-1) — the
+/// unchanged close gate reads the row and passes the slice to `done`.
+///
+/// Guards (design §5.4/§5.5): F-4 `--trunk` must equal `[dispatch] deliver_to`
+/// (a row targeting a ref the gate does not read would still block `done`) —
+/// absent `--trunk` defaults to it, an explicit mismatch is refused. F-2 an
+/// existing trunk row: a `Verified` row is a real prior integration ⇒ idempotent
+/// no-op; a `Pending`/`Failed` row carried zero external effect ⇒ replaced by the
+/// earned row (D7). The earned `is_ancestor` check lives in
+/// [`plan_recorded_trunk_row`] (R1). Unlike integrate the journal may legitimately
+/// be empty here (prepare-review need not have run for this recovery), so there is
+/// no empty-journal bail.
+pub(crate) fn run_record_integration(
+    path: Option<PathBuf>,
+    slice: u32,
+    trunk: Option<&str>,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    // F-4: the recorded row must target the gate's delivery ref, else `done` still
+    // blocks. Absent `--trunk` defaults to `deliver_to` (as show-journal does); an
+    // explicit mismatch is a hard refusal naming both refs.
+    let deliver_to = crate::dtoml::load_doctrine_toml(&root)?.dispatch.deliver_to;
+    let trunk: String = match trunk {
+        None => deliver_to,
+        Some(t) if t == deliver_to => t.to_string(),
+        Some(t) => bail!(
+            "record-integration: --trunk {t} does not match the close gate's delivery ref \
+             {deliver_to} ([dispatch] deliver_to) — a row targeting {t} would not be read at \
+             `slice status … done`; record onto {deliver_to} (or omit --trunk to default)"
+        ),
+    };
+
+    let slice3 = format!("{slice:03}");
+    let coord_ref = format!("{DISPATCH_REF_PREFIX}{slice3}");
+    let tip = resolve_commit(&root, &coord_ref)?
+        .with_context(|| format!("record-integration: dispatch/{slice3} does not exist"))?;
+    let tip_tree = tree_of(&root, &tip)?;
+    let journal_path = format!(".doctrine/dispatch/{slice3}/journal.toml");
+
+    // Tree-read the ledgers from the coordination tip (never the filesystem). An
+    // empty journal is legitimate here — recovery may run without a prior
+    // prepare-review — so, unlike integrate, we do NOT bail on an empty row set.
+    let mut journal = read_ledger::<Journal>(&root, &coord_ref, &slice3, "journal.toml")?;
+    let candidates = read_candidates(&root, slice)?;
+
+    // F-2 existing-trunk-row guard (D7): a prior Verified row is a real prior
+    // integration ⇒ the gate already passes ⇒ idempotent no-op (never a duplicate).
+    if journal
+        .rows
+        .iter()
+        .any(|r| r.target_ref == trunk && r.status == LedgerStatus::Verified)
+    {
+        writeln!(
+            io::stderr(),
+            "record-integration: already integrated — dispatch/{slice3} carries a Verified \
+             trunk row for {trunk}; no-op"
+        )?;
+        return Ok(());
+    }
+
+    // Plan the earned row (R1: refuses an un-landed payload / unresolved trunk).
+    let row = plan_recorded_trunk_row(&root, &slice3, &journal, &candidates, &trunk)?;
+    let payload = row.planned_new_oid.clone();
+    // A non-applied Pending/Failed row (the only remaining trunk-targeting shape —
+    // Verified returned above) carried zero external effect ⇒ replace it in place
+    // with the earned Verified row (the recovery, not a dead end); else append.
+    if let Some(slot) = journal.rows.iter_mut().find(|r| r.target_ref == trunk) {
+        *slot = row;
+    } else {
+        journal.rows.push(row);
+    }
+
+    // Commit the journal onto dispatch/<slice> — NO `with_journaled_projection`:
+    // the recorder advances no external ref (INV-1).
+    commit_journal(
+        &root,
+        &tip_tree,
+        &tip,
+        &journal_path,
+        &coord_ref,
+        &journal,
+        "journal: record-integration",
+    )?;
+    writeln!(
+        io::stderr(),
+        "record-integration: recorded Verified trunk row for {trunk} on dispatch/{slice3} \
+         (payload {payload})"
+    )?;
     Ok(())
 }
 
@@ -2049,9 +2162,9 @@ fn integrate(
     let fresh = |j: &Journal, target: &str| !j.rows.iter().any(|r| r.target_ref == target);
     if let Some(trunk_ref) = trunk.filter(|t| fresh(&journal, t)) {
         let row = if candidate_active {
-            plan_candidate_trunk_row(root, &candidates, trunk_ref)?
+            plan_candidate_trunk_row(root, &slice3, &journal, &candidates, trunk_ref)?
         } else {
-            plan_trunk_row(root, &slice3, &journal, trunk_ref)?
+            plan_trunk_row(root, &slice3, &journal, &candidates, trunk_ref)?
         };
         journal.rows.push(row);
     }
@@ -2345,6 +2458,93 @@ fn phase_chain_tip(journal: &Journal, slice3: &str) -> Option<String> {
         .map(|(_, refname)| refname)
 }
 
+/// Shared refusal (SL-068 I6/R4) when a candidate workflow is active but no
+/// `close_target` admission exists — integration will NOT fall back to a raw
+/// phase ref. Verb-neutral: the single source string every trunk consumer
+/// reaches via [`resolve_trunk_payload`] (STD-001).
+const NO_CLOSE_TARGET_ADMISSION: &str = "a candidate workflow is active but no close_target admission exists — run \
+     `dispatch candidate admit --role close_target` first; integration will not fall back \
+     to a raw phase ref";
+
+/// The SOLE home of the candidate-vs-legacy trunk *source* decision (SL-211
+/// EX-1). An empty candidate ledger ⇒ legacy: the verified phase-chain tip (NOT
+/// `review/<N>`). A recorded candidate workflow ⇒ the admitted `close_target`
+/// OID, REFUSING (no raw-evidence fallback, EX-2) when no such admission exists.
+/// Returns the resolved source oid; `integrate()` and both trunk planners route
+/// their `planned` through here — no duplicated source resolution remains.
+fn resolve_trunk_payload(
+    root: &Path,
+    slice3: &str,
+    journal: &Journal,
+    candidates: &Candidates,
+) -> anyhow::Result<String> {
+    if candidates.rows.is_empty() {
+        // legacy: the phase-chain tip (NOT review/<N>).
+        let phase_ref = phase_chain_tip(journal, slice3)
+            .with_context(|| format!("no phase/{slice3}-NN code units to integrate"))?;
+        resolve_commit(root, &phase_ref)?.with_context(|| format!("{phase_ref} does not resolve"))
+    } else {
+        // candidate-active: the admitted close_target — REFUSE if none.
+        candidates
+            .current_admission
+            .close_target
+            .as_ref()
+            .context(NO_CLOSE_TARGET_ADMISSION)
+            .map(|a| a.admitted_oid.clone())
+    }
+}
+
+/// A TERMINAL, already-applied trunk-record row: a *statement of fact* that
+/// `payload` sits on `trunk_ref`, not an intent to move it (contrast
+/// [`projection_row`], a Pending CAS advance). All four oid fields are the
+/// payload and the status is `Verified`. The replay-safety differences (D2):
+/// `expected_old == planned == payload` (NOT the trunk tip), so a stray later
+/// `--integrate` re-checks `is_ancestor(payload, trunk)` and converges to a
+/// non-destructive Refused/no-op — never a backward advance; `applied == payload`
+/// (already applied, not an empty pending slot). Consumed by
+/// [`plan_recorded_trunk_row`] (the record-integration handler, SL-211 PHASE-03).
+fn recorded_row(trunk_ref: &str, payload: String) -> JournalRow {
+    JournalRow {
+        source_oid: payload.clone(),
+        target_ref: trunk_ref.to_owned(),
+        expected_old_oid: payload.clone(), // = planned, NOT the trunk tip (D2)
+        planned_new_oid: payload.clone(),  // the gate re-checks is_ancestor(this, trunk)
+        applied_new_oid: payload,          // already applied — terminal, not pending
+        status: LedgerStatus::Verified,    // statement of fact, not intent
+    }
+}
+
+/// Plan the recorder row for `record-integration`: resolve the trunk payload via
+/// the shared [`resolve_trunk_payload`] seam, then hold it to the **same standard
+/// the integrate gate holds** — the payload must ALREADY be an ancestor of the
+/// trunk tip (R1 negative: recording is a statement of fact, not a way to force
+/// one). Returns the earned terminal row on success; REFUSES (named error) when
+/// the trunk ref does not resolve or the payload is not on trunk. Pure planner
+/// posture (A1): git lives in the shell (`resolve_commit`, `git::is_ancestor`
+/// take `root`); the row construction takes OIDs only. Consumed by
+/// [`run_record_integration`] (SL-211 PHASE-03).
+fn plan_recorded_trunk_row(
+    root: &Path,
+    slice3: &str,
+    journal: &Journal,
+    candidates: &Candidates,
+    trunk_ref: &str,
+) -> anyhow::Result<JournalRow> {
+    let payload = resolve_trunk_payload(root, slice3, journal, candidates)?;
+    let tip = resolve_commit(root, trunk_ref)?.with_context(|| {
+        format!("record-integration: {trunk_ref} does not resolve — no trunk to record onto")
+    })?;
+    // EARNED CHECK (R1 negative): the payload must already be on trunk — the same
+    // standard the gate holds (is_ancestor proves integration occurred).
+    anyhow::ensure!(
+        git::is_ancestor(root, &payload, &tip)?,
+        "record-integration: trunk payload {payload} is not an ancestor of {trunk_ref} \
+         (at {tip}) — land it (`git merge --no-ff phase/{slice3}-NN` or the admitted \
+         candidate) before recording"
+    );
+    Ok(recorded_row(trunk_ref, payload))
+}
+
 /// Plan the trunk projection row (EX-3): the cumulative code tip advances
 /// `trunk_ref` **fast-forward-only**. `expected_old` is the trunk tip (zero if the
 /// ref is absent); a planned commit that does not descend from it ⇒ the trunk
@@ -2353,13 +2553,10 @@ fn plan_trunk_row(
     root: &Path,
     slice3: &str,
     journal: &Journal,
+    candidates: &Candidates,
     trunk_ref: &str,
 ) -> anyhow::Result<JournalRow> {
-    let phase_ref = phase_chain_tip(journal, slice3).with_context(|| {
-        format!("integrate --trunk: no phase/{slice3}-NN code units to integrate")
-    })?;
-    let planned = resolve_commit(root, &phase_ref)?
-        .with_context(|| format!("integrate --trunk: {phase_ref} does not resolve"))?;
+    let planned = resolve_trunk_payload(root, slice3, journal, candidates)?;
     let expected_old = resolve_commit(root, trunk_ref)?;
     if let Some(tip) = &expected_old {
         anyhow::ensure!(
@@ -2391,15 +2588,12 @@ fn plan_edge_row(root: &Path, slice3: &str, edge_ref: &str) -> anyhow::Result<Jo
 /// superseding close-target candidate on the new base (EX-2, R4 — no auto-reanchor).
 fn plan_candidate_trunk_row(
     root: &Path,
+    slice3: &str,
+    journal: &Journal,
     candidates: &Candidates,
     trunk_ref: &str,
 ) -> anyhow::Result<JournalRow> {
-    let admission = candidates.current_admission.close_target.as_ref().context(
-        "integrate --trunk: a candidate workflow is active but no close_target admission \
-             exists — run `dispatch candidate admit --role close_target` first; integrate will \
-             not fall back to a raw phase ref",
-    )?;
-    let planned = admission.admitted_oid.clone();
+    let planned = resolve_trunk_payload(root, slice3, journal, candidates)?;
     let expected_old = resolve_commit(root, trunk_ref)?;
     if let Some(tip) = &expected_old {
         anyhow::ensure!(
@@ -4765,6 +4959,29 @@ mod tests {
         format!("{err}")
     }
 
+    // SL-211 EX-2 / VT-2: candidate workflow active (≥1 recorded row) but NO
+    // close_target admission ⇒ resolve_trunk_payload REFUSES (no raw-evidence
+    // fallback). Pure over (Candidates, Journal): the candidate branch errors
+    // before any git read, so the root path and journal are inert.
+    #[test]
+    fn resolve_trunk_payload_candidate_without_admission_refuses() {
+        let candidates = Candidates {
+            rows: vec![audit_surface_row()],
+            ..Default::default()
+        };
+        let err = resolve_trunk_payload(
+            std::path::Path::new("/nonexistent"),
+            "200",
+            &Journal::default(),
+            &candidates,
+        )
+        .expect_err("candidate-active without a close_target admission must refuse");
+        assert!(
+            format!("{err}").contains("close_target"),
+            "refusal names the missing close_target admission: {err}"
+        );
+    }
+
     // INV-1: a clean audit review_surface tracing to Verified journaled evidence
     // is accepted — the recursion's terminal base case.
     #[test]
@@ -5083,5 +5300,226 @@ mod tests {
                 "{fn_name} must not call g1 (advances no integration ref)"
             );
         }
+    }
+
+    // ---- SL-211 PHASE-02: recorder planner + R1 earned check -----------------
+
+    /// VT-1: `recorded_row` row shape — a TERMINAL Verified row whose four oid
+    /// fields ALL equal the payload (`expected_old == planned == applied == source
+    /// == payload`), status `Verified`. This pins the replay-safety contract (D2):
+    /// `expected_old` is the payload, NOT the trunk tip.
+    #[test]
+    fn recorded_row_is_terminal_verified_all_oids_payload() {
+        let payload = "a".repeat(40);
+        let row = recorded_row("refs/heads/main", payload.clone());
+        assert_eq!(row.target_ref, "refs/heads/main");
+        assert_eq!(row.source_oid, payload, "source == payload");
+        assert_eq!(
+            row.expected_old_oid, payload,
+            "expected_old == payload (= planned, NOT tip)"
+        );
+        assert_eq!(row.planned_new_oid, payload, "planned == payload");
+        assert_eq!(
+            row.applied_new_oid, payload,
+            "applied == payload (terminal, not empty)"
+        );
+        assert_eq!(row.status, LedgerStatus::Verified, "statement of fact");
+    }
+
+    /// VT-2: earned PASS — the resolved trunk payload is an ancestor of the trunk
+    /// tip ⇒ `plan_recorded_trunk_row` returns the earned terminal row with
+    /// `planned_new_oid == payload`. Legacy (candidate-free) path: the payload is
+    /// the phase-chain tip `phase/211-01`, and the trunk `main` has advanced past
+    /// it (payload strictly an ancestor).
+    #[test]
+    fn plan_recorded_trunk_row_returns_earned_row_when_payload_on_trunk() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path()); // c0 on main
+        let payload = commit_file(src.path(), "p.txt", "phase work\n", "phase 01 code");
+        git(src.path(), &["branch", "phase/211-01", &payload]);
+        // Trunk advances PAST the payload ⇒ payload is a strict ancestor of main.
+        commit_file(
+            src.path(),
+            "t.txt",
+            "trunk ahead\n",
+            "trunk advances past payload",
+        );
+
+        let journal = Journal {
+            rows: vec![jrow("refs/heads/phase/211-01", LedgerStatus::Verified)],
+            ..Default::default()
+        };
+        let candidates = Candidates::default();
+        let row =
+            plan_recorded_trunk_row(src.path(), "211", &journal, &candidates, "refs/heads/main")
+                .expect("payload on trunk ⇒ earned row");
+        assert_eq!(
+            row.planned_new_oid, payload,
+            "the earned row records the payload"
+        );
+        assert_eq!(row.status, LedgerStatus::Verified);
+    }
+
+    /// VT-3: R1 NEGATIVE — the payload is NOT an ancestor of the trunk tip (a
+    /// divergent phase branch never landed) ⇒ `plan_recorded_trunk_row` REFUSES
+    /// with an error naming `is not an ancestor`; no row is produced.
+    #[test]
+    fn plan_recorded_trunk_row_refuses_when_payload_not_on_trunk() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path()); // c0 on main
+        // Phase branch diverges from c0 with its own commit — never merged to main.
+        git(src.path(), &["checkout", "-q", "-b", "phase/211-01"]);
+        let payload = commit_file(src.path(), "p.txt", "unlanded phase\n", "phase 01 code");
+        // Advance main divergently so the payload is NOT its ancestor.
+        git(src.path(), &["checkout", "-q", "main"]);
+        commit_file(
+            src.path(),
+            "t.txt",
+            "trunk only\n",
+            "trunk advances without the phase",
+        );
+
+        let journal = Journal {
+            rows: vec![jrow("refs/heads/phase/211-01", LedgerStatus::Verified)],
+            ..Default::default()
+        };
+        let candidates = Candidates::default();
+        let err =
+            plan_recorded_trunk_row(src.path(), "211", &journal, &candidates, "refs/heads/main")
+                .expect_err("unlanded payload must refuse");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("is not an ancestor"),
+            "R1 refusal names the earned-check failure; got: {msg}"
+        );
+        assert!(
+            msg.contains(&payload),
+            "refusal names the payload oid; got: {msg}"
+        );
+    }
+
+    // ---- SL-211 PHASE-03: run_record_integration handler guards (VT-2) --------
+
+    /// Seed `refs/heads/dispatch/{slice:03}` at a commit whose tree carries
+    /// `.doctrine/dispatch/{slice:03}/journal.toml` == `journal` (the handler
+    /// tree-reads it from the coordination tip). Returns the seeded dispatch tip.
+    fn seed_dispatch_journal(dir: &Path, slice: u32, journal: &Journal) -> String {
+        let rel = format!(".doctrine/dispatch/{slice:03}/journal.toml");
+        let full = dir.join(&rel);
+        std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+        std::fs::write(&full, journal.to_toml().unwrap()).unwrap();
+        git(dir, &["add", "-A"]);
+        git(dir, &["commit", "-q", "-m", "seed journal"]);
+        let head = git(dir, &["rev-parse", "HEAD"]);
+        git(
+            dir,
+            &[
+                "update-ref",
+                &format!("{DISPATCH_REF_PREFIX}{slice:03}"),
+                &head,
+            ],
+        );
+        head
+    }
+
+    /// Re-read the committed journal from the (possibly advanced) dispatch tip.
+    fn read_dispatch_journal(dir: &Path, slice: u32) -> Journal {
+        let coord = format!("{DISPATCH_REF_PREFIX}{slice:03}");
+        read_ledger::<Journal>(dir, &coord, &format!("{slice:03}"), "journal.toml").unwrap()
+    }
+
+    /// F-4: an explicit `--trunk` ≠ `[dispatch] deliver_to` (default
+    /// `refs/heads/main`) is REFUSED before any ref work — a row targeting a ref the
+    /// close gate never reads would leave `done` permanently blocked.
+    #[test]
+    fn run_record_integration_refuses_trunk_deliver_to_mismatch() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let err = run_record_integration(
+            Some(src.path().to_path_buf()),
+            211,
+            Some("refs/heads/other"),
+        )
+        .expect_err("mismatched --trunk must refuse");
+        let msg = format!("{err}");
+        assert!(msg.contains("does not match"), "names the mismatch: {msg}");
+        assert!(
+            msg.contains("refs/heads/other"),
+            "names the given ref: {msg}"
+        );
+        assert!(msg.contains("refs/heads/main"), "names deliver_to: {msg}");
+    }
+
+    /// F-2/D7: a pre-existing *Verified* trunk row is a real prior integration ⇒
+    /// idempotent no-op: `Ok`, and `dispatch/<slice>` is NOT advanced (no duplicate
+    /// row committed).
+    #[test]
+    fn run_record_integration_verified_row_is_idempotent_noop() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        let journal = Journal {
+            rows: vec![jrow("refs/heads/main", LedgerStatus::Verified)],
+            ..Default::default()
+        };
+        let tip_before = seed_dispatch_journal(src.path(), 211, &journal);
+        run_record_integration(Some(src.path().to_path_buf()), 211, Some("refs/heads/main"))
+            .expect("a Verified row ⇒ no-op Ok");
+        let tip_after = git(
+            src.path(),
+            &["rev-parse", &format!("{DISPATCH_REF_PREFIX}211")],
+        );
+        assert_eq!(
+            tip_before, tip_after,
+            "no-op leaves dispatch/<slice> unadvanced"
+        );
+    }
+
+    /// F-2/D7: a pre-existing non-applied (Failed) trunk row carried zero external
+    /// effect ⇒ REPLACED in place by the earned Verified row (the recovery), not
+    /// duplicated, not refused. The payload (phase-chain tip) is a strict ancestor
+    /// of the trunk tip, so the earned check passes.
+    #[test]
+    fn run_record_integration_replaces_failed_trunk_row() {
+        let src = tempfile::tempdir().unwrap();
+        init_repo(src.path());
+        // Landed payload: a commit that becomes a strict ancestor of main.
+        let payload = commit_file(src.path(), "p.txt", "phase work\n", "phase 01 code");
+        git(src.path(), &["branch", "phase/211-01", &payload]);
+        // Advance main PAST the payload so it is a strict ancestor.
+        commit_file(
+            src.path(),
+            "t.txt",
+            "trunk ahead\n",
+            "advance main past payload",
+        );
+
+        let journal = Journal {
+            rows: vec![
+                jrow("refs/heads/phase/211-01", LedgerStatus::Verified),
+                jrow("refs/heads/main", LedgerStatus::Failed),
+            ],
+            ..Default::default()
+        };
+        seed_dispatch_journal(src.path(), 211, &journal);
+
+        run_record_integration(Some(src.path().to_path_buf()), 211, Some("refs/heads/main"))
+            .expect("a Failed row is replaced with the earned Verified row");
+
+        let reloaded = read_dispatch_journal(src.path(), 211);
+        let main_rows: Vec<_> = reloaded
+            .rows
+            .iter()
+            .filter(|r| r.target_ref == "refs/heads/main")
+            .collect();
+        assert_eq!(main_rows.len(), 1, "replaced in place, not duplicated");
+        assert_eq!(
+            main_rows[0].status,
+            LedgerStatus::Verified,
+            "the earned row is Verified"
+        );
+        assert_eq!(
+            main_rows[0].planned_new_oid, payload,
+            "the earned row records the payload"
+        );
     }
 }
