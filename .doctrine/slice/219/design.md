@@ -132,6 +132,7 @@ stay domain-agnostic.
 | `src/comparison/store.rs` | `DomainSystem` split; two anchor maps; est projection; cost-feed fn |
 | `src/comparison/project.rs` | `ProjectionParams`; no config reads; `VALUE_PROJECTION_PARAMS` const |
 | `src/comparison/resolve.rs` | no semantic change (est rows resolve Active); doc updates |
+| `src/priority/view.rs` | cost-source `ReasonKind` variants + `Explanation.cost_source` (SL-213 value-source precedent, additive) |
 | `src/priority/graph.rs` | `est_cost` ladder + cost-feed param on `build_from_with_cfg`; `authored_est_cost` extraction |
 | `src/priority/surface.rs` | shell wiring: anchor builders, cost-feed filter, explain cost-source block |
 | `src/priority/elicit.rs` | `sizing-probe` candidate kind (§4) |
@@ -140,6 +141,7 @@ stay domain-agnostic.
 | `src/priority/render.rs` | cost-source fragments, probe render |
 | `src/commands/compare.rs` | capture: est-pair admissibility branch; elicit render additions |
 | `tests/e2e_compare_estimate.rs` | new e2e |
+| `tests/e2e_compare_elicit.rs` | PHASE-05 Option B golden reconciliation (`incomparable` row, user-adjudicated) |
 
 Not touched, stated: `comparison/compile.rs` (reused as-is; domain enters at
 finding construction, D9), `comparison/query.rs` (determinacy untouched —
@@ -257,11 +259,19 @@ is more work? — winner is the costlier"). Default frame stays `equal-effort`.
 **`compare list`.** Status column routes per-row to the owning domain system
 (§2). The existing frame column discloses domain — no new column.
 
-**`explain`.** New cost-source block beside the S3 value-source block, three
-shapes + one flag:
+**`explain`.** New cost-source block beside the S3 value-source block, four
+shapes + one flag. The block renders only when the est system is engaged (est
+projection non-empty) — mirroring the value-source posture that a bare divisor
+is a floor, not a citable source; every pre-SL-219 explain golden stays
+byte-identical, and the standalone bare-anchor shape below renders only in
+est-active corpora:
 
 - `est_cost 5.9 — authored [2.0 ‥ 8.0] · β 0.65` (the operator pin,
   provenance now explicit)
+- `est_cost 4.0 — authored (via class anchor)` — a facet-less member hoisted
+  into an anchored class by an `equal` merge takes the class anchor value at
+  provenance Authored (the §2 cost-feed tier table's P3 "members merged in
+  without own facet" row; exercised by the probe round-trip e2e)
 - `est_cost 3.4 — projected · bounds (2.0 ‥ 5.65) · from 4 constraining
   sizing judgements (3 human, 1 agent)` — T7 rater-split disclosure;
   `NoConstraint` rows excluded from counts (S3 precedent)
@@ -318,7 +328,7 @@ Suites → rules pinned. VT/VA/VH ids minted at `/plan`.
    lower-middle, both fallback tiers, none-anywhere state detail); probes
    gate `Candidates`; sizing-debt disclosure on Stable; JSON kind golden;
    byte-determinism.
-9. **Surfaces**: three cost-source shapes + gauge flag line; domain-tagged
+9. **Surfaces**: four cost-source shapes + gauge flag line; domain-tagged
    findings render + JSON parity; list status routing per domain.
 10. **e2e** (`tests/e2e_compare_estimate.rs`): capture `more-work` → compile
     → project → feed → visible score shift in `explain`; full probe

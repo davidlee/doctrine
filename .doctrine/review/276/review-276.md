@@ -112,3 +112,48 @@ from F-3 minted as a backlog improvement.
   INV-2 restatement, gauge-never-divides, positivity axiom, operator knobs)
   was discharged in-flight by REV-023, applied to ADR-015 before the ladder
   landed (F-1/F-5/F-6 raised nothing further against governance).
+
+## Reconciliation Outcome
+
+### Direct edits applied (design.md, edge)
+
+- **§5 cost-source block** (F-4): "three shapes + one flag" → four shapes.
+  Added the `est_cost — authored (via class anchor)` shape for the facet-less
+  member hoisted into an anchored class by an `equal` merge (provenance
+  Authored; the §2 P3 tier-table row), verified byte-faithful to the landed
+  render (`render.rs:614`, `CostAuthored { pin: None }`; `view.rs:87-92`).
+  Added the est-engagement gating sentence — the block renders only when est
+  projection is non-empty (`render.rs:702` `if let Some(&ex.cost_source)`),
+  mirroring the value-source floor-not-a-source posture; pre-SL-219 explain
+  goldens stay byte-identical.
+- **§2 module-impact table** (F-4): added the two design-target rows the prose
+  mirror lacked — `src/priority/view.rs` (cost-source `ReasonKind` variants +
+  `Explanation.cost_source`, SL-213 precedent) and `tests/e2e_compare_elicit.rs`
+  (PHASE-05 Option B golden reconciliation). Prose mirror only — the selector
+  registry already carries both on dispatch/219 (a44daea5 / 63f5d7ca); no
+  `slice selector` verb (F-2: an edge-side write would collide with stage-2
+  integrate).
+- **§6.9 verification-plan mirror** (F-4, same divergence): "three cost-source
+  shapes" → "four cost-source shapes" — the one-word count mirror of the §5
+  shape addition, folded in with user assent rather than handed back as a new
+  finding.
+
+### REVs completed
+
+- None owed. Governance was discharged in-flight by REV-023 (ADR-015
+  estimate-source resolution), applied before the ladder landed.
+
+### Withdrawn / tolerated
+
+- F-3 tolerated: the two conformance-signal defects are platform behaviour, not
+  SL-219 drift (rationale in the finding disposition); minted as a backlog
+  improvement at harvest. No reconcile write.
+- F-1 / F-2 / F-5 / F-6 verified-aligned: no reconcile write (documented,
+  invariant-preserving, or already-correct on the integrating surface).
+
+### Not a reconcile surface (noted, not edited)
+
+- `render.rs:602` stale `// the three shapes'` doc comment — code on
+  dispatch/219, outside the design.md reconcile surface; left for a code touch.
+
+Reconcile pass complete — handoff to /close.
