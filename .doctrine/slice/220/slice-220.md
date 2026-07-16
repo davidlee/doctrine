@@ -106,18 +106,18 @@ cross-session, conflicting-pin, and lens-isolation tests before implementation.
 ## Risks, assumptions, open questions
 
 - **R1 — anchor attachment is row-gated per compiled system**
-  ([mem.fact.comparison.anchor-attachment-row-gated-per-system]): anchors
-  attach only to entities present in ≥1 row of that compile. Post-flip, an
-  item whose *only* evidence is a claim (no comparison rows) must still
-  resolve to its claimed value — the claims pass must not inherit the silent
-  drop. Design must state where claim-derived values enter for row-less items.
+  ([mem.fact.comparison.anchor-attachment-row-gated-per-system])
+  *(resolved at design, §2)*: dual-seam consumption — the graph ladder reads
+  `ClaimResolution.anchored` directly (row-less items resolve fine);
+  `anchor_map()` is a projection input only, where row-gating is correct.
 - **R2 — deliberate behaviour change.** The flip re-ranks corpora where agent
   facets currently anchor. Phase 0's diagnostic is the accepted-evidence
   baseline; shared-machinery suites stay green unchanged (engine gate), and
   ranking deltas are justified against the baseline, not waved through.
 - **R3 — same-tier conflict semantics** *(adjudicated at design, 2026-07-16)*:
   the winning tier's active claims with distinct magnitudes resolve to their
-  arithmetic **midpoint** as the point anchor (D8-safe); the disagreement
+  arithmetic **mean** (over the deduplicated row multiset — corroboration
+  counts, exact duplicates collapse) as the point anchor (D8-safe); the disagreement
   interval renders as bounds; a loud finding + reprobe candidate fires;
   resolution is a superseding row. Uniform across tiers (a conflicted pin is
   a contested pin, named as such). Rationale: independent human assessments —
@@ -128,9 +128,11 @@ cross-session, conflicting-pin, and lens-isolation tests before implementation.
   session files, no parallel store.
 - **A2** — SL-219 executes unchanged, before or in parallel; `AnchorMap` is
   the integration seam.
-- **OQ-1** — ladder × lens composition (RFC-020 OQ-2): Phase 1 gate material.
-- **OQ-2** — does abstention need an anchor-claim analogue ("cannot value
-  now") as selector fodder (RFC-020 OQ-4)? Capture posture only.
+- **OQ-1** *(resolved at design, D5)* — ladder × lens: independent
+  per-partition resolution; unlensed feeds everything; lensed output inert
+  (IDE-035 seam); no cross-partition mixing.
+- **OQ-2** *(deferred at design)* — abstention anchor-analogue (RFC-020
+  OQ-4): not built; nothing forecloses it.
 - **OQ-3** *(resolved at design)* — no product verbs for migration or the
   Phase 0 diagnostic: both are throwaway Python scripts in `scripts/`;
   doctrine only parses the v3 anchor rows the migration emits.

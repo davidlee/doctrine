@@ -54,19 +54,83 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/commands/facet.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/compare.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/main.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "scripts/**"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/comparison/wire.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/resolve.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/claims.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/store.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/surface.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/render.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/view.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/config.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/elicit.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/priority/findings.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "scripts/migrate_value_facets.py"
+intent = "design-target"
+
+[[selector]]
+selector = "scripts/value_baseline.py"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_value_claims.rs"
+intent = "design-target"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
