@@ -1,7 +1,7 @@
 id = 220
 slug = "value-claims"
 title = "Ledgered value claims"
-status = "plan"
+status = "ready"
 created = "2026-07-16"
 updated = "2026-07-16"
 tags = []
