@@ -405,8 +405,13 @@ Red/green/refactor; behaviour-preservation is the existing suites staying green.
   against `advance_row`, and "gate unchanged" against `trunk_integration`
   (ancestor-not-tip passes; ambiguous / empty-planned fail closed).
 
-**Still open (minor, non-blocking):** whether `--trunk` hard-refuses a `deliver_to`
-mismatch or silently defaults; whether to emit the payload OID in the success line
-(cf. `--show-journal-trunk-oid`). Retroactive note: already-stranded SL-147/SL-190
-that historically merged `review/<N>` may need a payload re-land to record (or stay
-one-offs) — the verb is forward-correct for the general shape.
+**Resolved in implementation (minor, non-blocking; RV-274 F-2):** both questions
+the design left open are settled by the shipped verb. (1) `--trunk` ≠ `deliver_to`
+**hard-refuses** — `run_record_integration` `bail!`s naming both refs; an absent
+`--trunk` defaults to `deliver_to` (VT-6 /
+`run_record_integration_refuses_trunk_deliver_to_mismatch` +
+`vt2_close_integration_honours_deliver_to_override`). (2) the success line **emits
+the payload OID** (`record-integration: recorded Verified trunk row … (payload …)`).
+Retroactive note (still open): already-stranded SL-147/SL-190 that historically
+merged `review/<N>` may need a payload re-land to record (or stay one-offs) — the
+verb is forward-correct for the general shape.

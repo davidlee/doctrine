@@ -94,3 +94,23 @@ No blocker findings; the close-gate is clear.
 - None. No ADR, spec, policy, or standard divergence surfaced — the design
   already routed its governance frame (RFC-016 §C/§D, SPEC-022, ADR-012 FF-only)
   and the code preserves each invariant.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §10** (RV-274 F-2): rewrote the "Still open (minor, non-blocking)"
+  paragraph to record the resolution the shipped verb actually settled — (1)
+  `--trunk` ≠ `deliver_to` hard-refuses (`bail!` naming both refs; absent `--trunk`
+  defaults to `deliver_to`, VT-6); (2) the success line emits the payload OID.
+  Preserved the still-open retroactive SL-147/SL-190 re-land note. Prose-only; no
+  code change. Canon now tells the truth.
+
+### REVs completed
+- None. Reconciliation brief carried no governance/spec item — no ADR, spec,
+  policy, or standard divergence surfaced.
+
+### Withdrawn / tolerated
+- RV-274 F-1 (nit): aligned — the lone conformance `undeclared` is the slice's own
+  `slice-211.toml` lifecycle metadata, not a code path. No write needed.
+
+Reconcile pass complete — every brief item resolved. Handoff to /close.
