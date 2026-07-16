@@ -64,6 +64,10 @@ intent = "scope-relevant"
 selector = "src/main.rs"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "scripts/**"
+intent = "scope-relevant"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload

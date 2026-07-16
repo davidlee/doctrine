@@ -27,9 +27,11 @@ Strictly additive until the migration census passes; same purity posture as
 SL-213/217 — pure over `(ledger, authored facets, statuses, config)`, disk at
 the scan seam.
 
-- **Phase 0 — baseline diagnostic** (IMP-290): force values to default / zero
-  the value coefficient; diff top-N ranking against live. Captured as an
-  evidence artifact before any resolver motion.
+- **Phase 0 — baseline diagnostic** (IMP-290): a throwaway `scripts/` Python
+  script (adjudicated at design) — copy the corpus to a temp root, zero the
+  value coefficient, run `doctrine reports survey -p` against both roots,
+  diff top-N. Captured as an evidence artifact before any resolver motion;
+  re-run post-flip as the regression comparison. No product surface.
 - **Anchor-claim rows.** `form = anchor` joins `order`/`ratio` in the wire
   vocabulary: single-subject absolute claim, payload a magnitude (f64, T5),
   mandatory `rater`, `asserted_at`/`observed_at` split, riding the existing
@@ -48,11 +50,16 @@ the scan seam.
   precedent); authority is derived from provenance, never a row column.
 - **Verb re-plumbing.** `value set` appends an anchor claim; `value clear`
   appends a tombstone; correction is supersession, never in-place edit.
-- **Migration import** per the census contract: existing `[value]` facets
-  import as `rater = migrated` claims (bottom of the ladder, below attributed
-  agent claims), observed-at = migration date, asserted-at honestly absent,
-  git archaeology as optional `basis`. Idempotent, census-verified, lossless
-  rollback; the `[value]` facet table retires only after the census passes.
+- **Migration import** per the census contract, as a throwaway `scripts/`
+  Python script — NOT product surface (adjudicated at design): existing
+  `[value]` facets import as `rater = migrated` claims (bottom of the ladder,
+  below attributed agent claims), observed-at = migration date, asserted-at
+  honestly absent, git archaeology as optional `basis`. Idempotent,
+  census-verified, dry-run mode, lossless rollback (each row cites its source
+  facet). The same pass **physically strips** `[value]` tables from entity
+  TOMLs (adjudicated: removal, not read-path retirement — dead
+  authored-looking data is a standing lie). Phase 2 reruns the pattern for
+  `[estimate]`.
 - **Rendering.** `show`/`explain` render value as derived-with-provenance
   (tier, rater, date, bounds, judgement count); value-fit certainty is
   derived bounds, never authored (RV-275 F-4).
@@ -89,8 +96,8 @@ cross-session, conflicting-pin, and lens-isolation tests before implementation.
 - `src/priority/graph.rs`, `src/priority/config.rs`, `src/priority/surface.rs`,
   `src/priority/render.rs`, `src/priority/view.rs` — resolver flip,
   `effective_raw_value` precedence, demotion knob, provenance rendering.
-- `src/commands/facet.rs`, `src/main.rs` — `value set|pin|clear` re-plumbing,
-  migration/diagnostic verbs.
+- `src/commands/facet.rs`, `src/main.rs` — `value set|pin|clear` re-plumbing.
+- `scripts/` — throwaway migration + Phase 0 diagnostic Python scripts.
 - `src/value.rs`, `src/facet.rs`, `src/facet_write.rs` — `[value]` facet
   read/write path (retires at census; estimate/risk facets untouched).
 - `src/commands/compare.rs` — capture admissibility for anchor rows.
@@ -108,10 +115,15 @@ cross-session, conflicting-pin, and lens-isolation tests before implementation.
   facets currently anchor. Phase 0's diagnostic is the accepted-evidence
   baseline; shared-machinery suites stay green unchanged (engine gate), and
   ranking deltas are justified against the baseline, not waved through.
-- **R3 — same-tier conflict semantics** (conflicted tier contributes nothing
-  vs disagreement-interval bounds) is design-gate material; posture fixed by
-  RFC-020 T3 (deterministic, surfaced, no invented winner, no agent win via
-  human disagreement).
+- **R3 — same-tier conflict semantics** *(adjudicated at design, 2026-07-16)*:
+  the winning tier's active claims with distinct magnitudes resolve to their
+  arithmetic **midpoint** as the point anchor (D8-safe); the disagreement
+  interval renders as bounds; a loud finding + reprobe candidate fires;
+  resolution is a superseding row. Uniform across tiers (a conflicted pin is
+  a contested pin, named as such). Rationale: independent human assessments —
+  the average likely beats either guess; don't break the graph pending
+  adjudication. Deterministic and surfaced, never silent; no lower tier wins
+  because a higher tier disagrees.
 - **A1** — one ledger, one schema; anchor claims are rows in the existing
   session files, no parallel store.
 - **A2** — SL-219 executes unchanged, before or in parallel; `AnchorMap` is
@@ -119,8 +131,9 @@ cross-session, conflicting-pin, and lens-isolation tests before implementation.
 - **OQ-1** — ladder × lens composition (RFC-020 OQ-2): Phase 1 gate material.
 - **OQ-2** — does abstention need an anchor-claim analogue ("cannot value
   now") as selector fodder (RFC-020 OQ-4)? Capture posture only.
-- **OQ-3** — verb surface for migration + Phase 0 diagnostic (subcommand
-  shapes, one-shot vs doctor-style) — design decision.
+- **OQ-3** *(resolved at design)* — no product verbs for migration or the
+  Phase 0 diagnostic: both are throwaway Python scripts in `scripts/`;
+  doctrine only parses the v3 anchor rows the migration emits.
 
 ## Verification / closure intent
 
