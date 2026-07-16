@@ -1426,3 +1426,22 @@ Two token sinks driving SL-211 phases 01–03 via main-thread /dispatch.
    a heavy hammer — a lighter "sync authored selector into coord" seam would help.
 
 [dispatch; SL-211-conclude-phase04] prepare-review completeness gate reads completed-phase ids from the PRIMARY worktree (`git::primary_worktree` → `.doctrine/state/slice/NNN/phases/`), but a main-thread claude-arm drive flips phase status into whichever worktree is cwd — the COORD tree. Net: after a clean funnel drive, coord phase sheets showed `completed` while the primary's showed `planned`/`in_progress`, so `dispatch sync --prepare-review` bailed with "recorded row for PHASE-NN, which is not a completed phase" for every phase. Diagnosis cost real tokens: had to trace `registry_completeness(&primary,&primary,…)` → `completed_phase_ids` → `phases_dir(project_root)` and discover the completed-set resolves against primary, not cwd/coord. Fix was manual: re-flip 01–04 `--status completed` with `-p /workspace/doctrine` to write the primary sheets. The drive never syncs phase completion primary←coord; the conclude ritual should either flip phase status against `-p <primary>` from the start, or the gate/driver should reconcile the two trees. A silent trap for any main-thread coord-tree drive.
+
+[close; SL-211-close-reanchor]
+The audit synthesis (RV-274) prescribed SL-211's own close as the "ordinary
+integrate path" — a plain FF of `dispatch sync --integrate --trunk main` after
+promoting edge→main, explicitly "not a self-referential split-lineage close".
+Reality diverged: the code branches (review/211, phase/211-*) fork from the
+pre-promotion main (b68bea82); promoting edge→main first (the audit's own
+prescribed ordering) advanced main to 1236d5e2 with authored commits the code
+branches lack, so the FF-only integrate refused ("trunk moved; re-anchor
+required"). Resolution was the candidate re-anchor documented in close §3a
+(create close_target candidate --base main --source review/211 → admit → integrate),
+which the audit did not anticipate. Cost: a refused integrate, diagnosis of the
+merge-base divergence, and ~4 extra CLI round-trips (candidate create/inspect/
+admit) not budgeted by the audit's one-line "ordinary integrate" claim. Root
+cause: the audit modelled the integrate as if the code branches would still FF
+the trunk after an authored-content promotion — but any dispatched slice whose
+authored `.doctrine/**` advanced edge between fork and close will diverge its
+code branches from the promoted trunk, making the re-anchor the *normal* case,
+not the exception. The audit's "ordinary FF" framing is the mislead.
