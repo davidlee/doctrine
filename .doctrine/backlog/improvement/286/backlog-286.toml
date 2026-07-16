@@ -5,10 +5,10 @@ id = 286
 slug = "estimate-comparison-domain"
 title = "Estimate comparison domain: constraint semantics and elicit frames"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-12"
-updated = "2026-07-12"
+updated = "2026-07-16"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
