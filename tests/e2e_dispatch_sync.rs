@@ -1858,6 +1858,116 @@ fn vt2_close_integration_honours_deliver_to_override() {
 }
 
 // ============================================================================
+// SL-211 PHASE-03 — `dispatch sync --record-integration`: the split-lineage
+// close-recovery verb. Records a Verified trunk row for a payload that already
+// landed out-of-band as an ANCESTOR (not descendant) of trunk — the shape
+// `--integrate` (ff-only) cannot serve — so the unchanged close gate reads it
+// as Integrated and `reconcile → done` succeeds without a hand-edited journal.
+// ============================================================================
+
+/// Drive `dispatch sync --slice 64 --record-integration --trunk <ref> -p <dir>`.
+fn record_integration(dir: &Path, trunk: &str) -> Output {
+    run(
+        dir,
+        None,
+        &[
+            "dispatch",
+            "sync",
+            "--slice",
+            "64",
+            "--record-integration",
+            "--trunk",
+            trunk,
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    )
+}
+
+/// SL-211 VT-1 (e2e): after prepare-review + integrate (verifies the phase refs,
+/// writes NO trunk row), the operator lands the phase-chain-tip payload
+/// out-of-band via a `--no-ff` merge (payload becomes an ANCESTOR, not a
+/// descendant, of trunk — the manual-merge shape SL-190 broke by hand).
+/// `--record-integration --trunk refs/heads/main` records a Verified trunk row;
+/// the unchanged close gate reads it as Integrated and `reconcile → done`
+/// SUCCEEDS — no hand-edited journal.
+#[test]
+fn vt1_record_integration_closes_split_lineage_slice() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    // Verify the phase refs (phase/064-01, phase/064-02) WITHOUT a trunk row — the
+    // "dry-run for the trunk leg" that leaves split lineage unclosable by ff.
+    assert!(integrate(dir, &[]).status.success());
+
+    // Land the phase-chain-tip payload out-of-band as an ANCESTOR of trunk (a
+    // non-ff merge — the split-lineage shape `--integrate` refuses).
+    git(
+        dir,
+        &[
+            "merge",
+            "--no-ff",
+            "-m",
+            "land payload out-of-band",
+            "phase/064-02",
+        ],
+    );
+
+    let out = record_integration(dir, "refs/heads/main");
+    assert!(
+        out.status.success(),
+        "record-integration succeeds for a landed payload; stderr: {}",
+        stderr(&out)
+    );
+
+    write_reconcile_slice_64(dir);
+    let out = slice_status_done(dir);
+    assert!(
+        out.status.success(),
+        "recorded split-lineage slice closes; stderr: {}",
+        stderr(&out)
+    );
+    let toml = std::fs::read_to_string(dir.join(".doctrine/slice/064/slice-064.toml")).unwrap();
+    assert!(
+        toml.contains("status = \"done\""),
+        "close wrote the terminal status: {toml}"
+    );
+}
+
+/// SL-211 (e2e, R1 negative): `--record-integration` BEFORE the payload is landed
+/// is REFUSED end-to-end — the earned check sees the phase-chain tip is not an
+/// ancestor of trunk, writes no row, and the slice stays unclosable. Proves the
+/// verb is a statement of fact, not a way to force one.
+#[test]
+fn record_integration_refuses_when_payload_not_yet_landed() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_fixture(dir);
+    assert!(prepare_review(dir).status.success());
+    assert!(integrate(dir, &[]).status.success());
+    // Deliberately do NOT land phase/064-02 into main.
+
+    let out = record_integration(dir, "refs/heads/main");
+    assert!(
+        !out.status.success(),
+        "an un-landed payload must refuse; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("is not an ancestor"),
+        "refusal names the earned-check failure: {}",
+        stderr(&out)
+    );
+    // No trunk row was written — the gate still fails closed.
+    write_reconcile_slice_64(dir);
+    assert!(
+        !slice_status_done(dir).status.success(),
+        "no row recorded ⇒ close still refused"
+    );
+}
+
+// ============================================================================
 // SL-154 PHASE-05 (ISS-052) — projection-source guard (D11) + derive + the
 // primary-rooted completeness gate at prepare-review, ALL before the ref
 // projection (design §5.2). A halt creates NO review/phase refs.
