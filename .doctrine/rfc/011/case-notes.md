@@ -1591,3 +1591,13 @@ Design §5 + boot SPINE cite `doctrine reports survey`; shipped CLI (0.21.0) has
 top-level `doctrine survey --json` and no `reports` group. Cost a probe cycle
 mid-phase-plan; boot snapshot SPINE appears stale vs binary. Worker prompt pins
 the real verb.
+
+[dispatch; SL220-dispatch-fable]
+PHASE-01 fixture-blindness: worker's VA checklist ran wholly on synthetic
+fixtures; first real-corpus run of `snapshot --neutral` ENOSPC'd copying
+43G of gitignored runtime (.doctrine/state/dispatch — old worktrees with
+in-tree target/). Cost one failed 35MB-output run + operator fixup commit.
+Worker prompts for corpus-touching scripts should mandate one smoke run
+against a real-shaped corpus (or state the state/-exclusion invariant).
+Separately: 43G of stale dispatch worktrees under .doctrine/state/dispatch
+is itself a token/disk hazard — flagged to operator for gc.
