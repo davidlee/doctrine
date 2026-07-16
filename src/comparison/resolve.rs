@@ -172,6 +172,8 @@ pub(crate) fn resolve<'a>(
         } else if let Some(&by) = superseded_r3.get(&uid) {
             ResolutionStatus::Superseded { by: by.to_string() }
         } else if j.domain == DOMAIN_PRIORITY {
+            // R4 gates ONLY the priority domain (SL-219 R4): estimate-domain
+            // rows resolve Active like value rows.
             ResolutionStatus::InertDomain
         } else if j.lens.is_some() {
             ResolutionStatus::InertLens
@@ -461,9 +463,9 @@ mod tests {
         EntityLifecycle, MalformedSupersession, Resolution, ResolutionStatus, StatusMap, resolve,
     };
     use crate::comparison::{
-        COMPARISON_SCHEMA, COMPARISON_VERSION, ComparisonSession, DOMAIN_PRIORITY, DOMAIN_VALUE,
-        FRAME_EQUAL_EFFORT, FRAME_PREFER_FIRST, Judgement, RaterKind, Response, RowForm,
-        SessionHeader, Tombstone,
+        COMPARISON_SCHEMA, COMPARISON_VERSION, ComparisonSession, DOMAIN_ESTIMATE, DOMAIN_PRIORITY,
+        DOMAIN_VALUE, FRAME_EQUAL_EFFORT, FRAME_MORE_WORK, FRAME_PREFER_FIRST, Judgement,
+        RaterKind, Response, RowForm, SessionHeader, Tombstone,
     };
 
     // ---- fixtures -----------------------------------------------------------
@@ -734,6 +736,68 @@ mod tests {
         let sessions = [session("s1", vec![judgement("j1", 0, "A", "B")], vec![])];
         let res = run(&sessions);
         assert_eq!(status_of(&res, "j1"), &ResolutionStatus::Active);
+    }
+
+    // ---- SL-219: estimate domain (VT-3) --------------------------------------
+
+    /// `judgement` retargeted to the estimate domain (frame kept consistent
+    /// with the closed table, though resolve keys on domain alone).
+    fn estimate_judgement(uid: &str, seq: u32, a: &str, b: &str) -> Judgement {
+        let mut j = judgement(uid, seq, a, b);
+        j.domain = DOMAIN_ESTIMATE.to_string();
+        j.frame = FRAME_MORE_WORK.to_string();
+        j
+    }
+
+    /// SL-219 R4: estimate-domain rows resolve Active — inert-domain gating
+    /// stays scoped to `priority` alone.
+    #[test]
+    fn estimate_domain_row_resolves_active() {
+        let sessions = [session(
+            "s1",
+            vec![estimate_judgement("j1", 0, "A", "B")],
+            vec![],
+        )];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "j1"), &ResolutionStatus::Active);
+    }
+
+    /// SL-219 EX-2: the identity key carries `domain`, so the same unordered
+    /// pair holding a value row AND an estimate row — even within one session —
+    /// neither collides nor supersedes across domains: both stay Active.
+    #[test]
+    fn same_pair_value_and_estimate_rows_stay_concurrent() {
+        let sessions = [session(
+            "s1",
+            vec![
+                judgement("v", 0, "X", "Y"),
+                estimate_judgement("e", 1, "Y", "X"),
+            ],
+            vec![],
+        )];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "v"), &ResolutionStatus::Active);
+        assert_eq!(status_of(&res, "e"), &ResolutionStatus::Active);
+    }
+
+    /// SL-219 EX-2: R3 within-session revision is scoped per domain — two
+    /// estimate rows on one pair revise (higher seq wins) without touching
+    /// the value row on the same pair.
+    #[test]
+    fn r3_revision_scopes_within_the_estimate_domain() {
+        let sessions = [session(
+            "s1",
+            vec![
+                judgement("v", 0, "X", "Y"),
+                estimate_judgement("e1", 1, "X", "Y"),
+                estimate_judgement("e2", 2, "Y", "X"),
+            ],
+            vec![],
+        )];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "v"), &ResolutionStatus::Active);
+        assert_eq!(status_of(&res, "e1"), &superseded_by("e2"));
+        assert_eq!(status_of(&res, "e2"), &ResolutionStatus::Active);
     }
 
     // ---- cross-file mechanics ----------------------------------------------

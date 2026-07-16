@@ -68,6 +68,11 @@ fn default_ref_coeff() -> f64 {
     1.0
 }
 
+/// The additive gauge step for the ESTIMATE-domain projection's unbounded
+/// tails/heads (SL-219 D8) — the est-system analog of [`GAUGE_STEP`]. Named
+/// const (STD-001); config-overridable via `[priority.estimate] gauge_step`.
+pub(crate) const EST_GAUGE_STEP: f64 = 0.25;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub(crate) struct EstimateCost {
@@ -75,6 +80,8 @@ pub(crate) struct EstimateCost {
     pub(crate) skew: f64,
     #[serde(default = "default_margin")]
     pub(crate) margin: f64,
+    #[serde(default = "default_est_gauge_step")]
+    pub(crate) gauge_step: f64,
 }
 
 impl Default for EstimateCost {
@@ -82,6 +89,7 @@ impl Default for EstimateCost {
         Self {
             skew: 0.65,
             margin: 1.0,
+            gauge_step: EST_GAUGE_STEP,
         }
     }
 }
@@ -91,6 +99,9 @@ fn default_skew() -> f64 {
 }
 fn default_margin() -> f64 {
     1.0
+}
+fn default_est_gauge_step() -> f64 {
+    EST_GAUGE_STEP
 }
 
 /// The additive gauge step for unbounded projection tails/heads (SL-213 design
@@ -257,6 +268,7 @@ pub(crate) fn load_from_table(table: &toml::value::Table) -> PriorityConfig {
     if let Some(t) = table.get("estimate").and_then(|v| v.as_table()) {
         cfg.estimate.skew = f64_or(t, "skew", 0.65);
         cfg.estimate.margin = f64_or(t, "margin", 1.0);
+        cfg.estimate.gauge_step = f64_or(t, "gauge_step", EST_GAUGE_STEP);
     }
     if let Some(t) = table.get("gauge").and_then(|v| v.as_table()) {
         cfg.gauge.step = f64_or(t, "step", GAUGE_STEP);
@@ -340,9 +352,11 @@ fn clamp(mut cfg: PriorityConfig) -> PriorityConfig {
     // dep_coeff: (0, 1]
     cfg.consequence.dep_coeff = clamp_dep(cfg.consequence.dep_coeff);
 
-    // estimate: skew → [0.0, 1.0]; margin → non-negative (reuse clamp_general)
+    // estimate: skew → [0.0, 1.0]; margin → non-negative (reuse clamp_general);
+    // gauge_step → the [priority.gauge] step clamp idiom (SL-219 D8).
     cfg.estimate.skew = clamp_skew(cfg.estimate.skew);
     cfg.estimate.margin = clamp_general(cfg.estimate.margin, 1.0);
+    cfg.estimate.gauge_step = clamp_general(cfg.estimate.gauge_step, EST_GAUGE_STEP);
 
     // gauge.step: non-finite/negative/over-max clamp like any general coefficient.
     cfg.gauge.step = clamp_general(cfg.gauge.step, GAUGE_STEP);
@@ -610,6 +624,46 @@ mod tests {
         let cfg = load_from("[priority]\nestimate = { skew = 0.7, margin = 2 }\n");
         assert_eq!(cfg.estimate.skew, 0.7);
         assert_eq!(cfg.estimate.margin, 2.0);
+    }
+
+    // ---- estimate gauge_step (SL-219 PHASE-03 VT-3) ----
+
+    /// VT-3: `EST_GAUGE_STEP` defaults to 0.25 — absent file AND a `[priority]`
+    /// with no `estimate` sub-table AND an `estimate` sub-table without the key
+    /// all read the named const.
+    #[test]
+    fn est_gauge_step_absent_uses_named_const_default() {
+        assert_eq!(EST_GAUGE_STEP, 0.25);
+
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(load(dir.path()).estimate.gauge_step, EST_GAUGE_STEP);
+
+        let cfg = load_from("[priority]\ncoefficients = { value = 3.0 }\n");
+        assert_eq!(cfg.estimate.gauge_step, EST_GAUGE_STEP);
+
+        let cfg2 = load_from("[priority]\nestimate = { skew = 0.7 }\n");
+        assert_eq!(cfg2.estimate.gauge_step, EST_GAUGE_STEP);
+    }
+
+    /// VT-3: a config-authored `[priority.estimate] gauge_step` overrides the
+    /// default (and its siblings keep their own defaults).
+    #[test]
+    fn est_gauge_step_override_roundtrips() {
+        let cfg = load_from("[priority]\nestimate = { gauge_step = 0.4 }\n");
+        assert_eq!(cfg.estimate.gauge_step, 0.4);
+        assert_eq!(cfg.estimate.skew, 0.65);
+        assert_eq!(cfg.estimate.margin, 1.0);
+    }
+
+    /// VT-3: `gauge_step` clamps per the `[priority.gauge] step` idiom —
+    /// non-finite → the named default; negative → 0.0.
+    #[test]
+    fn est_gauge_step_clamps_non_finite_and_negative() {
+        let cfg = load_from("[priority]\nestimate = { gauge_step = nan }\n");
+        assert_eq!(cfg.estimate.gauge_step, EST_GAUGE_STEP);
+
+        let cfg2 = load_from("[priority]\nestimate = { gauge_step = -0.1 }\n");
+        assert_eq!(cfg2.estimate.gauge_step, 0.0);
     }
 
     // ---- gauge_step (SL-213 PHASE-05 VT-4) ----

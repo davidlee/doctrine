@@ -17,7 +17,7 @@ use owo_colors::{
     DynColors,
 };
 
-use super::findings::Finding;
+use super::findings::{ComparisonDomain, Finding};
 use super::view::{
     ActionabilityBlock, BlockersView, EdgeVerb, Explanation, NextRow, NextView, ReasonKind,
     SurveyRow, TensionCauseView, TensionGradeView,
@@ -381,6 +381,12 @@ fn reason_line(reason: &ReasonKind) -> String {
         | ReasonKind::ValueGauge { .. } => {
             format!("  {}\n", value_source_fragment(reason).unwrap_or_default())
         }
+        ReasonKind::CostAuthored { .. }
+        | ReasonKind::CostProjected { .. }
+        | ReasonKind::CostBareAnchor { .. }
+        | ReasonKind::CostGauge { .. } => {
+            format!("  {}\n", cost_source_fragment(reason).unwrap_or_default())
+        }
         ReasonKind::PriorityDomainDisclosure { count } => format!(
             "  {count} prefer-first judgements recorded — not value-bearing; no consumer yet\n"
         ),
@@ -593,6 +599,69 @@ fn bound_fragment(bound: Option<f64>) -> String {
     }
 }
 
+/// The SL-219 PHASE-06 cost-source fragment (design §5, the three shapes' +
+/// gauge flag's literal templates) — the SINGLE source shared by `reason_line`
+/// (human `explain`) and the `--json` surface. Bare text framed by the caller;
+/// the gauge case carries an INTERNAL newline (`\n  `) so the caller's single
+/// `  {frag}\n` wrap renders TWO indented lines. `None` for any non-cost-source
+/// reason.
+pub(crate) fn cost_source_fragment(reason: &ReasonKind) -> Option<String> {
+    match reason {
+        ReasonKind::CostAuthored { est_cost, pin } => Some(match pin {
+            Some((lower, upper, beta)) => {
+                format!("est_cost {est_cost:.1} — authored [{lower:.1} ‥ {upper:.1}] · β {beta:.2}")
+            }
+            None => format!("est_cost {est_cost:.1} — authored (via class anchor)"),
+        }),
+        ReasonKind::CostProjected {
+            est_cost,
+            lower,
+            upper,
+            human,
+            agent,
+        } => Some(format!(
+            "est_cost {est_cost:.1} — projected · bounds ({} ‥ {}) · from {} constraining sizing \
+             judgements ({human} human, {agent} agent)",
+            bound_fragment(*lower),
+            bound_fragment(*upper),
+            human + agent,
+        )),
+        ReasonKind::CostBareAnchor {
+            est_cost,
+            max_estimate,
+            margin,
+        } => Some(bare_anchor_fragment(*est_cost, *max_estimate, *margin)),
+        ReasonKind::CostGauge {
+            est_cost,
+            max_estimate,
+            margin,
+            judgements,
+        } => Some(format!(
+            "{}\n  sizing: gauge · ordered by {judgements} judgements, no estimated item in \
+             component — estimate any member to calibrate",
+            bare_anchor_fragment(*est_cost, *max_estimate, *margin),
+        )),
+        _ => None,
+    }
+}
+
+/// The bare-anchor cost-source line (design §5 shape 3), reused verbatim as the
+/// first line of the gauge flag case (D2 honesty — the divisor scoring actually
+/// used). `max_estimate` `None` is the empty-corpus fallback (no authored upper
+/// to cite; `est_cost` is then the `1.0` default).
+fn bare_anchor_fragment(est_cost: f64, max_estimate: Option<f64>, margin: f64) -> String {
+    match max_estimate {
+        Some(me) => {
+            format!(
+                "est_cost {est_cost:.1} — bare anchor (max estimate {me:.1} + margin {margin:.1})"
+            )
+        }
+        None => format!(
+            "est_cost {est_cost:.1} — bare anchor (no estimate in corpus; default {est_cost:.1})"
+        ),
+    }
+}
+
 /// The human fragment for the two PROVENANCE reason variants — an evicted soft (`after`)
 /// edge, or a degraded dep cycle. The SINGLE source shared by `explain`'s [`reason_line`]
 /// and the `findings` `Provenance` render (SL-194 R2: reuse the *fragment*, NOT
@@ -628,6 +697,10 @@ pub(crate) fn explain_human(ex: &Explanation) -> String {
     // for a frontier id; the "not on the current frontier" disclosure otherwise.
     parts.push(explain_tension_section(ex));
     if let Some(r) = &ex.value_source {
+        parts.push(reason_line(r));
+    }
+    // SL-219 PHASE-06 (design §5): the cost-source block, beside value-source.
+    if let Some(r) = &ex.cost_source {
         parts.push(reason_line(r));
     }
     if let Some(r) = &ex.priority_disclosure {
@@ -712,35 +785,66 @@ fn finding_line(f: &Finding) -> String {
         Finding::Provenance(reason) => {
             format!("  {}\n", provenance_fragment(reason).unwrap_or_default())
         }
-        Finding::PreferenceCycle { classes, rows } => format!(
-            "  cycle among {{{}}} — quarantines {{{}}} ({} rows); exit: supersede one row \
+        Finding::PreferenceCycle {
+            domain,
+            classes,
+            rows,
+        } => format!(
+            "  {}cycle among {{{}}} — quarantines {{{}}} ({} rows); exit: supersede one row \
              (`--supersedes <uid>`) or tombstone one to break the cycle\n",
+            domain_tag(*domain),
             classes.join(", "),
             rows.join(", "),
             rows.len()
         ),
-        Finding::AnchorConflict { anchors, rows } => {
+        Finding::AnchorConflict {
+            domain,
+            anchors,
+            rows,
+        } => {
             let anchor_text = anchors
                 .iter()
                 .map(|(e, v)| format!("{e}={v:.1}"))
                 .collect::<Vec<_>>()
                 .join(" vs ");
-            format!(
-                "  anchors {anchor_text} conflict — quarantines {{{}}}; exit: supersede a \
-                 conflicting row, tombstone one, or edit an anchor\n",
-                rows.join(", ")
-            )
+            match domain {
+                // The value wording is pre-SL-219 golden text — unchanged.
+                ComparisonDomain::Value => format!(
+                    "  anchors {anchor_text} conflict — quarantines {{{}}}; exit: supersede a \
+                     conflicting row, tombstone one, or edit an anchor\n",
+                    rows.join(", ")
+                ),
+                // SL-219 D1: the likeliest defect is a stale estimate.
+                ComparisonDomain::Estimate => format!(
+                    "  [estimate] anchors {anchor_text} conflict — sizing evidence contradicts \
+                     the β-resolved costs; quarantines {{{}}}; exit: revise the estimate or \
+                     supersede the row\n",
+                    rows.join(", ")
+                ),
+            }
         }
-        Finding::AnchorGaugeDisconnect { entities } => format!(
-            "  {{{}}} placed by gauge convention — no order path to any anchor; compare against \
+        Finding::AnchorGaugeDisconnect { domain, entities } => format!(
+            "  {}{{{}}} placed by gauge convention — no order path to any anchor; compare against \
              an anchored item to place it\n",
+            domain_tag(*domain),
             entities.join(", ")
         ),
-        Finding::MalformedSupersession { rows } => format!(
-            "  supersession cycle among {{{}}} — all deactivated; exit: tombstone one row to \
+        Finding::MalformedSupersession { domain, rows } => format!(
+            "  {}supersession cycle among {{{}}} — all deactivated; exit: tombstone one row to \
              break the cycle\n",
+            domain_tag(*domain),
             rows.join(", ")
         ),
+    }
+}
+
+/// The est-domain line tag (SL-219 D9 domain-tagged render). Value-domain
+/// lines stay UNTAGGED — they are pre-SL-219 golden text (extend, don't
+/// replace); only the estimate system's findings announce their domain.
+fn domain_tag(domain: ComparisonDomain) -> &'static str {
+    match domain {
+        ComparisonDomain::Value => "",
+        ComparisonDomain::Estimate => "[estimate] ",
     }
 }
 
@@ -806,18 +910,32 @@ fn finding_json(f: &Finding) -> serde_json::Value {
             ..
         } => serde_json::json!({ "hub": hub, "order_lo": order_lo, "order_hi": order_hi }),
         Finding::Provenance(reason) => serde_json::json!({ "detail": reason_json(reason) }),
-        Finding::PreferenceCycle { classes, rows } => {
-            serde_json::json!({ "classes": classes, "rows": rows })
+        // SL-219 D9: comparison findings carry their producing system's
+        // `domain` token (JSON parity with the domain-tagged human render).
+        Finding::PreferenceCycle {
+            domain,
+            classes,
+            rows,
+        } => {
+            serde_json::json!({ "domain": domain.token(), "classes": classes, "rows": rows })
         }
-        Finding::AnchorConflict { anchors, rows } => {
+        Finding::AnchorConflict {
+            domain,
+            anchors,
+            rows,
+        } => {
             let anchors: Vec<serde_json::Value> = anchors
                 .iter()
                 .map(|(e, v)| serde_json::json!({ "entity": e, "value": v }))
                 .collect();
-            serde_json::json!({ "anchors": anchors, "rows": rows })
+            serde_json::json!({ "domain": domain.token(), "anchors": anchors, "rows": rows })
         }
-        Finding::AnchorGaugeDisconnect { entities } => serde_json::json!({ "entities": entities }),
-        Finding::MalformedSupersession { rows } => serde_json::json!({ "rows": rows }),
+        Finding::AnchorGaugeDisconnect { domain, entities } => {
+            serde_json::json!({ "domain": domain.token(), "entities": entities })
+        }
+        Finding::MalformedSupersession { domain, rows } => {
+            serde_json::json!({ "domain": domain.token(), "rows": rows })
+        }
     };
     if let Some(obj) = value.as_object_mut() {
         obj.insert("kind".to_string(), serde_json::json!(f.kind_label()));
@@ -920,6 +1038,55 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
         ReasonKind::ValueGauge { value, judgements } => serde_json::json!({
             "kind": "value_gauge",
             "value": value,
+            "judgements": judgements,
+        }),
+        ReasonKind::CostAuthored { est_cost, pin } => {
+            let (lower, upper, beta) = match pin {
+                Some((l, u, b)) => (Some(*l), Some(*u), Some(*b)),
+                None => (None, None, None),
+            };
+            serde_json::json!({
+                "kind": "cost_authored",
+                "est_cost": est_cost,
+                "lower": lower,
+                "upper": upper,
+                "beta": beta,
+            })
+        }
+        ReasonKind::CostProjected {
+            est_cost,
+            lower,
+            upper,
+            human,
+            agent,
+        } => serde_json::json!({
+            "kind": "cost_projected",
+            "est_cost": est_cost,
+            "lower": lower,
+            "upper": upper,
+            "human": human,
+            "agent": agent,
+        }),
+        ReasonKind::CostBareAnchor {
+            est_cost,
+            max_estimate,
+            margin,
+        } => serde_json::json!({
+            "kind": "cost_bare_anchor",
+            "est_cost": est_cost,
+            "max_estimate": max_estimate,
+            "margin": margin,
+        }),
+        ReasonKind::CostGauge {
+            est_cost,
+            max_estimate,
+            margin,
+            judgements,
+        } => serde_json::json!({
+            "kind": "cost_gauge",
+            "est_cost": est_cost,
+            "max_estimate": max_estimate,
+            "margin": margin,
             "judgements": judgements,
         }),
         ReasonKind::PriorityDomainDisclosure { count } => serde_json::json!({
@@ -1033,6 +1200,7 @@ pub(crate) fn explain_json(ex: &Explanation) -> anyhow::Result<String> {
         "evictions": ex.evictions.iter().map(reason_json).collect::<Vec<_>>(),
         "score": reason_json(&ex.score),
         "value_source": ex.value_source.as_ref().map(reason_json),
+        "cost_source": ex.cost_source.as_ref().map(reason_json),
         "priority_disclosure": ex.priority_disclosure.as_ref().map(reason_json),
         // SL-218 PHASE-03: tensions involving this id (both classes, filtered in
         // the surface shell) + frontier participation (design §2 considered-set).

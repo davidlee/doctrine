@@ -18,6 +18,12 @@
 //! 3. **Anchor-review** (D12) — one candidate per distinct suspect anchor in an
 //!    `AnchorConflict` quarantine pair; admits on suspect EXISTENCE, not on
 //!    yield, and is deliberately NOT K-gated.
+//! 4. **Sizing-probe** (SL-219 §4, D4) — one calibration probe per un-sized
+//!    top-K subject (no authored estimate, zero est-domain rows), driving a
+//!    `more-work` sizing session against the median-cost authored-estimate
+//!    target. Existence-admitted, never yield-ranked (`score 0`,
+//!    `yield_basis` Calibration) — probes sink below every yield-motivated
+//!    entry via the one sort. No hypothetical machinery runs for a probe.
 //!
 //! Ranking (D13): `score = guaranteed_yield × guaranteed_impact ×
 //! confirm_boost`; `guaranteed_impact` = the min, over the answers attaining
@@ -39,7 +45,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::comparison::{
     AnchorMap, Bound, ClassId, ConstraintSet, Hypothetical, Judgement, PairSide, Projection,
     QuarantinePolicy, QuarantineReason, Reachability, Response, RowUid, ValueBounds,
-    ValueProvenance, admissible_value_pair, compile, compile_human_only,
+    ValueProvenance, admissible_estimate_pair, admissible_value_pair, compile, compile_human_only,
     constraining_counts_by_class, determined, human_rows, hypothetical_outcome,
     synthetic_answer_row,
 };
@@ -92,6 +98,30 @@ pub(crate) struct ElicitInputs<'a> {
     /// human-rows-only system; the full system keeps bounds, projection,
     /// and the queue pool.
     pub demote_agent_evidence: bool,
+    /// SL-219 §4: the est-domain facts the sizing-probe source reads. An empty
+    /// bundle (the default) mints no probes and discloses nothing — the
+    /// behaviour-preservation gate for every corpus with no est activity.
+    pub sizing: SizingInputs,
+}
+
+/// The est-domain inputs the sizing-probe source (SL-219 §4) rides — derived by
+/// the shell from the est pipeline, threaded as PURE facts (no disk here). Two
+/// signals: the calibration-target pool (authored est costs only, so the
+/// anchored-membership postcondition holds by construction) and the
+/// est-evidenced set (an item touched by ANY resolved-active est row — the
+/// predicate that retires a probe when an `incomparable` row lands).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SizingInputs {
+    /// Admissible items WITH an authored estimate → their authored `est_cost`
+    /// (D1). The probe-target candidate pool — NEVER a projected/gauge cost.
+    /// Whole corpus, not just top-K (fallback tier 1 medians over all of it).
+    pub estimated_costs: BTreeMap<String, f64>,
+    /// Items touched by ≥1 resolved-active est-domain row of ANY compilation
+    /// status (§4 pool predicate). An est-evidenced item is NOT a probe subject
+    /// — an `incomparable` row (→ `NoConstraint`) still lands here, so the
+    /// engine asks once and retires; gauge-component members carry est rows too,
+    /// so they fall out here (never probed, mask-annotation only).
+    pub est_evidenced: BTreeSet<String>,
 }
 
 // ── queue model ─────────────────────────────────────────────────────────────
@@ -111,6 +141,9 @@ pub(crate) enum QueueState {
 pub(crate) enum CandidateKind {
     Comparison,
     AnchorReview,
+    /// SL-219 §4: a deterministic sizing session against a median authored
+    /// estimate — existence-admitted, zero yield claim.
+    SizingProbe,
 }
 
 /// The answer space an entry's guaranteed yield ranges over (design D11) —
@@ -120,6 +153,10 @@ pub(crate) enum CandidateKind {
 pub(crate) enum YieldBasis {
     OrderBearingAnswers,
     CanonicalResolvingActions,
+    /// SL-219 §4: a sizing probe makes NO yield claim — its numbers are pinned
+    /// at zero and disclosed as calibration, never spine-comparable to a
+    /// yield-motivated entry.
+    Calibration,
 }
 
 /// A structured reason (design D16, findings JSON-parity idiom).
@@ -135,6 +172,17 @@ pub(crate) struct Reason {
 pub(crate) struct Participant {
     pub id: String,
     pub annotations: Vec<String>,
+}
+
+/// The deterministic calibration target of a sizing probe (SL-219 §4): the
+/// median authored-estimate item the subject is sized against. `estimate` is
+/// the target's authored `est_cost` (never projected/gauge — the target pool is
+/// authored-only), carried so the render shows the anchor the curator judges
+/// against.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SizingTarget {
+    pub id: String,
+    pub estimate: f64,
 }
 
 /// The suspect anchor an anchor-review entry is about.
@@ -167,6 +215,14 @@ pub(crate) enum EntryPayload {
         subject: AnchorSubject,
         ask: AskSpec,
     },
+    /// SL-219 §4: a sizing probe — a lean subject (id + annotations) sized
+    /// against the median authored-estimate `target`. Carries no `AskSpec`: the
+    /// `more-work` frame, `estimate` domain, and answer tokens are invariant
+    /// (rendered from constants), and a probe discloses NO per-answer yield.
+    SizingProbe {
+        subject: Participant,
+        target: SizingTarget,
+    },
 }
 
 /// One ranked queue entry (design §2 spine).
@@ -181,13 +237,25 @@ pub(crate) struct QueueEntry {
     pub payload: EntryPayload,
 }
 
-/// The assembled queue: its state, the ranked entries, and the D6 disclosure
-/// count of top-K pairs dropped as value-insensitive (`m = 0`).
+/// The assembled queue: its state, the ranked entries, the D6 disclosure count
+/// of top-K pairs dropped as value-insensitive (`m = 0`), and the SL-219 §4
+/// sizing-debt disclosure (top-K un-sized items NOT covered by a minted probe,
+/// plus whether an eligible subject found no estimated target to calibrate
+/// against) — disclosed, never gating.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ElicitQueue {
     pub state: QueueState,
     pub entries: Vec<QueueEntry>,
     pub excluded_value_insensitive: usize,
+    /// SL-219 §4: top-K un-sized items (no authored estimate, admissible) with
+    /// NO minted probe — sizing debt disclosed on the state line, non-gating
+    /// (sizing-declined subjects, gauge-masked items, or would-be subjects with
+    /// no calibration target).
+    pub sizing_residual: usize,
+    /// SL-219 §4: a probe-eligible subject existed (un-sized, no est rows) but
+    /// no admissible authored-estimate item was available to calibrate against
+    /// (fallback tier 2) — drives the "estimate any item to seed sizing" detail.
+    pub sizing_no_calibration_target: bool,
 }
 
 // ── reason / ask codes (STD-001) ────────────────────────────────────────────
@@ -196,11 +264,22 @@ const REASON_FRONTIER_PAIR: &str = "indeterminate-frontier-pair";
 const REASON_MEDIAN_PROBE: &str = "median-probe";
 const REASON_AGENT_ONLY: &str = "agent-only-calibration";
 const REASON_STALE_ANCHOR: &str = "stale-anchor-suspect";
+const REASON_SIZING_PROBE: &str = "sizing-probe";
 
 const ANSWER_PREFER_A: &str = "prefer-a";
 const ANSWER_PREFER_B: &str = "prefer-b";
 const ANSWER_EQUAL: &str = "equal";
 const ANSWER_INCOMPARABLE: &str = "incomparable";
+/// The sizing-probe answer tokens (SL-219 §4): the order-bearing trio plus
+/// `incomparable` (which retires the probe). `pub(crate)` so the shell's JSON
+/// ask block keys off this ONE definition (STD-001) — a probe stores no
+/// `AskSpec`, the tokens are invariant.
+pub(crate) const SIZING_PROBE_ANSWERS: &[&str] = &[
+    ANSWER_PREFER_A,
+    ANSWER_PREFER_B,
+    ANSWER_EQUAL,
+    ANSWER_INCOMPARABLE,
+];
 // Anchor-review answer tokens are `pub(crate)` — the elicit JSON surface keys
 // each entry's `exits` action list by answer token (design §3), so the shell
 // shares this ONE definition rather than restating the strings (STD-001).
@@ -440,6 +519,11 @@ pub(crate) fn assemble(inputs: &ElicitInputs<'_>, ctx: DecisionContext) -> Elici
         depth,
         &mut candidates,
     );
+    // Source 4 (SL-219 §4): sizing probes over the un-sized top-K band — pure
+    // over the est-domain facts, no hypothetical machinery. Returns the
+    // sizing-debt disclosure (residual count + no-target flag).
+    let (sizing_residual, sizing_no_calibration_target) =
+        sizing_probe_candidates(inputs, &band, &mut candidates);
 
     // Rank: score desc via total_cmp, id-lexicographic tiebreak.
     candidates.sort_by(|a, b| {
@@ -462,6 +546,8 @@ pub(crate) fn assemble(inputs: &ElicitInputs<'_>, ctx: DecisionContext) -> Elici
         state,
         entries,
         excluded_value_insensitive,
+        sizing_residual,
+        sizing_no_calibration_target,
     }
 }
 
@@ -933,6 +1019,132 @@ fn conflict_pairs_for(cs: &ConstraintSet, suspect: &str) -> Vec<(String, String)
     out.into_iter().collect()
 }
 
+/// Source 4 (SL-219 §4): one sizing probe per un-sized top-K subject, driving a
+/// deterministic `more-work` session against the median authored-estimate
+/// target. Existence-admitted, never yield-ranked (`score 0`, `yield_basis`
+/// Calibration) — no hypothetical machinery runs. Returns `(residual,
+/// no_calibration_target)`: the count of top-K un-sized items NOT covered by a
+/// minted probe (disclosed sizing debt, non-gating), and whether a probe-
+/// eligible subject found no estimated target (fallback tier 2).
+///
+/// Subject predicate (exact, §4): admissible kind AND no authored estimate
+/// (`bare_estimate`) AND zero est-domain rows (`est_evidenced` absent — an
+/// `incomparable` row lands there and retires the probe; gauge members carry
+/// est rows and fall out here too). One probe per subject. The target
+/// (`sizing_target`) is shared across every probe — a corpus-level median.
+fn sizing_probe_candidates(
+    inputs: &ElicitInputs<'_>,
+    band: &[&FrontierItem],
+    out: &mut Vec<Candidate>,
+) -> (usize, bool) {
+    let target = sizing_target(inputs, band);
+    let mut unsized_count = 0_usize;
+    let mut minted = 0_usize;
+    let mut eligible_uncalibrated = false;
+    for item in band {
+        if admissible_estimate_pair(&item.kind, &item.kind).is_err() {
+            continue; // kind carries no comparable settle-cost
+        }
+        // No authored estimate ⇒ un-sized. An item the shell could not price is
+        // not a probe subject (nothing to reason about).
+        let Some(costing) = inputs.costing.get(&item.id) else {
+            continue;
+        };
+        if !costing.bare_estimate {
+            continue; // already sized (authored estimate)
+        }
+        unsized_count += 1;
+        if inputs.sizing.est_evidenced.contains(&item.id) {
+            continue; // est rows present (declined / gauge) — residual, disclosed
+        }
+        let Some(target) = &target else {
+            eligible_uncalibrated = true; // no estimated item to calibrate against
+            continue;
+        };
+        out.push(sizing_probe(inputs, item, target));
+        minted += 1;
+    }
+    (unsized_count.saturating_sub(minted), eligible_uncalibrated)
+}
+
+/// The deterministic calibration target (SL-219 §4): the median-cost item among
+/// top-K items WITH authored estimates (even count → lower-cost middle; ties
+/// id-lexicographic). Fallback tier 1: none in top-K → the median over ALL
+/// admissible authored-estimate items. Tier 2: none anywhere → `None` (the
+/// caller discloses "estimate any item to seed sizing"). NEVER a projected- or
+/// gauge-costed item: `estimated_costs` holds ONLY authored costs, so the
+/// anchored-membership postcondition holds by construction, not by luck.
+fn sizing_target(inputs: &ElicitInputs<'_>, band: &[&FrontierItem]) -> Option<SizingTarget> {
+    let costs = &inputs.sizing.estimated_costs;
+    let in_band: Vec<(&String, f64)> = band
+        .iter()
+        .filter_map(|f| costs.get_key_value(&f.id).map(|(id, &c)| (id, c)))
+        .collect();
+    if in_band.is_empty() {
+        median_by_cost(costs.iter().map(|(id, &c)| (id, c)).collect())
+    } else {
+        median_by_cost(in_band)
+    }
+}
+
+/// The lower-middle median of `(id, cost)` by ascending `(cost, id)` (SL-219 §4:
+/// even count → lower-cost middle; ties id-lexicographic).
+#[expect(
+    clippy::integer_division,
+    reason = "median index; integer halving is intended (lower-middle)"
+)]
+fn median_by_cost(mut items: Vec<(&String, f64)>) -> Option<SizingTarget> {
+    if items.is_empty() {
+        return None;
+    }
+    items.sort_by(|(ia, ca), (ib, cb)| ca.total_cmp(cb).then_with(|| ia.cmp(ib)));
+    let mid = (items.len() - 1) / 2; // lower-middle for even n, exact middle for odd
+    items.get(mid).map(|&(id, cost)| SizingTarget {
+        id: id.clone(),
+        estimate: cost,
+    })
+}
+
+/// Build one sizing-probe candidate (SL-219 §4): a lean subject sized against
+/// the shared `target`, pinned at zero yield/impact/score with the Calibration
+/// basis. Sort key `siz:{id}` sinks probes below every yield-motivated entry
+/// (positive score) and orders probes among themselves by subject id.
+fn sizing_probe(
+    inputs: &ElicitInputs<'_>,
+    item: &FrontierItem,
+    target: &SizingTarget,
+) -> Candidate {
+    let mut annotations = Vec::new();
+    if is_masked(inputs.projection.get(&item.id)) {
+        annotations.push(MASK_ANNOTATION.to_string());
+    }
+    let subject = Participant {
+        id: item.id.clone(),
+        annotations,
+    };
+    Candidate {
+        sort_key: format!("siz:{}", item.id),
+        entry: QueueEntry {
+            kind: CandidateKind::SizingProbe,
+            guaranteed_yield: 0,
+            guaranteed_impact: 0.0,
+            score: 0.0,
+            yield_basis: YieldBasis::Calibration,
+            reasons: vec![Reason {
+                code: REASON_SIZING_PROBE.to_string(),
+                text: format!(
+                    "un-sized top-K item — calibrate its cost against {} (median authored estimate)",
+                    target.id
+                ),
+            }],
+            payload: EntryPayload::SizingProbe {
+                subject,
+                target: target.clone(),
+            },
+        },
+    }
+}
+
 /// `i64 → f64` for the score product (yields are tiny counts).
 #[expect(
     clippy::as_conversions,
@@ -1016,6 +1228,19 @@ mod tests {
             rank_decay: 1.0,
             confirm_boost: 1.5,
             demote_agent_evidence: false,
+            sizing: SizingInputs::default(),
+        }
+    }
+
+    /// Build a [`SizingInputs`] from `(id, authored_est_cost)` target candidates
+    /// and est-evidenced ids — the two pure signals the shell derives.
+    fn sizing(estimated: &[(&str, f64)], evidenced: &[&str]) -> SizingInputs {
+        SizingInputs {
+            estimated_costs: estimated
+                .iter()
+                .map(|&(id, c)| (id.to_string(), c))
+                .collect(),
+            est_evidenced: evidenced.iter().map(|&s| s.to_string()).collect(),
         }
     }
 
@@ -1218,7 +1443,7 @@ mod tests {
             .iter()
             .filter_map(|e| match &e.payload {
                 EntryPayload::AnchorReview { subject, .. } => Some(subject.id.as_str()),
-                EntryPayload::Comparison { .. } => None,
+                EntryPayload::Comparison { .. } | EntryPayload::SizingProbe { .. } => None,
             })
             .collect();
         assert_eq!(subjects, vec!["A", "C"], "id-lexicographic tiebreak");
@@ -1424,5 +1649,452 @@ mod tests {
         let on = assemble(&inputs, seq(2));
         assert_eq!(on.state, QueueState::Stable { depth: 2 });
         assert!(on.entries.is_empty());
+    }
+
+    // ---- SL-219 PHASE-04 VT-2: cost_feed preservation & the D18 reprobe -----
+    //
+    // These are DISK-fixture tests (unlike the module's in-memory rows above):
+    // the reprobe contract is a whole-shell property — an authored-range or β
+    // edit re-derives est anchors → est projection → cost_feed → the ladder
+    // `est_cost` the elicit eff-weights consume. No caching seam exists to
+    // pin, so the tests drive the same load path the shells use.
+
+    use crate::catalog::scan::ScanMode;
+    use crate::comparison::CostFeed;
+    use crate::priority::graph::{self, PriorityGraph};
+    use crate::relation_graph::{self, EntityKey};
+
+    fn write_file(root: &std::path::Path, rel: &str, body: &str) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, body).unwrap();
+    }
+
+    /// Seed a backlog issue carrying `[value] value = 5.0` and the given
+    /// `[estimate]` body (empty ⇒ bare item).
+    fn seed_costed_issue(root: &std::path::Path, id: u32, estimate: &str) {
+        write_file(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+                 resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                 [estimate]\n{estimate}\n[value]\nvalue = 5.0\n"
+            ),
+        );
+        write_file(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.md"),
+            "b\n",
+        );
+    }
+
+    /// One est-domain `more-work` session: ISS-002 evidenced costlier than
+    /// ISS-001 (the P5 head over ISS-001's authored anchor).
+    fn write_est_session(root: &std::path::Path) {
+        write_file(
+            root,
+            ".doctrine/comparisons/2026-07-11-e1.toml",
+            "schema = \"doctrine.comparison-session\"\nversion = 2\n\n\
+             [session]\nuid = \"e1\"\ndate = \"2026-07-11\"\n\n\
+             [[judgement]]\nuid = \"e1-row\"\nseq = 0\na = \"ISS-002\"\nb = \"ISS-001\"\n\
+             response = \"prefer-a\"\ndomain = \"estimate\"\nframe = \"more-work\"\n\
+             form = \"order\"\nrater = \"agent\"\ndate = \"2026-07-11\"\n",
+        );
+    }
+
+    /// `(multiplier, est_cost)` of `ISS-<id>` through the ONE post-build
+    /// costing seam the elicit shell consumes (`item_costing`).
+    fn costing_of(pg: &PriorityGraph, id: u32) -> (f64, f64) {
+        let cfg = crate::priority::config::PriorityConfig::default();
+        let (m, c, _) = pg
+            .item_costing(&EntityKey { prefix: "ISS", id }, &cfg)
+            .unwrap();
+        (m, c)
+    }
+
+    /// Behaviour preservation (design §3 normative pin): zero est-domain rows
+    /// ⇒ empty cost_feed ⇒ the build is identical to one fed an explicitly
+    /// empty feed — score, base dims, and per-item costing all match.
+    #[test]
+    fn empty_cost_feed_is_identical_graph_build() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_costed_issue(root, 1, "lower = 2.0\nupper = 6.0");
+        seed_costed_issue(root, 2, "");
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = crate::priority::config::load(root);
+        let via_load = graph::build_from(&scanned, root).unwrap();
+        let explicit_empty =
+            graph::build_from_with_cfg(&scanned, root, &cfg, &Projection::new(), &CostFeed::new())
+                .unwrap();
+        assert_eq!(via_load.score, explicit_empty.score, "score map identical");
+        for id in [1, 2] {
+            assert_eq!(
+                costing_of(&via_load, id),
+                costing_of(&explicit_empty, id),
+                "ISS-{id:03} costing identical under the empty feed"
+            );
+        }
+        // And the bare item kept the pre-ladder divisor: the bare anchor.
+        assert_eq!(costing_of(&via_load, 2).1, via_load.cost_ctx.absent);
+    }
+
+    /// D18 reprobe, authored-range edit: editing ISS-001's `[estimate]` moves
+    /// its anchor ⇒ the est projection re-derives ⇒ ISS-002's fed cost moves ⇒
+    /// the eff-weight (`m_self · c_other`) entering every value-determinacy
+    /// verdict moves with it — one reprobe dynamic spanning both domains.
+    #[test]
+    fn authored_range_edit_rederives_cost_feed_into_eff_weights() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_costed_issue(root, 1, "lower = 2.0\nupper = 6.0");
+        seed_costed_issue(root, 2, "");
+        write_est_session(root);
+
+        // Before: anchor 2 + 0.65·4 = 4.6; ISS-002 fed at the P5 head 4.85.
+        let before = graph::build(root).unwrap();
+        let (m1, c1) = costing_of(&before, 2);
+        assert!((c1 - 4.85).abs() < 1e-9, "fed, not bare-anchored: {c1}");
+
+        // The range edit: ISS-001 → (2, 10); anchor 2 + 0.65·8 = 7.2.
+        seed_costed_issue(root, 1, "lower = 2.0\nupper = 10.0");
+        let after = graph::build(root).unwrap();
+        let (m2, c2) = costing_of(&after, 2);
+        assert!((c2 - 7.45).abs() < 1e-9, "fed cost re-derived: {c2}");
+        assert!(
+            (c2 - after.cost_ctx.absent).abs() > 1e-9,
+            "still projected, not the (also-moved) bare anchor"
+        );
+        // The value-domain determinacy input moved: eff = m_self · c_other.
+        assert_eq!(m1, m2, "multiplier is cost-free");
+        assert!((m1 * c1 - m2 * c2).abs() > 1e-9, "eff-weight re-ran");
+    }
+
+    /// D18 reprobe, β edit: an operator `skew` edit moves every authored
+    /// anchor ⇒ est projection + fed costs re-derive (design §3 REV content 5).
+    #[test]
+    fn beta_edit_rederives_cost_feed() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_costed_issue(root, 1, "lower = 2.0\nupper = 6.0");
+        seed_costed_issue(root, 2, "");
+        write_est_session(root);
+        let before = graph::build(root).unwrap();
+        assert!((costing_of(&before, 2).1 - 4.85).abs() < 1e-9);
+
+        // β → 0.0: the anchor collapses to `lower` (2.0); the head follows.
+        write_file(
+            root,
+            crate::dtoml::DOCTRINE_TOML,
+            "[priority.estimate]\nskew = 0.0\n",
+        );
+        let after = graph::build(root).unwrap();
+        assert!(
+            (costing_of(&after, 2).1 - 2.25).abs() < 1e-9,
+            "β edit re-derived the fed cost"
+        );
+    }
+
+    // ---- SL-219 PHASE-05: sizing probes (SizingProbe / Calibration) ------------
+
+    /// In-memory inputs for the sizing source: an empty value system (no rows /
+    /// anchors / projection), a frontier band, the `bare` ids flipped un-sized
+    /// (the `mk` costing hardcodes the flag off), and the two pure sizing
+    /// signals. Every frontier item is `IMP` (estimate-admissible), `m = 1`.
+    fn unsized_inputs<'a>(
+        frontier: &[&str],
+        bare: &[&str],
+        target_pool: &[(&str, f64)],
+        evidenced: &[&str],
+    ) -> ElicitInputs<'a> {
+        let costing: Vec<(&str, f64, f64)> = frontier.iter().map(|&id| (id, 1.0, 5.0)).collect();
+        let mut inputs = mk(vec![], &[], frontier, &costing, &[]);
+        for id in bare {
+            if let Some(c) = inputs.costing.get_mut(*id) {
+                c.bare_estimate = true;
+            }
+        }
+        inputs.sizing = sizing(target_pool, evidenced);
+        inputs
+    }
+
+    fn probe_of<'q>(q: &'q ElicitQueue) -> Option<&'q QueueEntry> {
+        q.entries
+            .iter()
+            .find(|e| e.kind == CandidateKind::SizingProbe)
+    }
+
+    #[test]
+    fn sizing_probe_surfaces_for_unsized_subject_and_gates_candidates() {
+        // S1 un-sized (no authored estimate, no est rows), T1 an authored
+        // estimate ⇒ one existence-admitted SizingProbe (score/yield 0, basis
+        // Calibration) against T1, and the probe GATES Candidates.
+        let inputs = unsized_inputs(&["S1", "T1"], &["S1"], &[("T1", 2.0)], &[]);
+        let q = assemble(&inputs, seq(2));
+        assert_eq!(q.state, QueueState::Candidates, "a probe gates Candidates");
+        let probe = probe_of(&q).expect("a sizing probe");
+        assert_eq!(probe.guaranteed_yield, 0);
+        assert!(
+            probe.score.total_cmp(&0.0).is_eq(),
+            "existence admission, score 0"
+        );
+        assert_eq!(probe.yield_basis, YieldBasis::Calibration);
+        match &probe.payload {
+            EntryPayload::SizingProbe { subject, target } => {
+                assert_eq!(subject.id, "S1");
+                assert_eq!(target.id, "T1");
+                assert!((target.estimate - 2.0).abs() < 1e-9);
+            }
+            _ => panic!("expected a sizing-probe payload"),
+        }
+        assert_eq!(q.sizing_residual, 0);
+        assert!(!q.sizing_no_calibration_target);
+    }
+
+    #[test]
+    fn sizing_probe_incomparable_row_retires_the_probe() {
+        // An est-domain row of ANY status touching S1 (an `incomparable` compiles
+        // to NoConstraint but still lands in est_evidenced) retires the probe —
+        // the engine asked once. S1 is disclosed as residual sizing debt, NOT a
+        // re-probe loop.
+        let inputs = unsized_inputs(&["S1", "T1"], &["S1"], &[("T1", 2.0)], &["S1"]);
+        let q = assemble(&inputs, seq(2));
+        assert!(
+            probe_of(&q).is_none(),
+            "est-evidenced subject is not re-probed"
+        );
+        assert_eq!(
+            q.sizing_residual, 1,
+            "declined subject disclosed as residual"
+        );
+    }
+
+    #[test]
+    fn sizing_target_is_the_lower_middle_median_authored_estimate() {
+        // Odd count [1,2,3] ⇒ the middle (TB, cost 2). The subject sizes against it.
+        let odd = unsized_inputs(
+            &["S1", "TA", "TB", "TC"],
+            &["S1"],
+            &[("TA", 1.0), ("TB", 2.0), ("TC", 3.0)],
+            &[],
+        );
+        let q = assemble(&odd, seq(4));
+        let EntryPayload::SizingProbe { target, .. } = &probe_of(&q).unwrap().payload else {
+            panic!("probe payload");
+        };
+        assert_eq!(target.id, "TB", "odd median = the middle");
+
+        // Even count [1,2,3,4] ⇒ the LOWER-cost middle (TB, cost 2).
+        let even = unsized_inputs(
+            &["S1", "TA", "TB", "TC", "TD"],
+            &["S1"],
+            &[("TA", 1.0), ("TB", 2.0), ("TC", 3.0), ("TD", 4.0)],
+            &[],
+        );
+        let q = assemble(&even, seq(5));
+        let EntryPayload::SizingProbe { target, .. } = &probe_of(&q).unwrap().payload else {
+            panic!("probe payload");
+        };
+        assert_eq!(target.id, "TB", "even count ⇒ lower-cost middle");
+
+        // Equal costs ⇒ id-lexicographic tiebreak (TA before TB at the middle).
+        let tie = unsized_inputs(
+            &["S1", "TB", "TA"],
+            &["S1"],
+            &[("TA", 2.0), ("TB", 2.0)],
+            &[],
+        );
+        let q = assemble(&tie, seq(3));
+        let EntryPayload::SizingProbe { target, .. } = &probe_of(&q).unwrap().payload else {
+            panic!("probe payload");
+        };
+        assert_eq!(target.id, "TA", "ties break id-lexicographic");
+    }
+
+    #[test]
+    fn sizing_target_falls_back_to_all_estimated_then_none() {
+        // Fallback tier 1: no authored estimate in the top-K band ⇒ median over
+        // ALL admissible authored-estimate items (TB, cost 2).
+        let tier1 = unsized_inputs(
+            &["S1"],
+            &["S1"],
+            &[("TA", 1.0), ("TB", 2.0), ("TC", 3.0)],
+            &[],
+        );
+        let q = assemble(&tier1, seq(1));
+        let EntryPayload::SizingProbe { target, .. } = &probe_of(&q).unwrap().payload else {
+            panic!("probe payload");
+        };
+        assert_eq!(
+            target.id, "TB",
+            "tier-1 fallback medians over all estimated"
+        );
+
+        // Tier 2: none estimated anywhere ⇒ no probe minted; the subjects are
+        // disclosed residual + the no-calibration-target flag set.
+        let tier2 = unsized_inputs(&["S1", "S2"], &["S1", "S2"], &[], &[]);
+        let q = assemble(&tier2, seq(2));
+        assert!(probe_of(&q).is_none(), "no target ⇒ no probe");
+        assert!(q.sizing_no_calibration_target, "tier-2 disclosure flag set");
+        assert_eq!(q.sizing_residual, 2, "both un-sized subjects disclosed");
+    }
+
+    #[test]
+    fn sizing_probes_sink_below_yield_motivated_and_order_by_id() {
+        // A>C, B>D yields a positive-score comparison on (A,B); un-sized S1/S2
+        // add score-0 probes that sink below it, ordered by subject id.
+        let rows = vec![win("j0", "A", "C"), win("j1", "B", "D")];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let mut inputs = mk(
+            refs,
+            &[],
+            &["A", "B", "S2", "S1", "T1"],
+            &[
+                ("A", 1.0, 1.0),
+                ("B", 1.0, 1.0),
+                ("S2", 1.0, 5.0),
+                ("S1", 1.0, 5.0),
+                ("T1", 1.0, 2.0),
+            ],
+            &[],
+        );
+        for id in ["S1", "S2"] {
+            inputs.costing.get_mut(id).unwrap().bare_estimate = true;
+        }
+        inputs.sizing = sizing(&[("T1", 2.0)], &[]);
+        let q = assemble(&inputs, seq(5));
+
+        assert_eq!(
+            q.entries.first().map(|e| e.kind),
+            Some(CandidateKind::Comparison),
+            "the yield-motivated comparison ranks first"
+        );
+        let probe_subjects: Vec<&str> = q
+            .entries
+            .iter()
+            .filter_map(|e| match &e.payload {
+                EntryPayload::SizingProbe { subject, .. } => Some(subject.id.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            probe_subjects,
+            vec!["S1", "S2"],
+            "probes ordered by subject id"
+        );
+        // Every probe sinks below the yield-motivated entry.
+        let first_probe = q
+            .entries
+            .iter()
+            .position(|e| e.kind == CandidateKind::SizingProbe)
+            .unwrap();
+        assert!(
+            first_probe > 0,
+            "probes sink below the positive-score entry"
+        );
+    }
+
+    #[test]
+    fn sizing_residual_discloses_on_stable_without_gating() {
+        // A single un-sized, est-evidenced (declined) item that is ALSO
+        // value-insensitive (m = 0, out of the value pool) ⇒ no gating entry, the
+        // value pool is determined ⇒ Stable, and the sizing debt is disclosed as
+        // residual — never gating (§4 D15 precedence unchanged).
+        let mut inputs = unsized_inputs(&["S1"], &["S1"], &[("T1", 2.0)], &["S1"]);
+        inputs.costing.get_mut("S1").unwrap().multiplier = 0.0;
+        let q = assemble(&inputs, seq(1));
+        assert_eq!(
+            q.state,
+            QueueState::Stable { depth: 1 },
+            "residual never gates"
+        );
+        assert!(probe_of(&q).is_none());
+        assert_eq!(
+            q.sizing_residual, 1,
+            "unresolved sizing disclosed on Stable"
+        );
+    }
+
+    // ---- SL-219 PHASE-05 postcondition: sizing-probe answers land anchored -----
+    //
+    // The contract the probe's target selection GUARANTEES: because the target
+    // always carries an AUTHORED estimate (an anchored est class), an
+    // order-bearing answer lands the un-sized subject in that anchored component
+    // with non-Gauge provenance — Projected on `prefer`, Authored (via the class
+    // anchor) on `equal` — NEVER the bare anchor, NEVER a gauge component. These
+    // are disk-fixture goldens over the est pipeline (never touched here).
+
+    fn write_est_row(root: &std::path::Path, a: &str, b: &str, response: &str) {
+        write_file(
+            root,
+            ".doctrine/comparisons/2026-07-11-e1.toml",
+            &format!(
+                "schema = \"doctrine.comparison-session\"\nversion = 2\n\n\
+                 [session]\nuid = \"e1\"\ndate = \"2026-07-11\"\n\n\
+                 [[judgement]]\nuid = \"e1-row\"\nseq = 0\na = \"{a}\"\nb = \"{b}\"\n\
+                 response = \"{response}\"\ndomain = \"estimate\"\nframe = \"more-work\"\n\
+                 form = \"order\"\nrater = \"agent\"\ndate = \"2026-07-11\"\n",
+            ),
+        );
+    }
+
+    #[test]
+    fn sizing_probe_prefer_answer_projects_subject_non_gauge() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_costed_issue(root, 1, "lower = 2.0\nupper = 6.0"); // target: authored anchor 4.6
+        seed_costed_issue(root, 2, ""); // subject: un-sized
+        // ISS-002 is MORE work than ISS-001 (prefer-a, winner = costlier, D5).
+        write_est_row(root, "ISS-002", "ISS-001", "prefer-a");
+
+        let pipeline = graph::load_comparison_pipeline_for_root(root).unwrap();
+        let (cost, prov) = pipeline
+            .estimate
+            .projection
+            .get("ISS-002")
+            .copied()
+            .expect("subject placed in the est projection");
+        assert_eq!(
+            prov,
+            ValueProvenance::Projected,
+            "prefer ⇒ Projected placement"
+        );
+        assert!(cost > 0.0);
+
+        // The scoring feed consumes the projected cost — NEVER the bare anchor.
+        let pg = graph::build(root).unwrap();
+        let fed = costing_of(&pg, 2).1;
+        assert!(
+            (fed - pg.cost_ctx.absent).abs() > 1e-9,
+            "fed a projected cost, not the bare-anchor fallthrough"
+        );
+    }
+
+    #[test]
+    fn sizing_probe_equal_answer_merges_subject_authored_via_class() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        seed_costed_issue(root, 1, "lower = 2.0\nupper = 6.0"); // anchor 2 + 0.65·4 = 4.6
+        seed_costed_issue(root, 2, "");
+        write_est_row(root, "ISS-002", "ISS-001", "equal");
+
+        let pipeline = graph::load_comparison_pipeline_for_root(root).unwrap();
+        let (cost, prov) = pipeline
+            .estimate
+            .projection
+            .get("ISS-002")
+            .copied()
+            .expect("subject merged into the est projection");
+        assert_eq!(
+            prov,
+            ValueProvenance::Authored,
+            "equal ⇒ anchored-class membership, provenance Authored"
+        );
+        assert!(
+            (cost - 4.6).abs() < 1e-9,
+            "the merged member sits at the class anchor cost, not gauge/bare"
+        );
     }
 }
