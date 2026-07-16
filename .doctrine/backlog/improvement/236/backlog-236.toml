@@ -5,10 +5,10 @@ id = 236
 slug = "direct-land-trunk-row"
 title = "Split-lineage dispatched slice un-closeable: IMP-127 direct-land must record a trunk row"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-02"
-updated = "2026-07-03"
+updated = "2026-07-16"
 tags = ["area:close", "area:dispatch"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

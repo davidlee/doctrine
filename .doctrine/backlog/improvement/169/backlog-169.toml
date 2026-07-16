@@ -5,10 +5,10 @@ id = 169
 slug = "close-gate-recognize-manualexternal-dispatch-integration"
 title = "Close-gate: recognize manual/external dispatch integration"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-24"
-updated = "2026-07-03"
+updated = "2026-07-16"
 tags = ["area:close", "area:dispatch"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
