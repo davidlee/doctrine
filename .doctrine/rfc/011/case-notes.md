@@ -1601,3 +1601,12 @@ Worker prompts for corpus-touching scripts should mandate one smoke run
 against a real-shaped corpus (or state the state/-exclusion invariant).
 Separately: 43G of stale dispatch worktrees under .doctrine/state/dispatch
 is itself a token/disk hazard — flagged to operator for gc.
+
+[dispatch; SL220-dispatch-fable]
+PHASE-02 worker STOP: plan split §1/§2 into independently-green phases, but
+design §2:157 admits §1's b/response optionalisation breaks compile's
+accessors and assigns the closure (PairRow) to §2. Plan-time phase-boundary
+check missed transitive compile fallout of a struct change (~31 literals,
+8 files). Cost: one full worker spin (101k tokens) ending in a hand-back, an
+orchestrator adjudication, and a resume. Plan authoring should compile-check
+struct-motion phases: "can this land green with ONLY its declared files?"
