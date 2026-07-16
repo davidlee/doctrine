@@ -1,0 +1,34 @@
+id    = 274
+slug  = "sl-211-reconciliation-audit"
+title = "SL-211 reconciliation audit"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-211"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "nit"
+title = "conformance: undeclared .doctrine/slice/211/slice-211.toml — expected vs observed"
+detail = "Expected: `slice conformance SL-211` reports only code paths against the design-target selectors (src/dispatch.rs, src/slice.rs, src/main.rs, tests/e2e_dispatch_sync.rs). Observed: 4 conformant, 0 undelivered, and 1 undeclared — `M .doctrine/slice/211/slice-211.toml`. The undeclared path is the slice's own authored metadata (lifecycle status writes: ready→audit etc.), not a delivered code path. The design-target selectors correctly scope only code; slice-211.toml is bookkeeping churn outside the dispatch code bundle (which is .doctrine-stripped). No selector change is warranted."
+disposition = "aligned"
+response = "Aligned — the undeclared path is the slice's own lifecycle metadata (slice-211.toml status writes), not a delivered code path. The dispatch code bundle is .doctrine-stripped by construction, so authored slice metadata is correctly outside the design-target selectors. No selector change and no design edit warranted; conformance is clean on the code surface (4/4 conformant, 0 undelivered)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = 'design §10 "still open (minor)" questions are resolved in code but prose is stale — expected vs observed'
+detail = 'Expected: design.md §10 records the final disposition of its two "Still open (minor, non-blocking)" questions. Observed: the implementation resolved both, but §10 still frames them as open. (1) "whether --trunk hard-refuses a deliver_to mismatch or silently defaults" → run_record_integration does BOTH per intent: absent --trunk defaults to deliver_to; an explicit mismatch is a hard bail! naming both refs (VT-6 / e2e vt2_close_integration_honours_deliver_to_override + run_record_integration_refuses_trunk_deliver_to_mismatch). (2) "whether to emit the payload OID in the success line" → the handler emits `recorded Verified trunk row for {trunk} ... (payload {payload})`. Both choices are sound and design-consistent; only the §10 prose is stale. Per-slice design-doc update, no code change.'
+disposition = "verified"
+response = """Observation confirmed; remediation delegated to /reconcile as a per-slice direct edit (design.md §10) — see ## Reconciliation Brief. No code change: both resolutions (hard-refuse on --trunk≠deliver_to with default-when-absent; emit payload OID in the success line) are sound and design-consistent, proven by VT-6 and the handler tests. Only §10's "still open (minor)" prose is stale and should record the resolution so canon tells the truth."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
