@@ -1,0 +1,68 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 20
+slug = "ledgered-facet-claims"
+title = "Ledgered facet claims"
+status = "open"
+created = "2026-07-16"
+updated = "2026-07-16"
+tags = ["area:priority", "area:facets", "provenance", "epistemics", "value", "estimate", "scoring"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "RFC-019"
+
+[[relation]]
+label = "related"
+target = "RFC-015"
+
+[[relation]]
+label = "related"
+target = "REV-022"
+
+[[relation]]
+label = "related"
+target = "ADR-015"
+
+[[relation]]
+label = "related"
+target = "ADR-018"
+
+[[relation]]
+label = "related"
+target = "IDE-039"
+
+[[relation]]
+label = "related"
+target = "IMP-290"
+
+[[relation]]
+label = "related"
+target = "IMP-281"
+
+[[relation]]
+label = "related"
+target = "IDE-013"
+
+[[relation]]
+label = "related"
+target = "SL-219"
+
+[[relation]]
+label = "related"
+target = "SPEC-020"
+
+[[relation]]
+label = "related"
+target = "PRD-014"
+
+[[relation]]
+label = "related"
+target = "PRD-010"
+
