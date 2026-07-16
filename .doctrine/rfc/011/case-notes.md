@@ -1577,3 +1577,11 @@ Cost: ~4 verification probes (grep tree, main vs edge, branch census, candidate
 diff stat) to establish the real substrate location before phase sequencing
 could be pinned. Root cause: handover text stated lifecycle status as code
 location; dispatch integration state should be checked, not asserted.
+[plan; SL220-plan-fable]
+`slice verify-vt 220` pre-implementation prints "≈ UNATTRIBUTABLE VT-n —
+keyword present but <file> not modified by this slice" even where every
+mandated keyword is 0-count in the file today (verified by grep). The message
+text asserts a fact ("keyword present") that appears false; the state token is
+doing the real work. Cost: a re-grep round to distrust-then-dismiss the
+message. Suggest message variants per actual condition (file-unmodified vs
+keyword-found-but-unattributable).

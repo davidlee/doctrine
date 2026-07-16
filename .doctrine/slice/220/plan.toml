@@ -54,8 +54,8 @@ exit_criteria = [
   { id = "EX-3", text = "v2 fixture files parse unchanged; SL-219 v2 goldens byte-identical (D2); all existing suites green (engine gate)" },
 ]
 verification = [
-  { id = "VT-1", expects = "wire v3 battery — anchor/pin/migrated goldens, version-gate set {2,3}, validation matrix both directions (payload exactness, form⇔frame, migrated⇔observed_at, date-unless-migrated, pin⇒human∧anchor, b/response by form)", test_file = "src/comparison/wire.rs", keywords = ["FRAME_VALUE_ANCHOR", "validate_judgement", "observed_at"], waived = false },
-  { id = "VT-2", expects = "resolution semantics — ordering_date totality, degenerate IdentityKey R3 revision, form/rater key tokens, single-subject lifecycle inertness, anchor supersession chains", test_file = "src/comparison/resolve.rs", keywords = ["ordering_date", "anchor"], waived = false },
+  { id = "VT-1", expects = "wire v3 battery — anchor/pin/migrated goldens, version-gate set {2,3}, validation matrix both directions (payload exactness, form⇔frame, migrated⇔observed_at, date-unless-migrated, pin⇒human∧anchor, b/response by form)", test_file = "src/comparison/wire.rs", keywords = ["FRAME_VALUE_ANCHOR", "observed_at"], waived = false },
+  { id = "VT-2", expects = "resolution semantics — ordering_date totality, degenerate IdentityKey R3 revision, form/rater key tokens, single-subject lifecycle inertness, anchor supersession chains", test_file = "src/comparison/resolve.rs", keywords = ["ordering_date", "migrated"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -75,7 +75,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "the §8.3 gate battery in claims.rs — tier Ord pin, permutation, corroboration/conflict/contested-pin, cross-session, lens isolation both directions, anti-laundering, duplicate-merge", test_file = "src/comparison/claims.rs", keywords = ["pin_outranks_all_tiers_under_derived_ord", "ClaimResolution", "anchor_map"], waived = false },
   { id = "VT-2", expects = "PairRow pairwise projection type adapts compile input with zero rule churn; compile suite green unchanged", test_file = "src/comparison/compile.rs", keywords = ["PairRow"], waived = false },
-  { id = "VT-3", expects = "no-compile-consumer proof reaches the elicit path: assemble recompiles from the pairwise view; an anchor-bearing ledger yields a baseline ConstraintSet identical to the same ledger without anchors", test_file = "src/priority/elicit.rs", keywords = ["pairwise"], waived = false },
+  { id = "VT-3", expects = "no-compile-consumer proof reaches the elicit path: assemble recompiles from the pairwise view; an anchor-bearing ledger yields a baseline ConstraintSet identical to the same ledger without anchors", test_file = "src/priority/elicit.rs", keywords = ["active_pairwise"], waived = false },
 ]
 specs        = []
 requirements = []
@@ -95,7 +95,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "verb suite — mint semantics, TTY gate both branches, supersession scope refusals, clear/retire semantics, validate mirror", test_file = "src/commands/facet.rs", keywords = ["is_interactive", "supersedes", "ALL_KINDS"], waived = false },
-  { id = "VT-2", expects = "write-class regression — pin verbs in the worker-refused class, value_is_write true", test_file = "src/main.rs", keywords = ["pin"], waived = false },
+  { id = "VT-2", expects = "write-class regression — pin verbs in the worker-refused class, value_is_write true", test_file = "src/main.rs", keywords = ["retire"], waived = false },
   { id = "VT-3", expects = "e2e piped-stdin pin refusal naming the posture (file minted this phase, extended at PHASE-06)", test_file = "tests/e2e_value_claims.rs", keywords = ["pin"], waived = false },
 ]
 specs        = []
@@ -117,7 +117,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "ladder + rung-5 transitional semantics + UnmigratedFacet presence finding + R1 row-less claim + D14 reprobe gating", test_file = "src/priority/graph.rs", keywords = ["effective_raw_value", "UnmigratedFacet"], waived = false },
-  { id = "VT-2", expects = "empty-claims bitwise-preservation property + demote_agent_evidence widening over claims", test_file = "src/priority/graph.rs", keywords = ["ClaimResolution", "demote_agent_evidence"], waived = false },
+  { id = "VT-2", expects = "empty-claims bitwise-preservation property + demote_agent_evidence widening over claims", test_file = "src/priority/graph.rs", keywords = ["ClaimResolution", "priors"], waived = false },
   { id = "VT-3", expects = "value_source post-flip vocabulary golden — breaking token-set change pinned (D11)", test_file = "src/priority/view.rs", keywords = ["migrated-claim", "unmigrated-facet"], waived = false },
   { id = "VA-1", text = "REV-024 + SPEC-020 amendment approval verified against the phase log before landing (checked again at audit, §8.10)" },
   { id = "VA-2", text = "Golden churn list reviewed: every churned fixture authors a [value] facet; deltas justified against the PHASE-01 baseline, not waved through (scope R2)" },
@@ -138,7 +138,7 @@ exit_criteria = [
   { id = "EX-3", text = "Grep-gate holds: no display surface reads EntityFacets.value (named verification step, design §6)" },
 ]
 verification = [
-  { id = "VT-1", expects = "explain shape battery incl. contested-pin and agent-conflict guidance variants + demotion disclosure", test_file = "src/priority/render.rs", keywords = ["contested", "unmigrated"], waived = false },
+  { id = "VT-1", expects = "explain shape battery incl. contested-pin and agent-conflict guidance variants + demotion disclosure", test_file = "src/priority/render.rs", keywords = ["contested pin", "unmigrated"], waived = false },
   { id = "VT-2", expects = "compare list mixed-fixture goldens — full token routing over anchor + order + superseded + tombstoned + lensed rows", test_file = "src/commands/compare.rs", keywords = ["anchored", "conflicted"], waived = false },
   { id = "VT-3", expects = "e2e battery — capture→resolve→explain, tier dominance end-to-end, conflict lifecycle, clear fall-through", test_file = "tests/e2e_value_claims.rs", keywords = ["explain", "supersed"], waived = false },
   { id = "VA-1", text = "Repo-wide grep confirms no display surface reads EntityFacets.value post-phase; exceptions enumerated (rung-5 read path + migration census serve §3, not display)" },

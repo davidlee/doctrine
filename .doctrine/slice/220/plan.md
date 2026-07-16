@@ -96,7 +96,12 @@ and is out of this plan.
 - VT mandate keywords name design-pinned symbols (`FRAME_VALUE_ANCHOR`,
   `ordering_date`, `pin_outranks_all_tiers_under_derived_ord`, `PairRow`,
   `UnmigratedFacet`, D11 tokens). Workers own test names; mandates bind the
-  load-bearing identifiers, not the test list.
+  load-bearing identifiers, not the test list. Every keyword was checked
+  0-count in its target file at plan time (non-vacuous floor).
+- **Plan-pinned identifier**: the `Pipeline` view split (§2, RV-278 F-6)
+  names its pairwise view `active_pairwise` — PHASE-03 VT-3's mandate keys on
+  it in `elicit.rs`. If the worker has a strictly better name, the mandate
+  updates with the phase (append, never silently diverge).
 - PHASE-02..06 are file-overlapping by design (wire → claims → verbs → flip →
   render each build on the prior); dispatch them serially, one worker per
   phase, no parallelisation.

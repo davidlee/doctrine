@@ -7,7 +7,7 @@ updated = "2026-07-16"
 tags = []
 
 [relationships]
-needs = []                      # slice→work hard prerequisite
+needs = ["SL-219"]                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
