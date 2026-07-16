@@ -5,8 +5,9 @@
 //!
 //! Input: a compiled [`ConstraintSet`] (retained, post-quarantine classes,
 //! strict class digraph, and per-class anchors) plus a [`ProjectionCfg`] (the
-//! two gauge constants as pure inputs — a later phase homes the shipped
-//! `GAUGE_STEP` / `DEFAULT_VALUE` in `priority/config.rs`). Output: a
+//! two gauge parameters as pure PER-CALL inputs — no config reads in here,
+//! SL-219 D8; each domain's call site supplies its own params, the value
+//! domain's shipped constants named [`VALUE_PROJECTION_PARAMS`]). Output: a
 //! [`Projection`] mapping every evidence-bearing **entity** id to a scalar and
 //! its [`ValueProvenance`]; every member of a class takes the class value.
 //!
@@ -17,7 +18,7 @@
 //! ceiling), by **budgeted** interpolation `f + (c − f)/(d_up + 1)` (P4).
 //! Anchors are exact (P3). Unbounded tails step by `gauge_step` off a synthetic
 //! floor/off the floor (P5/P6). A class with neither floor nor ceiling is
-//! gauged to `default_value` (P7). An anchor-free component is spread by
+//! gauged to `gauge_center` (P7). An anchor-free component is spread by
 //! height (P8, component `H`). Ported from `.doctrine/slice/213/projection-prototype.py`,
 //! whose scenario battery (S1–S8, Y1–Y7, N1–N4) is the golden suite below —
 //! except gauge scope, where the port is per-component (SL-216; the
@@ -34,7 +35,7 @@
 //! tension was adjudicated for the per-component reading (SL-216, IMP-279,
 //! RV-266 F-3 follow-on), the `s2`/`s8` goldens re-pinned to component scale,
 //! and SL-213 design §3 amended in place. Accepted consequence: in a mixed
-//! corpus an anchor-free island's loser lands below `default_value`
+//! corpus an anchor-free island's loser lands below the gauge center
 //! (judged-and-lost ranks below unjudged).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -54,18 +55,33 @@ pub(crate) enum ValueProvenance {
     Gauge,
 }
 
-/// The two gauge constants, passed as pure inputs this phase. A later phase
-/// homes the shipped `GAUGE_STEP` / `DEFAULT_VALUE` named constants in
-/// `priority/config.rs` (STD-001) and threads them here.
+/// The two gauge parameters, passed as pure per-call inputs (SL-219 D8:
+/// `project()` never reads config — the calling shell threads each domain's
+/// own pair). Value domain: [`VALUE_PROJECTION_PARAMS`] (step overridable via
+/// `[priority.gauge] step`). Estimate domain: `EST_GAUGE_STEP` + `gauge_center
+/// = ctx.absent`, the corpus's bare-item cost anchor (D7/D8).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ProjectionCfg {
     /// The additive gauge step for unbounded tails/heads (`0.25` = a quarter
-    /// of `default_value`, design P5).
+    /// of the value domain's `gauge_center`, design P5).
     pub gauge_step: f64,
-    /// The gauge value for a class with no order path to any anchor (P7) and
-    /// the scale of the anchor-free spread (P8).
-    pub default_value: f64,
+    /// The gauge CENTER: the value for a class with no order path to any
+    /// anchor (P7) and the center/scale of the anchor-free component spread
+    /// (P8). The value domain centers on `DEFAULT_VALUE`; the estimate domain
+    /// centers its render-only gauge on the corpus's own bare anchor.
+    pub gauge_center: f64,
 }
+
+/// The VALUE domain's shipped projection parameters (SL-219 D8, STD-001): the
+/// prototype's `STEP = 0.25` / `DEFAULT = 1.0`, mirrored by the priority-layer
+/// `config::GAUGE_STEP` / `graph::DEFAULT_VALUE` (a test cross-pins them —
+/// this leaf cannot depend upward on `priority`). The value call site passes
+/// this const (its `gauge_step` config-overridable via `[priority.gauge]
+/// step`); the byte-identical goldens below are the invariant's proof.
+pub(crate) const VALUE_PROJECTION_PARAMS: ProjectionCfg = ProjectionCfg {
+    gauge_step: 0.25,
+    gauge_center: 1.0,
+};
 
 /// Entity id → its projected scalar and provenance. Deterministic ordering
 /// (`BTree`); `f64` is never a key.
@@ -328,7 +344,7 @@ fn place_component(
             .iter()
             .map(|n| {
                 let hn = h.get(n).copied().unwrap_or(0);
-                let value = 2.0 * cfg.default_value * (count_f64(hn) + 1.0) / denom;
+                let value = 2.0 * cfg.gauge_center * (count_f64(hn) + 1.0) / denom;
                 (n.clone(), (value, ValueProvenance::Gauge))
             })
             .collect();
@@ -354,10 +370,10 @@ fn place_component(
         let floor = successor_max(&values, out, v);
         let ceiling = hi.get(v).copied();
         let value = match (floor, ceiling) {
-            // P7: no floor AND no ceiling — gauge to default_value.
+            // P7: no floor AND no ceiling — gauge to the center.
             (None, None) => {
-                values.insert(v.clone(), cfg.default_value);
-                result.insert(v.clone(), (cfg.default_value, ValueProvenance::Gauge));
+                values.insert(v.clone(), cfg.gauge_center);
+                result.insert(v.clone(), (cfg.gauge_center, ValueProvenance::Gauge));
                 continue;
             }
             // P6: unbounded below — synthetic floor strictly under the ceiling
@@ -388,19 +404,40 @@ fn place_component(
 #[cfg(test)]
 mod tests {
     use super::super::compile::{AnchorMap, QuarantinePolicy, compile};
-    use super::{Projection, ProjectionCfg, ValueProvenance, project};
+    use super::{Projection, ProjectionCfg, VALUE_PROJECTION_PARAMS, ValueProvenance, project};
     use crate::comparison::{
         DOMAIN_VALUE, FRAME_EQUAL_EFFORT, Judgement, RaterKind, Response, RowForm,
     };
 
     use ValueProvenance::{Authored, Gauge, Projected};
 
-    /// The prototype's `DEFAULT = 1.0`, `STEP = 0.25`.
-    const CFG: ProjectionCfg = ProjectionCfg {
-        gauge_step: 0.25,
-        default_value: 1.0,
-    };
+    /// The prototype's `DEFAULT = 1.0`, `STEP = 0.25` — the value call site's
+    /// shipped constants (SL-219 D8): every golden below runs under the const
+    /// itself, so their byte-identity IS the parameterization invariant.
+    const CFG: ProjectionCfg = VALUE_PROJECTION_PARAMS;
     const EPS: f64 = 1e-4;
+
+    // ---- SL-219 VT-1: D8 parameterization ----------------------------------
+
+    /// D8: `VALUE_PROJECTION_PARAMS` carries the SHIPPED constants — pinned
+    /// against the priority-layer named consts (`config::GAUGE_STEP`,
+    /// `graph::DEFAULT_VALUE`) so the leaf-local literals can never drift, and
+    /// `gauge_center` is the value domain's `1.0`. `project()` takes its params
+    /// per call (no config reads — the signature is the seam); the goldens in
+    /// this module all run under this const, byte-identical to the
+    /// pre-parameterization suite.
+    #[test]
+    fn d8_value_projection_params_are_the_shipped_constants() {
+        assert_eq!(
+            VALUE_PROJECTION_PARAMS.gauge_step,
+            crate::priority::config::GAUGE_STEP
+        );
+        assert_eq!(
+            VALUE_PROJECTION_PARAMS.gauge_center,
+            crate::priority::graph::DEFAULT_VALUE
+        );
+        assert_eq!(CFG, VALUE_PROJECTION_PARAMS);
+    }
 
     // ---- fixtures ----------------------------------------------------------
 
@@ -1082,9 +1119,9 @@ mod tests {
         let lo = vals.iter().copied().fold(f64::INFINITY, f64::min);
         let hi = vals.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         assert!(lo > 0.0, "gauge below 0");
-        assert!(hi < 2.0 * CFG.default_value, "gauge above 2·default");
+        assert!(hi < 2.0 * CFG.gauge_center, "gauge above 2·default");
         assert!(
-            (lo + hi - 2.0 * CFG.default_value).abs() < EPS,
+            (lo + hi - 2.0 * CFG.gauge_center).abs() < EPS,
             "not centred"
         );
     }
@@ -1102,7 +1139,7 @@ mod tests {
         while step_milli <= 1000 {
             let cfg = ProjectionCfg {
                 gauge_step: f64::from(step_milli) / 1000.0,
-                default_value: 1.0,
+                gauge_center: 1.0,
             };
 
             let tp = project(&compiled(&edge_refs(&tail), &[("m0", 0.5)]), &cfg);

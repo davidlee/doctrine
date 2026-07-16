@@ -128,6 +128,25 @@ fn capture(root: &Path, slot: &str, a: &str, b: &str) {
     );
 }
 
+/// Hand-author an est-domain `incomparable` session-of-one over the pair
+/// (SL-219 §4): the asked-once row that retires a sizing probe. Compiles to
+/// `NoConstraint`, so it feeds no cost — value-domain determinacy and every
+/// `est_cost` are byte-identical with or without it.
+fn capture_est_incomparable(root: &Path, slot: &str, a: &str, b: &str) {
+    let body = format!(
+        "schema = \"doctrine.comparison-session\"\nversion = 2\n\n\
+         [session]\nuid = \"sess-{slot}\"\ndate = \"2026-01-01\"\n\n\
+         [[judgement]]\nuid = \"row-{slot}\"\nseq = 0\na = \"{a}\"\nb = \"{b}\"\n\
+         response = \"incomparable\"\ndomain = \"estimate\"\nframe = \"more-work\"\nform = \"order\"\n\
+         rater = \"agent\"\ndate = \"2026-01-01\"\n"
+    );
+    write(
+        root,
+        &format!(".doctrine/comparisons/2026-01-01-{slot}.toml"),
+        &body,
+    );
+}
+
 // =============================================================================
 // VT-1 — JSON goldens (both kinds) + median-probe + bare-estimate mask
 // =============================================================================
@@ -251,6 +270,11 @@ fn json_median_probe_surfaces_for_unconstrained_item() {
 /// with estimate facets (ISS-070/071), plus a second such pair left bare
 /// (ISS-072/073) — one indeterminate frontier pair each (D5), so both the
 /// estimated-unmasked and the bare-masked participant shapes surface together.
+///
+/// SL-219 §4: the bare pair also raises sizing probes (authored targets exist);
+/// the golden reads through `--kind comparison`, so the probes coexist without
+/// touching the pinned participant shapes (probe-render e2e is PHASE-06's
+/// `e2e_compare_estimate.rs`, not this file).
 fn seed_frontier_pairs(root: &Path) {
     seed(root, 70, "[estimate]\nlower = 2.0\nupper = 2.0\n");
     seed(root, 71, "[estimate]\nlower = 2.0\nupper = 2.0\n");
@@ -331,6 +355,16 @@ fn json_comparison_carries_value_bounds_and_estimate_mask_split() {
 /// VT-1: the stall render names the depth and disclaims stability — a zero-yield
 /// bridge (`T(5) > A,B > L(-5)` with differing A/B costs) admits no candidate but
 /// leaves an indeterminate pair (D15). Exercises the `stall` keyword contract.
+///
+/// SL-219 PHASE-05 corpus adjustment (orchestrator-adjudicated): the bare
+/// top-K item ISS-060 would now raise a sizing probe (an entry ⇒ Candidates),
+/// so the corpus records ONE est-domain `incomparable` row touching it — the
+/// §4 asked-once semantics retires the probe WITHOUT touching any cost (a
+/// NoConstraint row feeds nothing; the zero-yield bridge is byte-identical),
+/// so the queue genuinely stalls under the new rules and the residual sizing
+/// debt is disclosed, never gating. (Removing the authored-estimate targets
+/// instead would equalize the A/B costs and flip the corpus to Stable —
+/// verified empirically — destroying the golden's stall intent.)
 #[test]
 fn render_stall_names_depth_and_disclaims_stability() {
     let dir = project();
@@ -343,16 +377,27 @@ fn render_stall_names_depth_and_disclaims_stability() {
     capture(root, "al", &iss(61), &iss(63));
     capture(root, "tb", &iss(60), &iss(62));
     capture(root, "bl", &iss(62), &iss(63));
+    capture_est_incomparable(root, "sz", &iss(60), &iss(61));
 
     let out = elicit(root, &["--depth", "2"]);
     assert!(
         out.contains("stalled at depth 2") && out.contains("NOT a stability claim"),
         "stall names depth + disclaims stability: {out}"
     );
+    // The sizing-declined subject is disclosed as residual debt — never gating.
+    assert!(
+        out.contains("1 top-K item(s) carry unresolved sizing — costs may move on new evidence"),
+        "residual sizing debt disclosed on the stall line: {out}"
+    );
 }
 
 /// VT-1: a fully-determined top-K renders `stable` with the member-scoped
 /// value_dim-order wording (never prefix-membership, D5/D15).
+///
+/// SL-219 §4: this corpus carries NO authored estimate anywhere, so its two
+/// bare subjects hit sizing fallback tier 2 — no probes minted (Stable holds),
+/// and the state line additionally discloses the residual sizing debt plus the
+/// seed-sizing hint. Both clauses pinned here (non-gating by construction).
 #[test]
 fn render_stable_is_member_scoped() {
     let dir = project();
@@ -367,6 +412,14 @@ fn render_stable_is_member_scoped() {
         out.contains("stable: value_dim order among the current top-")
             && out.contains("not membership"),
         "stable is member-scoped: {out}"
+    );
+    // Tier-2 sizing disclosure: un-sized items counted, seed hint appended.
+    assert!(
+        out.contains("2 top-K item(s) carry unresolved sizing — costs may move on new evidence")
+            && out.contains(
+                "no estimated item to calibrate against — estimate any item to seed sizing"
+            ),
+        "tier-2 sizing debt disclosed on Stable: {out}"
     );
 }
 

@@ -387,12 +387,14 @@ pub(crate) fn survey_view_for_map(g: &PriorityGraph, all: bool) -> Actionability
 pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
     // Load via the comparison pipeline (like `explain`) — the tension grades need
     // the compiled determinacy view. The graph is byte-identical to the old
-    // `graph::build` path (`build_from` loads the SAME `pipeline.projection`), so
+    // `graph::build` path (`build_from` loads the SAME `pipeline.value.projection`), so
     // row order/score are unchanged; only the additive tension surfaces are new.
     let scanned = relation_graph::scan_entities(root, &mut vec![], ScanMode::default())?;
     let cfg = super::config::load(root);
     let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
-    let g = graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.projection)?;
+    let cost_feed = comparison::cost_feed(&pipeline.estimate.projection);
+    let g =
+        graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.value.projection, &cost_feed)?;
     // The actionable, non-promoted set (a promoted item is excluded by its own reason,
     // F1 / REQ-075 AC2 — the same exclusion `survey` applies).
     let actionable_set: std::collections::BTreeSet<EntityKey> = g
@@ -507,7 +509,9 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
     let scanned = relation_graph::scan_entities(root, &mut vec![], ScanMode::default())?;
     let cfg = super::config::load(root);
     let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
-    let g = graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.projection)?;
+    let cost_feed = comparison::cost_feed(&pipeline.estimate.projection);
+    let g =
+        graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.value.projection, &cost_feed)?;
     // Existence gate (SL-050 F6): a well-formed but never-minted id errors rather than
     // explaining a phantom node.
     relation_graph::require_minted(&g.projection, key)?;
@@ -545,6 +549,7 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
     }
 
     let value_source = value_source_reason(&g, key, &pipeline);
+    let cost_source = cost_source_reason(&g, key, &pipeline, &cfg);
     let priority_disclosure =
         (pipeline.priority_domain_count > 0).then_some(ReasonKind::PriorityDomainDisclosure {
             count: pipeline.priority_domain_count,
@@ -570,6 +575,7 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
         evictions,
         score,
         value_source,
+        cost_source,
         priority_disclosure,
         agent_demotion: cfg
             .compare
@@ -736,10 +742,14 @@ pub(crate) fn graded_tensions(
     // human-rows-only compile when the knob is on. The knob-on verdict reads the
     // human system; the full system stays available for the AgentProposed fallback.
     let active: Vec<&Judgement> = pipeline.active_judgements.iter().collect();
-    let full_reach = Reachability::build(&pipeline.constraint_set);
+    let full_reach = Reachability::build(&pipeline.value.constraint_set);
     let knob_on = cfg.compare.demote_agent_evidence;
     let human = knob_on.then(|| {
-        let cs = compile_human_only(&active, &pipeline.anchors, QuarantinePolicy::Symmetric);
+        let cs = compile_human_only(
+            &active,
+            &pipeline.value.anchors,
+            QuarantinePolicy::Symmetric,
+        );
         let reach = Reachability::build(&cs);
         let counts = constraining_counts_by_class(&cs, &active);
         (cs, reach, counts)
@@ -747,7 +757,7 @@ pub(crate) fn graded_tensions(
     let (verdict_cs, verdict_reach, verdict_counts) = match &human {
         Some((cs, reach, counts)) => (cs, reach, counts),
         None => (
-            &pipeline.constraint_set,
+            &pipeline.value.constraint_set,
             &full_reach,
             &pipeline.constraining_by_class,
         ),
@@ -763,7 +773,7 @@ pub(crate) fn graded_tensions(
                 t.surfaced,
                 (verdict_cs, verdict_reach, verdict_counts),
                 (
-                    &pipeline.constraint_set,
+                    &pipeline.value.constraint_set,
                     &full_reach,
                     &pipeline.constraining_by_class,
                 ),
@@ -862,17 +872,17 @@ pub(crate) fn value_source_reason(
     if let Some(v) = attrs.facets.value.as_ref() {
         return Some(ReasonKind::ValueAuthored {
             value: v.value,
-            conflict: anchor_conflict_citation(&pipeline.constraint_set, &canonical),
+            conflict: anchor_conflict_citation(&pipeline.value.constraint_set, &canonical),
         });
     }
-    if let Some(&(value, provenance)) = pipeline.projection.get(&canonical) {
+    if let Some(&(value, provenance)) = pipeline.value.projection.get(&canonical) {
         return Some(match provenance {
             comparison::ValueProvenance::Authored => ReasonKind::ValueAuthored {
                 value,
-                conflict: anchor_conflict_citation(&pipeline.constraint_set, &canonical),
+                conflict: anchor_conflict_citation(&pipeline.value.constraint_set, &canonical),
             },
             comparison::ValueProvenance::Projected => {
-                let (lower, upper) = class_bounds(&pipeline.constraint_set, &canonical);
+                let (lower, upper) = class_bounds(&pipeline.value.constraint_set, &canonical);
                 let counts = class_rater_counts(pipeline, &canonical);
                 ReasonKind::ValueProjected {
                     value,
@@ -900,6 +910,116 @@ pub(crate) fn value_source_reason(
     None
 }
 
+/// The SL-219 PHASE-06 cost-source block for one entity (design §5): the
+/// `est_cost` ladder made legible — authored (own `[estimate]` facet, the
+/// operator pin) > projected (bounds + rater split) > bare anchor; the gauge
+/// flag discloses that scoring used the bare anchor while sizing evidence
+/// merely ordered a gauge component (D2 honesty — gauge never divides).
+///
+/// GATED on est engagement (`pipeline.estimate.projection` non-empty): a corpus
+/// with zero est-domain rows shows NO cost block, so every pre-SL-219 `explain`
+/// golden stays byte-identical (the value-source S3 precedent — a bare divisor
+/// is a numeric floor, not a citable source until the est system is live). Only
+/// value-bearing kinds consume a divisor, so records (est-admissible anchors)
+/// carry no cost block.
+pub(crate) fn cost_source_reason(
+    g: &PriorityGraph,
+    key: EntityKey,
+    pipeline: &comparison::Pipeline,
+    cfg: &PriorityConfig,
+) -> Option<ReasonKind> {
+    let attrs = g.attrs.get(&key)?;
+    if !crate::kinds::is_value_bearing(key.prefix) {
+        return None;
+    }
+    if pipeline.estimate.projection.is_empty() {
+        return None;
+    }
+    let canonical = key.canonical();
+    // Shape 1 (own authored `[estimate]` facet): the operator pin — the ladder's
+    // authored branch, β-resolved via the ONE formula site.
+    if let Some(e) = attrs.facets.estimate.as_ref() {
+        let est_cost = graph::authored_est_cost((e.lower, e.upper), &cfg.estimate);
+        return Some(ReasonKind::CostAuthored {
+            est_cost,
+            pin: Some((e.lower, e.upper, cfg.estimate.skew)),
+        });
+    }
+    let margin = cfg.estimate.margin;
+    let absent = g.cost_ctx.absent;
+    let max_estimate = max_authored_upper(g);
+    // Shapes 2 / gauge (est projection engagement).
+    if let Some(&(cost, provenance)) = pipeline.estimate.projection.get(&canonical) {
+        return Some(match provenance {
+            // A facet-less member hoisted onto an anchored class by an `equal`
+            // merge (design §4 — provenance Authored, cost inherited).
+            comparison::ValueProvenance::Authored => ReasonKind::CostAuthored {
+                est_cost: cost,
+                pin: None,
+            },
+            comparison::ValueProvenance::Projected => {
+                let (lower, upper) = class_bounds(&pipeline.estimate.constraint_set, &canonical);
+                let counts = est_class_rater_counts(pipeline, &canonical);
+                ReasonKind::CostProjected {
+                    est_cost: cost,
+                    lower,
+                    upper,
+                    human: counts.human,
+                    agent: counts.agent,
+                }
+            }
+            // Gauge: scoring used the BARE ANCHOR (the feed excludes gauge, so
+            // the ladder falls to `ctx.absent`); the render never implies gauge
+            // fed the divisor (D2). `judgements` ordered it, nothing more.
+            comparison::ValueProvenance::Gauge => {
+                let counts = est_class_rater_counts(pipeline, &canonical);
+                ReasonKind::CostGauge {
+                    est_cost: absent,
+                    max_estimate,
+                    margin,
+                    judgements: counts.total(),
+                }
+            }
+        });
+    }
+    // Shape 3: est-admissible bare item, no projection engagement — the divisor
+    // scoring actually used is the bare anchor (D7).
+    Some(ReasonKind::CostBareAnchor {
+        est_cost: absent,
+        max_estimate,
+        margin,
+    })
+}
+
+/// The est system's constraining-judgement rater split for the est class
+/// `canonical` belongs to (the cost-source "projected" shape's `(human,
+/// agent)` disclosure) — the est-domain analog of [`class_rater_counts`], off
+/// the est constraint set + the est split (`NoConstraint` rows excluded, S3).
+fn est_class_rater_counts(pipeline: &comparison::Pipeline, canonical: &str) -> RaterCounts {
+    pipeline
+        .estimate
+        .constraint_set
+        .classes
+        .get(canonical)
+        .and_then(|class| pipeline.est_constraining_by_class.get(class))
+        .copied()
+        .unwrap_or_default()
+}
+
+/// The maximum non-terminal authored `upper` in the corpus — the bare anchor's
+/// `max_upper` before `+ margin` (`ctx.absent = max_upper + margin`). `None`
+/// in the empty-corpus fallback (no non-terminal authored estimate, `absent =
+/// 1.0`). Mirrors `graph::bare_cost_anchor`'s fold so the cost-source render
+/// can decompose `ctx.absent` into `(max_estimate, margin)` without widening
+/// the pure `CostCtx` — a display-only read over the already-built graph.
+fn max_authored_upper(g: &PriorityGraph) -> Option<f64> {
+    g.attrs
+        .values()
+        .filter(|a| status_class(a.kind, a.status.as_deref()) != StatusClass::Terminal)
+        .filter_map(|a| a.facets.estimate.as_ref().map(|e| e.upper))
+        .max_by(f64::total_cmp)
+}
+
 /// The constraining-judgement rater split for the class `canonical` belongs
 /// to, or a zero split when the entity carries no comparison evidence.
 fn class_rater_counts(
@@ -907,6 +1027,7 @@ fn class_rater_counts(
     canonical: &str,
 ) -> crate::comparison::RaterCounts {
     pipeline
+        .value
         .constraint_set
         .classes
         .get(canonical)
@@ -1013,8 +1134,10 @@ pub(crate) fn findings(root: &Path) -> anyhow::Result<Vec<super::findings::Findi
     // cfg-swept — a second load would just re-read the same ledger for the
     // same answer).
     let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
-    let base = graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.projection)?;
-    let betas = beta_endpoints(&scanned, root, &cfg, &pipeline.projection)?;
+    let cost_feed = comparison::cost_feed(&pipeline.estimate.projection);
+    let base =
+        graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.value.projection, &cost_feed)?;
+    let betas = beta_endpoints(&scanned, root, &cfg, &pipeline.value.projection, &cost_feed)?;
     let mut findings = super::findings::detect(&base, &cfg, betas.as_ref());
     findings.extend(super::findings::comparison_findings(&pipeline));
     findings.sort_by(|a, b| {
@@ -1046,11 +1169,14 @@ fn has_nonterminal_interval(scanned: &[relation_graph::ScannedEntity]) -> bool {
 /// `projected` (SL-213 PHASE-05) is the ONE comparison-tier projection the caller
 /// loaded over the shared scan — shared across both endpoint builds rather than
 /// re-derived per build (the projection is scan-derived, not cfg-swept).
+/// `cost_feed` (SL-219 PHASE-04) rides the same contract: derived once from the
+/// caller's pipeline, shared across both endpoint builds.
 pub(crate) fn beta_endpoints(
     scanned: &[relation_graph::ScannedEntity],
     root: &Path,
     cfg: &super::config::PriorityConfig,
     projected: &ValueProjection,
+    cost_feed: &comparison::CostFeed,
 ) -> anyhow::Result<Option<super::findings::BetaEndpoints>> {
     if !has_nonterminal_interval(scanned) {
         return Ok(None);
@@ -1059,8 +1185,8 @@ pub(crate) fn beta_endpoints(
     lo_cfg.estimate.skew = super::findings::BETA_LO;
     let mut hi_cfg = cfg.clone();
     hi_cfg.estimate.skew = super::findings::BETA_HI;
-    let lo = graph::build_from_with_cfg(scanned, root, &lo_cfg, projected)?;
-    let hi = graph::build_from_with_cfg(scanned, root, &hi_cfg, projected)?;
+    let lo = graph::build_from_with_cfg(scanned, root, &lo_cfg, projected, cost_feed)?;
+    let hi = graph::build_from_with_cfg(scanned, root, &hi_cfg, projected, cost_feed)?;
     Ok(Some(super::findings::BetaEndpoints { lo, hi }))
 }
 
@@ -1557,9 +1683,15 @@ mod tests {
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = super::super::config::load(root);
         assert!(
-            beta_endpoints(&scanned, root, &cfg, &ValueProjection::new())
-                .unwrap()
-                .is_some(),
+            beta_endpoints(
+                &scanned,
+                root,
+                &cfg,
+                &ValueProjection::new(),
+                &Default::default(),
+            )
+            .unwrap()
+            .is_some(),
             "a non-terminal interval estimate yields Some"
         );
 
@@ -1572,9 +1704,15 @@ mod tests {
             relation_graph::scan_entities(root2, &mut vec![], ScanMode::default()).unwrap();
         let cfg2 = super::super::config::load(root2);
         assert!(
-            beta_endpoints(&scanned2, root2, &cfg2, &ValueProjection::new())
-                .unwrap()
-                .is_none(),
+            beta_endpoints(
+                &scanned2,
+                root2,
+                &cfg2,
+                &ValueProjection::new(),
+                &Default::default(),
+            )
+            .unwrap()
+            .is_none(),
             "an estimate-free corpus yields None"
         );
     }
@@ -1598,9 +1736,15 @@ mod tests {
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = super::super::config::load(root);
         assert!(
-            beta_endpoints(&scanned, root, &cfg, &ValueProjection::new())
-                .unwrap()
-                .is_none(),
+            beta_endpoints(
+                &scanned,
+                root,
+                &cfg,
+                &ValueProjection::new(),
+                &Default::default(),
+            )
+            .unwrap()
+            .is_none(),
             "a terminal-only interval does not arm the sweep"
         );
     }
@@ -1689,7 +1833,14 @@ mod tests {
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = crate::priority::config::load(root);
         let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg).unwrap();
-        let g = graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.projection).unwrap();
+        let g = graph::build_from_with_cfg(
+            &scanned,
+            root,
+            &cfg,
+            &pipeline.value.projection,
+            &comparison::cost_feed(&pipeline.estimate.projection),
+        )
+        .unwrap();
         graded_tensions(&g, &pipeline, &cfg, usize::MAX)
     }
 
@@ -1750,5 +1901,251 @@ mod tests {
                 panic!("expected AgentProposed (human system indeterminate), got {other:?}")
             }
         }
+    }
+
+    // ── SL-219 PHASE-06 VT-1: cost-source block (design §5) ───────────────────
+    //
+    // The three shapes + the gauge flag line, exercised end-to-end over a real
+    // scan → pipeline → graph, then rendered through the SINGLE
+    // `render::cost_source_fragment` source. Rater split with `NoConstraint`
+    // excluded from the counts (S3 precedent).
+
+    /// Seed an open value-bearing issue with a verbatim facet tail (`[estimate]`
+    /// / `[value]` tables, before the empty `[relationships]`).
+    fn seed_cost(root: &Path, id: u32, facets: &str) {
+        write(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.toml"),
+            &format!(
+                "id = {id}\nslug = \"i\"\ntitle = \"I{id}\"\nkind = \"issue\"\nstatus = \"open\"\n\
+                 resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                 {facets}[relationships]\n"
+            ),
+        );
+        write(
+            root,
+            &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.md"),
+            "b\n",
+        );
+    }
+
+    /// Hand-author an est-domain `more-work` session-of-one over the pair
+    /// (`prefer-a` ⇒ `a` is the costlier item, D5). `resp` lets a caller mint an
+    /// `incomparable` (→ `NoConstraint`) row to prove it is excluded from the
+    /// rater split.
+    fn capture_more_work(root: &Path, slot: &str, a: &str, b: &str, resp: &str, rater: &str) {
+        write(
+            root,
+            &format!(".doctrine/comparisons/2026-01-01-{slot}.toml"),
+            &format!(
+                "schema = \"doctrine.comparison-session\"\nversion = 2\n\n\
+                 [session]\nuid = \"sess-{slot}\"\ndate = \"2026-01-01\"\n\n\
+                 [[judgement]]\nuid = \"row-{slot}\"\nseq = 0\na = \"{a}\"\nb = \"{b}\"\n\
+                 response = \"{resp}\"\ndomain = \"estimate\"\nframe = \"more-work\"\n\
+                 form = \"order\"\nrater = \"{rater}\"\ndate = \"2026-01-01\"\n"
+            ),
+        );
+    }
+
+    /// The cost-source reason for `id`, over the same scan → pipeline → graph
+    /// assembly `explain()` runs.
+    fn cost_reason(root: &Path, id: &str) -> Option<ReasonKind> {
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = crate::priority::config::load(root);
+        let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg).unwrap();
+        let g = graph::build_from_with_cfg(
+            &scanned,
+            root,
+            &cfg,
+            &pipeline.value.projection,
+            &comparison::cost_feed(&pipeline.estimate.projection),
+        )
+        .unwrap();
+        let key = parse_key(id).unwrap();
+        cost_source_reason(&g, key, &pipeline, &cfg)
+    }
+
+    /// The rendered human fragment for `id`'s cost source (through the shared
+    /// render source), or `""` when there is no block.
+    fn cost_fragment(root: &Path, id: &str) -> String {
+        cost_reason(root, id)
+            .and_then(|r| crate::priority::render::cost_source_fragment(&r))
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn cost_source_none_without_est_engagement() {
+        let dir = tmp();
+        let root = dir.path();
+        // An authored estimate + value, but ZERO est-domain rows ⇒ no cost block
+        // (byte-identical to pre-SL-219 explain; the bare divisor is not a source).
+        seed_cost(
+            root,
+            1,
+            "[estimate]\nlower = 2.0\nupper = 8.0\n[value]\nvalue = 10.0\n",
+        );
+        assert!(
+            cost_reason(root, "ISS-001").is_none(),
+            "no est engagement ⇒ no cost-source block"
+        );
+    }
+
+    #[test]
+    fn cost_source_authored_shape_shows_pin_bounds_and_beta() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 authors its own [estimate] pin [2,8] → β-resolved 5.9; a
+        // more-work row against a cheaper anchor makes the est system live.
+        seed_cost(
+            root,
+            1,
+            "[estimate]\nlower = 2.0\nupper = 8.0\n[value]\nvalue = 10.0\n",
+        );
+        seed_cost(
+            root,
+            2,
+            "[estimate]\nlower = 1.0\nupper = 1.0\n[value]\nvalue = 10.0\n",
+        );
+        capture_more_work(root, "mw", "ISS-001", "ISS-002", "prefer-a", "human");
+
+        match cost_reason(root, "ISS-001") {
+            Some(ReasonKind::CostAuthored {
+                est_cost,
+                pin: Some((lower, upper, beta)),
+            }) => {
+                assert!((est_cost - 5.9).abs() < 1e-9, "β-resolved pin: {est_cost}");
+                assert_eq!((lower, upper), (2.0, 8.0));
+                assert!((beta - 0.65).abs() < 1e-9);
+            }
+            other => panic!("expected CostAuthored pin, got {other:?}"),
+        }
+        assert_eq!(
+            cost_fragment(root, "ISS-001"),
+            "est_cost 5.9 — authored [2.0 ‥ 8.0] · β 0.65"
+        );
+    }
+
+    #[test]
+    fn cost_source_projected_shape_rater_split_excludes_noconstraint() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 is bare; a more-work row (ISS-002 costlier) projects it below
+        // the 8.0 anchor. An extra `incomparable` row touching ISS-001 is
+        // NoConstraint — it must NOT inflate the rater split (S3).
+        seed_cost(root, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(
+            root,
+            2,
+            "[estimate]\nlower = 8.0\nupper = 8.0\n[value]\nvalue = 10.0\n",
+        );
+        capture_more_work(root, "mw", "ISS-002", "ISS-001", "prefer-a", "human");
+        capture_more_work(root, "nc", "ISS-001", "ISS-002", "incomparable", "agent");
+
+        match cost_reason(root, "ISS-001") {
+            Some(ReasonKind::CostProjected {
+                upper,
+                human,
+                agent,
+                ..
+            }) => {
+                assert_eq!(upper, Some(8.0), "C6 upper bound at the anchor");
+                assert_eq!((human, agent), (1, 0), "NoConstraint row excluded");
+            }
+            other => panic!("expected CostProjected, got {other:?}"),
+        }
+        assert!(
+            cost_fragment(root, "ISS-001").contains(
+                "projected · bounds (unbounded ‥ 8.0) · from 1 constraining sizing \
+                           judgements (1 human, 0 agent)"
+            ),
+            "projected fragment: {}",
+            cost_fragment(root, "ISS-001")
+        );
+    }
+
+    #[test]
+    fn cost_source_bare_anchor_shape_decomposes_max_and_margin() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 is bare and untouched by any est row; ISS-002/003 make the est
+        // system live (max non-terminal upper = 10 ⇒ bare anchor 10 + 1 = 11).
+        seed_cost(root, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(
+            root,
+            2,
+            "[estimate]\nlower = 10.0\nupper = 10.0\n[value]\nvalue = 10.0\n",
+        );
+        seed_cost(
+            root,
+            3,
+            "[estimate]\nlower = 1.0\nupper = 1.0\n[value]\nvalue = 10.0\n",
+        );
+        capture_more_work(root, "mw", "ISS-002", "ISS-003", "prefer-a", "human");
+
+        match cost_reason(root, "ISS-001") {
+            Some(ReasonKind::CostBareAnchor {
+                est_cost,
+                max_estimate,
+                margin,
+            }) => {
+                assert!((est_cost - 11.0).abs() < 1e-9);
+                assert_eq!(max_estimate, Some(10.0));
+                assert!((margin - 1.0).abs() < 1e-9);
+            }
+            other => panic!("expected CostBareAnchor, got {other:?}"),
+        }
+        assert_eq!(
+            cost_fragment(root, "ISS-001"),
+            "est_cost 11.0 — bare anchor (max estimate 10.0 + margin 1.0)"
+        );
+    }
+
+    #[test]
+    fn cost_source_gauge_flag_shows_bare_anchor_never_the_divisor() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001/002 are both bare and mutually ordered → an anchor-free (gauge)
+        // component. ISS-003 authors an estimate (no est row) so a bare anchor
+        // exists (max 10 + margin 1 = 11). The gauge item's cost-source shows the
+        // BARE ANCHOR (what scoring used) + a SEPARATE sizing-gauge line.
+        seed_cost(root, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(root, 2, "[value]\nvalue = 10.0\n");
+        seed_cost(
+            root,
+            3,
+            "[estimate]\nlower = 10.0\nupper = 10.0\n[value]\nvalue = 10.0\n",
+        );
+        capture_more_work(root, "mw", "ISS-001", "ISS-002", "prefer-a", "human");
+
+        match cost_reason(root, "ISS-001") {
+            Some(ReasonKind::CostGauge {
+                est_cost,
+                max_estimate,
+                margin,
+                judgements,
+            }) => {
+                assert!(
+                    (est_cost - 11.0).abs() < 1e-9,
+                    "scoring used the bare anchor"
+                );
+                assert_eq!(max_estimate, Some(10.0));
+                assert!((margin - 1.0).abs() < 1e-9);
+                assert_eq!(judgements, 1);
+            }
+            other => panic!("expected CostGauge, got {other:?}"),
+        }
+        let frag = cost_fragment(root, "ISS-001");
+        assert!(
+            frag.contains("est_cost 11.0 — bare anchor (max estimate 10.0 + margin 1.0)"),
+            "line 1 is the bare anchor (what scoring used): {frag}"
+        );
+        assert!(
+            frag.contains(
+                "sizing: gauge · ordered by 1 judgements, no estimated item in component — \
+                 estimate any member to calibrate"
+            ),
+            "line 2 discloses gauge separately — never implies it fed the divisor: {frag}"
+        );
     }
 }

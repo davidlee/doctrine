@@ -31,14 +31,14 @@ use anyhow::Context;
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::comparison::{
-    self, COMPARISONS_DIR, ComparisonSession, FRAME_EQUAL_EFFORT, FRAME_PREFER_FIRST, Judgement,
-    RaterKind, ResolutionStatus, Response, RowForm, RowSummary, SessionHeader, Tombstone,
-    load_sessions,
+    self, COMPARISONS_DIR, ComparisonSession, FRAME_EQUAL_EFFORT, FRAME_MORE_WORK,
+    FRAME_PREFER_FIRST, Judgement, RaterKind, ResolutionStatus, Response, RowForm, RowSummary,
+    SessionHeader, Tombstone, load_sessions,
 };
 use crate::priority::config::PriorityConfig;
 use crate::priority::elicit::{
     CandidateKind, DecisionContext, ElicitInputs, ElicitQueue, EntryPayload, FrontierItem,
-    ItemCosting, Participant, QueueEntry, QueueState, assemble,
+    ItemCosting, Participant, QueueEntry, QueueState, SizingInputs, assemble,
 };
 use crate::priority::graph::{self, PriorityGraph};
 use crate::priority::view::ReasonKind;
@@ -93,7 +93,8 @@ pub(crate) struct RecordArgs {
     pub(crate) supersedes: Option<String>,
     /// Comparison frame (closed vocab; default `equal-effort`). `prefer-first`
     /// asks "under a binding capacity cutoff, which do you keep?" and records
-    /// a priority-domain row — not value-bearing.
+    /// a priority-domain row — not value-bearing. `more-work` asks "which is
+    /// more work? — winner is the costlier" and records an estimate-domain row.
     #[arg(long, value_enum, default_value_t = FrameArg::EqualEffort)]
     pub(crate) frame: FrameArg,
     /// Who rendered the judgement (default `agent`).
@@ -176,6 +177,7 @@ pub(crate) struct ElicitArgs {
 pub(crate) enum KindArg {
     Comparison,
     AnchorReview,
+    SizingProbe,
 }
 
 impl KindArg {
@@ -184,6 +186,7 @@ impl KindArg {
             (self, kind),
             (KindArg::Comparison, CandidateKind::Comparison)
                 | (KindArg::AnchorReview, CandidateKind::AnchorReview)
+                | (KindArg::SizingProbe, CandidateKind::SizingProbe)
         )
     }
 }
@@ -196,6 +199,7 @@ impl KindArg {
 pub(crate) enum FrameArg {
     EqualEffort,
     PreferFirst,
+    MoreWork,
 }
 
 impl FrameArg {
@@ -203,6 +207,7 @@ impl FrameArg {
         match self {
             Self::EqualEffort => FRAME_EQUAL_EFFORT,
             Self::PreferFirst => FRAME_PREFER_FIRST,
+            Self::MoreWork => FRAME_MORE_WORK,
         }
     }
 }
@@ -305,17 +310,25 @@ fn run_capture(args: &RecordArgs) -> anyhow::Result<()> {
     let (canonical_a, kind_a) = resolve_participant(&root, &args.a)?;
     let (canonical_b, kind_b) = resolve_participant(&root, &args.b)?;
 
-    // Pair admissibility over the resolved kinds (record pairs / RSK
-    // participants refused, with the human-readable reason). The priority
-    // domain reuses the value-domain admit set (design D2).
-    comparison::admissible_value_pair(kind_a, kind_b).map_err(|reason| anyhow::anyhow!(reason))?;
-
-    let response = resolve_response(args, &canonical_a, &canonical_b)?;
-
     // The frame implies the domain (S1) — the wire table is the single source.
+    // Derived before admissibility, which routes by it.
     let frame = args.frame.as_frame();
     let domain = comparison::domain_for_frame(frame)
         .ok_or_else(|| anyhow::anyhow!("frame `{frame}` maps to no domain"))?;
+
+    // Pair admissibility over the resolved kinds, routed by the frame-DERIVED
+    // domain (SL-219 D3): the estimate domain admits work + record kinds (RSK
+    // included); value frames keep the value admit set (record pairs / RSK
+    // participants refused, with the human-readable reason) — the priority
+    // domain reuses it (design D2).
+    if domain == comparison::DOMAIN_ESTIMATE {
+        comparison::admissible_estimate_pair(kind_a, kind_b)
+    } else {
+        comparison::admissible_value_pair(kind_a, kind_b)
+    }
+    .map_err(|reason| anyhow::anyhow!(reason))?;
+
+    let response = resolve_response(args, &canonical_a, &canonical_b)?;
 
     // Supersession target resolved against the corpus before any write.
     if let Some(target) = args.supersedes.as_deref() {
@@ -590,12 +603,24 @@ fn build_elicit_inputs<'a>(
         .collect();
 
     // Costing: D6 multiplier + β-skewed est_cost + bare flag, for every scored entity.
+    // The SAME loop harvests the sizing-probe target pool (SL-219 §4): an item
+    // with an authored estimate and an estimate-admissible kind contributes its
+    // AUTHORED `est_cost` (the ladder's authored branch — never projected/gauge,
+    // so the anchored-membership postcondition holds by construction).
     let mut costing: std::collections::BTreeMap<String, ItemCosting> =
         std::collections::BTreeMap::new();
-    for key in graph.attrs.keys() {
+    let mut estimated_costs: std::collections::BTreeMap<String, f64> =
+        std::collections::BTreeMap::new();
+    for (key, attr) in &graph.attrs {
         if let Some((multiplier, est_cost, bare_estimate)) = graph.item_costing(key, cfg) {
+            let canonical = key.canonical();
+            if !bare_estimate
+                && comparison::admissible_estimate_pair(attr.kind.prefix, attr.kind.prefix).is_ok()
+            {
+                estimated_costs.insert(canonical.clone(), est_cost);
+            }
             costing.insert(
-                key.canonical(),
+                canonical,
                 ItemCosting {
                     multiplier,
                     est_cost,
@@ -605,15 +630,32 @@ fn build_elicit_inputs<'a>(
         }
     }
 
+    // Est-evidenced set (SL-219 §4 pool predicate): items touched by ANY
+    // resolved-active est-domain row, any compilation status. An `incomparable`
+    // row (→ NoConstraint) still lands here and retires the probe.
+    let mut est_evidenced: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for row in &pipeline.rows {
+        if row.domain == comparison::DOMAIN_ESTIMATE
+            && matches!(row.state.resolution, comparison::ResolutionStatus::Active)
+        {
+            est_evidenced.insert(row.a.clone());
+            est_evidenced.insert(row.b.clone());
+        }
+    }
+
     ElicitInputs {
         active: pipeline.active_judgements.iter().collect(),
-        anchors: pipeline.anchors.clone(),
+        anchors: pipeline.value.anchors.clone(),
         frontier,
         costing,
-        projection: pipeline.projection.clone(),
+        projection: pipeline.value.projection.clone(),
         rank_decay: cfg.elicit.rank_decay,
         confirm_boost: cfg.elicit.confirm_boost,
         demote_agent_evidence: cfg.compare.demote_agent_evidence,
+        sizing: SizingInputs {
+            estimated_costs,
+            est_evidenced,
+        },
     }
 }
 
@@ -637,16 +679,17 @@ const MASK_MARK: &str = "⚠";
 /// stable / m=0 wording). Takes the whole queue so `Stable` can scope its claim
 /// by the `excluded_value_insensitive` (`m = 0`, D6) count.
 fn state_footer(queue: &ElicitQueue) -> (&'static str, String) {
+    let sizing = sizing_suffix(queue);
     match &queue.state {
         QueueState::Candidates => (
             "candidates",
-            "candidates outstanding — comparisons / anchor-reviews worth asking".to_string(),
+            format!("candidates outstanding — comparisons / anchor-reviews worth asking{sizing}"),
         ),
         QueueState::Stalled { depth } => (
             "stalled",
             format!(
                 "stalled at depth {depth}: greedy one-step yield exhausted — NOT a stability \
-                 claim (a bridge question may remain)"
+                 claim (a bridge question may remain){sizing}"
             ),
         ),
         QueueState::Stable { depth } => {
@@ -661,8 +704,32 @@ fn state_footer(queue: &ElicitQueue) -> (&'static str, String) {
                 0 => String::new(),
                 n => format!("; {n} pair(s) value-insensitive (zero weight), outside the claim"),
             };
-            ("stable", format!("{base}{scope}"))
+            ("stable", format!("{base}{scope}{sizing}"))
         }
+    }
+}
+
+/// The SL-219 §4 sizing-debt disclosure clause appended to any state line —
+/// residual un-sized top-K items (disclosed, never gating) and the fallback
+/// tier-2 "no calibration target" note. Empty when there is no sizing debt, so
+/// a corpus with no est activity renders byte-identically to pre-SL-219.
+fn sizing_suffix(queue: &ElicitQueue) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if queue.sizing_residual > 0 {
+        parts.push(format!(
+            "{} top-K item(s) carry unresolved sizing — costs may move on new evidence",
+            queue.sizing_residual
+        ));
+    }
+    if queue.sizing_no_calibration_target {
+        parts.push(
+            "no estimated item to calibrate against — estimate any item to seed sizing".to_string(),
+        );
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("; {}", parts.join("; "))
     }
 }
 
@@ -704,6 +771,7 @@ fn entry_human(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> String {
     let kind = match entry.kind {
         CandidateKind::Comparison => "comparison",
         CandidateKind::AnchorReview => "anchor-review",
+        CandidateKind::SizingProbe => "sizing-probe",
     };
     let mut parts = vec![format!(
         "{rank}. [{kind}] score {:.3}  yield {:+}  impact {:.3}\n",
@@ -723,6 +791,13 @@ fn entry_human(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> String {
                 "   review: anchor on {} (value {anchor})\n",
                 subject.id
             ));
+        }
+        EntryPayload::SizingProbe { subject, target } => {
+            parts.push(format!(
+                "   size: {} — which is more work vs {} (est {:.2})?\n",
+                subject.id, target.id, target.estimate
+            ));
+            parts.push(participant_human(ctx, subject));
         }
     }
     let reasons: Vec<&str> = entry.reasons.iter().map(|r| r.text.as_str()).collect();
@@ -766,6 +841,11 @@ fn answer_command(entry: &QueueEntry) -> String {
         EntryPayload::AnchorReview { subject, .. } => format!(
             "doctrine value set {} <v>   (revise)   |   supersede/withdraw the cited rows (uphold)",
             subject.id
+        ),
+        EntryPayload::SizingProbe { subject, target } => format!(
+            "doctrine compare record {} {} --prefer a   (| --prefer b | --equal | --incomparable) \
+             --frame more-work",
+            subject.id, target.id
         ),
     }
 }
@@ -815,7 +895,7 @@ impl<'a> RenderCtx<'a> {
                 _ => return None,
             };
         let bounds = crate::priority::surface::class_bounds_structural(
-            &self.pipeline.constraint_set,
+            &self.pipeline.value.constraint_set,
             canonical,
         );
         Some(value_block_json(provenance, point, bounds))
@@ -929,6 +1009,7 @@ fn entry_json(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> serde_jso
     let kind = match entry.kind {
         CandidateKind::Comparison => "comparison",
         CandidateKind::AnchorReview => "anchor-review",
+        CandidateKind::SizingProbe => "sizing-probe",
     };
     let reasons: Vec<serde_json::Value> = entry
         .reasons
@@ -949,6 +1030,7 @@ fn entry_json(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> serde_jso
             },
             "ask": anchor_ask_json(ask, subject),
         }),
+        EntryPayload::SizingProbe { subject, target } => sizing_probe_json(subject, target),
     };
     let mut obj = serde_json::json!({
         "rank": rank,
@@ -961,6 +1043,7 @@ fn entry_json(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> serde_jso
             crate::priority::elicit::YieldBasis::CanonicalResolvingActions => {
                 "canonical-resolving-actions"
             }
+            crate::priority::elicit::YieldBasis::Calibration => "calibration",
         },
         "reasons": reasons,
     });
@@ -981,6 +1064,33 @@ fn comparison_ask_json(ask: &crate::priority::elicit::AskSpec) -> serde_json::Va
         "domain": comparison::DOMAIN_VALUE,
         "answers": ask.answers,
         "yield_by_answer": ask.yield_by_answer,
+    })
+}
+
+/// The sizing-probe payload (SL-219 §4): a lean `subject { id, annotations }`,
+/// the `target { id, estimate }` (the median authored anchor sized against), and
+/// the invariant `ask`. NO `yield_by_answer` — a probe makes no yield claim; no
+/// hypothetical machinery ran. Additive kind, schema stays v1 (consumers switch
+/// on `kind`).
+fn sizing_probe_json(
+    subject: &Participant,
+    target: &crate::priority::elicit::SizingTarget,
+) -> serde_json::Value {
+    serde_json::json!({
+        "subject": { "id": subject.id, "annotations": subject.annotations },
+        "target": { "id": target.id, "estimate": target.estimate },
+        "ask": sizing_ask_json(),
+    })
+}
+
+/// The sizing-probe ask block (SL-219 §4): the `more-work` frame, `estimate`
+/// domain, and the invariant answer tokens keyed off the ONE elicit definition
+/// (STD-001). No per-answer yield.
+fn sizing_ask_json() -> serde_json::Value {
+    serde_json::json!({
+        "frame": comparison::FRAME_MORE_WORK,
+        "domain": comparison::DOMAIN_ESTIMATE,
+        "answers": crate::priority::elicit::SIZING_PROBE_ANSWERS,
     })
 }
 
@@ -1342,6 +1452,80 @@ mod tests {
         assert_eq!(j.frame, FRAME_PREFER_FIRST);
     }
 
+    /// SL-219 VT-2: `--frame more-work` derives `domain = estimate` (e2e-lite
+    /// through `run_capture`) — the captured session-of-one carries the
+    /// estimate domain and the more-work frame.
+    #[test]
+    fn more_work_frame_captures_estimate_domain_row() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 204, "accepted");
+        seed_entity(&root, "IMP", 118, "accepted");
+
+        let args = RecordArgs {
+            frame: FrameArg::MoreWork,
+            ..capture(&root, "SL-204", "IMP-118", "a")
+        };
+        run_capture(&args).unwrap();
+
+        let files = session_files(&root);
+        let session = comparison::parse(&std::fs::read_to_string(&files[0]).unwrap()).unwrap();
+        let j = &session.judgements[0];
+        assert_eq!(j.domain, comparison::DOMAIN_ESTIMATE);
+        assert_eq!(j.frame, comparison::FRAME_MORE_WORK);
+    }
+
+    /// SL-219 VT-2: capture routes admissibility by the frame-DERIVED domain —
+    /// a record-kind pair goes through `admissible_estimate_pair` under
+    /// `more-work` (admitted), and `admissible_value_pair` under the default
+    /// value frame (refused).
+    #[test]
+    fn record_kind_pair_admitted_in_estimate_domain_refused_in_value() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "QUE", 1, "open");
+        seed_entity(&root, "QUE", 2, "open");
+
+        // Value domain (default frame): refused.
+        let err = run_capture(&capture(&root, "QUE-001", "QUE-002", "a")).unwrap_err();
+        assert!(
+            err.to_string().contains("not value-bearing"),
+            "value-domain refusal surfaced: {err}"
+        );
+        assert!(session_files(&root).is_empty(), "no file on a refusal");
+
+        // Estimate domain (more-work frame): admitted.
+        let args = RecordArgs {
+            frame: FrameArg::MoreWork,
+            ..capture(&root, "QUE-001", "QUE-002", "a")
+        };
+        run_capture(&args).unwrap();
+        assert_eq!(
+            session_files(&root).len(),
+            1,
+            "record pair admitted in the estimate domain"
+        );
+    }
+
+    /// SL-219 D3: RSK participates in estimate comparison (settle-cost is
+    /// comparable even where value is not) — the same participant the value
+    /// domain refuses.
+    #[test]
+    fn rsk_participant_admitted_in_estimate_domain() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 204, "accepted");
+        seed_entity(&root, "RSK", 1, "open");
+
+        let args = RecordArgs {
+            frame: FrameArg::MoreWork,
+            ..capture(&root, "SL-204", "RSK-001", "a")
+        };
+        run_capture(&args).unwrap();
+        assert_eq!(
+            session_files(&root).len(),
+            1,
+            "RSK admitted in the estimate domain"
+        );
+    }
+
     /// S1: `--supersedes` with an unknown uid is a hard error before any
     /// write; a known judgement uid lands in the row (VT-3).
     #[test]
@@ -1555,10 +1739,9 @@ mod tests {
             sessions,
             &comparison::StatusMap::new(),
             &comparison::AnchorMap::new(),
-            &comparison::ProjectionCfg {
-                gauge_step: 0.25,
-                default_value: 1.0,
-            },
+            &comparison::AnchorMap::new(),
+            &comparison::VALUE_PROJECTION_PARAMS,
+            &comparison::VALUE_PROJECTION_PARAMS,
         )
         .unwrap()
         .rows
@@ -1688,6 +1871,53 @@ mod tests {
             "full uid rendered, not a prefix: {}",
             lines[0]
         );
+    }
+
+    /// SL-219 VT-3 (design §2 row-status routing): the `list` status column
+    /// routes per-row to the row's OWNING domain system — an est-domain
+    /// quarantined row renders quarantined while value rows are unaffected
+    /// (no value bias: the est evidence never touches the value compile).
+    #[test]
+    fn list_status_routes_per_row_to_owning_domain_system() {
+        // Est-domain rows (seeded via DOMAIN_ESTIMATE) forming a C3
+        // preference cycle — quarantined in the ESTIMATE system only.
+        let est = |uid: &str, seq: u32, a: &str, b: &str| {
+            let mut j = mk_judgement(uid, seq, a, b);
+            j.domain = comparison::DOMAIN_ESTIMATE.to_string();
+            j.frame = comparison::FRAME_MORE_WORK.to_string();
+            j
+        };
+        let session = mk_session(
+            "2026-07-10",
+            "sess-1",
+            vec![
+                mk_judgement("value-row", 0, "SL-204", "IMP-118"),
+                est("est-a", 1, "SL-204", "IMP-118"),
+                est("est-b", 2, "IMP-118", "CHR-042"),
+                est("est-c", 3, "CHR-042", "SL-204"),
+            ],
+        );
+        let lines = list_lines(&rows_of(&[session]), None, false);
+        assert_eq!(lines.len(), 4);
+        let line_of = |uid: &str| {
+            lines
+                .iter()
+                .find(|l| l.contains(uid))
+                .unwrap_or_else(|| panic!("{uid} listed: {lines:?}"))
+        };
+        // The value row is untouched by the est-domain cycle (no value bias).
+        assert!(
+            line_of("value-row").contains("status=active"),
+            "value row unaffected: {}",
+            line_of("value-row")
+        );
+        for uid in ["est-a", "est-b", "est-c"] {
+            assert!(
+                line_of(uid).contains("status=quarantined(cycle)"),
+                "{uid} quarantined by its owning (estimate) system: {}",
+                line_of(uid)
+            );
+        }
     }
 
     #[test]
@@ -2018,6 +2248,8 @@ mod tests {
             state,
             entries: vec![],
             excluded_value_insensitive: excluded,
+            sizing_residual: 0,
+            sizing_no_calibration_target: false,
         }
     }
 
@@ -2116,6 +2348,169 @@ mod tests {
             answer_command(&anchor).starts_with("doctrine value set IMP-3 <v>"),
             "anchor revise action: {}",
             answer_command(&anchor)
+        );
+    }
+
+    // ── SL-219 PHASE-05: sizing-probe render + state disclosure ──────────────
+
+    fn sizing_target(id: &str, estimate: f64) -> crate::priority::elicit::SizingTarget {
+        crate::priority::elicit::SizingTarget {
+            id: id.to_string(),
+            estimate,
+        }
+    }
+
+    /// The sizing-probe ask block is the invariant `more-work` / `estimate` frame
+    /// with the four answer tokens — and NO `yield_by_answer` (a probe makes no
+    /// yield claim).
+    #[test]
+    fn sizing_ask_json_is_more_work_estimate_frame() {
+        let ask = sizing_ask_json();
+        assert_eq!(
+            ask,
+            serde_json::json!({
+                "frame": "more-work",
+                "domain": "estimate",
+                "answers": ["prefer-a", "prefer-b", "equal", "incomparable"],
+            })
+        );
+        assert!(
+            ask.get("yield_by_answer").is_none(),
+            "a probe discloses no yield"
+        );
+    }
+
+    /// The sizing-probe payload: lean `subject { id, annotations }`, `target
+    /// { id, estimate }`, and the invariant ask.
+    #[test]
+    fn sizing_probe_json_shapes_subject_target_ask() {
+        let subject = Participant {
+            id: "SL-001".to_string(),
+            annotations: vec!["projection masked by bare estimate".to_string()],
+        };
+        assert_eq!(
+            sizing_probe_json(&subject, &sizing_target("ISS-007", 4.6)),
+            serde_json::json!({
+                "subject": {
+                    "id": "SL-001",
+                    "annotations": ["projection masked by bare estimate"],
+                },
+                "target": { "id": "ISS-007", "estimate": 4.6 },
+                "ask": {
+                    "frame": "more-work",
+                    "domain": "estimate",
+                    "answers": ["prefer-a", "prefer-b", "equal", "incomparable"],
+                },
+            })
+        );
+    }
+
+    /// The answer command a sizing probe carries (the exact §4 capture leg).
+    #[test]
+    fn answer_command_sizing_probe_is_more_work_record() {
+        let probe = spine(
+            EntryPayload::SizingProbe {
+                subject: bare_participant("SL-001"),
+                target: sizing_target("ISS-007", 4.6),
+            },
+            CandidateKind::SizingProbe,
+        );
+        assert_eq!(
+            answer_command(&probe),
+            "doctrine compare record SL-001 ISS-007 --prefer a   \
+             (| --prefer b | --equal | --incomparable) --frame more-work"
+        );
+    }
+
+    /// Stable disclosure (§4): residual un-sized top-K debt is appended to the
+    /// state line, never gating; the tier-2 flag adds the seed-sizing hint.
+    #[test]
+    fn state_footer_appends_sizing_debt_disclosure() {
+        let mut q = empty_queue(QueueState::Stable { depth: 5 }, 0);
+        q.sizing_residual = 2;
+        let (_, stable) = state_footer(&q);
+        assert!(
+            stable.contains(
+                "2 top-K item(s) carry unresolved sizing — costs may move on new evidence"
+            ),
+            "residual sizing debt disclosed on Stable: {stable}"
+        );
+
+        let mut q = empty_queue(QueueState::Candidates, 0);
+        q.sizing_no_calibration_target = true;
+        let (_, cand) = state_footer(&q);
+        assert!(
+            cand.contains(
+                "no estimated item to calibrate against — estimate any item to seed sizing"
+            ),
+            "tier-2 no-target hint disclosed: {cand}"
+        );
+    }
+
+    /// Seed a backlog issue carrying an authored `[estimate]` + `[value]` — an
+    /// admissible authored-estimate item (a sizing-probe TARGET candidate).
+    fn seed_estimated_issue(root: &Path, id: u32, lower: f64, upper: f64) -> String {
+        let p = format!("{id:03}");
+        let dir = root
+            .join(".doctrine")
+            .join("backlog")
+            .join("issue")
+            .join(&p);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("backlog-{p}.toml")),
+            format!(
+                "id = {id}\nslug = \"i{p}\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"open\"\n\
+                 resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
+                 [estimate]\nlower = {lower}\nupper = {upper}\n[value]\nvalue = 5.0\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join(format!("backlog-{p}.md")), "b\n").unwrap();
+        crate::listing::canonical_id("ISS", id)
+    }
+
+    /// VT-3 end-to-end (schema-v1 JSON): an un-sized subject + an authored
+    /// estimate target ⇒ a `sizing-probe` entry with the zero-claim spine
+    /// (guaranteed_yield 0, yield_basis calibration, score 0), the lean
+    /// subject/target payload, the invariant ask — and byte-deterministic output.
+    #[test]
+    fn elicit_envelope_carries_a_sizing_probe_entry_deterministically() {
+        let (_tmp, root) = mk_project_root();
+        let target = seed_estimated_issue(&root, 7, 2.0, 6.0); // ISS-007, anchor 4.6
+        let subject = seed_scored_slice(&root, 1); // SL-001, un-sized
+
+        let cfg = crate::priority::config::load(&root);
+        let build = || {
+            let graph = graph::build(&root).unwrap();
+            let pipeline = graph::load_comparison_pipeline_for_root(&root).unwrap();
+            let inputs = build_elicit_inputs(&graph, &pipeline, &cfg, 8);
+            let queue = assemble(&inputs, DecisionContext::Sequencing { depth: 8 });
+            let ctx = RenderCtx::new(&graph, &pipeline, &cfg);
+            serde_json::to_string(&elicit_envelope(&queue, 8, &elicit_args(&root), &ctx)).unwrap()
+        };
+        let first = build();
+        assert_eq!(first, build(), "byte-deterministic output");
+
+        let env: serde_json::Value = serde_json::from_str(&first).unwrap();
+        assert_eq!(env["version"], 1, "schema stays v1");
+        let probe = env["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["kind"] == "sizing-probe")
+            .expect("a sizing-probe entry");
+        assert_eq!(probe["guaranteed_yield"], 0);
+        assert_eq!(probe["score"], 0.0);
+        assert_eq!(probe["yield_basis"], "calibration");
+        assert_eq!(probe["subject"]["id"], subject);
+        assert_eq!(probe["target"]["id"], target);
+        assert!((probe["target"]["estimate"].as_f64().unwrap() - 4.6).abs() < 1e-9);
+        assert_eq!(probe["ask"]["frame"], "more-work");
+        assert_eq!(probe["ask"]["domain"], "estimate");
+        assert!(
+            probe["ask"].get("yield_by_answer").is_none(),
+            "no yield claim on a probe"
         );
     }
 }

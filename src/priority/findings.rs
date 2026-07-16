@@ -136,14 +136,20 @@ pub(crate) enum Finding {
     /// one row (`--supersedes <uid>`) or tombstone one to break the cycle —
     /// re-asking alone cannot clear it (R3 concurrency).
     PreferenceCycle {
+        domain: ComparisonDomain,
         classes: Vec<String>,
         rows: Vec<String>,
     },
     /// SL-213 PHASE-06 (comparison C2/C4) — retained rows contradict a pair
     /// of authored anchors. `anchors` names both conflicting entities WITH
-    /// their authored values; `rows` the quarantined row uids. Exit (C7/D6):
-    /// supersede a conflicting row, tombstone one, or edit an anchor.
+    /// their anchor values (authored `[value]` facets in the value domain;
+    /// β-resolved `authored_est_cost` points in the estimate domain — SL-219
+    /// D1); `rows` the quarantined row uids. Exit (C7/D6): supersede a
+    /// conflicting row, tombstone one, or edit an anchor — the est-domain
+    /// render says "revise the estimate" (the likeliest defect is a stale
+    /// estimate, D1).
     AnchorConflict {
+        domain: ComparisonDomain,
         anchors: Vec<(String, f64)>,
         rows: Vec<String>,
     },
@@ -152,12 +158,42 @@ pub(crate) enum Finding {
     /// order path connects them to any anchor). Under per-component placement
     /// (SL-216) this is every member of an anchor-free component, not just
     /// its P7 sinks. The hint: compare against an anchored item to place it.
-    AnchorGaugeDisconnect { entities: Vec<String> },
+    AnchorGaugeDisconnect {
+        domain: ComparisonDomain,
+        entities: Vec<String>,
+    },
     /// SL-213 PHASE-06 (comparison R2) — a supersession cycle deactivated
     /// every participating row (`ResolutionStatus::Malformed`). `rows` are
     /// the participant uids. Exit (C7/D6): tombstone one row to break the
     /// cycle.
-    MalformedSupersession { rows: Vec<String> },
+    MalformedSupersession {
+        domain: ComparisonDomain,
+        rows: Vec<String>,
+    },
+}
+
+/// Which per-domain comparison system produced a comparison finding (SL-219
+/// D9) — SET AT CONSTRUCTION by the shell that knows the producing system
+/// ([`comparison_findings`] runs the detectors once per system); compile
+/// payloads stay domain-agnostic. Lives here beside [`Finding`] (not in
+/// `comparison`): finding provenance is a findings-layer concern, and the
+/// closed two-variant set mirrors the two compiled systems, not the open
+/// wire-domain vocabulary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ComparisonDomain {
+    Value,
+    Estimate,
+}
+
+impl ComparisonDomain {
+    /// The wire-domain token (STD-001: the `wire.rs` constants, no parallel
+    /// strings) — the render tag and the JSON `domain` value.
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            ComparisonDomain::Value => comparison::DOMAIN_VALUE,
+            ComparisonDomain::Estimate => comparison::DOMAIN_ESTIMATE,
+        }
+    }
 }
 
 /// `f64` magnitude of a count, cast losslessly via `u32` (avoids the denied `as`
@@ -186,11 +222,11 @@ impl Finding {
             }
             // An evicted edge — the two endpoints; ranks below any multi-node cycle.
             Finding::Provenance(_) => 2.0,
-            Finding::PreferenceCycle { rows, .. } | Finding::MalformedSupersession { rows } => {
+            Finding::PreferenceCycle { rows, .. } | Finding::MalformedSupersession { rows, .. } => {
                 count_magnitude(rows.len())
             }
             Finding::AnchorConflict { rows, .. } => count_magnitude(rows.len()),
-            Finding::AnchorGaugeDisconnect { entities } => count_magnitude(entities.len()),
+            Finding::AnchorGaugeDisconnect { entities, .. } => count_magnitude(entities.len()),
         }
     }
 
@@ -509,7 +545,10 @@ fn provenance(g: &PriorityGraph) -> Vec<Finding> {
 /// entry, grouped by its cyclic class set (one finding per distinct SCC — several
 /// rows on the same cycle share one finding, C3's `classes` payload is identical
 /// across them).
-fn preference_cycle_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
+fn preference_cycle_findings(
+    cs: &comparison::ConstraintSet,
+    domain: ComparisonDomain,
+) -> Vec<Finding> {
     let mut groups: BTreeMap<Vec<String>, BTreeSet<String>> = BTreeMap::new();
     for (uid, reason) in &cs.quarantined {
         if let comparison::QuarantineReason::PreferenceCycle { classes } = reason {
@@ -522,6 +561,7 @@ fn preference_cycle_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
     groups
         .into_iter()
         .map(|(classes, rows)| Finding::PreferenceCycle {
+            domain,
             classes,
             rows: rows.into_iter().collect(),
         })
@@ -532,7 +572,10 @@ fn preference_cycle_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
 /// anchor pair, gathering every row quarantined for that pair (a row serving
 /// several conflicts appears in several findings, C4's "quarantined once, finding
 /// lists every pair" — here inverted to "one finding per pair, listing every row").
-fn anchor_conflict_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
+fn anchor_conflict_findings(
+    cs: &comparison::ConstraintSet,
+    domain: ComparisonDomain,
+) -> Vec<Finding> {
     let mut by_pair: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
     for (uid, reason) in &cs.quarantined {
         if let comparison::QuarantineReason::AnchorConflict { pairs } = reason {
@@ -547,6 +590,7 @@ fn anchor_conflict_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
             let ax = cs.anchors.get(&x).copied().unwrap_or(f64::NAN);
             let ay = cs.anchors.get(&y).copied().unwrap_or(f64::NAN);
             Finding::AnchorConflict {
+                domain,
                 anchors: vec![(x, ax), (y, ay)],
                 rows: rows.into_iter().collect(),
             }
@@ -564,6 +608,7 @@ fn anchor_conflict_findings(cs: &comparison::ConstraintSet) -> Vec<Finding> {
 fn anchor_gauge_disconnect_findings(
     cs: &comparison::ConstraintSet,
     projection: &comparison::Projection,
+    domain: ComparisonDomain,
 ) -> Vec<Finding> {
     if cs.anchors.is_empty() {
         return Vec::new();
@@ -576,32 +621,53 @@ fn anchor_gauge_disconnect_findings(
     if entities.is_empty() {
         return Vec::new();
     }
-    vec![Finding::AnchorGaugeDisconnect { entities }]
+    vec![Finding::AnchorGaugeDisconnect { domain, entities }]
 }
 
 /// **`MalformedSupersession`** (comparison R2) — one finding per supersession
-/// cycle the resolve tier already grouped (`Resolution::malformed`).
+/// cycle the resolve tier already grouped (`Resolution::malformed`). The
+/// resolve pass is SHARED across domains (SL-219 §1), so the domain is joined
+/// back from the cycle's own rows — the identity key carries `domain`, so a
+/// supersession cycle never spans domains (every participant shares one).
 fn malformed_supersession_findings(pipeline: &comparison::Pipeline) -> Vec<Finding> {
+    let domain_of_uid = |uid: &str| -> ComparisonDomain {
+        match pipeline.rows.iter().find(|r| r.uid == uid) {
+            Some(r) if r.domain == comparison::DOMAIN_ESTIMATE => ComparisonDomain::Estimate,
+            _ => ComparisonDomain::Value,
+        }
+    };
     pipeline
         .malformed
         .iter()
         .map(|m| Finding::MalformedSupersession {
+            domain: m
+                .cycle
+                .first()
+                .map_or(ComparisonDomain::Value, |uid| domain_of_uid(uid)),
             rows: m.cycle.clone(),
         })
         .collect()
 }
 
 /// Run the four SL-213 PHASE-06 comparison-domain detectors over the loaded
-/// pipeline (design §4 S4). The caller ([`super::surface::findings`]) merges
-/// these into the graph-domain catalogue and re-sorts.
+/// pipeline (design §4 S4) — once per domain system (SL-219 D9: the shell that
+/// knows which system produced a finding stamps its [`ComparisonDomain`] at
+/// construction). The caller ([`super::surface::findings`]) merges these into
+/// the graph-domain catalogue and re-sorts.
 pub(crate) fn comparison_findings(pipeline: &comparison::Pipeline) -> Vec<Finding> {
     let mut out = Vec::new();
-    out.extend(preference_cycle_findings(&pipeline.constraint_set));
-    out.extend(anchor_conflict_findings(&pipeline.constraint_set));
-    out.extend(anchor_gauge_disconnect_findings(
-        &pipeline.constraint_set,
-        &pipeline.projection,
-    ));
+    for (system, domain) in [
+        (&pipeline.value, ComparisonDomain::Value),
+        (&pipeline.estimate, ComparisonDomain::Estimate),
+    ] {
+        out.extend(preference_cycle_findings(&system.constraint_set, domain));
+        out.extend(anchor_conflict_findings(&system.constraint_set, domain));
+        out.extend(anchor_gauge_disconnect_findings(
+            &system.constraint_set,
+            &system.projection,
+            domain,
+        ));
+    }
     out.extend(malformed_supersession_findings(pipeline));
     out
 }
@@ -824,17 +890,22 @@ mod tests {
         let scanned =
             crate::relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = config::load(root);
-        // Mechanical call-site update (SL-213 PHASE-05): build_from_with_cfg gained a
-        // projected-values param; no comparisons dir in this fixture, so the empty map
-        // is byte-identical to the pre-SL-213 behaviour.
+        // Mechanical call-site update (SL-213 PHASE-05, SL-219 PHASE-04):
+        // build_from_with_cfg gained projected-values and cost-feed params; no
+        // comparisons dir in this fixture, so the empty maps are byte-identical
+        // to the pre-comparison-tier behaviour.
         let no_projection = crate::comparison::Projection::new();
-        let base = graph::build_from_with_cfg(&scanned, root, &cfg, &no_projection).unwrap();
+        let no_feed = crate::comparison::CostFeed::new();
+        let base =
+            graph::build_from_with_cfg(&scanned, root, &cfg, &no_projection, &no_feed).unwrap();
         let mut lo_cfg = cfg.clone();
         lo_cfg.estimate.skew = BETA_LO;
         let mut hi_cfg = cfg.clone();
         hi_cfg.estimate.skew = BETA_HI;
-        let lo = graph::build_from_with_cfg(&scanned, root, &lo_cfg, &no_projection).unwrap();
-        let hi = graph::build_from_with_cfg(&scanned, root, &hi_cfg, &no_projection).unwrap();
+        let lo =
+            graph::build_from_with_cfg(&scanned, root, &lo_cfg, &no_projection, &no_feed).unwrap();
+        let hi =
+            graph::build_from_with_cfg(&scanned, root, &hi_cfg, &no_projection, &no_feed).unwrap();
         let betas = BetaEndpoints { lo, hi };
         detect(&base, &cfg, Some(&betas))
     }
@@ -1251,6 +1322,174 @@ mod tests {
         );
     }
 
+    // ── SL-219 VT-4: findings carry their producing system's domain (D9) ──────
+
+    use crate::comparison::Judgement;
+
+    /// One judgement row for the domain-discriminator fixtures below.
+    fn domain_judgement(uid: &str, domain: &str, frame: &str, a: &str, b: &str) -> Judgement {
+        use crate::comparison::{RaterKind, Response, RowForm};
+        Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: a.to_string(),
+            b: b.to_string(),
+            response: Response::PreferA,
+            domain: domain.to_string(),
+            frame: frame.to_string(),
+            form: RowForm::Order,
+            magnitude: None,
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Human,
+            by: None,
+            note: None,
+            date: "2026-07-14".to_string(),
+        }
+    }
+
+    /// The in-memory pipeline over one session (the VT-4 harness).
+    fn pipeline_of(
+        judgements: Vec<Judgement>,
+        value_anchors: &crate::comparison::AnchorMap,
+        est_anchors: &crate::comparison::AnchorMap,
+    ) -> comparison::Pipeline {
+        use crate::comparison::{
+            COMPARISON_SCHEMA, COMPARISON_VERSION, ComparisonSession, SessionHeader, StatusMap,
+            VALUE_PROJECTION_PARAMS, pipeline_from_sessions,
+        };
+        let sessions = vec![ComparisonSession {
+            schema: COMPARISON_SCHEMA.to_string(),
+            version: COMPARISON_VERSION,
+            session: SessionHeader {
+                uid: "sess-1".to_string(),
+                date: "2026-07-14".to_string(),
+                audience: None,
+            },
+            judgements,
+            tombstones: Vec::new(),
+        }];
+        pipeline_from_sessions(
+            &sessions,
+            &StatusMap::new(),
+            value_anchors,
+            est_anchors,
+            &VALUE_PROJECTION_PARAMS,
+            &VALUE_PROJECTION_PARAMS,
+        )
+        .unwrap()
+    }
+
+    /// D9: each comparison finding carries the [`ComparisonDomain`] of the
+    /// system that produced it, SET AT CONSTRUCTION — and the domain reaches
+    /// both the human render (est wording per D1; value bytes unchanged) and
+    /// the JSON payload (`domain` key — render/JSON parity).
+    #[test]
+    fn comparison_findings_carry_domain_in_render_and_json() {
+        use crate::comparison::{
+            AnchorMap, DOMAIN_ESTIMATE, DOMAIN_VALUE, FRAME_EQUAL_EFFORT, FRAME_MORE_WORK,
+        };
+        // Each domain gets its own C4 anchor conflict: the row prefers the
+        // LOWER-anchored side, contradicting the anchors of its own system.
+        let value_anchors: AnchorMap = [("ISS-001".to_string(), 1.0), ("ISS-002".to_string(), 2.0)]
+            .into_iter()
+            .collect();
+        let est_anchors: AnchorMap = [("ISS-003".to_string(), 1.0), ("ISS-004".to_string(), 5.0)]
+            .into_iter()
+            .collect();
+        let pipeline = pipeline_of(
+            vec![
+                domain_judgement("v1", DOMAIN_VALUE, FRAME_EQUAL_EFFORT, "ISS-001", "ISS-002"),
+                domain_judgement("e1", DOMAIN_ESTIMATE, FRAME_MORE_WORK, "ISS-003", "ISS-004"),
+            ],
+            &value_anchors,
+            &est_anchors,
+        );
+
+        let fs = comparison_findings(&pipeline);
+        let domain_of = |rows: &[&str]| {
+            fs.iter()
+                .find_map(|f| match f {
+                    Finding::AnchorConflict {
+                        domain, rows: r, ..
+                    } if r == rows => Some(*domain),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("conflict over {rows:?} found: {fs:?}"))
+        };
+        assert_eq!(domain_of(&["v1"]), ComparisonDomain::Value);
+        assert_eq!(domain_of(&["e1"]), ComparisonDomain::Estimate);
+
+        // Human render: the est line carries the domain tag + the D1 stale-
+        // estimate wording; the value line keeps the pre-SL-219 bytes.
+        let human = crate::priority::render::findings_human(&fs);
+        assert!(
+            human.contains("[estimate] anchors ISS-003=1.0 vs ISS-004=5.0 conflict"),
+            "est conflict domain-tagged: {human}"
+        );
+        assert!(
+            human.contains("sizing evidence contradicts the β-resolved costs")
+                && human.contains("revise the estimate or supersede the row"),
+            "D1 wording on the est conflict: {human}"
+        );
+        assert!(
+            human.contains(
+                "  anchors ISS-001=1.0 vs ISS-002=2.0 conflict — quarantines {v1}; exit: \
+                 supersede a conflicting row, tombstone one, or edit an anchor\n"
+            ),
+            "value wording unchanged and untagged: {human}"
+        );
+
+        // JSON parity: every comparison finding carries its `domain` token.
+        let json = crate::priority::render::findings_json(&fs).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let domains: Vec<&str> = value["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["kind"] == "anchor conflicts")
+            .map(|f| f["domain"].as_str().expect("domain is a string"))
+            .collect();
+        assert_eq!(domains, ["value", "estimate"], "JSON domain per finding");
+    }
+
+    /// The shared-resolution finding (`MalformedSupersession`) joins its domain
+    /// back from the cycle's own rows — an est-domain supersession cycle is
+    /// tagged `estimate` even though resolve runs once over all rows.
+    #[test]
+    fn malformed_supersession_joins_domain_from_its_rows() {
+        use crate::comparison::{AnchorMap, DOMAIN_ESTIMATE, FRAME_MORE_WORK};
+        let mut a = domain_judgement(
+            "mal-a",
+            DOMAIN_ESTIMATE,
+            FRAME_MORE_WORK,
+            "ISS-001",
+            "ISS-002",
+        );
+        let mut b = domain_judgement(
+            "mal-b",
+            DOMAIN_ESTIMATE,
+            FRAME_MORE_WORK,
+            "ISS-002",
+            "ISS-001",
+        );
+        a.supersedes = Some("mal-b".to_string());
+        b.supersedes = Some("mal-a".to_string());
+        b.seq = 1;
+        let pipeline = pipeline_of(vec![a, b], &AnchorMap::new(), &AnchorMap::new());
+        let fs = comparison_findings(&pipeline);
+        assert!(
+            fs.iter().any(|f| matches!(
+                f,
+                Finding::MalformedSupersession {
+                    domain: ComparisonDomain::Estimate,
+                    ..
+                }
+            )),
+            "the est cycle carries the estimate domain: {fs:?}"
+        );
+    }
+
     #[test]
     fn anchor_gauge_disconnect_lists_whole_island() {
         // Mixed corpus (the s8 shape): anchored chain x>y (x=4.0) plus an
@@ -1259,8 +1498,8 @@ mod tests {
         // (SL-216 D1): every member of the island is gauge-placed, so the
         // finding lists z AND w — not only the floorless sink.
         use crate::comparison::{
-            AnchorMap, DOMAIN_VALUE, FRAME_EQUAL_EFFORT, Judgement, ProjectionCfg,
-            QuarantinePolicy, RaterKind, Response, RowForm, compile, project,
+            AnchorMap, DOMAIN_VALUE, FRAME_EQUAL_EFFORT, Judgement, QuarantinePolicy, RaterKind,
+            Response, RowForm, compile, project,
         };
         let judgement = |uid: &str, winner: &str, loser: &str| Judgement {
             uid: uid.to_string(),
@@ -1283,17 +1522,11 @@ mod tests {
         let refs: Vec<&Judgement> = rows.iter().collect();
         let anchors: AnchorMap = [("x".to_string(), 4.0)].into_iter().collect();
         let cs = compile(&refs, &anchors, QuarantinePolicy::Symmetric);
-        let projection = project(
-            &cs,
-            &ProjectionCfg {
-                gauge_step: 0.25,
-                default_value: 1.0,
-            },
-        );
+        let projection = project(&cs, &crate::comparison::VALUE_PROJECTION_PARAMS);
 
-        let fs = anchor_gauge_disconnect_findings(&cs, &projection);
+        let fs = anchor_gauge_disconnect_findings(&cs, &projection, ComparisonDomain::Value);
         assert_eq!(fs.len(), 1, "one disconnect finding: {fs:?}");
-        let Finding::AnchorGaugeDisconnect { entities } = &fs[0] else {
+        let Finding::AnchorGaugeDisconnect { entities, .. } = &fs[0] else {
             panic!("wrong finding kind: {fs:?}");
         };
         assert_eq!(
