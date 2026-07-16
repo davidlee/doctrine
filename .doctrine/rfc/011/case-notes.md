@@ -1585,3 +1585,9 @@ text asserts a fact ("keyword present") that appears false; the state token is
 doing the real work. Cost: a re-grep round to distrust-then-dismiss the
 message. Suggest message variants per actual condition (file-unmodified vs
 keyword-found-but-unattributable).
+
+[phase-plan; SL220-dispatch-fable]
+Design §5 + boot SPINE cite `doctrine reports survey`; shipped CLI (0.21.0) has
+top-level `doctrine survey --json` and no `reports` group. Cost a probe cycle
+mid-phase-plan; boot snapshot SPINE appears stale vs binary. Worker prompt pins
+the real verb.
