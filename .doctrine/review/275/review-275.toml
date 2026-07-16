@@ -1,0 +1,61 @@
+id    = 275
+slug  = "inquisition-rfc-020-ledgered-facet-claims"
+title = "Inquisition: RFC-020 ledgered facet claims"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "RFC-020"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected deterministic active-claim resolution; observed undefined same-tier and lens conflicts"
+detail = "RFC-020 lines 95-109 promises that competing claims resolve to one AnchorMap entry, while lines 116-133 only order different authority tiers and OQ-2 at lines 352-353 leaves lens composition open. RFC-019 lines 416-433 makes lensed rows inert in pooled inference, and lines 436-456 forbids lexicographic winner selection for concurrent evidence. Two active human claims or pins with different magnitudes therefore cannot deterministically become one point anchor without an unstated winner, quarantine, or aggregation policy. Penance: before Phase 1, define anchor identity and active-set rules, authority values, lens participation, same-tier conflict handling, and deterministic permutation/concurrency tests."
+disposition = "design-wrong"
+response = "Accepted. RFC-020 must not advance to Phase 1 design or implementation until the active anchor-claim resolver is complete: identity, supersession, same-tier concurrency, lens participation, authority ordering, conflict diagnostics, and deterministic tests. The current text is under-specified at the exact seam that produces one AnchorMap entry."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Expected aggregation-free hierarchy diagnostics; observed an additive member-sum test"
+detail = "RFC-020 lines 186-193 correctly says member value is non-additive and aggregation is unsound until semantics are chosen, then immediately diagnoses PRD value 8 against member projections sum at least 12. OQ-1 at lines 348-351 admits aggregation and package burndown remain unresolved. The diagnostic already assumes additive containment, so Phase 3 cannot be independently shippable as claimed at line 282. Penance: delete cross-level arithmetic from v1 or first settle a declared per-container aggregation contract and its overlap/package semantics; verify packaged-feature and multi-membership counterexamples."
+disposition = "design-wrong"
+response = "Accepted. The member-sum example is doctrinally incompatible with the RFCs own non-additivity premise. Phase 3 must either remain diagnostic without cross-level arithmetic or be gated by an explicit aggregation-mode decision and ADR-018 revision. The current v1 promise is design-wrong."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected unknown provenance to remain unknown; observed migration fabricating agent authorship and date"
+detail = "RFC-020 lines 258-264 assigns every legacy facet agent authority and the migration date despite admitting plausible human origin, then calls that honest provenance at line 260 and again at line 317. This replaces missing provenance with false provenance, demotes genuine human judgements, and makes a synthetic conversion date appear to be the judgement date. Penance: represent legacy origin explicitly as migrated or unknown, distinguish observed-at-migration from asserted-at, preserve source commit evidence where defensible, and prove idempotent import plus a census with no silent human-to-agent claim."
+disposition = "design-wrong"
+response = "Accepted. Migration may preserve an unproven magnitude but may not invent who judged it or when. The design must carry migrated or unknown provenance and synthetic conversion metadata separately, with idempotence and corpus-census verification."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected one coherent confidence contract; observed authored estimate confidence under never-authored doctrine"
+detail = "RFC-020 lines 72-74 makes estimate confidence part of the authored anchor payload, while lines 134-140 declares confidence derived and never authored; the Outcome repeats the unqualified derived-only claim. The paragraph narrows derived bounds to value but never gives the two concepts distinct names or semantics. An implementer cannot know whether estimate confidence survives migration, affects projection, or is display-only. Penance: name value-fit certainty and estimate-payload confidence separately, specify whether estimate confidence is evidence or metadata and how it composes with bounds, then pin round-trip and explain rendering."
+disposition = "design-wrong"
+response = "Accepted. The RFC must separate value-fit certainty derived from feasible bounds from the legacy estimate confidence payload, then state the latters semantic force. The unqualified never-authored formulation is internally contradictory."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected operator pins to have an enforceable provenance invariant; observed free authority beside self-asserted rater"
+detail = "RFC-020 lines 72-77 calls pin an explicit operator-policy override, but the row at lines 95-104 carries independent rater, authority, optional by, and no authority vocabulary or consistency rule. Lines 126-133 promise governance and demotion without defining who may mint or demote a pin. As written an agent row can assert human or pin authority and optional attribution cannot establish the constitutional override. Penance: define authority as a closed vocabulary, bind pin creation to an explicit operator shell/posture, derive ordinary tier from mandatory provenance rather than accepting contradictory fields, specify demotion as supersession, and test rejected inconsistent rows."
+disposition = "design-wrong"
+response = "Accepted. Pin is constitutional policy and requires a closed admission and provenance contract. The design must prevent contradictory rater/authority states, make attribution sufficient, and define demotion through append-only supersession rather than an unspecified mutation."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
