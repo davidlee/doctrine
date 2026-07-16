@@ -710,6 +710,42 @@ mod write_class_tests {
         );
     }
 
+    // SL-211 EX-3: `dispatch sync --record-integration` is the SAME Orchestrator
+    // verb class — `guard` classes by the `Sync { .. }` variant, so the new stage
+    // inherits worker-mode refusal with no classifier change (F-3).
+    #[test]
+    fn dispatch_sync_record_integration_is_orchestrator() {
+        let c = Cli::try_parse_from([
+            "doctrine",
+            "dispatch",
+            "sync",
+            "--slice",
+            "64",
+            "--record-integration",
+            "--trunk",
+            "refs/heads/main",
+        ])
+        .unwrap()
+        .command;
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("dispatch-sync")),
+            "dispatch sync --record-integration must be Orchestrator(\"dispatch-sync\")"
+        );
+        assert_eq!(
+            cls(&[
+                "doctrine",
+                "dispatch",
+                "sync",
+                "--slice",
+                "64",
+                "--record-integration",
+                "--trunk",
+                "refs/heads/main"
+            ]),
+            Some("dispatch-sync")
+        );
+    }
+
     #[test]
     fn inspect_is_read() {
         // SL-046: the cross-kind relation view reads only — never mints/derives.
@@ -966,6 +1002,61 @@ mod write_class_tests {
     fn parse_dispatch_sync_missing_stage_errors() {
         let r = Cli::try_parse_from(["doctrine", "dispatch", "sync", "--slice", "99"]);
         assert!(r.is_err(), "sync without a stage selector should error");
+    }
+
+    // SL-211 VT-3: `--record-integration` parses in the stage group WITH `--trunk`.
+    #[test]
+    fn parse_dispatch_sync_record_integration_with_trunk_parses() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "dispatch",
+            "sync",
+            "--slice",
+            "99",
+            "--record-integration",
+            "--trunk",
+            "refs/heads/main",
+        ]);
+        assert!(r.is_ok(), "sync with --record-integration + --trunk");
+    }
+
+    // SL-211: `--record-integration` REQUIRES `--trunk` (required_if_eq) — the
+    // recorded row must name the gate's delivery ref.
+    #[test]
+    fn parse_dispatch_sync_record_integration_without_trunk_errors() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "dispatch",
+            "sync",
+            "--slice",
+            "99",
+            "--record-integration",
+        ]);
+        assert!(
+            r.is_err(),
+            "--record-integration without --trunk should error"
+        );
+    }
+
+    // SL-211 EX-3: `--record-integration` is in the mutually-exclusive `stage`
+    // group — it conflicts with the other stage flags.
+    #[test]
+    fn parse_dispatch_sync_record_integration_conflicts_with_integrate() {
+        let r = Cli::try_parse_from([
+            "doctrine",
+            "dispatch",
+            "sync",
+            "--slice",
+            "99",
+            "--record-integration",
+            "--integrate",
+            "--trunk",
+            "refs/heads/main",
+        ]);
+        assert!(
+            r.is_err(),
+            "--record-integration conflicts with --integrate (stage group)"
+        );
     }
 
     // ── Non-SPINE_KINDS CommonListArgs consumers ────────────────────────────────
