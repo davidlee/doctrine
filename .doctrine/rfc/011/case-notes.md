@@ -1445,3 +1445,10 @@ the trunk after an authored-content promotion — but any dispatched slice whose
 authored `.doctrine/**` advanced edge between fork and close will diverge its
 code branches from the promoted trunk, making the re-anchor the *normal* case,
 not the exception. The audit's "ordinary FF" framing is the mislead.
+
+[discussion (no skill); post-217-epistemics]
+`rfc show RFC-019` emits ~40KB with no section addressing; answering "what's
+next after Phase C" required paging the whole document in three chunks. A
+`--section`/TOC affordance on `show` for long RFC/spec bodies would cut this
+class of read substantially. Also: `echo ===` as a separator between compound
+commands breaks under zsh eval (`== not found`) — cost one retry round-trip.

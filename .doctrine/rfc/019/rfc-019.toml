@@ -4,9 +4,9 @@ version = 1
 id = 19
 slug = "comparison-value-elicitation"
 title = "Comparison-based value elicitation"
-status = "resolved"
+status = "open"
 created = "2026-07-10"
-updated = "2026-07-10"
+updated = "2026-07-16"
 tags = ["area:priority", "elicitation", "scoring", "value"]
 
 [relationships]
