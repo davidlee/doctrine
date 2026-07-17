@@ -1,0 +1,52 @@
+id    = 283
+slug  = "audit-of-sl-221-unify-dispatch-boundary-writes-on-the-object-db-ref"
+title = "audit of SL-221 — unify dispatch boundary writes on the object-db ref"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-221"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Edge's authored slice-221.toml lacks the tests/e2e_dispatch_lifecycle.rs design-target selector; conformance reports it undeclared"
+detail = "Expected: the design-target selector set matches the files git actually touched. Observed: primary-tree `doctrine slice conformance SL-221` reports 4 conformant, 0 undelivered, and **1 undeclared — `tests/e2e_dispatch_lifecycle.rs`**. That file is a genuine P03 scope discovery (PHASE-03 makes `record-boundary` land working-tree-free on the ref, so the test's manual `git add/commit` of the working-tree ledger is removed — a real design consequence, diff verified). The `slice selector add tests/e2e_dispatch_lifecycle.rs` edit is authored on the dispatch/221 coord branch and is present on the candidate (`candidate/221/review-001` carries all 5 selectors), but edge's authored `slice-221.toml` carries only 4 — it holds the lifecycle status but not the selector block. Conformance is therefore red on edge until integrate's class-routed projection carries the selector edit onto edge/main. Not a code defect; a reconciliation item."
+disposition = "verified"
+response = "Observation confirmed — remediation delegated to /reconcile (recorded in the Reconciliation Brief, Per-slice surface). The load-bearing change is the selector registry (slice-221.toml): the `slice selector add tests/e2e_dispatch_lifecycle.rs` edit is authored on dispatch/221 and must land on edge/main via integrate's class-routed projection at /close. Verify post-integrate that edge's slice-221.toml carries all 5 selectors and primary-tree `slice conformance SL-221` is clean (0 undeclared). No code change; not a plan-criterion edit."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Worker beyond-plan migration judgment (vt6, round-trip, upsert deletion) verified sound — no silent coverage loss"
+detail = "The plan specified PHASE-05 deletions by test-name; the worker exercised judgment beyond the literal list. Audited to closure: (a) `vt6_gate_is_primary_rooted_when_run_from_coord_cwd` was **migrated**, not deleted, onto the ref-committed fixture (`commit_ledger_on_dispatch` + `seed_completed_phases`) — it genuinely still exercises the halt: seeds only 01/02 ref-committed, marks 01/02/03 completed in the PRIMARY tree, runs prepare-review from the coord cwd, and asserts the gate halts naming PHASE-03 with no refs created (proves the gate reads the primary completed-set, not the coord cwd — not vacuous). (b) `record_boundary_upserts_by_phase_never_duplicates` was deleted; its invariant is fully covered by `land_boundary_row_upserts_by_phase` (asserts new-phase append preserves siblings AND existing-phase replace-in-place, no duplicate, order kept). (c) `record_then_read_round_trips_through_disk` was migrated (seeds via `store()` instead of the retired `record_boundary`) to keep the KEEP dormant symbols `read_boundaries`/`read_orthogonal`/`record_orthogonal` test-live — those are a pre-existing documented dormant-scaffolding pattern (per-symbol `cfg_attr(not(test), expect(dead_code))`, ledger.rs:292-300), explicitly sanctioned by PHASE-05 VA-1. No coverage silently lost."
+disposition = "aligned"
+response = "Verified sound; no change needed. The three beyond-plan migration calls each preserve the invariant they inherited — vt6 still halts on the primary-rooted gap (names PHASE-03, no refs), the upsert invariant is fully re-covered by land_boundary_row_upserts_by_phase, and the round-trip migration keeps the KEEP dormant-scaffolding symbols test-live per the documented cfg_attr pattern (VA-1-sanctioned). No coverage silently lost."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "plan_phases malformed/non-PHASE-NN sort-last branch (design §5.2e′) has no dedicated VT"
+detail = """Expected (design §5.2e′): plan_phases sorts a local view by phase ordinal before chaining; "malformed / non-PHASE-NN rows keep relative position, sorted last". Observed: VT-1 P04 (`plan_phases_orders_by_phase_ordinal_not_row_order`) exercises only the valid out-of-order scramble (PHASE-03 tail-appended after 05); the `ord.is_none()` malformed branch is not asserted by any test (dispatch.rs:5036's "malformed" is an unrelated phase-status-reduction fixture). The branch is correct by inspection — sort key `(ord.is_none(), ord.unwrap_or(0))` with a stable sort puts unparseable labels last while preserving their relative order — and the input is unreachable by construction (all boundary rows carry PHASE-NN labels emitted by the funnel/escape-hatch). Defensive belt-and-braces, not a live path."""
+disposition = "aligned"
+response = "Aligned; no change needed. The malformed sort-last branch is correct by inspection (tuple key `(ord.is_none(), ord.unwrap_or(0))` + stable sort) and the input is unreachable by construction — every boundary row carries a PHASE-NN label. The live hazard (valid out-of-order escape-hatch record) IS covered by VT-1 P04. A dedicated test for the unreachable defensive branch would be low-value; recording the coverage boundary here suffices."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "Primary phase sheets manually flipped completed to clear prepare-review's primary-rooted gate (IMP-272 tree split)"
+detail = """Operational observation, not a SL-221 payload defect. At conclude, `dispatch sync --prepare-review` failed its completeness gate for all five phases ("recorded row for PHASE-0N, which is not a completed phase") because `dispatch_conclude_phase` flips the phase sheet in the COORD tree while the gate reads the completed-set from the PRIMARY tree's phase sheets (state.rs: `phases_dir` uses project_root verbatim, no primary resolution, while `boundaries_path` resolves to primary — the two halves of boundary state resolve to different trees). Workaround applied: `slice phase 221 PHASE-0N --status completed -p /workspace/doctrine` ×5, a true-state reconciliation. This is the second live repro (first SL-205), tracked as IMP-272 and recorded in the RFC-011 case-notes. It also explains why `slice conformance` run from the candidate worktree reports "incomplete" (that tree's phase sheets are unflipped) — the meaningful conformance is the primary-tree run. Accepted operational drift; the machinery fix is IMP-272."""
+disposition = "tolerated"
+response = "Accepted operational drift, not a payload defect. The manual phase-sheet flip is a true-state reconciliation of the IMP-272 coord/primary tree split (phases_dir resolves to project_root verbatim while boundaries_path resolves to primary). The SL-221 payload is unaffected. Machinery fix is owned by IMP-272 (option 1: co-write phase status into the primary tree at conclude/record-boundary, landing flip+row atomically in the tree the gate reads). Second live repro captured in RFC-011 case-notes."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -1,7 +1,7 @@
 id = 221
 slug = "prepare-review-clobbers-concluded-ledger-rows"
 title = "Unify dispatch boundary writes on the object-db ref"
-status = "audit"
+status = "reconcile"
 created = "2026-07-17"
 updated = "2026-07-17"
 tags = ["area:correctness", "area:dispatch"]

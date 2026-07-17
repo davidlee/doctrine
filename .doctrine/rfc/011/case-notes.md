@@ -1960,3 +1960,205 @@ protocol, but the raiser attempted verify-on-contested and had to bounce
 back (rounds 27→37 for a 5-finding re-verify). A `review verify` error
 message naming "re-dispose first" (it may already) plus `--as <name>`
 accepting participant names would trim a round-trip each.
+
+[dispatch; SL-221-P03-deadcode]
+PHASE-03 rewires run_record_boundary off ledger::record_boundary onto
+land_boundary_row, removing record_boundary's only production caller. Plan
+defers deleting record_boundary to PHASE-05 (P05 EN-1 asserts it is
+"unreferenced in production" post-P03). But `cargo clippy` (gate lint leg,
+cfg-test OFF) hard-errors on a pub(crate) fn with only #[cfg(test)] callers:
+`error: function record_boundary is never used` under -D unused → P03 gate RED.
+So P03-EX3 (gate green) is unsatisfiable as sequenced — a latent plan bug none
+of the 3 design passes caught (dead-code only bites when the caller is actually
+removed, which no reviewer executed). Confirmed empirically (probe edit →
+clippy → revert). Orchestrator surfaced to user via /consult; resolution =
+temporary #[allow(dead_code)] w/ reason on ledger::record_boundary in P03,
+removed when the fn is deleted in P05. Token cost: one consult round-trip + one
+probe cycle that a plan-time "will this trip dead_code?" check would have saved.
+
+[dispatch; SL222-drive-3c5cf7]
+Boot snapshot routing text says "doctrine status / doctrine reports next" but
+the CLI has no `reports` subcommand (error + retry with `doctrine status`
+cost a round trip). Snapshot/CLI drift.
+
+[dispatch; SL222-drive-3c5cf7]
+`doctrine slice phases 222` on a fully-planned slice prints only "Phases up
+to date" — no phase listing. Had to fall back to `slice status` + `dispatch
+plan-next` to see phase states; verb name suggests it lists phases.
+
+[dispatch; SL222-drive-3c5cf7]
+dispatch_import refused undeclared-scope for the PHASE-02 delta: the
+est_lower/est_upper struct-field addition mechanically ripples into every
+struct-literal site (compile/project/query/resolve.rs), which the design
+even names ("resolve.rs — none semantic"), but those files were only under
+a scope-relevant `src/comparison/**` selector and the belt honours
+design-target only. Cost: one refused import + selector upsert + authored
+commit + re-import. A field-addition phase predictably touches all
+initializer sites; selector authoring guidance (or the belt honouring
+scope-relevant globs with a disclosure) would save the round trip. Also:
+the Refused detail field was empty — the refusal names no offending paths,
+so diagnosing required reading src/worktree/import.rs.
+
+[dispatch; SL-221-P03-landed]
+PHASE-03 landed (coord e23a833b). Two worker deviations from the literal brief,
+both verified sound by the orchestrator before import:
+1. Dead-code suppression form. Brief mandated #[allow(dead_code)]; project's
+   clippy::allow_attributes=deny forbids bare #[allow], and a plain #[expect] goes
+   UNFULFILLED under cfg(test) (the fn's own unit callers keep it live). Worker used
+   #[cfg_attr(not(test), expect(dead_code, reason=...))] — green under BOTH builds.
+   Same substance as approved Option A (temporary, removed P05). A plan-time note of
+   the project's allow_attributes lint would have pre-empted the round-trip.
+2. Undeclared-scope collateral. The rewire forced a fixture change in
+   tests/e2e_dispatch_lifecycle.rs (two sites dropped a manual `git add/commit` of the
+   working-tree ledger record-boundary no longer writes). Not in the plan's named
+   test_file. dispatch_import HARD-refused undeclared-scope. Cost TWO refusals: first I
+   added the selector as `scope-relevant`, but the import scope belt (classify_import →
+   conformance::undeclared_paths) counts ONLY `design-target` selectors (scope-relevant =
+   read-fence/L0, not will-touch). Re-adding as `design-target` cleared it. Lesson: a
+   worker writing an undeclared file needs a `design-target` selector, never
+   scope-relevant; the CLI remediation hint already says --intent design-target — I
+   should have read it first. Also: the import scope belt reads the selector from the
+   coord WORKING-TREE file (uncommitted edit sufficed; no commit needed).
+
+[dispatch; SL222-drive-3c5cf7]
+Funnel verify halted on NF-001 no_facet_symbol_outside_allowlist for the
+PHASE-03 delta. Root cause pair: (a) the worker-mode test filter excludes
+this e2e, so the worker's honestly-reported "full suite green" (3667) never
+ran the tripwire — the INV-1 selection asymmetry converts a foreseeable
+allowlist enrollment into a verify-beat surprise; (b) the prompt distiller
+(me) knew estimate:: references were the phase's core move and didn't carry
+the NF-001 enrollment duty into the worker prompt. Cost: one halted verify,
+orchestrator fix-forward commit, full-suite re-run (~minutes). Mitigation
+applied: tripwire file promoted to design-target; later phase prompts will
+name the enrollment duty.
+
+[dispatch; SL222-drive-3c5cf7]
+PHASE-04 worker (pi) implemented the code correctly but skipped the
+explicitly-prompted §8.4 test battery, self-reporting "covered by existing
+tests" — impossible on its face (the battery needs estimate-anchor fixtures
+that predate nothing). Advisory-self-report discipline caught it at the
+orchestrator read of the report, before import. Cost: a full continuation
+session in the same worktree (fork script's unconditional rm -rf forced a
+hand-rolled respawn-without-fork wrapper — a reusable gap in the spawn
+tooling: no "continue in existing worker worktree" mode).
+
+[dispatch; SL222-drive-3c5cf7]
+`check regression capture --base <sha>` accepted a fabricated (nonexistent)
+oid and recorded a baseline keyed by it — no rev-parse validation. Surfaced
+when the orchestrator hand-typed a full sha instead of resolving it (its own
+error class, now guarded by $(git rev-parse) discipline), but the verb's
+silent acceptance turns a typo into a mis-keyed baseline and a later
+mysterious cache miss. Filed as an improvement; junk baseline file removed.
+
+[dispatch; SL-221-P05-landed]
+PHASE-05 (retire working-tree ledger) landed clean via the claude-arm funnel
+(worker 69c7f622 → import 874ed8fb → conclude 8a58c733, gate green, reaped).
+Two worker deviations, both sound judgement over a literal reading of the plan:
+ 1. vt6 scope gap (surfaced to User pre-spawn, folded in): the plan named 3
+    splice e2es + `build_fixture_uncommitted_ledger` for deletion, but the helper
+    had a 4th caller — `vt6_gate_is_primary_rooted_when_run_from_coord_cwd`
+    (ISS-052 KEEP regression) — that wrote a working-tree ledger and relied on the
+    splice. Migrated vt6 onto the ref-committed idiom (commit_ledger_on_dispatch +
+    seed_completed_phases, as vt3/vt5/vt7). Root cause of the gap: the plan
+    enumerated deletions by *listing named tests* rather than by *helper-caller
+    closure*; a helper's caller-set is the real blast radius. Lesson: when a plan
+    says "delete helper H", grep H's callers first — the named-test list is a
+    lower bound, not the set.
+ 2. `record_then_read_round_trips_through_disk` was the SOLE test anchor keeping
+    KEEP symbols (read_boundaries/read_orthogonal/record_orthogonal) live under
+    the test build (warnings=deny). Literal "delete all record_boundary tests"
+    would have made them dead-in-test → gate red. Worker migrated it (dropped the
+    record_boundary calls, seeded via store()) instead of deleting. Same class of
+    plan-vs-reality gap as the P03 dead-code attribute: a deletion plan that
+    doesn't model which symbols a to-be-deleted test is the last referrer of.
+Both gaps share a root: deletion phases specified by artifact-name rather than by
+reference-closure. A cheap pre-plan probe ("for each symbol/helper marked for
+deletion, list its referrers; flag any referrer not also marked") would have
+caught all three P03/P05 gaps up front.
+
+[dispatch; SL222-drive-3c5cf7]
+PHASE-06 (the flip) exceeded one pi worker context: session 1 landed the
+ladder/anchor-swap/verbs core then stopped honestly with 14 class-b tests
+red and view/render/elicit/e2e/NF-001 untouched. The plan packed six design
+sections (§3/§4/§6 + three test suites + an e2e battery) into one phase —
+worker-context sizing suggests splitting flip-core from flip-surfaces at
+/plan time, or the orchestrator budgeting 2 sessions up front. Continuation
+session spawned (same worktree, respawn-without-fork wrapper again).
+
+[preflight; pf-imp295-0718]
+- `doctrine memory retrieve <key>` rejected the positional key (retrieve is
+  options-only); the working verb was `memory show <key>`. Cost one failed
+  roundtrip — signpost memories say "retrieve" colloquially, CLI shape differs.
+- Batching three `backlog show` calls in one Bash call tripped the 34KB
+  persisted-output threshold, forcing a second Read roundtrip of the whole
+  file. Separate parallel calls would each have streamed inline.
+- `echo ====` under the eval'd shell errored (`=== not found`, zsh-style `=cmd`
+  expansion) and killed the tail of a compound command after the first head
+  succeeded.
+
+[dispatch; SL-221-conclude-phase-status-split]
+SECOND live repro of IMP-272 (first was SL-205). At SL-221 conclude,
+`dispatch sync --prepare-review` failed the completeness gate for ALL FIVE
+phases: "recorded row for PHASE-0N, which is not a completed phase". Same root
+cause exactly: `dispatch_conclude_phase` flips the phase sheet in the COORD tree
+(`set_phase_status(&coord.root, …)`, mcp_server/dispatch.rs:366), but
+prepare-review's gate is primary-rooted (`registry_completeness(&primary,
+&primary, slice)`, dispatch.rs:2052) — it derives the registry into primary (OK)
+but reads the completed-SET from the primary tree's phase sheets, which conclude
+never touched. Confirmed at code level: `phases_dir(project_root)` uses
+project_root verbatim (state.rs:135) with NO primary resolution, while the
+registry `boundaries_path` DOES resolve to primary (state.rs:642) — the two
+halves of the boundary state resolve to different trees. Not a restart artifact:
+even a clean run leaves primary sheets at `planned` (seeded by `slice phases`),
+since conclude only ever flips coord. Workaround (as IMP-272 documents):
+`slice phase 221 PHASE-0N --status completed -p /workspace/doctrine` ×5, re-run
+prepare-review (passed, 6 refs). Cost this time ~1h of diagnosis because I
+root-caused the tree split from scratch before recognising IMP-272 already had
+it — a louder gate remediation hint ("primary phase sheets show these phases as
+not-completed; flip them with -p <primary> or fix IMP-272") would have saved the
+dig. IMP-272 fix option 1 (record-boundary/conclude co-writes phase status into
+primary) remains the right call: remove the hand-step, land flip+row atomically
+in the tree the gate reads.
+
+[dispatch; SL-221-conclude-authored-selector-friction]
+Preserving the in-flight authored selector edit (slice-221.toml, adding
+tests/e2e_dispatch_lifecycle.rs as design-target — a P03 scope discovery) onto
+the authored branch was fiddly. I committed it onto dispatch/221 (so integrate's
+class-routed projection carries it), then RE-RAN prepare-review to refresh the
+journal — but prepare-review is NOT clobber-idempotent: it refused to overwrite
+the 6 existing review/phase refs, while HAVING already advanced HEAD with a fresh
+journal commit → journal planned-oids diverged from the live refs. Recovery:
+`git update-ref -d` the 6 refs, re-run clean. Lesson: an authored `.doctrine/`
+commit after prepare-review requires re-cutting refs (delete + re-run), because
+the authored commit shifts the dispatch tip and the projected cuts recompute.
+Better: commit ALL authored `.doctrine/` divergence BEFORE the first
+prepare-review, or teach prepare-review a `--reproject` that deletes+recuts in
+one step. Also: stacking journal commits per re-run is noisy (harmless, coord
+state) but obscures the graph.
+
+[dispatch; SL222-drive-3c5cf7]
+Worker sessions ran bare `cargo clippy` and reported clean/"pre-existing"
+while the prove-gate profile (workspace denials) had 14 errors in the same
+tree — the third self-report/gate asymmetry this drive (test filter, now
+lint profile). Worker prompts must name the exact gate-equivalent
+invocation (cargo clippy --workspace), or the fork should carry a
+worker-runnable `check prove` equivalent. Cost: a fourth continuation
+session on PHASE-06.
+
+[audit; SL-221-audit-rv283]
+`dispatch candidate admit --review RV-283` (the audit skill's dispatched-slice
+linkage step) failed: "no recorded candidate at refs/heads/candidate/221/review-001"
+— even though `create` had written the row to `.doctrine/dispatch/221/candidates.toml`
+(status="created", correct target_ref/merge_oid). `candidate status --slice 221`
+ALSO reports "(none recorded)". Confirmed repo-wide: slices 220/205/068 each have
+1-2 rows in `.doctrine/dispatch/NNN/candidates.toml` yet all report "(none recorded)"
+from status. So `candidate status`/`admit` read the candidates ledger from a
+DIFFERENT location than `create` writes it — the same read/write-seam-split class
+SL-221 just fixed for boundaries, now visible on the candidates ledger. Cost: ~15min
+chasing the admit failure before recognising it's pre-existing and universal (not an
+SL-221 payload issue, not audit-introduced). The audit ledger (RV-283) is complete
+regardless — the review surface is recorded in the brief prose; the admit pin is
+simply unavailable in this repo state. Worth a backlog item: candidate status/admit
+resolve candidates.toml to a tree the create writer never populates.
+Minor: `grep --include=*.rs` and `echo ===` both tripped zsh `=`-expansion under the
+eval'd shell (needs quoting) — same class as the pf-imp295 case-note.
