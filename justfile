@@ -188,6 +188,19 @@ readme-index:
   @scripts/refresh-readme-index.sh
 
 
+# Sync the plugin + marketplace manifest versions to the crate version. These
+# JSON manifests carry a semver field that must track Cargo.toml; a targeted
+# sed touches only the "version" line so the compact manifest formatting stays
+# put (jq would reflow it). Run automatically by `just release`.
+sync-plugin-versions:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  version="$(cargo pkgid -p doctrine | sed 's/.*[#@]//')"
+  for f in plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json; do
+    sed -i -E 's/^(\s*"version"\s*:\s*)"[^"]*"/\1"'"${version}"'"/' "$f"
+  done
+  echo "synced plugin manifest versions → v${version}"
+
 # Run before a version bump / tag — this is where flake breakage (a new embed
 # root absent from the crane source graft, a toolchain skew) actually bites.
 # Pre-release gate: full workspace gate + hermetic nix flake build.
@@ -209,9 +222,10 @@ release bump: # readme-index
   esac
   version="$(cargo pkgid -p doctrine | sed 's/.*[#@]//')"
   git rev-parse -q --verify "refs/tags/v${version}" >/dev/null && { echo "release: tag v${version} already exists" >&2; exit 1; }
+  just sync-plugin-versions
   just release-check
-  git add Cargo.toml Cargo.lock
-  git commit -m "chore: v${version}"
+  git add Cargo.toml Cargo.lock plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json
+  git commit -m "chore: v${version}" -- Cargo.toml Cargo.lock plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json
   git tag "v${version}"
   echo "released v${version} (committed + tagged) — push with: git push && git push --tags"
   echo "  (pushing the tag triggers release.yml → prebuilt macOS binaries on the GitHub Release)"
