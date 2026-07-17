@@ -1,0 +1,2228 @@
+schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "9c458d1a-141e-4c6b-9421-27738a138e60"
+date = "2026-07-17"
+audience = "migration"
+
+[[judgement]]
+uid = "a5837a48-3b1a-4894-83e7-8547753c49ef"
+seq = 0
+a = "ISS-008"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/008/backlog-008.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "7ee155d4-2442-4408-aa1b-d7669c40c2a7"
+seq = 0
+a = "ISS-019"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/019/backlog-019.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "0313b10c-9305-40bd-9a61-100567e46e2f"
+seq = 0
+a = "ISS-024"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/024/backlog-024.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b795a0c6-107d-4d1c-b258-fef27d231de5"
+seq = 0
+a = "ISS-028"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/028/backlog-028.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "60651e8f-5ba3-4593-a352-083b8f0d4780"
+seq = 0
+a = "ISS-035"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/035/backlog-035.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "633f0595-aa99-4a81-9063-049ae935a4b8"
+seq = 0
+a = "ISS-037"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/037/backlog-037.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "e39e8523-3ed1-485a-b782-014000a744ad"
+seq = 0
+a = "ISS-038"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/038/backlog-038.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ba33131b-342d-4d75-8d72-34842c092115"
+seq = 0
+a = "ISS-041"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/041/backlog-041.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c7369c15-2872-44b4-b152-4cdcddd86f5e"
+seq = 0
+a = "ISS-053"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/053/backlog-053.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "6fcf39ef-7b9d-499c-923c-4076c0816124"
+seq = 0
+a = "ISS-055"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/055/backlog-055.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "5cb6d640-72bb-452a-8519-021145a34547"
+seq = 0
+a = "ISS-059"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/059/backlog-059.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "06ef2e93-b92c-4bda-96eb-238809aa8a09"
+seq = 0
+a = "ISS-205"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/205/backlog-205.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "fd1ee149-050d-476f-91a8-70acea6b3efa"
+seq = 0
+a = "ISS-206"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/issue/206/backlog-206.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "a3247d72-ad7a-433d-9821-58f30c3fd8fd"
+seq = 0
+a = "IMP-012"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/012/backlog-012.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "1b1085cb-c723-43a8-bf49-39c466201115"
+seq = 0
+a = "IMP-014"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/014/backlog-014.toml @ 1d4b2295 David Lee 2026-06-22"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "d33bf407-702e-4ff2-a338-1d9a47908181"
+seq = 0
+a = "IMP-016"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.1
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/016/backlog-016.toml @ 1d4b2295 David Lee 2026-06-22"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "bfa3c33a-11b5-4270-8827-56f3b3d27148"
+seq = 0
+a = "IMP-020"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/020/backlog-020.toml @ 9cb09a99 David Lee 2026-06-22"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "8a22b3fc-dbc4-4ce4-ae42-2783035b66c8"
+seq = 0
+a = "IMP-021"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/021/backlog-021.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "606c1b97-eb6d-4018-9e8d-616a96392193"
+seq = 0
+a = "IMP-022"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/022/backlog-022.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "80663356-3974-47fe-8012-68d6c2d4dbbd"
+seq = 0
+a = "IMP-024"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/024/backlog-024.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "2a8bc35b-eede-4597-8a1b-d5d4dd7f1da7"
+seq = 0
+a = "IMP-025"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/025/backlog-025.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c5ff0600-1dca-4a5e-b712-9c095b782d8f"
+seq = 0
+a = "IMP-026"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/026/backlog-026.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "304ce1cf-7bfa-42ea-906f-f8650fb7adcb"
+seq = 0
+a = "IMP-029"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/029/backlog-029.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f7bb943d-a98e-49e9-95dd-53b9e82d814c"
+seq = 0
+a = "IMP-042"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/042/backlog-042.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "cc9a767b-8da4-43c8-b2bb-9e4f7882112d"
+seq = 0
+a = "IMP-043"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/043/backlog-043.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "74424a2e-ae55-4c91-a018-8a78df3f07be"
+seq = 0
+a = "IMP-045"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/045/backlog-045.toml @ 7e8b346a David Lee's clanker 2026-07-01"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "e0f95458-c7d6-47f0-9ce6-a29fbd6822be"
+seq = 0
+a = "IMP-053"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/053/backlog-053.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f77dbe3a-c0cb-4cd1-9257-1cac55ca26eb"
+seq = 0
+a = "IMP-054"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/054/backlog-054.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "0949576e-0f48-48b6-bda5-929c76c4fcb2"
+seq = 0
+a = "IMP-056"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/056/backlog-056.toml @ a48a0a7a David Lee 2026-06-29"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "be47bd2b-74d8-4820-b380-d5e0dfb3fbae"
+seq = 0
+a = "IMP-057"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/057/backlog-057.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "4f09d423-7a20-46f0-aef8-310250f7646b"
+seq = 0
+a = "IMP-059"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/059/backlog-059.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b2690b14-911b-4f44-b730-145435263eff"
+seq = 0
+a = "IMP-062"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/062/backlog-062.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "a40d9013-125d-42b5-86d5-5d3f3e285c81"
+seq = 0
+a = "IMP-063"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/063/backlog-063.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ea31c5d9-a8cd-4127-a56e-3e31ae058031"
+seq = 0
+a = "IMP-065"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/065/backlog-065.toml @ 7e8b346a David Lee's clanker 2026-07-01"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "86e9d331-d539-42cc-b82b-027ba41f445b"
+seq = 0
+a = "IMP-068"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/068/backlog-068.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c74f3328-057d-4496-85df-057fa075a6e8"
+seq = 0
+a = "IMP-069"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/069/backlog-069.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ca6e8d99-33fe-4915-9995-19f7a69c3a74"
+seq = 0
+a = "IMP-070"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/070/backlog-070.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "fe9517e1-1a38-4270-a56c-7fb8aea5ac90"
+seq = 0
+a = "IMP-071"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/071/backlog-071.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b9f85d3b-c1ba-4084-8af4-0f812d88fb32"
+seq = 0
+a = "IMP-073"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/073/backlog-073.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "eaeb4431-2ba7-44ca-96ff-e2eafd64e26d"
+seq = 0
+a = "IMP-074"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/074/backlog-074.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "1a6e7dc7-b196-4d03-8473-076f55b0810b"
+seq = 0
+a = "IMP-077"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/077/backlog-077.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "58758ec2-a3a7-454e-8e5b-4de58cdfe41a"
+seq = 0
+a = "IMP-085"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/085/backlog-085.toml @ 520cd1ea David Lee 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "2ec3e17b-a35b-4785-98de-d4f4dab2d635"
+seq = 0
+a = "IMP-086"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/086/backlog-086.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "adc2ecc8-0016-4de6-a41c-5f2d4515a897"
+seq = 0
+a = "IMP-087"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.3
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/087/backlog-087.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ec32a4ad-bc57-4c0c-9115-d908588b6c98"
+seq = 0
+a = "IMP-088"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/088/backlog-088.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b4140633-e6dd-4985-8180-9541b6a64871"
+seq = 0
+a = "IMP-089"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/089/backlog-089.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "8fd2a1f1-bba1-4b17-a8d6-7e66a90515cf"
+seq = 0
+a = "IMP-095"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/095/backlog-095.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b82da18c-5953-4e43-8a5d-a765cab9f0ea"
+seq = 0
+a = "IMP-096"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/096/backlog-096.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "6cef866c-eb6e-4a2f-bbe1-219bf9b0058d"
+seq = 0
+a = "IMP-097"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/097/backlog-097.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b8de4fd1-09de-4554-8311-21e6f485aa0d"
+seq = 0
+a = "IMP-099"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/099/backlog-099.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "e80786b5-781b-4c4f-97f8-adb5aa9f8fd8"
+seq = 0
+a = "IMP-101"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/101/backlog-101.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "4f02e88e-811a-4128-bd71-0f00cedb59c4"
+seq = 0
+a = "IMP-103"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 0.9
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/103/backlog-103.toml @ 7e8b346a David Lee's clanker 2026-07-01"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c5f10e7e-2397-4123-bbc8-b5a3ef0a7003"
+seq = 0
+a = "IMP-104"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/104/backlog-104.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "35747682-429b-445a-8d8b-05eb3252f69f"
+seq = 0
+a = "IMP-105"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/105/backlog-105.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "01f824d2-e300-4cad-b9ec-16a4e930a0b5"
+seq = 0
+a = "IMP-107"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/107/backlog-107.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "77e9a05c-8dfa-44e2-852e-1ed1d3b14ffd"
+seq = 0
+a = "IMP-108"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/108/backlog-108.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "751f127d-46ea-4869-a744-e2b561921f52"
+seq = 0
+a = "IMP-109"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/109/backlog-109.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "dc16d65e-f955-4ed5-bcbe-4cfbf528a030"
+seq = 0
+a = "IMP-111"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/111/backlog-111.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "3c57ed3e-6126-4d0d-8765-294f64fe2d5d"
+seq = 0
+a = "IMP-112"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/112/backlog-112.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "3edefdab-81cb-4018-8db1-560a838daccf"
+seq = 0
+a = "IMP-115"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/115/backlog-115.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "a1bbb599-7c0f-4b45-88fe-debf459527a9"
+seq = 0
+a = "IMP-120"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/120/backlog-120.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "82976c0a-46b1-4382-ae83-c679b4c9e995"
+seq = 0
+a = "IMP-123"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/123/backlog-123.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "4e24ffe4-c1a3-4151-b0ee-d52b76f3a2c6"
+seq = 0
+a = "IMP-125"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/125/backlog-125.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ffad1e73-4eaf-4d55-b570-b4db0e53c8c1"
+seq = 0
+a = "IMP-126"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/126/backlog-126.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "4b1d935e-684e-4638-aa26-04c2b2bd2937"
+seq = 0
+a = "IMP-127"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/127/backlog-127.toml @ 7e8b346a David Lee's clanker 2026-07-01"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f1b75a02-0ba8-4326-9584-ff1d3993941f"
+seq = 0
+a = "IMP-130"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/130/backlog-130.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "843751fd-5d97-4599-ab7b-b9fef85c2a36"
+seq = 0
+a = "IMP-133"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/133/backlog-133.toml @ 08075b55 David Lee 2026-07-13"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "a2bf7f00-66fc-4ad7-b316-4ed2b026b102"
+seq = 0
+a = "IMP-135"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/135/backlog-135.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "5be5138a-3f35-43cc-a931-8fd4ae833d08"
+seq = 0
+a = "IMP-137"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/137/backlog-137.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c357ad96-28b5-46b2-bf32-71cedb649d67"
+seq = 0
+a = "IMP-138"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/138/backlog-138.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ff9b176e-a0c6-4e00-b72a-1aae614fbbae"
+seq = 0
+a = "IMP-144"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.3
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/144/backlog-144.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "de117c81-6353-401f-b553-0467f64d4d3d"
+seq = 0
+a = "IMP-146"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/146/backlog-146.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "401abcdb-75fd-473c-a51f-4aed69a96b22"
+seq = 0
+a = "IMP-148"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/148/backlog-148.toml @ d26a8b83 David Lee's clanker 2026-06-22"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "669ec389-9dc4-4899-a593-f7a46b31acf2"
+seq = 0
+a = "IMP-150"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/150/backlog-150.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "3e51383b-23a3-4b74-9769-e0313fb28dfb"
+seq = 0
+a = "IMP-154"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/154/backlog-154.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "a7dfb9c4-14d6-48f5-b1bf-de59474d74e9"
+seq = 0
+a = "IMP-155"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 5.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/155/backlog-155.toml @ f47b246d David Lee 2026-06-30"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "5882080a-67ee-4c28-8320-6f31a13d1845"
+seq = 0
+a = "IMP-156"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/156/backlog-156.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "a5d29804-a7d9-4241-83fe-8465775ac8cd"
+seq = 0
+a = "IMP-157"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/157/backlog-157.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "aea9500a-23dd-4a27-bc70-eefd6dfc7852"
+seq = 0
+a = "IMP-158"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/158/backlog-158.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "1d4275b6-ef0c-4a0b-93b9-55634982eb2e"
+seq = 0
+a = "IMP-159"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/159/backlog-159.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "5dc211cd-f1ff-4fc9-9d13-75441c5e6925"
+seq = 0
+a = "IMP-162"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/162/backlog-162.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "3d23963b-8b52-4296-93fa-15e66c83ca5a"
+seq = 0
+a = "IMP-163"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/163/backlog-163.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "afe28851-2220-4c45-a1f8-254602dc3ce0"
+seq = 0
+a = "IMP-167"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/167/backlog-167.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "56ce6539-0c8d-42bc-8b74-9721233d13e5"
+seq = 0
+a = "IMP-169"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/169/backlog-169.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "464fbd50-9f22-4a25-b6b0-34ce4262c015"
+seq = 0
+a = "IMP-170"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/170/backlog-170.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "d5d14457-9d71-4c97-8f6d-182df86332e9"
+seq = 0
+a = "IMP-171"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/171/backlog-171.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "06e3849c-cabb-479a-8762-1cd79265dfd8"
+seq = 0
+a = "IMP-172"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/172/backlog-172.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "9d10dff2-a19c-4ebe-a624-d9140254c6dc"
+seq = 0
+a = "IMP-173"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/173/backlog-173.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "159c24d7-aef7-4801-9b22-0bb2a8d11b0e"
+seq = 0
+a = "IMP-174"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/174/backlog-174.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b5259cc8-f0f0-4872-b4a1-1363f2d08c88"
+seq = 0
+a = "IMP-175"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/175/backlog-175.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "36090214-c5e1-4a24-9940-fd2d61701af6"
+seq = 0
+a = "IMP-176"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/176/backlog-176.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "e2d16427-20b5-4adf-bdbf-a466e89e74bc"
+seq = 0
+a = "IMP-177"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/177/backlog-177.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f5c59124-8764-4259-a96d-d54db761ea55"
+seq = 0
+a = "IMP-178"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/178/backlog-178.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f241801b-e83a-4bd8-b7bb-cb80b0e8ef30"
+seq = 0
+a = "IMP-179"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/179/backlog-179.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "1a265ee0-40ad-4292-b537-c87ce7c5b083"
+seq = 0
+a = "IMP-180"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/180/backlog-180.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c4da8836-bc28-4d00-a3e2-c4db387771f6"
+seq = 0
+a = "IMP-181"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/181/backlog-181.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "2258988c-f0df-41ce-9f61-bd82d0ee9fc7"
+seq = 0
+a = "IMP-182"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/182/backlog-182.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b818a461-5303-44e7-9a2d-6416ab0d080f"
+seq = 0
+a = "IMP-183"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/183/backlog-183.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "bf615fff-42d9-4edf-9741-a27d870abb18"
+seq = 0
+a = "IMP-185"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.3
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/185/backlog-185.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "3b79cedf-7852-4e17-9c0c-546e342b8e66"
+seq = 0
+a = "IMP-187"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/187/backlog-187.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "dccbec2a-573b-49b1-8844-fe01a471c8e1"
+seq = 0
+a = "IMP-190"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/190/backlog-190.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "d25930af-1c38-4806-8c23-3a1f8e0674c7"
+seq = 0
+a = "IMP-192"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/192/backlog-192.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "4428e38c-c639-45bb-b7f7-94251a3ff984"
+seq = 0
+a = "IMP-193"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.3
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/193/backlog-193.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "d3a2d75c-9832-49a1-83ae-a44d3af68279"
+seq = 0
+a = "IMP-194"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/194/backlog-194.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "6113838b-e7ec-4d71-8906-4f9515289ceb"
+seq = 0
+a = "IMP-195"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/195/backlog-195.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c0695a35-7ed6-4e63-a076-f137ab38253c"
+seq = 0
+a = "IMP-196"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/196/backlog-196.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "e9daf45d-e452-4dc6-a991-6cf2c39edf4e"
+seq = 0
+a = "IMP-197"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/197/backlog-197.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "bb2feb12-9eaf-4b34-8a8d-7320e89a9ad7"
+seq = 0
+a = "IMP-198"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.6
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/198/backlog-198.toml @ ad93bfc6 David Lee's clanker 2026-06-28"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f7b907a6-b400-43cf-8fc9-7e7554ea5b36"
+seq = 0
+a = "IMP-199"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/199/backlog-199.toml @ ad93bfc6 David Lee's clanker 2026-06-28"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "50871c29-45a7-4b32-9f2b-886f29d8e435"
+seq = 0
+a = "IMP-200"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/200/backlog-200.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c0b44d54-70e5-4bae-9efc-d317bdcd1647"
+seq = 0
+a = "IMP-201"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/201/backlog-201.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "1d0352ce-3509-4441-8c19-ff62f4016d1d"
+seq = 0
+a = "IMP-202"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/202/backlog-202.toml @ ad93bfc6 David Lee's clanker 2026-06-28"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "bd57ae11-cb69-4e7e-9723-12e12d9b0fb1"
+seq = 0
+a = "IMP-203"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/203/backlog-203.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "889e935b-c267-40e6-b3af-5b02c3f6be25"
+seq = 0
+a = "IMP-204"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.3
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/204/backlog-204.toml @ ad93bfc6 David Lee's clanker 2026-06-28"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b830c203-af05-4a3d-b222-e9799a3562d1"
+seq = 0
+a = "IMP-205"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/205/backlog-205.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "6752757d-7724-4bf0-93e2-172e42040aeb"
+seq = 0
+a = "IMP-206"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/206/backlog-206.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "08933dd0-abaf-4091-99db-f5706ee93157"
+seq = 0
+a = "IMP-208"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/208/backlog-208.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "82c6ad8d-aa1f-456c-b7dd-23b38daf3cfa"
+seq = 0
+a = "IMP-209"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/209/backlog-209.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "8f2f7944-fd74-4517-8cb1-8175a488a86f"
+seq = 0
+a = "IMP-210"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/210/backlog-210.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "9ff67646-1438-40fe-8e01-60ba902e25c1"
+seq = 0
+a = "IMP-214"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/214/backlog-214.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "eb9fb0db-3813-487b-a538-8abf96f640be"
+seq = 0
+a = "IMP-216"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/216/backlog-216.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "459752cb-7380-4e15-ad56-37c2e991771d"
+seq = 0
+a = "IMP-217"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/217/backlog-217.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "7b15fdaf-bef7-41ba-9f00-8ee6eadcfd82"
+seq = 0
+a = "IMP-220"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/220/backlog-220.toml @ 040953b1 David Lee 2026-06-30"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "e0916850-cec1-4da8-b90d-9878aa32e351"
+seq = 0
+a = "IMP-221"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/221/backlog-221.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "27842e6c-a5f8-4728-832a-36caf21a66ef"
+seq = 0
+a = "IMP-222"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/222/backlog-222.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "5163ce5c-79b1-45c2-b71d-dcaf183d5a29"
+seq = 0
+a = "IMP-223"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.3
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/223/backlog-223.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "72007997-4706-4cd6-9e96-0b5b32bc0362"
+seq = 0
+a = "IMP-229"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.1
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/229/backlog-229.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "02db0ecb-ac0e-4e1e-baf0-a48e41d104e5"
+seq = 0
+a = "IMP-230"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/230/backlog-230.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "2e7b78c6-8baa-4245-be55-f8022dbbd4f2"
+seq = 0
+a = "IMP-232"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/232/backlog-232.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "31412e32-0f60-4a9f-90bc-64ec2f00cf79"
+seq = 0
+a = "IMP-233"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/233/backlog-233.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "616c320e-aaad-4e16-a073-cba02b43b4aa"
+seq = 0
+a = "IMP-234"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/234/backlog-234.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "3c90f393-6f11-476c-9283-4b581291d7d0"
+seq = 0
+a = "IMP-235"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/235/backlog-235.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "72647280-3096-406b-8b4b-fd6359fbe101"
+seq = 0
+a = "IMP-236"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/236/backlog-236.toml @ 08075b55 David Lee 2026-07-13"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c850b9e9-23b7-49fc-9731-a63cd6404cf9"
+seq = 0
+a = "IMP-237"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/237/backlog-237.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "af3a9ad5-34ea-424b-9bcf-a6b51742b31d"
+seq = 0
+a = "IMP-239"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.3
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/239/backlog-239.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "084088b1-367d-4faf-a4a3-a61d9326348a"
+seq = 0
+a = "IMP-240"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/240/backlog-240.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "a9ae99f3-527b-4b8d-acca-cebc1fac9d45"
+seq = 0
+a = "IMP-244"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/244/backlog-244.toml @ 12a80e92 David Lee 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "71f318e8-bbb3-452b-90cb-ebfcb45aad10"
+seq = 0
+a = "IMP-255"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/255/backlog-255.toml @ 08075b55 David Lee 2026-07-13"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c315d45c-377e-4a7b-af5b-341d04f4eebb"
+seq = 0
+a = "IMP-256"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/256/backlog-256.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "096fb832-8615-4d63-a439-0b9bf4375114"
+seq = 0
+a = "IMP-257"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/257/backlog-257.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "be4a3ad7-ef83-403b-ba75-9d8b2a6a6053"
+seq = 0
+a = "IMP-258"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/258/backlog-258.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "cb039c26-3fba-4533-9490-e3468ae607fa"
+seq = 0
+a = "IMP-259"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/259/backlog-259.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f82a16ef-29e6-48a1-a743-2f7d729e8dbb"
+seq = 0
+a = "IMP-260"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/260/backlog-260.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "d8eeb9d2-9ce0-40fa-9b33-3e65f8d7ac4a"
+seq = 0
+a = "IMP-261"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/261/backlog-261.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f65782fb-4e69-4104-8ea0-a12dffd28e51"
+seq = 0
+a = "IMP-262"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/262/backlog-262.toml @ a898362b David Lee 2026-07-04"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "d4130877-9b34-47d3-8134-92010b041cfb"
+seq = 0
+a = "IMP-263"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/263/backlog-263.toml @ 08075b55 David Lee 2026-07-13"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "173c744d-28bc-40e2-a7bc-84482813d4b9"
+seq = 0
+a = "IMP-274"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.3
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/274/backlog-274.toml @ 08075b55 David Lee 2026-07-13"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "27f902d7-05a7-4f08-a201-699f78e5ae20"
+seq = 0
+a = "IMP-279"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/improvement/279/backlog-279.toml @ c7770486 David Lee's clanker 2026-07-11"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "37aaeeaf-3b31-420c-8963-450a24c67900"
+seq = 0
+a = "CHR-001"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/001/backlog-001.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "1054d07d-e2b0-4d82-ac1a-c6e0b66f72eb"
+seq = 0
+a = "CHR-007"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/007/backlog-007.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "d6697f2a-1c5f-40b7-b25f-6425b504b2a4"
+seq = 0
+a = "CHR-009"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/009/backlog-009.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "f2d3de69-88c9-46da-883a-876e430dd5a1"
+seq = 0
+a = "CHR-016"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/016/backlog-016.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "3d74e72b-9420-4289-83b6-28d3dce5bb39"
+seq = 0
+a = "CHR-021"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.4
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/021/backlog-021.toml @ df7c68ed David Lee's clanker 2026-06-23"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "7d20eb52-665d-411e-97eb-df51da3c1351"
+seq = 0
+a = "CHR-023"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/023/backlog-023.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "5fe85834-b49d-4773-bc3c-a86da46fd431"
+seq = 0
+a = "CHR-024"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/024/backlog-024.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "6ea1535b-fe7e-4a96-8ec6-acabd6870961"
+seq = 0
+a = "CHR-026"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/026/backlog-026.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "3b31b538-4471-47fe-95d7-d4b08133a45f"
+seq = 0
+a = "CHR-027"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/027/backlog-027.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "90325099-4538-45f2-b942-f2731d31724a"
+seq = 0
+a = "CHR-034"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/034/backlog-034.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b95ecb73-3fa1-456a-8062-fdbe8f533ce4"
+seq = 0
+a = "CHR-035"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/035/backlog-035.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "989c7745-ecee-4c06-bd58-95fdb72a8ec6"
+seq = 0
+a = "CHR-036"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/chore/036/backlog-036.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "7225943b-fb5b-410d-aa94-682e02aed433"
+seq = 0
+a = "RSK-006"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/risk/006/backlog-006.toml @ a48a0a7a David Lee 2026-06-29"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "905f3947-431f-4a91-a766-2496c165c18e"
+seq = 0
+a = "RSK-008"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/risk/008/backlog-008.toml @ a48a0a7a David Lee 2026-06-29"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "34925643-09c3-40d9-b4a2-ac001212b8b1"
+seq = 0
+a = "RSK-012"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/risk/012/backlog-012.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "fce76787-b97a-48b8-af4b-0b617f628b65"
+seq = 0
+a = "RSK-013"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/risk/013/backlog-013.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ccbade42-a99e-4073-a4fa-64c85b4ae677"
+seq = 0
+a = "RSK-014"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/risk/014/backlog-014.toml @ 7e8b346a David Lee's clanker 2026-07-01"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "fd01ed20-6236-4a51-a7cf-401118a4e31e"
+seq = 0
+a = "IDE-005"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/005/backlog-005.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "c19ef582-7755-4c64-948a-4842bf0e716f"
+seq = 0
+a = "IDE-007"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/007/backlog-007.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "cae35bc4-d9f0-46d3-9ef4-6f2ea341d9e6"
+seq = 0
+a = "IDE-008"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/008/backlog-008.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "8d3a6dcb-2aef-445d-b674-d89f7e4a0c0a"
+seq = 0
+a = "IDE-009"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/009/backlog-009.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "081a128f-2abb-40be-a91c-89897a701cfb"
+seq = 0
+a = "IDE-011"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/011/backlog-011.toml @ a48a0a7a David Lee 2026-06-29"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "2dd0af94-89ec-4835-9b8a-6872b29958e5"
+seq = 0
+a = "IDE-013"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/013/backlog-013.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "b0a378b1-9560-43d5-91f2-04dcace505a9"
+seq = 0
+a = "IDE-014"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/014/backlog-014.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "e26f6e1e-92ea-4c9c-b2b2-e0f565fc963a"
+seq = 0
+a = "IDE-015"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/015/backlog-015.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "d8c92bce-4e64-46c9-a561-031fb2e0834b"
+seq = 0
+a = "IDE-016"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/016/backlog-016.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ad467e28-c7fd-4261-8029-2056d8325073"
+seq = 0
+a = "IDE-017"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/017/backlog-017.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "50719ef4-b6f2-4b14-be8a-ed580f8737ce"
+seq = 0
+a = "IDE-018"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/018/backlog-018.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "cdc589de-4d65-4a45-881f-190bd5b2d939"
+seq = 0
+a = "IDE-019"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/019/backlog-019.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "93db4c13-a05a-4cfd-a88a-798fdf784969"
+seq = 0
+a = "IDE-021"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.5
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/021/backlog-021.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "dfed69d3-d86f-4a9e-93ee-db228dbf299b"
+seq = 0
+a = "IDE-022"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/022/backlog-022.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "1ba4806a-e0c8-499e-80db-572808afed2a"
+seq = 0
+a = "IDE-023"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/023/backlog-023.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "e10bb5bc-869d-4141-a3ef-46ddefc79c4f"
+seq = 0
+a = "IDE-024"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/024/backlog-024.toml @ 7e8b346a David Lee's clanker 2026-07-01"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "12631837-84ac-48cf-b557-1290cb0b2eb4"
+seq = 0
+a = "IDE-025"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.6
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/025/backlog-025.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "ae7614c0-f86e-464e-a603-83e13d3ed1b2"
+seq = 0
+a = "IDE-026"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 2.2
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/026/backlog-026.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "171af079-82ce-43b5-9f97-ccd648605cf1"
+seq = 0
+a = "IDE-027"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 3.0
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/027/backlog-027.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"
+
+[[judgement]]
+uid = "143f826d-a737-4dc7-a33a-19ecc68e13d2"
+seq = 0
+a = "IDE-028"
+form = "anchor"
+domain = "value"
+frame = "value-anchor"
+magnitude = 1.8
+rater = "migrated"
+basis = "facet [value] .doctrine/backlog/idea/028/backlog-028.toml @ b911d5f0 David Lee's clanker 2026-07-03"
+observed_at = "2026-07-17"

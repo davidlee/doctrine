@@ -1,0 +1,24 @@
+$ DOCTRINE_BIN=.dispatch/SL-220/target/debug/doctrine python3 .dispatch/SL-220/scripts/migrate_value_facets.py --check
+(run 2026-07-17, primary tree @ 12d05c5b, coord binary @ fb49eaf2)
+
+scan: 185 [value] facet(s) found
+emit: wrote /workspace/doctrine/.doctrine/comparisons/2026-07-17-9c458d1a-141e-4c6b-9421-27738a138e60.toml (185 row(s))
+verify: OK — comparison corpus parses/resolves
+census: facets_found=185 imported=185 already-imported=0 re-imported(superseding)=0
+--check complete (no strip performed)
+
+Full per-entity status table (185 rows, all `imported`):
+ISS: 008 019 024 028 035 037 038 041 053 055 059 205 206  (13)
+IMP: 012 014 016 020 021 022 024 025 026 029 042 043 045 053 054 056 057 059
+     062 063 065 068 069 070 071 073 074 077 085 086 087 088 089 095 096 097
+     099 101 103 104 105 107 108 109 111 112 115 120 123 125 126 127 130 133
+     135 137 138 144 146 148 150 154 155 156 157 158 159 162 163 167 169 170
+     171 172 173 174 175 176 177 178 179 180 181 182 183 185 187 190 192 193
+     194 195 196 197 198 199 200 201 202 203 204 205 206 208 209 210 214 216
+     217 220 221 222 223 229 230 232 233 234 235 236 237 239 240 244 255 256
+     257 258 259 260 261 262 263 274 279  (135)
+CHR: 001 007 009 016 021 023 024 026 027 034 035 036  (12)
+RSK: 006 008 012 013 014  (5)
+IDE: 005 007 008 009 011 013 014 015 016 017 018 019 021 022 023 024 025 026
+     027 028  (20)
+13+135+12+5+20 = 185 ✓ (matches facets_found)
