@@ -1911,3 +1911,52 @@ Friction wiring IMP-107 (ReviewError variants) in an isolated worktree:
   cause: worktree skill hands back a fork PATH but nothing re-anchors subsequent
   file-tool cwd; easy to keep using habitual absolute primary paths. A cheap
   guard would be echoing the fork path prominently as the working root.
+
+[slice; SL-222-scoping-fable]
+Relation authoring for RFC-derived slices took three attempts: (1) `link SL
+originates_from RFC` refused — role-refined labels aren't link-writable
+directly, must be `references --role originates_from`; the error's legal-label
+list prints `references` three times (once per role?) which obscures rather
+than hints at the --role mechanism; (2) `references` then refused an RFC
+target (legal kinds: ISS/IMP/CHR/RSK/IDE/SL), so a slice cannot record
+"originates from RFC-NNN" at all — fell back to bare `related`, losing the
+provenance intent. If phases of an RFC become a recurring pattern (RFC-020 has
+4+), RFC as a legal `references` target (or a dedicated provenance channel)
+would save the discovery loop each time.
+
+[dispatch; SL-221 orch session 32c19af3]
+PHASE-01 funnel friction (claude arm):
+- Stale LSP dead-code diagnostics false-alarm: the harness emitted `<new-diagnostics>`
+  flagging every relocated engine symbol in dispatch.rs as "never used" the instant the
+  worker returned. Fresh `cargo clippy --bin doctrine` (forced recompile) = zero warnings.
+  Root cause: rust-analyzer fired mid-edit (definitions moved into dispatch.rs before the
+  mcp_server `use crate::dispatch::{…}` imports were wired), and the stale diagnostic rode
+  the worker's return. Cost: ~3 orchestrator turns re-verifying a non-issue before trusting
+  the delta. Worker self-report (clippy clean, tests green) was actually correct; the
+  harness signal was the misleader.
+- Working-tree-free import → manual `git reset --hard <coord_tip>` needed before the
+  regression verify beat. dispatch_import advances the ref object-db-only, leaving the coord
+  working tree at B; `check regression diff` builds the cwd working tree, so it must be
+  synced to S first. Not documented in the dispatch/dispatch-agent skills — an orchestrator
+  has to infer the reset step. A one-liner in the funnel ("sync coord worktree to coord_tip
+  before the regression diff") would save the inference.
+
+[dispatch; SL-221 orch session 32c19af3]
+PHASE-02 worker path-aliasing confusion:
+- The confined worker's early Reads via the ABSOLUTE path /workspace/doctrine/src/... resolved
+  to the SHARED PRIMARY checkout (on edge, pre-PHASE-01) — stale content — not its own worktree
+  copy under .dispatch/SL-221/.worktrees/agent-<id>/src/... The worker caught it and made all
+  edits against the worktree-relative path, but flagged it as a latent trap: a worker that
+  trusts an absolute /workspace/doctrine/... path silently reads pre-dispatch source. Mitigation
+  for future worker prompts: instruct workers to use worktree-relative paths (cwd is the fork
+  root) and never absolute /workspace/doctrine/... paths for reads/edits.
+
+[design/review; SL-222-rv282-fable]
+Review-ledger protocol friction: (1) `review raise --as` takes the role
+LABEL (`raiser`), not the participant name set at `review new --raiser codex`
+— the external reviewer burned a round discovering this; (2) a contested
+finding cannot be re-verified until the responder re-disposes — correct
+protocol, but the raiser attempted verify-on-contested and had to bounce
+back (rounds 27→37 for a 5-finding re-verify). A `review verify` error
+message naming "re-dispose first" (it may already) plus `--as <name>`
+accepting participant names would trim a round-trip each.
