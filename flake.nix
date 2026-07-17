@@ -45,6 +45,10 @@
           then inputs.pub.lib.${system}.mkJailedAgents {inherit (inputs) llm-agents;}
           else {};
 
+        # pi-dev = jailLib.agentsByName.pi;
+        claude = jailLib.agentsByName.claude;
+        codex = jailLib.agentsByName.codex;
+
         projectPkgs = with pkgs; [
           jujutsu
           jjui

@@ -312,11 +312,11 @@
       },
       "locked": {
         "dir": "flakes/pub",
-        "lastModified": 1783929137,
-        "narHash": "sha256-sbX1P3v8RkkfKWrh2phM+zFWBxOSUHSNsQknAAmgygk=",
+        "lastModified": 1784259864,
+        "narHash": "sha256-ZgU+cXxRgqPxIzxgl6PzJWZTV9Qg9ntKK18HczVx8Cs=",
         "owner": "davidlee",
         "repo": "nix-config",
-        "rev": "18ccc201aefb910cb10041c9258549de0f825be6",
+        "rev": "88a0702f640ad1b6eb29107a9cf5bdc64a83f091",
         "type": "github"
       },
       "original": {
