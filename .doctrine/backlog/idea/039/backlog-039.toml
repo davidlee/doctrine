@@ -5,10 +5,10 @@ id = 39
 slug = "magnitude-claims-ledgered"
 title = "Magnitude claims as ledgered evidence"
 kind = "idea"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "promoted"
 created = "2026-07-12"
-updated = "2026-07-12"
+updated = "2026-07-17"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
