@@ -1754,3 +1754,54 @@ flags migration/authored divergence) would have surfaced the 3-way split in one
 command instead of a manual investigation. Same root as SL-198's note: the
 edge/main promotion discipline vs dispatch's off-edge code lineage keeps
 generating split-lineage close friction.
+[inquisition; rv278-shell-quoting]
+`review raise --title/--detail` through `exec_command` is vulnerable to shell command-substitution if backticks survive into double-quoted arguments; a malformed verified finding resulted and had to be superseded rather than withdrawn because verified findings are not withdrawable. Safe pattern: here-doc into shell vars, then pass "$var".
+
+[design; e4d90792-SL-214]
+- `/design` invoked on a slice already at `plan` status with a locked committed
+  design; the skill has no explicit resume/already-locked entry path, so the
+  agent must reconstruct lifecycle position from paths/status/git-log/review-list
+  (~4 probe commands) before knowing which state-machine node applies.
+- `doctrine review list` has no `--slice <id>` filter; checking "has SL-214 had
+  an external review?" means dumping the full RV table and grepping — cost grows
+  with ledger count (currently 19+ rows for an empty answer).
+
+[design/slice; SL-221-e636a12e]
+- First `/design` produced a *localised* fix (merge inside `commit_boundaries`) that
+  the codex inquisition (RV-278) then holed below the waterline — forcing a full
+  rescope to "collapse the seam". Root cause of the wasted first pass: the
+  boundaries-ledger **writer/arm model** is captured nowhere retrievable. Had to
+  reconstruct from code + `dispatch/SKILL.md` across ~8 probe commands that
+  `conclude_boundary_commit` (object-db) is the PRIMARY writer, `record-boundary`
+  (working-tree) is a rare MANUAL escape hatch, and `commit_boundaries` reads the
+  working tree = the seam. My first design mis-modelled the CLI arm as routinely
+  authoritative for working-tree rows. A durable memory ("boundaries.toml: one
+  object-db writer + a working-tree escape hatch, joined by a lossy sync read")
+  would have routed straight to the collapse design. → candidate `/record-memory`.
+- `doctrine review list` has no `--slice <id>` filter (also hit by e4d90792): to
+  confirm "any prior review of SL-221?" you dump the whole RV table and grep.
+- `review dispose` refuses when a finding is `verified` ("out of turn"): a reviewer
+  that raises AND self-verifies (codex with write access) leaves the author no
+  open turn to record acceptance; the disposition ends up authored by the reviewer.
+
+[plan; e4d90792-SL-214]
+- `doctrine slice verify-vt` pre-implementation output is misleading:
+  UNATTRIBUTABLE rows print "keyword present but <file> not modified by this
+  slice" even when the keyword is verifiably absent (grep exit 1). Cost: agent
+  re-greps every mandated file to disprove the tool's claim before trusting
+  the plan's keyword floors. Filed as backlog issue.
+- Plan scaffold comment shows the VT row shape but not VA/VH row shape
+  (`expects` vs `text`); had to grep a sibling slice's plan.toml for the
+  precedent, then rewrite rows.
+
+[inquisition; SL-221 RV-279 second-trial]
+External reviewer (codex/GPT-5.5) suffered a shell-interpolation mishap on its
+first two `review raise` calls: symbol names inside backticks were stripped by
+the shell, landing F-1/F-2 with empty `` `` `` backticks and no evidence. It then
+re-raised the clean versions as F-4/F-5 but left the mangled F-1/F-2 open (didn't
+self-withdraw). Cost: 2 dead findings the responder had to withdraw, + reader
+confusion reconciling "5 findings, 3 usable". Root cause: raising multi-line
+`--detail` prose containing backticked `code` symbols through a shell without
+robust quoting. Mitigation worth considering: a `review raise --detail-file` /
+stdin path (like `prime --from`) so evidence prose never transits shell word-
+splitting; or guidance in the reviewer prompt to single-quote detail bodies.

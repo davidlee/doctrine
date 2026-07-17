@@ -87,9 +87,20 @@ the whole "splice the uncommitted working ledger" step are gone.
 
 **(a) Relocate the object-db compose engine** — move `commit_on_behalf`,
 `commit_tree_as`, `Provenance`, `Identity`, `dispatch_identity`, `CommitOutcome`,
-`CommitRefusal`, and `DISPATCH_NAME`/`DISPATCH_EMAIL` from `mcp_server/dispatch.rs`
-into `dispatch.rs` (engine tier). `mcp_server/dispatch.rs` references them as
-`crate::dispatch::…` (the existing one-way edge). Generalise the CAS target:
+`CommitRefusal`, `funnel_message`, and `DISPATCH_NAME`/`DISPATCH_EMAIL` from
+`mcp_server/dispatch.rs` into `dispatch.rs` (engine tier). `mcp_server/dispatch.rs`
+references them as `crate::dispatch::…` (the existing one-way edge; its remaining
+callers — `dispatch_import` line 490, `conclude_boundary_commit` line 578 — pick up
+`funnel_message` through that same edge).
+
+*Relocation set closed over `land_boundary_row` (RV-279 F-5).* The helper's
+transitive dependencies were audited: `funnel_message` (`mcp_server/dispatch.rs:42`)
+is the **only** symbol that must move down with the engine — everything else it
+touches already lives at or below the engine tier: `tree_of`
+(`dispatch.rs:1927`), `read_ledger` (`dispatch.rs:2652`), `resolve_commit`
+(`dispatch.rs:1914`), `git::tree_with_file` (`git.rs:794`), and the coord-ref prefix
+`DISPATCH_REF_PREFIX` (`crate::kinds`). No symbol in the set forces a reverse
+`dispatch → mcp_server` edge (ADR-001 clean). Generalise the CAS target:
 
 ```rust
 // was: derives the branch ref from `coord_root`'s HEAD (couples to running in the coord worktree)
@@ -139,18 +150,45 @@ row, &prov)` instead of `ledger::record_boundary`. Its second write —
 reads boundaries from the ref via `read_ledger` (already does). Reword the §5.2-step-1
 doc-comment.
 
+**(e′) `plan_phases` normalises by phase before chaining (RV-279 F-3).**
+`plan_phases` (`dispatch.rs:2709-2728`) reparents each `phase/<slice>-NN` off the
+previous emitted phase, walking `boundaries.rows` **in stored order** — so ledger
+row order *is* the branch ancestry. Today that is safe only because the funnel
+concludes phases in ascending order; the `record-boundary` escape hatch is
+documented to "bootstrap a pre-binding phase" (`dispatch/SKILL.md:97`), i.e. it can
+legitimately land an *earlier* phase after later rows exist. `land_boundary_row`
+UPSERTs a **new** phase with `rows.push` (tail append) — so an out-of-order record
+would leave the rows misordered and `plan_phases` would mischain ancestry.
+
+Fix: `plan_phases` sorts a local view of the rows by parsed phase ordinal (stable;
+malformed/non-`PHASE-NN` rows keep relative position, sorted last) **before** the
+chaining walk. The consumer owns its ordering requirement; the writers stay
+append-simple and the ledger's on-disk order is untouched (no second normalisation
+seam). This is the truthful replacement for the retracted "single writer ⇒ ordering
+cannot arise" claim: the single writer removes the *merge-interleave* source, but
+phase-order == row-order is established **here**, by construction, independent of
+write order.
+
+*Alternative considered — sort-on-write* (keep `Boundaries` phase-sorted inside
+`land_boundary_row`): rejected as less local — it spreads the ordering invariant
+across every writer and mutates stored order, versus one guard at the sole
+order-sensitive consumer.
+
 **(f) Deletions** — `dispatch::commit_boundaries`, `ledger::read_boundaries_file`,
 `ledger::record_boundary` (+ their unit tests) once unreferenced.
 
 ### 5.3 Data, State & Ownership
 
-`BoundaryRow` / `Boundaries` schemas unchanged. Row order is now **only** ever the
-committed ref's order (conclude/record-boundary append in call order); there is no
-second source to interleave, so F-3's ordering hazard cannot arise — `plan_phases`
-sees exactly the order the single writer produced (as it does today for conclude).
-`boundary::Provenance` (`Funnel`/`Manual`) stays a row field; the commit-identity
-`Provenance` (`Import`/`Conclude`) is the git author/committer (see OQ-1 for the
-escape hatch's identity).
+`BoundaryRow` / `Boundaries` schemas unchanged. Collapsing to one writer removes the
+*merge-interleave* source RV-278 F-3 attacked (there is no second ledger to splice
+in), but it does **not** by itself make ledger row order equal phase order: both
+the funnel and the escape hatch `push` a new phase at the tail, and the escape hatch
+may legitimately land an out-of-order phase (§5.2 e′). Phase-order == row-order is
+therefore established explicitly at the sole order-sensitive consumer —
+`plan_phases` sorts by phase ordinal before chaining (§5.2 e′, VT-6) — not assumed
+from the single-writer property. `boundary::Provenance` (`Funnel`/`Manual`) stays a
+row field; the commit-identity `Provenance` (`Import`/`Conclude`) is the git
+author/committer (see OQ-1 for the escape hatch's identity).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
