@@ -1671,3 +1671,28 @@ jail has ro .doctrine)
 - Scratch fixtures under the session scratchpad dir did not survive
   between bash calls in the worker jail (cwd + tmp reset);
   fixture-build-and-assert must be a single bash call.
+
+[dispatch; SL-220 PHASE-07 conclude]
+prepare-review completeness gate roots BOTH sides on the PRIMARY tree
+(dispatch.rs step 5), but dispatch_conclude_phase flips only the COORD
+tree's phase sheets — so a fully-concluded drive still halts with
+"recorded row for PHASE-NN, which is not a completed phase" (the Extra
+gap, whose remedy hint "record-delta the missing phase(s)" points the
+WRONG way — the rows exist; the primary sheets are stale). Cost: one
+halted prepare-review + source dive (state.rs/dispatch.rs) to learn the
+completed-set provenance + 7 manual `slice phase --status completed`
+flips in the primary tree. IDE-028 already captures the fix (auto-push
+phase status in the funnel Record beat); the misleading Extra-gap hint
+is an additional papercut worth folding in.
+
+[dispatch; SL-220 PHASE-07 conclude, cont.]
+Second papercut in the same beat: dispatch_conclude_phase lands the
+boundary row WORKING-TREE-FREE, but prepare-review's ledger commit
+step commits the coord WORKING TREE's boundaries.toml — which was
+still the pre-conclude checkout. Result: prepare-review itself
+clobbered the just-landed PHASE-07 row (ac2f1e33, -6 lines) and then
+its own gate failed on the row it deleted. The funnel's
+sync-working-tree-after-object-db-write ritual applies to conclude
+too, not just imports — or prepare-review should source its ledger
+commit from the ref, not the working tree. Cost: one forensic git
+dive + a restore commit (fc58eb60).
