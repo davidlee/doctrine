@@ -419,14 +419,9 @@ fn canonical_id(id: u32) -> String {
 }
 
 /// Parse a rec reference — `REC-007`, `rec-7`, or the bare id `7` — to its id.
+/// Delegates to the shared [`crate::listing::parse_ref`] (IMP-125).
 fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    let digits = reference
-        .strip_prefix("REC-")
-        .or_else(|| reference.strip_prefix("rec-"))
-        .unwrap_or(reference);
-    digits
-        .parse::<u32>()
-        .with_context(|| format!("not a rec reference: `{reference}` (expected `REC-007` or `7`)"))
+    crate::listing::parse_ref("REC", "a rec", reference)
 }
 
 /// Read one REC's `rec-NNN.toml` as data.

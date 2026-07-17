@@ -42,6 +42,28 @@ pub(crate) fn canonical_id(prefix: &str, id: u32) -> String {
     format!("{prefix}-{id:03}")
 }
 
+/// The symmetric inverse of [`canonical_id`]: parse an entity reference by prefix,
+/// accepting both `PREFIX-NNN` and bare `NNN`. The single id-**parse** authority for
+/// prefixed kinds (IMP-125), mirroring `canonical_id`'s id-**format** authority.
+///
+/// The prefix is stripped in exactly two literal cases (`PREFIX-` or its lowercase),
+/// **not** case-insensitively: a case-insensitive strip would newly accept mixed-case
+/// forms, an observable behaviour change (R4).
+///
+/// `prefix` is the canonical prefix string, e.g. `"ADR"`, `"SL"`.
+/// `kind_label` is the prose label for error messages, e.g. `"an ADR"`, `"a slice"`.
+pub(crate) fn parse_ref(prefix: &str, kind_label: &str, reference: &str) -> anyhow::Result<u32> {
+    let upper = format!("{prefix}-");
+    let lower = upper.to_lowercase();
+    let digits = reference
+        .strip_prefix(&upper)
+        .or_else(|| reference.strip_prefix(&lower))
+        .unwrap_or(reference);
+    digits.parse::<u32>().with_context(|| {
+        format!("not {kind_label} reference: `{reference}` (expected `{prefix}-007` or `7`)")
+    })
+}
+
 /// Output format for a `list`/`show` surface. A plain enum (NOT `clap::ValueEnum`,
 /// which would drag clap into this leaf — A-3); the command layer wires it via
 /// `#[arg(value_parser = Format::from_str)]`. `Display` is required by clap's
@@ -1054,6 +1076,39 @@ mod tests {
         assert_eq!(canonical_id("PRD", 123), "PRD-123");
         // four+ digits are not truncated — padding is a minimum, not a cap.
         assert_eq!(canonical_id("REQ", 1234), "REQ-1234");
+    }
+
+    // -- parse_ref (the symmetric inverse of canonical_id) ----------------
+
+    #[test]
+    fn parse_ref_accepts_prefixed_padded_and_bare_ids() {
+        // ADR
+        assert_eq!(parse_ref("ADR", "an ADR", "ADR-007").unwrap(), 7);
+        assert_eq!(parse_ref("ADR", "an ADR", "adr-7").unwrap(), 7);
+        assert_eq!(parse_ref("ADR", "an ADR", "7").unwrap(), 7);
+        assert_eq!(parse_ref("ADR", "an ADR", "042").unwrap(), 42);
+        // policy
+        assert_eq!(parse_ref("POL", "a policy", "POL-001").unwrap(), 1);
+        // slice
+        assert_eq!(parse_ref("SL", "a slice", "SL-025").unwrap(), 25);
+        // padded bare, no prefix
+        assert_eq!(parse_ref("RFC", "an RFC", "011").unwrap(), 11);
+    }
+
+    #[test]
+    fn parse_ref_error_names_the_kind_label_and_expected_form() {
+        let err = parse_ref("ADR", "an ADR", "nope").unwrap_err().to_string();
+        assert!(err.contains("an ADR"), "error names the kind label: {err}");
+        assert!(err.contains("ADR-007"), "error shows expected form: {err}");
+        let err = parse_ref("POL", "a policy", "bad").unwrap_err().to_string();
+        assert!(err.contains("a policy"), "{err}");
+    }
+
+    #[test]
+    fn parse_ref_strip_is_two_literal_cases_not_case_insensitive() {
+        // R4: the strip is exactly `PREFIX-` or its lowercase — a mixed-case prefix
+        // is NOT stripped, so it fails to parse (an observable contract).
+        assert!(parse_ref("ADR", "an ADR", "AdR-7").is_err());
     }
 
     // -- Format from_str / Display ----------------------------------------

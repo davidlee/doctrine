@@ -1477,14 +1477,9 @@ fn edge_label(doc: &ReviewDoc) -> String {
 }
 
 /// Parse a review reference — `RV-007`, `rv-7`, or the bare id `7` — to its id.
+/// Delegates to the shared [`crate::listing::parse_ref`] (IMP-125).
 fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    let digits = reference
-        .strip_prefix("RV-")
-        .or_else(|| reference.strip_prefix("rv-"))
-        .unwrap_or(reference);
-    digits.parse::<u32>().with_context(|| {
-        format!("not a review reference: `{reference}` (expected `RV-007` or `7`)")
-    })
+    crate::listing::parse_ref("RV", "a review", reference)
 }
 
 /// One unresolved blocker holding a target's closure open (design §7, D8/D-C9b):

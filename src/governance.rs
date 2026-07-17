@@ -217,34 +217,12 @@ struct Doc {
 }
 
 /// Parse a governance reference — `ADR-007`, `adr-7`, or the bare id `7` — to its
-/// numeric id. Delegates to [`parse_entity_ref`]; the error-message label is
-/// `"an {prefix}"` (preserving the pre-SL-167 format, article and all).
+/// numeric id. Delegates to the shared [`crate::listing::parse_ref`] (IMP-125); the
+/// error-message label is `"an {prefix}"` (preserving the pre-SL-167 format, article
+/// and all).
 fn parse_ref(g: &GovKind, reference: &str) -> anyhow::Result<u32> {
     let label = format!("an {}", g.kind.prefix);
-    parse_entity_ref(g.kind.prefix, &label, reference)
-}
-
-/// Parse an entity reference by prefix — accepts both `PREFIX-NNN` and bare `NNN`.
-/// The prefix is stripped in exactly two literal cases (`PREFIX-` or its
-/// lowercase), **not** case-insensitively: a case-insensitive strip would newly
-/// accept mixed-case forms, an observable behaviour change.
-///
-/// `prefix` is the canonical prefix string, e.g. `"ADR"`, `"SL"`.
-/// `kind_label` is the prose label for error messages, e.g. `"an ADR"`, `"a slice"`.
-pub(crate) fn parse_entity_ref(
-    prefix: &str,
-    kind_label: &str,
-    reference: &str,
-) -> anyhow::Result<u32> {
-    let upper = format!("{prefix}-");
-    let lower = format!("{prefix}-").to_lowercase();
-    let digits = reference
-        .strip_prefix(&upper)
-        .or_else(|| reference.strip_prefix(&lower))
-        .unwrap_or(reference);
-    digits.parse::<u32>().with_context(|| {
-        format!("not {kind_label} reference: `{reference}` (expected `{prefix}-007` or `7`)")
-    })
+    crate::listing::parse_ref(g.kind.prefix, &label, reference)
 }
 
 /// Read one entity's `<stem>-NNN.toml` (as data) and `<stem>-NNN.md` (prose body).
@@ -1105,30 +1083,6 @@ mod tests {
         // R4: the strip is two literal cases, NOT case-insensitive — a mixed-case
         // prefix is NOT stripped, so it fails to parse (an observable ADR contract).
         assert!(parse_ref(&ADR_KIND, "AdR-7").is_err());
-    }
-
-    #[test]
-    fn parse_entity_ref_delegates_correctly_for_each_prefix() {
-        // ADR
-        assert_eq!(parse_entity_ref("ADR", "an ADR", "ADR-007").unwrap(), 7);
-        assert_eq!(parse_entity_ref("ADR", "an ADR", "7").unwrap(), 7);
-        let err = parse_entity_ref("ADR", "an ADR", "nope")
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("an ADR"), "error names the kind label: {err}");
-        assert!(err.contains("ADR-007"), "error shows expected form: {err}");
-        // policy
-        assert_eq!(parse_entity_ref("POL", "a policy", "POL-001").unwrap(), 1);
-        let err = parse_entity_ref("POL", "a policy", "bad")
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("a policy"), "{err}");
-        // slice
-        assert_eq!(parse_entity_ref("SL", "a slice", "SL-025").unwrap(), 25);
-        // padded
-        assert_eq!(parse_entity_ref("RFC", "an RFC", "011").unwrap(), 11);
-        // mixed-case prefix NOT stripped (R4 invariant)
-        assert!(parse_entity_ref("ADR", "an ADR", "AdR-7").is_err());
     }
 
     #[test]

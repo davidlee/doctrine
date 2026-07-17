@@ -141,7 +141,7 @@ pub(crate) fn run_show(
 
 /// Parse an RFC reference — accepts both `RFC-007` and bare `7`.
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    governance::parse_entity_ref("RFC", "an RFC", reference)
+    crate::listing::parse_ref("RFC", "an RFC", reference)
 }
 
 /// Clap `value_parser` wrapper for [`parse_ref`].

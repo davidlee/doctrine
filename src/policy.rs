@@ -156,7 +156,7 @@ pub(crate) fn run_show(
 
 /// Parse a policy reference — accepts both `POL-007` and bare `7`.
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    governance::parse_entity_ref("POL", "a policy", reference)
+    crate::listing::parse_ref("POL", "a policy", reference)
 }
 
 /// Clap `value_parser` wrapper for [`parse_ref`].

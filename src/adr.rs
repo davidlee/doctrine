@@ -281,7 +281,7 @@ pub(crate) fn run_show(
 
 /// Parse an ADR reference — accepts both `ADR-007` and bare `7`.
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    governance::parse_entity_ref("ADR", "an ADR", reference)
+    crate::listing::parse_ref("ADR", "an ADR", reference)
 }
 
 /// Clap `value_parser` wrapper for [`parse_ref`].

@@ -377,15 +377,10 @@ pub(crate) struct ConceptMapDoc {
 }
 
 /// Parse a concept-map reference - `CM-001`, `cm-1`, or the bare id `1` - to its
-/// numeric id. The prefix is optional and case-insensitive; the id may be padded.
+/// numeric id. Delegates to the shared [`crate::listing::parse_ref`] (IMP-125);
+/// the strip is two literal cases (`CM-`/`cm-`), the id may be padded.
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    let digits = reference
-        .strip_prefix("CM-")
-        .or_else(|| reference.strip_prefix("cm-"))
-        .unwrap_or(reference);
-    digits.parse::<u32>().with_context(|| {
-        format!("not a concept-map reference: `{reference}` (expected `CM-001` or `1`)")
-    })
+    crate::listing::parse_ref("CM", "a concept-map", reference)
 }
 
 /// Read one concept-map's `concept-map-NNN.toml` (as data) and

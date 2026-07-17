@@ -167,7 +167,7 @@ pub(crate) fn run_show(
 
 /// Parse a standard reference — accepts both `STD-007` and bare `7`.
 pub(crate) fn parse_ref(reference: &str) -> anyhow::Result<u32> {
-    governance::parse_entity_ref("STD", "a standard", reference)
+    crate::listing::parse_ref("STD", "a standard", reference)
 }
 
 /// Clap `value_parser` wrapper for [`parse_ref`].
