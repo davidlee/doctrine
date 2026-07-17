@@ -251,12 +251,32 @@ suite that authors no `[estimate]` facet stays green unchanged (engine
 gate). The records-anchor delta (E5) is class (b) evidence, called out
 separately in the audit artifact.
 
+**The flip stated without euphemism (RV-278 F-4 discipline, est-domain
+instance).** At the flip phase the facet est-anchor builder deletes, so
+authored `[estimate]` facets stop anchoring cost projection **immediately
+and permanently** — and migration does not restore it (a migrated claim
+never anchors, E5). A corpus whose only absolute sizing magnitudes were
+facets loses est-domain projection anchoring entirely until a human
+re-asserts (`estimate set --rater human`, or a pin): anchored classes
+dissolve to gauge components, the cost feed empties for them, and evidenced
+items resolve at rungs 3–5 (their asserted operative costs) rather than
+rung 2. Ranking degrades deterministically — every item with an asserted
+range still carries its own cost; only the *propagation* of costs through
+sizing comparisons pauses. The loud presence finding plus the `explain`
+provenance lines are the re-assertion prompts.
+
 **Determinacy / elicitation.** `demote_agent_evidence` widens to estimate
 claims (E10): when set, agent/migrated-tier resolved costs leave sizing
 probe-eligibility intact (a number, not an answer); when unset they retire
-it. Anchored-tier estimate `ClaimFinding::Conflict` items enter the reprobe
-queue knob-independently; agent/migrated conflicts never do (D14 — the
-shared `nominates_reprobe` predicate already says so).
+it. During the interregnum an **unmigrated-facet item counts as sized**
+(rung 5 is an asserted range; mirrors pre-flip behaviour, knob-independent,
+dies with the rung). Probe **targets** require anchored-tier claims (E10),
+so post-flip pre-migration a facet-only corpus has no probe targets — the
+"no estimated item to calibrate against" state detail fires with the
+claim-era remedy; sizing probes wake as human claims land. Anchored-tier
+estimate `ClaimFinding::Conflict` items enter the reprobe queue
+knob-independently; agent/migrated conflicts never do (D14 — the shared
+`nominates_reprobe` predicate already says so).
 
 **Code impact (§3):** `src/priority/graph.rs` (`est_cost` signature gains
 the estimate-claims view; `CostCtx` builder re-source; `build_from_with_cfg`
@@ -370,6 +390,10 @@ and `bare anchor` shapes byte-stable; the `authored` shapes die:
 (transitional, dies at §5), `CostClassAnchor` join. JSON `cost_source` token
 change per E12, pinned by a full post-flip vocabulary golden; golden churn on
 fixtures authoring `[estimate]` facets is expected class-b evidence.
+**Naming hazard (RV-277 F-5 precedent):** the NF-001 tripwire greps facet
+symbol substrings — new symbols must avoid the `EstimateFacet`/`ValueFacet`
+literals (`CostUnmigratedFacet`, not `EstimateFacetUnmigrated`); final names
+checked against the tripwire at phase-plan.
 
 **`show`.** The estimate line re-sources from the comparison pipeline
 (SL-220 §6 shared-helper seam — the 9-fold render dedup already exists to
@@ -458,11 +482,13 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
    unchanged through the anchor-source swap where fixtures author no facets;
    enumerated class-b golden churn pinned at the flip phase.
 6. **Probes (E10)**: pool predicate splits pairwise/anchor (an anchor row
-   alone never counts as sizing evidence); retirement × knob matrix; target
-   selection over anchored-tier claims only, fallbacks re-pinned,
-   none-anywhere state detail names the claim-era remedy;
-   anchored-membership postcondition golden (order-bearing answer against a
-   claim-anchored target ⇒ non-Gauge provenance next refresh).
+   alone never counts as sizing evidence); retirement × knob matrix;
+   interregnum: unmigrated-facet item counts as sized knob-independently
+   (dies with rung 5); target selection over anchored-tier claims only,
+   fallbacks re-pinned, facet-only corpus post-flip ⇒ no targets + state
+   detail naming the claim-era remedy; anchored-membership postcondition
+   golden (order-bearing answer against a claim-anchored target ⇒ non-Gauge
+   provenance next refresh).
 7. **Verbs**: mirror of SL-220 §8.6 for estimate (mandatory `--rater`,
    every-invocation-mints, supersession scope refusals incl. cross-domain,
    pin TTY/worker/`--by` gates, clear-under-pin refusal, `-x` point mint,

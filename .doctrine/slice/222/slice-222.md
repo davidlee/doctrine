@@ -116,20 +116,26 @@ the scan seam.
   Resolution must round-trip the payload losslessly even where consumption
   collapses it — migration census and supersession chains operate on the
   payload, not the scalar.
-- **A1** — one ledger, one schema; estimate anchor claims are rows in the
-  existing session files, no parallel store. Whether the payload variant
-  fits the v3 gate additively or needs a bump is design material (OQ-3).
-- **A2** — SL-220's claim-resolution pass, ladder, and conflict semantics are
-  reused, not reimplemented (T2 invariant); divergence is a design smell.
-- **OQ-1** — pin admission surface: is an `estimate pin` verb added
-  (mirroring `value pin`'s operator gate), or is estimate pinning deferred?
-- **OQ-2** — same-tier conflict over range payloads: SL-220 R3 resolves
-  same-tier magnitude conflict to the arithmetic mean; what is the mean of
-  two ranges (per-field mean, mean of collapsed scalars, or interval hull)?
-- **OQ-3** — wire versioning: additive within v3, or v3 → v4?
-- **OQ-4** — REV routing: does REV-024's tiered-resolution rewrite already
-  cover the estimate domain, or does SL-219's D2 source ladder need its own
-  REV against ADR-015?
+- **A1** *(confirmed at design)* — one ledger, one schema; estimate anchor
+  claims are rows in the existing session files, no parallel store.
+- **A2** *(resolved at design, E3)* — one generic claims fold parameterised
+  by payload; the value instantiation is a behaviour-preserving refactor
+  proven by the existing battery green unchanged.
+- **OQ-1** *(resolved at design, E8)* — `estimate pin` + `pin --retire`
+  added, SL-220 D13 gate verbatim (interactive-TTY + worker-refused class).
+- **OQ-2** *(resolved at design, E4; operator-adjudicated)* — per-field mean
+  over the winning-tier multiset; conflict interval over per-row operative
+  costs; linearity lemma makes the two aggregations agree by construction.
+- **OQ-3** *(resolved at design, E2)* — additive within v3, no version bump
+  (SL-220 D1/D2 as designed).
+- **OQ-4** *(resolved at design, E11)* — this slice authors its own REV
+  against ADR-015 dissolving REV-023; REV-024 explicitly left it standing.
+- **R3** *(surfaced at design, Q2/E7)* — post-strip the bare anchor's input
+  (authored uppers) vanishes; `max_upper` re-sources from any-tier resolved
+  claim uppers or the ISS-057 inversion returns corpus-wide.
+- **R4** *(surfaced at design, Q4/E9)* — never-migrated corpora cross a
+  disclosed behaviour cliff at the facet-path deletion; a scan-seam presence
+  tripwire keeps the finding loud with a real remedy.
 
 ## Verification / closure intent
 
