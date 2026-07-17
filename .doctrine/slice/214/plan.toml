@@ -34,7 +34,7 @@ verification = [
   { id = "VT-2", expects = "design skill points capture intent at /knowledge", test_file = "plugins/doctrine/skills/design/SKILL.md", keywords = ["/knowledge"], waived = false },
   { id = "VT-3", expects = "consult skill points capture intent at /knowledge", test_file = "plugins/doctrine/skills/consult/SKILL.md", keywords = ["/knowledge"], waived = false },
   { id = "VT-4", expects = "preflight skill points at /knowledge and prompts an inbound-gating check", test_file = "plugins/doctrine/skills/preflight/SKILL.md", keywords = ["/knowledge"], waived = false },
-  { id = "VA-1", text = "POL-002 grep pass over all five touched files returns zero hits; any [[mem.…]] key cited resolves against shipped memory/ corpus keys" },
+  { id = "VA-1", expects = "POL-002 grep pass over all five touched files returns zero hits; any [[mem.…]] key cited resolves against shipped memory/ corpus keys" },
 ]
 specs        = []
 requirements = []
@@ -55,8 +55,8 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "routing table routes epistemic capture to the knowledge skill", test_file = "install/routing-process.md", keywords = ["/knowledge"], waived = false },
   { id = "VT-2", expects = "using-doctrine names the inbound-needs gating model on the knowledge_record bullet", test_file = "install/using-doctrine.md", keywords = ["unsettled"], waived = false },
-  { id = "VA-1", text = "installed skill list shows knowledge; installed copy is byte-identical to plugins/ source" },
-  { id = "VH-1", text = "human confirms sequencing was honoured (install before row before boot) and the boot snapshot reads correctly" },
+  { id = "VA-1", expects = "installed skill list shows knowledge; installed copy is byte-identical to plugins/ source" },
+  { id = "VH-1", expects = "human confirms sequencing was honoured (install before row before boot) and the boot snapshot reads correctly" },
 ]
 specs        = []
 requirements = []
@@ -74,9 +74,9 @@ exit_criteria = [
   { id = "EX-3", text = "doctrine knowledge list is non-empty — census non-zero at close" },
 ]
 verification = [
-  { id = "VA-1", text = "doctrine knowledge show on each record renders well-formed metadata + body; kinds seeded with their default states" },
-  { id = "VA-2", text = "no record authors dep/seq edges (ADR-017: records never gate; only shapes/spawns outbound)" },
-  { id = "VH-1", text = "human accepts the two records as fair first citizens — teaching by example, not record-spam" },
+  { id = "VA-1", expects = "doctrine knowledge show on each record renders well-formed metadata + body; kinds seeded with their default states" },
+  { id = "VA-2", expects = "no record authors dep/seq edges (ADR-017: records never gate; only shapes/spawns outbound)" },
+  { id = "VH-1", expects = "human accepts the two records as fair first citizens — teaching by example, not record-spam" },
 ]
 specs        = []
 requirements = []
