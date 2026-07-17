@@ -53,8 +53,11 @@ chaining (F-3). Both dissolve once there is only one writer.
 - **SL-199 working-tree-free conclude** — preserved and generalised (now *all*
   boundary writes are working-tree-free).
 - **Behaviour-preservation gate** (AGENTS.md) — the existing `mcp_server` +
-  `e2e_dispatch_sync.rs` suites are the proof; relocation + conclude delegation must
-  keep them green *unchanged*.
+  `e2e_dispatch_sync.rs` suites are the proof: their **invariant assertions** must
+  stay green through relocation + conclude delegation. Two behaviour-neutral edits
+  are expected and bounded (the `commit_on_behalf` `target_ref` call-site arg; the
+  rewrite of the working-tree-pinning `record-boundary` e2e to assert the ref) — see
+  §8 R1, §9 VT-4/VT-5. The gate holds invariants, not literal test bytes.
 - **SL-064 §4.1 invariant** — sync reads the ledger from the ref; this slice makes it
   hold with no exception (retires the last working-tree reader).
 - **STD-001** — no new magic strings; the relocated dispatch id constants
@@ -124,6 +127,7 @@ pub(crate) fn land_boundary_row(
     git_root: &Path, coord_ref: &str, tip: &str, slice: u32, row: BoundaryRow, prov: &Provenance,
 ) -> anyhow::Result<CommitOutcome> {
     let path = format!(".doctrine/dispatch/{slice:03}/boundaries.toml");
+    let phase = row.phase.clone();           // captured before the UPSERT consumes `row`
     let mut b = read_ledger::<Boundaries>(git_root, tip, &format!("{slice:03}"), "boundaries.toml")?;
     match b.rows.iter_mut().find(|r| r.phase == row.phase) {
         Some(existing) => *existing = row,   // UPSERT by phase (funnel + escape hatch alike)
@@ -206,6 +210,10 @@ author/committer (see OQ-1 for the escape hatch's identity).
 - **UPSERT-by-phase preserved** — both writers replace a phase's row in place; a
   re-conclude or a corrected re-record simply overwrites the ref row (the F-2
   ambiguity is gone because there is no competing working-tree copy).
+- **Phase-chain order is consumer-normalised** — `plan_phases` chains phases in
+  ascending phase ordinal regardless of ledger row order (§5.2 e′), so an
+  out-of-order escape-hatch record cannot mischain ancestry. The ledger's stored
+  order is not itself an invariant; the branch chain's is.
 - **`commit_on_behalf` invariants preserved** — empty-delta refusal, lost-ref-race
   CAS, byte-unchanged-on-refusal; the only change is the explicit target ref.
 - **(E1)** record-boundary run when no `dispatch/<slice>` ref exists → clean refusal
@@ -228,9 +236,12 @@ author/committer (see OQ-1 for the escape hatch's identity).
 
 - **D-B1: Collapse the seam — one object-db writer, retire the working-tree ledger.**
   *Chosen.* Kills ISS-225 by construction, dissolves RV-278 F-2 (no competing
-  source) and F-3 (single order), retires the last violator of SL-064 §4.1, and net
-  *removes* code (the merge/splice/working-tree read/write) rather than adding merge
-  logic.
+  source), retires the last violator of SL-064 §4.1, and net *removes* code (the
+  merge/splice/working-tree read/write) rather than adding merge logic. It does
+  **not** by itself resolve RV-278 F-3 (row-order ⇒ ancestry): the single writer
+  removes merge-interleave but not the tail-append hazard — that is closed
+  separately by D-B4 (consumer normalisation). (RV-279 F-3 corrected the earlier
+  overclaim that the single writer alone dissolved F-3.)
 - **D-B1-alt (merge in `commit_boundaries`, ref-base ⊕ working overlay).**
   *Rejected at RV-278.* Unsound tie-break (F-2) and order hazard (F-3); keeps two
   source models alive.
@@ -242,12 +253,24 @@ author/committer (see OQ-1 for the escape hatch's identity).
   primitive from "run inside the coord worktree", letting the CLI escape hatch reuse
   it. Alternative (keep HEAD-derivation, run record-boundary in the coord worktree)
   rejected — fragile cwd coupling.
+- **D-B4: Normalise phase order at the consumer (`plan_phases`), not on write.**
+  *Chosen* (RV-279 F-3). The single-writer collapse removes merge-interleave but not
+  the tail-append hazard when the escape hatch bootstraps an out-of-order phase;
+  `plan_phases` is the sole order-sensitive reader, so it sorts by phase ordinal
+  before chaining. Alternative (keep `Boundaries` phase-sorted on every write)
+  rejected — spreads the ordering invariant across all writers and mutates stored
+  order, for no gain over one guard at the consumer.
 
 ## 8. Risks & Mitigations
 
 - **R1: relocation regresses the funnel.** *Mitigation:* phase the move as a pure
-  relocation + delegation with the `mcp_server`/`e2e_dispatch_sync` suites green
-  *unchanged* before any behaviour change (behaviour-preservation gate).
+  relocation + delegation, holding the suites' **assertions** unchanged (the
+  behaviour-preservation gate is about invariants, not test bytes). Two mechanical,
+  behaviour-neutral edits ride along and must be called out in the plan, not smuggled:
+  the `commit_on_behalf` call-sites gain the explicit `target_ref` arg (VT-4), and
+  the working-tree-pinning `record-boundary` e2e is rewritten to assert the ref
+  (VT-5). Any change to an *idempotency/stale-ref/refused-row* assertion is the
+  regression signal (RV-279 F-4).
 - **R2: `commit_on_behalf` contract change breaks import/conclude.** *Mitigation:*
   its provenance/CAS/empty-delta tests move with it and must still pass; import +
   conclude pass the coord ref explicitly (OQ-3).
@@ -265,11 +288,26 @@ author/committer (see OQ-1 for the escape hatch's identity).
   working tree); a corrected re-record UPSERTs it.
 - **VT-3 (new): `land_boundary_row` UPSERT-by-phase** — new phase appends; existing
   phase replaces; used identically by conclude and record-boundary (one behaviour).
-- **VT-4 (preserved): `commit_on_behalf` primitives** — empty-delta refusal,
-  lost-ref-race CAS, byte-unchanged-on-refusal — green after relocation + the
-  explicit-ref generalisation.
-- **VT-5 (preserved): `e2e_dispatch_sync.rs`** idempotency / stale-ref / refused-row
-  green *unchanged* (behaviour-preservation gate).
+- **VT-4 (invariants preserved, call-sites updated): `commit_on_behalf` primitives**
+  — empty-delta refusal, lost-ref-race CAS, byte-unchanged-on-refusal still hold
+  after relocation + the explicit-ref generalisation. The tests' **assertions** are
+  unchanged; their **call-sites are mechanically updated** for the new `target_ref`
+  parameter (`mcp_server/dispatch.rs:980,1004,1024,1062,1088,1116,1160`). This is a
+  signature edit, not a behaviour change — the gate is about invariants, not literal
+  test bytes (RV-279 F-4).
+- **VT-5 (split — preserved invariants + one rewrite): `e2e_dispatch_sync.rs`.**
+  Idempotency / stale-ref / refused-row cases stay green *unchanged* (the true
+  behaviour-preservation gate). The `record-boundary` e2e
+  (`record_boundary_appends_row_at_canonical_padded_ledger_path`,
+  `tests/e2e_dispatch_sync.rs:1389-1415,1488-1515`) currently reads the **working-tree**
+  `boundaries.toml` from disk — it pins exactly the behaviour §5.2(d) retires, so it
+  **must be rewritten** to assert the row landed on the `dispatch/<slice>` **ref**
+  (this is VT-2's surface). Rewriting a test that asserts *removed* behaviour is
+  required, not a gate violation (RV-279 F-4).
+- **VT-6 (new, red-first): `plan_phases` chains by phase ordinal, not row order.**
+  Land phases out of order (record `PHASE-03` after `PHASE-05` exists → tail append);
+  `plan_phases` still parents `phase/<slice>-03` off `-02` and `-05` off `-04`. Guards
+  the §5.2 e′ normalisation (RV-279 F-3).
 
 ## 10. Review Notes
 
@@ -299,3 +337,8 @@ author/committer (see OQ-1 for the escape hatch's identity).
     (`mcp_server/dispatch.rs:42`), absent from the §5.2(a) down-move set → ADR-001
     up-call. **Penance:** close the relocation set over the helper's dependencies
     (fold into OQ-2). Dispositions + synthesis on the ledger.
+  - **Resolved (this revision)** — all three penances integrated: F-5 → §5.2(a)
+    (relocation set closed, `funnel_message` added, dependency audit inline); F-3 →
+    §5.2(e′) + §5.3 + §5.5 + D-B4 + VT-6 (`plan_phases` normalises by phase ordinal);
+    F-4 → §3 + §8 R1 + §9 VT-4/VT-5 (verification narrative rewritten: invariants
+    preserved vs mechanical call-site churn vs record-boundary e2e rewrite).

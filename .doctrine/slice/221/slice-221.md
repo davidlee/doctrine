@@ -45,13 +45,14 @@ boundaries path is the lone holdout.
 boundary rows, and retire the working-tree boundaries ledger entirely.**
 
 1. **Relocate the object-db dispatch-commit engine.** Move `commit_on_behalf` /
-   `commit_tree_as` / `Provenance` / `Identity` / `dispatch_identity` (+ the
-   dispatch id constants) from `mcp_server/dispatch.rs` **down** to `dispatch.rs`
-   (engine tier), so both the MCP funnel and the CLI can compose object-db commits
-   without a `dispatch ↔ mcp_server` cycle (ADR-001). Generalise `commit_on_behalf`
-   to take an **explicit target ref + expected_old** instead of deriving the CAS
-   target from the coord worktree's `HEAD`, removing its "must run from the coord
-   worktree" coupling.
+   `commit_tree_as` / `Provenance` / `Identity` / `dispatch_identity` /
+   `funnel_message` (+ the dispatch id constants) from `mcp_server/dispatch.rs`
+   **down** to `dispatch.rs` (engine tier), so both the MCP funnel and the CLI can
+   compose object-db commits without a `dispatch ↔ mcp_server` cycle (ADR-001). The
+   relocation set is closed over `land_boundary_row`'s dependencies (design §5.2a,
+   RV-279 F-5). Generalise `commit_on_behalf` to take an **explicit target ref +
+   expected_old** instead of deriving the CAS target from the coord worktree's
+   `HEAD`, removing its "must run from the coord worktree" coupling.
 2. **Extract one shared boundary-write helper** — `land_boundary_row(coord_root,
    tip, coord_ref, slice, row) -> CommitOutcome`: read committed boundaries at
    `tip`, UPSERT the row by phase, splice, `commit_on_behalf`. `conclude_boundary_commit`
@@ -96,8 +97,14 @@ impossible by construction, and the SL-064 §4.1 invariant holds with no excepti
 
 - **Behaviour-preservation gate.** Relocating the commit primitives and delegating
   conclude to the shared helper must be provably behaviour-preserving — the existing
-  `mcp_server` / `e2e_dispatch_sync` suites are the proof and must stay green
-  *unchanged* through phases 1–2.
+  `mcp_server` / `e2e_dispatch_sync` suites are the proof: their **invariant
+  assertions** stay green through phases 1–2. Two behaviour-neutral edits are
+  expected and bounded (the `commit_on_behalf` `target_ref` call-site arg; rewriting
+  the working-tree-pinning `record-boundary` e2e to assert the ref) — the gate holds
+  invariants, not literal test bytes (design §8 R1, RV-279 F-4).
+- **Phase-chain ordering.** `plan_phases` chains phases strictly in ledger row
+  order, and the escape hatch can bootstrap an out-of-order phase; the design
+  normalises by phase ordinal at the consumer (design §5.2e′/D-B4, RV-279 F-3).
 - **`commit_on_behalf` contract change.** Generalising it to an explicit ref touches
   a primitive with provenance/CAS tests (VT-4 empty-delta, lost-ref-race); those
   tests move with it and must keep asserting the same invariants.
