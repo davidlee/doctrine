@@ -1696,3 +1696,24 @@ sync-working-tree-after-object-db-write ritual applies to conclude
 too, not just imports — or prepare-review should source its ledger
 commit from the ref, not the working tree. Cost: one forensic git
 dive + a restore commit (fc58eb60).
+
+[audit; audit-220-rv277]
+Audit-time token inefficiencies observed while auditing SL-220:
+- `slice phases 220` prints "Phases up to date" (it is a materializer) — an
+  agent reaching for "show me the plan's phases" burns a roundtrip; plan
+  reading is a raw plan.toml read with no synthesizing `show` verb.
+- `revision status REV-024` is a SETTER (requires <STATE>); the natural
+  read grammar costs an error roundtrip before discovering `revision show`.
+- verify-vt for a dispatched slice fails wholesale from the primary tree
+  pre-integration (files absent on edge); nothing in the output names the
+  surface problem ("run from the candidate/coord tree") — cost a diagnosis
+  cycle, and the prior session case-noted the same battery as
+  UNATTRIBUTABLE from the coord tree.
+- `dispatch candidate admit` run from inside the candidate worktree fails
+  with "no recorded candidate" (root auto-detect resolves to the worktree,
+  whose provisioned state lacks the ledger) — error names the symptom, not
+  the cwd cause; cost one roundtrip.
+- Belt design-target declarations (8e0d7699/cb8c45b5/33851ebf) never
+  project into the primary selector registry, so `slice conformance` at
+  audit reports 21 undeclared cells that were all already adjudicated —
+  re-deriving each mapping from phase sheets is pure token tax.
