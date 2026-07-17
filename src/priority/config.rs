@@ -190,6 +190,10 @@ fn default_confirm_boost() -> f64 {
 /// verdict is read over a fresh human-rows-only constraint system, so agent
 /// evidence proposes orderings but never retires a question (RFC-019 T7).
 /// Bounds, projection, and the elicit queue pool stay on the full system.
+/// SL-220 (design §3) widens the same semantics to anchor claims: when set,
+/// agent- and migrated-tier resolved claim values leave an item probe-eligible
+/// — a number, not an answer; anchored-tier conflict items enter the reprobe
+/// queue knob-independently (D14).
 pub(crate) const DEMOTE_AGENT_EVIDENCE_KEY: &str = "demote_agent_evidence";
 
 #[derive(Debug, Clone, Default, Deserialize)]
