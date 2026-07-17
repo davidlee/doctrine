@@ -25,9 +25,6 @@ label = "references"
 role = "concerns"
 target = "SL-147"
 
-[value]
-value = 3.8
-
 [estimate]
 lower = 3.0
 upper = 7.0

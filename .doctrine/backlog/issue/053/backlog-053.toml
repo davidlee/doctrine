@@ -28,5 +28,3 @@ target = "RFC-005"
 lower = 2.0
 upper = 5.0
 
-[value]
-value = 1.5

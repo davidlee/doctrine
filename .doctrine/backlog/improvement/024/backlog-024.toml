@@ -16,9 +16,6 @@ needs    = []                   # item→item hard prerequisite
 after    = [{ to = "IMP-022", rank = 0 }]                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
-[value]
-value = 2.8
-
 [estimate]
 lower = 4.0
 upper = 10.0

@@ -20,9 +20,6 @@ needs    = ["IMP-148"]                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
-[value]
-value = 2.4
-
 [[relation]]
 label = "drift"
 target = "mem.pattern.distribution.shipped-memory-authoring: the authoring flow for shipped memories"

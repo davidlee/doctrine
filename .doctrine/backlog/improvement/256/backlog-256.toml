@@ -25,9 +25,6 @@ triggers = []                   # watched source globs: { globs, note? }
 lower = 2.3
 upper = 4.7
 
-[value]
-value = 2.5
-
 [[relation]]
 label = "references"
 role = "concerns"

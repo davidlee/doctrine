@@ -21,9 +21,6 @@ label = "references"
 role = "concerns"
 target = "PRD-011"
 
-[value]
-value = 1.0
-
 [estimate]
 lower = 2.0
 upper = 4.0

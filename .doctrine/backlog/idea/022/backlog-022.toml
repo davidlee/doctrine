@@ -24,9 +24,6 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "related"
 target = "RFC-009"
 
-[value]
-value = 2.0
-
 [estimate]
 lower = 2.0
 upper = 5.0

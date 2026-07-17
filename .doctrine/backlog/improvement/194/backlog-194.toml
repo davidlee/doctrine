@@ -36,9 +36,6 @@ target = "IDE-008"
 label = "related"
 target = "IMP-198"
 
-[value]
-value = 3.0
-
 [estimate]
 lower = 3.0
 upper = 7.0

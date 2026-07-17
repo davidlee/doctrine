@@ -26,9 +26,6 @@ label = "references"
 role = "concerns"
 target = "RSK-014"
 
-[value]
-value = 2.0
-
 [estimate]
 lower = 3.0
 upper = 8.0
