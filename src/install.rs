@@ -498,6 +498,17 @@ fn run_forward_steps(root: &Path, exec: &Path, args: &InstallArgs<'_>) -> anyhow
                 } else {
                     skipped_plugin = Some(key.clone());
                 }
+            } else if prompt_step(
+                // Already installed: offer to update in place so a re-run refreshes
+                // a stale plugin (mirrors the marketplace refresh in step 1).
+                &format!("claude plugin update {key} --scope project? [y/N/a]"),
+                args.yes,
+                &mut all_yes,
+            )? {
+                match claude_plugin_update(&key) {
+                    Ok(()) => writeln!(out, "  {key} plugin updated")?,
+                    Err(e) => writeln!(out, "  plugin update failed: {e:#}")?,
+                }
             }
 
             // 3. Agent-def install (kept as-is).
@@ -606,6 +617,21 @@ fn claude_plugin_install(name: &str) -> anyhow::Result<()> {
     anyhow::ensure!(
         status.success(),
         "claude plugin install exited with {status}"
+    );
+    Ok(())
+}
+
+/// Run `claude plugin update <key> --scope project` — refresh an already-installed
+/// plugin in place. `key` is the qualified enable key (`doctrine@doctrine`); the
+/// bare name is rejected by the CLI.
+fn claude_plugin_update(key: &str) -> anyhow::Result<()> {
+    let status = Command::new("claude")
+        .args(["plugin", "update", key, "--scope", "project"])
+        .status()
+        .context("failed to execute claude plugin update")?;
+    anyhow::ensure!(
+        status.success(),
+        "claude plugin update exited with {status}"
     );
     Ok(())
 }

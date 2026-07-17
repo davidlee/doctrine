@@ -196,7 +196,7 @@ sync-plugin-versions:
   #!/usr/bin/env bash
   set -euo pipefail
   version="$(cargo pkgid -p doctrine | sed 's/.*[#@]//')"
-  for f in plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json; do
+  for f in plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json plugins/doctrine-memory/.claude-plugin/plugin.json plugins/doctrine-partner/.claude-plugin/plugin.json; do
     sed -i -E 's/^(\s*"version"\s*:\s*)"[^"]*"/\1"'"${version}"'"/' "$f"
   done
   echo "synced plugin manifest versions → v${version}"
@@ -224,8 +224,8 @@ release bump: # readme-index
   git rev-parse -q --verify "refs/tags/v${version}" >/dev/null && { echo "release: tag v${version} already exists" >&2; exit 1; }
   just sync-plugin-versions
   just release-check
-  git add Cargo.toml Cargo.lock plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json
-  git commit -m "chore: v${version}" -- Cargo.toml Cargo.lock plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json
+  git add Cargo.toml Cargo.lock plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json plugins/doctrine-memory/.claude-plugin/plugin.json plugins/doctrine-partner/.claude-plugin/plugin.json
+  git commit -m "chore: v${version}" -- Cargo.toml Cargo.lock plugins/marketplace.json .claude-plugin/marketplace.json plugins/doctrine/.claude-plugin/plugin.json plugins/doctrine-memory/.claude-plugin/plugin.json plugins/doctrine-partner/.claude-plugin/plugin.json
   git tag "v${version}"
   echo "released v${version} (committed + tagged) — push with: git push && git push --tags"
   echo "  (pushing the tag triggers release.yml → prebuilt macOS binaries on the GitHub Release)"

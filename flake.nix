@@ -110,7 +110,7 @@
           # IMP-249. dst tilde expands in the host launcher shell (in-jail $HOME is
           # also /home/david). Dev-iteration binary is ./target/debug/doctrine,
           # never bound — unaffected.
-          (ro-bind "${doctrine}/bin/doctrine" (noescape "~/.cargo/bin/doctrine"))
+          (ro-bind "${doctrine}/bin/doctrine" (noescape "/home/david/.cargo/bin/doctrine"))
           # Put cargo-bin on the jail PATH so the SessionStart hook's bare
           # `doctrine boot` resolves to the shared binary above.
           #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
