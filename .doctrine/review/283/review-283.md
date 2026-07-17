@@ -117,3 +117,43 @@ lost.
 - **IMP-272 (F-4)** — the coord/primary phase-sheet tree split is machinery, owned
   by the existing backlog item; no SL-221 artefact edit. Do not fold into this
   slice's reconciliation.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **`slice-221.toml` selector registry (F-1)** — ran
+  `doctrine slice selector add --intent design-target 221
+  tests/e2e_dispatch_lifecycle.rs --note "PHASE-03 collateral write…"` on the
+  primary tree (edge), carrying the same note as dispatch/221 to converge the
+  authored registry rather than narrow the divergence. Primary-tree
+  `doctrine slice conformance SL-221` now reports **0 undeclared / 0 undelivered /
+  5 conformant** — the F-1 acceptance criterion is met on edge. This makes edge's
+  authored truth correct *now* (reconcile is the sole writer of reconciled truth);
+  it does not defer the fix to integrate's projection. edge and dispatch/221 now
+  agree on all five selectors incl. the note, so the selector line is convergent at
+  integrate, not a conflict.
+
+### REVs completed
+- None. The brief's Governance/spec section was empty — no ADR / spec / requirement
+  change is implied by this slice's audit.
+
+### Withdrawn / tolerated
+- **F-2** (nit) — aligned; beyond-plan worker migration judgment verified sound, no
+  write needed.
+- **F-3** (nit) — aligned; `plan_phases` malformed-sort branch correct by
+  inspection, unreachable by construction, low-value to test. No write.
+- **F-4** (nit) — tolerated; the IMP-272 coord/primary phase-sheet tree split is
+  machinery owned by the existing backlog item, not an SL-221 artefact edit.
+
+### Carried to /close (not a reconcile surface)
+- Dispatched-slice integrate lands the **code** (source-deltas) via replay; edge's
+  authored `.doctrine/slice/221/` state — including this selector edit and the
+  lifecycle-status flips — is the primary and is now correct. /close must **not**
+  wholesale-project dispatch/221's authored slice state over edge (it would clobber
+  the reconcile edits); the code replay is the integrate payload.
+- Foreign trunk drift (SL-222, review-282) and the pre-existing candidate
+  admit/status read-write split surface at integrate — awareness items, not
+  SL-221 defects (see `## Synthesis` risks 2 & 4).
+
+Reconcile pass complete — every brief item resolved, no half-applied REV. Handoff
+to /close.
