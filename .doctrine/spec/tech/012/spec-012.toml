@@ -23,8 +23,11 @@ responsibilities = [
 
 [[source]]
 language = "rust"
-identifier = "src/worktree.rs"
+identifier = "src/worktree/mod.rs"
 module = "doctrine::worktree"
+# directory module; siblings: allowlist.rs, coordinate.rs, create.rs, dispatch_record.rs,
+# fork.rs, gc.rs, import.rs, inventory.rs, jail.rs, jail_prefix.rs, land.rs, marker.rs,
+# pretooluse.rs, provision.rs, shared.rs, subagent.rs, test_helpers.rs
 
 [[source]]
 language = "rust"

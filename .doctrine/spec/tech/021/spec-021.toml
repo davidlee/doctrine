@@ -41,3 +41,18 @@ identifier = "plugins/doctrine/skills/worktree/SKILL.md"
 language = "rust"
 identifier = "src/dispatch.rs"
 module = "doctrine::dispatch"
+
+[[source]]
+language = "rust"
+identifier = "src/dispatch_config.rs"
+module = "doctrine::dispatch_config"
+
+[[source]]
+language = "rust"
+identifier = "src/mcp_server/dispatch.rs"
+module = "doctrine::mcp_server::dispatch"
+
+[[source]]
+language = "rust"
+identifier = "src/worktree/dispatch_record.rs"
+module = "doctrine::worktree::dispatch_record"

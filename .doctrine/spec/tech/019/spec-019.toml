@@ -21,3 +21,8 @@ responsibilities = [
   "Front the family through one `doctrine knowledge` command namespace riding SPEC-013's uniform `<kind> <verb>` grammar and kind-blind listing spine: `new <record_kind>` capture (kind-positional), `show`/`list`/`status` (prefix-resolved), with `list` carrying the shared `CommonListArgs`, the kind-relative `--status` known-set, and the canonical-id/JSON/columns model. Relate rides the uniform `link`/`unlink` verb; supersede is the IMP-006 verb — neither a bespoke kind verb.",
   "Declare the records' priority-engine posture (SL-047): no record state is ever `Workable`, so records are never eligible, never in `survey`/`next`, and carry zero work-lineage consequence. Records are nonetheless meant to *gate* dependents (open `QUE` blocks a slice's design, `active` `CON` blocks a `REQ`, …); decoupling blocking from eligibility — a third `Gating` class + a record→item gating edge into the `dep` overlay — is the priority-engine change tracked as IMP-047. Interim: parked in an explicit all-`Terminal` partition (status-ful — not REC's status-less `None → Terminal` path), gating only via a spawned backlog item.",
 ]
+
+[[source]]
+language = "rust"
+identifier = "src/knowledge.rs"
+module = "doctrine::knowledge"

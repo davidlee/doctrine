@@ -20,6 +20,21 @@ responsibilities = [
   "Honour the forbidden-core constraint: no time, scheduling, commitment, urgency, or product vocabulary in the graph crate.",
 ]
 
+[[source]]
+language = "rust"
+identifier = "crates/cordage/src/lib.rs"
+module = "cordage"
+# generic priority-graph core crate — the "standalone publishable crate free of
+# doctrine vocabulary" referenced in this spec's responsibilities
+
+[[source]]
+language = "rust"
+identifier = "src/priority/mod.rs"
+module = "doctrine::priority"
+# directory module; siblings: channels.rs, config.rs, elicit.rs, findings.rs, graph.rs,
+# order.rs, partition.rs, render.rs, surface.rs, tension.rs, view.rs — the doctrine
+# policy layer + derived-surface CLI contracts (survey/next/blockers/explain/findings)
+
 # category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:
 #   category = "cli"
 # c4_level — closed C4 set: context | container | component | code. Add as:
