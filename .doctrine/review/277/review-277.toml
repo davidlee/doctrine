@@ -1,0 +1,106 @@
+id    = 277
+slug  = "reconciliation-review-of-sl-220"
+title = "reconciliation review of SL-220"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-220"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "VH-1: migration census executed under blanket proceed - awaits operator ratification"
+detail = "Expected: operator reviews --check census, authorises --execute, commits post-strip corpus (PHASE-07 VH-1). Observed: executed by orchestrator under session blanket proceed; evidence complete: --check census 185/185/0/0 reconciled (phase7-census-check.txt, primary @ 12d05c5b); --execute re-reconciled against the T2 session (already-imported=185, no re-emission), 185 strips per-file verified (phase7-execute.txt); re-run --check scans 0 facets, tree unchanged (phase7-idempotency.txt); post-migration snapshot all-zero diff vs pre-migration (246/246 ranks unchanged, delta +0.0000) - migration scoring-neutral by construction. Commits aa0c764e / 613e0141 / fee25c7c on edge. Ratification is the operator's."
+disposition = "aligned"
+response = "Evidence complete and internally consistent: census reconciles 185/185/0/0, strip verification 185/185, idempotent no-op proven, scoring-neutrality proven (all-zero rank/score diff vs pre-migration snapshot). No code or spec change needed; the finding stays open solely for operator ratification of the VH gate - raiser verifies on the operator's word, not before."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "blocker"
+title = "VH-2: REV-024 application awaits operator confirmation that canon matches the shipped resolver"
+detail = "Expected: operator confirms REV-024 apply landed and ADR-015/SPEC-020/PRD-014 tell the same story as the shipped resolver (PHASE-07 VH-2, design D12, sec 8.10 VA). Observed: REV-024 status done+approved; 7 modify rows hand-landed at edge b2e0cd05 (ADR-015 T3 ladder x3 edits; REQ-278/279/280/286 to ledgered-claim semantics; SPEC-020 value prose; PRD-014 pointer + flows); spec validate clean; boot re-run. Approval was verified pre-flip at PHASE-05 phase-plan (EN-2, base cb8c45b5) - the D12 gate held. Ratification is the operator's."
+disposition = "aligned"
+response = "REV-024 done+approved; the seven modify rows landed and spec validate is clean; ADR-015/SPEC-020/PRD-014 spot-read tells the T3-ladder story the shipped resolver implements (D12 held: approval preceded the flip landing). Open solely for operator ratification of the VH gate."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Conformance: 21 undeclared paths - mid-phase adjudicated scope extensions never promoted into the primary selector registry"
+detail = "Expected: slice conformance clean over recorded deltas. Observed: 21 undeclared. All map to ledgered adjudications, none to silent creep: (a) show value-line re-source, 9 kind modules + shared seams (backlog/concept_map/governance/lazyspec/memory/rec/retrieve/review/revision/slice/spec .rs) - PHASE-06 T3+EX-3, belt-declared 8e0d7699 + 33851ebf; (b) PHASE-02 mechanical fallout of b/response optionalisation (compile.rs, project.rs, query.rs, cli.rs) - orchestrator adjudication in phase-02 sheet; (c) class-b golden churn (e2e_compare_elicit, e2e_compare_inference; declared cb8c45b5) + e2e_estimate_non_blocking (NF-001 tripwire, +5); (d) src/value.rs (validate mirror, named in slice Affected surface); (e) adr/001/layering.toml (ratchet, see F-9); (f) slice-220.toml (registry/administrative churn, self-referential). Root cause: belt design-target declarations rode the coord tree and never projected into the primary registry - conformance credits design-target selectors only. Remediation is the registry verb, not prose: slice selector add at reconcile (brief)."
+disposition = "verified"
+response = "Every undeclared path traces to a ledgered adjudication - no silent scope creep. Load-bearing remediation is the selector registry (slice selector add, design-target intent) with a design.md code-impact append-note as its mirror; both routed to the reconciliation brief per-slice surface. Registry edits are reconcile's write, not audit's."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Conformance: undelivered src/priority/config.rs - the docs half of the demote_agent_evidence widening never landed"
+detail = "Expected: design sec 3 Config - demote_agent_evidence semantics widen (docs + tests). Observed: tests landed (graph.rs sec 8.4 demotion + D14 batteries; config.rs parse tests pre-exist from SL-218) but the knob doc comment still described only the RFC-019 pairwise semantics; the bundle never touched config.rs, so the design-target selector reads undelivered. Fixed now: doc comment widened to name the claims semantics (candidate commit f8e7ca38, branch advanced + admitted). The undelivered cell itself clears when the repair delta integrates."
+disposition = "fix-now"
+response = "Fixed within audit scope on the candidate interaction branch: knob doc comment widened to name the claims semantics (f8e7ca38); candidate ref advanced and re-admitted under RV-277. Tests were already delivered; only the docs half was owed."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Accepted deviation: ReasonKind::ValueUnmigratedFacet vs design sec 6 ValueFacetUnmigrated"
+detail = "Expected: variant name ValueFacetUnmigrated (design sec 6). Observed: landed as ValueUnmigratedFacet - the literal substring ValueFacet trips the NF-001 facet-symbol tripwire (e2e_estimate_non_blocking). Same semantics; D11 JSON token (unmigrated-facet) unchanged. PHASE-05 accepted deviation, minimal reading. Design append-note owed (per-slice direct edit at reconcile - brief)."
+disposition = "verified"
+response = "Deviation is sound (NF-001 tripwire is a real constraint; semantics and D11 token unchanged) but canon must record it: design sec 6 append-note naming ValueUnmigratedFacet and the tripwire rationale - reconciliation brief, per-slice direct edit."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "Hoisted-anchor render: ValueProvenance::Authored (class-mate hoisted claim anchor) renders as projected"
+detail = "Adjudicated PHASE-06: rung 2 is what fed scoring; design sec 6 lists projected as unchanged - conformant. A tier-attributed hoist shape is out of design scope; captured as a backlog idea at harvest."
+disposition = "aligned"
+response = "Conformant with design sec 6 (projected listed unchanged; rung 2 fed scoring). Tier-attributed hoist render captured as a backlog idea at harvest; no design or code change owed by this slice."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "nit"
+title = "Demotion disclosure widened by adjudication, not by text change"
+detail = "Design sec 6: AGENT_DEMOTION_DISCLOSURE widens to claims. Observed: existing constant fires on a superset condition and its text (agent judgements propose orderings but do not retire questions) already covers claim rows - claims ARE judgement rows. Rewording would churn three byte-exact enumerated goldens for no informational gain. PHASE-06 adjudication accepted as-is; conformant."
+disposition = "aligned"
+response = "The superset-condition adjudication is correct: the disclosure already names the demoted-evidence posture for all judgement rows, claims included; a byte-identical-goldens rewording buys nothing. Design intent (single-line posture, no new config) satisfied."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = "verify-vt renders FAIL from the primary tree pre-integration; all 14 VTs PASS attributed from the candidate surface"
+detail = "Expected per handover: VTs keyword-present but UNATTRIBUTABLE. Observed at audit: from the primary tree (edge, code not integrated) every VT fails file-absent/keyword-absent - mechanical, not a defect; from the candidate worktree (cand-220-review-001 @ f8e7ca38) the full battery is 14/14 PASS with clean attribution. Attribution question from the handover is resolved: run verify-vt from the reviewed surface for dispatched slices."
+disposition = "aligned"
+response = "Mechanical artifact of the pre-integration window, not a defect: verify-vt reads the working tree, and the code lives on the candidate branch until /close integrates. Candidate-surface run is the authoritative record: 14/14 PASS, cleanly attributed. Durable pattern recorded at harvest."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "ADR-001 layering ratchet baseline bumped 86 to 99 for the sec 6 show re-source"
+detail = "Expected: layering.toml untouched (worker-forbidden). Observed: PHASE-06 tangle-ratchet halt was correct; orchestrator bumped Command-tier baseline 86 to 99 with rationale comment (7661b3fd) and the worker delta was replayed verbatim by a fresh worker onto the bumped base (fork 9411ee90) - primary path preserved, no fallback import. Deliberate, ledgered, governance-owned edit."
+disposition = "aligned"
+response = "Deliberate, rationale-carrying governance edit by the role that owns it (orchestrator), with the primary-path replay preserving worker provenance. The ratchet did its job (halted the worker); the bump is the sanctioned channel. No follow-up."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "Open reconciliation obligations from design sec 7 / D12 (documentary, non-blocking)"
+detail = "Per design: RFC-020 Phase 0/1 rows move to delivered-by-SL-220 at reconciliation (RFC stays open for Phases 2-3); additive/documentary spec work remains owed - full claim-schema retention REQs (SPEC-020) and PRD-011/SPEC-001 descent prose - none of it may contradict the amended normative text. Routed to the reconciliation brief (governance/spec surface)."
+disposition = "verified"
+response = "All three obligations are documentary and were explicitly deferred to reconciliation by design sec 7/D12 - not drift. Routed to the reconciliation brief governance/spec surface: RFC-020 status motion, SPEC-020 claim-schema retention REQs, PRD-011/SPEC-001 descent prose."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
