@@ -5,10 +5,10 @@ id = 182
 slug = "knowledge-authoring-skill-route-agents-to-create-transition-asmdecquecon-records"
 title = "/knowledge authoring skill: route agents to create + transition ASM/DEC/QUE/CON records"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-26"
-updated = "2026-06-26"
+updated = "2026-07-17"
 tags = ["area:memory", "area:skills"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
