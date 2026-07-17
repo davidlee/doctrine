@@ -1,7 +1,7 @@
 id = 220
 slug = "value-claims"
 title = "Ledgered value claims"
-status = "audit"
+status = "reconcile"
 created = "2026-07-16"
 updated = "2026-07-17"
 tags = []
@@ -20,7 +20,8 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/value.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
 
 [[selector]]
 selector = "src/facet.rs"
@@ -109,6 +110,96 @@ intent = "design-target"
 [[selector]]
 selector = "tests/e2e_value_claims.rs"
 intent = "design-target"
+
+[[selector]]
+selector = "src/backlog.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/comparison/compile.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/comparison/project.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/comparison/query.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/concept_map.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/governance.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/lazyspec.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/rec.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/review.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/revision.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "tests/e2e_compare_elicit.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "tests/e2e_compare_inference.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
+
+[[selector]]
+selector = "tests/e2e_estimate_non_blocking.rs"
+intent = "design-target"
+note = "RV-277 F-3: adjudicated mid-phase extensions (PHASE-02 mechanical fallout; PHASE-06 show re-source; class-b golden churn)"
 
 [[relation]]
 label = "governed_by"

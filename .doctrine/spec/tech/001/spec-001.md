@@ -449,3 +449,13 @@ Resolved:
   plan↔audit divergence surface (D6 (a) vs (b)) when D6's prerequisites land
   (IMP-012 tension decided then). Lock-safe — D6 fixes the mask *shape*; strength
   is downstream.
+
+## Descent note — value channel source (REV-025, SL-220)
+
+Documentary pointer, no contract change. The policy layer's value dimension
+(`value_dim`'s numerator) descends from the comparison pipeline's resolved
+`(value, provenance)` — the ADR-015 T3 claim ladder (REV-024) — threaded to
+`build_from_with_cfg` as a pure input by the shell (the SL-219 cost-feed
+pattern). Authored `[value]` facets are retired as an input (transitional
+rung 5 aside, SL-220 design §3); the graph core remains policy-free and
+reads only the supplied numbers. Normative detail: ADR-015, SPEC-020.

@@ -132,3 +132,45 @@ prepare-review ledger clobber) are captured follow-up work.
 
 - config.rs demote-knob doc widening (F-4) — candidate commit f8e7ca38,
   admitted under RV-277; lands with /close's stage-2 integrate.
+
+## Reconciliation Outcome
+
+Reconcile pass complete (2026-07-17). Every brief item resolved; no
+escalation to design.
+
+### Direct edits applied (per-slice)
+
+- **Selector registry** (F-3, load-bearing): 19 adjudicated-extension paths
+  promoted to design-target (`slice selector add`, note citing RV-277 F-3).
+  `slice conformance 220` now: **37 conformant**; residuals are exactly the
+  dispositioned cells — `layering.toml` + `slice-220.toml` undeclared
+  (governance ratchet / registry self-churn, F-9/F-3) and `config.rs`
+  undelivered (audit-repaired on the candidate at f8e7ca38, clears at
+  integrate).
+- **design.md**: appended `## Post-audit append-notes (RV-277)` — the
+  ValueUnmigratedFacet naming deviation (F-5), the PHASE-02 mechanical
+  fallout and PHASE-06 show re-source code-impact extensions (F-3 mirror),
+  and the F-4 config-docs repair pointer. Locked sections untouched.
+
+### REVs completed (governance/spec)
+
+- **REV-025** (`reconcile-sl-220`, originates from RFC-020): done —
+  approved, applied, all three surfaced rows hand-landed:
+  - **introduce FR-012 (REQ-336) → SPEC-020**: full claim-schema retention
+    (observed_at/basis/admission + per-domain payload columns; additive
+    within v3); statement/rationale/acceptance authored; status → active.
+  - **modify PRD-011**: descent note — value input resolves through the
+    ADR-015 T3 claim ladder; derived, never authored truth.
+  - **modify SPEC-001**: descent note — value channel consumes the resolved
+    (value, provenance) as a pure input; graph core stays policy-free.
+  `spec validate`: corpus clean. Narrative in revision-025.md.
+- **RFC-020** (not a REV-able target — direct edit recorded in REV-025's
+  narrative): Phase 0 and Phase 1 implementation-path rows annotated
+  *Delivered by SL-220*; RFC stays `open` for Phases 2–3.
+
+### Already repaired at audit (no action here)
+
+- config.rs demote-knob doc widening (F-4) — candidate commit f8e7ca38,
+  admitted under RV-277; lands with /close's stage-2 integrate.
+
+Handoff → /close.

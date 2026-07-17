@@ -14,7 +14,7 @@ ref   = "SL-220"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "VH-1: migration census executed under blanket proceed - awaits operator ratification"
 detail = "Expected: operator reviews --check census, authorises --execute, commits post-strip corpus (PHASE-07 VH-1). Observed: executed by orchestrator under session blanket proceed; evidence complete: --check census 185/185/0/0 reconciled (phase7-census-check.txt, primary @ 12d05c5b); --execute re-reconciled against the T2 session (already-imported=185, no re-emission), 185 strips per-file verified (phase7-execute.txt); re-run --check scans 0 facets, tree unchanged (phase7-idempotency.txt); post-migration snapshot all-zero diff vs pre-migration (246/246 ranks unchanged, delta +0.0000) - migration scoring-neutral by construction. Commits aa0c764e / 613e0141 / fee25c7c on edge. Ratification is the operator's."
@@ -23,7 +23,7 @@ response = "Evidence complete and internally consistent: census reconciles 185/1
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "VH-2: REV-024 application awaits operator confirmation that canon matches the shipped resolver"
 detail = "Expected: operator confirms REV-024 apply landed and ADR-015/SPEC-020/PRD-014 tell the same story as the shipped resolver (PHASE-07 VH-2, design D12, sec 8.10 VA). Observed: REV-024 status done+approved; 7 modify rows hand-landed at edge b2e0cd05 (ADR-015 T3 ladder x3 edits; REQ-278/279/280/286 to ledgered-claim semantics; SPEC-020 value prose; PRD-014 pointer + flows); spec validate clean; boot re-run. Approval was verified pre-flip at PHASE-05 phase-plan (EN-2, base cb8c45b5) - the D12 gate held. Ratification is the operator's."

@@ -354,3 +354,15 @@ intent.)
   `proposed` ADR a decision still to make? Blocks the policy's per-kind status-class table
   and the cross-kind `next` result. SL-047 cannot finalise its actionable set until this
   closes in SPEC-001.
+
+## Descent note — value-source resolution (REV-025, SL-220)
+
+Documentary pointer, no contract change. The **value** input this capability
+consumes is no longer an authored `[value]` facet: absolute value assignment
+is ledgered claim evidence in the comparison corpus, resolved through the
+ADR-015 T3 epistemic authority ladder (pin > human claim > comparison
+projection > agent claim > migrated claim > transitional unmigrated facet >
+default; REV-024). The priority view consumes the **resolved**
+`(value, provenance)` — derived, disposable, never stored as authored truth,
+exactly per this PRD's own principles. Normative detail: ADR-015, SPEC-020
+(value surface), RFC-020.

@@ -808,3 +808,30 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
 - Lens-resolved claim surfacing (IDE-035): `lensed` output exists, inert.
 - Aggregation modes, cascade, container views (RFC-020 OQ-1 + ADR-018 REV).
 - Magnitude coarsening config gate (RFC-020 T5).
+
+## Post-audit append-notes (RV-277, 2026-07-17)
+
+Append-only reconciliation notes — the design above is locked; these record
+where the landed implementation deviates from or extends the letter of the
+sections, each adjudicated on the RV-277 ledger.
+
+- **§6 naming deviation (RV-277 F-5).** `ReasonKind::ValueFacetUnmigrated`
+  landed as **`ValueUnmigratedFacet`**: the literal substring `ValueFacet`
+  trips the NF-001 facet-symbol tripwire (e2e_estimate_non_blocking).
+  Semantics identical; the D11 JSON token `unmigrated-facet` is unchanged.
+- **§1/§2 code-impact extension (RV-277 F-3, PHASE-02 adjudication).**
+  Optionalising `Judgement.b/response` broke 31 consumer literals across 8
+  files; PHASE-02 absorbed the *mechanical* fallout (Option handling +
+  transitional anchor-row filters in `compile.rs`, `project.rs`, `query.rs`,
+  `commands/cli.rs`) with zero golden churn; the typed `PairRow` seam landed
+  at PHASE-03 as designed.
+- **§6 code-impact extension (RV-277 F-3, PHASE-06).** The `show` value-line
+  re-source dissolved a 9-fold `format_value_normal` duplication across the
+  kind modules (`backlog/concept_map/governance/memory/rec/review/revision/
+  slice/spec.rs`) via a single shared helper, with `lazyspec.rs`/`retrieve.rs`
+  riding the shared `spec::render`/`memory::render_show` seams; `value.rs`
+  churned for the validate mirror; class-b golden churn landed in
+  `e2e_compare_elicit`/`e2e_compare_inference` (+ the NF-001 suite). All
+  promoted to design-target selectors at reconcile.
+- **§3 config docs (RV-277 F-4).** The demote-knob doc widening was missed by
+  the bundle and repaired at audit on the candidate branch (f8e7ca38).

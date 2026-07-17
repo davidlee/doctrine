@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 336
+slug = "retain-the-full-claim-schema-on-the-wire"
+title = "Retain the full claim schema on the wire"
+status = "active"
+kind = "functional"
+
+description = "The wire v3 anchor-claim row retains its complete evidential schema (observed_at/basis/admission + per-domain payload columns); parse lossless over absent optionals; new domains add optional columns only — no row reshape, no version bump within v3."
+tags = ["claims", "wire-schema", "provenance", "forward-compatible"]
+acceptance_criteria = [
+  "Anchor rows carry observed_at, basis, and admission as optional columns; parse is lossless when they are absent.",
+  "Payload exactness per domain is enforced at capture-time validation, never at parse.",
+  "A new claim domain lands as additional optional columns on the same row shape — no reshape of existing rows, no version bump within v3.",
+  "Every v2 document parses as a valid v3 document.",
+]
