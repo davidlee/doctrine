@@ -20,7 +20,8 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/value.rs"
-intent = "scope-relevant"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
 
 [[selector]]
 selector = "src/facet.rs"
@@ -109,6 +110,116 @@ intent = "design-target"
 [[selector]]
 selector = "tests/e2e_value_claims.rs"
 intent = "design-target"
+
+[[selector]]
+selector = "src/comparison/compile.rs"
+intent = "design-target"
+note = "PHASE-02 adjudicated mechanical fallout of §1 struct motion (worker STOP resolution)"
+
+[[selector]]
+selector = "src/comparison/project.rs"
+intent = "design-target"
+note = "PHASE-02 adjudicated mechanical fallout of §1 struct motion (worker STOP resolution)"
+
+[[selector]]
+selector = "src/comparison/query.rs"
+intent = "design-target"
+note = "PHASE-02 adjudicated mechanical fallout of §1 struct motion (worker STOP resolution)"
+
+[[selector]]
+selector = "tests/e2e_estimate_non_blocking.rs"
+intent = "design-target"
+note = "PHASE-02 adjudicated mechanical fallout of §1 struct motion (worker STOP resolution)"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "PHASE-04 adjudicated: ValueAction clap enum + Command::Value dispatch arm live only in cli.rs — no alternative seam for the Pin subcommand (worker deviation accepted)"
+
+[[selector]]
+selector = "tests/e2e_compare_elicit.rs"
+intent = "design-target"
+note = "PHASE-05 R2 class-b golden churn: the design enumerates goldens authoring [value] facets as designed flip churn (design §3 behaviour-change accounting, EX-2)"
+
+[[selector]]
+selector = "tests/e2e_compare_estimate.rs"
+intent = "design-target"
+note = "PHASE-05 R2 class-b golden churn: the design enumerates goldens authoring [value] facets as designed flip churn (design §3 behaviour-change accounting, EX-2)"
+
+[[selector]]
+selector = "tests/e2e_compare_inference.rs"
+intent = "design-target"
+note = "PHASE-05 R2 class-b golden churn: the design enumerates goldens authoring [value] facets as designed flip churn (design §3 behaviour-change accounting, EX-2)"
+
+[[selector]]
+selector = "tests/e2e_priority_golden.rs"
+intent = "design-target"
+note = "PHASE-05 R2 class-b golden churn: the design enumerates goldens authoring [value] facets as designed flip churn (design §3 behaviour-change accounting, EX-2)"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/backlog.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/governance.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/rec.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/review.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/revision.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/concept_map.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/adr.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/standard.rs"
+intent = "design-target"
+note = "PHASE-06 §6 show value-line re-source: every kind module renders the facet value row via format_value_normal (9-fold duplicated pattern); design mandates re-sourcing from the comparison pipeline"
+
+[[selector]]
+selector = "src/lazyspec.rs"
+intent = "design-target"
+note = "PHASE-06 EX-3 completion: spec::render / memory::render_show are shared seams — these two callers must move with the signature change (worker-surfaced scope gap)"
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "design-target"
+note = "PHASE-06 EX-3 completion: spec::render / memory::render_show are shared seams — these two callers must move with the signature change (worker-surfaced scope gap)"
 
 [[relation]]
 label = "governed_by"

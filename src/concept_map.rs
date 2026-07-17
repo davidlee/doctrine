@@ -1141,6 +1141,13 @@ pub(crate) fn run_show(
             let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
             let value_unit = crate::value::resolve_unit(&cfg.value);
             let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            let value_line = crate::priority::surface::show_value_line(
+                &root,
+                &crate::listing::canonical_id(CONCEPT_MAP_KIND.prefix, doc.id),
+                doc.value.as_ref().map(|v| v.value),
+                CONCEPT_MAP_KIND.prefix,
+                &value_unit,
+            )?;
             format_show(
                 &doc,
                 &body,
@@ -1148,7 +1155,7 @@ pub(crate) fn run_show(
                 nodes,
                 parsed.as_ref(),
                 &estimation_unit,
-                &value_unit,
+                value_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -1171,7 +1178,7 @@ fn format_show(
     nodes: bool,
     parsed: Option<&ParsedConceptMap>,
     estimation_unit: &str,
-    value_unit: &str,
+    value_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -1199,11 +1206,9 @@ fn format_show(
             )
         ));
     }
-    if let Some(ref val) = doc.value {
-        parts.push(format!(
-            "\n{}\n",
-            crate::value::format_value_normal(val, value_unit)
-        ));
+    // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
+    if let Some(line) = value_line {
+        parts.push(format!("\n{line}\n"));
     }
     if !body.trim().is_empty() {
         parts.push(format!("\n\n---\n\n{body}"));
@@ -2334,7 +2339,7 @@ mod tests {
         std::fs::write(&toml_path, text).unwrap();
 
         let (doc, _toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
-        let out = format_show(&doc, "", false, false, None, "points", "points", 0.0, 1.0);
+        let out = format_show(&doc, "", false, false, None, "points", None, 0.0, 1.0);
         assert!(out.contains("CM-001"));
         assert!(out.contains("Domain Model"));
         assert!(out.contains("draft"));
@@ -2368,7 +2373,7 @@ mod tests {
             false,
             Some(&parsed),
             "points",
-            "points",
+            None,
             0.0,
             1.0,
         );
@@ -2383,7 +2388,7 @@ mod tests {
             true,
             Some(&parsed),
             "points",
-            "points",
+            None,
             0.0,
             1.0,
         );
@@ -2416,7 +2421,7 @@ mod tests {
             false,
             None,
             "espresso_shots",
-            "magic_beans",
+            Some("value: 7.0 magic_beans (human claim, ada, 2026-07-16)"),
             0.1,
             0.9,
         );
@@ -2424,7 +2429,10 @@ mod tests {
             out.contains("estimate: 2.3–4.7 espresso_shots (80% confidence)"),
             "estimate row: {out}"
         );
-        assert!(out.contains("value: 7.0 magic_beans"), "value row: {out}");
+        assert!(
+            out.contains("value: 7.0 magic_beans (human claim, ada, 2026-07-16)"),
+            "value row: {out}"
+        );
     }
 
     #[test]

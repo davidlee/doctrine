@@ -41,7 +41,7 @@ use super::tension::{
 };
 use super::view::{
     Actionability, ActionabilityBlock, ActionabilityEdge, ActionabilityNode, ActionabilityView,
-    BlockersView, EdgeVerb, Explanation, NextRow, NextView, ReasonKind, SurveyRow,
+    BlockersView, ContestedClaim, EdgeVerb, Explanation, NextRow, NextView, ReasonKind, SurveyRow,
     TensionCauseView, TensionGradeView,
 };
 
@@ -393,8 +393,14 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
     let cfg = super::config::load(root);
     let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
     let cost_feed = comparison::cost_feed(&pipeline.estimate.projection);
-    let g =
-        graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.value.projection, &cost_feed)?;
+    let g = graph::build_from_with_cfg(
+        &scanned,
+        root,
+        &cfg,
+        &pipeline.value.projection,
+        &cost_feed,
+        &pipeline.value_claims,
+    )?;
     // The actionable, non-promoted set (a promoted item is excluded by its own reason,
     // F1 / REQ-075 AC2 — the same exclusion `survey` applies).
     let actionable_set: std::collections::BTreeSet<EntityKey> = g
@@ -417,15 +423,13 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
                 });
             }
             reasons.push(score_reason(&g, k));
-            // Project facet fields from NodeAttr (SL-171 PHASE-01, D2) — read once,
-            // never recompute.
-            let (estimate, value, tags) = attr(&g, k).map_or((None, None, Vec::new()), |a| {
-                (
-                    a.facets.estimate.clone(),
-                    a.facets.value.clone(),
-                    a.facets.tags.clone(),
-                )
+            // Project the estimate/tags facets from NodeAttr (SL-171 PHASE-01, D2);
+            // the value cell re-paths to the RESOLVED ladder (SL-220 PHASE-06,
+            // design §6) — the facet reader here died with the flip (EX-3).
+            let (estimate, tags) = attr(&g, k).map_or((None, Vec::new()), |a| {
+                (a.facets.estimate.clone(), a.facets.tags.clone())
             });
+            let value_source = value_source_reason(&g, k, &pipeline);
             NextRow {
                 id: k.canonical(),
                 title: title_of(&g, k),
@@ -437,7 +441,7 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
                 blockers: Vec::new(),
                 blocking,
                 estimate,
-                value,
+                value_source,
                 tags,
             }
         })
@@ -510,8 +514,14 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
     let cfg = super::config::load(root);
     let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
     let cost_feed = comparison::cost_feed(&pipeline.estimate.projection);
-    let g =
-        graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.value.projection, &cost_feed)?;
+    let g = graph::build_from_with_cfg(
+        &scanned,
+        root,
+        &cfg,
+        &pipeline.value.projection,
+        &cost_feed,
+        &pipeline.value_claims,
+    )?;
     // Existence gate (SL-050 F6): a well-formed but never-minted id errors rather than
     // explaining a phantom node.
     relation_graph::require_minted(&g.projection, key)?;
@@ -741,7 +751,7 @@ pub(crate) fn graded_tensions(
     // Verdict systems (SL-218 D1): the full pipeline compile always; a fresh
     // human-rows-only compile when the knob is on. The knob-on verdict reads the
     // human system; the full system stays available for the AgentProposed fallback.
-    let active: Vec<&Judgement> = pipeline.active_judgements.iter().collect();
+    let active: Vec<&Judgement> = pipeline.active_pairwise().iter().collect();
     let full_reach = Reachability::build(&pipeline.value.constraint_set);
     let knob_on = cfg.compare.demote_agent_evidence;
     let human = knob_on.then(|| {
@@ -850,15 +860,66 @@ fn pair_counts(
     out
 }
 
-/// The SL-213 PHASE-06 value-source block for one entity (design §4 S3):
-/// authored (own `[value]` facet — possibly an anchor hoisted onto a shared
-/// class) > projected (bounds + rater split) > gauge (judgement count) >
-/// the implicit default tier (D11). `None` for a non-value-bearing kind.
+/// The value-source block for one entity — the SL-220 §3 evidence ladder made
+/// legible, mirroring `graph::effective_raw_value` rung-for-rung: anchored
+/// claim (pin / human, rung 1) > projection (bounds + rater split / gauge,
+/// rung 2) > agent / migrated prior (rungs 3–4) > unmigrated `[value]` facet
+/// (rung 5, transitional). `None` for a non-value-bearing kind, and for the
+/// default floor (rung 6 is a NUMERIC floor, not a value-SOURCE worth a
+/// citation — citing it would regress every `explain` golden with no
+/// comparison evidence; the S3 precedent).
 ///
 /// The SINGLE precedence source (SL-217 PHASE-03): the elicit participant
-/// value block maps this `ReasonKind` to `{provenance, point}` and reads the
-/// STRUCTURAL bounds via [`class_bounds_structural`] separately (this variant
-/// has already flattened them for the human explain contract).
+/// value block maps this `ReasonKind` to `{provenance, point}` (via the D11
+/// `value_source_token`) and reads the STRUCTURAL bounds via
+/// [`class_bounds_structural`] separately (this variant has already flattened
+/// them for the human explain contract).
+///
+/// A projection hit with `Authored` provenance is a class-mate's anchored
+/// claim hoisted onto the item's class (the item's OWN claim would have won
+/// at rung 1) — reported as projected, the rung that actually fed scoring;
+/// the tier-attributed hoist render is PHASE-06 material.
+/// Convert a resolved claim into its render reason (SL-220 PHASE-06, design
+/// §6) — the SINGLE claim→`ReasonKind` mapping shared by the anchored (rung 1)
+/// and prior (rungs 3–4) arms and by `show`'s pipeline-only resolver. Pin tier
+/// routes to [`ReasonKind::ValuePin`] (carries `basis`); every other tier to
+/// [`ReasonKind::ValueClaim`]. Attribution rides through only for a singleton
+/// resolution (`claim.attribution` is `None` for corroboration/conflict). A
+/// migrated claim reads its timestamp from `observed_at` (the render frames it
+/// as `observed`); every other tier reads `date`.
+pub(crate) fn claim_reason(claim: &comparison::ResolvedClaim, conflict: Vec<String>) -> ReasonKind {
+    let contested = claim.conflict.as_ref().map(|c| ContestedClaim {
+        low: c.low,
+        high: c.high,
+        rows: claim.rows,
+    });
+    let attr = claim.attribution.clone().unwrap_or_default();
+    // Migrated rows carry `observed_at`, not `date`; every other tier the reverse.
+    let date = if matches!(claim.tier, comparison::ClaimTier::Migrated) {
+        attr.observed_at
+    } else {
+        attr.date
+    };
+    match claim.tier {
+        comparison::ClaimTier::Pin => ReasonKind::ValuePin {
+            value: claim.value,
+            conflict,
+            by: attr.by,
+            date,
+            basis: attr.basis,
+            contested,
+        },
+        tier => ReasonKind::ValueClaim {
+            value: claim.value,
+            tier,
+            conflict,
+            by: attr.by,
+            date,
+            contested,
+        },
+    }
+}
+
 pub(crate) fn value_source_reason(
     g: &PriorityGraph,
     key: EntityKey,
@@ -868,22 +929,38 @@ pub(crate) fn value_source_reason(
     if !crate::kinds::is_value_bearing(key.prefix) {
         return None;
     }
-    let canonical = key.canonical();
-    if let Some(v) = attrs.facets.value.as_ref() {
-        return Some(ReasonKind::ValueAuthored {
-            value: v.value,
-            conflict: anchor_conflict_citation(&pipeline.value.constraint_set, &canonical),
-        });
+    // Rung 5 fallback is the entity's own authored `[value]` facet — the ONE
+    // sanctioned ladder read of `EntityFacets.value` (EX-3 enumerated exception).
+    let facet_value = attrs.facets.value.as_ref().map(|v| v.value);
+    resolve_value_reason(pipeline, &key.canonical(), facet_value)
+}
+
+/// The kind-AGNOSTIC value ladder resolver (SL-220 PHASE-06, design §3/§6) —
+/// resolves one canonical id's value-source `ReasonKind` from the comparison
+/// pipeline alone, with the entity's `[value]` facet magnitude as the rung-5
+/// fallback. The SINGLE ladder walk shared by the graph-gated
+/// [`value_source_reason`] (rows/explain, value-bearing kinds only) and `show`'s
+/// pipeline-only resolver (design §6 — `ClaimResolution` captures claims for
+/// EVERY subject including non-scored kinds, D7, so a record's human claim
+/// resolves here too). `None` ⇔ no evidence at any rung (the line is omitted —
+/// never the scoring floor).
+pub(crate) fn resolve_value_reason(
+    pipeline: &comparison::Pipeline,
+    canonical: &str,
+    facet_value: Option<f64>,
+) -> Option<ReasonKind> {
+    let claims = &pipeline.value_claims;
+    // Rung 1: an anchored claim (Pin/Human) — row-less included (scope R1).
+    if let Some(claim) = claims.anchored.get(canonical) {
+        let conflict = anchor_conflict_citation(&pipeline.value.constraint_set, canonical);
+        return Some(claim_reason(claim, conflict));
     }
-    if let Some(&(value, provenance)) = pipeline.value.projection.get(&canonical) {
+    // Rung 2: the comparison projection (anchors claim-derived post-flip).
+    if let Some(&(value, provenance)) = pipeline.value.projection.get(canonical) {
         return Some(match provenance {
-            comparison::ValueProvenance::Authored => ReasonKind::ValueAuthored {
-                value,
-                conflict: anchor_conflict_citation(&pipeline.value.constraint_set, &canonical),
-            },
-            comparison::ValueProvenance::Projected => {
-                let (lower, upper) = class_bounds(&pipeline.value.constraint_set, &canonical);
-                let counts = class_rater_counts(pipeline, &canonical);
+            comparison::ValueProvenance::Authored | comparison::ValueProvenance::Projected => {
+                let (lower, upper) = class_bounds(&pipeline.value.constraint_set, canonical);
+                let counts = class_rater_counts(pipeline, canonical);
                 ReasonKind::ValueProjected {
                     value,
                     lower,
@@ -893,7 +970,7 @@ pub(crate) fn value_source_reason(
                 }
             }
             comparison::ValueProvenance::Gauge => {
-                let counts = class_rater_counts(pipeline, &canonical);
+                let counts = class_rater_counts(pipeline, canonical);
                 ReasonKind::ValueGauge {
                     value,
                     judgements: counts.total(),
@@ -901,13 +978,56 @@ pub(crate) fn value_source_reason(
             }
         });
     }
-    // No own facet, no comparison-tier engagement at all: nothing to disclose
-    // (design §4 S3 names three shapes only — the scoring-tier `DEFAULT_VALUE`
-    // fallback `effective_raw_value` applies for `value_dim` is a NUMERIC
-    // floor, not a value-SOURCE worth a citation; showing one here for every
-    // untouched value-bearing entity would regress every existing `explain`
-    // golden that carries no comparison evidence).
-    None
+    // Rungs 3–4: the below-projection priors (agent, then migrated — the
+    // within-map contest is already resolved by the claims pass).
+    if let Some(claim) = claims.priors.get(canonical) {
+        // Priors never anchor compile (D4) — no anchor-conflict citation.
+        return Some(claim_reason(claim, Vec::new()));
+    }
+    // Rung 5: the unmigrated authored facet (zero claim rows by construction here).
+    facet_value.map(|value| ReasonKind::ValueUnmigratedFacet { value })
+}
+
+/// The impure `show` value-line helper (SL-220 PHASE-06, design §6) — the ONE
+/// scan-threading seam every entity `show` shell calls, dissolving the former
+/// nine-fold `format_value_normal` duplication. Loads the comparison pipeline,
+/// walks the ladder for `canonical` (with the entity's own `[value]` facet as
+/// the rung-5 fallback), and renders the resolved provenance line. `kind` is the
+/// entity kind prefix — a non-value-bearing kind (record/governance/REV) still
+/// renders its captured claim, annotated `scoring-inert` (D7). `Ok(None)` ⇔ no
+/// evidence at any rung (the line is omitted — matching today's absent-facet
+/// behaviour, never the `1.0` default).
+pub(crate) fn show_value_line(
+    root: &Path,
+    canonical: &str,
+    facet_value: Option<f64>,
+    kind: &str,
+    value_unit: &str,
+) -> anyhow::Result<Option<String>> {
+    let pipeline = graph::load_comparison_pipeline_for_root(root)?;
+    Ok(value_line_from_pipeline(
+        &pipeline,
+        canonical,
+        facet_value,
+        kind,
+        value_unit,
+    ))
+}
+
+/// The pure body of [`show_value_line`] over an ALREADY-LOADED pipeline — for
+/// callers that render many entities in one scan and must not reload the
+/// pipeline per entity (`lazyspec`'s spec catalog, `retrieve`'s memory loop).
+/// Same ladder walk, same render, same scoring-inert annotation.
+pub(crate) fn value_line_from_pipeline(
+    pipeline: &comparison::Pipeline,
+    canonical: &str,
+    facet_value: Option<f64>,
+    kind: &str,
+    value_unit: &str,
+) -> Option<String> {
+    let reason = resolve_value_reason(pipeline, canonical, facet_value)?;
+    let inert = (!crate::kinds::is_value_bearing(kind)).then_some(kind);
+    super::render::show_value_render(&reason, value_unit, inert)
 }
 
 /// The SL-219 PHASE-06 cost-source block for one entity (design §5): the
@@ -1135,9 +1255,22 @@ pub(crate) fn findings(root: &Path) -> anyhow::Result<Vec<super::findings::Findi
     // same answer).
     let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg)?;
     let cost_feed = comparison::cost_feed(&pipeline.estimate.projection);
-    let base =
-        graph::build_from_with_cfg(&scanned, root, &cfg, &pipeline.value.projection, &cost_feed)?;
-    let betas = beta_endpoints(&scanned, root, &cfg, &pipeline.value.projection, &cost_feed)?;
+    let base = graph::build_from_with_cfg(
+        &scanned,
+        root,
+        &cfg,
+        &pipeline.value.projection,
+        &cost_feed,
+        &pipeline.value_claims,
+    )?;
+    let betas = beta_endpoints(
+        &scanned,
+        root,
+        &cfg,
+        &pipeline.value.projection,
+        &cost_feed,
+        &pipeline.value_claims,
+    )?;
     let mut findings = super::findings::detect(&base, &cfg, betas.as_ref());
     findings.extend(super::findings::comparison_findings(&pipeline));
     findings.sort_by(|a, b| {
@@ -1171,12 +1304,15 @@ fn has_nonterminal_interval(scanned: &[relation_graph::ScannedEntity]) -> bool {
 /// re-derived per build (the projection is scan-derived, not cfg-swept).
 /// `cost_feed` (SL-219 PHASE-04) rides the same contract: derived once from the
 /// caller's pipeline, shared across both endpoint builds.
+/// `claims` (SL-220 PHASE-05) likewise: the one claim resolution off the
+/// caller's pipeline, shared — claims are scan-derived, not cfg-swept.
 pub(crate) fn beta_endpoints(
     scanned: &[relation_graph::ScannedEntity],
     root: &Path,
     cfg: &super::config::PriorityConfig,
     projected: &ValueProjection,
     cost_feed: &comparison::CostFeed,
+    claims: &comparison::ClaimResolution,
 ) -> anyhow::Result<Option<super::findings::BetaEndpoints>> {
     if !has_nonterminal_interval(scanned) {
         return Ok(None);
@@ -1185,8 +1321,8 @@ pub(crate) fn beta_endpoints(
     lo_cfg.estimate.skew = super::findings::BETA_LO;
     let mut hi_cfg = cfg.clone();
     hi_cfg.estimate.skew = super::findings::BETA_HI;
-    let lo = graph::build_from_with_cfg(scanned, root, &lo_cfg, projected, cost_feed)?;
-    let hi = graph::build_from_with_cfg(scanned, root, &hi_cfg, projected, cost_feed)?;
+    let lo = graph::build_from_with_cfg(scanned, root, &lo_cfg, projected, cost_feed, claims)?;
+    let hi = graph::build_from_with_cfg(scanned, root, &hi_cfg, projected, cost_feed, claims)?;
     Ok(Some(super::findings::BetaEndpoints { lo, hi }))
 }
 
@@ -1689,6 +1825,7 @@ mod tests {
                 &cfg,
                 &ValueProjection::new(),
                 &Default::default(),
+                &Default::default(),
             )
             .unwrap()
             .is_some(),
@@ -1709,6 +1846,7 @@ mod tests {
                 root2,
                 &cfg2,
                 &ValueProjection::new(),
+                &Default::default(),
                 &Default::default(),
             )
             .unwrap()
@@ -1741,6 +1879,7 @@ mod tests {
                 root,
                 &cfg,
                 &ValueProjection::new(),
+                &Default::default(),
                 &Default::default(),
             )
             .unwrap()
@@ -1839,6 +1978,7 @@ mod tests {
             &cfg,
             &pipeline.value.projection,
             &comparison::cost_feed(&pipeline.estimate.projection),
+            &pipeline.value_claims,
         )
         .unwrap();
         graded_tensions(&g, &pipeline, &cfg, usize::MAX)
@@ -1960,6 +2100,7 @@ mod tests {
             &cfg,
             &pipeline.value.projection,
             &comparison::cost_feed(&pipeline.estimate.projection),
+            &pipeline.value_claims,
         )
         .unwrap();
         let key = parse_key(id).unwrap();

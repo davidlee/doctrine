@@ -132,26 +132,57 @@ fn est_cost(
 /// an authored value (incl. < 1.0 and 0.0) is returned untouched.
 pub(crate) const DEFAULT_VALUE: f64 = 1.0;
 
-/// Single definition of an entity's value for priority purposes (SL-213 design
-/// D11): authored value wins; else the comparison-tier PROJECTED value (either
-/// tier — `Projected` interpolation or its `Gauge` sub-tier, D11: "gauge is a
-/// sub-tier of projected for ADR-015 purposes"); else a value-bearing kind with
-/// no facet and no projection defaults to `DEFAULT_VALUE`; any other valueless
-/// kind (records, governance, REV) is None. `projected` empty ⇒ bitwise-identical
-/// to the pre-SL-213 two-tier resolution (behaviour-preservation gate). Consumed
-/// by `base_score`'s `value_dim` AND the burndown accessor identically (design
-/// "governed policy": gauge participates in burndown, RV-191 F-1 / SL-213 D11).
+/// Single definition of an entity's value for priority purposes — the SL-220
+/// evidence ladder (design §3, RFC-020 T3; first hit wins):
+///
+/// 1. **Anchored claim** — [`ClaimResolution`]`.anchored` (Pin or Human tier,
+///    conflict means included). Wins outright; the same tiers shape projection
+///    via `anchor_map()` — the two seams the authored facet used to occupy,
+///    now with provenance. Read DIRECTLY (scope R1): a row-less human claim
+///    still wins here even though compile's row-gating drops its anchor.
+/// 2. **Comparison projection** — unchanged machinery (`Projected` OR its
+///    `Gauge` sub-tier, SL-213 D11: value multiplies, never divides); anchors
+///    are claim-derived only since the flip.
+/// 3. **Agent-tier prior**, then 4. **Migrated-tier prior** — one `priors`
+///    lookup (the D4 split routes both around the constraint layer; the
+///    within-map tier contest is already resolved by the claims pass,
+///    agent > migrated).
+/// 5. **Unmigrated `[value]` facet** (transitional, D6) — consulted only when
+///    ZERO unlensed claim rows exist for the item (structural here: `anchored`
+///    and `priors` both missed; lensed partitions are inert, D5). The
+///    `UnmigratedFacet` finding fires on facet PRESENCE, not this rung's
+///    consumption (RV-278 F-4 — a facet shadowed by projection is still debt).
+/// 6. **`DEFAULT_VALUE`** for a value-bearing kind; any other valueless kind
+///    (records, governance, REV) is None.
+///
+/// Consumption gate (D7): the claim rungs read only for value-bearing kinds —
+/// a scoring-inert subject's claims resolve normally but nothing consumes
+/// them. The facet/projection rungs keep their pre-flip kind behaviour
+/// bit-for-bit (the caller contract). Empty `claims` + empty `projected` ⇒
+/// bitwise-identical to the pre-SL-213 two-tier resolution (the
+/// behaviour-preservation gate). Consumed by `base_score`'s `value_dim` AND
+/// the burndown accessor identically (governed policy, RV-191 F-1).
 fn effective_raw_value(
     kind: &entity::Kind,
     f: &EntityFacets,
     key: EntityKey,
     projected: &ValueProjection,
+    claims: &comparison::ClaimResolution,
 ) -> Option<f64> {
-    f.value
-        .as_ref()
-        .map(|v| v.value)
-        .or_else(|| projected.get(&key.canonical()).map(|&(v, _)| v))
-        .or_else(|| crate::kinds::is_value_bearing(kind.prefix).then_some(DEFAULT_VALUE))
+    let value_bearing = crate::kinds::is_value_bearing(kind.prefix);
+    let canonical = key.canonical();
+    // Rungs 1 / 3–4 (D7 consumption gate: claims feed scored kinds only).
+    let claim_rung = |map: &BTreeMap<String, comparison::ResolvedClaim>| -> Option<f64> {
+        if !value_bearing {
+            return None;
+        }
+        map.get(&canonical).map(|c| c.value)
+    };
+    claim_rung(&claims.anchored)
+        .or_else(|| projected.get(&canonical).map(|&(v, _)| v))
+        .or_else(|| claim_rung(&claims.priors))
+        .or_else(|| f.value.as_ref().map(|v| v.value))
+        .or_else(|| value_bearing.then_some(DEFAULT_VALUE))
 }
 
 /// The per-entity tag multiplier term: `(1.0 + Σ(tag_coeff − 1.0)).max(0.0)` —
@@ -165,11 +196,16 @@ fn tag_term(f: &EntityFacets, cfg: &config::PriorityConfig) -> f64 {
 
 /// Pure base-score computation per entity (design §5.1). Returns the SPLIT
 /// `BaseScore` so `explain` can surface `value_dim` / `risk_dim`. No IO.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the pure scoring inputs (projection, claims, cost feed) thread from one shell seam"
+)]
 fn base_score(
     f: &EntityFacets,
     kind: &entity::Kind,
     key: EntityKey,
     projected: &ValueProjection,
+    claims: &comparison::ClaimResolution,
     cost_feed: &comparison::CostFeed,
     cfg: &config::PriorityConfig,
     ctx: CostCtx,
@@ -181,7 +217,7 @@ fn base_score(
     // negative multiplier from many demoting tags.
     let tag_term = tag_term(f, cfg);
     let value_dim = {
-        let raw = match effective_raw_value(kind, f, key, projected) {
+        let raw = match effective_raw_value(kind, f, key, projected, claims) {
             Some(v) => {
                 let cost = est_cost(
                     f.estimate.as_ref().map(|e| (e.lower, e.upper)),
@@ -375,7 +411,14 @@ pub(crate) fn build_from(
     // resolve→compile→project pass — never two ledger reads for one build.
     let pipeline = load_comparison_pipeline(root, scanned, &cfg)?;
     let cost_feed = comparison::cost_feed(&pipeline.estimate.projection);
-    build_from_with_cfg(scanned, root, &cfg, &pipeline.value.projection, &cost_feed)
+    build_from_with_cfg(
+        scanned,
+        root,
+        &cfg,
+        &pipeline.value.projection,
+        &cost_feed,
+        &pipeline.value_claims,
+    )
 }
 
 /// Load the comparison-tier PIPELINE (SL-213 PHASE-06): the compiled
@@ -391,8 +434,10 @@ pub(crate) fn load_comparison_pipeline(
     scanned: &[relation_graph::ScannedEntity],
     cfg: &config::PriorityConfig,
 ) -> anyhow::Result<comparison::Pipeline> {
+    // SL-220 PHASE-05: no facet→AnchorMap builder — the value system's compile
+    // anchors are claim-derived inside the pipeline (`ClaimResolution::
+    // anchor_map()`, D4/D12); facets stopped anchoring/shaping projection.
     let statuses = comparison_status_map(scanned);
-    let anchors = comparison_anchor_map(scanned);
     let est_anchors = comparison_est_anchor_map(scanned, cfg);
     // Per-domain projection params (SL-219 D8). Value: the shipped
     // `VALUE_PROJECTION_PARAMS` (its step still config-overridable via the
@@ -409,14 +454,7 @@ pub(crate) fn load_comparison_pipeline(
         gauge_step: cfg.estimate.gauge_step,
         gauge_center: bare_cost_anchor(scanned, &cfg.estimate),
     };
-    comparison::load_pipeline(
-        root,
-        &statuses,
-        &anchors,
-        &est_anchors,
-        &value_cfg,
-        &est_cfg,
-    )
+    comparison::load_pipeline(root, &statuses, &est_anchors, &value_cfg, &est_cfg)
 }
 
 /// The bare-item cost anchor (SL-172 §5.4 anchor fold): the maximum `upper`
@@ -498,22 +536,6 @@ fn comparison_status_map(scanned: &[relation_graph::ScannedEntity]) -> StatusMap
     map
 }
 
-/// Build the comparison-tier [`AnchorMap`] from the raw entity scan: each
-/// entity's authored `[value]` facet (design C1 — anchors are the only
-/// magnitude source). Same layering rationale as
-/// [`comparison_status_map`] — home stated there.
-fn comparison_anchor_map(scanned: &[relation_graph::ScannedEntity]) -> AnchorMap {
-    scanned
-        .iter()
-        .filter_map(|entity| {
-            entity
-                .value
-                .as_ref()
-                .map(|v| (entity.key.canonical(), v.value))
-        })
-        .collect()
-}
-
 /// Build the est-domain [`AnchorMap`] from the raw entity scan (SL-219 design
 /// §2 anchor seam): each ADMISSIBLE entity's (per [`comparison::
 /// admissible_estimate_pair`] kinds — no parallel list) authored `[estimate]`
@@ -573,6 +595,14 @@ fn comparison_est_anchor_map(
 /// rows ⇒ empty feed ⇒ bitwise-identical scoring to the pre-ladder build
 /// (the same empty-map preservation gate as `projected`).
 ///
+/// SL-220 PHASE-05: `claims` is the value-domain claim resolution
+/// (`Pipeline.value_claims` — the SAME pipeline pass that produced
+/// `projected`), threaded as a PURE input from the shell (the cost-feed
+/// precedent) and consulted by [`effective_raw_value`]'s claim rungs. An
+/// empty resolution (no anchor rows on disk) is bitwise-identical to the
+/// pre-flip build over the same `projected`/`cost_feed` (the empty-claims
+/// preservation gate, §8.5).
+///
 /// # Errors
 ///
 /// Propagates a read error, or an internal cordage rejection of well-formed adapter
@@ -583,6 +613,7 @@ pub(crate) fn build_from_with_cfg(
     cfg: &config::PriorityConfig,
     projected: &ValueProjection,
     cost_feed: &comparison::CostFeed,
+    claims: &comparison::ClaimResolution,
 ) -> anyhow::Result<PriorityGraph> {
     // 2b. Anchor fold (SL-172 §5.4): the shared [`bare_cost_anchor`] helper —
     //      max upper among non-terminal estimated items + margin, else 1.0.
@@ -607,6 +638,7 @@ pub(crate) fn build_from_with_cfg(
                 entity.kind,
                 entity.key,
                 projected,
+                claims,
                 cost_feed,
                 cfg,
                 ctx,
@@ -762,6 +794,7 @@ pub(crate) fn build_from_with_cfg(
         dep_overlay,
         cfg,
         projected,
+        claims,
     );
 
     Ok(PriorityGraph {
@@ -780,6 +813,10 @@ pub(crate) fn build_from_with_cfg(
 
 /// Consequence post-pass (design §5.4 step 6). Pure over the built graph.
 /// Returns (leverage, optionality, score) keyed by `EntityKey`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the pure scoring inputs (projection, claims) thread from build_from_with_cfg's one seam"
+)]
 fn consequence_post_pass(
     graph: &Graph,
     projection: &Projection<EntityKey>,
@@ -788,6 +825,7 @@ fn consequence_post_pass(
     dep_overlay: OverlayId,
     cfg: &config::PriorityConfig,
     projected: &ValueProjection,
+    claims: &comparison::ClaimResolution,
 ) -> (
     BTreeMap<EntityKey, f64>,
     BTreeMap<EntityKey, f64>,
@@ -813,19 +851,19 @@ fn consequence_post_pass(
             .and_then(|k| attrs.get(&k))
             .map_or(0.0, |a| a.base_score.risk_dim)
     };
-    // SL-176 PHASE-03 / SL-177 PHASE-02 / SL-213 PHASE-05: raw value accessor
-    // routed through the priority-tier seam — authored value wins, else the
-    // comparison-tier projection (D11), else a value-bearing kind defaults to
-    // 1.0, valueless kind is 0.0. The burndown numerator and denominator both
-    // use this — SAME source as `value_dim` (SL-213 design "governed policy":
-    // gauge participates in burndown identically).
+    // SL-176 PHASE-03 / SL-177 PHASE-02 / SL-213 PHASE-05 / SL-220 PHASE-05:
+    // raw value accessor routed through the priority-tier seam — the SL-220
+    // evidence ladder (anchored claim → projection → priors → transitional
+    // facet → default; valueless kind is 0.0). The burndown numerator and
+    // denominator both use this — SAME source as `value_dim` (SL-213 design
+    // "governed policy": gauge participates in burndown identically).
     let raw_value_of = |nid: cordage::NodeId| -> f64 {
         let Some(key) = ek(nid) else {
             return 0.0;
         };
         attrs
             .get(&key)
-            .and_then(|a| effective_raw_value(a.kind, &a.facets, key, projected))
+            .and_then(|a| effective_raw_value(a.kind, &a.facets, key, projected, claims))
             .unwrap_or(0.0)
     };
 
@@ -1757,6 +1795,7 @@ mod tests {
             .map(|k| k.kind)
             .expect("ISS in KINDS");
         let no_projection = ValueProjection::new();
+        let no_claims = comparison::ClaimResolution::default();
         let asm_key = EntityKey {
             prefix: asm_kind.prefix,
             id: 1,
@@ -1770,15 +1809,15 @@ mod tests {
             id: 1,
         };
         assert_eq!(
-            effective_raw_value(asm_kind, &facets, asm_key, &no_projection),
+            effective_raw_value(asm_kind, &facets, asm_key, &no_projection, &no_claims),
             None
         );
         assert_eq!(
-            effective_raw_value(rev_kind, &facets, rev_key, &no_projection),
+            effective_raw_value(rev_kind, &facets, rev_key, &no_projection, &no_claims),
             None
         );
         assert_eq!(
-            effective_raw_value(iss_kind, &facets, iss_key, &no_projection),
+            effective_raw_value(iss_kind, &facets, iss_key, &no_projection, &no_claims),
             Some(DEFAULT_VALUE),
             "ISS is value-bearing → default"
         );
@@ -1791,6 +1830,7 @@ mod tests {
             asm_kind,
             asm_key,
             &no_projection,
+            &no_claims,
             &no_feed,
             &cfg,
             ctx,
@@ -1804,6 +1844,7 @@ mod tests {
             rev_kind,
             rev_key,
             &no_projection,
+            &no_claims,
             &no_feed,
             &cfg,
             ctx,
@@ -1817,6 +1858,7 @@ mod tests {
             iss_kind,
             iss_key,
             &no_projection,
+            &no_claims,
             &no_feed,
             &cfg,
             ctx,
@@ -1851,15 +1893,18 @@ mod tests {
 
     // ── SL-213 PHASE-05: comparison-tier value projection ───────────────
 
-    /// VT-1: `effective_raw_value`'s provenance chain (D11) — authored beats a
-    /// projected-map entry beats `DEFAULT_VALUE`; a `Gauge`-provenance map
-    /// entry resolves IDENTICALLY to a `Projected` one (D11: "gauge is a
-    /// sub-tier of projected"). An empty projected map is the identity case
-    /// (byte-identical to the pre-SL-213 two-tier resolution). The authored
-    /// facet is obtained via a real disk scan (never naming the facet type
-    /// directly — `EntityFacets.value` stays untyped here, mirroring the
-    /// production base pre-pass at `build_from_with_cfg` — NF-001's structural
-    /// tripwire keeps facet-symbol exposure to its allowlisted surface).
+    /// `effective_raw_value`'s projection tier (SL-213 D11, re-pinned under
+    /// the SL-220 ladder): a projected-map entry beats `DEFAULT_VALUE`; a
+    /// `Gauge`-provenance map entry resolves IDENTICALLY to a `Projected` one
+    /// (D11: "gauge is a sub-tier of projected"). An empty projected map is
+    /// the identity case. SL-220 §3 FLIPPED the facet's position (RV-278
+    /// F-4): projection now out-ranks the unmigrated facet — the compared
+    /// facet-bearing assertion at the tail is the flip stated as a test. The
+    /// authored facet is obtained via a real disk scan (never naming the
+    /// facet type directly — `EntityFacets.value` stays untyped here,
+    /// mirroring the production base pre-pass at `build_from_with_cfg` —
+    /// NF-001's structural tripwire keeps facet-symbol exposure to its
+    /// allowlisted surface).
     #[test]
     fn effective_raw_value_provenance_chain_authored_over_projected_over_gauge_over_default() {
         let iss_kind = crate::integrity::KINDS
@@ -1877,11 +1922,12 @@ mod tests {
             risk: None,
             tags: vec![],
         };
+        let no_claims = comparison::ClaimResolution::default();
 
         // Empty map: value-bearing kind with no facet ⇒ DEFAULT_VALUE (identity).
         let empty = ValueProjection::new();
         assert_eq!(
-            effective_raw_value(iss_kind, &no_facets, key1, &empty),
+            effective_raw_value(iss_kind, &no_facets, key1, &empty, &no_claims),
             Some(DEFAULT_VALUE)
         );
 
@@ -1892,7 +1938,7 @@ mod tests {
             (2.5, crate::comparison::ValueProvenance::Projected),
         );
         assert_eq!(
-            effective_raw_value(iss_kind, &no_facets, key1, &projected),
+            effective_raw_value(iss_kind, &no_facets, key1, &projected, &no_claims),
             Some(2.5)
         );
 
@@ -1903,12 +1949,15 @@ mod tests {
             (2.5, crate::comparison::ValueProvenance::Gauge),
         );
         assert_eq!(
-            effective_raw_value(iss_kind, &no_facets, key1, &gauged),
+            effective_raw_value(iss_kind, &no_facets, key1, &gauged, &no_claims),
             Some(2.5),
             "Gauge and Projected provenance resolve to the same raw value"
         );
 
-        // Authored facet beats EVERY projected-map entry, regardless of provenance.
+        // THE FLIP (SL-220 §3, RV-278 F-4): a projected/gauge map entry now
+        // beats the unmigrated facet — the facet's absolute magnitude stopped
+        // anchoring the value scale; with zero claim rows AND no projection
+        // it still contributes at rung 5.
         let dir = tmp();
         let root = dir.path();
         seed_issue_with_facets(root, 1, "", "", "value = 9.0", "");
@@ -1925,9 +1974,14 @@ mod tests {
             tags: authored.tags.clone(),
         };
         assert_eq!(
-            effective_raw_value(iss_kind, &authored_facets, key1, &gauged),
+            effective_raw_value(iss_kind, &authored_facets, key1, &gauged, &no_claims),
+            Some(2.5),
+            "projection out-ranks the unmigrated facet (rung 2 > rung 5)"
+        );
+        assert_eq!(
+            effective_raw_value(iss_kind, &authored_facets, key1, &empty, &no_claims),
             Some(9.0),
-            "authored value wins over a projected/gauge map entry"
+            "no projection, zero claim rows: the facet still contributes (rung 5)"
         );
     }
 
@@ -2009,8 +2063,8 @@ mod tests {
             uid: "j1".to_string(),
             seq: 0,
             a: winner.to_string(),
-            b: loser.to_string(),
-            response: comparison::Response::PreferA,
+            b: Some(loser.to_string()),
+            response: Some(comparison::Response::PreferA),
             domain: comparison::DOMAIN_VALUE.to_string(),
             frame: comparison::FRAME_EQUAL_EFFORT.to_string(),
             form: comparison::RowForm::Order,
@@ -2020,7 +2074,10 @@ mod tests {
             rater: comparison::RaterKind::Agent,
             by: None,
             note: None,
-            date: "2026-07-11".to_string(),
+            date: Some("2026-07-11".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         };
         let session = comparison::ComparisonSession {
             schema: comparison::COMPARISON_SCHEMA.to_string(),
@@ -2865,6 +2922,7 @@ mod tests {
             .map(|k| k.kind)
             .expect("ISS in KINDS");
         let no_projection = ValueProjection::new();
+        let no_claims = comparison::ClaimResolution::default();
         let rev_key = EntityKey {
             prefix: rev_kind.prefix,
             id: 1,
@@ -2879,16 +2937,16 @@ mod tests {
         };
         // Non-value-bearing → None → raw_value_of returns 0.0 (via unwrap_or).
         assert_eq!(
-            effective_raw_value(rev_kind, &facets, rev_key, &no_projection),
+            effective_raw_value(rev_kind, &facets, rev_key, &no_projection, &no_claims),
             None
         );
         assert_eq!(
-            effective_raw_value(asm_kind, &facets, asm_key, &no_projection),
+            effective_raw_value(asm_kind, &facets, asm_key, &no_projection, &no_claims),
             None
         );
         // Value-bearing without authored value → Some(1.0) (default).
         assert_eq!(
-            effective_raw_value(iss_kind, &facets, iss_key, &no_projection),
+            effective_raw_value(iss_kind, &facets, iss_key, &no_projection, &no_claims),
             Some(DEFAULT_VALUE)
         );
         // When routed through the burndown closure (raw_value_of), these map to:
@@ -2935,6 +2993,7 @@ mod tests {
             &config::load(root),
             &ValueProjection::new(),
             &comparison::CostFeed::new(),
+            &comparison::ClaimResolution::default(),
         )
         .unwrap();
 
@@ -3043,8 +3102,8 @@ mod tests {
             uid: uid.to_string(),
             seq: 0,
             a: a.to_string(),
-            b: b.to_string(),
-            response,
+            b: Some(b.to_string()),
+            response: Some(response),
             domain: comparison::DOMAIN_ESTIMATE.to_string(),
             frame: comparison::FRAME_MORE_WORK.to_string(),
             form: comparison::RowForm::Order,
@@ -3054,7 +3113,10 @@ mod tests {
             rater: comparison::RaterKind::Agent,
             by: None,
             note: None,
-            date: "2026-07-11".to_string(),
+            date: Some("2026-07-11".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 
@@ -3286,5 +3348,362 @@ mod tests {
             fed > pg.cost_ctx.absent,
             "projected exceeds the bare anchor"
         );
+    }
+    // ── SL-220 PHASE-05: the resolver flip — evidence-ladder suite (§8.4) ──
+
+    /// A value-domain anchor row for the claims harness (mirrors the
+    /// `claims.rs` fixtures; capture admissibility is capture-time-only).
+    fn claim_anchor(
+        uid: &str,
+        item: &str,
+        magnitude: f64,
+        rater: comparison::RaterKind,
+        pin: bool,
+    ) -> comparison::Judgement {
+        let migrated = matches!(rater, comparison::RaterKind::Migrated);
+        comparison::Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: item.to_string(),
+            b: None,
+            response: None,
+            domain: comparison::DOMAIN_VALUE.to_string(),
+            frame: comparison::FRAME_VALUE_ANCHOR.to_string(),
+            form: comparison::RowForm::Anchor,
+            magnitude: Some(magnitude),
+            supersedes: None,
+            lens: None,
+            rater,
+            by: pin.then(|| "op".to_string()),
+            note: None,
+            date: (!migrated).then(|| "2026-07-16".to_string()),
+            observed_at: migrated.then(|| "2026-07-16".to_string()),
+            basis: None,
+            admission: pin.then_some(comparison::AdmissionKind::Pin),
+        }
+    }
+
+    /// Resolve a claim ledger over Active rows (the pure §8.4 harness).
+    fn claims_of(rows: &[comparison::Judgement]) -> comparison::ClaimResolution {
+        let tagged: Vec<(&comparison::Judgement, comparison::ResolutionStatus)> = rows
+            .iter()
+            .map(|j| (j, comparison::ResolutionStatus::Active))
+            .collect();
+        comparison::resolve_claims(&tagged)
+    }
+
+    /// EX-1: each ladder rung wins in isolation, and every ADJACENT rung
+    /// dominance pair holds — pin > human > projection > agent > migrated >
+    /// facet > default (design §3, first hit wins). The facet is consulted
+    /// ONLY at zero claim rows: a coexisting prior shadows it (D6 residue).
+    #[test]
+    fn value_ladder_rungs_and_adjacent_dominance() {
+        use comparison::RaterKind;
+        let iss_kind = crate::integrity::KINDS
+            .iter()
+            .find(|k| k.kind.prefix == "ISS")
+            .map(|k| k.kind)
+            .expect("ISS in KINDS");
+        let key1 = key("ISS", 1);
+        let no_facets = crate::facet::EntityFacets {
+            estimate: None,
+            value: None,
+            risk: None,
+            tags: vec![],
+        };
+        // The facet comes off a real disk scan (NF-001 tripwire: the facet
+        // type is never named in this file).
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue_with_facets(root, 1, "", "", "value = 9.0", "");
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let facet_9 = crate::facet::EntityFacets {
+            estimate: None,
+            value: scanned
+                .iter()
+                .find(|e| e.key == key1)
+                .and_then(|e| e.value.clone()),
+            risk: None,
+            tags: vec![],
+        };
+        assert!(facet_9.value.is_some(), "fixture authored the facet");
+
+        let no_projection = ValueProjection::new();
+        let mut projection_2_5 = ValueProjection::new();
+        projection_2_5.insert(
+            key1.canonical(),
+            (2.5, crate::comparison::ValueProvenance::Projected),
+        );
+        let erv = |f: &EntityFacets,
+                   projected: &ValueProjection,
+                   claims: &comparison::ClaimResolution| {
+            effective_raw_value(iss_kind, f, key1, projected, claims)
+        };
+
+        // Rung 1 vs rung 2 — an anchored claim (pin OR human) beats projection.
+        let pin_over_human = claims_of(&[
+            claim_anchor("h", "ISS-001", 5.0, RaterKind::Human, false),
+            claim_anchor("p", "ISS-001", 6.0, RaterKind::Human, true),
+        ]);
+        assert_eq!(
+            erv(&facet_9, &projection_2_5, &pin_over_human),
+            Some(6.0),
+            "pin > human (tier contest) and anchored > projection > facet"
+        );
+        let human = claims_of(&[claim_anchor("h", "ISS-001", 5.0, RaterKind::Human, false)]);
+        assert_eq!(
+            erv(&no_facets, &projection_2_5, &human),
+            Some(5.0),
+            "human claim > projection"
+        );
+
+        // Rung 2 vs rung 3 — projection beats an agent-tier prior.
+        let agent = claims_of(&[claim_anchor("a", "ISS-001", 3.0, RaterKind::Agent, false)]);
+        assert!(agent.priors.contains_key("ISS-001"), "agent → priors (D4)");
+        assert_eq!(
+            erv(&no_facets, &projection_2_5, &agent),
+            Some(2.5),
+            "projection > agent prior"
+        );
+
+        // Rung 3 vs rung 4 — agent beats migrated (the priors tier contest).
+        let agent_over_migrated = claims_of(&[
+            claim_anchor("a", "ISS-001", 3.0, RaterKind::Agent, false),
+            claim_anchor("m", "ISS-001", 2.0, RaterKind::Migrated, false),
+        ]);
+        assert_eq!(
+            erv(&no_facets, &no_projection, &agent_over_migrated),
+            Some(3.0),
+            "agent prior > migrated prior"
+        );
+
+        // Rung 4 vs rung 5 — a migrated prior shadows the facet (residue
+        // awaiting its strip: NOT consulted while any claim row exists).
+        let migrated = claims_of(&[claim_anchor(
+            "m",
+            "ISS-001",
+            2.0,
+            RaterKind::Migrated,
+            false,
+        )]);
+        assert_eq!(
+            erv(&facet_9, &no_projection, &migrated),
+            Some(2.0),
+            "migrated prior > unmigrated facet"
+        );
+
+        // Rung 5 vs rung 6 — zero claim rows: the facet still contributes.
+        let no_claims = comparison::ClaimResolution::default();
+        assert_eq!(
+            erv(&facet_9, &no_projection, &no_claims),
+            Some(9.0),
+            "unmigrated facet > default (transitional rung, D6)"
+        );
+        // Rung 6 — nothing at all: the value-bearing default.
+        assert_eq!(
+            erv(&no_facets, &no_projection, &no_claims),
+            Some(DEFAULT_VALUE)
+        );
+    }
+
+    /// Scope R1 (the row-gating footgun): a human `value set` claim with NO
+    /// comparison rows still wins at rung 1 — compile's row-gating drops the
+    /// row-less anchor from the constraint set (no class to attach to), but
+    /// the ladder reads `ClaimResolution.anchored` DIRECTLY. Proven through
+    /// the FULL pipeline: session on disk → `build_from` → `value_dim`.
+    #[test]
+    fn row_less_human_claim_resolves_at_rung_1_through_the_full_pipeline() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue(root, 1, "open", "", "");
+        write_value_claim_session(
+            root,
+            vec![claim_anchor(
+                "c1",
+                "ISS-001",
+                7.0,
+                comparison::RaterKind::Human,
+                false,
+            )],
+        );
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = config::load(root);
+        let pipeline = load_comparison_pipeline(root, &scanned, &cfg).unwrap();
+        // Row-gating drops the row-less anchor from compile/projection…
+        assert!(
+            pipeline.value.projection.get("ISS-001").is_none(),
+            "no comparison rows ⇒ no projection entry"
+        );
+        // …but the authority record carries it, and the ladder consumes it.
+        assert_eq!(pipeline.value_claims.anchored["ISS-001"].value, 7.0);
+        let pg = build(root).unwrap();
+        let bs = pg.attrs[&key("ISS", 1)].base_score;
+        // value_dim = 1.0 × 7.0 × 1.0 × 1.0 / est_cost(absent = 1.0) = 7.0.
+        assert!(
+            (bs.value_dim - 7.0).abs() < 1e-9,
+            "the row-less claim scored: {}",
+            bs.value_dim
+        );
+    }
+
+    /// RV-278 F-4, stated as a test: a compared facet-bearing item resolves
+    /// at rung 2 — the facet neither anchors the compile (the deleted
+    /// facet→AnchorMap builder) nor fills the ladder — and the presence-based
+    /// `UnmigratedFacet` finding fires anyway. Permanent semantics, not a
+    /// migration-window artifact.
+    #[test]
+    fn compared_facet_bearing_item_resolves_at_rung_2_and_presence_finding_fires() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue_with_facets(root, 1, "", "", "value = 9.0", "");
+        seed_issue(root, 2, "open", "", "");
+        write_comparison_session(root, "ISS-001", "ISS-002");
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = config::load(root);
+        let pipeline = load_comparison_pipeline(root, &scanned, &cfg).unwrap();
+        // The facet no longer anchors or shapes projection…
+        assert!(
+            pipeline.value.anchors.is_empty(),
+            "no claim rows ⇒ no compile anchors — the facet never enters"
+        );
+        // …so the two-node anchor-free chain projects via the P8 gauge
+        // spread (winner 4/3, loser 2/3 of DEFAULT_VALUE), and rung 2 wins
+        // over the facet's 9.0.
+        let pg = build(root).unwrap();
+        let bs1 = pg.attrs[&key("ISS", 1)].base_score;
+        assert!(
+            (bs1.value_dim - 4.0 / 3.0).abs() < 1e-9,
+            "rung 2 (projection) beat the unmigrated facet: {}",
+            bs1.value_dim
+        );
+        // The presence finding fires regardless of rung-5 consumption.
+        let findings = crate::priority::findings::detect(&pg, &cfg, None);
+        assert!(
+            findings.iter().any(|f| matches!(
+                f,
+                crate::priority::findings::Finding::UnmigratedFacet { entity, value, .. }
+                    if entity == "ISS-001" && (*value - 9.0).abs() < 1e-9
+            )),
+            "UnmigratedFacet fires on PRESENCE: {findings:?}"
+        );
+        // And the uncompared control: strip the session, the facet serves
+        // rung 5 — same finding, different rung (presence ≠ consumption).
+        std::fs::remove_dir_all(root.join(".doctrine/comparisons")).unwrap();
+        let pg2 = build(root).unwrap();
+        let bs1 = pg2.attrs[&key("ISS", 1)].base_score;
+        assert!(
+            (bs1.value_dim - 9.0).abs() < 1e-9,
+            "no projection: rung 5 serves the facet"
+        );
+    }
+
+    /// D7 paired consumption gate over ALL_KINDS: a resolved claim on ANY
+    /// subject resolves (capture-lossless — the claims pass is kind-blind),
+    /// but `effective_raw_value` consumes it ONLY for value-bearing kinds —
+    /// scoring-inert subjects' claims feed nothing (consumption-inert).
+    #[test]
+    fn scoring_inert_kinds_claims_resolve_but_are_never_consumed_all_kinds() {
+        let no_facets = crate::facet::EntityFacets {
+            estimate: None,
+            value: None,
+            risk: None,
+            tags: vec![],
+        };
+        let no_projection = ValueProjection::new();
+        for prefix in crate::kinds::ALL_KINDS {
+            let Some(kind) = crate::integrity::KINDS
+                .iter()
+                .find(|k| k.kind.prefix == *prefix)
+                .map(|k| k.kind)
+            else {
+                panic!("{prefix} missing from integrity::KINDS");
+            };
+            let subject = format!("{prefix}-001");
+            let claims = claims_of(&[claim_anchor(
+                "c1",
+                &subject,
+                7.0,
+                comparison::RaterKind::Human,
+                false,
+            )]);
+            // Capture-lossless: the claim resolved for EVERY kind.
+            assert_eq!(claims.anchored[&subject].value, 7.0, "{prefix} captured");
+            let entity_key = EntityKey { prefix, id: 1 };
+            let resolved =
+                effective_raw_value(kind, &no_facets, entity_key, &no_projection, &claims);
+            if crate::kinds::is_value_bearing(prefix) {
+                assert_eq!(resolved, Some(7.0), "{prefix} consumes at rung 1");
+            } else {
+                assert_eq!(resolved, None, "{prefix} is consumption-inert (D7)");
+            }
+        }
+    }
+
+    /// §8.5 empty-claims bitwise-preservation property: a corpus with NO
+    /// anchor rows and NO `[value]` facets builds BITWISE-identically whether
+    /// the claims input is the pipeline's own (empty) `ClaimResolution` or an
+    /// explicitly-empty one — with real comparison rows keeping the
+    /// projection non-trivial (the SL-213 empty-projection precedent).
+    #[test]
+    fn empty_claims_and_no_facets_score_bitwise_identically() {
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue(root, 1, "open", "", "");
+        seed_issue(root, 2, "open", "", "");
+        write_comparison_session(root, "ISS-001", "ISS-002");
+        let scanned =
+            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = config::load(root);
+        let pipeline = load_comparison_pipeline(root, &scanned, &cfg).unwrap();
+        assert_eq!(
+            pipeline.value_claims,
+            comparison::ClaimResolution::default(),
+            "no anchor rows ⇒ the pipeline's claims are empty"
+        );
+        assert!(!pipeline.value.projection.is_empty(), "non-trivial corpus");
+        let cost_feed = comparison::cost_feed(&pipeline.estimate.projection);
+        let via_load = build_from(&scanned, root).unwrap();
+        let explicit_empty = build_from_with_cfg(
+            &scanned,
+            root,
+            &cfg,
+            &pipeline.value.projection,
+            &cost_feed,
+            &comparison::ClaimResolution::default(),
+        )
+        .unwrap();
+        assert_eq!(via_load.score, explicit_empty.score, "score map bitwise");
+        assert_eq!(via_load.leverage, explicit_empty.leverage);
+        assert_eq!(via_load.optionality, explicit_empty.optionality);
+        for (k, attr) in &via_load.attrs {
+            let other = &explicit_empty.attrs[k];
+            assert!(
+                attr.base_score.value_dim.to_bits() == other.base_score.value_dim.to_bits()
+                    && attr.base_score.risk_dim.to_bits() == other.base_score.risk_dim.to_bits(),
+                "{} base dims bitwise-identical",
+                k.canonical()
+            );
+        }
+    }
+
+    /// Write one VALUE-domain session carrying `rows` straight to
+    /// `.doctrine/comparisons/` (mirrors [`write_est_session`]).
+    fn write_value_claim_session(root: &Path, rows: Vec<comparison::Judgement>) {
+        let session = comparison::ComparisonSession {
+            schema: comparison::COMPARISON_SCHEMA.to_string(),
+            version: comparison::COMPARISON_VERSION,
+            session: comparison::SessionHeader {
+                uid: "v1".to_string(),
+                date: "2026-07-16".to_string(),
+                audience: None,
+            },
+            judgements: rows,
+            tombstones: Vec::new(),
+        };
+        let text = comparison::to_toml(&session).unwrap();
+        write(root, ".doctrine/comparisons/2026-07-16-v1.toml", &text);
     }
 }

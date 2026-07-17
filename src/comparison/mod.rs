@@ -13,6 +13,7 @@
 //! so the PHASE-01..04 self-clearing `dead_code` suppressions have retired
 //! themselves (`mem.pattern.lint.dead-code-expect-vs-cfg-test`).
 
+mod claims;
 mod compile;
 mod project;
 mod query;
@@ -20,6 +21,7 @@ mod resolve;
 mod store;
 mod wire;
 
+pub(crate) use claims::*;
 pub(crate) use compile::*;
 pub(crate) use project::*;
 // SL-217 PHASE-02 retires the staged-ahead `dead_code` gate: `priority::elicit`

@@ -185,9 +185,11 @@ pub(crate) fn resolve<'a>(
         out.push((j, meta.session_uid, status));
     }
 
+    // SL-220 §1: `ordering_date()` (`date`, else `observed_at`) keeps the
+    // tier-1 key total over migrated rows — deterministic mixed ordering.
     out.sort_by(|a, b| {
-        a.0.date
-            .cmp(&b.0.date)
+        a.0.ordering_date()
+            .cmp(b.0.ordering_date())
             .then_with(|| a.1.cmp(b.1))
             .then_with(|| a.0.seq.cmp(&b.0.seq))
     });
@@ -405,11 +407,14 @@ fn implicit_revisions<'a>(
 
 /// The R3 identity key. The pair is unordered — asking `a` vs `b` and later `b`
 /// vs `a` is the same question — so the two entity refs are stored sorted.
+/// Anchor rows (SL-220 §1) key degenerately as `(pair_lo = a, pair_hi = None)`
+/// — `Option<String>: Ord` keeps the `BTreeMap` key valid, and `None` can never
+/// collide with a legal id (a sentinel string could).
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct IdentityKey {
     session: String,
     pair_lo: String,
-    pair_hi: String,
+    pair_hi: Option<String>,
     domain: String,
     frame: String,
     form: &'static str,
@@ -418,10 +423,10 @@ struct IdentityKey {
 }
 
 fn identity_key(session_uid: &str, j: &Judgement) -> IdentityKey {
-    let (pair_lo, pair_hi) = if j.a <= j.b {
-        (j.a.clone(), j.b.clone())
-    } else {
-        (j.b.clone(), j.a.clone())
+    let (pair_lo, pair_hi) = match j.b.as_deref() {
+        Some(b) if j.a.as_str() <= b => (j.a.clone(), Some(b.to_string())),
+        Some(b) => (b.to_string(), Some(j.a.clone())),
+        None => (j.a.clone(), None),
     };
     IdentityKey {
         session: session_uid.to_string(),
@@ -436,10 +441,13 @@ fn identity_key(session_uid: &str, j: &Judgement) -> IdentityKey {
 }
 
 /// Stable ordering tokens for the closed wire enums (they carry no `Ord`).
+/// `form` in the key means anchor rows never collide with order/ratio rows on
+/// the same subject (SL-220 §1).
 fn form_key(form: &RowForm) -> &'static str {
     match form {
         RowForm::Order => "order",
         RowForm::Ratio => "ratio",
+        RowForm::Anchor => "anchor",
     }
 }
 
@@ -447,14 +455,18 @@ pub(crate) fn rater_key(rater: &RaterKind) -> &'static str {
     match rater {
         RaterKind::Human => "human",
         RaterKind::Agent => "agent",
+        RaterKind::Migrated => "migrated",
     }
 }
 
-/// R6: a row is `InertLifecycle` when either of its entities is superseded.
-/// Terminal entities keep their rows active (inert for elicitation only).
+/// R6: a row is `InertLifecycle` when ANY PRESENT subject is superseded —
+/// for anchor rows the single subject `a`; `b` is consulted only when present
+/// (SL-220 §1). Terminal entities keep their rows active (inert for
+/// elicitation only).
 fn entity_superseded(j: &Judgement, statuses: &StatusMap) -> bool {
-    matches!(statuses.get(&j.a), Some(EntityLifecycle::Superseded { .. }))
-        || matches!(statuses.get(&j.b), Some(EntityLifecycle::Superseded { .. }))
+    let superseded =
+        |id: &str| matches!(statuses.get(id), Some(EntityLifecycle::Superseded { .. }));
+    superseded(&j.a) || j.b.as_deref().is_some_and(superseded)
 }
 
 #[cfg(test)]
@@ -464,8 +476,8 @@ mod tests {
     };
     use crate::comparison::{
         COMPARISON_SCHEMA, COMPARISON_VERSION, ComparisonSession, DOMAIN_ESTIMATE, DOMAIN_PRIORITY,
-        DOMAIN_VALUE, FRAME_EQUAL_EFFORT, FRAME_MORE_WORK, FRAME_PREFER_FIRST, Judgement,
-        RaterKind, Response, RowForm, SessionHeader, Tombstone,
+        DOMAIN_VALUE, FRAME_EQUAL_EFFORT, FRAME_MORE_WORK, FRAME_PREFER_FIRST, FRAME_VALUE_ANCHOR,
+        Judgement, RaterKind, Response, RowForm, SessionHeader, Tombstone,
     };
 
     // ---- fixtures -----------------------------------------------------------
@@ -475,8 +487,8 @@ mod tests {
             uid: uid.to_string(),
             seq,
             a: a.to_string(),
-            b: b.to_string(),
-            response: Response::PreferA,
+            b: Some(b.to_string()),
+            response: Some(Response::PreferA),
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -486,8 +498,32 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-10".to_string(),
+            date: Some("2026-07-10".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
+    }
+
+    /// A live human anchor row (SL-220 §1): single subject, `value-anchor`
+    /// frame, magnitude payload.
+    fn anchor(uid: &str, seq: u32, a: &str) -> Judgement {
+        let mut j = judgement(uid, seq, a, "unused");
+        j.b = None;
+        j.response = None;
+        j.frame = FRAME_VALUE_ANCHOR.to_string();
+        j.form = RowForm::Anchor;
+        j.magnitude = Some(5.0);
+        j
+    }
+
+    /// A migrated anchor row (SL-220 §1): `observed_at` in place of `date`.
+    fn migrated_anchor(uid: &str, seq: u32, a: &str, observed_at: &str) -> Judgement {
+        let mut j = anchor(uid, seq, a);
+        j.rater = RaterKind::Migrated;
+        j.date = None;
+        j.observed_at = Some(observed_at.to_string());
+        j
     }
 
     fn session(
@@ -820,7 +856,7 @@ mod tests {
     fn same_uid_differing_content_is_a_load_error() {
         let s1 = session("s1", vec![judgement("x", 0, "A", "B")], vec![]);
         let mut conflicting = judgement("x", 0, "A", "B");
-        conflicting.response = Response::PreferB;
+        conflicting.response = Some(Response::PreferB);
         let s2 = session("s2", vec![conflicting], vec![]);
         let err = resolve(&[s1, s2], &StatusMap::new()).unwrap_err();
         assert!(err.to_string().contains("differing content"));
@@ -863,5 +899,192 @@ mod tests {
         // Sanity: the fixture exercises a cross-session edge and a cycle.
         assert_eq!(status_of(&r1, "a"), &superseded_by("b"));
         assert_eq!(status_of(&r1, "c"), &ResolutionStatus::Malformed);
+    }
+
+    // ---- SL-220 §1: anchor-row resolution semantics (VT-2) --------------------
+
+    /// `ordering_date()` totality: mixed migrated/live rows order
+    /// deterministically — `observed_at` slots migrated rows into the same
+    /// tier-1 key as live `date` rows, independent of merge order.
+    #[test]
+    fn ordering_date_orders_mixed_migrated_and_live_rows() {
+        // Migrated row observed BEFORE the live rows' dates; a second
+        // migrated row shares a date with a live row (session uid tiebreak).
+        let s1 = session(
+            "s1",
+            vec![judgement("live-10", 0, "A", "B")], // date 2026-07-10
+            vec![],
+        );
+        let s2 = session(
+            "s2",
+            vec![
+                migrated_anchor("mig-09", 0, "C", "2026-07-09"),
+                migrated_anchor("mig-10", 1, "D", "2026-07-10"),
+            ],
+            vec![],
+        );
+        let order_of = |sessions: &[ComparisonSession]| -> Vec<String> {
+            resolve(sessions, &StatusMap::new())
+                .expect("resolve ok")
+                .rows
+                .iter()
+                .map(|(j, _)| j.uid.clone())
+                .collect()
+        };
+        let forward = order_of(&[s1, s2]);
+        // (date, session_uid, seq): 07-09 first; on 07-10 s1 < s2.
+        assert_eq!(forward, ["mig-09", "live-10", "mig-10"]);
+
+        let s1 = session("s1", vec![judgement("live-10", 0, "A", "B")], vec![]);
+        let s2 = session(
+            "s2",
+            vec![
+                migrated_anchor("mig-09", 0, "C", "2026-07-09"),
+                migrated_anchor("mig-10", 1, "D", "2026-07-10"),
+            ],
+            vec![],
+        );
+        assert_eq!(order_of(&[s2, s1]), forward, "merge-order independent");
+    }
+
+    /// R3 over the degenerate key: same-session same-subject anchor rows by
+    /// one rater at one lens group implicitly revise — higher seq wins.
+    #[test]
+    fn r3_same_subject_anchor_rows_implicitly_revise() {
+        let sessions = [session(
+            "s1",
+            vec![anchor("p", 0, "SL-100"), anchor("q", 1, "SL-100")],
+            vec![],
+        )];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "q"), &ResolutionStatus::Active);
+        assert_eq!(status_of(&res, "p"), &superseded_by("q"));
+    }
+
+    /// `form` in the key: an anchor row and an order row on the same subject
+    /// never collide — both stay Active (SL-220 §1).
+    #[test]
+    fn anchor_and_order_rows_on_the_same_subject_stay_concurrent() {
+        let sessions = [session(
+            "s1",
+            vec![
+                anchor("anch", 0, "SL-100"),
+                judgement("ord", 1, "SL-100", "SL-200"),
+            ],
+            vec![],
+        )];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "anch"), &ResolutionStatus::Active);
+        assert_eq!(status_of(&res, "ord"), &ResolutionStatus::Active);
+    }
+
+    /// `rater` in the key (`migrated` token): a human anchor and a migrated
+    /// anchor on one subject in one session are distinct identities — both
+    /// Active, no implicit revision across raters.
+    #[test]
+    fn human_and_migrated_anchors_on_one_subject_stay_concurrent() {
+        let sessions = [session(
+            "s1",
+            vec![
+                anchor("hum", 0, "SL-100"),
+                migrated_anchor("mig", 1, "SL-100", "2026-07-16"),
+            ],
+            vec![],
+        )];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "hum"), &ResolutionStatus::Active);
+        assert_eq!(status_of(&res, "mig"), &ResolutionStatus::Active);
+    }
+
+    /// Cross-session same-key anchor rows stay concurrent (R3 scopes within
+    /// one file; concurrent contradiction is a finding, never latest-wins).
+    #[test]
+    fn cross_session_same_subject_anchors_are_concurrent() {
+        let s1 = session("s1", vec![anchor("p", 0, "SL-100")], vec![]);
+        let s2 = session("s2", vec![anchor("q", 0, "SL-100")], vec![]);
+        let sessions = [s1, s2];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "p"), &ResolutionStatus::Active);
+        assert_eq!(status_of(&res, "q"), &ResolutionStatus::Active);
+    }
+
+    /// Single-subject lifecycle inertness (SL-220 §1): an anchor row is inert
+    /// iff its ONE subject is superseded; terminal keeps it active; the
+    /// absent `b` is never consulted.
+    #[test]
+    fn r6_anchor_row_lifecycle_follows_its_single_subject() {
+        let mut statuses = StatusMap::new();
+        statuses.insert(
+            "SL-100".to_string(),
+            EntityLifecycle::Superseded {
+                by: "SL-999".to_string(),
+            },
+        );
+        statuses.insert("SL-200".to_string(), EntityLifecycle::Terminal);
+        let s = session(
+            "s1",
+            vec![
+                anchor("gone", 0, "SL-100"),
+                anchor("done", 1, "SL-200"),
+                anchor("live", 2, "SL-300"),
+            ],
+            vec![],
+        );
+        let sessions = [s];
+        let res = resolve(&sessions, &statuses).expect("resolve ok");
+        assert_eq!(status_of(&res, "gone"), &ResolutionStatus::InertLifecycle);
+        assert_eq!(status_of(&res, "done"), &ResolutionStatus::Active);
+        assert_eq!(status_of(&res, "live"), &ResolutionStatus::Active);
+    }
+
+    /// R1/R2 machinery applies to anchor rows unchanged: a tombstone evicts,
+    /// an explicit supersession chain leaves only the head active.
+    #[test]
+    fn anchor_rows_ride_tombstones_and_supersession_chains() {
+        let a = anchor("a", 0, "SL-100");
+        let mut b = anchor("b", 1, "SL-100");
+        b.rater = RaterKind::Agent; // distinct identity: R2 does the work, not R3
+        b.supersedes = Some("a".to_string());
+        let mut c = migrated_anchor("c", 2, "SL-100", "2026-07-16");
+        c.supersedes = Some("b".to_string());
+        let d = anchor("d", 3, "SL-200");
+        let s = session("s1", vec![a, b, c, d], vec![tombstone("t1", "d")]);
+        let sessions = [s];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "c"), &ResolutionStatus::Active);
+        assert_eq!(status_of(&res, "b"), &superseded_by("c"));
+        assert_eq!(status_of(&res, "a"), &superseded_by("b"));
+        assert_eq!(status_of(&res, "d"), &ResolutionStatus::Tombstoned);
+    }
+
+    /// R2 cycle detection over anchor rows: mutual supersession deactivates
+    /// both participants and surfaces the finding.
+    #[test]
+    fn anchor_supersession_cycle_is_malformed() {
+        let mut p = anchor("p", 0, "SL-100");
+        p.supersedes = Some("q".to_string());
+        let mut q = anchor("q", 0, "SL-200");
+        q.supersedes = Some("p".to_string());
+        let sessions = [session("s1", vec![p, q], vec![])];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "p"), &ResolutionStatus::Malformed);
+        assert_eq!(status_of(&res, "q"), &ResolutionStatus::Malformed);
+        assert_eq!(
+            res.malformed,
+            vec![MalformedSupersession {
+                cycle: vec!["p".to_string(), "q".to_string()],
+            }]
+        );
+    }
+
+    /// R5 applies to anchor rows: a lens-tagged anchor is InertLens (the
+    /// lensed claim partitions arrive at the claims pass, design §2).
+    #[test]
+    fn lensed_anchor_row_is_inert() {
+        let mut j = anchor("j1", 0, "SL-100");
+        j.lens = Some("user-value".to_string());
+        let sessions = [session("s1", vec![j], vec![])];
+        let res = run(&sessions);
+        assert_eq!(status_of(&res, "j1"), &ResolutionStatus::InertLens);
     }
 }

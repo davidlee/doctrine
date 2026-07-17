@@ -134,12 +134,9 @@ fn toml_to_f64(value: &toml::Value, name: &str) -> anyhow::Result<f64> {
     Ok(f)
 }
 
-/// Render a value facet line for `slice show`.
-/// Output: `"value: {magnitude} {unit}"`
-pub(crate) fn format_value_normal(facet: &ValueFacet, unit: &str) -> String {
-    debug_assert!(!unit.is_empty());
-    format!("value: {:.1} {}", facet.value, unit)
-}
+// NOTE (SL-220 PHASE-06): the former `format_value_normal` show-line renderer
+// is retired — every entity `show` value line now resolves through the
+// comparison ladder (`priority::surface::show_value_line`, design §6).
 
 // ---------------------------------------------------------------------------
 // Tests

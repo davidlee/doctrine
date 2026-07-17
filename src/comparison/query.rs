@@ -376,8 +376,8 @@ pub(crate) fn synthetic_answer_row(a: &str, b: &str, response: Response) -> Judg
         uid: format!("{SYNTHETIC_SESSION_UID}:{a}:{b}"),
         seq: 0,
         a: a.to_string(),
-        b: b.to_string(),
-        response,
+        b: Some(b.to_string()),
+        response: Some(response),
         domain: DOMAIN_VALUE.to_string(),
         frame: FRAME_EQUAL_EFFORT.to_string(),
         form: RowForm::Order,
@@ -387,7 +387,10 @@ pub(crate) fn synthetic_answer_row(a: &str, b: &str, response: Response) -> Judg
         rater: RaterKind::Agent,
         by: None,
         note: None,
-        date: SYNTHETIC_ROW_DATE.to_string(),
+        date: Some(SYNTHETIC_ROW_DATE.to_string()),
+        observed_at: None,
+        basis: None,
+        admission: None,
     }
 }
 
@@ -555,8 +558,8 @@ mod tests {
             uid: uid.to_string(),
             seq: 0,
             a: a.to_string(),
-            b: b.to_string(),
-            response,
+            b: Some(b.to_string()),
+            response: Some(response),
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -566,7 +569,10 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-12".to_string(),
+            date: Some("2026-07-12".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 

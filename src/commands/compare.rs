@@ -178,6 +178,7 @@ pub(crate) enum KindArg {
     Comparison,
     AnchorReview,
     SizingProbe,
+    ClaimReprobe,
 }
 
 impl KindArg {
@@ -187,6 +188,7 @@ impl KindArg {
             (KindArg::Comparison, CandidateKind::Comparison)
                 | (KindArg::AnchorReview, CandidateKind::AnchorReview)
                 | (KindArg::SizingProbe, CandidateKind::SizingProbe)
+                | (KindArg::ClaimReprobe, CandidateKind::ClaimReprobe)
         )
     }
 }
@@ -344,8 +346,8 @@ fn run_capture(args: &RecordArgs) -> anyhow::Result<()> {
         uid: row_uid,
         seq: 0,
         a: canonical_a,
-        b: canonical_b,
-        response,
+        b: Some(canonical_b),
+        response: Some(response),
         domain: domain.to_string(),
         frame: frame.to_string(),
         form: RowForm::Order,
@@ -355,7 +357,10 @@ fn run_capture(args: &RecordArgs) -> anyhow::Result<()> {
         rater: args.rater.to_kind(),
         by: args.by.clone(),
         note: args.note.clone(),
-        date: date.clone(),
+        date: Some(date.clone()),
+        observed_at: None,
+        basis: None,
+        admission: None,
     };
     comparison::validate_judgement(&judgement)?;
 
@@ -383,11 +388,129 @@ fn run_capture(args: &RecordArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The value-anchor payload the `value set|pin` verbs mint (SL-220 §4). Pure
+/// data; [`record_anchor`] performs the impure edge (uid/date) + write. Rides
+/// the `compare record` mint path VERBATIM — the shell stamps `frame =
+/// value-anchor`, `domain = value`, `form = anchor`.
+pub(crate) struct AnchorSpec {
+    /// The single subject (a resolved canonical id).
+    pub(crate) subject: String,
+    pub(crate) magnitude: f64,
+    pub(crate) rater: RaterKind,
+    /// `Some(Pin)` for the gated `value pin` path; `None` for `value set`.
+    pub(crate) admission: Option<crate::comparison::AdmissionKind>,
+    pub(crate) by: Option<String>,
+    pub(crate) basis: Option<String>,
+    pub(crate) lens: Option<String>,
+    pub(crate) note: Option<String>,
+    pub(crate) supersedes: Option<String>,
+}
+
+/// Mint + write ONE value-anchor session-of-one via the `compare record` path
+/// (SL-220 §4): stamp the anchor discriminators, validate the wire row, resolve
+/// `--supersedes` scope (anchor-form target sharing subject/domain/lens)
+/// against the corpus, then append a fresh clobber-refusing file. EVERY
+/// invocation mints (D10 — no idempotency guard); the row uid/date are the
+/// single impure edge, exactly as `run_capture`.
+pub(crate) fn record_anchor(root: &Path, spec: &AnchorSpec) -> anyhow::Result<PathBuf> {
+    let session_uid = uuid::Uuid::now_v7().to_string();
+    let row_uid = uuid::Uuid::now_v7().to_string();
+    let date = crate::clock::today();
+
+    let judgement = Judgement {
+        uid: row_uid,
+        seq: 0,
+        a: spec.subject.clone(),
+        b: None,
+        response: None,
+        domain: comparison::DOMAIN_VALUE.to_string(),
+        frame: comparison::FRAME_VALUE_ANCHOR.to_string(),
+        form: RowForm::Anchor,
+        magnitude: Some(spec.magnitude),
+        supersedes: spec.supersedes.clone(),
+        lens: spec.lens.clone(),
+        rater: spec.rater.clone(),
+        by: spec.by.clone(),
+        note: spec.note.clone(),
+        date: Some(date.clone()),
+        observed_at: None,
+        basis: spec.basis.clone(),
+        admission: spec.admission,
+    };
+    comparison::validate_judgement(&judgement)?;
+
+    // Supersession scope (SL-220 §4): resolve the target uid against the corpus
+    // and check its (subject, domain, lens) match — refused AT CAPTURE.
+    if let Some(target_uid) = spec.supersedes.as_deref() {
+        let sessions = load_sessions(root)?;
+        let target = sessions
+            .iter()
+            .flat_map(|s| &s.judgements)
+            .find(|j| j.uid == target_uid)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "--supersedes `{target_uid}` names no judgement row — supersession targets an existing row uid (see `compare list`)"
+                )
+            })?;
+        comparison::validate_anchor_supersedes(&judgement, target)
+            .map_err(|reason| anyhow::anyhow!(reason))?;
+    }
+
+    let session = comparison::session_of_one(
+        SessionHeader {
+            uid: session_uid.clone(),
+            date: date.clone(),
+            audience: None,
+        },
+        judgement,
+    );
+    let text = comparison::to_toml(&session)?;
+    write_session_file(root, &date, &session_uid, &text)
+}
+
+/// Append ONE session carrying tombstones for `targets` (SL-220 §4): the
+/// `value clear` / `value pin --retire` withdrawal path, reusing the create-new
+/// session seam. `targets` is caller-guaranteed non-empty (the no-op is
+/// short-circuited upstream). Stamps the CURRENT wire discriminators.
+pub(crate) fn record_tombstones(
+    root: &Path,
+    targets: &[String],
+    note: Option<&str>,
+) -> anyhow::Result<PathBuf> {
+    let session_uid = uuid::Uuid::now_v7().to_string();
+    let date = crate::clock::today();
+    let tombstones: Vec<Tombstone> = targets
+        .iter()
+        .enumerate()
+        .map(|(i, target)| Tombstone {
+            uid: uuid::Uuid::now_v7().to_string(),
+            seq: u32::try_from(i).unwrap_or(u32::MAX),
+            target: target.clone(),
+            date: date.clone(),
+            note: note.map(str::to_string),
+        })
+        .collect();
+    let session = ComparisonSession {
+        schema: comparison::COMPARISON_SCHEMA.to_string(),
+        version: comparison::COMPARISON_VERSION,
+        session: SessionHeader {
+            uid: session_uid.clone(),
+            date: date.clone(),
+            audience: None,
+        },
+        judgements: Vec::new(),
+        tombstones,
+    };
+    let text = comparison::to_toml(&session)?;
+    write_session_file(root, &date, &session_uid, &text)
+}
+
 /// Write a fresh session file `<date>-<uid>.toml` under
 /// `.doctrine/comparisons/` — clobber-refusing (`create-new`), directory made
-/// lazily. The single disk seam shared by capture and withdrawal (design D2 —
-/// append-only, exactly one new file per act; never rewrites an existing path).
-fn write_session_file(
+/// lazily. The single disk seam shared by capture, withdrawal, and the SL-220
+/// value-anchor verbs (design D2 — append-only, exactly one new file per act;
+/// never rewrites an existing path).
+pub(crate) fn write_session_file(
     root: &Path,
     date: &str,
     session_uid: &str,
@@ -415,12 +538,15 @@ fn write_session_file(
 /// pre-existing golden text, extend-don't-replace).
 fn render_row(row: &RowSummary) -> String {
     // Minimal v2 adaptation (SL-213 PHASE-01 EX-4): the `*` marks a preferred
-    // side; `=` / `~` render equal / incomparable.
-    let pair = match row.response {
-        Response::PreferA => format!("{}* vs {}", row.a, row.b),
-        Response::PreferB => format!("{} vs {}*", row.a, row.b),
-        Response::Equal => format!("{} = {}", row.a, row.b),
-        Response::Incomparable => format!("{} ~ {}", row.a, row.b),
+    // side; `=` / `~` render equal / incomparable. An anchor row (SL-220 §1:
+    // single subject, no pairwise payload) renders its subject alone — the
+    // full mixed-fixture render treatment is PHASE-06.
+    let pair = match (row.response, row.b.as_deref()) {
+        (Some(Response::PreferA), Some(b)) => format!("{}* vs {}", row.a, b),
+        (Some(Response::PreferB), Some(b)) => format!("{} vs {}*", row.a, b),
+        (Some(Response::Equal), Some(b)) => format!("{} = {}", row.a, b),
+        (Some(Response::Incomparable), Some(b)) => format!("{} ~ {}", row.a, b),
+        _ => row.a.clone(),
     };
     let by = row
         .by
@@ -437,7 +563,9 @@ fn render_row(row: &RowSummary) -> String {
     format!(
         "{uid}  status={status}  {pair}  frame={frame}  rater={rater}{by}  {date}{note}{tomb}",
         uid = row.uid,
-        status = row.state.display_token(),
+        // The claim-aware join (SL-220 §2): active anchor rows wear their
+        // ClaimResolution token; everything else the RowState join.
+        status = row.display_token(),
         frame = row.frame,
         rater = row.rater_token,
         date = row.date,
@@ -453,7 +581,7 @@ fn render_row(row: &RowSummary) -> String {
 /// `RowSummary`s are already in.
 fn list_lines(rows: &[RowSummary], filter: Option<&str>, active_only: bool) -> Vec<String> {
     rows.iter()
-        .filter(|r| filter.is_none_or(|id| r.a == id || r.b == id))
+        .filter(|r| filter.is_none_or(|id| r.a == id || r.b.as_deref() == Some(id)))
         .filter(|r| !active_only || matches!(r.state.resolution, ResolutionStatus::Active))
         .map(render_row)
         .collect()
@@ -580,8 +708,8 @@ fn run_elicit(args: &ElicitArgs) -> anyhow::Result<()> {
 /// (design §2 shell seam). The frontier is the top-`depth` band by final score
 /// (id-lex tiebreak — determinism); costing is the D6 `(multiplier, est_cost,
 /// bare_estimate)` per entity; active evidence + anchors + projection come
-/// straight off the pipeline. Borrows the pipeline's owned `active_judgements`,
-/// so the returned inputs live no longer than `pipeline`.
+/// straight off the pipeline. Borrows the pipeline's owned pairwise view
+/// (`active_pairwise`), so the returned inputs live no longer than `pipeline`.
 fn build_elicit_inputs<'a>(
     graph: &PriorityGraph,
     pipeline: &'a comparison::Pipeline,
@@ -639,12 +767,27 @@ fn build_elicit_inputs<'a>(
             && matches!(row.state.resolution, comparison::ResolutionStatus::Active)
         {
             est_evidenced.insert(row.a.clone());
-            est_evidenced.insert(row.b.clone());
+            if let Some(b) = &row.b {
+                est_evidenced.insert(b.clone());
+            }
         }
     }
 
+    // SL-220 §3 rung-5 set: items carrying an unmigrated `[value]` facet —
+    // valued for queue purposes like a prior (knob-off retired, knob-on
+    // probe-eligible).
+    let facet_valued: std::collections::BTreeSet<String> = graph
+        .attrs
+        .iter()
+        .filter(|(_, attr)| attr.facets.value.is_some())
+        .map(|(key, _)| key.canonical())
+        .collect();
+
     ElicitInputs {
-        active: pipeline.active_judgements.iter().collect(),
+        // The pairwise view (SL-220 §2): `assemble` recompiles its baseline
+        // from pairwise evidence only — anchor rows terminate at the claims
+        // pass and never reach a compile consumer (RV-278 F-6).
+        active: pipeline.active_pairwise().iter().collect(),
         anchors: pipeline.value.anchors.clone(),
         frontier,
         costing,
@@ -656,6 +799,10 @@ fn build_elicit_inputs<'a>(
             estimated_costs,
             est_evidenced,
         },
+        // SL-220 §3/D14: the claim facts — probe retirement + the
+        // knob-independent claim-reprobe source.
+        claims: pipeline.value_claims.clone(),
+        facet_valued,
     }
 }
 
@@ -772,6 +919,7 @@ fn entry_human(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> String {
         CandidateKind::Comparison => "comparison",
         CandidateKind::AnchorReview => "anchor-review",
         CandidateKind::SizingProbe => "sizing-probe",
+        CandidateKind::ClaimReprobe => "claim-reprobe",
     };
     let mut parts = vec![format!(
         "{rank}. [{kind}] score {:.3}  yield {:+}  impact {:.3}\n",
@@ -798,6 +946,21 @@ fn entry_human(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> String {
                 subject.id, target.id, target.estimate
             ));
             parts.push(participant_human(ctx, subject));
+        }
+        // SL-220 D14 — the minimal spine line; tier-token render is PHASE-06.
+        EntryPayload::ClaimReprobe {
+            subject,
+            mean,
+            low,
+            high,
+            distinct,
+            rows,
+            ..
+        } => {
+            parts.push(format!(
+                "   reprobe: contested claim on {subject} — mean {mean}, {distinct} distinct \
+                 magnitudes ({low} ‥ {high}) over {rows} rows\n"
+            ));
         }
     }
     let reasons: Vec<&str> = entry.reasons.iter().map(|r| r.text.as_str()).collect();
@@ -847,6 +1010,12 @@ fn answer_command(entry: &QueueEntry) -> String {
              --frame more-work",
             subject.id, target.id
         ),
+        // The resolving action for a contested claim is a superseding row
+        // (design §4 supersession scope; correction is supersession).
+        EntryPayload::ClaimReprobe { subject, .. } => format!(
+            "doctrine value set {subject} <v> --rater human --supersedes <row-uid>   \
+             (or `value pin` the settled magnitude)"
+        ),
     }
 }
 
@@ -879,21 +1048,25 @@ impl<'a> RenderCtx<'a> {
 
     /// The structural value block for a participant (design §3 / D16):
     /// `{provenance, point}` from the SINGLE value-source precedence
-    /// (`surface::value_source_reason` — authored > projected > gauge), plus the
-    /// STRUCTURAL bounds (`surface::class_bounds_structural`, open/closed/unbounded
-    /// retained — the human `explain` path flattens, this surface must not, web
-    /// review). `None` when the entity has no citable value source (an
-    /// un-constrained bare item — the numeric default floor is not a source,
-    /// surface.rs S3).
+    /// (`surface::value_source_reason` — the SL-220 §3 evidence ladder) with
+    /// the D11 token map (`value_source_token`) naming the provenance, plus
+    /// the STRUCTURAL bounds (`surface::class_bounds_structural`,
+    /// open/closed/unbounded retained — the human `explain` path flattens,
+    /// this surface must not, web review). `None` when the entity has no
+    /// citable value source (an un-constrained bare item — the numeric
+    /// default floor is not a source, surface.rs S3).
     fn value_block(&self, canonical: &str) -> Option<serde_json::Value> {
         let key = *self.keys.get(canonical)?;
-        let (provenance, point) =
-            match crate::priority::surface::value_source_reason(self.graph, key, self.pipeline)? {
-                ReasonKind::ValueAuthored { value, .. } => ("authored", value),
-                ReasonKind::ValueProjected { value, .. } => ("projected", value),
-                ReasonKind::ValueGauge { value, .. } => ("gauge", value),
-                _ => return None,
-            };
+        let reason = crate::priority::surface::value_source_reason(self.graph, key, self.pipeline)?;
+        let provenance = reason.value_source_token()?;
+        let point = match &reason {
+            ReasonKind::ValuePin { value, .. }
+            | ReasonKind::ValueClaim { value, .. }
+            | ReasonKind::ValueUnmigratedFacet { value }
+            | ReasonKind::ValueProjected { value, .. }
+            | ReasonKind::ValueGauge { value, .. } => *value,
+            _ => return None,
+        };
         let bounds = crate::priority::surface::class_bounds_structural(
             &self.pipeline.value.constraint_set,
             canonical,
@@ -1010,6 +1183,7 @@ fn entry_json(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> serde_jso
         CandidateKind::Comparison => "comparison",
         CandidateKind::AnchorReview => "anchor-review",
         CandidateKind::SizingProbe => "sizing-probe",
+        CandidateKind::ClaimReprobe => "claim-reprobe",
     };
     let reasons: Vec<serde_json::Value> = entry
         .reasons
@@ -1031,6 +1205,22 @@ fn entry_json(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> serde_jso
             "ask": anchor_ask_json(ask, subject),
         }),
         EntryPayload::SizingProbe { subject, target } => sizing_probe_json(subject, target),
+        // SL-220 D14 — minimal payload; tier-token render detail is PHASE-06.
+        EntryPayload::ClaimReprobe {
+            subject,
+            tier,
+            mean,
+            low,
+            high,
+            distinct,
+            rows,
+        } => serde_json::json!({
+            "subject": { "id": subject },
+            "tier": format!("{tier:?}").to_lowercase(),
+            "mean": mean,
+            "interval": { "low": low, "high": high, "distinct": distinct },
+            "rows": rows,
+        }),
     };
     let mut obj = serde_json::json!({
         "rank": rank,
@@ -1252,8 +1442,8 @@ mod tests {
         let j = &session.judgements[0];
         assert_eq!(j.seq, 0);
         assert_eq!(j.a, "SL-204");
-        assert_eq!(j.b, "IMP-118");
-        assert_eq!(j.response, Response::PreferA);
+        assert_eq!(j.b.as_deref(), Some("IMP-118"));
+        assert_eq!(j.response, Some(Response::PreferA));
         assert_eq!(j.domain, comparison::DOMAIN_VALUE);
         assert_eq!(j.frame, FRAME_EQUAL_EFFORT);
         assert_eq!(j.form, RowForm::Order);
@@ -1380,6 +1570,7 @@ mod tests {
                     .unwrap()
                     .judgements[0]
                     .response
+                    .unwrap()
             })
             .collect();
         responses.sort_by_key(|r| format!("{r:?}"));
@@ -1394,7 +1585,7 @@ mod tests {
         run_capture(&capture(&root, "SL-204", "IMP-118", "IMP-118")).unwrap();
         let files = session_files(&root);
         let session = comparison::parse(&std::fs::read_to_string(&files[0]).unwrap()).unwrap();
-        assert_eq!(session.judgements[0].response, Response::PreferB);
+        assert_eq!(session.judgements[0].response, Some(Response::PreferB));
     }
 
     /// S1: `--equal` and `--incomparable` land their wire responses; the
@@ -1424,7 +1615,7 @@ mod tests {
             .map(|p| {
                 let s = comparison::parse(&std::fs::read_to_string(p).unwrap()).unwrap();
                 assert_eq!(s.judgements[0].domain, comparison::DOMAIN_VALUE);
-                s.judgements[0].response
+                s.judgements[0].response.unwrap()
             })
             .collect();
         responses.sort_by_key(|r| format!("{r:?}"));
@@ -1700,8 +1891,8 @@ mod tests {
             uid: uid.to_string(),
             seq,
             a: a.to_string(),
-            b: b.to_string(),
-            response: Response::PreferA,
+            b: Some(b.to_string()),
+            response: Some(Response::PreferA),
             domain: comparison::DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -1711,7 +1902,10 @@ mod tests {
             rater: RaterKind::Agent,
             by: None,
             note: None,
-            date: "2026-07-10".to_string(),
+            date: Some("2026-07-10".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 
@@ -1738,7 +1932,6 @@ mod tests {
         comparison::pipeline_from_sessions(
             sessions,
             &comparison::StatusMap::new(),
-            &comparison::AnchorMap::new(),
             &comparison::AnchorMap::new(),
             &comparison::VALUE_PROJECTION_PARAMS,
             &comparison::VALUE_PROJECTION_PARAMS,
@@ -1785,8 +1978,113 @@ mod tests {
     /// invariant honest rather than decoupling the two dates.
     fn mk_judgement_dated(uid: &str, seq: u32, a: &str, b: &str, date: &str) -> Judgement {
         let mut j = mk_judgement(uid, seq, a, b);
-        j.date = date.to_string();
+        j.date = Some(date.to_string());
         j
+    }
+
+    /// SL-220 §2 token plumbing: an anchor row lists with its CLAIM token
+    /// (here `anchored` — human tier), a single-subject pair cell, and no
+    /// `CompilationStatus` token; the pairwise row beside it is untouched.
+    /// Full mixed-fixture list goldens ride PHASE-06.
+    #[test]
+    fn compare_list_renders_anchor_rows_with_claim_tokens() {
+        let mut anchor = mk_judgement("row-anchor", 0, "SL-204", "unused");
+        anchor.b = None;
+        anchor.response = None;
+        anchor.form = RowForm::Anchor;
+        anchor.frame = comparison::FRAME_VALUE_ANCHOR.to_string();
+        anchor.magnitude = Some(6.5);
+        anchor.rater = RaterKind::Human;
+        let session = mk_session(
+            "2026-07-10",
+            "sess-a",
+            vec![anchor, mk_judgement("row-pair", 1, "SL-204", "IMP-118")],
+        );
+        let lines = list_lines(&rows_of(&[session]), None, false);
+        assert_eq!(lines.len(), 2);
+        assert!(
+            lines[0].contains("status=anchored") && lines[0].contains("SL-204"),
+            "anchor row wears its claim token: {}",
+            lines[0]
+        );
+        assert!(
+            !lines[0].contains("vs"),
+            "single subject, no pair cell: {}",
+            lines[0]
+        );
+        assert!(
+            lines[1].contains("status=active") && lines[1].contains("SL-204* vs IMP-118"),
+            "the pairwise row is untouched: {}",
+            lines[1]
+        );
+    }
+
+    /// SL-220 §2: a superseded anchor row keeps its RESOLUTION token (claim
+    /// tokens are Active-only), `--active-only` drops it, and an agent-tier
+    /// head renders `prior` — the D4 routing made visible.
+    #[test]
+    fn compare_list_supersession_and_prior_tokens_on_anchor_rows() {
+        let mk_anchor = |uid: &str, seq: u32, magnitude: f64| {
+            let mut j = mk_judgement(uid, seq, "SL-204", "unused");
+            j.b = None;
+            j.response = None;
+            j.form = RowForm::Anchor;
+            j.frame = comparison::FRAME_VALUE_ANCHOR.to_string();
+            j.magnitude = Some(magnitude);
+            j // rater stays Agent (the fixture default): a `prior` claim
+        };
+        let session = || {
+            let mut head = mk_anchor("row-new", 1, 2.0);
+            head.supersedes = Some("row-old".to_string());
+            mk_session(
+                "2026-07-10",
+                "sess-b",
+                vec![mk_anchor("row-old", 0, 1.0), head],
+            )
+        };
+
+        let all = list_lines(&rows_of(&[session()]), None, false);
+        assert_eq!(all.len(), 2);
+        assert!(
+            all[0].contains("row-old") && all[0].contains("status=superseded→row-new"),
+            "superseded anchor keeps its resolution token: {}",
+            all[0]
+        );
+        assert!(
+            all[1].contains("row-new") && all[1].contains("status=prior"),
+            "agent-tier head routes to `prior` (D4): {}",
+            all[1]
+        );
+        let active_only = list_lines(&rows_of(&[session()]), None, true);
+        assert_eq!(active_only.len(), 1, "only the head survives --active-only");
+    }
+
+    /// SL-220 PHASE-06 §2/§6 (RV-278 F-8): two SAME-tier anchor claims that
+    /// disagree on magnitude resolve to a `conflicted` token — the winning
+    /// tier's internal contest ("contested" for an anchored tier) surfaced in
+    /// `compare list`, never a `CompilationStatus` token.
+    #[test]
+    fn compare_list_conflicting_anchor_claims_render_conflicted() {
+        let mk_anchor = |uid: &str, seq: u32, magnitude: f64| {
+            let mut j = mk_judgement(uid, seq, "SL-204", "unused");
+            j.b = None;
+            j.response = None;
+            j.form = RowForm::Anchor;
+            j.frame = comparison::FRAME_VALUE_ANCHOR.to_string();
+            j.magnitude = Some(magnitude);
+            j.rater = RaterKind::Human; // anchored tier — the contest is "contested"
+            j
+        };
+        // Two CONCURRENT human anchors on SL-204 with distinct magnitudes —
+        // separate sessions so R3 (same-session revision) never reduces them.
+        let s1 = mk_session("2026-07-10", "sess-c", vec![mk_anchor("row-lo", 0, 4.0)]);
+        let s2 = mk_session("2026-07-11", "sess-d", vec![mk_anchor("row-hi", 0, 8.0)]);
+        let lines = list_lines(&rows_of(&[s1, s2]), None, false);
+        assert_eq!(lines.len(), 2);
+        assert!(
+            lines.iter().all(|l| l.contains("status=conflicted")),
+            "both same-tier disagreeing anchors wear `conflicted`: {lines:?}"
+        );
     }
 
     #[test]
