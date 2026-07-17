@@ -51,3 +51,19 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 - PHASE-02 VH-1: human confirms F14 sequencing + boot snapshot reads well.
 - PHASE-03 VH-1: human accepts DEC-002/ASM-002 as fair first citizens.
+
+## Audit (2026-07-17, RV-280)
+
+- F-1/F-2 fixed at audit: phase deltas re-recorded via safe `--commit` mode
+  (foreign SL-221/ISS-227/case-notes commits excluded); design-target selector
+  `.doctrine/knowledge/**` added for the PHASE-03 records. Conformance:
+  12 conformant / 0 undelivered / 3 undeclared (all dispositioned aligned).
+- F-3: session-start boot regen by the stale-embed PATH binary had silently
+  dropped the /knowledge routing row (self-reported clean). Restored via
+  ./target/debug/doctrine; ISS-228 + high-severity memory
+  (mem.fact.doctrine.boot-regen-binary-embed-divergence). Standing risk until
+  a release ships.
+- F-4 tolerated: Claude plugin cache (0.1.0) lacks the skill — /knowledge not
+  invocable in a Claude session until plugin refresh; CHR-045 (version bump).
+- Harvest: ISS-228, ISS-229 (stale knowledge signpost memory), CHR-045.
+- F-7/F-8 (blockers): PHASE-02 + PHASE-03 VH gates await human sign-off.

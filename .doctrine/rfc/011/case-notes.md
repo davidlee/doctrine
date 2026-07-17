@@ -1805,3 +1805,38 @@ confusion reconciling "5 findings, 3 usable". Root cause: raising multi-line
 robust quoting. Mitigation worth considering: a `review raise --detail-file` /
 stdin path (like `prime --from`) so evidence prose never transits shell word-
 splitting; or guidance in the reviewer prompt to single-quote detail bodies.
+
+[execute; e4d90792-SL-214]
+- Boot/embed staleness cost a probe cycle: `doctrine boot` (PATH = old release
+  binary, embedded assets) silently reported "Unchanged" after a routing-table
+  edit; the dev binary ALSO served stale bytes because rust-embed `debug-embed`
+  bakes assets at compile time. Nothing in boot output names its asset source
+  or build stamp — an agent must know the touch-src/install.rs + rebuild +
+  ./target/debug ritual (memory existed but pointed at a file removed by
+  IMP-226; now fixed).
+- `doctrine install -s knowledge -y` soft-fails: npx delegate reported "No
+  matching skills found" (skill not yet on GitHub) yet overall exit=0 on the
+  second run — reachability gates (F14) can't trust the exit code; had to grep
+  the log. First run did exit non-zero but with a generic "npx skills failed"
+  that doesn't name the missing-skill cause.
+- `memory edit` uses `--path-scope` for scope paths while `-p/--path` is
+  project root; passing `--path src/install.rs` silently retargeted the
+  project root → "memory not found" (wrong-root, not wrong-id) — misleading
+  error for a flag mixup.
+
+[audit; rv280-sl214-audit]
+- Boot snapshot divergence chase cost ~8 tool calls: session-start hook had
+  regenerated boot.md with the PATH release binary (stale embed) → /knowledge
+  routing row silently dropped, `boot --check` first said stale (exit 0), then
+  after PATH regen said clean. Nothing tells the agent WHICH binary's embed a
+  snapshot came from; had to A/B regenerate (PATH vs ./target/debug) to
+  diagnose. Filed ISS-228.
+- `boot --check` exits 0 even when it prints stale — scripted `&&` chains
+  can't gate on it; the echoed sentinel misled one evidence pass.
+- "Installed skill" has no discoverable location: audit had to probe the
+  claude plugin cache (absent), ~/.claude/skills (absent), .claude/skills
+  (absent) before finding .agents/skills/. Neither the plan's VA ("installed
+  skill list") nor any doc names the resolved install destination or a verb to
+  query it (`doctrine install --list`?).
+- zsh ate bare `===` / `===SEP===` echo separators (two retries) — jail shell
+  is zsh; `=` expansion. Use quoted or dash separators.

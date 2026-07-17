@@ -1,0 +1,84 @@
+id    = 280
+slug  = "sl-214-audit-knowledge-authoring-skill"
+title = "SL-214 audit — knowledge authoring skill"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-214"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Recorded phase deltas contaminated by foreign commits (PHASE-01, PHASE-02)"
+detail = "Expected: each phase delta covers only its own patch. Observed: solo phase-binding recorded HEAD-to-HEAD ranges; PHASE-01 [a75eb2a3..a88e35e5] swallowed 1d51b3b7 (ISS-227 backlog capture), PHASE-02 [f3524337..32bf6abc] swallowed f14ea27c (SL-221 design) and 58863b3b (SL-221 design + RFC-011 case notes). Conformance reported 8 spurious undeclared paths (SL-221 slice files, backlog/issue/227, rfc/011/case-notes.md)."
+disposition = "fix-now"
+response = "Re-recorded both deltas via the safe --commit mode (slice record-delta 214 PHASE-01 --commit a88e35e5; PHASE-02 --commit 32bf6abc), which records exactly each phase's own patch. Conformance re-run: the 8 spurious undeclared paths (SL-221 files, ISS-227, case-notes) are gone. PHASE-03's range was already exactly its own commit."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "PHASE-03 deliverables undeclared: no design-target selector covered the dogfood records"
+detail = "Expected: PHASE-03 deliverables conformant. Observed: design D5 and PHASE-03 exit criteria declare the DEC/ASM records as deliverables, but the design-target selector registry (and design.md Code-impact table) list only the six skill/doc paths — all six .doctrine/knowledge record paths flagged undeclared."
+disposition = "fix-now"
+response = """Registry fixed at audit: slice selector add 214 '.doctrine/knowledge/**' --intent design-target --note "D5 dogfood records — PHASE-03 deliverables". Conformance re-run: all six record paths now conformant. The human mirror — a records row in design.md §Code impact — is delegated to /reconcile via the reconciliation brief (per-slice direct edit)."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "PHASE-02 EX-4 not durable: stale-embed PATH binary rolled the /knowledge routing row out of the boot snapshot"
+detail = "Expected: boot snapshot carries the /knowledge routing row (EX-4). Observed: session-start regen (17:01) by ~/.cargo/bin/doctrine (release binary, stale embedded install/ assets) produced a boot.md without the row; boot --check under that binary reports clean because it validates against its own embed. Regenerating with ./target/debug/doctrine (fresh embed) restores the row and checks clean. Recurs every regen by an older binary until a release ships."
+disposition = "fix-now"
+response = "Regenerated the snapshot with ./target/debug/doctrine (fresh embed): routing row present at boot.md:18, boot --check clean. Residual recurrence risk (any regen by the stale PATH binary rolls it back again with a false-clean check) is captured as ISS-228 and memory mem.fact.doctrine.boot-regen-binary-embed-divergence; durable resolution is the next release/binary refresh — outside slice scope."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "/knowledge routed but not invocable via the Claude plugin-cache channel"
+detail = "Expected: routed skill reachable in the harness (ADR-009 F14 spirit). Observed: ~/.claude/plugins/cache/doctrine/doctrine/0.1.0 lacks skills/knowledge (plugin.json version unbumped since the skill landed), so this session's Claude harness cannot invoke /knowledge. The channel the slice governs is correct: .agents/skills/knowledge/SKILL.md is byte-identical to the plugins/ source and skills-lock.json selected it (PHASE-02 VA-1 holds)."
+disposition = "tolerated"
+response = "Tolerated as distribution lag, not slice drift: F14 was honoured on the channel the slice governs (doctrine install → .agents/skills, byte-identical, lock-selected); the Claude marketplace cache refreshes on plugin update, which is a user-side action. The process gap that lets the cache go stale silently — plugin.json version never bumped when the skill set changes — is captured as CHR-045."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Undeclared incidental edits in PHASE-02 commit: skills-lock.json + memory-item correction"
+detail = "Expected: phase commits touch declared paths. Observed: 32bf6abc also carries skills-lock.json (side effect of the F14 install step) and the mem_019eae55 correction (skill-refresh command: src/skills.rs moved to src/install.rs) — neither in any design-target selector."
+disposition = "aligned"
+response = "Both edits are legitimate and in-scope side effects: skills-lock.json is written by the F14 install step itself; the memory correction is en-route hygiene mandated by the memory system (stale command path would misdirect future agents). Declaring them design-target would be false — they remain visibly undeclared by design. No action."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "Stale scope premise: zero-records census"
+detail = "Expected: scope/design premises accurate. Observed: scope and design cite the 2026-06-26 census (zero records, zero shapes edges), but five records already existed from the SL-158/ADR-017 era — dogfood ids came out -002 and first-citizens reads as first records authored through the routed skill. Corrected in notes.md; canon (design.md current-behaviour, slice-214.md context) still carries the stale premise."
+disposition = "verified"
+response = """Observation confirmed; remediation is reconcile's. Reconciliation brief carries the per-slice direct edits: design.md "Current vs target behaviour" and slice-214.md context get the corrected census baseline (five SL-158-era records pre-existed; dogfood ids -002; "first citizens" = first records authored through the routed skill). No plan-criteria edits involved."""
+
+[[finding]]
+id = "F-7"
+status = "open"
+severity = "blocker"
+title = "PHASE-02 VH-1 unconfirmed: human sign-off on F14 sequencing + boot snapshot"
+detail = "Plan requires human confirmation that sequencing was honoured (publish/install before routing row before boot) and the boot snapshot reads correctly. Evidence assembled: notes.md execution summary, commit order (install + skills-lock in 32bf6abc alongside the row, after the user's push), routing row present in regenerated boot, boot --check clean under the fresh-embed binary. Awaiting the human gate."
+
+[[finding]]
+id = "F-8"
+status = "open"
+severity = "blocker"
+title = "PHASE-03 VH-1 unconfirmed: human accepts DEC-002/ASM-002 as fair first citizens"
+detail = "Plan requires human acceptance of the two dogfood records as teaching-by-example, not record-spam. DEC-002 (capture-vs-harvest boundary, accepted, shapes SL-215) and ASM-002 (touchpoints drive population, held, validation plan = re-census after SL-215, shapes SL-215); no dep/seq authored by either record (VA-2). Awaiting the human gate."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

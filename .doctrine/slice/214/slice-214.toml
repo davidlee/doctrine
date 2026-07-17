@@ -1,7 +1,7 @@
 id = 214
 slug = "knowledge-authoring-skill"
 title = "Knowledge authoring skill"
-status = "started"
+status = "audit"
 created = "2026-07-11"
 updated = "2026-07-17"
 tags = []
@@ -60,6 +60,11 @@ intent = "design-target"
 [[selector]]
 selector = "install/using-doctrine.md"
 intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/knowledge/**"
+intent = "design-target"
+note = "D5 dogfood records — PHASE-03 deliverables (DEC-002, ASM-002)"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL

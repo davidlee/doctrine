@@ -1,0 +1,50 @@
+memory_uid = "mem_019f6eea697d73d396cefed3947d9627"
+memory_key = "mem.fact.doctrine.boot-regen-binary-embed-divergence"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Boot regen rolls back governance when run from a stale-embed binary"
+summary = "boot regen uses the generating binary's embedded install/ assets; a stale binary silently rolls back governance rows and --check self-reports clean — in the doctrine repo regenerate with ./target/debug/doctrine after asset edits"
+created = "2026-07-17"
+updated = "2026-07-17"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["boot", "distribution", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8d902726bc37af97c89aae30ccad533f3ed665fa"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d38fbaf91f37f8243d011200b32a9b045e76e1f4b3e36c2837c2d84c5dd1d110"
+base_commit = "7cb90d78566e27c1dbbda0135d13734d3b1e9f53"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-214"
+
+[[source]]
+kind = "issue"
+ref = "ISS-228"
+
