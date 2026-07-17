@@ -491,220 +491,6 @@ fn refused_row_persists_failed_status_in_committed_journal() {
 }
 
 // ====================================================================
-// PHASE-04 — commit the boundaries ledger at prepare-review (ISS-039)
-// ====================================================================
-//
-// VT-1: splice from an UNCOMMITTED working ledger living in a live coordination
-//   worktree → prepare-review commits boundaries.toml onto dispatch/064 (beside
-//   journal.toml), read_ledger reads N rows, phase/064-NN refs project.
-// VT-2: content-idempotent — a second prepare-review on the unchanged working
-//   ledger adds NO second `ledger: boundaries` commit and the committed
-//   boundaries blob is stable (commit_boundaries no-op via TREE-oid compare).
-// VT-3: malformed working boundaries.toml → the run fails and the dispatch tip
-//   is unchanged (commit_boundaries validates before committing — no garbage).
-
-/// Like [`build_fixture`] but the boundaries ledger is left **uncommitted** in a
-/// live coordination worktree on `dispatch/064` (no `ledger fixtures` commit). The
-/// dispatch tip carries the code + authored entity only; the working `boundaries.toml`
-/// sits in the coord worktree, so `prepare_review` must splice it via
-/// `commit_boundaries` (guarded by `live_worktree_for_ref`) before any read. Returns
-/// the coord worktree path. `ledger` is written verbatim — callers pass a malformed
-/// body to exercise the validate-before-commit path (VT-3).
-fn build_fixture_uncommitted_ledger(dir: &Path, ledger: &str) -> std::path::PathBuf {
-    std::fs::create_dir_all(dir).unwrap();
-    git(dir, &["init", "-q", "-b", "main"]);
-    git(dir, &["config", "user.email", "t@example.com"]);
-    git(dir, &["config", "user.name", "Test"]);
-    // Gitignore runtime state (as production) — prepare-review's derive writes the
-    // registry under `.doctrine/state/`; without this it would dirty the tree.
-    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
-    git(dir, &["add", ".gitignore"]);
-    commit(dir, "trunk.txt", "trunk", "base");
-
-    git(dir, &["checkout", "-q", "-b", "dispatch/064"]);
-    commit(dir, "src1.txt", "a", "phase1 code");
-    commit(dir, "src2.txt", "b", "phase2 code");
-    commit(
-        dir,
-        ".doctrine/slice/064/slice-064.md",
-        "scope",
-        "authored entity",
-    );
-    // Return the primary tree to `main` so `dispatch/064` is free to check out in
-    // a linked worktree (git refuses a branch checked out in two worktrees).
-    git(dir, &["checkout", "-q", "main"]);
-
-    // A LIVE coordination worktree on dispatch/064 — what `live_worktree_for_ref`
-    // keys on, and where the uncommitted ledger lives on the working filesystem.
-    let coord = dir.join(".coord-064");
-    git(
-        dir,
-        &[
-            "worktree",
-            "add",
-            "-q",
-            coord.to_str().unwrap(),
-            "dispatch/064",
-        ],
-    );
-    std::fs::create_dir_all(coord.join(".doctrine/dispatch/064")).unwrap();
-    std::fs::write(coord.join(".doctrine/dispatch/064/boundaries.toml"), ledger).unwrap();
-    // The PHASE-05 completeness gate roots on the PRIMARY tree (`dir`), not the
-    // coord worktree — seed completion there (design §5.2: gate is primary-rooted).
-    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02", "PHASE-03"]);
-    coord
-}
-
-/// A well-formed three-phase boundaries body (PHASE-03 is empty-code: start==end).
-fn working_boundaries(dir: &Path) -> String {
-    let base = git(dir, &["rev-parse", "dispatch/064~3"]);
-    let code_end_1 = git(dir, &["rev-parse", "dispatch/064~2"]);
-    let code_end_2 = git(dir, &["rev-parse", "dispatch/064~1"]);
-    format!(
-        "[[boundary]]\nphase = \"PHASE-01\"\ncode_start_oid = \"{base}\"\ncode_end_oid = \"{code_end_1}\"\nprovenance = \"funnel\"\n\
-         [[boundary]]\nphase = \"PHASE-02\"\ncode_start_oid = \"{code_end_1}\"\ncode_end_oid = \"{code_end_2}\"\nprovenance = \"funnel\"\n\
-         [[boundary]]\nphase = \"PHASE-03\"\ncode_start_oid = \"{code_end_2}\"\ncode_end_oid = \"{code_end_2}\"\nprovenance = \"funnel\"\n"
-    )
-}
-
-// --- VT-1: splice from an uncommitted working ledger, then project -----------
-
-#[test]
-fn prepare_review_splices_uncommitted_ledger_then_projects() {
-    let repo = tempfile::tempdir().unwrap();
-    let dir = repo.path();
-    // Seed with a placeholder, then write the oid-bearing ledger once the branch exists.
-    let coord = build_fixture_uncommitted_ledger(dir, "");
-    std::fs::write(
-        coord.join(".doctrine/dispatch/064/boundaries.toml"),
-        working_boundaries(dir),
-    )
-    .unwrap();
-
-    // Precondition: the dispatch tip carries NO committed ledger yet.
-    assert!(
-        !git(dir, &["ls-tree", "-r", "--name-only", "dispatch/064"]).contains("boundaries.toml"),
-        "precondition: boundaries ledger is uncommitted"
-    );
-
-    let out = prepare_review(dir);
-    assert!(
-        out.status.success(),
-        "prepare-review ok; stderr: {}",
-        stderr(&out)
-    );
-
-    // commit_boundaries spliced the working ledger onto dispatch/064, beside journal.toml.
-    let listing = git(dir, &["ls-tree", "-r", "--name-only", "dispatch/064"]);
-    assert!(
-        listing.contains(".doctrine/dispatch/064/boundaries.toml"),
-        "boundaries.toml committed onto dispatch/064: {listing}"
-    );
-    assert!(
-        listing.contains(".doctrine/dispatch/064/journal.toml"),
-        "journal.toml committed beside it: {listing}"
-    );
-
-    // read_ledger read the now-committed N rows → phase cuts project (PHASE-03 empty, skipped).
-    assert!(ref_exists(dir, "review/064"), "review/064 projected");
-    assert!(ref_exists(dir, "phase/064-01"), "phase/064-01 projected");
-    assert!(ref_exists(dir, "phase/064-02"), "phase/064-02 projected");
-    assert!(
-        !ref_exists(dir, "phase/064-03"),
-        "empty-code PHASE-03 emits no cut"
-    );
-}
-
-// --- VT-2: commit_boundaries is content-idempotent on an unchanged re-run -----
-//
-// Verified at the commit_boundaries grain (the literal "same dispatch tip oid"
-// full-rerun assertion is unsatisfiable at PHASE-04 — a second prepare-review
-// collides on the already-created refs and the journal churns, pre-existing
-// EX-5/VT-4 behaviour; the clean re-run needs the PHASE-05 gate). The content-
-// idempotency claim (design F1 / EX-2): identical working content ⇒ no second
-// `ledger: boundaries` commit and a stable committed blob.
-
-#[test]
-fn commit_boundaries_is_content_idempotent_on_rerun() {
-    let repo = tempfile::tempdir().unwrap();
-    let dir = repo.path();
-    let coord = build_fixture_uncommitted_ledger(dir, "");
-    std::fs::write(
-        coord.join(".doctrine/dispatch/064/boundaries.toml"),
-        working_boundaries(dir),
-    )
-    .unwrap();
-
-    assert!(prepare_review(dir).status.success(), "first run projects");
-    let blob_before = git(
-        dir,
-        &[
-            "rev-parse",
-            "dispatch/064:.doctrine/dispatch/064/boundaries.toml",
-        ],
-    );
-
-    // Re-run on the UNCHANGED working ledger. The full run bails on the already-
-    // created refs (out of PHASE-04 scope) — but commit_boundaries must no-op:
-    // no new boundaries commit, identical committed blob.
-    let _ = prepare_review(dir);
-    let blob_after = git(
-        dir,
-        &[
-            "rev-parse",
-            "dispatch/064:.doctrine/dispatch/064/boundaries.toml",
-        ],
-    );
-    assert_eq!(
-        blob_before, blob_after,
-        "committed boundaries blob is stable across the re-run (TREE-oid no-op)"
-    );
-
-    let boundaries_commits = git(
-        dir,
-        &[
-            "log",
-            "--grep",
-            "ledger: boundaries",
-            "--oneline",
-            "dispatch/064",
-        ],
-    );
-    assert_eq!(
-        boundaries_commits.lines().count(),
-        1,
-        "commit_boundaries fired exactly once — content-idempotent: {boundaries_commits}"
-    );
-}
-
-// --- VT-3: malformed working ledger → run fails, dispatch tip unchanged -------
-
-#[test]
-fn malformed_working_ledger_fails_and_leaves_dispatch_tip_unchanged() {
-    let repo = tempfile::tempdir().unwrap();
-    let dir = repo.path();
-    build_fixture_uncommitted_ledger(dir, "this is not valid boundaries toml ][\n");
-    let tip_before = git(dir, &["rev-parse", "dispatch/064"]);
-
-    let out = prepare_review(dir);
-    assert!(
-        !out.status.success(),
-        "malformed working ledger makes the run fail: {}",
-        stderr(&out)
-    );
-    assert!(
-        stderr(&out).contains("malformed"),
-        "error names the malformed ledger: {}",
-        stderr(&out)
-    );
-    assert_eq!(
-        git(dir, &["rev-parse", "dispatch/064"]),
-        tip_before,
-        "dispatch tip unchanged — validate-before-commit committed no garbage"
-    );
-}
-
-// ====================================================================
 // PHASE-05 — stage-2 `dispatch sync --integrate` (design §4 / ADR-012 D4/D5)
 // ====================================================================
 
@@ -1360,9 +1146,10 @@ fn integrate_refused_under_worker_mode() {
 //
 // The claude-arm phase cut (§4.3) consumes `boundaries.toml`; the orchestrator
 // populates it during the funnel via this verb (the surface the skills cite).
-// Pins: (a) it appends a `[[boundary]]` row at the CANONICAL padded ledger path
-// `.doctrine/dispatch/064/` (the path `dispatch sync` tree-reads — writer↔reader
-// agreement), and (b) it is Orchestrator-classed (refused under worker-mode).
+// Pins: (a) the escape hatch lands the `[[boundary]]` row WORKING-TREE-FREE on the
+// `dispatch/<slice>` ref (SL-221 PHASE-03 — the split write seam collapsed onto the
+// ref, ISS-225), upserting by phase, and (b) it is Orchestrator-classed (refused
+// under worker-mode).
 
 fn record_boundary(cwd: &Path, root: &Path, phase: &str, start: &str, end: &str) -> Output {
     run(
@@ -1386,11 +1173,15 @@ fn record_boundary(cwd: &Path, root: &Path, phase: &str, start: &str, end: &str)
 }
 
 #[test]
-fn record_boundary_appends_row_at_canonical_padded_ledger_path() {
+fn record_boundary_lands_on_the_dispatch_ref() {
     let repo = tempfile::tempdir().unwrap();
     let dir = repo.path();
     let fx = build_fixture(dir);
-    let ledger = dir.join(".doctrine/dispatch/064/boundaries.toml");
+    let working_ledger = dir.join(".doctrine/dispatch/064/boundaries.toml");
+
+    // A fresh commit whose oid is absent from the fixture rows — so the corrected
+    // re-record's UPSERT can be pinned to a NEW, distinguishable code-end.
+    let corrected_end = commit(dir, "corrected.txt", "x", "fresh tip for the re-record");
 
     let out = record_boundary(dir, dir, "PHASE-09", &fx.base, &fx.code_end_1);
     assert!(
@@ -1398,19 +1189,55 @@ fn record_boundary_appends_row_at_canonical_padded_ledger_path() {
         "record-boundary ok; stderr: {}",
         stderr(&out)
     );
-    let body = std::fs::read_to_string(&ledger).expect("ledger written at padded path");
-    assert!(body.contains("[[boundary]]"), "row header: {body}");
-    assert!(body.contains("phase = \"PHASE-09\""), "phase row: {body}");
-    // Stores the resolved code tip (full oid) the phase cut snapshots.
-    assert!(body.contains(&fx.code_end_1), "code_end oid: {body}");
 
-    // Append-only: a second record adds a second row, keeps the first.
-    let out = record_boundary(dir, dir, "PHASE-10", &fx.code_end_1, &fx.code_end_2);
-    assert!(out.status.success(), "second record ok: {}", stderr(&out));
-    let body = std::fs::read_to_string(&ledger).unwrap();
+    // (1) The row landed on the COMMITTED `dispatch/064` ref — the phase-cut input
+    // prepare-review tree-reads — never the working tree.
+    let committed = git(
+        dir,
+        &[
+            "show",
+            "dispatch/064:.doctrine/dispatch/064/boundaries.toml",
+        ],
+    );
     assert!(
-        body.contains("PHASE-09") && body.contains("PHASE-10"),
-        "both rows present: {body}"
+        committed.contains("phase = \"PHASE-09\""),
+        "ref carries the row: {committed}"
+    );
+    assert!(
+        committed.contains(&fx.code_end_1),
+        "ref carries the resolved code-end oid: {committed}"
+    );
+
+    // (2) The primary tree is on `main`, where the ledger path does not exist — the
+    // escape hatch wrote the ref working-tree-free, touching no working copy.
+    assert!(
+        !working_ledger.exists(),
+        "working tree untouched (primary tree is on main)"
+    );
+
+    // (3) A corrected re-record UPSERTs by phase: exactly ONE PHASE-09 row, carrying
+    // the NEW oid — not a second appended row.
+    let out = record_boundary(dir, dir, "PHASE-09", &fx.base, &corrected_end);
+    assert!(
+        out.status.success(),
+        "corrected re-record ok: {}",
+        stderr(&out)
+    );
+    let committed = git(
+        dir,
+        &[
+            "show",
+            "dispatch/064:.doctrine/dispatch/064/boundaries.toml",
+        ],
+    );
+    assert_eq!(
+        committed.matches("phase = \"PHASE-09\"").count(),
+        1,
+        "upsert keeps exactly one PHASE-09 row: {committed}"
+    );
+    assert!(
+        committed.contains(&corrected_end),
+        "the PHASE-09 row carries the corrected code-end oid: {committed}"
     );
 }
 
@@ -1480,30 +1307,22 @@ fn record_boundary_refused_under_worker_mode() {
     assert!(!ledger.exists(), "still records nothing");
 }
 
-// SL-147 PHASE-04 T3 — the funnel record beat ALSO writes the arm-neutral
-// recorded source-delta registry (`.doctrine/state/slice/<NNN>/boundaries.toml`),
-// ALONGSIDE — never replacing — the committed claude-arm ledger
-// (`.doctrine/dispatch/<NNN>/boundaries.toml`). Both files get the row; the two
-// are independent artifacts.
+// SL-147 PHASE-04 T3 — the funnel record beat writes the arm-neutral recorded
+// source-delta registry (`.doctrine/state/slice/<NNN>/boundaries.toml`). Since
+// SL-221 PHASE-03 the committed claude-arm ledger lands on the `dispatch/<NNN>`
+// ref (working-tree-free, covered by `record_boundary_lands_on_the_dispatch_ref`),
+// so this test pins only the registry write — the two remain independent artifacts.
 #[test]
 fn record_boundary_also_writes_the_arm_neutral_registry() {
     let repo = tempfile::tempdir().unwrap();
     let dir = repo.path();
     let fx = build_fixture(dir);
-    let committed_ledger = dir.join(".doctrine/dispatch/064/boundaries.toml");
     let neutral_registry = dir.join(".doctrine/state/slice/064/boundaries.toml");
 
     let out = record_boundary(dir, dir, "PHASE-09", &fx.base, &fx.code_end_1);
     assert!(out.status.success(), "record-boundary ok: {}", stderr(&out));
 
-    // (1) The committed ledger still carries the row (untouched behaviour).
-    let committed = std::fs::read_to_string(&committed_ledger).expect("committed ledger written");
-    assert!(
-        committed.contains("phase = \"PHASE-09\""),
-        "committed: {committed}"
-    );
-
-    // (2) The arm-neutral registry under the runtime state tree ALSO carries it.
+    // The arm-neutral registry under the runtime state tree carries the row.
     let neutral = std::fs::read_to_string(&neutral_registry).expect("neutral registry written");
     assert!(
         neutral.contains("[[boundary]]"),
@@ -1518,13 +1337,9 @@ fn record_boundary_also_writes_the_arm_neutral_registry() {
         "neutral end oid: {neutral}"
     );
 
-    // (3) SL-154 PHASE-05 EX-1 pin: the funnel stamps `provenance = funnel` on
-    // BOTH writes — the committed ledger and the registry — so the prepare-review
-    // guard/derive (D11) can discriminate funnel-owned rows from solo/manual.
-    assert!(
-        committed.contains("provenance = \"funnel\""),
-        "committed ledger stamps funnel provenance: {committed}"
-    );
+    // SL-154 PHASE-05 EX-1 pin: the funnel stamps `provenance = funnel` on the
+    // registry row, so the prepare-review guard/derive (D11) can discriminate
+    // funnel-owned rows from solo/manual.
     assert!(
         neutral.contains("provenance = \"funnel\""),
         "registry stamps funnel provenance: {neutral}"
@@ -2162,21 +1977,36 @@ fn vt5_derive_overwrites_garbage_and_populates_every_row() {
 fn vt6_gate_is_primary_rooted_when_run_from_coord_cwd() {
     let repo = tempfile::tempdir().unwrap();
     let dir = repo.path();
-    // Live coord on dispatch/064; the builder seeds PRIMARY completed 01/02/03.
-    let coord = build_fixture_uncommitted_ledger(dir, "");
-    let base = git(dir, &["rev-parse", "dispatch/064~3"]);
-    let c1 = git(dir, &["rev-parse", "dispatch/064~2"]);
-    let c2 = git(dir, &["rev-parse", "dispatch/064~1"]);
-    // The working ledger covers only 01/02 → PHASE-03 (completed in primary) is a gap.
-    std::fs::write(
-        coord.join(".doctrine/dispatch/064/boundaries.toml"),
-        format!(
+    let (base, c1, c2) = build_guard_repo(dir);
+    // SL-221 PHASE-05: the run ledger is sourced from the dispatch REF (the
+    // working-tree splice is retired), so seed it ref-committed like vt3/vt5/vt7.
+    // The committed ledger covers only 01/02; PHASE-03 is completed in the PRIMARY
+    // tree but carries no boundary row → the gap the primary-rooted gate must catch.
+    commit_ledger_on_dispatch(
+        dir,
+        &format!(
             "{}{}",
             boundary_row("PHASE-01", &base, &c1, "funnel"),
             boundary_row("PHASE-02", &c1, &c2, "funnel"),
         ),
-    )
-    .unwrap();
+    );
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02", "PHASE-03"]);
+
+    // A live coordination worktree on dispatch/064 is the cwd prepare-review runs
+    // from. The gate must STILL root on the PRIMARY tree (`dir`), whose gitignored
+    // completed-set (01/02/03) this linked coord tree does not carry — so a halt
+    // naming PHASE-03 proves the gate read the primary set, not the coord cwd.
+    let coord = dir.join(".coord-064");
+    git(
+        dir,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            coord.to_str().unwrap(),
+            "dispatch/064",
+        ],
+    );
 
     let out = prepare_review_from(&coord, &coord);
     assert!(
@@ -2245,4 +2075,81 @@ fn vt7_gate_halts_before_projection_then_rerun_projects_after_fix() {
         ref_exists(dir, "phase/064-01") && ref_exists(dir, "phase/064-02"),
         "phase cuts created on the clean re-run"
     );
+}
+
+// SL-221 VT-1 (ISS-225) — clobber is impossible by construction. `conclude` lands
+// the full boundary set on the dispatch REF; a live coord worktree holding only a
+// STALE PREFIX working-tree ledger must NOT overwrite the concluded rows. Under the
+// retired `commit_boundaries` splice this test is RED — the splice would have
+// committed the coord's 01..03 prefix onto the ref, dropping the concluded 04..07
+// (and then the primary-rooted gate would halt on the vanished tail). With the
+// working-tree path retired, prepare-review sources the ref directly and the full
+// 01..07 set survives untouched.
+#[test]
+fn prepare_review_cannot_clobber_concluded_rows() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    let (_base, _c1, c2) = build_guard_repo(dir);
+
+    // `conclude` landed the FULL set PHASE-01..07 on the dispatch ref (all
+    // empty-code — start==end — so projection emits no per-phase cuts and the
+    // scenario needs no extra code commits; the row SET is what matters).
+    let concluded: String = (1..=7)
+        .map(|n| boundary_row(&format!("PHASE-{n:02}"), &c2, &c2, "funnel"))
+        .collect();
+    commit_ledger_on_dispatch(dir, &concluded);
+    seed_completed_phases(
+        dir,
+        64,
+        &[
+            "PHASE-01", "PHASE-02", "PHASE-03", "PHASE-04", "PHASE-05", "PHASE-06", "PHASE-07",
+        ],
+    );
+
+    // A LIVE coord worktree on dispatch/064 carrying a STALE PREFIX working ledger
+    // (only 01..03) — exactly what the retired splice would have clobbered the ref
+    // with.
+    let coord = dir.join(".coord-064");
+    git(
+        dir,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            coord.to_str().unwrap(),
+            "dispatch/064",
+        ],
+    );
+    let stale_prefix: String = (1..=3)
+        .map(|n| boundary_row(&format!("PHASE-{n:02}"), &c2, &c2, "funnel"))
+        .collect();
+    std::fs::write(
+        coord.join(".doctrine/dispatch/064/boundaries.toml"),
+        &stale_prefix,
+    )
+    .unwrap();
+
+    let out = prepare_review(dir);
+    assert!(
+        out.status.success(),
+        "prepare-review succeeds — the concluded ref ledger is complete; stderr: {}",
+        stderr(&out)
+    );
+
+    // The concluded rows are STILL the full 01..07 set on the ref: no splice
+    // truncated them to the stale coord prefix.
+    let committed = git(
+        dir,
+        &[
+            "show",
+            "dispatch/064:.doctrine/dispatch/064/boundaries.toml",
+        ],
+    );
+    for n in 1..=7 {
+        let phase = format!("PHASE-{n:02}");
+        assert!(
+            committed.contains(&phase),
+            "concluded row {phase} survives on the ref (no stale-prefix clobber): {committed}"
+        );
+    }
 }

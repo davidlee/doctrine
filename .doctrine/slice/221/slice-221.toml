@@ -26,6 +26,11 @@ intent = "design-target"
 selector = "tests/e2e_dispatch_sync.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "tests/e2e_dispatch_lifecycle.rs"
+intent = "design-target"
+note = "PHASE-03 collateral write: record-boundary lands on the ref working-tree-free, so these lifecycle fixtures drop the manual add/commit of the (no-longer-written) working-tree ledger"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"

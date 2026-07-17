@@ -189,9 +189,9 @@ fn full_lifecycle_coordinate_to_integrate_preserves_main_and_deliverables() {
         stderr(&out)
     );
     // sync tree-reads the ledger from the committed `dispatch/064` tree, never the
-    // working filesystem (mem.pattern...sync-tree-reads-ledger) — so commit it.
-    git(&coord, &["add", ".doctrine/dispatch/064"]);
-    git(&coord, &["commit", "-q", "-m", "PHASE-01 boundary ledger"]);
+    // working filesystem (mem.pattern...sync-tree-reads-ledger). Since SL-221
+    // PHASE-03 record-boundary lands the row WORKING-TREE-FREE on the `dispatch/064`
+    // ref itself, so it is already committed — no manual add/commit needed.
 
     // --- 3. prepare-review: project the audit-ready refs from the coord tree ----
     // The completeness gate roots on the PRIMARY worktree (git worktree list first
@@ -356,8 +356,8 @@ fn repair_to_close_to_integrate_to_status_done() {
         "record-boundary; stderr: {}",
         stderr(&out)
     );
-    git(&coord, &["add", ".doctrine/dispatch/064"]);
-    git(&coord, &["commit", "-q", "-m", "PHASE-01 boundary ledger"]);
+    // SL-221 PHASE-03: record-boundary already committed the row onto the
+    // `dispatch/064` ref (working-tree-free) — no manual add/commit needed.
 
     // --- 3. Prepare-review: create review/064 + journal rows -------------------
     let out = run(
