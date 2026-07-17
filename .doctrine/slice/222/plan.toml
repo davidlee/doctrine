@@ -1,0 +1,189 @@
+# Implementation plan for SL-222 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-222"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Pre-flip baseline evidence"
+objective = "Capture the pre-flip ranking baseline (design §3 behaviour accounting, scope R1): scripts/value_baseline.py (exists, domain-blind) snapshot of the live corpus committed to .doctrine/slice/222/ as the accepted-evidence base every later ranking delta is judged against. No code motion."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md reviewed (RV-282, 9/9 verified) — satisfied at plan time" },
+  { id = "EN-2", text = "SL-220 landed (claims machinery on trunk) — satisfied at plan time (SL-220 done, edge carries it)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Pre-flip live snapshot JSON committed to .doctrine/slice/222/ (phase1-preflip-live.json), captured before any SL-222 code phase lands" },
+]
+verification = [
+  { id = "VA-1", text = "Snapshot precedes every code phase in the commit history; the live corpus is untouched by the capture (git status clean apart from the evidence file)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Wire: estimate anchor payload + cost-anchor frame"
+objective = "Design §1/E1/E2: est_lower/est_upper optional columns on the v3 row (no version bump); FRAME_COST_ANCHOR joins DOMAIN_FRAMES[estimate] and ANCHOR_FRAMES; anchor_frame_for stays total; validation-matrix arms (per-domain payload exactness both directions, cost-anchor⇔estimate-anchor biconditional, estimate::validate mirroring incl. lower>=0, migrated/pin rules domain-agnostic). Strictly additive; resolve.rs untouched semantically."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 EX-1: baseline evidence committed (sequencing pin, design §5)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.1 wire suite green: estimate anchor goldens (live human, pin, migrated, -x point), round-trip losslessness over the new optionals, validation matrix both directions" },
+  { id = "EX-2", text = "v2 fixtures and SL-220 v3 fixtures parse byte-identically; all existing suites green (engine gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "wire battery — estimate anchor goldens, payload exactness per domain x form, cost-anchor⇔estimate-anchor biconditional, estimate::validate mirroring (negative-lower refusal), migrated/pin rules on estimate rows", test_file = "src/comparison/wire.rs", keywords = ["FRAME_COST_ANCHOR", "est_lower", "est_upper"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Generic claims pass + estimate instantiation"
+objective = "Design §2/E3/E4/E13: relocate the one formula site to estimate::operative_cost(bounds, skew) (EPSILON floor composed after aggregation; graph::authored_est_cost delegates); generalise resolve_claims over ClaimPayload (extract/mean/operative + Params); value instantiation as behaviour-preserving refactor (assertion semantics + goldens unchanged, .value→.operative accessor re-path the sole churn class); estimate instantiation (per-field mean, operative-cost conflict interval, distinct (lower,upper) pairs); the RV-275 F-1 gate battery re-instantiated for estimate payloads."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 exit: estimate anchor rows parse and validate" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.2 claims battery green for estimate payloads: tier ordering, permutation invariance, corroboration vs conflict over ranges, conflicting pins, cross-session concurrency, lens isolation non-vacuous both directions, anti-laundering property, no-compile-consumer, duplicate posture" },
+  { id = "EX-2", text = "E4 linearity property green: float-tolerance affine(mean)==mean(affines), floor-composes-after-aggregation rule, sub-EPSILON determinism corner; distinct-payload-same-operative conflict fires with degenerate interval" },
+  { id = "EX-3", text = "Value-pass refactor gate: existing claims battery assertion semantics + goldens unchanged; accessor re-path enumerated in the phase notes as the sole churn; downstream suites (store/graph/surface/elicit) green with only accessor motion" },
+]
+verification = [
+  { id = "VT-1", expects = "generic fold + estimate instantiation: ClaimPayload trait, EstimatePayload extract/mean/operative, tier + conflict machinery shared", test_file = "src/comparison/claims.rs", keywords = ["ClaimPayload", "EstimatePayload"], waived = false },
+  { id = "VT-2", expects = "E4 linearity property battery (tolerance equality, floor composition, sub-EPSILON corner)", test_file = "src/comparison/claims.rs", keywords = ["linearity", "affine"], waived = false },
+  { id = "VT-3", expects = "one formula site relocated: operative_cost(bounds, skew) with EPSILON floor; graph::authored_est_cost delegates (pinned equality test)", test_file = "src/estimate.rs", keywords = ["operative_cost"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Pipeline wiring + in-pipeline bare anchor (behaviour-preserved)"
+objective = "Design §2/§3(F-4): Pipeline gains estimate_claims: ClaimResolution<EstimatePayload> (skew threaded as pure input); bare anchor derived inside pipeline_from_sessions — max_upper folded over every active unlensed estimate-anchor row upper (E7/F-2) plus the facet-uppers pure input, margin applied, used as est ProjectionParams.gauge_center and exposed as Pipeline.bare_anchor; CostCtx.absent consumes the exposed value (priority-shell facet computation deletes); RowSummary claim-join and compare list tokens extend to estimate anchor rows. Behaviour-preserved pre-flip: zero estimate anchor rows exist, so pipeline-derived bare anchor == current facet-derived value (pinned)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 exit: estimate claims resolve" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.4 bare-anchor suite green: every-active-row-upper domination property (bare anchor >= every active asserted upper + margin), losing-tier + individual conflict rows included, lensed excluded, projected costs never feed it, empty corpus 1.0, one-site pin CostCtx.absent == pipeline.bare_anchor == est gauge centre" },
+  { id = "EX-2", text = "Behaviour preservation: corpora without estimate anchor rows score bitwise-identically; SL-219 est-domain suites green unchanged; est anchor source still authored facets (swap is PHASE-06)" },
+]
+verification = [
+  { id = "VT-1", expects = "estimate claims wiring + in-pipeline bare-anchor derivation + exposure; domination property; one-site equality", test_file = "src/comparison/store.rs", keywords = ["estimate_claims", "bare_anchor"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Governance gate: REV against ADR-015 + SPEC-020 amendments"
+objective = "Design §7/E11: author the REV dissolving REV-023's estimate-source ladder into the claim ladder (INV-2 restated per E7 row-sourcing; anti-laundering; per-field-mean conflict; gauge/positivity restated; records-anchor delta disclosed; REV-024's rung-deletion clause recorded as fired; never-migrated re-rank consequence disclosed) and SPEC-020's estimate amendments with the literal per-REQ disposition map (REQ-269..277 + REQ-310 -> rewrite/retire/unchanged, gates named). Operator approval gates PHASE-06."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 exit: the machinery the REV describes exists (additive, inert)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "REV authored via the revision machinery targeting ADR-015; SPEC-020 amendment authored carrying the disposition map; both approved by the operator" },
+  { id = "EX-2", text = "ADR-015 estimate-source-resolution text updated on REV apply; no active SPEC-020 REQ contradicts the post-flip binary at any phase boundary" },
+]
+verification = [
+  { id = "VH-1", text = "Operator approves the REV and the SPEC-020 amendment before PHASE-06 lands (D12 mirror — canon never stale while the corpus is live)" },
+  { id = "VA-1", text = "Disposition map covers REQ-269, 270, 271, 272, 273, 274, 275, 276, 277, 310 exactly as the design table states; RFC-020 T2 invariant re-checked against the shipped generic pass" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "The flip: est_cost ladder, anchor swap, verbs, probes, explain"
+objective = "Design §3/§4/E5/E6/E8/E10/E12: est_cost resolves by the claim ladder (anchored > projection > agent > migrated > unmigrated facet > bare anchor); est anchor source swaps to estimate_claims.anchor_map() (facet est-anchor builder deletes — facets stop anchoring projection, stated in §3); estimate set/pin/clear re-plumb to claim mint (mandatory --rater, D13 TTY+worker pin gate, clear-under-pin refusal, supersession scope, no-op branch dies); sizing probes recompose (pairwise/anchor pool split, retirement x demote-knob matrix, anchored-tier ∩ admissible targets, interregnum facet-counts-as-sized); explain cost-source claim-tier shapes + ReasonKind motion + breaking JSON cost_source token set; demotion disclosure widens."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 EX-1/EX-2: REV + SPEC-020 amendments approved and applied" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.3 ladder suite green: rung isolation + adjacent-rung dominance, facet-only-at-zero-claims, row-less human claim resolves, gauge-masked item with claim takes rung 3/4, scoring-inert kinds paired capture/consumption, demote-knob both directions, reprobe tiers per D14" },
+  { id = "EX-2", text = "§8.6 probe suite green incl. interregnum semantics and admissibility-intersected targets; §8.7 verb suite green incl. write-class regression" },
+  { id = "EX-3", text = "Explain shapes per rung + full post-flip cost_source vocabulary golden; class-b golden churn enumerated in phase notes and pinned; suites not authoring estimate facets green unchanged" },
+  { id = "EX-4", text = "Post-flip snapshot + diff vs PHASE-01 baseline committed to .doctrine/slice/222/ (R1 evidence)" },
+]
+verification = [
+  { id = "VT-1", expects = "est_cost claim ladder + CostCtx from pipeline + demote-knob widening", test_file = "src/priority/graph.rs", keywords = ["estimate_claims"], waived = false },
+  { id = "VT-2", expects = "estimate set/pin/clear mint claims: mandatory --rater, pin TTY/worker gates, clear-under-pin refusal, supersession scope refusals, -x point mint", test_file = "src/commands/facet.rs", keywords = ["cost-anchor", "rater"], waived = false },
+  { id = "VT-3", expects = "ReasonKind cost motion: CostPin/CostClaim replace CostAuthored; JSON tokens", test_file = "src/priority/view.rs", keywords = ["CostClaim", "CostPin"], waived = false },
+  { id = "VT-4", expects = "probe recomposition: pairwise/anchor pool split, anchored-tier ∩ admissible targets, knob matrix, interregnum", test_file = "src/priority/elicit.rs", keywords = ["estimate_claims"], waived = false },
+  { id = "VT-5", expects = "e2e: set -> claim -> est_cost -> explain provenance; pin overrides projection; human beats agent; migrated loses to projection; conflict -> finding -> superseding row; clear -> tombstone -> fallthrough; probe round trip", test_file = "tests/e2e_estimate_claims.rs", keywords = ["pin", "migrated", "cost-anchor"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Entity render + elicit + findings surfaces"
+objective = "Design §6 remainder: show's estimate line re-sources from the comparison pipeline (shared-helper seam; resolved range + tier + attribution + unit; scoring-inert annotation; absent-evidence omission); compare list token routing golden over a mixed estimate fixture; elicit render fragments carry claim tiers; estimate ClaimConflict + UnmigratedFacet findings render/JSON domain-tagged parity."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 exit: resolved estimate claims are the cost source" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "§8.8 render suite green: show line (resolved, unit, inert annotation, absent-omitted), compare list mixed-fixture golden, elicit fragments, findings render + JSON parity, demotion disclosure line" },
+]
+verification = [
+  { id = "VT-1", expects = "cost-source render fragments per rung incl. contested + class-anchor re-token", test_file = "src/priority/render.rs", keywords = ["est_cost"], waived = false },
+  { id = "VT-2", expects = "compare list token routing for estimate anchor rows (anchored/prior/conflicted, never a CompilationStatus token)", test_file = "src/commands/compare.rs", keywords = ["anchored"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "Migration: script, census, corpus execution"
+objective = "Design §5/E9: scripts/migrate_estimate_facets.py — scan [estimate] tables, emit migrated cost-anchor rows (rater=migrated, observed_at, blame basis, never pins), facet-state idempotency key (path, lower, upper), census, per-file strip verification, truly non-mutating --check (F-7 divergence from the SL-220 template, recorded); then execute on this corpus: census reconciles, [estimate] tables stripped, post-migration snapshot + diff committed."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 exit: migrated rows resolve and render (rung 4)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Script committed; fixture-corpus checks per §8.10 pass (dirty-tree refusal, --check tree-hash-identical, census reconciliation, parse gate, strip verification, idempotent re-run, interrupted-state rung-5 shadow)" },
+  { id = "EX-2", text = "Live-corpus migration executed: census facets_found == imported + already-imported + re-imported, exactly one active migrated row per source facet, zero provenance conversions, [estimate] tables stripped" },
+  { id = "EX-3", text = "Post-migration snapshot + diff committed to .doctrine/slice/222/" },
+]
+verification = [
+  { id = "VT-1", expects = "the migration script exists with non-mutating check, census, strip verification, blame basis", test_file = "scripts/migrate_estimate_facets.py", keywords = ["census", "est_lower", "observed_at"], waived = false },
+  { id = "VA-1", text = "Census output + tree-hash --check proof + idempotent re-run attached as phase evidence; migration never emits admission=pin" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-09"
+name      = "The deletion: facet read paths, tripwire, grep-gate"
+objective = "Design §5 deletion (Q4, fires SL-220 D6): rung 5 deletes from both ladders; EntityFacets.value/estimate + read_facets + hydrate/graph copies + per-kind document-struct facet fields and their render/JSON paths delete (blast radius per F-5); facet_write [value]/[estimate] machinery deletes (risk/tags survive); value.rs/estimate.rs keep validate/operative_cost/claim-render helpers only; scan-seam key-presence tripwire fires magnitude-free UnmigratedFacet {domain, entity} per domain with remedy text (F-9 reshape; findings-JSON churn disclosed); widened grep-gate holds."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-08 EX-2: both domains migrated on this corpus (the SL-220 D6 deletion trigger)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Widened grep-gate green: no parse/consumption of value/estimate top-level TOML keys outside the tripwire — read_facets, parse_optional, and field access on scan/hydrate/graph/document types all gone" },
+  { id = "EX-2", text = "Tripwire suite green: presence (incl. malformed residue) fires the magnitude-free finding with remedy; clean corpus fires nothing; findings-JSON golden updated (disclosed churn)" },
+  { id = "EX-3", text = "Full suite green; final diff vs PHASE-01 baseline committed; new symbols clear the NF-001 facet-substring tripwire" },
+]
+verification = [
+  { id = "VT-1", expects = "magnitude-free UnmigratedFacet variant {domain, entity} + render without scalar", test_file = "src/priority/findings.rs", keywords = ["UnmigratedFacet"], waived = false },
+  { id = "VT-2", expects = "scan-seam key-presence tripwire for value/estimate keys (parse-free)", test_file = "src/catalog/scan.rs", keywords = ["unmigrated", "estimate"], waived = false },
+  { id = "VA-1", text = "Grep-gate evidence attached (named targets from design §5); NF-001 symbol check; deletion inventory cross-checked against the F-5 module list" },
+]
+specs        = []
+requirements = []
