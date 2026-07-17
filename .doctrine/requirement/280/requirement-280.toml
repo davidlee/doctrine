@@ -7,10 +7,10 @@ title = "Resolve the project-wide value unit from doctrine.toml [value].unit, de
 status = "active"
 kind = "functional"
 
-description = "The value unit is read from doctrine.toml [value].unit, defaulting to magic_beans when unconfigured; the unit is project-wide, with no entity-local unit field in v1."
+description = "The value unit is read from doctrine.toml [value].unit, defaulting to magic_beans when unconfigured; the unit is project-wide and applies to claim magnitudes (REV-024), with no per-claim or entity-local unit field in v1."
 tags = []
 acceptance_criteria = [
   "With [value].unit configured, the resolved unit is that value.",
   "With [value].unit omitted, the resolved unit defaults to magic_beans.",
-  "The facet schema exposes no entity-local value unit field.",
+  "Claim rows and the facet schema expose no per-claim or entity-local value unit field.",
 ]

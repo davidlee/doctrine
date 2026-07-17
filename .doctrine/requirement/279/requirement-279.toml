@@ -3,15 +3,16 @@ version = 1
 
 id = 279
 slug = "validate-a-present-value-value-required-finite-absent-parses-clean"
-title = "Validate a present value: value required, finite; absent parses clean"
+title = "Validate value claims at the capture matrix; absent claims are valid"
 status = "active"
 kind = "functional"
 
-description = "A present [value] requires the value field present and finite — missing or non-finite is a hard parse error; there is no range validation (single magnitude, no ordering constraint). An absent [value] parses clean."
+description = "Value validation lives on the claim row's capture matrix (REV-024): the magnitude must be present and finite (mirrors value::validate — missing or non-finite is a hard error; no range validation, a single magnitude has no ordering constraint), the rater is mandatory, pin implies human tier and anchor form, and migrated tier holds iff observed_at is set. Absent claims remain valid — bookkeeping never blocks work."
 tags = []
 acceptance_criteria = [
-  "A present value validates only when the value field is present and finite.",
-  "A missing value field and a non-finite value (NaN, +Infinity, -Infinity) are each hard parse errors.",
+  "A claim row validates only when its magnitude is present and finite.",
+  "A missing magnitude and a non-finite magnitude (NaN, +Infinity, -Infinity) are each hard errors.",
   "No range or ordering validation is applied — a single magnitude has nothing to compare against.",
-  "An absent [value] parses clean and is never a validation error.",
+  "Provenance rules hold at capture: rater mandatory; pin implies human tier and anchor form; migrated tier iff observed_at present.",
+  "An entity with no claim rows is valid and is never a validation error.",
 ]

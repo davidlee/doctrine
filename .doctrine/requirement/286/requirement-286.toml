@@ -7,10 +7,11 @@ title = "Expose value metadata through a policy-free graph contract"
 status = "active"
 kind = "functional"
 
-description = "Catalog/graph hydration exposes each node's value magnitude and project value unit through the same stable, policy-free contract as the estimate facet, carrying no aggregation or interpretation."
+description = "Catalog/graph hydration exposes each node's value as the resolved (value, provenance) pair from the comparison pipeline plus the project value unit (REV-024) — authored [value] magnitudes are no longer the exposed value surface — through the same stable, policy-free contract as the estimate facet, carrying no aggregation or interpretation."
 tags = []
 acceptance_criteria = [
-  "For each node carrying a value facet, hydration exposes the value magnitude and the project value unit through the same catalog/graph contract as the estimate facet.",
+  "For each node with resolvable value evidence, hydration exposes the resolved value, its provenance, and the project value unit through the same catalog/graph contract as the estimate facet.",
+  "Hydration does not expose authored [value] facet magnitudes as the value surface.",
   "The exposed value contract carries no aggregation, traversal, or interpretation policy.",
   "The graph-facing value vocabulary passes the whole-word denylist (no project/task/schedule/capacity).",
 ]

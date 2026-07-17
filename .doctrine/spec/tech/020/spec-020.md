@@ -13,9 +13,11 @@ mechanism (the `<entity>-<id>.{toml,md}` identity pair, typed facet tables,
 edit-preserving writes, catalog hydration) lives in the parent container and is used
 here unchanged; this spec carries only what is specific to the estimate facet:
 its model, normalization, validation, unit resolution, display, and graph exposure.
-It also covers the **Value facet**: a single `f64` magnitude parsed from an optional
-`[value]` table, with project-wide unit resolution from `[value].unit` defaulting to
-`magic_beans`.
+It also covers the **value surface**: a single `f64` magnitude captured as a
+ledgered anchor-claim row in the comparison corpus (REV-024, RFC-020), with
+project-wide unit resolution from `[value].unit` defaulting to `magic_beans`. The
+legacy `[value]` facet parse survives transitionally, consumed only by the
+unmigrated-facet resolution rung and the migration census.
 
 PRD-014 owns the *what* and *why* (the meaning of attention burden, the optionality
 contract, the full non-goal list). This spec is the *how* and does not restate that
@@ -129,36 +131,47 @@ guarantee is **structural** — the absence of any such read — and is proven b
 absence, not by a passing workflow run. A missing estimate is never a validation
 error and can never block, fatally warn, or refuse any workflow.
 
-### The `ValueFacet` model and parse seam
+### The value-claim capture shape (REV-024)
 
-A single reusable `ValueFacet` carries one finite `f64` magnitude, `value`. It is
-parsed from an optional `[value]` TOML table via the same facet seam as the Estimate
-facet. The model, its normalization, and its rendering are **pure**; only the
-project-config read and hydration sit in the imperative shell. Integer and float
-authoring both normalize to finite `f64`; non-finite values (`NaN`, `±Infinity`)
-are rejected at the parse boundary.
+The normative value capture is the wire-level **anchor-claim row** in the
+comparison ledger: `form = anchor` with a value payload `{magnitude}` carrying one
+finite `f64`. Integer and float authoring both normalize to finite `f64`;
+non-finite values (`NaN`, `±Infinity`) are rejected at the parse boundary. Claim
+resolution and rendering are **pure**; only the project-config read, ledger IO,
+and hydration sit in the imperative shell.
+
+`value set` **appends** an anchor-claim row (dated, attributed by rater tier);
+`value clear` appends tombstone rows; correction is **supersession** — an
+explicitly superseding row, never an in-place edit. `value pin` is the
+operator-gated admission path for the pin tier (interactive-TTY, worker-refused
+write class). The legacy `[value]` facet parse seam is retired as the value
+surface; it survives transitionally to serve the unmigrated-facet resolution rung
+and the migration census only.
 
 ### Value validation
 
-A *present* `[value]` requires the `value` field present and finite — missing or
-non-finite produces a hard parse error. There is no range validation (the Value
-facet carries a single magnitude with no ordering constraint). An *absent*
-`[value]` parses clean.
+Validation lives on the claim row's capture matrix: the `magnitude` must be
+present and finite — missing or non-finite is a hard error (mirrors
+`value::validate`). There is no range validation (a single magnitude has no
+ordering constraint). Provenance rules hold at capture: the rater is mandatory;
+pin implies human tier and anchor form; migrated tier holds iff `observed_at` is
+set. An entity with *no* claim rows is valid — bookkeeping never blocks work.
 
 ### Value unit resolution
 
 The value unit is read from `doctrine.toml [value].unit`, defaulting to
-`magic_beans` when unconfigured. The unit is project-wide; the facet schema carries
-no entity-local unit field in v1.
+`magic_beans` when unconfigured. The unit is project-wide and applies to claim
+magnitudes; neither claim rows nor the facet schema carry a local unit field in v1.
 
 ### Value graph exposure
 
-Catalog/graph hydration exposes each node's value magnitude and the project value
-unit through the **same** stable, policy-free contract as the estimate facet
-(above) — the scan-side reader carries both facets symmetrically and the catalog
-graph projects them alongside the top-level `units{estimation,value}` block. The
-value contract carries no aggregation, traversal, or interpretation policy, and its
-field vocabulary (`value`) is clear of the SPEC-001 Appendix B whole-word denylist.
+Catalog/graph hydration exposes each node's **resolved** `(value, provenance)`
+from the comparison pipeline and the project value unit through the **same**
+stable, policy-free contract as the estimate facet (above) — authored `[value]`
+magnitudes are no longer the exposed value surface. The catalog graph projects
+value alongside the top-level `units{estimation,value}` block. The value contract
+carries no aggregation, traversal, or interpretation policy, and its field
+vocabulary (`value`) is clear of the SPEC-001 Appendix B whole-word denylist.
 
 ## Concerns
 

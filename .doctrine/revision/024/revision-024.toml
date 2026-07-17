@@ -1,9 +1,9 @@
 id      = 24
 slug    = "adr-015-tiered-value-claim-resolution"
 title   = "ADR-015 tiered value-claim resolution"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
+status = "done"
 approval = "approved"
-updated = "2026-07-16"
+updated = "2026-07-17"
 tags    = []
 
 # A Revision (REV, ADR-013) is a first-class change-axis entity: a pending

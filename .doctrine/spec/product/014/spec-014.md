@@ -22,15 +22,19 @@ safe to dispatch, whether more design or decomposition is needed first, and wher
 uncertainty and coordination burden concentrate across the graph.
 
 A **value** answers the second: an optional, project-local single-magnitude claim
-about the expected **worth or payoff** an entity represents. It is the deliberate
+about the expected **worth or payoff** an entity represents — since REV-024
+(RFC-020) a *ledgered* claim, dated, attributed, and supersedable in the
+comparison corpus, rather than an entity-file facet; validation and absence
+semantics are unchanged in force. It is the deliberate
 counterpart to the estimate's attention-burden *cost* — together they let an agent or
 reviewer weigh what an entity will demand against what it is expected to return, and
 let graph tooling surface where cost and value concentrate or diverge. Value is worth,
 not price: it is decision support, never a monetary amount, a budget, a committed
 return, or a gate.
 
-The desired end state is two thin, optional facets — `[estimate]` (two bounds) and
-`[value]` (one magnitude) — that record their claim, validate when present, display
+The desired end state is two thin, optional claim surfaces — `[estimate]` (two
+bounds, an entity-file facet) and value (one magnitude, a ledgered anchor-claim
+row since REV-024) — that record their claim, validate when present, display
 cleanly, and are exposed to graph tooling, defensibly compatible with PERT-flavoured
 and cost-vs-value reasoning without importing project-management ceremony. They are
 inputs to scope control, dispatch safety, epistemic calibration, audit planning, graph
@@ -43,9 +47,10 @@ In scope:
 
 - An optional `[estimate]` facet carrying two bounded effort claims (`lower`,
   `upper`) in a project-wide unit, attachable to any TOML-backed addressable entity.
-- An optional `[value]` facet carrying a single finite worth/payoff magnitude in a
+- An optional value claim carrying a single finite worth/payoff magnitude in a
   project-wide unit, attachable to the same entities — the value counterpart to
-  `[estimate]`.
+  `[estimate]`. Captured as a ledgered anchor-claim row (REV-024); the legacy
+  `[value]` facet survives transitionally for unmigrated corpora only.
 - Structural validation of a *present* estimate and of a *present* value; absence of
   either is always valid.
 - Project-wide estimation and value units, each with a default, configured once, not
@@ -194,14 +199,12 @@ lower = 2.0
 upper = 8.0
 ```
 
-Primary flow — record a value: an author adds an optional `[value]` table with a single
-`value` magnitude. Integers or floats are accepted and normalized to a float. The
-entity remains valid with or without the table.
-
-```toml
-[value]
-value = 5.0
-```
+Primary flow — record a value (REV-024): an author runs `value set`, which appends
+a dated, attributed anchor-claim row with a single magnitude to the comparison
+ledger; `value clear` appends tombstones and correction is supersession. Integers
+or floats are accepted and normalized to a float. The entity remains valid with or
+without claim rows. (Pre-REV-024 corpora may still carry a transitional `[value]`
+entity-file table, consulted only when no claim rows exist.)
 
 Validation flow — estimate: when `[estimate]` is present it must be structurally valid
 — `lower` required, `upper` required, both finite TOML integers or floats,
@@ -209,10 +212,12 @@ Validation flow — estimate: when `[estimate]` is present it must be structural
 `±Infinity`, negative `lower`, `upper < lower`) are hard validation errors. When
 `[estimate]` is absent, validation passes — absence is not malformation.
 
-Validation flow — value: when `[value]` is present the `value` field is required and
-must be finite; missing or non-finite (`NaN`, `±Infinity`) is a hard validation error.
+Validation flow — value: a present claim row requires its magnitude present and
+finite; missing or non-finite (`NaN`, `±Infinity`) is a hard validation error.
 There is no range or ordering check — a single magnitude has nothing to validate
-against. When `[value]` is absent, validation passes.
+against. An entity with no value claims passes validation — absence is not
+malformation. (The same present-required-finite / absent-clean rule applies to a
+transitional `[value]` table where one survives.)
 
 Configuration flow: the estimation unit is read from project config
 `[estimation].unit`, defaulting to `espresso_shots`; the value unit is read from
