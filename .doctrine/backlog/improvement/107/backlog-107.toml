@@ -5,10 +5,10 @@ id = 107
 slug = "wire-reviewerrorlockcontention-and-reviewerrordanglingref-to-their-upstream-call-sites"
 title = "Wire ReviewError::LockContention and ReviewError::DanglingRef to their upstream call sites"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-07-17"
 tags = ["area:mcp", "area:review"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
