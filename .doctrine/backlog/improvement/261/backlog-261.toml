@@ -5,10 +5,10 @@ id = 261
 slug = "link-verb-toml-block-order-coupling-selector-add-should-home-above-relation-array"
 title = "link verb TOML block-order coupling: selector add should home above relation array"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-04"
-updated = "2026-07-04"
+updated = "2026-07-17"
 tags = ["area:cli", "area:relations"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
