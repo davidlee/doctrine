@@ -59,7 +59,7 @@
 
           stdenv.cc # cc/ld on PATH (linker for cargo build)
           stdenv.cc.cc.lib
-          codex
+
           nodejs_latest
           eslint
           bun
@@ -72,6 +72,10 @@
           mermaid-cli
 
           doctrine
+
+          codex
+          claude
+          # pi-dev
         ];
 
         jailEnvOptions = with jailLib.combinators; [

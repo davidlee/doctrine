@@ -1840,3 +1840,74 @@ splitting; or guidance in the reviewer prompt to single-quote detail bodies.
   query it (`doctrine install --list`?).
 - zsh ate bare `===` / `===SEP===` echo separators (two retries) — jail shell
   is zsh; `=` expansion. Use quoted or dash separators.
+
+[worktree+execute; IMP-125 parse_ref consolidation]
+- Backlog seam line numbers were stale (~350 off); had to re-grep every parse_ref
+  site. Minor: an authored item's evidence line-refs drift as the file grows —
+  cost a few grep round-trips to re-anchor.
+- Prior art (governance::parse_entity_ref, SL-167) already 6-way shared; IMP-125
+  is really "relocate to listing + fold in the 4 stragglers." The prompt's
+  proposed 2-arg helper sig (prefix, reference) is wrong — drops kind_label,
+  would change every governance error message + break an assertion. Had to derive
+  the 3-arg sig from the existing helper. A pointer to parse_entity_ref in the
+  item body would have saved the discovery.
+
+[plan; SL-221-plan]
+Plan-time premise re-grep paid off but cost grounding tokens the design should
+have made cheap. Two frictions:
+1. design.md's concrete citations had drifted (line numbers off-by-1/2:
+   tree_of/read_ledger/resolve_commit). Not wrong-enough to mislead, but every
+   citation had to be independently re-resolved because none could be trusted at
+   face value. A locked design's line numbers rot the moment the tree moves;
+   citing symbol names (grep-stable) over line numbers would remove the re-verify
+   tax entirely.
+2. A real implementation hazard — the `Provenance` name collision (boundary:: /
+   knowledge:: / the relocated commit-identity type; dispatch.rs already imports
+   boundary::Provenance unqualified) — was invisible to THREE adversarial design
+   passes (RV-278/279/281) because they all probed layering/semantics/verification
+   truthfulness, never name-scope within the *destination* file of a relocation.
+   Only a plan-time `grep -rn '\bProvenance\b'` surfaced it. Suggests a relocation
+   design should carry a mandatory "name-collision at destination" check as a
+   first-class review lens, or the plan skill should template a "grep every moved
+   symbol name in the destination file" step for any move-down phase.
+
+[worktree+execute; IMP-107-batchA-eecae1c1]
+Friction wiring IMP-107 (ReviewError variants) in an isolated worktree:
+- `doctrine worktree fork --dir` takes the FULL fork path, not the parent.
+  First attempt `--dir .worktrees` failed `fork-refused: dir .worktrees already
+  exists`. Skill text says "fork path is <dir>/<branch>" which reads as if --dir
+  is the parent; the flag help ("The fork worktree directory (must not already
+  exist)") is the disambiguator. Cost one round-trip.
+- Self-review checkpoint "does removing #[expect(dead_code)] compile clean?" was
+  the expensive bit. Two variants (NotFound/Internal) are constructed ONLY in
+  #[cfg(test)] code, so I expected dead_code to fire in a non-test clippy build.
+  It did NOT: the MCP mapper's exhaustive match READS every variant's fields,
+  which counts as a use for the dead_code lint. Had to verify empirically
+  (edit + clippy) rather than reason it out — the cfg(test)-vs-match-as-use
+  distinction is a genuine trap. The enum-level expect removed cleanly.
+- clippy runs `-D clippy::map-err-ignore`, so `.map_err(|_| ...)` is a hard
+  error; needed a named-underscore binding `|_unresolved|`. Not obvious up front.
+- `Result::unwrap_err()` requires the Ok type to be Debug; `LockGuard` isn't
+  (by design). Used `.err().expect(...)` to avoid widening the struct.
+
+[worktree; IMP-261-batchB]
+- `doctrine worktree fork --dir <D>` takes the FULL fork path as `--dir`, not the
+  parent dir. First attempt passed `--dir .worktrees` (the container) and got
+  `fork-refused: dir .worktrees already exists` — read as "the container exists"
+  rather than "the fork path collides". The skill's "fork path is `<dir>/<branch>`"
+  wording implies `--dir` is the parent; the CLI help ("The fork worktree
+  directory (must not already exist; unique per branch)") is the accurate one.
+  Minor: one wasted round-trip. A one-line skill fix ("`--dir` is the full fork
+  path `<container>/<branch>`, not the container") would close it.
+- Pre-existing unrelated dirt in the primary tree (flake.nix, skills-lock.json, a
+  stray `~/` dir) trips the commit-before-spawn guard's letter, but forking from
+  committed HEAD is exactly right there — the guard's concern is MY uncommitted
+  work vanishing, not someone else's. Skill could distinguish "your dirty files"
+  from "pre-existing foreign dirt" to avoid a false abort signal.
+- WRONG-TREE incident: after `worktree fork`, I edited via absolute PRIMARY-tree
+  paths (/workspace/doctrine/src/...) instead of the fork dir — the Edit tool
+  doesn't inherit the bash `cd`. User caught it ("worktree."). Recovery cost:
+  git diff the 2 files → git apply into the fork → git restore in primary. Root
+  cause: worktree skill hands back a fork PATH but nothing re-anchors subsequent
+  file-tool cwd; easy to keep using habitual absolute primary paths. A cheap
+  guard would be echoing the fork path prominently as the working root.
