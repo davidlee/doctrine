@@ -68,17 +68,21 @@ response = """Observation confirmed; remediation is reconcile's. Reconciliation 
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "PHASE-02 VH-1 unconfirmed: human sign-off on F14 sequencing + boot snapshot"
 detail = "Plan requires human confirmation that sequencing was honoured (publish/install before routing row before boot) and the boot snapshot reads correctly. Evidence assembled: notes.md execution summary, commit order (install + skills-lock in 32bf6abc alongside the row, after the user's push), routing row present in regenerated boot, boot --check clean under the fresh-embed binary. Awaiting the human gate."
+disposition = "aligned"
+response = "Human gate satisfied: user confirmed the PHASE-02 VH-1 sign-off in the audit session (2026-07-17) — F14 sequencing honoured (publish/install before routing row before boot) and the boot snapshot reads correctly (row restored via fresh-embed dev binary, --check clean; recurrence risk tracked as ISS-228 under F-3)."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "PHASE-03 VH-1 unconfirmed: human accepts DEC-002/ASM-002 as fair first citizens"
 detail = "Plan requires human acceptance of the two dogfood records as teaching-by-example, not record-spam. DEC-002 (capture-vs-harvest boundary, accepted, shapes SL-215) and ASM-002 (touchpoints drive population, held, validation plan = re-census after SL-215, shapes SL-215); no dep/seq authored by either record (VA-2). Awaiting the human gate."
+disposition = "aligned"
+response = "Human gate satisfied: user accepted DEC-002 and ASM-002 as fair first citizens in the audit session (2026-07-17) — teaching-by-example, not record-spam; PHASE-03 VH-1 closed."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
