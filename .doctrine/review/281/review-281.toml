@@ -1,0 +1,43 @@
+id    = 281
+slug  = "confirmatory-pass-on-d-b1-revision-rv-279-penances"
+title = "Confirmatory pass on D-B1 revision (RV-279 penances)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-221"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected the relocation set closed over its deps (RV-279 F-5 penance), observed FUNNEL_MARKER still omitted → same ADR-001 up-call one level deeper"
+detail = "§5.2(a) now folds funnel_message into the down-move set and asserts (design.md:99-101) it is 'the only symbol that must move down', with an inline dependency audit. The audit stopped at depth 1. funnel_message's body (src/mcp_server/dispatch.rs:43) references the private const FUNNEL_MARKER (src/mcp_server/dispatch.rs:38, 'dispatch-funnel'), which is NOT in the §5.2(a) move set. FUNNEL_MARKER's only non-test user is funnel_message itself (def:38, body:43, test:1077). Implement §5.2 verbatim and funnel_message — now in engine-tier dispatch.rs — references crate::mcp_server::…::FUNNEL_MARKER: the exact dispatch → mcp_server ADR-001 cycle F-5 was closing, reintroduced one level deeper. The 'only symbol' claim is false; FUNNEL_MARKER (and the test at mcp_server/dispatch.rs:1077) must also move."
+disposition = "design-wrong"
+response = "Confirmed against code: FUNNEL_MARKER at src/mcp_server/dispatch.rs:38 is referenced by funnel_message's body (:43) and its test (:1077); no other non-test user. Moving funnel_message down while FUNNEL_MARKER stays reintroduces the dispatch → mcp_server up-call. Penance (design fix): add FUNNEL_MARKER to the §5.2(a) move set and correct the 'only symbol that must move down' claim to name both funnel_message and FUNNEL_MARKER (and relocate the test at mcp_server/dispatch.rs:1077 with the const)."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected the verification narrative made truthful+complete (RV-279 F-4 penance), observed the commit_boundaries splice-test cluster still un-enumerated and a contradicted 'idempotency unchanged' claim"
+detail = "F-4's reword correctly owns the commit_on_behalf call-site churn and the record-boundary e2e rewrite. But retiring the working-tree splice (§5.2(e) deletes the commit_boundaries block; §5.2(f) deletes commit_boundaries) breaks a cluster the design never enumerates and which R3's 'compiler catches it' does NOT cover (CLI-driven → red at runtime): prepare_review_splices_uncommitted_ledger_then_projects (tests/e2e_dispatch_sync.rs:573), commit_boundaries_is_content_idempotent_on_rerun (:628), malformed_working_ledger_fails_and_leaves_dispatch_tip_unchanged (:683), and the build_fixture_uncommitted_ledger helper (:513). Worse, VT-5 states 'Idempotency / stale-ref / refused-row cases stay green unchanged' — but commit_boundaries_is_content_idempotent_on_rerun (:628) tests the DELETED function and cannot stay green: a residual false 'unchanged' claim, the same class RV-279 F-4 raised. Also record_boundary_refused_under_worker_mode (:1418) asserts !ledger.exists() and goes vacuously true once record-boundary never writes the working tree, and the :1488 test (record_boundary_also_writes_the_arm_neutral_registry) mixes a preserved assertion with a removed working-tree one — so 'one e2e rewritten' understates it."
+disposition = "design-wrong"
+response = "Confirmed against code: commit_boundaries_is_content_idempotent_on_rerun (tests/e2e_dispatch_sync.rs:628) exercises the commit_boundaries function §5.2(f) deletes, directly contradicting VT-5's 'idempotency … stay green unchanged'; the splice cluster (:513 helper, :573, :628, :683) and the vacuous-refusal (:1418) / mixed-assertion (:1489) tests are un-enumerated. Penance (design fix): §5.2(f) + §9 VT-5 must enumerate the commit_boundaries/prepare-review splice tests as deleted-or-rewritten, and VT-5 must drop the 'idempotency unchanged' claim (the idempotency e2e tests the removed function)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Expected the retracted single-writer-dissolves-ordering overclaim fully purged (RV-279 F-3 penance), observed a residual instance at design.md:45"
+detail = "The purge is complete in §5.3/§5.5/D-B1/D-B4 — but §2 (design.md:44-45) still reads: 'merge append-order breaks plan_phases's strict row-order phase chaining (F-3). Both dissolve once there is only one writer.' That asserts the ordering finding (F-3) dissolves with the single writer — the precise retracted claim — stated in the design's own voice, and re-opens the §2-vs-§7 contradiction RV-279 F-3 flagged. Reword to scope the dissolution to the merge-interleave only (e.g. 'the merge-interleave source dissolves with the single writer; the tail-append ordering hazard is closed separately by D-B4')."
+disposition = "design-wrong"
+response = "Confirmed against code: design.md:45 still reads 'Both dissolve once there is only one writer', asserting the ordering finding F-3 dissolves with the single writer — the retracted overclaim, in the design's own voice. Penance (design fix): reword §2 to scope the dissolution to the merge-interleave source only; route the tail-append ordering hazard through D-B4."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -42,7 +42,9 @@ import) — so these primitives sit *above* the CLI that also needs them.
 differing from the ref is ambiguous — stale checkout (ref wins) vs escape-hatch
 correction (working wins) — indistinguishable by content, so no silent merge rule
 is safe (F-2); and merge append-order breaks `plan_phases`'s strict row-order phase
-chaining (F-3). Both dissolve once there is only one writer.
+chaining (F-3). The single writer dissolves F-2 (no competing source) and removes
+the *merge-interleave* source of F-3; the residual tail-append ordering hazard is
+closed separately by consumer normalisation (D-B4, §5.2 e′).
 
 ## 3. Forces & Constraints
 
@@ -90,20 +92,26 @@ the whole "splice the uncommitted working ledger" step are gone.
 
 **(a) Relocate the object-db compose engine** — move `commit_on_behalf`,
 `commit_tree_as`, `Provenance`, `Identity`, `dispatch_identity`, `CommitOutcome`,
-`CommitRefusal`, `funnel_message`, and `DISPATCH_NAME`/`DISPATCH_EMAIL` from
+`CommitRefusal`, `funnel_message` (with the private const it reads, `FUNNEL_MARKER`),
+and `DISPATCH_NAME`/`DISPATCH_EMAIL` from
 `mcp_server/dispatch.rs` into `dispatch.rs` (engine tier). `mcp_server/dispatch.rs`
 references them as `crate::dispatch::…` (the existing one-way edge; its remaining
 callers — `dispatch_import` line 490, `conclude_boundary_commit` line 578 — pick up
 `funnel_message` through that same edge).
 
-*Relocation set closed over `land_boundary_row` (RV-279 F-5).* The helper's
-transitive dependencies were audited: `funnel_message` (`mcp_server/dispatch.rs:42`)
-is the **only** symbol that must move down with the engine — everything else it
-touches already lives at or below the engine tier: `tree_of`
-(`dispatch.rs:1927`), `read_ledger` (`dispatch.rs:2652`), `resolve_commit`
-(`dispatch.rs:1914`), `git::tree_with_file` (`git.rs:794`), and the coord-ref prefix
-`DISPATCH_REF_PREFIX` (`crate::kinds`). No symbol in the set forces a reverse
-`dispatch → mcp_server` edge (ADR-001 clean). Generalise the CAS target:
+*Relocation set closed over `land_boundary_row` (RV-279 F-5, RV-281 F-1).* The
+helper's transitive dependencies were audited **to closure**: `funnel_message`
+(`mcp_server/dispatch.rs:42`) **and the private const it reads, `FUNNEL_MARKER`
+(`mcp_server/dispatch.rs:38`)**, both move down with the engine (relocate the
+`FUNNEL_MARKER` unit test at `mcp_server/dispatch.rs:1077` alongside). Auditing only
+`funnel_message` was the depth-1 miss RV-281 F-1 caught — leaving `FUNNEL_MARKER`
+behind would make the relocated `funnel_message` call *up* into `mcp_server`, the
+exact ADR-001 cycle one level deeper. Everything else the helper touches already
+lives at or below the engine tier: `tree_of`, `read_ledger`, `resolve_commit` (all
+`dispatch.rs`), `git::tree_with_file` (`git.rs`), and the coord-ref prefix
+`DISPATCH_REF_PREFIX` (`crate::kinds`). With `FUNNEL_MARKER` moved, no symbol in the
+set forces a reverse `dispatch → mcp_server` edge (ADR-001 clean). Generalise the
+CAS target:
 
 ```rust
 // was: derives the branch ref from `coord_root`'s HEAD (couples to running in the coord worktree)
@@ -179,7 +187,14 @@ across every writer and mutates stored order, versus one guard at the sole
 order-sensitive consumer.
 
 **(f) Deletions** — `dispatch::commit_boundaries`, `ledger::read_boundaries_file`,
-`ledger::record_boundary` (+ their unit tests) once unreferenced.
+`ledger::record_boundary` (+ their unit tests) once unreferenced. Retiring the
+working-tree splice also strands a **CLI-driven e2e cluster the compiler will *not*
+catch** (they fail at runtime, not link — so R3's compiler backstop does not cover
+them): delete `prepare_review_splices_uncommitted_ledger_then_projects`,
+`commit_boundaries_is_content_idempotent_on_rerun`,
+`malformed_working_ledger_fails_and_leaves_dispatch_tip_unchanged`, and the
+`build_fixture_uncommitted_ledger` helper (`tests/e2e_dispatch_sync.rs:513,573,628,683`)
+— each asserts behaviour of the removed splice (RV-281 F-2).
 
 ### 5.3 Data, State & Ownership
 
@@ -295,15 +310,31 @@ author/committer (see OQ-1 for the escape hatch's identity).
   parameter (`mcp_server/dispatch.rs:980,1004,1024,1062,1088,1116,1160`). This is a
   signature edit, not a behaviour change — the gate is about invariants, not literal
   test bytes (RV-279 F-4).
-- **VT-5 (split — preserved invariants + one rewrite): `e2e_dispatch_sync.rs`.**
-  Idempotency / stale-ref / refused-row cases stay green *unchanged* (the true
-  behaviour-preservation gate). The `record-boundary` e2e
-  (`record_boundary_appends_row_at_canonical_padded_ledger_path`,
-  `tests/e2e_dispatch_sync.rs:1389-1415,1488-1515`) currently reads the **working-tree**
-  `boundaries.toml` from disk — it pins exactly the behaviour §5.2(d) retires, so it
-  **must be rewritten** to assert the row landed on the `dispatch/<slice>` **ref**
-  (this is VT-2's surface). Rewriting a test that asserts *removed* behaviour is
-  required, not a gate violation (RV-279 F-4).
+- **VT-5 (split — preserved invariants + deletions + rewrites): `e2e_dispatch_sync.rs`.**
+  Three disjoint buckets (RV-281 F-2 corrected the earlier over-broad "idempotency
+  stays green *unchanged*" — the idempotency e2e tests the *deleted* function):
+  - *Preserved byte-unchanged* — the conclude-side stale-ref / refused-row invariant
+    cases that never touched the working-tree splice (the true behaviour-preservation
+    gate).
+  - *Deleted with the splice* — the `commit_boundaries`/prepare-review tests
+    (`prepare_review_splices_uncommitted_ledger_then_projects`,
+    `commit_boundaries_is_content_idempotent_on_rerun`,
+    `malformed_working_ledger_fails_and_leaves_dispatch_tip_unchanged`, helper
+    `build_fixture_uncommitted_ledger`) exercise the removed function and go with it
+    (§5.2 f). *This is why VT-5 cannot claim idempotency "unchanged": the idempotency
+    e2e tests the deleted `commit_boundaries`.*
+  - *Rewritten to assert the ref* — the `record-boundary` e2e
+    (`record_boundary_appends_row_at_canonical_padded_ledger_path`,
+    `tests/e2e_dispatch_sync.rs:1389`) reads the **working-tree** `boundaries.toml`,
+    pinning exactly the behaviour §5.2(d) retires, so it is rewritten to assert the
+    row landed on the `dispatch/<slice>` **ref** (VT-2's surface).
+    `record_boundary_also_writes_the_arm_neutral_registry` (`:1489`) keeps its
+    arm-neutral-registry assertion but drops the working-tree committed-ledger one;
+    `record_boundary_refused_under_worker_mode` (`:1418`), whose `!ledger.exists()`
+    check goes vacuously true once record-boundary never writes the working tree, is
+    rewritten to assert the refusal against the ref (or removed).
+  Rewriting/deleting tests that assert *removed* behaviour is required, not a gate
+  violation (RV-279 F-4, RV-281 F-2).
 - **VT-6 (new, red-first): `plan_phases` chains by phase ordinal, not row order.**
   Land phases out of order (record `PHASE-03` after `PHASE-05` exists → tail append);
   `plan_phases` still parents `phase/<slice>-03` off `-02` and `-05` off `-04`. Guards
@@ -313,8 +344,9 @@ author/committer (see OQ-1 for the escape hatch's identity).
 
 - **RV-278** (inquisition, codex/GPT-5.5): F-2 (tie-break, major), F-3 (ordering,
   major), F-4 (verification, minor) against the prior merge design — all accepted;
-  resolved by the D-B1 collapse (F-2/F-3 dissolve with the single writer; F-4's gaps
-  are covered by VT-1..VT-5). F-1 was a malformed duplicate of F-2. Dispositions on
+  resolved by the D-B1 collapse (F-2 dissolves with the single writer; F-3's ordering
+  hazard is closed by D-B4 consumer normalisation, not the single writer alone; F-4's
+  gaps are covered by VT-1..VT-5). F-1 was a malformed duplicate of F-2. Dispositions on
   the ledger.
 - **RV-279** (inquisition, codex/GPT-5.5) — second trial, against the *standing*
   D-B1 collapse. Confirms the pivot is sound (F-2 tie-break genuinely dissolved) but
@@ -342,3 +374,20 @@ author/committer (see OQ-1 for the escape hatch's identity).
     §5.2(e′) + §5.3 + §5.5 + D-B4 + VT-6 (`plan_phases` normalises by phase ordinal);
     F-4 → §3 + §8 R1 + §9 VT-4/VT-5 (verification narrative rewritten: invariants
     preserved vs mechanical call-site churn vs record-boundary e2e rewrite).
+- **RV-281** (confirmatory pass, opus sub-agent) — third trial, narrowly scoped to
+  whether the three RV-279 penances actually closed *against the code*. Confirms the
+  seam collapse is sound and F-3's mechanism (D-B4) holds, but caught the RV-279
+  integration re-introducing the same under-proof pattern in two places (all
+  `design-wrong`, verified, integrated this revision — none reopens soundness):
+  - **F-1 (major)** — the F-5 relocation set was closed only to depth 1;
+    `funnel_message`'s private const `FUNNEL_MARKER` (`mcp_server/dispatch.rs:38`) was
+    omitted, re-creating the ADR-001 up-call one level deeper → §5.2(a) now moves
+    `FUNNEL_MARKER` (+ its unit test) with the engine.
+  - **F-2 (major)** — the F-4 verification narrative omitted the
+    `commit_boundaries`/prepare-review splice-test cluster §5.2(f) deletes (not
+    compiler-caught) and carried a contradicted "idempotency stays *unchanged*" claim
+    → §5.2(f) enumerates the cluster; §9 VT-5 rewritten to the three-bucket split.
+  - **F-3 (minor)** — a residual "both dissolve once there is only one writer"
+    overclaim survived in §2 → reworded to scope the dissolution to the
+    merge-interleave source, routing the tail-append hazard through D-B4.
+  Dispositions on the ledger.
