@@ -3015,6 +3015,13 @@ fn selector_upsert(
     intent: &str,
     note: Option<&str>,
 ) -> anyhow::Result<()> {
+    // IMP-261: is the `[[selector]]` array being created for the first time? A
+    // freshly `entry`-inserted array-of-tables lands at EOF — BELOW a pre-authored
+    // `[[relation]]` block — which then trips `link`'s F1 EOF-append defence
+    // (`relation::trailing_typed_table_after_relation`). When we create it, home it
+    // above `[[relation]]` (see `home_selector_above_relation`).
+    let newly_created = !doc.as_table().contains_key("selector");
+
     let array = doc
         .as_table_mut()
         .entry("selector")
@@ -3047,7 +3054,50 @@ fn selector_upsert(
         row.insert("note", toml_edit::value(n));
     }
     array.push(row);
+
+    if newly_created {
+        home_selector_above_relation(doc);
+    }
     Ok(())
+}
+
+/// Home the just-created `[[selector]]` array above any `[[relation]]` array so a
+/// later `doctrine link` append never trips the F1 EOF-append defence (IMP-261).
+///
+/// `toml_edit` renders top-level tables / array-of-tables elements by ascending
+/// `doc_position` — a STABLE sort in which a `None`-position element inherits the
+/// previously-visited item's position (`toml_edit::encode`). A freshly
+/// `entry`-inserted `[[selector]]` is visited LAST and inherits the `[[relation]]`
+/// position, so it renders BELOW the relation block. Pin the new selector
+/// element(s) one slot under the relation array's position so they sort ahead of
+/// it — WITHOUT moving or re-decorating the relation block itself.
+///
+/// No `[[relation]]` (or one lacking a parsed position — never produced by a disk
+/// round-trip) → nothing to out-order; the selector stays at EOF, which is safe
+/// because `link` then appends its first relation AFTER it.
+fn home_selector_above_relation(doc: &mut toml_edit::DocumentMut) {
+    let Some(relation_pos) = doc
+        .as_table()
+        .get("relation")
+        .and_then(toml_edit::Item::as_array_of_tables)
+        .and_then(|rel| rel.iter().filter_map(toml_edit::Table::position).min())
+    else {
+        return;
+    };
+    // `[relationships]` always precedes `[[relation]]` in a slice, so `relation_pos`
+    // is never 0; guard defensively rather than underflow.
+    let Some(target) = relation_pos.checked_sub(1) else {
+        return;
+    };
+    if let Some(selector) = doc
+        .as_table_mut()
+        .get_mut("selector")
+        .and_then(toml_edit::Item::as_array_of_tables_mut)
+    {
+        for elem in selector.iter_mut() {
+            elem.set_position(target);
+        }
+    }
 }
 
 /// Set `note` on the selector row whose `selector` string matches exactly.
@@ -6734,6 +6784,71 @@ mod tests {
         assert_eq!(doc.selectors[1].note.as_deref(), Some("shared note"));
         assert_eq!(doc.selectors[2].selector, "docs/*.md");
         assert_eq!(doc.selectors[2].intent, SelectorIntent::ScopeRelevant);
+    }
+
+    #[test]
+    fn selector_add_then_link_appends_without_f1_rehome() {
+        // IMP-261: a slice authored with a `[[relation]]` block, then `selector add`,
+        // then `link` again must APPEND — not refuse with the F1 EOF-append defence,
+        // which used to force a manual TOML re-home. The writer now homes `[[selector]]`
+        // ABOVE `[[relation]]`.
+        use crate::relation::{AppendOutcome, RelationLabel, append_edge};
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        make_slice(root, "test", "Test", "2026-06-24");
+        let slice_root = root.join(SLICE_DIR);
+        let toml_path = slice_toml_path(&slice_root, 1);
+
+        // 1. a prior `link` authors the first `[[relation]]` row.
+        append_edge(
+            &toml_path,
+            RelationLabel::Related,
+            None,
+            None,
+            None,
+            "SL-002",
+        )
+        .unwrap();
+        // 2. `selector add` — must land `[[selector]]` ABOVE `[[relation]]`.
+        run_selector_add(
+            Some(root.to_path_buf()),
+            1,
+            SelectorIntent::ScopeRelevant,
+            &["src/**".to_string()],
+            None,
+        )
+        .unwrap();
+
+        // placement-ordering assertion: selector precedes relation in source order.
+        let text = fs::read_to_string(&toml_path).unwrap();
+        let sel_at = text.find("[[selector]]").expect("[[selector]] present");
+        let rel_at = text.find("[[relation]]").expect("[[relation]] present");
+        assert!(
+            sel_at < rel_at,
+            "[[selector]] must be authored above [[relation]] (IMP-261)\n{text}"
+        );
+
+        // 3. a subsequent `link` to a NEW target must APPEND, not trip F1.
+        let outcome = append_edge(
+            &toml_path,
+            RelationLabel::Related,
+            None,
+            None,
+            None,
+            "SL-003",
+        )
+        .unwrap();
+        assert_eq!(
+            outcome,
+            AppendOutcome::Wrote,
+            "second link must append, not refuse"
+        );
+
+        // read-back: the selector survives and both relations landed.
+        let (doc, _t, _b) = read_slice(&slice_root, 1).unwrap();
+        assert_eq!(doc.selectors.len(), 1);
+        assert_eq!(doc.selectors[0].selector, "src/**");
     }
 
     #[test]
