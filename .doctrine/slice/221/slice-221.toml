@@ -1,6 +1,6 @@
 id = 221
 slug = "prepare-review-clobbers-concluded-ledger-rows"
-title = "Dispatch prepare-review clobbers concluded ledger rows"
+title = "Unify dispatch boundary writes on the object-db ref"
 status = "design"
 created = "2026-07-17"
 updated = "2026-07-17"
@@ -16,11 +16,11 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/mcp_server/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/ledger.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/e2e_dispatch_sync.rs"

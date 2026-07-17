@@ -1,219 +1,242 @@
-# Design SL-221: Dispatch prepare-review clobbers concluded ledger rows
+# Design SL-221: Unify dispatch boundary writes on the object-db ref
 
 <!-- Reference forms (.doctrine/glossary.md § reference forms): entity ids padded
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
+<!-- Rescoped after RV-278: the localised "merge in commit_boundaries" design
+     (git history: design aab267fd) was shown unsound (F-2 tie-break, F-3
+     ordering) and is superseded by the seam collapse below (D-B1). -->
 
 ## 1. Design Problem
 
 `dispatch sync --prepare-review` can delete phase-boundary rows that
-`dispatch_conclude_phase` has already committed, then halt its own completeness
-gate on the self-inflicted gap (ISS-225). Close the write/read seam so an
-object-db conclude can never be clobbered by a subsequent prepare-review, while
-keeping the CLI/subprocess arm's working-tree-recorded rows landing as before.
+`dispatch_conclude_phase` committed object-db-only, then halt its own completeness
+gate on the gap (ISS-225). The root cause is not a bug in one function but **two
+boundary writers with two source-of-truth models** joined by a lossy read. Collapse
+the seam: one object-db writer, the ref as sole truth, no working-tree boundaries
+ledger.
 
 ## 2. Current State
 
-The dispatch boundaries ledger (`.doctrine/dispatch/<slice>/boundaries.toml`) has
-**two writers on two arms**:
+`.doctrine/dispatch/<slice>/boundaries.toml` has two writers and one sync reader:
 
-- **CLI / subprocess (pi) arm** — `run_record_boundary` (`dispatch.rs:848`, the
-  `dispatch record-boundary` verb) → `ledger::record_boundary` (`ledger.rs:555`)
-  writes the **working tree**, uncommitted. The rows reach the ref only when
-  `commit_boundaries` splices them at prepare-review (ISS-039, design §5.2 step 1).
-- **claude arm** — `dispatch_conclude_phase` → `conclude_boundary_commit`
-  (`mcp_server/dispatch.rs:543`, SL-199) writes the **ref** object-db by
-  read-modify-write over the committed tip, **deliberately** leaving the working
-  tree untouched (the fault-atomicity argument at `mcp_server/dispatch.rs:505-509`
-  rests on the working tree staying byte-unchanged).
+| Path | Site | Writes | Source model |
+|---|---|---|---|
+| `dispatch_conclude_phase` → `conclude_boundary_commit` | `mcp_server/dispatch.rs:543` | **ref** (object-db RMW + `commit_on_behalf`) | ref is truth |
+| `dispatch record-boundary` → `run_record_boundary` | `dispatch.rs:848` | **working tree** (`ledger::record_boundary`) | working tree is truth |
+| `dispatch sync --prepare-review` → `commit_boundaries` | `dispatch.rs:2795` | ref (splices the **working-tree** file whole over the tip) | reads working tree |
 
-`commit_boundaries` (`dispatch.rs:2795-2823`) reads the working-tree ledger
-(`read_boundaries_file`, `ledger.rs:528`), serialises it *whole* (`to_toml`), and
-splices it as the **entire** `boundaries.toml` over the ref tip tree
-(`tree_with_file`, line 2811). The ref tip is only the splice *base*; all content
-comes from the working tree. So when the working tree is a stale prefix of the ref
-(the claude arm never refreshes it after conclude advances the ref), the whole-file
-replace **drops** the rows the ref gained — the ISS-225 sequence: conclude lands
-01–07 on the ref, the coord checkout still holds 01–06, prepare-review re-commits
-01–06 over the tip, PHASE-07 is deleted, and the completeness gate bails
-("completed phase PHASE-07 has no recorded source-delta row").
+`conclude_boundary_commit` (SL-199) is the primary writer; `record-boundary` is a
+rare manual escape hatch (`dispatch/SKILL.md:97`). `commit_boundaries` reads the
+working tree and splices it *whole*, so a stale coord checkout (the normal state
+after an object-db conclude) **replaces and deletes** the ref's newer rows — the
+ISS-225 sequence.
 
-This violates the verified invariant `mem.pattern.dispatch.sync-tree-reads-ledger-not-worktree`
-(SL-064 design §4.1): sync-side ledger reads go through the ref
-(`read_path_at`/`read_ledger`); the filesystem `read_*` are the funnel's RMW side.
-`commit_boundaries` is the one sync-side reader that never adopted it — but naive
-adoption ("always read from ref") is wrong: it would drop the CLI arm's
-working-tree-only rows.
+The object-db commit machinery lives in `mcp_server/dispatch.rs`:
+`commit_on_behalf` (280) → `commit_tree_as` (241), keyed by a two-identity
+`Provenance` (181: `Import` / `Conclude`) + `dispatch_identity` (372).
+`mcp_server/dispatch.rs` already depends on `crate::dispatch::` (one-way; no reverse
+import) — so these primitives sit *above* the CLI that also needs them.
+
+**RV-278** (inquisition) closed the localised merge design: a working-tree row
+differing from the ref is ambiguous — stale checkout (ref wins) vs escape-hatch
+correction (working wins) — indistinguishable by content, so no silent merge rule
+is safe (F-2); and merge append-order breaks `plan_phases`'s strict row-order phase
+chaining (F-3). Both dissolve once there is only one writer.
 
 ## 3. Forces & Constraints
 
-- **Both arms must keep working.** CLI-arm rows live only in the working tree until
-  `commit_boundaries`; claude-arm rows live only on the ref. Neither source can be
-  discarded.
-- **SL-199 working-tree-free conclude** — `conclude_boundary_commit` must not be
-  made to write the working tree; its fault-atomicity property depends on it.
-- **Behaviour-preservation gate** — `tests/e2e_dispatch_sync.rs` (idempotency,
-  stale-ref, refused-row) must stay green *unchanged* (AGENTS.md; the existing
-  suites are the proof when touching shared dispatch machinery).
-- **F1 idempotency** (SL-154 PHASE-04 VT-2) and **F3 validate-before-commit** must
-  survive the change.
-- **STD-001** — no new magic strings; reuse existing path/message literals.
-- **ADR-012** — dispatch integration topology; the coord ref is the run SSoT.
+- **Both writers must keep functioning** — conclude (primary) and record-boundary
+  (escape hatch) — but through **one** source model.
+- **ADR-001 layering** — leaf ← engine ← command, no cycles. `dispatch.rs` (CLI)
+  cannot call *up* into `mcp_server`; the shared primitive must relocate *down*.
+- **SL-199 working-tree-free conclude** — preserved and generalised (now *all*
+  boundary writes are working-tree-free).
+- **Behaviour-preservation gate** (AGENTS.md) — the existing `mcp_server` +
+  `e2e_dispatch_sync.rs` suites are the proof; relocation + conclude delegation must
+  keep them green *unchanged*.
+- **SL-064 §4.1 invariant** — sync reads the ledger from the ref; this slice makes it
+  hold with no exception (retires the last working-tree reader).
+- **STD-001** — no new magic strings; the relocated dispatch id constants
+  (`DISPATCH_NAME`/`DISPATCH_EMAIL`) and ref-prefix stay single-sourced.
 
 ## 4. Guiding Principles
 
-The ref is the single source of committed truth; the working tree is a staging
-area for the CLI arm's not-yet-committed rows. `commit_boundaries` *folds* staging
-into truth — it never lets staging *replace* truth. Arm-agnostic: no arm detection;
-the merge is correct for both because their row-sets are disjoint by phase.
+One writer, one truth. The `dispatch/<slice>` ref is the sole source of committed
+boundary rows; nothing reads or writes a working-tree boundaries ledger. The escape
+hatch and the funnel converge on the same object-db compose primitive.
 
 ## 5. Proposed Design
 
 ### 5.1 System Model
 
-`commit_boundaries` changes from **working-tree-as-whole-content** to
-**ref-base ⊕ working-tree overlay**:
+Target write/read graph:
 
-1. Read the committed ref boundaries at `parent` (the splice base) as the merge
-   base — never dropped.
-2. Read the working-tree boundaries; fold each row in **by phase, for phases the
-   ref does not already carry** (ref-wins-existing).
-3. Serialise the merge and splice it (unchanged F1 tree-oid idempotency + CAS
-   advance from line 2808 onward).
+```
+dispatch_conclude_phase ─┐
+                         ├─▶ dispatch::land_boundary_row ─▶ commit_on_behalf ─▶ dispatch/<slice> ref
+dispatch record-boundary ┘                                                          │
+                                                                                    ▼
+                        dispatch sync --prepare-review ─▶ read_ledger (ref) ─▶ plan_phases
+```
 
-Worked cases:
-
-| ref (committed) | working tree | merged result |
-|---|---|---|
-| 01–07 (conclude) | 01–06 (stale prefix) | **01–07** — 07 survives (the fix) |
-| ∅ | 01–03 (CLI arm) | **01–03** — CLI arm unchanged |
-| 01–02 | 01–03 (CLI new phase) | **01–03** — genuinely-new 03 lands |
+No node reads or writes the working-tree `boundaries.toml`. `commit_boundaries` and
+the whole "splice the uncommitted working ledger" step are gone.
 
 ### 5.2 Interfaces & Contracts
 
-Signature unchanged: `fn commit_boundaries(root, parent, coord_ref, coord, slice)
--> anyhow::Result<String>`. Body:
+**(a) Relocate the object-db compose engine** — move `commit_on_behalf`,
+`commit_tree_as`, `Provenance`, `Identity`, `dispatch_identity`, `CommitOutcome`,
+`CommitRefusal`, and `DISPATCH_NAME`/`DISPATCH_EMAIL` from `mcp_server/dispatch.rs`
+into `dispatch.rs` (engine tier). `mcp_server/dispatch.rs` references them as
+`crate::dispatch::…` (the existing one-way edge). Generalise the CAS target:
 
 ```rust
-let slice3 = format!("{slice:03}");
-let path = format!(".doctrine/dispatch/{slice3}/boundaries.toml");
-
-// Base: committed ref boundaries, read at `parent` (the splice base) — never dropped.
-let mut merged: Boundaries = read_ledger(root, parent, &slice3, "boundaries.toml")?;
-
-// Overlay: fold the CLI arm's uncommitted working-tree rows for NEW phases only.
-if let Some(raw) = crate::ledger::read_boundaries_file(&coord.path, slice)? {
-    let working = Boundaries::parse(&raw).with_context(|| {
-        format!("commit_boundaries: working boundaries.toml for dispatch/{slice3} is malformed")
-    })?;
-    for row in working.rows {
-        if !merged.rows.iter().any(|r| r.phase == row.phase) {
-            merged.rows.push(row);
-        }
-    }
-}
-
-let canonical = merged.to_toml()?;
-let tip_tree = tree_of(root, parent)?;
-let candidate = git::tree_with_file(root, &tip_tree, &path, &canonical)?;
-if candidate == tip_tree { return Ok(parent.to_owned()); }
-let commit = git::commit_tree(root, &candidate, parent, "ledger: boundaries")?;
-// CAS advance — unchanged.
+// was: derives the branch ref from `coord_root`'s HEAD (couples to running in the coord worktree)
+// now: explicit target ref — object-db + ref update work from any worktree sharing the common git dir
+pub(crate) fn commit_on_behalf(
+    git_root: &Path, target_ref: &str, expected_old: &str,
+    tree: &str, message: &str, prov: &Provenance,
+) -> anyhow::Result<CommitOutcome>
 ```
 
-`read_ledger(root, parent, …)` passes the `parent` **oid** as the read ref;
-`git::read_path_at` (`cat-file -p <oid>:<path>`) resolves oids, so the base is read
-at exactly the splice base — no TOCTOU re-resolution of `coord_ref`.
+The empty-delta refusal, `commit-tree` object-db-only compose, and CAS lost-ref-race
+guard are unchanged; only the target-ref source changes (explicit arg, not HEAD).
+
+**(b) Shared boundary-write helper** in `dispatch.rs`:
+
+```rust
+/// UPSERT `row` (by phase) into the committed boundaries at `tip` and land it on
+/// `coord_ref` with one working-tree-free commit. The single boundary writer for
+/// both the funnel (conclude) and the CLI escape hatch (record-boundary).
+pub(crate) fn land_boundary_row(
+    git_root: &Path, coord_ref: &str, tip: &str, slice: u32, row: BoundaryRow, prov: &Provenance,
+) -> anyhow::Result<CommitOutcome> {
+    let path = format!(".doctrine/dispatch/{slice:03}/boundaries.toml");
+    let mut b = read_ledger::<Boundaries>(git_root, tip, &format!("{slice:03}"), "boundaries.toml")?;
+    match b.rows.iter_mut().find(|r| r.phase == row.phase) {
+        Some(existing) => *existing = row,   // UPSERT by phase (funnel + escape hatch alike)
+        None => b.rows.push(row),
+    }
+    let tree = git::tree_with_file(git_root, &tree_of(git_root, tip)?, &path, &b.to_toml()?)?;
+    commit_on_behalf(git_root, coord_ref, tip, &tree, &funnel_message(slice, &phase), prov)
+}
+```
+
+**(c) `conclude_boundary_commit`** (`mcp_server`) → resolves the coord + tip as
+today, then delegates to `crate::dispatch::land_boundary_row(coord.root,
+&dispatch_ref(slice), coord.tip, slice, row, &Provenance::Conclude{…})`. Behaviour
+identical (same UPSERT, same commit).
+
+**(d) `run_record_boundary`** (`dispatch.rs`) → resolves the `dispatch/<slice>` ref
+tip (`resolve_commit`) and calls `land_boundary_row(root, &coord_ref, &tip, slice,
+row, &prov)` instead of `ledger::record_boundary`. Its second write —
+`state::record_source_delta` (the arm-neutral primary-tree registry) — is
+**unchanged**.
+
+**(e) `prepare_review`** (`dispatch.rs:1959`) → delete the
+`live_worktree_for_ref → commit_boundaries` block; `let tip = tip0;`. `plan_phases`
+reads boundaries from the ref via `read_ledger` (already does). Reword the §5.2-step-1
+doc-comment.
+
+**(f) Deletions** — `dispatch::commit_boundaries`, `ledger::read_boundaries_file`,
+`ledger::record_boundary` (+ their unit tests) once unreferenced.
 
 ### 5.3 Data, State & Ownership
 
-`BoundaryRow` (`boundary.rs:20`) and `Boundaries` (`ledger.rs`) unchanged. The
-merge is over `Boundaries.rows`, keyed by `phase` (immutable id). No new fields, no
-schema change, no new file. Ordering: ref rows first (their committed order), then
-appended new working-tree rows — `plan_phases` (`dispatch.rs:2702`) chains phases
-by their own order and skips empty-code phases, and does not assume a global sort,
-so append order is safe. (Confirmed at plan time.)
+`BoundaryRow` / `Boundaries` schemas unchanged. Row order is now **only** ever the
+committed ref's order (conclude/record-boundary append in call order); there is no
+second source to interleave, so F-3's ordering hazard cannot arise — `plan_phases`
+sees exactly the order the single writer produced (as it does today for conclude).
+`boundary::Provenance` (`Funnel`/`Manual`) stays a row field; the commit-identity
+`Provenance` (`Import`/`Conclude`) is the git author/committer (see OQ-1 for the
+escape hatch's identity).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-No change to when `commit_boundaries` runs (top of `prepare_review`,
-`dispatch.rs:1972`), to `conclude_boundary_commit`, `commit_on_behalf`, or any
-`ledger.rs` writer. The operator ritual `git restore --source=HEAD --staged
---worktree -- <ledger paths>` after an object-db write becomes **unnecessary** for
-the boundaries clobber (its raison d'être here); it may still matter for the
-staged-reversal class (`mem.pattern.dispatch.mcp-import-lands-object-db-coord-tree-stale`)
-which is out of scope.
+- Conclude: unchanged externally (delegates internally).
+- Escape hatch: `record-boundary` now lands on the ref in one step (was: write
+  working tree, hope prepare-review commits it). A correction UPSERTs the ref row
+  directly — no ambiguity, no clobber, no halt.
+- prepare-review: reads one committed source; the operator ritual `git restore …
+  <ledger paths>` for the boundaries clobber is **obsolete**.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **F1 idempotency preserved** — merge is a pure deterministic function of (ref,
-  working); a re-run yields the identical `Boundaries` → identical canonical TOML →
-  identical tree → no ref advance. Assert at commit-grain (one `ledger: boundaries`
-  commit, stable blob oid), never full-rerun tip equality (journal churn — see
-  `mem.pattern.dispatch.prepare-review-rerun-not-idempotent-until-gate`).
-- **F3 validate-before-commit preserved** — a malformed working ledger still
-  `Err`s with the tip untouched. (A1) *Assumption:* strictness stays even when the
-  ref alone would suffice (claude arm with a corrupt working file); a malformed
-  coord ledger is a real fault worth surfacing. Named as OQ-1 in case that bites.
-- **ref-wins-existing tie-break** — safe because the two arms' phase-sets are
-  disjoint in a real run and the claude-arm working tree is only ever a stale
-  *prefix* of the ref (never a newer version of a ref phase). (E1) *Accepted
-  limitation:* a CLI operator re-recording an *already-committed* phase with a
-  corrected oid will not overwrite the ref row. Pathological; flagged, not solved.
-- **No arm detection** — correctness does not depend on knowing the arm; the merge
-  is right for both.
+- **One writer, one truth** — no code reads/writes the working-tree boundaries
+  ledger after this slice; SL-064 §4.1 holds unconditionally.
+- **UPSERT-by-phase preserved** — both writers replace a phase's row in place; a
+  re-conclude or a corrected re-record simply overwrites the ref row (the F-2
+  ambiguity is gone because there is no competing working-tree copy).
+- **`commit_on_behalf` invariants preserved** — empty-delta refusal, lost-ref-race
+  CAS, byte-unchanged-on-refusal; the only change is the explicit target ref.
+- **(E1)** record-boundary run when no `dispatch/<slice>` ref exists → clean refusal
+  (ref unresolved), same failure mode as any funnel verb off a missing coord.
+- **SL-199 generalised** — working-tree-free now covers *every* boundary write.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1** — Should a *malformed working* `boundaries.toml` be tolerated when the
-  ref is complete (claude arm), or keep the hard `Err` (F3)? Default: keep strict.
-  Revisit only if it bites an operator.
-- **OQ-2** — Test altitude: unit on `commit_boundaries` vs an e2e case in
-  `e2e_dispatch_sync.rs`. Resolve at `/plan` against the existing harness shape.
+- **OQ-1** — commit-identity for the escape-hatch ref write: reuse
+  `dispatch_identity()` (attributes the correction to "dispatch") or add an
+  attributable operator/`Manual` identity? Default: reuse `dispatch_identity()`;
+  revisit if attribution matters. Resolve at `/plan`.
+- **OQ-2** — remaining callers of `ledger::read_boundaries` (the ref-parsing sibling)
+  vs `read_ledger`: audit at `/plan` before deleting anything in `ledger.rs`.
+- **OQ-3** — does generalising `commit_on_behalf` to an explicit ref perturb
+  `dispatch_import`'s call (also HEAD-based today)? It must pass the coord ref
+  explicitly; confirm import stays behaviour-identical.
 
 ## 7. Decisions, Rationale & Alternatives
 
-- **D1: Merge inside `commit_boundaries` (ref-base ⊕ working overlay).** *Chosen.*
-  Fixes the class at the sync read seam (ISS-225 author's preference), keeps
-  conclude working-tree-free (SL-199), needs no arm awareness, localised to one
-  function. Restores the SL-064 §4.1 invariant for the last sync-side reader.
-- **D1-alt (A): conclude checkout-syncs the working tree.** *Rejected.* Simpler
-  splice, but reintroduces the working-tree write SL-199 deliberately removed
-  (breaks the fault-atomicity argument at `mcp_server/dispatch.rs:505-509`), and
-  only closes *this* writer's gap — any future object-db ledger writer reopens it.
-- **D1-alt (B): "always read from ref", drop the working-tree read.** *Rejected.*
-  Drops the CLI/subprocess arm's working-tree-only rows entirely → prepare-review
-  emits no phases on that arm.
-- **D2: ref-wins-existing (add new working phases only).** *Chosen* over
-  working-wins (would re-clobber the claude stale-prefix case) and over a
-  provenance-aware merge (unneeded complexity — `BoundaryProvenance` exists but the
-  disjoint-phase-set argument makes it moot).
+- **D-B1: Collapse the seam — one object-db writer, retire the working-tree ledger.**
+  *Chosen.* Kills ISS-225 by construction, dissolves RV-278 F-2 (no competing
+  source) and F-3 (single order), retires the last violator of SL-064 §4.1, and net
+  *removes* code (the merge/splice/working-tree read/write) rather than adding merge
+  logic.
+- **D-B1-alt (merge in `commit_boundaries`, ref-base ⊕ working overlay).**
+  *Rejected at RV-278.* Unsound tie-break (F-2) and order hazard (F-3); keeps two
+  source models alive.
+- **D-B1-alt (conclude checkout-syncs the working tree).** *Rejected.* Reintroduces
+  the working-tree write SL-199 removed and only closes one writer's gap.
+- **D-B2: Relocate primitives down to `dispatch.rs`, not up into `mcp_server`.**
+  Forced by ADR-001 (no `dispatch → mcp_server` cycle); also the natural engine home.
+- **D-B3: Generalise `commit_on_behalf` to an explicit target ref.** Decouples the
+  primitive from "run inside the coord worktree", letting the CLI escape hatch reuse
+  it. Alternative (keep HEAD-derivation, run record-boundary in the coord worktree)
+  rejected — fragile cwd coupling.
 
 ## 8. Risks & Mitigations
 
-- **R1: silent divergence not surfaced.** If ref and working genuinely disagree on
-  a phase's oid, ref-wins hides it. *Mitigation:* disjoint-by-arm makes this
-  unreachable in real runs; E1 documents the one contrived path. No gate added
-  (would be dead code).
-- **R2: regression in the CLI-arm empty-ref path.** *Mitigation:* on an empty ref
-  the merge is byte-identical to today's whole-file splice; the existing
-  `e2e_dispatch_sync.rs` suite (which exercises that path) must pass unchanged —
-  the behaviour-preservation proof.
+- **R1: relocation regresses the funnel.** *Mitigation:* phase the move as a pure
+  relocation + delegation with the `mcp_server`/`e2e_dispatch_sync` suites green
+  *unchanged* before any behaviour change (behaviour-preservation gate).
+- **R2: `commit_on_behalf` contract change breaks import/conclude.** *Mitigation:*
+  its provenance/CAS/empty-delta tests move with it and must still pass; import +
+  conclude pass the coord ref explicitly (OQ-3).
+- **R3: a hidden consumer still reads the working-tree ledger.** *Mitigation:* OQ-2
+  audit + compiler (deleting `read_boundaries_file`/`record_boundary` fails to build
+  if anything references them).
 
 ## 9. Quality Engineering & Validation
 
-- **VT-1 (new, red-first): conclude→prepare-review clobber regression.** Seed a
-  coord ref with boundaries 01–07 committed object-db (mirroring conclude), write a
-  stale working-tree `boundaries.toml` at 01–06, run `commit_boundaries`, assert
-  the resulting ref `boundaries.toml` still contains PHASE-07 (and 01–06). Fails on
-  today's whole-file splice; passes on the merge.
-- **VT-2 (preserved): F1 idempotency** — two `commit_boundaries` runs ⇒ exactly one
-  `ledger: boundaries` commit + stable committed blob oid (SL-154 PHASE-04 VT-2).
-- **VT-3 (preserved): `e2e_dispatch_sync.rs`** idempotency / stale-ref (EX-5) /
-  refused-row (VT-4) green *unchanged*.
-- **VT-4 (new): CLI-arm new-phase overlay** — ref 01–02, working 01–03 ⇒ merged
-  01–03 (guards ref-wins-existing still adds genuinely new phases).
+- **VT-1 (new, red-first): ISS-225 clobber is impossible.** conclude lands 01–07 on
+  the ref, coord working tree is a stale prefix (or absent), `prepare-review` →
+  resulting ref boundaries still 01–07. (No `commit_boundaries` to clobber.)
+- **VT-2 (new): escape hatch lands on the ref.** `record-boundary PHASE-N` on a live
+  coord → the row is present in the committed `dispatch/<slice>` boundaries (not the
+  working tree); a corrected re-record UPSERTs it.
+- **VT-3 (new): `land_boundary_row` UPSERT-by-phase** — new phase appends; existing
+  phase replaces; used identically by conclude and record-boundary (one behaviour).
+- **VT-4 (preserved): `commit_on_behalf` primitives** — empty-delta refusal,
+  lost-ref-race CAS, byte-unchanged-on-refusal — green after relocation + the
+  explicit-ref generalisation.
+- **VT-5 (preserved): `e2e_dispatch_sync.rs`** idempotency / stale-ref / refused-row
+  green *unchanged* (behaviour-preservation gate).
 
 ## 10. Review Notes
 
-(Adversarial pass appended below after the internal hostile review.)
+- **RV-278** (inquisition, codex/GPT-5.5): F-2 (tie-break, major), F-3 (ordering,
+  major), F-4 (verification, minor) against the prior merge design — all accepted;
+  resolved by the D-B1 collapse (F-2/F-3 dissolve with the single writer; F-4's gaps
+  are covered by VT-1..VT-5). F-1 was a malformed duplicate of F-2. Dispositions on
+  the ledger.

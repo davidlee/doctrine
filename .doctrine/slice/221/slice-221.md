@@ -1,110 +1,121 @@
-# Dispatch prepare-review clobbers concluded ledger rows
+# Unify dispatch boundary writes on the object-db ref
+
+<!-- Rescoped 2026-07-17 after RV-278 (inquisition): the localised "merge in
+     commit_boundaries" fix was shown unsound (F-2/F-3), so the slice pivots to
+     collapsing the read/write seam entirely — one object-db writer, no
+     working-tree boundaries ledger. -->
 
 ## Context
 
 Originates from ISS-225, surfaced at SL-220 PHASE-07 conclude (2026-07-17).
 
 The dispatch boundaries ledger (`.doctrine/dispatch/<slice>/boundaries.toml`) is
-touched through two mechanisms that disagree on their source of truth:
+touched through a **split write/read seam**:
 
-- **`dispatch_conclude_phase`** (MCP funnel) lands the phase-boundary row
-  **object-db only** — read-modify-write over the committed `dispatch/<slice>`
-  tip tree via `git::read_path_at` → splice → `commit_on_behalf`, advancing the
-  ref without touching the coordination working tree (by design; SL-199,
-  commit-on-behalf comment `mcp_server/dispatch.rs:271-279`).
-- **`dispatch sync --prepare-review`** opens by committing the boundaries ledger
-  **from the coordination working tree** — `commit_boundaries`
-  (`dispatch.rs:2795`) reads the on-disk file via `read_boundaries_file`
-  (`ledger.rs:528`, `std::fs::read_to_string`) at `dispatch.rs:2802`, splices it
-  into the tip tree, and advances the ref whenever the tree-oid differs.
+- **`dispatch_conclude_phase` → `conclude_boundary_commit`**
+  (`mcp_server/dispatch.rs:543`, SL-199) — the primary boundary writer — lands the
+  row on the `dispatch/<slice>` **ref** object-db (read-modify-write over the
+  committed tip via `commit_on_behalf`), deliberately leaving the coord working
+  tree untouched.
+- **`dispatch record-boundary` → `run_record_boundary`** (`dispatch.rs:848`) — a
+  rare **manual escape hatch** ("correct a range", per `dispatch/SKILL.md:97`) —
+  writes the row to the coord **working tree** via `ledger::record_boundary`.
+- **`dispatch sync --prepare-review` → `commit_boundaries`** (`dispatch.rs:2795`)
+  reads that **working-tree** file and splices it *whole* over the ref tip.
 
-The clash: a conclude that isn't followed by a working-tree sync leaves the
-coord `boundaries.toml` stale. prepare-review then re-commits that stale file
-over the tip, **deleting the row conclude just landed**, and its own
-completeness gate fails on the self-inflicted gap ("completed phase PHASE-NN has
-no recorded source-delta row") — a halt with a misleading signature.
+The clash (ISS-225): after conclude advances the ref object-db, the coord working
+tree is a stale checkout; `commit_boundaries` re-commits the stale file over the
+tip, **deleting** the rows conclude just landed, and prepare-review's own
+completeness gate then halts.
 
-This is the exact trap named by the verified memory
-`mem.pattern.dispatch.sync-tree-reads-ledger-not-worktree` (SL-064 design §4.1):
-sync-side ledger reads must go through the branch tip
-(`read_path_at`/`read_ledger`); the filesystem `read_*`/`record_*` are the
-funnel's RMW side and are a trap when used in the sync. `commit_boundaries` is
-the one sync-side reader that never adopted the invariant. Today the gap is
-guarded only by operator ritual (`git restore --source=HEAD --staged --worktree
--- <ledger paths>` after every object-db write), enforced nowhere.
+The originally-scoped localised fix — merge ref-base ⊕ working-tree inside
+`commit_boundaries` — was taken to adversarial review (**RV-278**) and shown
+unsound: a working-tree row that differs from the ref is ambiguous (stale checkout
+vs a deliberate `record-boundary` correction) and **content cannot distinguish
+them**, so no silent merge rule is safe (F-2); and the merge's append-order breaks
+`plan_phases`'s strict row-order phase chaining (F-3). The findings point past the
+merge to the real defect: **two writers with two source-of-truth models**. The
+verified invariant `mem.pattern.dispatch.sync-tree-reads-ledger-not-worktree`
+(SL-064 §4.1) already says sync reads the ledger from the ref; the working-tree
+boundaries path is the lone holdout.
 
 ## Scope & Objectives
 
-Close the write/read seam so an object-db conclude can never be clobbered by a
-subsequent prepare-review — restoring the established "sync reads from the ref,
-not the worktree" invariant for the boundaries-commit step.
+**Collapse the seam: make the object-db ref the single source of truth for
+boundary rows, and retire the working-tree boundaries ledger entirely.**
 
-Design (`/design`) picks the mechanism between the two candidate fixes named in
-ISS-225; both kill the class:
+1. **Relocate the object-db dispatch-commit engine.** Move `commit_on_behalf` /
+   `commit_tree_as` / `Provenance` / `Identity` / `dispatch_identity` (+ the
+   dispatch id constants) from `mcp_server/dispatch.rs` **down** to `dispatch.rs`
+   (engine tier), so both the MCP funnel and the CLI can compose object-db commits
+   without a `dispatch ↔ mcp_server` cycle (ADR-001). Generalise `commit_on_behalf`
+   to take an **explicit target ref + expected_old** instead of deriving the CAS
+   target from the coord worktree's `HEAD`, removing its "must run from the coord
+   worktree" coupling.
+2. **Extract one shared boundary-write helper** — `land_boundary_row(coord_root,
+   tip, coord_ref, slice, row) -> CommitOutcome`: read committed boundaries at
+   `tip`, UPSERT the row by phase, splice, `commit_on_behalf`. `conclude_boundary_commit`
+   delegates to it (behaviour-preserving); `run_record_boundary` calls it instead
+   of the working-tree write.
+3. **Retire the working-tree path.** Delete `commit_boundaries` and its call in
+   `prepare_review` (collapses to `tip = tip0`; `plan_phases` already reads
+   boundaries from the ref via `read_ledger`). Delete `ledger::read_boundaries_file`
+   and `ledger::record_boundary` (the working-tree reader/writer) once unreferenced,
+   with their tests.
 
-1. **prepare-review sources its ledger commit from the ref** — `commit_boundaries`
-   reads the concluded ledger from the `dispatch/<slice>` tip (align with the
-   `read_ledger`/`read_path_at` seam the rest of sync already uses) rather than
-   the working tree; only commit a working-tree ledger that is strictly newer,
-   or refuse on divergence. Localised in `dispatch.rs`. *Author's preference;
-   aligns with the verified SL-064 invariant.*
-2. **conclude checkout-syncs the coord working tree** for the paths it writes,
-   closing the gap at the source (and generalising to every object-db ledger
-   writer).
-
-Closure intent: the clobber sequence is impossible by construction, proven by a
-regression test that reproduces conclude → prepare-review and asserts the
-concluded row survives; the existing `commit_boundaries` idempotency contract
-(SL-154 PHASE-04 VT-2 — one `ledger: boundaries` commit, stable blob oid) and
-`e2e_dispatch_sync.rs` suite stay green.
+Closure intent: exactly one boundary-write path (object-db, ref), the escape hatch
+still lands corrections (now on the ref, one step), the ISS-225 clobber is
+impossible by construction, and the SL-064 §4.1 invariant holds with no exceptions.
 
 ## Non-Goals
 
-- **ISS-212 / IMP-272** — phase-*completion-flag* divergence (per-worktree
-  gitignored runtime sheets read from the primary tree). A distinct stale-state
-  class in the same conclude beat, different mechanism and fix surface. Out.
-- **ISS-224** — `dispatch_conclude_phase` stores boundary oids verbatim without
-  resolve/validate. Same function as candidate fix 2, but a validation concern,
-  not the read/write seam. Out (may be co-touched if fix 2 is chosen; decide at
-  design).
-- Broader unification of the two compose arms (`commit_on_behalf` vs
-  `commit_boundaries`/`commit_journal`) into one shared object-db helper — a
-  larger refactor; this slice fixes the boundaries clobber, not the arm split.
+- **Unifying the journal/orthogonal compose** (`commit_journal`, `commit_boundaries`
+  twins) into the same shared seam beyond what boundary-write needs — the shared
+  primitive lands, but rewiring `commit_journal` onto it is a separate cleanup.
+  Follow-up.
+- **The subprocess-arm symmetric ledger derive** (D6 / IMP-171, deferred) — out.
+- **ISS-212 / IMP-272** (completion-flag split-brain) and **ISS-224** (oid
+  validation) — sibling stale-state items, tracked separately.
 
 ## Affected Surface
 
-- `src/dispatch.rs` — `commit_boundaries` (2795), `prepare_review` call site
-  (1959, 1972), `read_ledger` (2652), `with_journaled_projection` (2885).
-- `src/mcp_server/dispatch.rs` — `dispatch_conclude_phase` (510),
-  `conclude_boundary_commit` (543), `commit_on_behalf` (280) — read side if
-  candidate fix 2.
-- `src/ledger.rs` — `read_boundaries_file` (528), `dispatch_dir` (367).
-- `src/git.rs` — `read_path_at`, `tree_with_file`, `commit_tree`,
-  `update_ref_cas`.
-- Tests: `tests/e2e_dispatch_sync.rs` (idempotency + stale-ref invariants must
-  hold), plus a new conclude→prepare-review clobber regression.
+- `src/mcp_server/dispatch.rs` — relocate commit primitives + `Provenance`/`Identity`;
+  `dispatch_import` / `dispatch_conclude_phase` call `crate::dispatch::` for them;
+  `conclude_boundary_commit` delegates to `land_boundary_row`.
+- `src/dispatch.rs` — new engine home for the commit primitives + `land_boundary_row`;
+  `run_record_boundary` writes the ref; delete `commit_boundaries` + its
+  `prepare_review` call site.
+- `src/ledger.rs` — delete `read_boundaries_file`, `record_boundary` (+ tests) once
+  unreferenced; `read_boundaries` (ref-side, via `dispatch_dir`) audited for
+  remaining callers.
+- Tests: `tests/e2e_dispatch_sync.rs` + the mcp/dispatch unit suites must stay green
+  (behaviour-preservation gate); new clobber regression + escape-hatch-lands-on-ref
+  tests.
 
 ## Risks & Assumptions
 
-- **Idempotency contract.** `commit_boundaries` is content-idempotent by tree-oid
-  compare (SL-154 PHASE-04 VT-2). Any change to its read source must preserve
-  that grain — assert at commit-count + blob-oid, not full-rerun tip equality.
-- **Legitimate worktree edits.** If an operator hand-edits `boundaries.toml` in
-  the coord tree between conclude and prepare-review, fix 1 must define
-  precedence (ref vs newer worktree). Assume ref is authoritative unless the
-  worktree is strictly newer; confirm at design.
+- **Behaviour-preservation gate.** Relocating the commit primitives and delegating
+  conclude to the shared helper must be provably behaviour-preserving — the existing
+  `mcp_server` / `e2e_dispatch_sync` suites are the proof and must stay green
+  *unchanged* through phases 1–2.
+- **`commit_on_behalf` contract change.** Generalising it to an explicit ref touches
+  a primitive with provenance/CAS tests (VT-4 empty-delta, lost-ref-race); those
+  tests move with it and must keep asserting the same invariants.
+- **Escape-hatch provenance.** `record-boundary` currently stamps
+  `boundary::Provenance::Funnel`; writing the ref keeps the row provenance but adds a
+  commit-identity — decide the identity variant at design (likely a `Conclude`-shaped
+  or a new `Manual` id) so the escape hatch is attributable.
 - **SL-220 binary discipline.** Corpus verbs run via `.dispatch/doctrine-v3-sl220`
-  (0.21.0) until `/close` integrates SL-220; the primary tree's older binary
-  must not write the migrated corpus.
+  (0.21.0) until `/close` integrates SL-220.
 
 ## Open Questions
 
-- Which candidate fix — read-from-ref (localised, invariant-aligned) vs
-  conclude-side checkout-sync (generalises to all object-db writers)? → `/design`.
-- If fix 1: on ref/worktree divergence, refuse-and-halt or take-newer? Precedence
-  semantics.
+- Commit-identity for the escape-hatch ref write — reuse `dispatch_identity()` or
+  introduce an attributable `Manual`/operator identity? → `/design`.
+- Does any consumer besides `plan_phases` still read the working-tree boundaries
+  (`read_boundaries` vs `read_ledger`)? Audit at `/plan`.
 
 ## Follow-Ups
 
-- ISS-212 / IMP-272 (completion-flag split-brain) and ISS-224 (oid validation)
-  remain open — sibling stale-state items in the same beat, tracked separately.
+- Rewire `commit_journal` onto the shared object-db-commit seam (the journal twin).
+- ISS-212 / IMP-272, ISS-224 remain open.

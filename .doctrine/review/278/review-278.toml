@@ -1,0 +1,52 @@
+id    = 278
+slug  = "design-review-of-sl-221"
+title = "design review of SL-221"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-221"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected D1 to preserve legitimate same-phase retries; observed  discards a supported upsert path as 'pathological'"
+detail = "SL-221 §5.5 lines 158-162 claims the arms' phase-sets are disjoint and demotes an already-committed same-phase correction to E1/'pathological'. The code says otherwise: both write surfaces are UPSERT-by-phase, not append-only (, ). A re-record of an already committed phase is a first-class retry/correction path the system already models. Under D1's merge (, ) that newer working-tree row is silently ignored, so prepare-review can preserve a stale committed boundary and project the wrong code range. The accused confesses its own heresy in E1; the stake is deserved."
+disposition = "design-wrong"
+response = "Penance: the design must stop treating same-phase divergence as unreachable. Either detect  and refuse with an operator-facing error, or define a provenance-/freshness-aware overwrite rule that preserves legitimate retries. Leaving the stale ref row to win silently is not doctrinally safe."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected D1 to preserve legitimate same-phase retries; observed `ref-wins-existing` discards a supported upsert path as 'pathological'"
+detail = "SL-221 §5.5 lines 158-162 claims the arms' phase-sets are disjoint and demotes an already-committed same-phase correction to E1/'pathological'. The code says otherwise: both write surfaces are UPSERT-by-phase, not append-only (`src/ledger.rs:558-565`, `src/mcp_server/dispatch.rs:565-569`). A re-record of an already committed phase is a first-class retry/correction path the system already models. Under D1's merge (`.doctrine/slice/221/design.md:79-80`, `109-112`) that newer working-tree row is silently ignored, so prepare-review can preserve a stale committed boundary and project the wrong code range. The accused confesses its own heresy in E1; the stake is deserved."
+disposition = "design-wrong"
+response = "Penance: the design must stop treating same-phase divergence as unreachable. Either detect `same phase, different oid` and refuse with an operator-facing error, or define a provenance-/freshness-aware overwrite rule that preserves legitimate retries. Leaving the stale ref row to win silently is not doctrinally safe."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected §5.3 to prove phase-chain safety; observed it misstates `plan_phases`, which chains strictly by ledger row order"
+detail = """SL-221 §5.3 lines 132-135 says append order is safe because `plan_phases` "does not assume a global sort". The code says the opposite: `plan_phases` iterates `boundaries.rows` in stored order and updates `parent` after each emitted phase (`src/dispatch.rs:2709-2728`), so ledger order directly determines the ancestry of `phase/<slice>-NN`. `Boundaries` preserves vector order on parse/serialize (`src/ledger.rs:323-330`), and neither writer sorts before storing (`src/ledger.rs:562-564`, `src/mcp_server/dispatch.rs:567-569`). D1's "ref rows then append new working rows" merge is therefore safe only if a separate monotonic-by-phase invariant already holds; the design neither states nor verifies that invariant. A misordered ledger will synthesize the wrong branch chain and the wheel should turn for the author of this false comfort."""
+disposition = "design-wrong"
+response = "Penance: either prove and cite the ordering invariant that every boundary writer preserves, or normalize/sort by phase before `plan_phases` consumes the merged ledger. As written, §5.3 blesses append-order on a premise the code directly refutes."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Expected VT-1..VT-4 to cover D1's new overlap semantics; observed the matrix never tests the conflicting same-phase or ordering cases D1 relies on"
+detail = "SL-221 §9 limits new validation to the stale-prefix clobber case and the 01-02 + 01-03 append case. The preserved PHASE-04 suite in `tests/e2e_dispatch_sync.rs` covers only the empty-ref/uncommitted-working path, rerun idempotency, and malformed working input (`tests/e2e_dispatch_sync.rs:494-690`). None of VT-1..VT-4 exercises the very overlap semantics D1 introduces: `same phase present in ref and working with different oids`, or a non-canonical row order feeding `plan_phases`. That leaves the design's central safety claims (`design.md:149-163`, `176-190`) resting on assertion rather than proof. Heresy untested is heresy invited."
+disposition = "design-wrong"
+response = "Penance: add an explicit verification item for conflicting same-phase overlap, and either a test or a proved invariant for ledger row order before `plan_phases` chaining. Without that, the behaviour-preservation claim is too weak for a shared dispatch seam."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
