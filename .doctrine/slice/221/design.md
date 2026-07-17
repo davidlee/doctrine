@@ -240,3 +240,24 @@ escape hatch's identity).
   resolved by the D-B1 collapse (F-2/F-3 dissolve with the single writer; F-4's gaps
   are covered by VT-1..VT-5). F-1 was a malformed duplicate of F-2. Dispositions on
   the ledger.
+- **RV-279** (inquisition, codex/GPT-5.5) — second trial, against the *standing*
+  D-B1 collapse. Confirms the pivot is sound (F-2 tie-break genuinely dissolved) but
+  holes the artifact with three verified `design-wrong` findings that **re-open the
+  design** (revise before `/plan`):
+  - **F-3 (blocker)** — §5.3 asserts the ordering hazard "cannot arise" but does not
+    prove it; `plan_phases` (`dispatch.rs:2709-2728`) still chains strictly by
+    `boundaries.rows` order and `land_boundary_row` appends an absent phase at the
+    tail, so the escape hatch's "bootstrap a pre-binding phase" (`SKILL.md:97`) can
+    mischain ancestry. **Penance:** normalise rows by phase before `plan_phases`
+    consumes them (the escape hatch makes a monotonic-write invariant untruthful),
+    and add an out-of-order VT-3 assertion.
+  - **F-4 (major)** — R1/VT-4/VT-5 "suites green *unchanged*" is false: the
+    `commit_on_behalf` unit tests call the 5-arg shape directly
+    (`mcp_server/dispatch.rs:980…1160`, edited by the new `target_ref` param) and
+    `e2e_dispatch_sync.rs:1389-1415` pins the working-tree `record-boundary` write
+    §5.2(d) retires. **Penance:** reword to "invariants preserved, call-sites
+    mechanically updated, record-boundary e2e rewritten to assert the ref".
+  - **F-5 (major)** — `land_boundary_row` calls `funnel_message`
+    (`mcp_server/dispatch.rs:42`), absent from the §5.2(a) down-move set → ADR-001
+    up-call. **Penance:** close the relocation set over the helper's dependencies
+    (fold into OQ-2). Dispositions + synthesis on the ledger.

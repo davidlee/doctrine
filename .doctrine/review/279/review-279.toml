@@ -1,0 +1,57 @@
+id    = 279
+slug  = "inquisition-on-d-b1-seam-collapse"
+title = "Inquisition on D-B1 (seam collapse)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-221"
+
+[[finding]]
+id = "F-1"
+status = "withdrawn"
+severity = "major"
+title = "Expected the down-move to stay cycle-free, observed land_boundary_row depends on funnel_message still housed in mcp_server"
+detail = "D-B1 says the object-db compose engine relocates down into  while preserving the one-way  edge ([.doctrine/slice/221/design.md] §5.2(a), §7 D-B2). But the very  sketch in §5.2(b) ends by calling , and the relocation list does not include . In the code today  lives in , above the proposed helper, while  currently has no copy. Unless the design also moves that symbol (or changes the message contract),  would need to call up into , violating ADR-001's leaf <- engine <- command layering, or duplicate the string path outside the documented move. The seam collapse is therefore incomplete as written."
+
+[[finding]]
+id = "F-2"
+status = "withdrawn"
+severity = "major"
+title = "Expected unchanged proof suites, observed D-B1's own signature and surface changes require test edits"
+detail = "R1 and VT-4/VT-5 claim relocation plus delegation keep the existing  and  suites green unchanged ([.doctrine/slice/221/design.md] §3 behaviour-preservation gate, §8 R1, §9 VT-4/VT-5). The code confesses otherwise. The current  unit tests call  directly with the old 5-arg shape in place ([src/mcp_server/dispatch.rs:977-1168], e.g. lines 980, 1004, 1024, 1062, 1088, 1116, 1160), so moving it and adding  forces call-site edits. And the standing  tests pin the current working-tree  behaviour by reading  from disk after the CLI runs ([tests/e2e_dispatch_sync.rs:1388-1415], [tests/e2e_dispatch_sync.rs:1488-1515]). D-B1 changes  to land on the ref instead of the working tree ([.doctrine/slice/221/design.md] §5.2(d)), so those tests cannot stay green unchanged either. The proof strategy is false as written; the design understates the verification churn it introduces."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "Expected D-B1 to eliminate row-order drift, observed late first-writes still append and can mischain phases"
+detail = "Design SL-221 says the single writer dissolves F-3 and sketches `land_boundary_row` with phase upsert `Some(existing) => *existing = row, None => b.rows.push(row)` (.doctrine/slice/221/design.md §5.2(b), §5.3, §7 D-B1). But `plan_phases` still materialises phase refs in ledger row order, reparents each emitted phase off the previous one, and is therefore order-sensitive (src/dispatch.rs:2702-2728, especially 2709-2728). The existing writer folds the design reuses also append on an absent phase (`conclude_boundary_commit` at src/mcp_server/dispatch.rs:567-570; `record_boundary` at src/ledger.rs:562-565). The dispatch skill explicitly keeps `record-boundary` as a manual escape hatch to `correct a range / bootstrap a pre-binding phase` (.agents/skills/dispatch/SKILL.md:95-98). That means a missing earlier phase recorded after later rows exist is appended at the tail, so `plan_phases` will misparent the branch chain. The merge is gone, but the ordering hazard is not dissolved."
+disposition = "design-wrong"
+response = "Confirmed against src/dispatch.rs:2709-2728 — plan_phases reparents each phase strictly in boundaries.rows order (parent = phase_commit), and land_boundary_row appends an absent phase at the tail; the escape hatch is documented to 'bootstrap a pre-binding phase' (dispatch/SKILL.md:97), so an out-of-order record can mischain the branch ancestry. §5.3's 'F-3's ordering hazard cannot arise' is an unproven overclaim. Penance (design fix): §5.3 must either (a) state and cite the monotonic-by-phase invariant every writer preserves, or (b) have land_boundary_row / plan_phases normalise rows by phase number before chaining. The 'single writer' argument removes the merge-interleave source but does NOT by itself establish phase-order == row-order. VT-3 to add an out-of-order-record ordering assertion. Reconcile the design artifact before /plan."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected unchanged proof suites, observed the proposed API and record-boundary surface both force test changes"
+detail = "R1 and VT-4/VT-5 claim relocation plus delegation keep the existing `mcp_server` and `e2e_dispatch_sync` suites green unchanged (.doctrine/slice/221/design.md §3, §8 R1, §9 VT-4/VT-5). The present tests contradict that claim. The unit tests in `src/mcp_server/dispatch.rs` call `commit_on_behalf` directly with the current 5-argument shape at lines 980, 1004, 1024, 1062, 1088, 1116, and 1160, so moving it and adding an explicit `target_ref` parameter necessarily edits those tests. And `tests/e2e_dispatch_sync.rs` pins the current working-tree `record-boundary` behaviour by reading `.doctrine/dispatch/064/boundaries.toml` from disk after the CLI runs (lines 1388-1415 and 1488-1515). D-B1 changes `run_record_boundary` to land on the ref instead of the working tree (.doctrine/slice/221/design.md §5.2(d)), so those end-to-end assertions cannot stay green unchanged either. The stated behaviour-preservation proof is false as written."
+disposition = "design-wrong"
+response = "Confirmed twofold. (1) commit_on_behalf's own unit tests call the current 5-arg shape directly (src/mcp_server/dispatch.rs:980,1004,1024,1062,1088,1116,1160); adding the explicit target_ref param edits every call-site, so VT-4 cannot be 'green *unchanged*'. (2) tests/e2e_dispatch_sync.rs:1389-1415 (record_boundary_appends_row_at_canonical_padded_ledger_path) reads the working-tree boundaries.toml from disk to pin the exact behaviour §5.2(d) retires — that assertion MUST be rewritten to read the ref, so VT-5 cannot be 'unchanged' either. Penance (design fix): reword §3/§8 R1/§9 VT-4/VT-5 to separate 'invariants preserved' (empty-delta/CAS/byte-unchanged semantics still hold) from 'call-sites mechanically updated for the new signature' and 'the record-boundary e2e is rewritten to assert the ref write, not the working tree'. The behaviour-preservation gate is about invariants, not literal test bytes; say so honestly."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected the down-move to stay cycle-free, observed the helper sketch still depends on mcp_server-only funnel_message"
+detail = "D-B1 says the object-db compose engine relocates down into `dispatch.rs` while preserving the one-way `mcp_server -> crate::dispatch::` edge (.doctrine/slice/221/design.md §5.2(a), §7 D-B2). But the `land_boundary_row` sketch in §5.2(b) ends by calling `commit_on_behalf(..., &funnel_message(slice, &phase), prov)`, and the relocation set does not include `funnel_message`. In the code today `funnel_message` lives in `src/mcp_server/dispatch.rs:42`, above the proposed helper, while `src/dispatch.rs` has no sibling helper. As written, the design either forces `dispatch.rs` to call up into `mcp_server` (an ADR-001 layering breach) or to duplicate the message contract outside the documented move. The relocation is incomplete on its own terms."
+disposition = "design-wrong"
+response = "Confirmed — funnel_message is defined at src/mcp_server/dispatch.rs:42 and is NOT in the §5.2(a) relocation set (which lists commit_on_behalf, commit_tree_as, Provenance, Identity, dispatch_identity, CommitOutcome, CommitRefusal, DISPATCH_NAME/EMAIL), yet the §5.2(b) land_boundary_row sketch — sited in dispatch.rs — calls funnel_message(slice, &phase). As written dispatch.rs would call up into mcp_server (ADR-001 cycle) or duplicate the message. Penance (design fix): add funnel_message (and audit for any other symbol the helper transitively needs, e.g. dispatch_ref/resolve_commit) to the down-move set in §5.2(a); make the relocation list closed over land_boundary_row's dependencies. Fold this into OQ-2's caller/dependency audit."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
