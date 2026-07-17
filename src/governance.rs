@@ -332,7 +332,7 @@ fn format_show(
     related: &[String],
     body: &str,
     estimation_unit: &str,
-    value_unit: &str,
+    value_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -358,11 +358,9 @@ fn format_show(
             )
         ));
     }
-    if let Some(ref val) = doc.value {
-        parts.push(format!(
-            "{}\n",
-            crate::value::format_value_normal(val, value_unit)
-        ));
+    // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
+    if let Some(line) = value_line {
+        parts.push(format!("{line}\n"));
     }
 
     let rel = &doc.relationships;
@@ -547,13 +545,20 @@ pub(crate) fn run_show(
             let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
             let value_unit = crate::value::resolve_unit(&cfg.value);
             let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            let value_line = crate::priority::surface::show_value_line(
+                &root,
+                &listing::canonical_id(g.kind.prefix, doc.id),
+                doc.value.as_ref().map(|v| v.value),
+                g.kind.prefix,
+                &value_unit,
+            )?;
             format_show(
                 g,
                 &doc,
                 &related,
                 &body,
                 &estimation_unit,
-                &value_unit,
+                value_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -1174,7 +1179,7 @@ mod tests {
             &related,
             "# ADR-007: Use Rust\n\nbody.\n",
             "points",
-            "points",
+            None,
             0.0,
             1.0,
         );
@@ -1214,7 +1219,7 @@ mod tests {
             &related,
             "# Body\n",
             "espresso_shots",
-            "magic_beans",
+            Some("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
             0.1,
             0.9,
         );
@@ -1222,7 +1227,10 @@ mod tests {
             out.contains("estimate: 3.5–7.5 espresso_shots (80% confidence)"),
             "estimate row: {out}"
         );
-        assert!(out.contains("value: 42.0 magic_beans"), "value row: {out}");
+        assert!(
+            out.contains("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
+            "value row: {out}"
+        );
     }
 
     #[test]

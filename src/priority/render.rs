@@ -19,9 +19,10 @@ use owo_colors::{
 
 use super::findings::{ComparisonDomain, Finding};
 use super::view::{
-    ActionabilityBlock, BlockersView, EdgeVerb, Explanation, NextRow, NextView, ReasonKind,
-    SurveyRow, TensionCauseView, TensionGradeView,
+    ActionabilityBlock, BlockersView, ContestedClaim, EdgeVerb, Explanation, NextRow, NextView,
+    ReasonKind, SurveyRow, TensionCauseView, TensionGradeView,
 };
+use crate::comparison::ClaimTier;
 
 /// The priority policy version stamped into every `--json` envelope (D6 / REQ-094).
 /// A consumer keys behaviour off this; bump it whenever the policy (partition,
@@ -167,6 +168,17 @@ fn estimate_cell(r: &NextRow) -> String {
 /// value-bearing kind that authored no `[value]`), distinguishing it from an
 /// authored value of the same magnitude (IMP-211).
 const DEFAULT_VALUE_MARKER: &str = "*";
+/// SL-220 PHASE-06 per-rung value-cell source markers (design §6) — the compact
+/// glyph the value column appends to signal provenance. Implementation-owned,
+/// distinct, pinned by the row goldens. A human claim (rung 1, canonical
+/// evidence) renders BARE, mirroring the retired authored-facet convention.
+const VALUE_MARKER_PIN: &str = "!";
+const VALUE_MARKER_HUMAN: &str = "";
+const VALUE_MARKER_AGENT: &str = "~";
+const VALUE_MARKER_MIGRATED: &str = "°";
+const VALUE_MARKER_UNMIGRATED: &str = "?";
+const VALUE_MARKER_PROJECTED: &str = "≈";
+const VALUE_MARKER_GAUGE: &str = "^";
 
 /// Max tension callouts rendered under a `next` page (SL-218 PHASE-03, design §3
 /// / VT-6). A HUMAN-render bound only — `next --json` carries the full list
@@ -181,12 +193,38 @@ pub(crate) const TENSION_MAX_CALLOUTS: usize = 3;
 /// A genuinely valueless kind (records/governance/REV) has no value in the score
 /// either, so it stays `ABSENT_CELL`.
 fn value_cell(r: &NextRow) -> String {
-    match &r.value {
-        Some(v) => format_bound(v.value),
+    match &r.value_source {
+        Some(reason) => {
+            let (value, marker) = value_cell_parts(reason);
+            format!("{}{marker}", format_bound(value))
+        }
         None if crate::kinds::is_value_bearing(&r.kind) => {
             format!("{}{DEFAULT_VALUE_MARKER}", format_bound(DEFAULT_VALUE))
         }
         None => listing::ABSENT_CELL.to_string(),
+    }
+}
+
+/// Extract the value-cell magnitude + per-rung source marker from a resolved
+/// value-source reason (SL-220 PHASE-06, design §6). The reason always comes
+/// from [`super::surface::value_source_reason`], so only the value-source arms
+/// are reachable; the fallthrough is a defensive floor.
+fn value_cell_parts(reason: &ReasonKind) -> (f64, &'static str) {
+    match reason {
+        ReasonKind::ValuePin { value, .. } => (*value, VALUE_MARKER_PIN),
+        ReasonKind::ValueClaim { value, tier, .. } => (
+            *value,
+            match tier {
+                ClaimTier::Pin => VALUE_MARKER_PIN,
+                ClaimTier::Human => VALUE_MARKER_HUMAN,
+                ClaimTier::Agent => VALUE_MARKER_AGENT,
+                ClaimTier::Migrated => VALUE_MARKER_MIGRATED,
+            },
+        ),
+        ReasonKind::ValueUnmigratedFacet { value } => (*value, VALUE_MARKER_UNMIGRATED),
+        ReasonKind::ValueProjected { value, .. } => (*value, VALUE_MARKER_PROJECTED),
+        ReasonKind::ValueGauge { value, .. } => (*value, VALUE_MARKER_GAUGE),
+        _ => (DEFAULT_VALUE, DEFAULT_VALUE_MARKER),
     }
 }
 
@@ -376,7 +414,9 @@ fn reason_line(reason: &ReasonKind) -> String {
         ReasonKind::EvictedEdge { .. } | ReasonKind::CycleDegraded { .. } => {
             format!("  {}\n", provenance_fragment(reason).unwrap_or_default())
         }
-        ReasonKind::ValueAuthored { .. }
+        ReasonKind::ValuePin { .. }
+        | ReasonKind::ValueClaim { .. }
+        | ReasonKind::ValueUnmigratedFacet { .. }
         | ReasonKind::ValueProjected { .. }
         | ReasonKind::ValueGauge { .. } => {
             format!("  {}\n", value_source_fragment(reason).unwrap_or_default())
@@ -562,14 +602,45 @@ pub(crate) const AGENT_DEMOTION_DISCLOSURE: &str =
 /// for any non-value-source reason.
 pub(crate) fn value_source_fragment(reason: &ReasonKind) -> Option<String> {
     match reason {
-        ReasonKind::ValueAuthored { value, conflict } => {
-            let suffix = if conflict.is_empty() {
-                String::new()
-            } else {
-                format!(" (see anchor-conflict finding: {})", conflict.join(", "))
-            };
-            Some(format!("value {value:.1} — authored{suffix}"))
-        }
+        // SL-220 PHASE-06 claim shapes (design §6) — attribution parenthetical,
+        // the contested-interval variant (anchored-tier "contested … resolve by
+        // superseding row" vs agent/migrated "… calibrate via comparison", D14),
+        // and the anchor-conflict citation suffix.
+        ReasonKind::ValuePin {
+            value,
+            conflict,
+            by,
+            date,
+            basis,
+            contested,
+        } => Some(claim_fragment(
+            *value,
+            ClaimTier::Pin,
+            by.as_deref(),
+            date.as_deref(),
+            basis.as_deref(),
+            contested.as_ref(),
+            conflict,
+        )),
+        ReasonKind::ValueClaim {
+            value,
+            tier,
+            conflict,
+            by,
+            date,
+            contested,
+        } => Some(claim_fragment(
+            *value,
+            *tier,
+            by.as_deref(),
+            date.as_deref(),
+            None,
+            contested.as_ref(),
+            conflict,
+        )),
+        ReasonKind::ValueUnmigratedFacet { value } => Some(format!(
+            "value {value:.1} — unmigrated [value] facet — run scripts/migrate_value_facets.py"
+        )),
         ReasonKind::ValueProjected {
             value,
             lower,
@@ -589,6 +660,206 @@ pub(crate) fn value_source_fragment(reason: &ReasonKind) -> Option<String> {
         )),
         _ => None,
     }
+}
+
+/// The SL-220 PHASE-06 pin/claim value-source fragment (design §6) — the SINGLE
+/// template for every ledgered-claim rung, shared by `explain` (human) and, via
+/// the reason, the elicit + `show` surfaces. Three cases:
+///
+/// - **contested** (same-tier magnitude disagreement): the interval + row-count
+///   line. Anchored tiers (Pin/Human) carry the "contested" framing and the
+///   "resolve by superseding row" reprobe disclosure; agent/migrated tiers drop
+///   "contested" and read "calibrate via comparison" instead (D14).
+/// - **singleton**: `— {tier word}{attribution}`, with the agent prior's
+///   "below projection" disclosure (rung 3 — projection would have won had any
+///   evidence existed).
+///
+/// The anchor-conflict citation (a cross-class order violation, distinct from
+/// the same-tier contest) is appended in every case.
+fn claim_fragment(
+    value: f64,
+    tier: ClaimTier,
+    by: Option<&str>,
+    date: Option<&str>,
+    basis: Option<&str>,
+    contested: Option<&ContestedClaim>,
+    conflict: &[String],
+) -> String {
+    let anchored = matches!(tier, ClaimTier::Pin | ClaimTier::Human);
+    let tier_word = match tier {
+        ClaimTier::Pin => "pin",
+        ClaimTier::Human => "human claim",
+        ClaimTier::Agent => "agent claim",
+        ClaimTier::Migrated => "migrated claim",
+    };
+    let body = if let Some(c) = contested {
+        // The "contested" label is anchored-tiers-only; agent/migrated keep the
+        // bare tier word and route to comparison, not the human reprobe queue.
+        let label = match tier {
+            ClaimTier::Pin => "contested pin",
+            ClaimTier::Human => "contested human claim",
+            _ => tier_word,
+        };
+        let guidance = if anchored {
+            "resolve by superseding row"
+        } else {
+            "calibrate via comparison"
+        };
+        format!(
+            "value {value:.1} — {label} · {} claims, interval ({:.1} ‥ {:.1}), mean — {guidance}",
+            c.rows, c.low, c.high,
+        )
+    } else {
+        let attr = attribution_paren(tier, by, date, basis);
+        // Only the agent prior (rung 3) discloses "below projection" — a pin or
+        // human claim anchors (rung 1); a migrated prior renders bare (design §6).
+        let prior_suffix = if matches!(tier, ClaimTier::Agent) {
+            " · below projection — no projection evidence exists"
+        } else {
+            ""
+        };
+        format!("value {value:.1} — {tier_word}{attr}{prior_suffix}")
+    };
+    format!("{body}{}", anchor_conflict_suffix(conflict))
+}
+
+/// The attribution parenthetical (design §6). Migrated rows read
+/// `(unattributed · observed <date>)` — `by` is typically absent, and the
+/// timestamp is the migration `observed_at`. Every other tier reads
+/// `(by, date[, basis N])`, dropping any absent part; a fully-absent
+/// attribution renders nothing.
+fn attribution_paren(
+    tier: ClaimTier,
+    by: Option<&str>,
+    date: Option<&str>,
+    basis: Option<&str>,
+) -> String {
+    if matches!(tier, ClaimTier::Migrated) {
+        let who = by.unwrap_or("unattributed");
+        return match date {
+            Some(d) => format!(" ({who} · observed {d})"),
+            None => format!(" ({who})"),
+        };
+    }
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(b) = by {
+        parts.push(b.to_string());
+    }
+    if let Some(d) = date {
+        parts.push(d.to_string());
+    }
+    if let Some(b) = basis {
+        parts.push(format!("basis {b}"));
+    }
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", parts.join(", "))
+    }
+}
+
+/// The cross-class anchor-conflict citation suffix (an `AnchorConflict` finding
+/// reference) — distinct from the same-tier contest. Empty when no citation.
+fn anchor_conflict_suffix(conflict: &[String]) -> String {
+    if conflict.is_empty() {
+        String::new()
+    } else {
+        format!(" (see anchor-conflict finding: {})", conflict.join(", "))
+    }
+}
+
+/// The SL-220 PHASE-06 entity-`show` value line (design §6) — the SINGLE pure
+/// renderer that dissolved the former nine-fold `format_value_normal`
+/// duplication. Consumes the RESOLVED value-source reason (never the raw
+/// facet), so a record's captured human claim renders with its provenance and
+/// a `scoring-inert` annotation (D7). `inert_kind` is `Some(kind)` for a
+/// non-value-bearing kind; `None` (evidence absent) omits the line entirely.
+/// The unit is retained alongside the provenance parenthetical.
+pub(crate) fn show_value_render(
+    reason: &ReasonKind,
+    unit: &str,
+    inert_kind: Option<&str>,
+) -> Option<String> {
+    let provenance = show_provenance(reason)?;
+    let (value, _) = value_cell_parts(reason);
+    let base = format!("value: {value:.1} {unit} ({provenance})");
+    Some(match inert_kind {
+        Some(kind) => format!("{base} — scoring-inert ({kind} kind)"),
+        None => base,
+    })
+}
+
+/// The compact provenance phrase for the `show` value line (design §6) — tier
+/// word + singleton attribution (`, by, date`; migrated reads
+/// `, unattributed, observed <date>`), with a leading "contested" for an
+/// anchored-tier same-tier conflict. `None` for a non-value-source reason.
+fn show_provenance(reason: &ReasonKind) -> Option<String> {
+    match reason {
+        ReasonKind::ValuePin {
+            by,
+            date,
+            contested,
+            ..
+        } => {
+            let head = if contested.is_some() {
+                "contested pin"
+            } else {
+                "pin"
+            };
+            Some(join_provenance(head, by.as_deref(), date.as_deref(), false))
+        }
+        ReasonKind::ValueClaim {
+            tier,
+            by,
+            date,
+            contested,
+            ..
+        } => {
+            let word = match tier {
+                ClaimTier::Pin => "pin",
+                ClaimTier::Human => "human claim",
+                ClaimTier::Agent => "agent claim",
+                ClaimTier::Migrated => "migrated claim",
+            };
+            let anchored = matches!(tier, ClaimTier::Pin | ClaimTier::Human);
+            let head = if contested.is_some() && anchored {
+                format!("contested {word}")
+            } else {
+                word.to_string()
+            };
+            let migrated = matches!(tier, ClaimTier::Migrated);
+            Some(join_provenance(
+                &head,
+                by.as_deref(),
+                date.as_deref(),
+                migrated,
+            ))
+        }
+        ReasonKind::ValueUnmigratedFacet { .. } => Some("unmigrated [value] facet".to_string()),
+        ReasonKind::ValueProjected { .. } => Some("projected".to_string()),
+        ReasonKind::ValueGauge { .. } => Some("gauge".to_string()),
+        _ => None,
+    }
+}
+
+/// Append the singleton attribution to a provenance head phrase (design §6).
+/// A migrated row with no `by` reads `unattributed` and frames its date as
+/// `observed`; every other tier drops an absent part.
+fn join_provenance(head: &str, by: Option<&str>, date: Option<&str>, migrated: bool) -> String {
+    let mut s = head.to_string();
+    match (by, migrated) {
+        (Some(b), _) => {
+            s.push_str(", ");
+            s.push_str(b);
+        }
+        (None, true) => s.push_str(", unattributed"),
+        (None, false) => {}
+    }
+    if let Some(d) = date {
+        s.push_str(if migrated { ", observed " } else { ", " });
+        s.push_str(d);
+    }
+    s
 }
 
 /// One C6 display bound as text — `"unbounded"` for `None`.
@@ -835,6 +1106,38 @@ fn finding_line(f: &Finding) -> String {
             domain_tag(*domain),
             rows.join(", ")
         ),
+        Finding::UnmigratedFacet {
+            domain,
+            entity,
+            value,
+        } => format!(
+            "  {}{entity} authors an unmigrated [value] facet ({value}) — evidence debt; exit: \
+             run scripts/migrate_value_facets.py (or re-assert via value set/pin, then value \
+             clear)\n",
+            domain_tag(*domain),
+        ),
+        Finding::ClaimConflict {
+            domain,
+            item,
+            tier,
+            low,
+            high,
+            rows,
+        } => {
+            // Anchored tiers wear the "contested" framing + reprobe disclosure;
+            // agent/migrated conflicts route to comparison instead (D14).
+            let (label, exit) = match tier {
+                ClaimTier::Pin => ("contested pin", "resolve by superseding row"),
+                ClaimTier::Human => ("contested human claim", "resolve by superseding row"),
+                ClaimTier::Agent => ("agent claim conflict", "calibrate via comparison"),
+                ClaimTier::Migrated => ("migrated claim conflict", "calibrate via comparison"),
+            };
+            format!(
+                "  {}{item} {label} — {rows} claims span interval ({low:.1} ‥ {high:.1}), mean \
+                 stands; exit: {exit}\n",
+                domain_tag(*domain),
+            )
+        }
     }
 }
 
@@ -936,6 +1239,36 @@ fn finding_json(f: &Finding) -> serde_json::Value {
         Finding::MalformedSupersession { domain, rows } => {
             serde_json::json!({ "domain": domain.token(), "rows": rows })
         }
+        Finding::UnmigratedFacet {
+            domain,
+            entity,
+            value,
+        } => {
+            serde_json::json!({ "domain": domain.token(), "entity": entity, "value": value })
+        }
+        Finding::ClaimConflict {
+            domain,
+            item,
+            tier,
+            low,
+            high,
+            rows,
+        } => {
+            let tier_token = match tier {
+                ClaimTier::Pin => "pin",
+                ClaimTier::Human => "human-claim",
+                ClaimTier::Agent => "agent-claim",
+                ClaimTier::Migrated => "migrated-claim",
+            };
+            serde_json::json!({
+                "domain": domain.token(),
+                "item": item,
+                "tier": tier_token,
+                "low": low,
+                "high": high,
+                "rows": rows,
+            })
+        }
     };
     if let Some(obj) = value.as_object_mut() {
         obj.insert("kind".to_string(), serde_json::json!(f.kind_label()));
@@ -1016,10 +1349,26 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
         ReasonKind::CycleDegraded { nodes } => {
             serde_json::json!({ "kind": "cycle_degraded", "nodes": nodes })
         }
-        ReasonKind::ValueAuthored { value, conflict } => serde_json::json!({
-            "kind": "value_authored",
+        // SL-220 D11: the new value-source shapes carry the pinned provenance
+        // token AS the kind (view.rs `value_source_token`, the single source);
+        // `value_projected`/`value_gauge` below stay byte-stable.
+        ReasonKind::ValuePin {
+            value, conflict, ..
+        }
+        | ReasonKind::ValueClaim {
+            value, conflict, ..
+        } => {
+            // Attribution/contested are render-only (design §6, human surfaces);
+            // the JSON stays the pinned token + value + anchor-conflict citation.
+            serde_json::json!({
+                "kind": reason.value_source_token(),
+                "value": value,
+                "conflict": conflict,
+            })
+        }
+        ReasonKind::ValueUnmigratedFacet { value } => serde_json::json!({
+            "kind": reason.value_source_token(),
             "value": value,
-            "conflict": conflict,
         }),
         ReasonKind::ValueProjected {
             value,
@@ -1239,7 +1588,6 @@ mod tests {
     use crate::estimate::EstimateFacet;
     use crate::listing::ABSENT_CELL;
     use crate::priority::view::Actionability;
-    use crate::value::ValueFacet;
 
     /// Build a bare NextRow with no facets (estimate/value/tags absent).
     /// Wrap rows in a tension-free `NextView` for the table/pagination tests
@@ -1264,8 +1612,21 @@ mod tests {
             blockers: vec![],
             blocking: vec![],
             estimate: None,
-            value: None,
+            value_source: None,
             tags: vec![],
+        }
+    }
+
+    /// A resolved human-claim value source (renders bare — the canonical rung-1
+    /// evidence, the retired authored-facet convention).
+    fn human_value(val: f64) -> ReasonKind {
+        ReasonKind::ValueClaim {
+            value: val,
+            tier: ClaimTier::Human,
+            conflict: vec![],
+            by: None,
+            date: None,
+            contested: None,
         }
     }
 
@@ -1285,7 +1646,7 @@ mod tests {
                 lower: lo,
                 upper: hi,
             }),
-            value: Some(ValueFacet { value: val }),
+            value_source: Some(human_value(val)),
             tags: tags.iter().map(|t| (*t).to_string()).collect(),
         }
     }
@@ -1457,14 +1818,55 @@ mod tests {
         // graph::DEFAULT_VALUE (effective_raw_value), so the value cell must show
         // that default (marked), never ABSENT_CELL — else the displayed value
         // contradicts the score driving the ranking.
-        let mut r = bare_row("ISS-001"); // kind ISS is value-bearing, value None
+        let mut r = bare_row("ISS-001"); // kind ISS is value-bearing, no value source
         assert_eq!(
             value_cell(&r),
             format!("{}{DEFAULT_VALUE_MARKER}", format_bound(DEFAULT_VALUE))
         );
-        // An authored value still renders bare — no marker.
-        r.value = Some(ValueFacet { value: 2.0 });
+        // A resolved human claim (rung 1) renders bare — the canonical evidence.
+        r.value_source = Some(human_value(2.0));
         assert_eq!(value_cell(&r), format_bound(2.0));
+    }
+
+    /// SL-220 PHASE-06: each ladder rung marks its cell distinctly (design §6).
+    #[test]
+    fn value_cell_marks_each_source_rung() {
+        let mut r = bare_row("ISS-001");
+        r.value_source = Some(ReasonKind::ValuePin {
+            value: 6.5,
+            conflict: vec![],
+            by: None,
+            date: None,
+            basis: None,
+            contested: None,
+        });
+        assert_eq!(
+            value_cell(&r),
+            format!("{}{VALUE_MARKER_PIN}", format_bound(6.5))
+        );
+        r.value_source = Some(ReasonKind::ValueClaim {
+            value: 3.0,
+            tier: ClaimTier::Agent,
+            conflict: vec![],
+            by: None,
+            date: None,
+            contested: None,
+        });
+        assert_eq!(
+            value_cell(&r),
+            format!("{}{VALUE_MARKER_AGENT}", format_bound(3.0))
+        );
+        r.value_source = Some(ReasonKind::ValueProjected {
+            value: 4.2,
+            lower: Some(3.0),
+            upper: Some(5.0),
+            human: 2,
+            agent: 1,
+        });
+        assert_eq!(
+            value_cell(&r),
+            format!("{}{VALUE_MARKER_PROJECTED}", format_bound(4.2))
+        );
     }
 
     #[test]
@@ -1474,7 +1876,7 @@ mod tests {
         // misrepresent it.
         let mut r = bare_row("REV-001");
         r.kind = "REV".to_string();
-        r.value = None;
+        r.value_source = None;
         assert_eq!(value_cell(&r), ABSENT_CELL);
     }
 
@@ -1648,6 +2050,52 @@ mod tests {
         assert_eq!(f0["hub"], "ISS-001");
         assert_eq!(f0["arms"][0], "ISS-002");
         assert_eq!(f0["magnitude"], 2.0, "magnitude = arm count");
+    }
+
+    /// SL-220 PHASE-06: the `ClaimConflict` finding renders (contested framing
+    /// for an anchored tier) and its JSON carries the domain-tagged payload —
+    /// render + JSON parity (design §6).
+    #[test]
+    fn claim_conflict_finding_renders_and_json_parity() {
+        let human = Finding::ClaimConflict {
+            domain: ComparisonDomain::Value,
+            item: "SL-118".to_string(),
+            tier: ClaimTier::Human,
+            low: 4.0,
+            high: 8.0,
+            rows: 2,
+        };
+        let line = finding_line(&human);
+        assert!(
+            line.contains("SL-118 contested human claim")
+                && line.contains("2 claims span interval (4.0 ‥ 8.0)")
+                && line.contains("resolve by superseding row"),
+            "human contested render: {line}"
+        );
+        let v = finding_json(&human);
+        assert_eq!(v["kind"], "claim conflicts");
+        assert_eq!(v["domain"], "value");
+        assert_eq!(v["tier"], "human-claim");
+        assert_eq!(v["low"], 4.0);
+        assert_eq!(v["rows"], 2);
+        assert_eq!(v["magnitude"], 2.0);
+
+        // An agent-tier conflict routes to comparison, never the human queue.
+        let agent = Finding::ClaimConflict {
+            domain: ComparisonDomain::Value,
+            item: "SL-120".to_string(),
+            tier: ClaimTier::Agent,
+            low: 1.0,
+            high: 3.0,
+            rows: 2,
+        };
+        let agent_line = finding_line(&agent);
+        assert!(
+            agent_line.contains("agent claim conflict")
+                && agent_line.contains("calibrate via comparison")
+                && !agent_line.contains("contested"),
+            "agent conflict routes to comparison (D14): {agent_line}"
+        );
     }
 
     #[test]

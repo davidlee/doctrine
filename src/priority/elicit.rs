@@ -43,11 +43,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::comparison::{
-    AnchorMap, Bound, ClassId, ConstraintSet, Hypothetical, Judgement, PairSide, Projection,
-    QuarantinePolicy, QuarantineReason, Reachability, Response, RowUid, ValueBounds,
-    ValueProvenance, admissible_estimate_pair, admissible_value_pair, compile, compile_human_only,
-    constraining_counts_by_class, determined, human_rows, hypothetical_outcome,
-    synthetic_answer_row,
+    AnchorMap, Bound, ClaimFinding, ClaimResolution, ClaimTier, ClassId, ConstraintSet,
+    Hypothetical, Judgement, PairSide, Projection, QuarantinePolicy, QuarantineReason,
+    Reachability, Response, RowUid, ValueBounds, ValueProvenance, admissible_estimate_pair,
+    admissible_value_pair, compile, compile_human_only, constraining_counts_by_class, determined,
+    human_rows, hypothetical_outcome, synthetic_answer_row,
 };
 
 // ── inputs ──────────────────────────────────────────────────────────────────
@@ -87,6 +87,9 @@ pub(crate) struct ItemCosting {
 /// pure config inputs.
 #[derive(Debug, Clone)]
 pub(crate) struct ElicitInputs<'a> {
+    /// The value-domain PAIRWISE evidence (SL-220 §2: the shell feeds
+    /// `Pipeline::active_pairwise` — anchor rows terminate at the claims
+    /// pass and never reach this recompiler, RV-278 F-6).
     pub active: Vec<&'a Judgement>,
     pub anchors: AnchorMap,
     pub frontier: Vec<FrontierItem>,
@@ -102,6 +105,19 @@ pub(crate) struct ElicitInputs<'a> {
     /// bundle (the default) mints no probes and discloses nothing — the
     /// behaviour-preservation gate for every corpus with no est activity.
     pub sizing: SizingInputs,
+    /// SL-220 §3: the value-domain claim resolution (the shell clones
+    /// `Pipeline.value_claims`). Three queue consumers: rung-1 `anchored`
+    /// items retire calibration probes KNOB-INDEPENDENTLY (a human answered);
+    /// `priors` retire them only while `demote_agent_evidence` is off (a
+    /// number, not an answer); the anchored-tier conflict findings mint the
+    /// D14 claim-reprobe entries. An empty resolution (the default) is the
+    /// pre-claims queue bit-for-bit.
+    pub claims: ClaimResolution,
+    /// SL-220 §3 rung 5: items carrying an unmigrated `[value]` facet (the
+    /// shell derives it from the graph's facet attrs). Valued for queue
+    /// purposes exactly like a prior — knob-off retired, knob-on
+    /// probe-eligible.
+    pub facet_valued: BTreeSet<String>,
 }
 
 /// The est-domain inputs the sizing-probe source (SL-219 §4) rides — derived by
@@ -144,6 +160,10 @@ pub(crate) enum CandidateKind {
     /// SL-219 §4: a deterministic sizing session against a median authored
     /// estimate — existence-admitted, zero yield claim.
     SizingProbe,
+    /// SL-220 D14: an ANCHORED-tier (Pin/Human) claim conflict — "the humans
+    /// must talk". Existence-admitted, zero yield claim, knob-independent;
+    /// agent/migrated conflicts never mint one.
+    ClaimReprobe,
 }
 
 /// The answer space an entry's guaranteed yield ranges over (design D11) —
@@ -153,9 +173,10 @@ pub(crate) enum CandidateKind {
 pub(crate) enum YieldBasis {
     OrderBearingAnswers,
     CanonicalResolvingActions,
-    /// SL-219 §4: a sizing probe makes NO yield claim — its numbers are pinned
-    /// at zero and disclosed as calibration, never spine-comparable to a
-    /// yield-motivated entry.
+    /// SL-219 §4 / SL-220 D14: the entry makes NO yield claim — its numbers
+    /// are pinned at zero and disclosed as such (a sizing probe's calibration
+    /// ask, or a claim reprobe's existence admission), never spine-comparable
+    /// to a yield-motivated entry.
     Calibration,
 }
 
@@ -223,6 +244,20 @@ pub(crate) enum EntryPayload {
         subject: Participant,
         target: SizingTarget,
     },
+    /// SL-220 D14: a contested anchored-tier claim — the conflict's tier
+    /// (`Pin` renders "contested pin"), the resolved mean, the D3 interval
+    /// `{low, high, distinct}`, and the winning-tier row count. Carries no
+    /// `AskSpec`: the resolving action is invariant (a superseding
+    /// `value set`/`value pin` row) and a reprobe discloses no yield.
+    ClaimReprobe {
+        subject: String,
+        tier: ClaimTier,
+        mean: f64,
+        low: f64,
+        high: f64,
+        distinct: u32,
+        rows: u32,
+    },
 }
 
 /// One ranked queue entry (design §2 spine).
@@ -265,6 +300,7 @@ const REASON_MEDIAN_PROBE: &str = "median-probe";
 const REASON_AGENT_ONLY: &str = "agent-only-calibration";
 const REASON_STALE_ANCHOR: &str = "stale-anchor-suspect";
 const REASON_SIZING_PROBE: &str = "sizing-probe";
+const REASON_CONTESTED_CLAIM: &str = "contested-claim";
 
 const ANSWER_PREFER_A: &str = "prefer-a";
 const ANSWER_PREFER_B: &str = "prefer-b";
@@ -524,6 +560,9 @@ pub(crate) fn assemble(inputs: &ElicitInputs<'_>, ctx: DecisionContext) -> Elici
     // sizing-debt disclosure (residual count + no-target flag).
     let (sizing_residual, sizing_no_calibration_target) =
         sizing_probe_candidates(inputs, &band, &mut candidates);
+    // Source 5 (SL-220 D14): one reprobe per ANCHORED-tier claim conflict —
+    // knob-independent by construction (no `demote_agent_evidence` read).
+    claim_reprobe_candidates(inputs, &mut candidates);
 
     // Rank: score desc via total_cmp, id-lexicographic tiebreak.
     candidates.sort_by(|a, b| {
@@ -682,8 +721,27 @@ fn comparison_candidates(
     }
 }
 
+/// SL-220 §3 determinacy: does a resolved claim retire this item's
+/// calibration probe? Rung 1 (an anchored Pin/Human claim) always — a human
+/// ANSWERED, knob-independently (and row-lessly: compile's row-gating drops
+/// a row-less anchor from the constraint set, so `constrained` cannot see
+/// it — scope R1). Rungs 3–5 (agent/migrated priors, or an unmigrated
+/// `[value]` facet) only while `demote_agent_evidence` is off: knob-on they
+/// hold a number, not an answer, and the item stays probe-eligible.
+fn claim_retired(inputs: &ElicitInputs<'_>, id: &str) -> bool {
+    if inputs.claims.anchored.contains_key(id) {
+        return true;
+    }
+    if inputs.demote_agent_evidence {
+        return false;
+    }
+    inputs.claims.priors.contains_key(id) || inputs.facet_valued.contains(id)
+}
+
 /// Source 2: one median-probe per un-constrained top-K item, against the
 /// projected-median comparable item (design D14). Stateless, heuristic.
+/// SL-220 §3: an item whose value is claim-resolved (per [`claim_retired`])
+/// needs no calibration probe.
 fn median_probe_candidates(
     inputs: &ElicitInputs<'_>,
     pool: &[PoolItem],
@@ -694,6 +752,9 @@ fn median_probe_candidates(
     out: &mut Vec<Candidate>,
 ) {
     for u in pool.iter().filter(|p| !p.constrained) {
+        if claim_retired(inputs, &u.id) {
+            continue; // valued by claim/facet — no calibration probe (§3)
+        }
         let Some(target) = median_target(inputs, pool, u) else {
             continue;
         };
@@ -1145,6 +1206,66 @@ fn sizing_probe(
     }
 }
 
+/// Source 5 (SL-220 D14): one reprobe candidate per ANCHORED-tier claim
+/// conflict — "the humans must talk" (the stale-anchor existence precedent:
+/// admitted on existence, NOT K-gated, never yield-ranked). Tier-gated
+/// through the ONE predicate [`ClaimFinding::nominates_reprobe`], so
+/// agent/migrated conflicts — ordinary calibrate-via-comparison findings —
+/// can NEVER enter the human queue; and KNOB-INDEPENDENT by construction
+/// (no `demote_agent_evidence` read anywhere on this path). Score 0: the
+/// entry sinks below every yield-motivated entry (the sizing-probe
+/// precedent) but never vanishes.
+fn claim_reprobe_candidates(inputs: &ElicitInputs<'_>, out: &mut Vec<Candidate>) {
+    for finding in &inputs.claims.findings {
+        if !finding.nominates_reprobe() {
+            continue; // D14: agent/migrated conflicts never reach the queue
+        }
+        let ClaimFinding::Conflict {
+            item,
+            tier,
+            low,
+            high,
+            distinct,
+            rows,
+            ..
+        } = finding;
+        let contested = match tier {
+            ClaimTier::Pin => "contested pin",
+            _ => "contested human claims",
+        };
+        out.push(Candidate {
+            sort_key: format!("clm:{item}"),
+            entry: QueueEntry {
+                kind: CandidateKind::ClaimReprobe,
+                guaranteed_yield: 0,
+                guaranteed_impact: 0.0,
+                score: 0.0,
+                yield_basis: YieldBasis::Calibration,
+                reasons: vec![Reason {
+                    code: REASON_CONTESTED_CLAIM.to_string(),
+                    text: format!(
+                        "{contested} on {item} — {distinct} distinct magnitudes \
+                         ({low} ‥ {high}) over {rows} rows; resolve by superseding row"
+                    ),
+                }],
+                payload: EntryPayload::ClaimReprobe {
+                    subject: item.clone(),
+                    tier: *tier,
+                    mean: inputs
+                        .claims
+                        .anchored
+                        .get(item)
+                        .map_or(0.0, |claim| claim.value),
+                    low: *low,
+                    high: *high,
+                    distinct: *distinct,
+                    rows: *rows,
+                },
+            },
+        });
+    }
+}
+
 /// `i64 → f64` for the score product (yields are tiny counts).
 #[expect(
     clippy::as_conversions,
@@ -1167,8 +1288,8 @@ mod tests {
             uid: uid.to_string(),
             seq: 0,
             a: a.to_string(),
-            b: b.to_string(),
-            response,
+            b: Some(b.to_string()),
+            response: Some(response),
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -1178,7 +1299,10 @@ mod tests {
             rater,
             by: None,
             note: None,
-            date: "2026-07-12".to_string(),
+            date: Some("2026-07-12".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 
@@ -1229,6 +1353,8 @@ mod tests {
             confirm_boost: 1.5,
             demote_agent_evidence: false,
             sizing: SizingInputs::default(),
+            claims: ClaimResolution::default(),
+            facet_valued: BTreeSet::new(),
         }
     }
 
@@ -1269,6 +1395,86 @@ mod tests {
         assert_eq!(q.entries.len(), 1);
         assert_eq!(q.entries[0].kind, CandidateKind::Comparison);
         assert!(q.entries[0].guaranteed_yield >= 1);
+    }
+
+    /// RV-278 F-6 through `assemble` (SL-220 design §2): an anchor-bearing
+    /// ledger and its anchor-free twin — fed through the store pipeline's
+    /// PAIRWISE view — recompile to an IDENTICAL baseline `ConstraintSet`
+    /// and an identical queue. Anchor rows reach no compile consumer, and
+    /// the proof is non-vacuous: the queue carries a real candidate.
+    #[test]
+    fn assemble_baseline_ignores_anchor_rows_via_the_pairwise_view() {
+        use crate::comparison::{
+            AnchorMap, COMPARISON_SCHEMA, COMPARISON_VERSION, ComparisonSession,
+            FRAME_VALUE_ANCHOR, SessionHeader, StatusMap, VALUE_PROJECTION_PARAMS,
+            pipeline_from_sessions,
+        };
+        let session_of = |judgements: Vec<Judgement>| ComparisonSession {
+            schema: COMPARISON_SCHEMA.to_string(),
+            version: COMPARISON_VERSION,
+            session: SessionHeader {
+                uid: "s1".to_string(),
+                date: "2026-07-12".to_string(),
+                audience: None,
+            },
+            judgements,
+            tombstones: Vec::new(),
+        };
+        let anchor = || {
+            let mut j = jrow("anch", "A", "unused", Response::PreferA, RaterKind::Human);
+            j.b = None;
+            j.response = None;
+            j.form = RowForm::Anchor;
+            j.frame = FRAME_VALUE_ANCHOR.to_string();
+            j.magnitude = Some(6.0);
+            j
+        };
+        let pipeline_of = |judgements: Vec<Judgement>| {
+            pipeline_from_sessions(
+                &[session_of(judgements)],
+                &StatusMap::new(),
+                &AnchorMap::new(),
+                &VALUE_PROJECTION_PARAMS,
+                &VALUE_PROJECTION_PARAMS,
+            )
+            .expect("pipeline ok")
+        };
+        let with_anchor = pipeline_of(vec![win("j0", "A", "C"), win("j1", "B", "D"), anchor()]);
+        let without_anchor = pipeline_of(vec![win("j0", "A", "C"), win("j1", "B", "D")]);
+        assert!(
+            !with_anchor.value_claims.anchored.is_empty(),
+            "non-vacuous: the claim was captured"
+        );
+
+        fn inputs_of(p: &crate::comparison::Pipeline) -> ElicitInputs<'_> {
+            mk(
+                p.active_pairwise().iter().collect(),
+                &[],
+                &["A", "B"],
+                &[("A", 1.0, 1.0), ("B", 1.0, 1.0)],
+                &[],
+            )
+        }
+        let inputs_with = inputs_of(&with_anchor);
+        let inputs_without = inputs_of(&without_anchor);
+        // The baseline `assemble` recompiles (its first act) is identical…
+        assert_eq!(
+            compile(
+                &inputs_with.active,
+                &inputs_with.anchors,
+                QuarantinePolicy::Symmetric
+            ),
+            compile(
+                &inputs_without.active,
+                &inputs_without.anchors,
+                QuarantinePolicy::Symmetric
+            ),
+            "anchor rows never reach the assemble baseline compile"
+        );
+        // …and so is the whole assembled queue, non-vacuously.
+        let q_with = assemble(&inputs_with, seq(2));
+        assert_eq!(q_with, assemble(&inputs_without, seq(2)));
+        assert_eq!(q_with.entries.len(), 1, "a real candidate rode the proof");
     }
 
     #[test]
@@ -1443,7 +1649,9 @@ mod tests {
             .iter()
             .filter_map(|e| match &e.payload {
                 EntryPayload::AnchorReview { subject, .. } => Some(subject.id.as_str()),
-                EntryPayload::Comparison { .. } | EntryPayload::SizingProbe { .. } => None,
+                EntryPayload::Comparison { .. }
+                | EntryPayload::SizingProbe { .. }
+                | EntryPayload::ClaimReprobe { .. } => None,
             })
             .collect();
         assert_eq!(subjects, vec!["A", "C"], "id-lexicographic tiebreak");
@@ -1726,9 +1934,15 @@ mod tests {
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = crate::priority::config::load(root);
         let via_load = graph::build_from(&scanned, root).unwrap();
-        let explicit_empty =
-            graph::build_from_with_cfg(&scanned, root, &cfg, &Projection::new(), &CostFeed::new())
-                .unwrap();
+        let explicit_empty = graph::build_from_with_cfg(
+            &scanned,
+            root,
+            &cfg,
+            &Projection::new(),
+            &CostFeed::new(),
+            &ClaimResolution::default(),
+        )
+        .unwrap();
         assert_eq!(via_load.score, explicit_empty.score, "score map identical");
         for id in [1, 2] {
             assert_eq!(
@@ -2096,5 +2310,223 @@ mod tests {
             (cost - 4.6).abs() < 1e-9,
             "the merged member sits at the class anchor cost, not gauge/bare"
         );
+    }
+
+    // ---- SL-220 §3 / D14: claim retirement + the claim-reprobe source ------------
+
+    /// A value-domain anchor row for the claims harness (single subject,
+    /// magnitude payload — the §2 wire shape).
+    fn anchor_claim(uid: &str, item: &str, magnitude: f64, rater: RaterKind) -> Judgement {
+        use crate::comparison::{DOMAIN_VALUE, FRAME_VALUE_ANCHOR};
+        let migrated = matches!(rater, RaterKind::Migrated);
+        let mut j = jrow(uid, item, "unused", Response::PreferA, rater);
+        j.b = None;
+        j.response = None;
+        j.form = RowForm::Anchor;
+        j.domain = DOMAIN_VALUE.to_string();
+        j.frame = FRAME_VALUE_ANCHOR.to_string();
+        j.magnitude = Some(magnitude);
+        if migrated {
+            j.observed_at = j.date.take();
+        }
+        j
+    }
+
+    /// Resolve a claim ledger over Active rows (the pure harness — mirrors
+    /// the store pipeline's own selection).
+    fn claims_from(rows: &[Judgement]) -> ClaimResolution {
+        let tagged: Vec<(&Judgement, crate::comparison::ResolutionStatus)> = rows
+            .iter()
+            .map(|j| (j, crate::comparison::ResolutionStatus::Active))
+            .collect();
+        crate::comparison::resolve_claims(&tagged)
+    }
+
+    /// Does the queue carry a median-probe involving `id`?
+    fn has_median_probe(q: &ElicitQueue, id: &str) -> bool {
+        q.entries.iter().any(|e| {
+            e.reasons.iter().any(|r| r.code == "median-probe")
+                && matches!(
+                    &e.payload,
+                    EntryPayload::Comparison { a, b, .. } if a.id == id || b.id == id
+                )
+        })
+    }
+
+    /// §3 demotion widening, rungs 3–4: an agent-tier prior counts as VALUED
+    /// while the knob is off (its calibration probe retires) and stays
+    /// PROBE-ELIGIBLE when the knob is on (a number, not an answer) — both
+    /// settings asserted over the same fixture.
+    #[test]
+    fn prior_valued_item_probe_retired_knob_off_eligible_knob_on() {
+        let rows = vec![win("j0", "W", "Z")];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let claim_rows = [anchor_claim("a1", "U", 3.0, RaterKind::Agent)];
+        let mut inputs = mk(
+            refs.clone(),
+            &[("Z", 0.0)],
+            &["U", "W"],
+            &[("U", 1.0, 1.0), ("W", 1.0, 1.0)],
+            &[
+                ("U", 2.0, ValueProvenance::Projected),
+                ("W", 3.0, ValueProvenance::Projected),
+            ],
+        );
+        inputs.claims = claims_from(&claim_rows);
+        assert!(inputs.claims.priors.contains_key("U"), "prior resolved");
+
+        let off = assemble(&inputs, seq(2));
+        assert!(
+            !has_median_probe(&off, "U"),
+            "knob-off: the prior retires the probe (valued for queue purposes)"
+        );
+        inputs.demote_agent_evidence = true;
+        let on = assemble(&inputs, seq(2));
+        assert!(
+            has_median_probe(&on, "U"),
+            "knob-on: rungs 3–5 do not retire elicitation"
+        );
+    }
+
+    /// §3 demotion widening, rung 5: an unmigrated `[value]` facet behaves
+    /// exactly like a prior for queue purposes — knob-off retired, knob-on
+    /// probe-eligible.
+    #[test]
+    fn facet_valued_item_probe_retired_knob_off_eligible_knob_on() {
+        let rows = vec![win("j0", "W", "Z")];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let mut inputs = mk(
+            refs.clone(),
+            &[("Z", 0.0)],
+            &["U", "W"],
+            &[("U", 1.0, 1.0), ("W", 1.0, 1.0)],
+            &[
+                ("U", 2.0, ValueProvenance::Projected),
+                ("W", 3.0, ValueProvenance::Projected),
+            ],
+        );
+        inputs.facet_valued.insert("U".to_string());
+
+        let off = assemble(&inputs, seq(2));
+        assert!(!has_median_probe(&off, "U"), "knob-off: facet retires");
+        inputs.demote_agent_evidence = true;
+        let on = assemble(&inputs, seq(2));
+        assert!(has_median_probe(&on, "U"), "knob-on: facet stays eligible");
+    }
+
+    /// Rung 1 is an ANSWER, not a number: an anchored (human) claim retires
+    /// the calibration probe under BOTH knob settings — even row-lessly
+    /// (scope R1: compile's row-gating cannot see the anchor, `claim_retired`
+    /// reads `anchored` directly).
+    #[test]
+    fn anchored_claim_retires_probe_knob_independently() {
+        let rows = vec![win("j0", "W", "Z")];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let claim_rows = [anchor_claim("h1", "U", 6.0, RaterKind::Human)];
+        let mut inputs = mk(
+            refs.clone(),
+            &[("Z", 0.0)],
+            &["U", "W"],
+            &[("U", 1.0, 1.0), ("W", 1.0, 1.0)],
+            &[
+                ("U", 2.0, ValueProvenance::Projected),
+                ("W", 3.0, ValueProvenance::Projected),
+            ],
+        );
+        inputs.claims = claims_from(&claim_rows);
+        assert!(inputs.claims.anchored.contains_key("U"));
+
+        for knob in [false, true] {
+            inputs.demote_agent_evidence = knob;
+            let q = assemble(&inputs, seq(2));
+            assert!(
+                !has_median_probe(&q, "U"),
+                "an anchored claim retires the probe (knob = {knob})"
+            );
+        }
+    }
+
+    /// D14 BOTH directions, BOTH knob settings: an anchored-tier (human)
+    /// claim conflict enters the reprobe queue KNOB-INDEPENDENTLY; an
+    /// agent-tier conflict — an ordinary calibrate-via-comparison finding —
+    /// NEVER does. Existence-admitted at score 0 (sinks, never vanishes).
+    #[test]
+    fn anchored_conflict_enters_reprobe_queue_knob_independently_agent_never() {
+        let claim_rows = [
+            anchor_claim("h1", "U", 4.0, RaterKind::Human),
+            anchor_claim("h2", "U", 6.0, RaterKind::Human),
+            anchor_claim("a1", "V", 1.0, RaterKind::Agent),
+            anchor_claim("a2", "V", 3.0, RaterKind::Agent),
+        ];
+        let claims = claims_from(&claim_rows);
+        assert_eq!(claims.findings.len(), 2, "conflicts fire at EVERY tier");
+
+        let mut inputs = mk(vec![], &[], &[], &[], &[]);
+        inputs.claims = claims;
+        for knob in [false, true] {
+            inputs.demote_agent_evidence = knob;
+            let q = assemble(&inputs, seq(2));
+            let reprobes: Vec<&QueueEntry> = q
+                .entries
+                .iter()
+                .filter(|e| e.kind == CandidateKind::ClaimReprobe)
+                .collect();
+            assert_eq!(
+                reprobes.len(),
+                1,
+                "exactly the anchored conflict (knob = {knob})"
+            );
+            let EntryPayload::ClaimReprobe {
+                subject,
+                tier,
+                mean,
+                low,
+                high,
+                distinct,
+                rows,
+            } = &reprobes[0].payload
+            else {
+                panic!("claim-reprobe payload");
+            };
+            assert_eq!(subject, "U", "the agent conflict (V) never enters");
+            assert_eq!(*tier, ClaimTier::Human);
+            assert_eq!((*mean, *low, *high), (5.0, 4.0, 6.0));
+            assert_eq!((*distinct, *rows), (2, 2));
+            assert_eq!(reprobes[0].score, 0.0, "existence-admitted, zero yield");
+            assert_eq!(reprobes[0].yield_basis, YieldBasis::Calibration);
+        }
+    }
+
+    /// A contested PIN reprobes too (D3 "contested pin"), named as such in
+    /// its reason text — still the one anchored-tier gate, no special case.
+    #[test]
+    fn contested_pin_mints_a_reprobe_named_contested_pin() {
+        let mut p1 = anchor_claim("p1", "U", 3.0, RaterKind::Human);
+        p1.admission = Some(crate::comparison::AdmissionKind::Pin);
+        let mut p2 = anchor_claim("p2", "U", 9.0, RaterKind::Human);
+        p2.admission = Some(crate::comparison::AdmissionKind::Pin);
+        let mut inputs = mk(vec![], &[], &[], &[], &[]);
+        inputs.claims = claims_from(&[p1, p2]);
+        let q = assemble(&inputs, seq(2));
+        let entry = q
+            .entries
+            .iter()
+            .find(|e| e.kind == CandidateKind::ClaimReprobe)
+            .expect("the contested pin reprobes");
+        assert!(
+            entry
+                .reasons
+                .iter()
+                .any(|r| r.text.contains("contested pin")),
+            "{:?}",
+            entry.reasons
+        );
+        assert!(matches!(
+            &entry.payload,
+            EntryPayload::ClaimReprobe {
+                tier: ClaimTier::Pin,
+                ..
+            }
+        ));
     }
 }

@@ -74,7 +74,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "the §8.3 gate battery in claims.rs — tier Ord pin, permutation, corroboration/conflict/contested-pin, cross-session, lens isolation both directions, anti-laundering, duplicate-merge", test_file = "src/comparison/claims.rs", keywords = ["pin_outranks_all_tiers_under_derived_ord", "ClaimResolution", "anchor_map"], waived = false },
-  { id = "VT-2", expects = "PairRow pairwise projection type adapts compile input with zero rule churn; compile suite green unchanged", test_file = "src/comparison/compile.rs", keywords = ["PairRow"], waived = false },
+  { id = "VT-2", expects = "PairRow pairwise projection type adapts compile input with zero rule churn; compile suite green unchanged", test_file = "src/comparison/compile.rs", keywords = ["PairRow"], patterns = ["^\\s*pub(\\(crate\\))?\\s+struct\\s+PairRow"], waived = false },
   { id = "VT-3", expects = "no-compile-consumer proof reaches the elicit path: assemble recompiles from the pairwise view; an anchor-bearing ledger yields a baseline ConstraintSet identical to the same ledger without anchors", test_file = "src/priority/elicit.rs", keywords = ["active_pairwise"], waived = false },
 ]
 specs        = []

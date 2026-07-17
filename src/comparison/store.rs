@@ -27,7 +27,8 @@ use super::resolve::{
     self, MalformedSupersession, ResolutionStatus, RowState, StatusMap, rater_key,
 };
 use super::{
-    COMPARISONS_DIR, ComparisonSession, DOMAIN_ESTIMATE, DOMAIN_PRIORITY, Judgement, Response,
+    COMPARISONS_DIR, ClaimResolution, ComparisonSession, DOMAIN_ESTIMATE, DOMAIN_PRIORITY,
+    Judgement, Response, RowForm, resolve_claims,
 };
 
 /// Scan `.doctrine/comparisons/*.toml` and parse every session (moved
@@ -71,8 +72,11 @@ pub(crate) fn load_sessions(root: &Path) -> anyhow::Result<Vec<ComparisonSession
 pub(crate) struct RowSummary {
     pub uid: String,
     pub a: String,
-    pub b: String,
-    pub response: Response,
+    /// The pairwise partner — absent on anchor rows (single subject,
+    /// SL-220 §1).
+    pub b: Option<String>,
+    /// The pairwise response — absent on anchor rows (SL-220 §1).
+    pub response: Option<Response>,
     /// The row's authored domain (SL-219 §2) — the key the per-domain
     /// status routing and the findings domain discriminator join on.
     pub domain: String,
@@ -81,7 +85,23 @@ pub(crate) struct RowSummary {
     pub by: Option<String>,
     pub note: Option<String>,
     pub date: String,
+    /// The claim-join token for an ACTIVE anchor row (`anchored` / `prior` /
+    /// `conflicted`), produced HERE at the [`ClaimResolution`] join (SL-220
+    /// design §2, RV-278 F-8) — never in `resolve::display_token`. `None` on
+    /// pairwise rows and on non-Active anchor rows (which keep their
+    /// resolution token).
+    pub claim: Option<&'static str>,
     pub state: RowState,
+}
+
+impl RowSummary {
+    /// The single display token: the claim join for an active anchor row,
+    /// the [`RowState`] join otherwise (SL-220 design §2 — anchor rows never
+    /// acquire a `CompilationStatus`).
+    pub(crate) fn display_token(&self) -> String {
+        self.claim
+            .map_or_else(|| self.state.display_token(), str::to_string)
+    }
 }
 
 /// The composed pipeline artifacts PHASE-06's surfaces need beyond the final
@@ -97,7 +117,9 @@ pub(crate) struct RowSummary {
 pub(crate) struct Pipeline {
     pub rows: Vec<RowSummary>,
     /// The value-domain system (SL-219 §2): compiled from the Active
-    /// non-estimate rows + the authored `[value]` anchors.
+    /// non-estimate PAIRWISE rows + the claim-derived anchors
+    /// (`ClaimResolution::anchor_map()`, SL-220 D4/D12 — facets stopped
+    /// anchoring at the flip).
     pub value: DomainSystem,
     /// The estimate-domain system (SL-219 §2): compiled from the Active
     /// estimate rows + the ROW-GATED `authored_est_cost` anchors. No est rows
@@ -113,13 +135,30 @@ pub(crate) struct Pipeline {
     pub est_constraining_by_class: BTreeMap<ClassId, RaterCounts>,
     pub malformed: Vec<MalformedSupersession>,
     pub priority_domain_count: usize,
-    /// The resolved-ACTIVE VALUE-domain judgements, owned (SL-217 PHASE-03;
-    /// domain-scoped by SL-219 — the est rows compile in their own system and
-    /// must not leak into the value recompiles). `resolve` borrows the loaded
+    /// The value-domain claim resolution (SL-220 design §2): the anchor-side
+    /// output of the pairwise/anchor split. Anchor rows TERMINATE here —
+    /// no compile consumer reads them (RV-278 F-6). Since the PHASE-05 flip
+    /// its `anchor_map()` IS the value system's compile anchor source (D4/
+    /// D12), and the graph ladder reads `anchored`/`priors` directly (§3).
+    pub value_claims: ClaimResolution,
+    /// The resolved-ACTIVE VALUE-domain PAIRWISE judgements, owned (SL-217
+    /// PHASE-03; domain-scoped by SL-219 — the est rows compile in their own
+    /// system and must not leak into the value recompiles; anchor-free by
+    /// SL-220's pairwise/anchor split — read it via
+    /// [`Pipeline::active_pairwise`]). `resolve` borrows the loaded
     /// `sessions`, which drop on return — so the elicit shell cannot borrow
     /// `active` back out. Owned clones let `assemble` recompile its own
     /// baseline `ConstraintSet` from the SAME evidence, no re-resolve (DRY).
-    pub active_judgements: Vec<Judgement>,
+    pub active_pairwise: Vec<Judgement>,
+}
+
+impl Pipeline {
+    /// The PAIRWISE view of the SL-220 §2 split: every recompiler (elicit
+    /// `assemble`, tension grading) consumes THIS — never anchor rows, which
+    /// terminate at [`ClaimResolution`] (RV-278 F-6).
+    pub(crate) fn active_pairwise(&self) -> &[Judgement] {
+        &self.active_pairwise
+    }
 }
 
 /// One per-domain comparison system (SL-219 design §2): the compiled
@@ -173,20 +212,12 @@ impl DomainSystem {
 pub(crate) fn load_pipeline(
     root: &Path,
     statuses: &StatusMap,
-    value_anchors: &AnchorMap,
     est_anchors: &AnchorMap,
     value_cfg: &ProjectionCfg,
     est_cfg: &ProjectionCfg,
 ) -> anyhow::Result<Pipeline> {
     let sessions = load_sessions(root)?;
-    pipeline_from_sessions(
-        &sessions,
-        statuses,
-        value_anchors,
-        est_anchors,
-        value_cfg,
-        est_cfg,
-    )
+    pipeline_from_sessions(&sessions, statuses, est_anchors, value_cfg, est_cfg)
 }
 
 /// The disk-FREE inner half of [`load_pipeline`]: `resolve` → `compile` →
@@ -197,32 +228,46 @@ pub(crate) fn load_pipeline(
 pub(crate) fn pipeline_from_sessions(
     sessions: &[ComparisonSession],
     statuses: &StatusMap,
-    value_anchors: &AnchorMap,
     est_anchors: &AnchorMap,
     value_cfg: &ProjectionCfg,
     est_cfg: &ProjectionCfg,
 ) -> anyhow::Result<Pipeline> {
     if sessions.is_empty() {
+        // No sessions ⇒ no claim rows ⇒ no value anchors (SL-220 D4: claims
+        // are the ONLY value-anchor source since the PHASE-05 flip).
         return Ok(Pipeline {
             rows: Vec::new(),
-            value: DomainSystem::empty(value_anchors),
+            value: DomainSystem::empty(&AnchorMap::new()),
             // Row-gated (SL-219 §1): no rows ⇒ no est anchors ⇒ no system.
             estimate: DomainSystem::empty(&AnchorMap::new()),
             constraining_by_class: BTreeMap::new(),
             est_constraining_by_class: BTreeMap::new(),
             malformed: Vec::new(),
             priority_domain_count: 0,
-            active_judgements: Vec::new(),
+            value_claims: ClaimResolution::default(),
+            active_pairwise: Vec::new(),
         });
     }
 
     // ONE shared resolve pass over all rows (SL-219 §1: the per-domain split
     // happens at compile-input selection, not resolution).
     let resolution = resolve::resolve(sessions, statuses)?;
+    // The claims pass (SL-220 design §2): its OWN selection over the
+    // post-resolve rows (value-domain anchors, Active or InertLens). Its
+    // anchor_map() — the Pin/Human tiers ONLY (D4 anti-laundering) — is the
+    // value system's compile anchor source since the PHASE-05 flip: facets
+    // stopped anchoring/shaping projection (design §3, RV-278 F-4).
+    let value_claims = resolve_claims(&resolution.rows);
+    let value_anchors = value_claims.anchor_map();
+    // The pairwise boundary (SL-220 §2, RV-278 F-6): anchor rows terminate
+    // at `claims` and reach NO compile consumer — every downstream system
+    // (compile, project, elicit's owned evidence) is anchor-free.
     let active: Vec<&Judgement> = resolution
         .rows
         .iter()
-        .filter(|(_, status)| matches!(status, ResolutionStatus::Active))
+        .filter(|(j, status)| {
+            matches!(status, ResolutionStatus::Active) && !matches!(j.form, RowForm::Anchor)
+        })
         .map(|(j, _)| *j)
         .collect();
     // Compile-input selection (SL-219 §2): each domain compiles ONLY its own
@@ -236,11 +281,15 @@ pub(crate) fn pipeline_from_sessions(
     // est-domain row touches its item.
     let gated_est_anchors: AnchorMap = est_anchors
         .iter()
-        .filter(|(item, _)| est_active.iter().any(|j| j.a == **item || j.b == **item))
+        .filter(|(item, _)| {
+            est_active
+                .iter()
+                .any(|j| j.a == **item || j.b.as_deref() == Some(item.as_str()))
+        })
         .map(|(item, &v)| (item.clone(), v))
         .collect();
 
-    let value = DomainSystem::compiled(&value_active, value_anchors, value_cfg);
+    let value = DomainSystem::compiled(&value_active, &value_anchors, value_cfg);
     let estimate = DomainSystem::compiled(&est_active, &gated_est_anchors, est_cfg);
     let constraining_by_class =
         compile::constraining_counts_by_class(&value.constraint_set, &value_active);
@@ -258,17 +307,24 @@ pub(crate) fn pipeline_from_sessions(
         .rows
         .iter()
         .map(|(j, status)| {
+            let is_anchor = matches!(j.form, RowForm::Anchor);
             // Row-status routing (SL-219 §2): `CompilationStatus` is assigned
             // by the row's OWNING domain system — the quarantine maps are
             // disjoint by construction (each row belongs to exactly one
-            // domain); `RowState` joins by row uid.
-            let compilation = matches!(status, ResolutionStatus::Active).then(|| {
-                if j.domain == DOMAIN_ESTIMATE {
-                    estimate.constraint_set.status_of(j)
-                } else {
-                    value.constraint_set.status_of(j)
-                }
-            });
+            // domain); `RowState` joins by row uid. Anchor rows never acquire
+            // one (SL-220 §2): their active display token joins from the
+            // claims pass instead.
+            let compilation =
+                (!is_anchor && matches!(status, ResolutionStatus::Active)).then(|| {
+                    if j.domain == DOMAIN_ESTIMATE {
+                        estimate.constraint_set.status_of(j)
+                    } else {
+                        value.constraint_set.status_of(j)
+                    }
+                });
+            let claim = (is_anchor && matches!(status, ResolutionStatus::Active))
+                .then(|| claim_token(&value_claims, &j.a))
+                .flatten();
             RowSummary {
                 uid: j.uid.clone(),
                 a: j.a.clone(),
@@ -279,7 +335,8 @@ pub(crate) fn pipeline_from_sessions(
                 rater_token: rater_key(&j.rater),
                 by: j.by.clone(),
                 note: j.note.clone(),
-                date: j.date.clone(),
+                date: j.ordering_date().to_string(),
+                claim,
                 state: RowState::new(status.clone(), compilation),
             }
         })
@@ -288,7 +345,7 @@ pub(crate) fn pipeline_from_sessions(
     // Owned clones of the value-domain active evidence for the elicit shell
     // (SL-217 PHASE-03): taken while `resolution` (which the borrows come
     // from) is still alive.
-    let active_judgements: Vec<Judgement> = value_active.iter().map(|&j| j.clone()).collect();
+    let active_pairwise: Vec<Judgement> = value_active.iter().map(|&j| j.clone()).collect();
 
     Ok(Pipeline {
         rows,
@@ -298,7 +355,30 @@ pub(crate) fn pipeline_from_sessions(
         est_constraining_by_class,
         malformed: resolution.malformed,
         priority_domain_count,
-        active_judgements,
+        value_claims,
+        active_pairwise,
+    })
+}
+
+/// The claim-join display token for an ACTIVE anchor row's item (SL-220
+/// design §2, RV-278 F-8): `conflicted` when the item's winning tier
+/// disagrees internally, else `anchored` (Pin/Human) / `prior`
+/// (Agent/Migrated). Item-level — every active anchor row on the item wears
+/// its resolved state; the row's own tier stays visible via `rater_token`.
+fn claim_token(claims: &ClaimResolution, item: &str) -> Option<&'static str> {
+    if let Some(claim) = claims.anchored.get(item) {
+        return Some(if claim.conflict.is_some() {
+            "conflicted"
+        } else {
+            "anchored"
+        });
+    }
+    claims.priors.get(item).map(|claim| {
+        if claim.conflict.is_some() {
+            "conflicted"
+        } else {
+            "prior"
+        }
     })
 }
 
@@ -333,10 +413,10 @@ pub(crate) fn cost_feed(est_projection: &Projection) -> CostFeed {
 mod tests {
     use super::{AnchorMap, Projection, ProjectionCfg, StatusMap, load_pipeline, load_sessions};
     use crate::comparison::{
-        COMPARISON_SCHEMA, COMPARISON_VERSION, ComparisonSession, DOMAIN_ESTIMATE, DOMAIN_VALUE,
-        FRAME_EQUAL_EFFORT, FRAME_MORE_WORK, Judgement, QuarantineReason, RaterKind, Response,
-        RowForm, SessionHeader, VALUE_PROJECTION_PARAMS, ValueProvenance, cost_feed,
-        pipeline_from_sessions,
+        COMPARISON_SCHEMA, COMPARISON_VERSION, ClaimResolution, ComparisonSession, DOMAIN_ESTIMATE,
+        DOMAIN_VALUE, FRAME_EQUAL_EFFORT, FRAME_MORE_WORK, FRAME_VALUE_ANCHOR, Judgement,
+        QuarantinePolicy, QuarantineReason, RaterKind, Response, RowForm, SessionHeader,
+        VALUE_PROJECTION_PARAMS, ValueProvenance, cost_feed, pipeline_from_sessions,
     };
     use crate::priority::config::EST_GAUGE_STEP;
 
@@ -364,8 +444,8 @@ mod tests {
             uid: uid.to_string(),
             seq: 0,
             a: a.to_string(),
-            b: b.to_string(),
-            response: Response::PreferA,
+            b: Some(b.to_string()),
+            response: Some(Response::PreferA),
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -375,7 +455,10 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-11".to_string(),
+            date: Some("2026-07-11".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 
@@ -453,7 +536,6 @@ mod tests {
             dir.path(),
             &StatusMap::new(),
             &Default::default(),
-            &Default::default(),
             &CFG,
             &EST_CFG,
         )
@@ -478,15 +560,8 @@ mod tests {
             ))
             .unwrap(),
         );
-        let pipeline = load_pipeline(
-            root,
-            &StatusMap::new(),
-            &Default::default(),
-            &Default::default(),
-            &CFG,
-            &EST_CFG,
-        )
-        .unwrap();
+        let pipeline =
+            load_pipeline(root, &StatusMap::new(), &Default::default(), &CFG, &EST_CFG).unwrap();
         let projected = &pipeline.value.projection;
         // Anchor-free two-node chain: the P8 gauge spread places both ends.
         assert!(projected.contains_key("SL-100"));
@@ -511,22 +586,11 @@ mod tests {
     }
 
     /// The in-memory pipeline over one session of `judgements` with the given
-    /// anchor maps (the VT-1 harness).
-    fn pipeline_of(
-        judgements: Vec<Judgement>,
-        value_anchors: &AnchorMap,
-        est_anchors: &AnchorMap,
-    ) -> super::Pipeline {
+    /// est anchor map (the VT-1 harness). Value anchors are claim-derived
+    /// inside the pipeline since the SL-220 PHASE-05 flip — no caller input.
+    fn pipeline_of(judgements: Vec<Judgement>, est_anchors: &AnchorMap) -> super::Pipeline {
         let sessions = vec![session("s1", "2026-07-11", judgements)];
-        pipeline_from_sessions(
-            &sessions,
-            &StatusMap::new(),
-            value_anchors,
-            est_anchors,
-            &CFG,
-            &EST_CFG,
-        )
-        .unwrap()
+        pipeline_from_sessions(&sessions, &StatusMap::new(), est_anchors, &CFG, &EST_CFG).unwrap()
     }
 
     /// The DomainSystem split: each domain compiles ONLY its own rows — an
@@ -540,7 +604,6 @@ mod tests {
                 est_judgement("e1", "SL-100", "SL-300"),
             ],
             &AnchorMap::new(),
-            &AnchorMap::new(),
         );
         let value_entities: Vec<&String> = pipeline.value.constraint_set.classes.keys().collect();
         assert_eq!(value_entities, ["SL-100", "SL-200"], "value rows only");
@@ -549,7 +612,7 @@ mod tests {
         // The owned value evidence excludes the est row (elicit recompiles
         // the value baseline from this — no cross-domain leak).
         let active_uids: Vec<&str> = pipeline
-            .active_judgements
+            .active_pairwise()
             .iter()
             .map(|j| j.uid.as_str())
             .collect();
@@ -572,11 +635,7 @@ mod tests {
         .into_iter()
         .collect();
 
-        let pipeline = pipeline_of(
-            vec![est_judgement("e1", "SL-300", "SL-100")],
-            &AnchorMap::new(),
-            &est_anchors,
-        );
+        let pipeline = pipeline_of(vec![est_judgement("e1", "SL-300", "SL-100")], &est_anchors);
         // Gated map: SL-400 (row-less) never enters the compiled system.
         let gated: Vec<&String> = pipeline.estimate.anchors.keys().collect();
         assert_eq!(gated, ["SL-100", "SL-300"], "row-gated anchor set");
@@ -587,11 +646,7 @@ mod tests {
         assert_eq!(cs.anchors.get(class_of("SL-300")), Some(&cost((5.0, 9.0))));
 
         // Cold start: no est rows ⇒ empty est system despite candidate anchors.
-        let cold = pipeline_of(
-            vec![judgement("v1", "SL-100", "SL-200")],
-            &AnchorMap::new(),
-            &est_anchors,
-        );
+        let cold = pipeline_of(vec![judgement("v1", "SL-100", "SL-200")], &est_anchors);
         assert!(cold.estimate.anchors.is_empty(), "no rows ⇒ no est anchors");
         assert!(cold.estimate.constraint_set.classes.is_empty());
         assert!(cold.estimate.projection.is_empty());
@@ -605,8 +660,8 @@ mod tests {
             .into_iter()
             .collect();
         let mut equal_row = est_judgement("e1", "SL-100", "SL-300");
-        equal_row.response = Response::Equal;
-        let pipeline = pipeline_of(vec![equal_row], &AnchorMap::new(), &est_anchors);
+        equal_row.response = Some(Response::Equal);
+        let pipeline = pipeline_of(vec![equal_row], &est_anchors);
         assert!(
             matches!(
                 pipeline.estimate.constraint_set.quarantined.get("e1"),
@@ -632,11 +687,7 @@ mod tests {
         .into_iter()
         .collect();
         // …but the sizing row says SL-100 is MORE work than SL-300.
-        let pipeline = pipeline_of(
-            vec![est_judgement("e1", "SL-100", "SL-300")],
-            &AnchorMap::new(),
-            &est_anchors,
-        );
+        let pipeline = pipeline_of(vec![est_judgement("e1", "SL-100", "SL-300")], &est_anchors);
         assert_eq!(
             pipeline.estimate.constraint_set.quarantined.get("e1"),
             Some(&QuarantineReason::AnchorConflict {
@@ -666,7 +717,6 @@ mod tests {
                 judgement("v3", "SL-500", "SL-100"),
                 est_judgement("e1", "SL-100", "SL-300"),
             ],
-            &AnchorMap::new(),
             &est_anchors,
         );
         let value_uids: Vec<&String> = pipeline.value.constraint_set.quarantined.keys().collect();
@@ -706,15 +756,7 @@ mod tests {
         est_cfg: &ProjectionCfg,
     ) -> super::Pipeline {
         let sessions = vec![session("s1", "2026-07-11", judgements)];
-        pipeline_from_sessions(
-            &sessions,
-            &StatusMap::new(),
-            &AnchorMap::new(),
-            est_anchors,
-            &CFG,
-            est_cfg,
-        )
-        .unwrap()
+        pipeline_from_sessions(&sessions, &StatusMap::new(), est_anchors, &CFG, est_cfg).unwrap()
     }
 
     fn anchors_of(pairs: &[(&str, f64)]) -> AnchorMap {
@@ -884,6 +926,161 @@ mod tests {
         }
     }
 
+    // ---- SL-220 PHASE-03: the claims pass wiring (design §2) -----------------
+
+    /// A live human value-anchor row (SL-220 §1): single subject, no pairwise
+    /// payload, `value-anchor` frame, magnitude payload.
+    fn anchor_row(uid: &str, item: &str, magnitude: f64) -> Judgement {
+        let mut j = judgement(uid, item, "unused");
+        j.b = None;
+        j.response = None;
+        j.form = RowForm::Anchor;
+        j.frame = FRAME_VALUE_ANCHOR.to_string();
+        j.magnitude = Some(magnitude);
+        j
+    }
+
+    fn row_of<'a>(pipeline: &'a super::Pipeline, uid: &str) -> &'a super::RowSummary {
+        pipeline
+            .rows
+            .iter()
+            .find(|r| r.uid == uid)
+            .unwrap_or_else(|| panic!("row {uid} present"))
+    }
+
+    /// The claims pass is wired (design §2) and anchor rows terminate at it:
+    /// they reach NO compile consumer AS ROWS (RV-278 F-6 — the value system
+    /// equals a direct compile over ONLY the pairwise rows), the pairwise
+    /// view excludes them, and their RowSummary joins the claim token instead
+    /// of any `CompilationStatus`. Since the PHASE-05 flip their RESOLVED
+    /// Pin/Human magnitudes DO feed compile — as the claim-derived
+    /// `AnchorMap` (D4/D12), never as rows; agent claims stay laundering-proof
+    /// (absent from the compiled anchors).
+    #[test]
+    fn anchor_rows_terminate_at_claims_and_never_reach_compile() {
+        let mut agent_anchor = anchor_row("a1", "SL-300", 2.0);
+        agent_anchor.rater = RaterKind::Agent;
+        let with_anchors = pipeline_of(
+            vec![
+                judgement("j1", "SL-100", "SL-200"),
+                anchor_row("h1", "SL-100", 6.0),
+                agent_anchor,
+            ],
+            &AnchorMap::new(),
+        );
+
+        // The claim resolution rides the Pipeline, routed by tier (D4).
+        assert_eq!(with_anchors.value_claims.anchored["SL-100"].value, 6.0);
+        assert_eq!(with_anchors.value_claims.priors["SL-300"].value, 2.0);
+        // The pairwise view is anchor-free (the SL-220 split).
+        let pairwise: Vec<&str> = with_anchors
+            .active_pairwise()
+            .iter()
+            .map(|j| j.uid.as_str())
+            .collect();
+        assert_eq!(pairwise, ["j1"]);
+        // F-6, store path: the compiled value system is EXACTLY a direct
+        // compile over the pairwise rows + the claim-derived anchor map —
+        // anchor rows contributed no compile ROW.
+        let claim_anchors = with_anchors.value_claims.anchor_map();
+        assert_eq!(
+            claim_anchors.get("SL-100"),
+            Some(&6.0),
+            "the human claim anchors the compile (the flip, D12)"
+        );
+        assert!(
+            !claim_anchors.contains_key("SL-300"),
+            "the agent claim never enters the anchor map (D4)"
+        );
+        assert_eq!(with_anchors.value.anchors, claim_anchors);
+        let pairwise_refs: Vec<&Judgement> = with_anchors.active_pairwise().iter().collect();
+        let direct =
+            super::compile::compile(&pairwise_refs, &claim_anchors, QuarantinePolicy::Symmetric);
+        assert_eq!(with_anchors.value.constraint_set, direct);
+        // RowSummary join: claim tokens, never a CompilationStatus.
+        let h1 = row_of(&with_anchors, "h1");
+        assert_eq!(h1.b, None);
+        assert_eq!(h1.response, None);
+        assert_eq!(h1.state.compilation, None);
+        assert_eq!(h1.claim, Some("anchored"));
+        assert_eq!(h1.display_token(), "anchored");
+        let a1 = row_of(&with_anchors, "a1");
+        assert_eq!(a1.state.compilation, None);
+        assert_eq!(a1.display_token(), "prior");
+        // The pairwise row keeps the RowState join untouched.
+        assert_eq!(row_of(&with_anchors, "j1").display_token(), "active");
+    }
+
+    /// Claim display tokens beyond the happy path: cross-session same-tier
+    /// disagreement renders `conflicted` on every contributing row; a lensed
+    /// anchor row keeps its RESOLUTION token (`inert(lens)` — the claim
+    /// tokens are Active-only); a superseded anchor row keeps its
+    /// supersession token.
+    #[test]
+    fn anchor_row_tokens_cover_conflict_lens_and_supersession() {
+        let mut lensed = anchor_row("l1", "SL-100", 9.0);
+        lensed.lens = Some("user-value".to_string());
+        let s1 = session(
+            "s1",
+            "2026-07-11",
+            vec![
+                anchor_row("p", "SL-100", 4.0),
+                anchor_row("q", "SL-100", 8.0), // R3-revises `p` (same identity)
+                lensed,
+            ],
+        );
+        let s2 = session("s2", "2026-07-11", vec![anchor_row("r", "SL-100", 2.0)]);
+        let pipeline = pipeline_from_sessions(
+            &[s1, s2],
+            &StatusMap::new(),
+            &AnchorMap::new(),
+            &CFG,
+            &EST_CFG,
+        )
+        .unwrap();
+        // q (8.0) and r (2.0) are concurrent → conflicted, mean 5.0.
+        let claim = &pipeline.value_claims.anchored["SL-100"];
+        assert_eq!(claim.value, 5.0);
+        assert!(claim.conflict.is_some());
+        assert_eq!(row_of(&pipeline, "q").display_token(), "conflicted");
+        assert_eq!(row_of(&pipeline, "r").display_token(), "conflicted");
+        // Non-Active anchor rows keep their resolution tokens.
+        assert_eq!(row_of(&pipeline, "p").display_token(), "superseded→q");
+        assert_eq!(row_of(&pipeline, "l1").claim, None);
+        assert_eq!(row_of(&pipeline, "l1").display_token(), "inert(lens)");
+        // …and the lensed partition still resolved (RV-278 F-2).
+        let key = ("user-value".to_string(), "SL-100".to_string());
+        assert_eq!(pipeline.value_claims.lensed[&key].value, 9.0);
+    }
+
+    /// The empty-claims property (design §8.5, pipeline level): a corpus with
+    /// no anchor rows carries an empty ClaimResolution, an EMPTY compiled
+    /// anchor map (claims are the only value-anchor source post-flip), and a
+    /// value system bitwise-identical to a direct anchor-free compile+project
+    /// over the same rows — the claims pass perturbs nothing.
+    #[test]
+    fn corpus_without_anchor_rows_scores_identically_with_empty_claims() {
+        let rows = vec![
+            judgement("j1", "SL-100", "SL-200"),
+            judgement("j2", "SL-200", "SL-300"),
+        ];
+        let pipeline = pipeline_of(rows, &AnchorMap::new());
+        assert_eq!(pipeline.value_claims, ClaimResolution::default());
+        assert!(pipeline.value.anchors.is_empty(), "no claims ⇒ no anchors");
+
+        let rows = [
+            judgement("j1", "SL-100", "SL-200"),
+            judgement("j2", "SL-200", "SL-300"),
+        ];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let direct = super::compile::compile(&refs, &AnchorMap::new(), QuarantinePolicy::Symmetric);
+        assert_eq!(pipeline.value.constraint_set, direct);
+        assert_eq!(
+            pipeline.value.projection,
+            super::project::project(&direct, &CFG)
+        );
+    }
+
     /// D11 positivity property over DETERMINISTICALLY generated est ledgers
     /// (the `project.rs` enumeration idiom — no rng): every response
     /// assignment over four entities' six pairs (4^6: absent / more-work
@@ -915,7 +1112,7 @@ mod tests {
                         2 => rows.push(est_judgement(&uid, b, a)),
                         3 => {
                             let mut eq = est_judgement(&uid, a, b);
-                            eq.response = Response::Equal;
+                            eq.response = Some(Response::Equal);
                             rows.push(eq);
                         }
                         _ => {}

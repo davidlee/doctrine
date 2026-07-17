@@ -92,6 +92,11 @@ const ALLOWLIST: &[&str] = &[
     // IMP-183 extended: backlog now surfaces estimate/value (RawBacklogToml +
     // BacklogItem fields + format_metadata rendering).
     "backlog.rs",
+    // SL-220 §1: the value-domain anchor payload mirrors `value::validate`
+    // EXACTLY (single source — no re-implemented finiteness policy), so the
+    // wire model names ValueFacet/value:: — sanctioned capture-side exposure,
+    // not a gating path (scoring still never reads the facet here).
+    "comparison/wire.rs",
 ];
 
 fn src_dir() -> PathBuf {

@@ -2237,6 +2237,16 @@ pub(crate) fn run_show(
                 risk: None,
                 tags: doc.tags.clone(),
             };
+            // SL-220 PHASE-06: the value line re-sources from the comparison
+            // ladder (design §6) — never the raw facet (EX-3). `doc.value` feeds
+            // only the rung-5 fallback.
+            let value_line = crate::priority::surface::show_value_line(
+                &root,
+                &canonical_id(doc.id),
+                doc.value.as_ref().map(|v| v.value),
+                SLICE_KIND.prefix,
+                &value_unit,
+            )?;
             format_show(
                 &doc,
                 &tier1,
@@ -2245,7 +2255,7 @@ pub(crate) fn run_show(
                 posture,
                 &facets,
                 &estimation_unit,
-                &value_unit,
+                value_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -2345,7 +2355,7 @@ fn format_show(
     posture: crate::conduct::Conduct,
     facets: &crate::facet::EntityFacets,
     estimation_unit: &str,
-    value_unit: &str,
+    value_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -2377,12 +2387,11 @@ fn format_show(
         ));
     }
 
-    // Value row — magnitude + resolved unit (D4). Absent → no row (D3).
-    if let Some(ref val) = facets.value {
-        parts.push(format!(
-            "{}\n",
-            crate::value::format_value_normal(val, value_unit)
-        ));
+    // Value row — the resolved provenance line (SL-220 PHASE-06, design §6),
+    // re-sourced from the comparison ladder by the shell. Absent evidence → no
+    // row (D3, matching the former absent-facet behaviour).
+    if let Some(line) = value_line {
+        parts.push(format!("{line}\n"));
     }
 
     // Tier-1 axes in canonical order (supersedes, governed_by, then references per
@@ -4035,7 +4044,7 @@ mod tests {
             posture,
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
-            "magic_beans",
+            None,
             0.1,
             0.9,
         );
@@ -4085,7 +4094,7 @@ mod tests {
             posture,
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
-            "magic_beans",
+            None,
             0.1,
             0.9,
         );
@@ -4149,7 +4158,7 @@ mod tests {
             posture,
             &facets,
             "espresso_shots",
-            "magic_beans",
+            None,
             0.1,
             0.9,
         );
@@ -4185,7 +4194,7 @@ mod tests {
             posture,
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
-            "magic_beans",
+            None,
             0.1,
             0.9,
         );
@@ -4219,6 +4228,8 @@ mod tests {
             risk: None,
             tags: vec![],
         };
+        // SL-220 PHASE-06: the value line is now resolved by the shell and
+        // threaded in (design §6); format_show renders the passed line verbatim.
         let out = format_show(
             &doc,
             &[],
@@ -4227,12 +4238,12 @@ mod tests {
             posture,
             &facets,
             "espresso_shots",
-            "magic_beans",
+            Some("value: 5.0 magic_beans (human claim, alice, 2026-07-16)"),
             0.1,
             0.9,
         );
         assert!(
-            out.contains("value: 5.0 magic_beans"),
+            out.contains("value: 5.0 magic_beans (human claim, alice, 2026-07-16)"),
             "VT-3 value row: {out}"
         );
     }
@@ -4263,7 +4274,7 @@ mod tests {
             posture,
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
-            "magic_beans",
+            None,
             0.1,
             0.9,
         );
@@ -4309,7 +4320,7 @@ mod tests {
             posture,
             &facets,
             "espresso_shots",
-            "magic_beans",
+            None,
             0.25,
             0.75,
         );
@@ -4354,7 +4365,7 @@ mod tests {
             posture,
             &facets,
             "espresso_shots",
-            "magic_beans",
+            None,
             0.1,
             0.9,
         );
@@ -4389,7 +4400,7 @@ mod tests {
             posture,
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
-            "magic_beans",
+            None,
             0.1,
             0.9,
         );
@@ -4572,7 +4583,7 @@ mod tests {
             posture,
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
-            "magic_beans",
+            None,
             0.1,
             0.9,
         );
@@ -4796,7 +4807,6 @@ mod tests {
         let cfg = crate::dtoml::load_doctrine_toml(root).unwrap();
         let posture = crate::conduct::resolve(&cfg.conduct, &doc.status);
         let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
-        let value_unit = crate::value::resolve_unit(&cfg.value);
         let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation).unwrap();
         let facets = crate::facet::EntityFacets {
             estimate: doc.estimate.clone(),
@@ -4814,7 +4824,7 @@ mod tests {
             posture,
             &facets,
             &estimation_unit,
-            &value_unit,
+            None,
             lower_pct,
             upper_pct,
         );

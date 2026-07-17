@@ -19,10 +19,12 @@ use crate::standard::StandardCommand;
 pub(crate) enum WriteClass {
     Read,
     Write(&'static str),
-    /// Orchestrator-only privileged verbs (SL-056 PHASE-06): `fork` is the FIRST
-    /// member; later phases add `import`/`land`/`gc`. Carries the verb label like
-    /// `Write`. REFUSED under worker-mode — these are the orchestrator's funnel
-    /// operations, never a worker's.
+    /// Operator-gated privileged verbs (SL-056 PHASE-06): the orchestrator's
+    /// funnel operations (`fork`/`import`/`land`/`gc`, …) AND the SL-220 §4
+    /// human-in-the-loop admission family (`value pin` / `value pin --retire`) —
+    /// verbs that must never run from a worker. Carries the verb label like
+    /// `Write`. REFUSED under worker-mode. (The pin family's separate TTY gate
+    /// is enforced in the handler, not here.)
     Orchestrator(&'static str),
     /// `worktree marker --clear` (SL-056 §3, §5): a bespoke class that the
     /// worker-mode guard does NOT refuse (locking the marker's only remover behind
@@ -378,7 +380,16 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         Command::Supersede { .. } => Write("supersede"),
         // Estimate / Value / Risk facet writes (SL-118 PHASE-03, SL-134 PHASE-02).
         Command::Estimate { .. } => Write("estimate"),
-        Command::Value { .. } => Write("value"),
+        // `value set`/`clear` stay ordinary writes; the SL-220 §4 pin family is
+        // operator-gated (D13/EN-2) — Orchestrator-classed, worker-refused.
+        Command::Value { action } => match action {
+            crate::commands::cli::ValueAction::Set(_)
+            | crate::commands::cli::ValueAction::Clear(_) => Write("value"),
+            crate::commands::cli::ValueAction::Pin(pin) if pin.retire => {
+                Orchestrator("value pin --retire")
+            }
+            crate::commands::cli::ValueAction::Pin(_) => Orchestrator("value pin"),
+        },
         Command::Risk { .. } => Write("risk"),
         // Compare (SL-210): record + withdraw write authored session evidence
         // under `.doctrine/comparisons/` — authored writes, funnelled through the

@@ -170,6 +170,32 @@ pub(crate) enum Finding {
         domain: ComparisonDomain,
         rows: Vec<String>,
     },
+    /// SL-220 D6 (RV-278 F-4) — an authored `[value]` facet survives on the
+    /// entity: unmigrated evidence debt, fired on facet PRESENCE, never on
+    /// rung-5 consumption — a facet shadowed by projection (a compared
+    /// facet-bearing item resolves at rung 2) is still debt. Exit: run
+    /// `scripts/migrate_value_facets.py`, or re-assert via
+    /// `value set`/`value pin` and `value clear` the residue.
+    UnmigratedFacet {
+        domain: ComparisonDomain,
+        entity: String,
+        value: f64,
+    },
+    /// SL-220 PHASE-06 (design §2/§6, D3/D14) — a SAME-tier magnitude
+    /// disagreement on one item's value claim: the winning tier's multiset
+    /// mean stands as the point value; `rows` claims span `[low, high]`.
+    /// Anchored tiers (Pin/Human) carry the "contested" framing + the reprobe
+    /// disclosure; agent/migrated conflicts route to comparison, never the
+    /// human queue (D14). Sourced from the claim pass
+    /// ([`comparison::ClaimFinding::Conflict`]); domain-tagged Value.
+    ClaimConflict {
+        domain: ComparisonDomain,
+        item: String,
+        tier: comparison::ClaimTier,
+        low: f64,
+        high: f64,
+        rows: u32,
+    },
 }
 
 /// Which per-domain comparison system produced a comparison finding (SL-219
@@ -227,6 +253,10 @@ impl Finding {
             }
             Finding::AnchorConflict { rows, .. } => count_magnitude(rows.len()),
             Finding::AnchorGaugeDisconnect { entities, .. } => count_magnitude(entities.len()),
+            // Presence-based debt: one facet each — kind grouping carries the
+            // signal; within the group the stable sort keeps id order.
+            Finding::UnmigratedFacet { .. } => 1.0,
+            Finding::ClaimConflict { rows, .. } => f64::from(*rows),
         }
     }
 
@@ -247,6 +277,8 @@ impl Finding {
             Finding::AnchorConflict { .. } => "anchor conflicts",
             Finding::AnchorGaugeDisconnect { .. } => "anchor/gauge disconnects",
             Finding::MalformedSupersession { .. } => "malformed supersessions",
+            Finding::UnmigratedFacet { .. } => "unmigrated facets",
+            Finding::ClaimConflict { .. } => "claim conflicts",
         }
     }
 }
@@ -669,7 +701,64 @@ pub(crate) fn comparison_findings(pipeline: &comparison::Pipeline) -> Vec<Findin
         ));
     }
     out.extend(malformed_supersession_findings(pipeline));
+    out.extend(claim_conflict_findings(pipeline));
     out
+}
+
+/// **`ClaimConflict`** (SL-220 PHASE-06, design §2/§6) — lift the value claim
+/// pass's same-tier conflicts ([`comparison::ClaimFinding::Conflict`], fired at
+/// EVERY tier, surfaced-never-silent) into the findings surface, domain-tagged
+/// Value. The render distinguishes the anchored "contested" framing from the
+/// agent/migrated "calibrate via comparison" guidance (D14); the pass already
+/// carries the tier, interval, and row count.
+fn claim_conflict_findings(pipeline: &comparison::Pipeline) -> Vec<Finding> {
+    pipeline
+        .value_claims
+        .findings
+        .iter()
+        .map(|f| {
+            let comparison::ClaimFinding::Conflict {
+                item,
+                tier,
+                low,
+                high,
+                rows,
+                ..
+            } = f;
+            Finding::ClaimConflict {
+                domain: ComparisonDomain::Value,
+                item: item.clone(),
+                tier: *tier,
+                low: *low,
+                high: *high,
+                rows: *rows,
+            }
+        })
+        .collect()
+}
+
+/// **`UnmigratedFacet`** (SL-220 D6, RV-278 F-4) — every entity still
+/// authoring a `[value]` facet, fired on PRESENCE: the ladder's rung-5
+/// consumption is irrelevant (a compared facet-bearing item resolves at
+/// rung 2 and its facet is STILL debt — the flip's permanent semantics,
+/// design §3). Graph-derived (the facet rides `NodeAttr.facets`), so it
+/// lives with the graph detectors, not `comparison_findings`; domain-tagged
+/// Value at construction (SL-219 D9 — Phase 2's estimate migration reuses
+/// the variant with its own tag).
+fn unmigrated_facets(g: &PriorityGraph) -> Vec<Finding> {
+    g.attrs
+        .iter()
+        .filter_map(|(key, attr)| {
+            attr.facets
+                .value
+                .as_ref()
+                .map(|v| Finding::UnmigratedFacet {
+                    domain: ComparisonDomain::Value,
+                    entity: key.canonical(),
+                    value: v.value,
+                })
+        })
+        .collect()
 }
 
 // ── β-family detectors (PHASE-02 — over the pre-built BetaEndpoints) ──────────
@@ -767,6 +856,7 @@ pub(crate) fn detect(
     findings.extend(displacements(base));
     findings.extend(plateaus(base));
     findings.extend(provenance(base));
+    findings.extend(unmigrated_facets(base));
     if let Some(betas) = betas {
         findings.extend(order_instability(base, betas));
         findings.extend(arm_resequencing(base, betas));
@@ -890,22 +980,39 @@ mod tests {
         let scanned =
             crate::relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = config::load(root);
-        // Mechanical call-site update (SL-213 PHASE-05, SL-219 PHASE-04):
-        // build_from_with_cfg gained projected-values and cost-feed params; no
-        // comparisons dir in this fixture, so the empty maps are byte-identical
-        // to the pre-comparison-tier behaviour.
+        // Mechanical call-site update (SL-213 PHASE-05, SL-219 PHASE-04,
+        // SL-220 PHASE-05): build_from_with_cfg gained projected-values,
+        // cost-feed, and claims params; no comparisons dir in this fixture,
+        // so the empty inputs are byte-identical to the pre-comparison-tier
+        // behaviour.
         let no_projection = crate::comparison::Projection::new();
         let no_feed = crate::comparison::CostFeed::new();
+        let no_claims = crate::comparison::ClaimResolution::default();
         let base =
-            graph::build_from_with_cfg(&scanned, root, &cfg, &no_projection, &no_feed).unwrap();
+            graph::build_from_with_cfg(&scanned, root, &cfg, &no_projection, &no_feed, &no_claims)
+                .unwrap();
         let mut lo_cfg = cfg.clone();
         lo_cfg.estimate.skew = BETA_LO;
         let mut hi_cfg = cfg.clone();
         hi_cfg.estimate.skew = BETA_HI;
-        let lo =
-            graph::build_from_with_cfg(&scanned, root, &lo_cfg, &no_projection, &no_feed).unwrap();
-        let hi =
-            graph::build_from_with_cfg(&scanned, root, &hi_cfg, &no_projection, &no_feed).unwrap();
+        let lo = graph::build_from_with_cfg(
+            &scanned,
+            root,
+            &lo_cfg,
+            &no_projection,
+            &no_feed,
+            &no_claims,
+        )
+        .unwrap();
+        let hi = graph::build_from_with_cfg(
+            &scanned,
+            root,
+            &hi_cfg,
+            &no_projection,
+            &no_feed,
+            &no_claims,
+        )
+        .unwrap();
         let betas = BetaEndpoints { lo, hi };
         detect(&base, &cfg, Some(&betas))
     }
@@ -1333,8 +1440,8 @@ mod tests {
             uid: uid.to_string(),
             seq: 0,
             a: a.to_string(),
-            b: b.to_string(),
-            response: Response::PreferA,
+            b: Some(b.to_string()),
+            response: Some(Response::PreferA),
             domain: domain.to_string(),
             frame: frame.to_string(),
             form: RowForm::Order,
@@ -1344,14 +1451,18 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-14".to_string(),
+            date: Some("2026-07-14".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 
-    /// The in-memory pipeline over one session (the VT-4 harness).
+    /// The in-memory pipeline over one session (the VT-4 harness). Value
+    /// anchors are claim-derived inside the pipeline (SL-220 PHASE-05) —
+    /// fixtures mint them as anchor ROWS via [`value_anchor_row`].
     fn pipeline_of(
         judgements: Vec<Judgement>,
-        value_anchors: &crate::comparison::AnchorMap,
         est_anchors: &crate::comparison::AnchorMap,
     ) -> comparison::Pipeline {
         use crate::comparison::{
@@ -1372,12 +1483,23 @@ mod tests {
         pipeline_from_sessions(
             &sessions,
             &StatusMap::new(),
-            value_anchors,
             est_anchors,
             &VALUE_PROJECTION_PARAMS,
             &VALUE_PROJECTION_PARAMS,
         )
         .unwrap()
+    }
+
+    /// A live human value-anchor row (SL-220 §1) — the post-flip way a
+    /// fixture pins a value anchor (a resolved claim feeds `anchor_map()`).
+    fn value_anchor_row(uid: &str, item: &str, magnitude: f64) -> Judgement {
+        use crate::comparison::{DOMAIN_VALUE, FRAME_VALUE_ANCHOR, RowForm};
+        let mut j = domain_judgement(uid, DOMAIN_VALUE, FRAME_VALUE_ANCHOR, item, "unused");
+        j.b = None;
+        j.response = None;
+        j.form = RowForm::Anchor;
+        j.magnitude = Some(magnitude);
+        j
     }
 
     /// D9: each comparison finding carries the [`ComparisonDomain`] of the
@@ -1391,9 +1513,8 @@ mod tests {
         };
         // Each domain gets its own C4 anchor conflict: the row prefers the
         // LOWER-anchored side, contradicting the anchors of its own system.
-        let value_anchors: AnchorMap = [("ISS-001".to_string(), 1.0), ("ISS-002".to_string(), 2.0)]
-            .into_iter()
-            .collect();
+        // Value anchors are minted as claim ROWS (SL-220 PHASE-05 — the
+        // resolved Pin/Human claims feed compile via `anchor_map()`).
         let est_anchors: AnchorMap = [("ISS-003".to_string(), 1.0), ("ISS-004".to_string(), 5.0)]
             .into_iter()
             .collect();
@@ -1401,8 +1522,9 @@ mod tests {
             vec![
                 domain_judgement("v1", DOMAIN_VALUE, FRAME_EQUAL_EFFORT, "ISS-001", "ISS-002"),
                 domain_judgement("e1", DOMAIN_ESTIMATE, FRAME_MORE_WORK, "ISS-003", "ISS-004"),
+                value_anchor_row("va1", "ISS-001", 1.0),
+                value_anchor_row("va2", "ISS-002", 2.0),
             ],
-            &value_anchors,
             &est_anchors,
         );
 
@@ -1476,7 +1598,7 @@ mod tests {
         a.supersedes = Some("mal-b".to_string());
         b.supersedes = Some("mal-a".to_string());
         b.seq = 1;
-        let pipeline = pipeline_of(vec![a, b], &AnchorMap::new(), &AnchorMap::new());
+        let pipeline = pipeline_of(vec![a, b], &AnchorMap::new());
         let fs = comparison_findings(&pipeline);
         assert!(
             fs.iter().any(|f| matches!(
@@ -1505,8 +1627,8 @@ mod tests {
             uid: uid.to_string(),
             seq: 0,
             a: winner.to_string(),
-            b: loser.to_string(),
-            response: Response::PreferA,
+            b: Some(loser.to_string()),
+            response: Some(Response::PreferA),
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -1516,7 +1638,10 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-12".to_string(),
+            date: Some("2026-07-12".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         };
         let rows = [judgement("j0", "x", "y"), judgement("j1", "z", "w")];
         let refs: Vec<&Judgement> = rows.iter().collect();
