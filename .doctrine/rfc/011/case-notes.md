@@ -1717,3 +1717,40 @@ Audit-time token inefficiencies observed while auditing SL-220:
   project into the primary selector registry, so `slice conformance` at
   audit reports 21 undeclared cells that were all already adjudicated —
   re-deriving each mapping from phase sheets is pure token tax.
+
+[close; SL-220-splitlineage-3way-46c8e3df]
+Closing SL-220 cost real tokens to a THREE-way split lineage the handoff summary
+didn't register. The dispatch base (main) was never re-promoted from edge after
+audit/reconcile, so at close time: (a) the ~6.6k-line code delivery lived only on
+the admitted review-surface candidate f8e7ca38 (based on OLD main); (b) the
+corpus migration (185 [value] facets stripped → ledger) AND all reconcile authored
+content (design.md append-notes, REV-025, RV-277 outcome, spec edits, canonical
+selector registry) lived only on edge; (c) main had neither, and slice-220.toml
+diverged on ALL THREE tips. The handoff's "just run dispatch sync --integrate
+--trunk main" would have landed the code-only candidate on main WITHOUT the
+migration or reconcile content, stranded edge, and left a stale slice-220.toml —
+a silently-broken close.
+
+The existing recovery memories (close-preff-trunk-absorbs-repair,
+close-deadlock-refresh-base-recovery) assume the reconciled truth is on
+review/<slice> or the candidate. Here it was on EDGE — neither the review bundle
+nor the candidate carried the migration/reconcile. So the pre-FF step had to
+UNITE edge⊕candidate first: `git merge f8e7ca38` INTO edge, resolving the one
+authored-file conflict (slice-220.toml) to edge's canonical reconcile version,
+which also makes f8e7ca38 a genuine ancestor of trunk so the close_target
+provenance check passes. Then FF main→unified-tip, create+admit a no-op
+close_target (base=main, source=review/220 now an ancestor → tree-identical
+merge), `sync --integrate --trunk main` (records the trunk row as a +1 no-op
+merge), FF edge→that. Cost: ~15 tool calls of lineage archaeology (git
+merge-base/rev-parse across 3 tips, value-facet counts per lineage, blob
+compares) before it was safe to touch main.
+
+Root cause / signpost: when reconcile + a corpus migration accumulate on EDGE
+after the dispatch base, close is a merge-into-edge-then-record, not a bare
+integrate. The `dispatch status` "next" hint ("integrate --trunk main") is
+lineage-blind — it doesn't know reconcile truth is stranded on a sibling branch.
+A pre-close check that diffs the admitted close_target's tree against edge (and
+flags migration/authored divergence) would have surfaced the 3-way split in one
+command instead of a manual investigation. Same root as SL-198's note: the
+edge/main promotion discipline vs dispatch's off-edge code lineage keeps
+generating split-lineage close friction.
