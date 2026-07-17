@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 337
+slug = "semantic-graph-neighbourhood-exploration"
+title = "Semantic graph neighbourhood exploration"
+status = "pending"
+kind = "functional"
+
+description = "The explorer renders a focus-and-depth-bounded neighbourhood of the entity+relation graph, filterable by kind and navigable node to node."
+tags = []
+acceptance_criteria = [
+  "GET /api/graph returns the full catalog graph as nodes, edges, and units.",
+  "Selecting a focus entity and a depth (0-3) renders a server-rendered DOT-to-SVG diagram scoped to exactly that neighbourhood.",
+  "Kind-filter checkboxes narrow the rendered entity list and relationship table without a new server request.",
+  "Clicking a node navigates focus via URL hash routing, so a vantage point is a shareable link.",
+]

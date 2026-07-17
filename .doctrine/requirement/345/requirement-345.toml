@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 345
+slug = "deterministic-degradation-under-contradictory-evidence"
+title = "Deterministic degradation under contradictory evidence"
+status = "pending"
+kind = "functional"
+
+description = "The engine degrades deterministically and visibly under inconsistent or cyclic human evidence instead of discarding data or producing an infeasible constraint system."
+tags = []
+acceptance_criteria = [
+  "A preference cycle (A>B>C>A) collapses its members into one tied class and quarantines every participating row as `QuarantineReason::PreferenceCycle`, never a hard sort failure.",
+  "A row whose edge contradicts a pair of differently-valued anchors quarantines as `QuarantineReason::AnchorConflict`, naming the conflicting pair.",
+  "Quarantine policy is symmetric — every row on a violating structure is demoted, none silently dropped — and the resulting `ConstraintSet` is always satisfiable.",
+  "`compare list`/`explain` render a single joined display token (`RowState`) so no quarantined, inert, or superseded row's disposition goes unrendered.",
+]

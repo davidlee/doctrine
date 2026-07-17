@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 341
+slug = "dual-agent-and-human-json-graph-contract"
+title = "Dual agent and human JSON graph contract"
+status = "pending"
+kind = "quality"
+
+description = "Every explorer view's read model must be independently fetchable as JSON so an agent consumes the same graph a human browses."
+tags = []
+acceptance_criteria = [
+  "/api/graph, /api/survey, /api/concept-map/{id}, and /api/entity/{id}/markdown each return machine-parseable JSON or plain text usable without the HTML shell.",
+  "POST /api/refresh atomically rebuilds the catalog graph and priority graph together, so no subsequent request observes one refreshed store paired with a stale one.",
+  "A request for an unknown entity id or unembedded asset path returns a self-describing not-found response rather than a generic failure.",
+]

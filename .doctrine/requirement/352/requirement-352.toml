@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 352
+slug = "frontend-dot-authoring-is-pure-and-client-side"
+title = "Frontend DOT authoring is pure and client-side"
+status = "pending"
+kind = "quality"
+
+description = "The frontend composes DOT source text for the semantic graph and concept-map diagrams entirely in TypeScript with no DOM or network dependency, and posts only finished text to the server."
+tags = []
+acceptance_criteria = [
+  "dot.ts exports pure string-building functions (graphToDot, cmGraphToDot, dotQuote, escapeStringContent) that take data in and return strings, touching neither the DOM nor fetch.",
+  "render.ts and concept-map.ts each call renderDot (api.ts) exactly once per redraw with the built DOT text as the payload.",
+  "No frontend module parses or reconstructs SVG beyond wiring interaction handlers in svg.ts.",
+]

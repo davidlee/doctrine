@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 342
+slug = "append-only-session-ledger-capture"
+title = "Append-only session ledger capture"
+status = "pending"
+kind = "functional"
+
+description = "The engine captures every value/estimate judgement, relative or absolute, as an immutable, dated, attributed row in an append-only session ledger, never as an in-place edit."
+tags = []
+acceptance_criteria = [
+  "`compare record <A> <B>` requires exactly one of `--prefer`/`--equal`/`--incomparable` and writes a fresh, clobber-refusing session-of-one `.toml` under `.doctrine/comparisons/`.",
+  "Every captured row carries a mandatory `rater` (`human`/`agent`); `value set` requires an explicit `--rater` and `value pin` requires `--by`, with no default that could fabricate provenance.",
+  "`--supersedes <uid>` is validated against the loaded corpus at capture time; an unknown target uid is refused before any write.",
+  "Correction is only ever a superseding row or an appended tombstone — no code path edits an existing judgement row in place.",
+]

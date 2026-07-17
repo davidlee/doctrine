@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 343
+slug = "three-tier-pure-resolve-compile-project-pipeline"
+title = "Three-tier pure resolve-compile-project pipeline"
+status = "pending"
+kind = "functional"
+
+description = "The engine derives a per-entity value scalar and its provenance from the ledger through three pure tiers, row-validity resolution, constraint compilation, and gauge-based projection, composed behind one impure disk seam."
+tags = []
+acceptance_criteria = [
+  "`resolve` assigns every row exactly one `ResolutionStatus` (Active/Superseded/Tombstoned/InertLens/InertDomain/InertLifecycle/Malformed) before any row reaches compilation.",
+  "`compile` produces a `ConstraintSet` (classes, strict edges, anchors, quarantine, bounds) with no clock, disk, rng, or git dependency.",
+  "`project` places every evidence-bearing entity by reverse-topological greedy placement per weakly-connected component, tagging each with `Authored`/`Projected`/`Gauge` provenance.",
+  "`store::load_pipeline` is the sole disk-touching seam, short-circuiting to an empty pipeline when no comparison sessions exist on disk.",
+]

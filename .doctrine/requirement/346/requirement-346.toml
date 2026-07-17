@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 346
+slug = "pure-core-determinism-across-pipeline-tiers"
+title = "Pure-core determinism across pipeline tiers"
+status = "pending"
+kind = "quality"
+
+description = "Every pure tier of the comparison engine is deterministic and side-effect-free, so pipeline output depends only on the active row set, never on read order, machine, or wall-clock time."
+tags = []
+acceptance_criteria = [
+  "Every module below `store` (`wire`, `resolve`, `compile`, `project`, `query`, `claims`) touches no clock, disk, rng, or git, per module-level `//!` docs and the ADR-001 layering.",
+  "All ordering-sensitive collections are `BTreeMap`/`BTreeSet` keyed by uid or canonical entity id, with `f64` compared only via `total_cmp`, never used as a map key.",
+  "Two developers' independently-authored session files merge as clean file adds and yield byte-identical pipeline output regardless of merge order (the driving hazard RFC-019 T2 names).",
+]

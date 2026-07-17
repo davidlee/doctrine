@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 351
+slug = "route-handlers-stay-policy-free-wrappers"
+title = "Route handlers stay policy-free wrappers"
+status = "pending"
+kind = "quality"
+
+description = "HTTP route handlers in map_server::routes never duplicate graph-construction logic or entity semantics; they call one builder and serialise its result."
+tags = []
+acceptance_criteria = [
+  "The /api/graph and /api/survey handlers each call exactly one builder function (CatalogGraph::from_catalog, survey_view_for_map) with no intermediate transform of node/edge shape.",
+  "No handler branches on entity kind to decide graph shape or filter nodes.",
+  "The routes.rs module doc states the engine-tier (ADR-001) discipline explicitly.",
+]

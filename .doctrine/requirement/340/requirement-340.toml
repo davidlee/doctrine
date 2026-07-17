@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 340
+slug = "loopback-only-embedded-explorer-serving"
+title = "Loopback-only embedded explorer serving"
+status = "pending"
+kind = "quality"
+
+description = "The web explorer must run with no external network dependency, binding to loopback and serving assets embedded in the binary."
+tags = []
+acceptance_criteria = [
+  "map serve binds 127.0.0.1 only.",
+  "HTML/CSS/JS/vendor assets are served from an embedded bundle with no external fetch or separate deploy step required at run time.",
+  "GET /api/health reports both SVG-renderer (dot) availability and non-empty-graph readiness in one response.",
+]

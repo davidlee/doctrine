@@ -1,0 +1,11 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 16
+slug = "graph-exploration"
+title = "Graph exploration"
+status = "draft"
+kind = "product"
+tags = []
+product_level = "capability"
+# parent = "PRD-NNN"   # decomposition parent (product→product)

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 348
+slug = "refresh-swaps-all-data-stores-atomically"
+title = "Refresh swaps all data stores atomically"
+status = "pending"
+kind = "functional"
+
+description = "POST /api/refresh rescans the corpus and replaces the catalog, priority graph, and presentation graph together under one write-lock acquisition so readers never see a mixed generation."
+tags = []
+acceptance_criteria = [
+  "AppState.stores is a single Arc<RwLock<DataStores>> covering catalog, priority_graph, and graph.",
+  "The refresh handler rebuilds all three fields and assigns the whole DataStores struct in one *state.stores.write().await = stores statement.",
+  "No handler mutates one field of DataStores in place without rebuilding the other two.",
+]

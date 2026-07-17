@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 338
+slug = "actionability-graph-exploration-surface"
+title = "Actionability graph exploration surface"
+status = "pending"
+kind = "functional"
+
+description = "The explorer renders PRD-011's derived priority and actionability ordering as a navigable diagram distinct from the semantic view."
+tags = []
+acceptance_criteria = [
+  "GET /api/survey returns the actionability view built from PRD-011's priority graph.",
+  "Toggling the Actionability view renders the same corpus as a directed-acyclic diagram, laid out client-side, separate from the Semantic view's server-rendered SVG.",
+  "Switching between Semantic and Actionability preserves the active focus id, depth, and kind filter.",
+  "The actionability view performs no independent scoring or ordering computation; it renders the fetched derived view only.",
+]

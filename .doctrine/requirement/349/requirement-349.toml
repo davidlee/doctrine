@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 349
+slug = "delegate-dot-to-svg-rendering-to-graphviz"
+title = "Delegate DOT-to-SVG rendering to Graphviz"
+status = "pending"
+kind = "functional"
+
+description = "The server renders client-submitted DOT source to SVG by shelling out to the local dot binary behind an injectable DotRenderer trait, capped and time-bounded."
+tags = []
+acceptance_criteria = [
+  "POST /api/dot/svg rejects bodies over DOT_BODY_LIMIT (1 MiB) with BodyTooLarge before invoking the renderer.",
+  "RealDotRenderer spawns `dot -Tsvg` with a 10-second timeout and returns MapServerError::Timeout on expiry.",
+  "AppState.dot_renderer is a trait object so route tests inject FakeDotRenderer instead of requiring Graphviz installed.",
+  "GET /api/health reports dot availability and version independent of graph state.",
+]

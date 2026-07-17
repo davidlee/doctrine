@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 350
+slug = "concept-map-writes-are-stale-write-guarded"
+title = "Concept-map writes are stale-write guarded"
+status = "pending"
+kind = "functional"
+
+description = "Concept-map mutations apply against a client-supplied DSL hash and are refused when the on-disk DSL has changed since the client last read it."
+tags = []
+acceptance_criteria = [
+  "POST /api/concept-map/{id} accepts an optional base_hash field on the mutation payload.",
+  "The handler computes the SHA-256 of the current on-disk DSL and returns MapServerError::StaleConceptMap when it differs from base_hash.",
+  "A successful mutation persists via crate::fsutil::write_atomic and returns the freshly re-parsed nodes/edges/diagnostics plus the new hash.",
+]

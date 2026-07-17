@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 339
+slug = "concept-map-view-and-structural-editing"
+title = "Concept-map view and structural editing"
+status = "pending"
+kind = "functional"
+
+description = "The explorer renders a human-authored concept map's DSL as a diagram and applies structural edits through the same seam the CLI exposes."
+tags = []
+acceptance_criteria = [
+  "GET /api/concept-map/{id} returns the map's nodes, edges, and DSL-heuristic diagnostics.",
+  "POST /api/concept-map/{id} applies an add-edge, remove-edge, rename-node, or relabel mutation and returns the updated map.",
+  "A mutation whose base_hash does not match the map's current DSL hash is refused rather than applied over a concurrent edit.",
+  "Concept-map diagnostics render in a panel distinct from the semantic/actionability relationship table.",
+]

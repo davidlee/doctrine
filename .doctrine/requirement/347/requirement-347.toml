@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 347
+slug = "serve-three-independent-graph-resources"
+title = "Serve three independent graph resources"
+status = "pending"
+kind = "functional"
+
+description = "The map server exposes the presentation catalog graph, the actionability graph, and per-entity concept maps as three separately-fetchable JSON resources built by three separate functions."
+tags = []
+acceptance_criteria = [
+  "GET /api/graph returns a CatalogGraph snapshot (nodes, edges, units) built by CatalogGraph::from_catalog.",
+  "GET /api/survey returns an ActionabilityView built fresh from the priority_graph store via priority::surface::survey_view_for_map.",
+  "GET /api/concept-map/{id} returns a concept map's parsed nodes, edges, diagnostics, and DSL hash independent of the other two endpoints.",
+  "No handler composes more than one of these three builders into a single response.",
+]

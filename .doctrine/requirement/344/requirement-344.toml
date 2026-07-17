@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 344
+slug = "tiered-claim-authority-ladder-for-anchors"
+title = "Tiered claim-authority ladder for anchors"
+status = "pending"
+kind = "functional"
+
+description = "The engine resolves competing absolute value claims through a derived authority ladder, pin, human, comparison projection, agent, migrated, default, rather than treating every authored magnitude as equally constitutional."
+tags = []
+acceptance_criteria = [
+  "`ClaimTier` orders `Migrated < Agent < Human < Pin`, and only `Human`/`Pin` claims route into the `AnchorMap` that anchors the constraint layer.",
+  "`priority::graph::effective_raw_value` consumes the ladder in order — anchored claim, then comparison projection, then agent prior, then migrated prior, then the legacy `[value]` facet, then `DEFAULT_VALUE` — as the single definition of an entity's scoring value.",
+  "A `pin` claim is mintable only through the operator-gated `value pin` path under an interactive session; no ordinary row authorship can mint pin tier.",
+  "A same-tier conflict (two active claims, incompatible magnitudes) never resolves to a lexicographic or latest-wins pick — it surfaces as a `ClaimFinding::Conflict`.",
+]
