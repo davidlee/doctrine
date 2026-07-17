@@ -1,7 +1,7 @@
 id = 221
 slug = "prepare-review-clobbers-concluded-ledger-rows"
 title = "Dispatch prepare-review clobbers concluded ledger rows"
-status = "proposed"
+status = "design"
 created = "2026-07-17"
 updated = "2026-07-17"
 tags = ["area:correctness", "area:dispatch"]
@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/mcp_server/dispatch.rs"
@@ -24,7 +24,7 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "tests/e2e_dispatch_sync.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
