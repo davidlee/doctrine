@@ -684,11 +684,24 @@ impl C4Level {
             C4Level::Code => "code",
         }
     }
+
+    /// Coarse→fine rank on the ladder (0=context .. 3=code) — the parent
+    /// rank-adjacency check's ordering (IMP-069). Pure.
+    const fn rank(self) -> u8 {
+        match self {
+            C4Level::Context => 0,
+            C4Level::Container => 1,
+            C4Level::Component => 2,
+            C4Level::Code => 3,
+        }
+    }
 }
 
 /// The product altitude of a product spec. Closed set, kebab serde; product-only,
 /// optional. Mirror of `C4Level` (domain≈context, capability≈container,
-/// feature≈component, story≈code). Advisory — no rank-adjacency enforced (SL-065 D2).
+/// feature≈component, story≈code). Formerly advisory-only (SL-065 D2); rank
+/// inversion/gap is enforced since IMP-069, same-level refinement stays legal
+/// (PRD-012 §6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum ProductLevel {
@@ -706,6 +719,17 @@ impl ProductLevel {
             ProductLevel::Capability => "capability",
             ProductLevel::Feature => "feature",
             ProductLevel::Story => "story",
+        }
+    }
+
+    /// Coarse→fine rank on the ladder (0=domain .. 3=story) — mirrors
+    /// `C4Level::rank` (IMP-069). Pure.
+    const fn rank(self) -> u8 {
+        match self {
+            ProductLevel::Domain => 0,
+            ProductLevel::Capability => 1,
+            ProductLevel::Feature => 2,
+            ProductLevel::Story => 3,
         }
     }
 }
@@ -727,8 +751,9 @@ pub(crate) struct Spec {
     #[serde(default)]
     pub(crate) c4_level: Option<C4Level>,
     /// Product altitude (`domain|capability|feature|story`). Product-only,
-    /// optional; absent on a tech or unlabelled product spec. Advisory tag — only
-    /// `parent` is FK-validated (SL-065 D5). Mirror of `c4_level`.
+    /// optional; absent on a tech or unlabelled product spec. Formerly
+    /// advisory-only (SL-065 D5); rank-adjacency against `parent` is enforced
+    /// since IMP-069 (PRD-012 §6). Mirror of `c4_level`.
     #[serde(default)]
     pub(crate) product_level: Option<ProductLevel>,
     #[serde(default)]
@@ -1650,6 +1675,14 @@ pub(crate) fn build_registry(root: &Path) -> anyhow::Result<Registry> {
                     parent: canonicalize_spec_ref(parent),
                     on_product,
                 });
+            }
+            if let Some(level) = spec.c4_level {
+                reg.tech_levels
+                    .insert(spec_ref.clone(), (level.rank(), level.as_str()));
+            }
+            if let Some(level) = spec.product_level {
+                reg.product_levels
+                    .insert(spec_ref.clone(), (level.rank(), level.as_str()));
             }
 
             for m in read_members(&dir.join("members.toml"))? {
@@ -4174,6 +4207,71 @@ parent = \"SPEC-002\"
     }
 
     #[test]
+    fn sweep_parent_rank_inversion() {
+        // IMP-069: child (container) has a parent at a FINER level (component).
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 1),
+                    "parent = \"SPEC-002\"\nc4_level = \"container\"",
+                );
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 2),
+                    "c4_level = \"component\"",
+                );
+            },
+            "rank inversion:",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_rank_gap() {
+        // IMP-069: child (code) skips more than one level to its parent (context).
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+                fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 1),
+                    "parent = \"SPEC-002\"\nc4_level = \"code\"",
+                );
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Tech, 2),
+                    "c4_level = \"context\"",
+                );
+            },
+            "rank gap:",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_rank_same_level_is_clean() {
+        // PRD-012 §6: same-level refinement (delta 0) is legal.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "auth", "Auth"); // SPEC-001
+        fresh(root, SpecSubtype::Tech, "store", "Store"); // SPEC-002
+        append_spec_fields(
+            &spec_toml(root, SpecSubtype::Tech, 1),
+            "parent = \"SPEC-002\"\nc4_level = \"container\"",
+        );
+        append_spec_fields(
+            &spec_toml(root, SpecSubtype::Tech, 2),
+            "c4_level = \"container\"",
+        );
+        assert!(
+            build_registry(root).unwrap().validate(None).is_empty(),
+            "same-level parent/child produces no findings"
+        );
+        assert!(
+            run_validate(Some(root.to_path_buf()), None).is_ok(),
+            "run_validate exits zero on a same-level spine"
+        );
+    }
+
+    #[test]
     fn sweep_parent_product_to_product_is_clean() {
         // SL-065 §4: a product spec may now decompose into another product spec.
         // The well-formed PRD→PRD spine produces no finding and exits zero.
@@ -4243,6 +4341,26 @@ parent = \"SPEC-002\"
                 );
             },
             "parent cycle:",
+        );
+    }
+
+    #[test]
+    fn sweep_parent_rank_product_gap() {
+        // IMP-069: child (story) skips more than one level to its parent (domain).
+        assert_validate_flags(
+            |root| {
+                fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
+                fresh(root, SpecSubtype::Product, "accounts", "Accounts"); // PRD-002
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Product, 1),
+                    "parent = \"PRD-002\"\nproduct_level = \"story\"",
+                );
+                append_spec_fields(
+                    &spec_toml(root, SpecSubtype::Product, 2),
+                    "product_level = \"domain\"",
+                );
+            },
+            "rank gap:",
         );
     }
 

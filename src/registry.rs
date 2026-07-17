@@ -87,6 +87,12 @@ pub(crate) struct Registry {
     /// Every outbound decomposition (`parent`) edge, both subtypes (a product
     /// carrying the tech-only field is harvested so the check can flag it).
     pub(crate) parents: Vec<ParentEdge>,
+    /// `c4_level` rank + kebab name per tech spec (`(rank, name)` rather than the
+    /// `spec`-tier enum — this leaf sits below `spec.rs` in the layering, ADR-001).
+    /// Only specs that carry the field are present; advisory/optional (IMP-069).
+    pub(crate) tech_levels: BTreeMap<String, (u8, &'static str)>,
+    /// `product_level` rank + kebab name per product spec — mirror of `tech_levels`.
+    pub(crate) product_levels: BTreeMap<String, (u8, &'static str)>,
     /// Every outbound descent (`descends_from`) edge, both subtypes (as above).
     pub(crate) descents: Vec<DescentEdge>,
     /// Scan-time hard findings from parse-error classification (the `second_parent`
@@ -279,6 +285,55 @@ impl Registry {
         out
     }
 
+    /// HARD — a parent edge whose child sits at a finer level than its parent (an
+    /// inversion) or more than one level coarser-to-finer step away (a gap) on the
+    /// C4 / product-altitude ladder (IMP-069). Same-level refinement (delta 0)
+    /// stays legal — the PRD-012 §6 allowance — and a plain one-level decomposition
+    /// (delta 1) is the normal case; only delta<0 or delta>1 finds. Runs only on an
+    /// edge that already resolves same-family (self-loops are `self_parent`'s,
+    /// dangling/invalid-kind targets are `parent_findings`'s — this check must never
+    /// double up on either). Silent when either side lacks a level tag (advisory,
+    /// REQ-259/REQ-081). Scoped when `scope` is `Some`.
+    pub(crate) fn parent_rank_findings(&self, scope: Option<&str>) -> Vec<String> {
+        let mut out = Vec::new();
+        for e in self
+            .parents
+            .iter()
+            .filter(|e| scope.is_none_or(|s| e.spec == s))
+        {
+            if e.spec == e.parent {
+                continue; // self-loop — owned by self_parent
+            }
+            let (own_set, levels) = if e.on_product {
+                (&self.product_specs, &self.product_levels)
+            } else {
+                (&self.tech_specs, &self.tech_levels)
+            };
+            if !own_set.contains(&e.parent) {
+                continue; // dangling / invalid-kind — owned by parent_findings
+            }
+            let Some((child_rank, child_name)) = levels.get(&e.spec).copied() else {
+                continue;
+            };
+            let Some((parent_rank, parent_name)) = levels.get(&e.parent).copied() else {
+                continue;
+            };
+            let delta = i32::from(child_rank) - i32::from(parent_rank);
+            if delta < 0 {
+                out.push(format!(
+                    "rank inversion: {} ({child_name}) has parent {} at finer level ({parent_name})",
+                    e.spec, e.parent
+                ));
+            } else if delta > 1 {
+                out.push(format!(
+                    "rank gap: {} ({child_name}) skips more than one level to parent {} ({parent_name})",
+                    e.spec, e.parent
+                ));
+            }
+        }
+        out
+    }
+
     /// HARD — a membership label used more than once within a single spec. Grouped
     /// per spec (`BTreeMap` for deterministic ordering). Scoped when `scope` is
     /// `Some` — duplicate detection is intra-spec, so a scoped run is complete.
@@ -321,6 +376,7 @@ impl Registry {
         findings.extend(self.parent_findings(scope));
         findings.extend(self.self_parent(scope));
         findings.extend(self.parent_cycle(scope));
+        findings.extend(self.parent_rank_findings(scope));
         findings.extend(self.duplicate_labels(scope));
         findings.extend(
             self.build_findings
@@ -671,6 +727,122 @@ mod tests {
         r.parents.push(parent_edge("SPEC-002", "SPEC-001", false)); // B → A
         assert_eq!(r.parent_cycle(Some("SPEC-001")).len(), 1);
         assert!(r.parent_cycle(Some("SPEC-009")).is_empty());
+    }
+
+    // --- IMP-069: parent rank-adjacency ---
+
+    #[test]
+    fn parent_rank_inversion_is_flagged() {
+        // child (container, rank 1) has a parent at a FINER level (component, rank 2).
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.tech_levels
+            .insert("SPEC-001".to_string(), (1, "container"));
+        r.tech_levels
+            .insert("SPEC-002".to_string(), (2, "component"));
+        let found = r.parent_rank_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].starts_with("rank inversion:"));
+        assert!(found[0].contains("SPEC-001") && found[0].contains("SPEC-002"));
+    }
+
+    #[test]
+    fn parent_rank_gap_is_flagged() {
+        // child (code, rank 3) skips more than one level to its parent (context, rank 0).
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.tech_levels.insert("SPEC-001".to_string(), (3, "code"));
+        r.tech_levels.insert("SPEC-002".to_string(), (0, "context"));
+        let found = r.parent_rank_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].starts_with("rank gap:"));
+    }
+
+    #[test]
+    fn parent_rank_same_level_is_clean() {
+        // PRD-012 §6 allowance: delta 0 (same-level refinement) is legal — pinned so
+        // a future tightener can't silently regress it.
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.tech_levels
+            .insert("SPEC-001".to_string(), (1, "container"));
+        r.tech_levels
+            .insert("SPEC-002".to_string(), (1, "container"));
+        assert!(r.parent_rank_findings(None).is_empty());
+    }
+
+    #[test]
+    fn parent_rank_exact_one_level_gap_is_clean() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.tech_levels
+            .insert("SPEC-001".to_string(), (2, "component"));
+        r.tech_levels
+            .insert("SPEC-002".to_string(), (1, "container"));
+        assert!(r.parent_rank_findings(None).is_empty());
+    }
+
+    #[test]
+    fn parent_rank_missing_child_level_is_clean() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.tech_levels.insert("SPEC-002".to_string(), (0, "context"));
+        assert!(r.parent_rank_findings(None).is_empty());
+    }
+
+    #[test]
+    fn parent_rank_missing_parent_level_is_clean() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.tech_levels.insert("SPEC-001".to_string(), (3, "code"));
+        assert!(r.parent_rank_findings(None).is_empty());
+    }
+
+    #[test]
+    fn parent_rank_product_inversion_is_flagged() {
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001", "PRD-002"]);
+        r.parents.push(parent_edge("PRD-001", "PRD-002", true));
+        r.product_levels
+            .insert("PRD-001".to_string(), (1, "capability"));
+        r.product_levels
+            .insert("PRD-002".to_string(), (2, "feature"));
+        let found = r.parent_rank_findings(None);
+        assert_eq!(found.len(), 1);
+        assert!(found[0].starts_with("rank inversion:"));
+    }
+
+    #[test]
+    fn parent_rank_finding_suppressed_when_scope_names_an_unrelated_spec() {
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001", "SPEC-002", "SPEC-003"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-002", false));
+        r.tech_levels
+            .insert("SPEC-001".to_string(), (1, "container"));
+        r.tech_levels
+            .insert("SPEC-002".to_string(), (2, "component"));
+        assert_eq!(r.parent_rank_findings(Some("SPEC-001")).len(), 1);
+        assert!(r.parent_rank_findings(Some("SPEC-003")).is_empty());
+    }
+
+    #[test]
+    fn parent_rank_findings_never_fires_on_a_dangling_parent() {
+        // Gating: a dangling parent is parent_findings's to report. Even when both
+        // sides carry a level, parent_rank_findings must stay silent — a dangling
+        // edge can never also produce a rank finding.
+        let mut r = clean();
+        r.tech_specs = ids(&["SPEC-001"]);
+        r.parents.push(parent_edge("SPEC-001", "SPEC-404", false));
+        r.tech_levels.insert("SPEC-001".to_string(), (3, "code"));
+        r.tech_levels.insert("SPEC-404".to_string(), (0, "context"));
+        assert!(!r.parent_findings(None).is_empty());
+        assert!(r.parent_rank_findings(None).is_empty());
     }
 
     #[test]
