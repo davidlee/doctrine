@@ -1,0 +1,7 @@
+$ DOCTRINE_BIN=.dispatch/SL-220/target/debug/doctrine python3 .dispatch/SL-220/scripts/migrate_value_facets.py --check
+(EX-3 idempotency re-run, 2026-07-17, post-strip @ 613e0141)
+
+scan: 0 [value] facet(s) found
+nothing to migrate
+
+exit=0; working tree unchanged (git status --porcelain empty).
