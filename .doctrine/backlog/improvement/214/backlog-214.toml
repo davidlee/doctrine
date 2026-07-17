@@ -5,10 +5,10 @@ id = 214
 slug = "make-resolve-runner-testable-inject-command-factory-or-separate-pure-which-check-from-execution"
 title = "Make resolve_runner testable — inject command factory or separate pure which-check from execution"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-29"
-updated = "2026-07-03"
+updated = "2026-07-17"
 tags = ["area:dispatch", "area:testing"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

@@ -5,10 +5,10 @@ id = 185
 slug = "ci-constructor-test-for-doctrine-bin-resolver"
 title = "CI: constructor test for doctrine_bin() resolver"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "done"
 created = "2026-06-26"
-updated = "2026-07-03"
+updated = "2026-07-17"
 tags = ["area:testing"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
