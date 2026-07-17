@@ -97,7 +97,9 @@ consume this skill as its knowledge/decision sink).
 
 ## Distribution mechanics (implementation note)
 
-RustEmbed no-rerun gotcha: `touch src/skills.rs && cargo build`, then install
+RustEmbed no-rerun gotcha: `touch src/install.rs && cargo build` (embed root
+`#[folder = "plugins/"]` lives in `src/install.rs` since IMP-226 removed
+`src/skills.rs`), then install
 from the rebuilt binary (`./target/debug/doctrine install -s knowledge -y` or
 full install), then routing row, then `doctrine boot`. Source of truth is
 `plugins/` only; never edit `.doctrine/skills/` or `.agents/skills/` copies.
@@ -126,7 +128,7 @@ full install), then routing row, then `doctrine boot`. Source of truth is
 | `install/routing-process.md` | +1 routing row |
 | `install/using-doctrine.md` | +1 sentence, gating model |
 
-No Rust code changes. `src/skills.rs` is touched (mtime only) to force
+No Rust code changes. `src/install.rs` is touched (mtime only) to force
 re-embed — not a content change, not a design target.
 
 ## Decisions
