@@ -14,66 +14,84 @@ ref   = "SL-222"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "contested"
 severity = "blocker"
 title = "E4 exact linearity fails under the mandated EPSILON floor"
 detail = "E4 and §2 claim operative(mean(rows)) == mean(operative(rows)) exactly and §8.2 requires an equality property test, while E13 mandates that operative_cost include the EPSILON floor. The current formula is floor_eps(lower + skew*(upper-lower)) at src/priority/graph.rs:76-102. For two valid point ranges (0,0) and (2e-12,2e-12), the mean payload is (1e-12,1e-12) and its operative is 1e-12, but the mean of the row operatives is (1e-12 + 2e-12)/2 = 1.5e-12. total_cmp sorting only fixes fold order; it cannot make the nonlinear floor distributive, and ordinary floating arithmetic is not exactly distributive either. The specified cache invariant and exact property test therefore cannot be implemented as written."
+disposition = "fixed"
+response = "E4 restated: linearity claimed for the AFFINE map only, exact in reals, float-tolerance-tested; operative = floor_eps(affine(payload)) composes the floor AFTER aggregation; sub-EPSILON corner named (determinism, not equality, is the invariant there). §8.2 test row updated to tolerance + composition + corner case."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "contested"
 severity = "blocker"
 title = "Conflict averaging breaks E7 asserted-range domination"
 detail = "E7 and §7.3 require the bare anchor to dominate every asserted range, but §3.226-233 and §8.4 explicitly source max_upper from the winning-tier resolved payload upper after conflict averaging, not from every asserted row upper. Two same-tier valid rows [0,1] and [0,100] resolve to upper 50.5; with margin 1 the bare divisor is 51.5, below the asserted upper 100. A losing lower-tier row can likewise exceed the winning-tier payload and is omitted. Therefore the stated INV-2 is false and the prescribed implementation can reintroduce the inversion it claims to prevent."
+disposition = "fixed"
+response = "E7/§3/§8.4 revised: max_upper sources EVERY active unlensed estimate-anchor row upper (losing tiers and individual conflict rows included), not resolved/winning-tier uppers — domination over every active asserted range holds by construction; property test pinned (bare anchor >= every active asserted upper + margin). The prior conflict-mean-upper test is inverted accordingly."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "contested"
 severity = "major"
 title = "E3 cannot preserve the value battery unchanged after deleting value"
 detail = "E3 §2.162-166 explicitly replaces ResolvedClaim.value with payload/operative and says callers mechanically re-path, while §8.2 requires the entire existing claims battery to remain green unchanged. The current proof battery directly compiles against .value throughout src/comparison/claims.rs (for example lines 433, 451, 478, 575, 617, 683, 717) and src/comparison/store.rs (973-974, 1043, 1053), with further consumers in priority/graph.rs, priority/surface.rs, and priority/elicit.rs. Removing the field necessarily rewrites the claimed unchanged tests, invalidating the project engine gate as stated. The design must define a compatibility shape or a preservation proof that does not require rewriting its own oracle."
+disposition = "fixed"
+response = "E3/§2/§8.2 restated behaviourally (SL-220 §2 / RV-277 PHASE-02 precedent): assertion semantics preserved + zero golden churn; mechanical accessor re-path (.value → .operative) enumerated at phase-plan as the sole allowed churn class; byte-unchanged tests no longer claimed."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "major"
 title = "E7 claim-sourced gauge center has no executable pipeline order"
 detail = "§3.226-233 says the claim-derived bare anchor automatically becomes ProjectionParams.gauge_center at one computation site. In the current layering, priority::graph::load_comparison_pipeline computes est_cfg.gauge_center from scanned facets before comparison::load_pipeline is called (src/priority/graph.rs:432-457), while claim resolution occurs only inside pipeline_from_sessions before estimate compilation (src/comparison/store.rs:228-293). The required resolved claims therefore do not exist when the gauge center must be supplied. §3 code impact merely names CostCtx re-sourcing/threading and does not specify the necessary resolve-before-config/compile split or shared input that also keeps CostCtx and gauge_center identical. The automatic-inheritance claim is false in the current architecture and leaves a material implementation/order decision undesigned."
+disposition = "fixed"
+response = "§3 gains an explicit re-siting: bare anchor derived INSIDE pipeline_from_sessions after claim resolution (facet uppers + margin threaded as pure inputs), used as est ProjectionParams.gauge_center, exposed as Pipeline.bare_anchor; CostCtx.absent consumes the exposed value; priority-shell facet computation deletes. One-site test pins CostCtx.absent == pipeline.bare_anchor == gauge centre."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "major"
 title = "The deletion census and grep gate miss replicated facet readers"
 detail = "§5.333-353 scopes deletion and its proof to EntityFacets.value/estimate, but the current raw facet model is replicated well beyond that type and beyond the affected-surface list. ScannedEntity carries both fields and read_facets parses both (src/catalog/scan.rs:129-133, 246 onward); CatalogEntity and CatalogNode copy them through src/catalog/hydrate.rs:111-116,244-245 and src/catalog/graph.rs:44-67. Separate document structs and render/JSON paths consume them in src/backlog.rs, src/governance.rs, src/concept_map.rs, src/lazyspec.rs, and src/slice.rs. A grep for EntityFacets.value/.estimate can pass while these legacy parse, hydration, catalog, display, and JSON contracts survive. This is both an incomplete blast-radius design and an inadequate deletion verification gate; the final phase could leave forbidden raw-facet consumers live."
+disposition = "fixed"
+response = "§5 deletion inventory enumerates the replicated readers: catalog/scan.rs (read_facets, ScannedEntity fields), catalog/hydrate.rs (CatalogEntity), catalog/graph.rs (CatalogNode), per-kind document structs + render/JSON in backlog.rs/governance.rs/concept_map.rs/lazyspec.rs/slice.rs. Grep-gate widened to named targets (read_facets, parse_optional, field access on scan/hydrate/graph/document types). All eight modules added as design-target selectors."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "contested"
 severity = "major"
 title = "Flip gate leaves SPEC-020 active facet requirements undisposed"
 detail = "§7.441-445 says only that SPEC-020 §3 authored-surface/set-clear/hydration prose will be amended, but the deletion contradicts active structured responsibilities and requirements that are authoritative beyond that prose. doctrine spec show SPEC-020 currently requires the EstimateFacet model and optional [estimate] parse seam, hard present-table validation, parse-to-hydrate-to-catalog preservation, pure present/none display, policy-free graph exposure, kind-agnostic facet reuse, and schema forward compatibility in REQ-269 through REQ-277; REQ-310 also frames resolved bounds for display. §5 deletes the model/read/hydration surface. Without an explicit disposition/rewrite map for these active REQs and structured responsibilities, the promised governance flip gate can approve prose while leaving the implementation formally nonconformant."
+disposition = "fixed"
+response = "§7 spec routing now carries an explicit per-REQ disposition map: REQ-269–REQ-277 + REQ-310 each rewritten to a claim-schema equivalent or retired with the deletion phase named, riding the flip gate — no active REQ contradicts the shipped binary at any phase boundary."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "contested"
 severity = "major"
 title = "Inherited check mode is mutating and blocks the advertised rerun"
 detail = "E9/§5 inherit the SL-220 migration contract verbatim, and the SL-222 scope promises an idempotent dry-run. The concrete template does not implement that contract: scripts/migrate_value_facets.py:32-34 admits that --check writes the session, and lines 497-503 write it before verification/census; SL-220 §5.470-471 says --check reports without writing. Because every invocation first refuses a dirty tree, a successful --check that emits rows leaves the tree dirty and the subsequent --execute invocation refuses unless the operator first commits or discards the check artifact. Copying this design for estimates would ship neither a dry-run nor a directly rerunnable check-to-execute workflow. The design must reconcile check semantics, session emission, and the clean-tree/idempotency contract."
+disposition = "fixed"
+response = "§5 pins a truly non-mutating --check (in-memory rows + census, zero writes, tree-hash verified in §8.10) as a deliberate divergence from the SL-220 template; the value script's mutating --check is recorded, not repaired (already consumed on this corpus)."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "E10 target predicate omits inherited estimate admissibility"
 detail = "E10 and §8.6 describe the target set only as items with anchored-tier resolved claims. That is not sufficient because §1.68-72 deliberately allows estimate-anchor capture on any resolving entity kind, while SL-219 D3/§4 requires sizing targets to be admissible VALUE_BEARING + RECORD items and the current shell enforces admissible_estimate_pair before adding authored targets (src/commands/compare.rs:734-748). A human claim on an inadmissible governance kind would enter the literal E10 target set and yield a more-work answer command that capture rejects. The design should state and verify the intersection with inherited admissibility, not only claim tier."
+disposition = "fixed"
+response = "E10/§8.6 restated: probe targets = anchored-tier resolved claims ∩ estimate-pair admissibility (VALUE_BEARING + RECORD derivation, SL-219 D3); an inadmissible-kind claim is captured but never targeted."
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "verified"
 severity = "major"
 title = "The key-presence tripwire cannot populate the existing finding shape"
 detail = "E9/§5 requires a parse-free top-level-key tripwire that fires even for malformed value or estimate residue, but the concrete Finding::UnmigratedFacet payload is {domain, entity, value: f64} (src/priority/findings.rs:173-183) and the detector currently derives that scalar from a successfully parsed EntityFacets.value (lines 740 onward). A malformed key has no trustworthy scalar, and a valid estimate residue has two bounds rather than one value. After §5 deletes EntityFacets and facet parsing, this variant/detector/render contract cannot be populated as specified. The design names no payload redesign or diagnostic-to-priority-finding carrier, so the promised malformed-residue tripwire is not implementable at the stated seam."
+disposition = "fixed"
+response = "§5: at the deletion phase Finding::UnmigratedFacet reshapes to magnitude-free {domain, entity} (presence-only; no scalar exists for malformed residue, and estimate residue has two bounds); render drops the magnitude; findings-JSON churn disclosed as a breaking change riding E12's token release."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -27,7 +27,7 @@ at EPSILON.
 | E6 | The flip — `est_cost` resolves by the claim ladder: **pin > human claim > cost projection (non-Gauge) > agent claim > migrated claim > unmigrated `[estimate]` facet (transitional, dies this slice) > bare anchor**. Gauge-never-divides (D2) and the positivity axiom (D11) unchanged: payload validation gives `lower ≥ 0`, every operative cost floors at EPSILON. Verb re-plumbing rides the flip phase (an `estimate set` that stops writing facets before the ladder reads claims would silently change scoring) | REV-023's `authored > projected > bare anchor` dissolves exactly as REV-022 did for value; source precedence only, no numeric-dominance claim (INV-2 restated per E7) |
 | E7 | Bare anchor re-sources: `max_upper` = max over **every active unlensed estimate-anchor row's `est_upper`** — any tier, winning or losing, conflict rows individually *(revised at RV-282 F-2: resolved/conflict-mean uppers under-dominate — two same-tier rows `[0,1]`,`[0,100]` mean to upper 50.5, and the bare anchor would sit below the asserted 100)* — plus transitional unmigrated-facet uppers; tombstoned/superseded rows excluded by resolution; projected costs never feed it (D7's no-feedback invariant preserved). Computed **inside the pipeline** after claim resolution (see §3 order fix, RV-282 F-4). INV-2 restated in the REV: the bare anchor dominates every *active asserted* range — true by construction under row-sourcing; projected costs may exceed or undercut it; a bare item with no evidence keeps the dominating divisor. *(Operator-adjudicated Q2; sourcing revised per RV-282 F-2)* | The bare anchor is a corpus-scale prior, not an authority contest; anchored-tiers-only collapses to `1.0` on a freshly migrated corpus and resurrects the ISS-057 inversion; row-sourcing makes domination a construction, not a hope |
 | E8 | Verbs: `estimate set <id> <LOWER> <UPPER> \| -x N` gains mandatory `--rater human\|agent` (+ `--by/--basis/--lens/--note/--supersedes`) and mints an anchor row per invocation (D10 — no no-op guard; the current "estimate unchanged" no-op message dies); `estimate pin` + `estimate pin --retire` new, D13-gated (interactive-TTY + worker-refused class, mandatory `--by`); `estimate clear` tombstones all active unlensed estimate anchor rows, refuses under an active pin, `--lens` explicit. Supersession scope = identical (subject, domain, lens). No entity TOML is touched by any of them post-flip | Verb-for-verb the SL-220 §4 contract with the estimate payload; one admission path per domain (RV-275 F-5) |
-| E9 | Migration: `scripts/migrate_estimate_facets.py`, the SL-220 D8/§5 contract verbatim (throwaway, stdlib-only, dirty-tree refusal, session-per-run, census, `--check`/`--execute`, doctrine-binary parse gate, per-file strip verification, lossless rollback). Idempotency key = **facet state (path, lower, upper)**; emits `rater = migrated` rows — never pins, though REV-023 called authored estimates "operator pins" (importing them as pins would fabricate constitutional weight, RV-275 F-3). Then the **Q4 deletion** (see E10-adjacent §5): with both domains migrated, rung 5 (both ladders), `EntityFacets.value/estimate`, the facet parse/consumption paths, and `facet_write`'s facet machinery delete; a scan-seam **key-presence tripwire** keeps the `UnmigratedFacet` finding alive for both domains, naming the remedy. *(Operator-adjudicated Q4)* | Fires the trigger SL-220 D6/§3/§4 and REV-024 pinned; never-migrated corpora lose facet contribution (disclosed re-rank) but never rot silently |
+| E9 | Migration: `scripts/migrate_estimate_facets.py`, the SL-220 D8/§5 contract (throwaway, stdlib-only, dirty-tree refusal, session-per-run, census, doctrine-binary parse gate, per-file strip verification, lossless rollback) — with **one deliberate divergence**: `--check` is truly non-mutating here (RV-282 F-7; the SL-220 template's check writes the session pre-verify). Idempotency key = **facet state (path, lower, upper)**; emits `rater = migrated` rows — never pins, though REV-023 called authored estimates "operator pins" (importing them as pins would fabricate constitutional weight, RV-275 F-3). Then the **Q4 deletion** (see E10-adjacent §5): with both domains migrated, rung 5 (both ladders), `EntityFacets.value/estimate`, the facet parse/consumption paths, and `facet_write`'s facet machinery delete; a scan-seam **key-presence tripwire** keeps the `UnmigratedFacet` finding alive for both domains, naming the remedy. *(Operator-adjudicated Q4)* | Fires the trigger SL-220 D6/§3/§4 and REV-024 pinned; never-migrated corpora lose facet contribution (disclosed re-rank) but never rot silently |
 | E10 | Sizing probes recompose: the pool predicate's "zero est-domain active rows" narrows to **zero est-domain *pairwise* rows** (an anchor claim is an assertion, not sizing evidence — without the split, any claim row silently retires probes); "no authored estimate" becomes claim-aware and knob-composed — a probe retires iff an **anchored-tier** resolved claim exists, or (`demote_agent_evidence` unset) **any-tier** resolved claim exists. Probe **target** selection ("median-cost item among items with authored estimates") re-sources to items with anchored-tier resolved claims **intersected with estimate-pair admissibility** (`VALUE_BEARING + RECORD` derivation, SL-219 D3 — a human claim on an inadmissible governance kind is captured but never a target, else the probe's answer command would be refused at capture; RV-282 F-8) — forced by the anchored-membership postcondition (only Pin/Human claims enter `anchor_map()`; a migrated-claim target would strand the subject in a gauge component). Fallback state detail updates: "estimate any item to seed sizing" → the remedy names `estimate set --rater human` / `estimate pin` | SL-220 §3's demotion semantics ("a number, not an answer") extended to sizing; the postcondition "queue-driven sizing yields anchored membership or nothing" survives by construction |
 | E11 | Governance: **this slice's REV against ADR-015** (REV-023's dissolution — §7); approved before the flip phase lands, with SPEC-020's estimate normative amendments in the same gate (D12 mirror). Earlier phases strictly additive and REV-independent. The REV also records REV-024's transitional-rung deletion clause as fired (value rung 5 dies here too) | Canon never stale about what `estimate set` does while the corpus is live |
 | E12 | Rendering: `explain` cost-source block gains claim-tier shapes (§6); JSON `cost_source` is a **disclosed breaking token-set change** (D11-of-SL-220 mirror): `authored` and `authored (via class anchor)` removed; `pin`/`human-claim`/`agent-claim`/`migrated-claim`/`unmigrated-facet`/`anchored (via class anchor)` added; `projected`/`bare-anchor` + gauge flag byte-stable. `show`'s estimate line re-sources from the comparison pipeline (capture-lossless: a record's human estimate renders, annotated scoring-inert); absent evidence ⇒ line omitted. Demotion disclosure widens to estimate claims | Honest tokens; no code path emits `authored` post-flip |
@@ -175,10 +175,12 @@ gate.
 `(est_lower, est_upper)`, `mean` = per-field (E4), `operative` =
 `estimate::operative_cost(self, skew)` (E13), `Params = skew: f64` threaded
 from config by the store shell (pure input — no config reads in the pass).
-The E4 linearity lemma (`operative(mean(rows)) == mean(operative(rows))`, up
-to float-fold order pinned by `total_cmp` sorting) is a property test, so the
-cached `operative` of a conflict mean IS the mean of the interval's
-generating values.
+The E4 lemma as restated (RV-282 F-1): the **affine** resolution distributes
+over the per-field mean exactly in the reals and to float tolerance in
+practice; `operative = floor_eps(affine(payload))` composes the floor after
+aggregation, so the cached `operative` of a conflict mean is the floored
+affine of the mean — coincident with the mean of the interval's generating
+values except in the sub-EPSILON corner, where determinism is the invariant.
 
 **Pipeline wiring (`store.rs`).** `Pipeline` gains
 `estimate_claims: ClaimResolution<EstimatePayload>` beside `value_claims`
@@ -472,10 +474,12 @@ with SPEC-020's estimate normative amendments **before the flip phase**
    set` appends ledgered claims; the pin verb is the operator-policy
    override, now attributed and governed. The "records anchor too" sentence
    narrows to anchored-tier claims — disclosed.
-3. **INV-2 restated for the claims era** (E7): the bare anchor is computed
-   over every asserted range (any-tier resolved claim; transitional facets)
-   and dominates them all; projected costs may exceed or undercut it; a
-   bare item with no evidence keeps the dominating divisor.
+3. **INV-2 restated for the claims era** (E7, RV-282 F-2): the bare anchor
+   is computed over **every active unlensed estimate-anchor row's upper**
+   (any tier, losing tiers and individual conflict rows included; plus
+   transitional facet uppers) and therefore dominates every active asserted
+   range by construction; projected costs may exceed or undercut it; a bare
+   item with no evidence keeps the dominating divisor.
 4. **Gauge-never-divides and the positivity axiom**: unchanged, restated
    with claim vocabulary (payload validation enforces `lower ≥ 0` at
    capture; operative costs floor at EPSILON).
@@ -485,18 +489,26 @@ with SPEC-020's estimate normative amendments **before the flip phase**
    recorded as fired; the presence tripwire + re-rank consequence for
    never-migrated corpora disclosed.
 
-**Spec routing — with a REQ disposition map (RV-282 F-6).** SPEC-020's
-authority over the estimate facet is *structured*, not just prose:
-REQ-269–REQ-277 (the `EstimateFacet` model, optional `[estimate]` parse
-seam, present-table validation, parse→hydrate→catalog preservation,
-present/none display, policy-free graph exposure, kind-agnostic reuse,
-schema forward-compat) and REQ-310 (resolved-bounds display) mandate the
-machinery §5 deletes. The flip-gate amendment therefore carries an explicit
-**disposition per REQ** — each rewritten to its claim-schema equivalent
-(capture validation, resolved-claim display, pipeline exposure) or retired
-with the deletion phase named — so no active REQ contradicts the shipped
-binary at any phase boundary. Prose amendments (facet as authored surface,
-set/clear writer semantics, hydration reader) ride the same gate;
+**Spec routing — the REQ disposition map (RV-282 F-6, verified pass).**
+SPEC-020's authority over the estimate facet is *structured*, not just
+prose; each affected REQ gets an explicit disposition, authored into the
+flip-gate spec amendment (final wording there; gate = the phase named):
+
+| REQ | today | disposition | gate |
+|---|---|---|---|
+| REQ-269 (FR-001, `EstimateFacet` model + finite-f64 normalisation) | facet struct | **rewrite**: the normalisation/validation contract re-targets the anchor-claim payload (`est_lower`/`est_upper`, §1) — `estimate::validate` survives as the single source | flip |
+| REQ-270 (FR-002, present-table hard validation) | parse-time | **rewrite**: capture-time validation matrix (§1); absence of claims stays valid | flip |
+| REQ-271 (FR-003, project-wide unit resolution) | config | **unchanged** — unit renders resolved claims (§6) | — |
+| REQ-272 (FR-004, parse→hydrate→catalog preservation) | facet plumbing | **retire at deletion**: the preserved thing becomes the ledger row; wire round-trip goldens (§8.1) are the successor obligation | deletion |
+| REQ-273 (FR-005, display without spread classification) | facet display | **rewrite**: resolved-claim range display, same no-classification posture (§6) | flip |
+| REQ-274 (FR-006, policy-free graph exposure) | raw per-node bounds | **rewrite**: the graph consumes resolved claims through the pipeline; per-node raw-facet exposure retires at deletion | flip + deletion |
+| REQ-275 (NF-001, presence gates no workflow predicate) | facet presence | **rewrite**: claim presence gates no workflow predicate either (probe-eligibility is knob-governed elicitation policy, not a workflow gate) | flip |
+| REQ-276 (NF-002, kind-agnostic + pure-layer) | facet | **rewrite**: claim capture stays kind-agnostic (§1); resolution stays pure-layer (§2) | flip |
+| REQ-277 (NF-003, schema forward-compat) | `_extra` passthrough | **rewrite**: the wire's lossless-over-absent-optionals posture (E2) is the successor mechanism | flip |
+| REQ-310 (FR-011, confidence-band percentile framing for display) | config band over facet bounds | **rewrite**: the band frames resolved-claim bounds identically; still display-only, no entity-local field | flip |
+
+Prose amendments (facet as authored surface, set/clear writer semantics,
+hydration reader) ride the same gate;
 PRD-014/SPEC-020 claim-schema retention REQs and PRD-011/SPEC-001 descent
 prose remain reconciliation obligations, non-contradicting. RFC-020's
 Phase 2 row moves to delivered-by-SL-222 at reconciliation (Phase 3 keeps
@@ -596,8 +608,9 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
 - Scope R2 (payload fidelity) → E1/E4: payload round-trips losslessly;
   supersession/census operate on payload; collapse happens only at
   consumption (`operative`).
-- Scope A2 (reuse, not reimplement) → E3: one generic fold; the value
-  battery green unchanged is the proof.
+- Scope A2 (reuse, not reimplement) → E3: one generic fold; the proof is
+  behavioural — value assertion semantics + goldens unchanged, accessor
+  re-path the sole churn class (RV-282 F-3).
 
 ## Review history
 
