@@ -905,7 +905,6 @@ pub(crate) fn print_review(out: &ReviewOutput) -> String {
 /// so the MCP transport layer can map to JSON-RPC error codes by variant
 /// identity, never by string-parsing (design D8; RV-092 F-1).
 #[derive(Debug)]
-#[expect(dead_code, reason = "variants constructed in PHASE-02 verb handlers")]
 pub(crate) enum ReviewError {
     NotFound {
         reference: String,
@@ -1243,7 +1242,13 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<R
 
     // Forward-edge validation (design §7): refuse a dangling / unknown target
     // BEFORE claiming an id. Reuses the corpus id table (integrity::KINDS).
-    crate::integrity::ensure_ref_resolves(&root, &args.target)?;
+    // Structured as `DanglingRef` (IMP-107) so the MCP transport maps it to
+    // `DANGLING_REF` carrying the target, not a generic Internal.
+    crate::integrity::ensure_ref_resolves(&root, &args.target).map_err(|_unresolved| {
+        ReviewError::DanglingRef {
+            target: args.target.clone(),
+        }
+    })?;
 
     let title = args
         .title
@@ -1945,11 +1950,17 @@ impl LockGuard {
                 Ok(Self { path })
             }
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                anyhow::bail!(
-                    "{} busy (another `review` invocation holds the lock); re-run \
-                     (a stale lock from a hard kill clears with `review unlock`)",
-                    canonical_id(id)
-                )
+                // Structured contention (IMP-107): the MCP transport maps this by
+                // variant identity to `LOCK_CONTENTION`; the Display impl
+                // (`{canonical}: {details}`) reproduces the CLI "busy; re-run"
+                // guidance, so both arms carry the `review unlock` hint.
+                Err(ReviewError::LockContention {
+                    canonical: canonical_id(id),
+                    details: "busy (another `review` invocation holds the lock); re-run \
+                              (a stale lock from a hard kill clears with `review unlock`)"
+                        .to_owned(),
+                }
+                .into())
             }
             Err(e) => Err(e).with_context(|| format!("acquire lock {}", path.display())),
         }
@@ -3296,10 +3307,12 @@ mod tests {
         // SL-099 has no entity dir.
         let err =
             run_new(Some(root.to_path_buf()), &new_args(Facet::Design, "SL-099")).unwrap_err();
-        assert!(
-            err.to_string().contains("does not resolve"),
-            "dangling ref refused: {err}"
-        );
+        // IMP-107: refusal is a typed `DanglingRef` carrying the target (the MCP
+        // transport maps it to `DANGLING_REF`), asserted by variant identity.
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::DanglingRef { target }) => assert_eq!(target, "SL-099"),
+            other => panic!("expected DanglingRef, got {other:?}"),
+        }
         assert!(
             entity::scan_ids(&root.join(REVIEW_DIR)).unwrap().is_empty(),
             "no RV minted on a refused target"
@@ -3312,10 +3325,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let err = run_new(Some(root.to_path_buf()), &new_args(Facet::Scope, "ZZ-001")).unwrap_err();
-        assert!(
-            err.to_string().contains("unknown kind prefix"),
-            "unknown prefix refused: {err}"
-        );
+        // IMP-107: an unknown-prefix target is also a forward-edge refusal, typed
+        // as `DanglingRef` (asserted by variant identity, not string content).
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::DanglingRef { target }) => assert_eq!(target, "ZZ-001"),
+            other => panic!("expected DanglingRef, got {other:?}"),
+        }
     }
 
     /// `Facet::parse` accepts the closed 7-set and rejects `drift` (D-C11) /
@@ -3595,6 +3610,32 @@ mod tests {
             .map(|f| f.id.clone())
             .collect();
         assert_eq!(ids, ["F-1", "F-2"]);
+    }
+
+    /// IMP-107: the `acquire` path surfaces `ReviewError::LockContention` by
+    /// variant identity (not a generic anyhow bail) so the MCP transport maps it
+    /// to the structured `LOCK_CONTENTION` code carrying the canonical id, while
+    /// the `review unlock` guidance still rides `details` for the CLI arm.
+    #[test]
+    fn acquire_surfaces_lock_contention_by_variant_identity() {
+        let tmp = fixture_rv();
+        let root = tmp.path();
+        // Hold the lock, then a second acquire loses the create_new race.
+        let _held = LockGuard::acquire(root, 1).unwrap();
+        // `.err()` (not `unwrap_err`) — `LockGuard` is not `Debug` by design.
+        let err = LockGuard::acquire(root, 1)
+            .err()
+            .expect("second acquire must contend");
+        match err.downcast_ref::<ReviewError>() {
+            Some(ReviewError::LockContention { canonical, details }) => {
+                assert_eq!(canonical, "RV-001");
+                assert!(
+                    details.contains("review unlock"),
+                    "unlock guidance retained: {details}"
+                );
+            }
+            other => panic!("expected LockContention, got {other:?}"),
+        }
     }
 
     /// VT-5(b) + VT-6 + VT-7: a crash between the authored write (step 5) and the
