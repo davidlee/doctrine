@@ -7,7 +7,10 @@ ws3 ("populate — make gating bite").
 
 **Current:** the knowledge-record surface ships (SPEC-019; seven kinds since
 SL-159: ASM/DEC/QUE/CON/EVD/HYP/CPT) but no skill routes capture intent to it.
-Census 2026-06-26: zero records, zero `shapes` edges. RFC-008/SL-158's gating
+Census 2026-06-26: zero records, zero `shapes` edges. *(Corrected at audit,
+RV-280 F-6: five SL-158/ADR-017-era records post-dated that census, so the
+dogfood ids are -002 and "first records" reads "first authored through the
+routed skill".)* RFC-008/SL-158's gating
 (trinary actionability, ADR-017) has nothing to gate on.
 
 **Target:** a `/knowledge` skill routes capture intent to the CLI at the moments
@@ -127,6 +130,7 @@ full install), then routing row, then `doctrine boot`. Source of truth is
 | `plugins/doctrine/skills/preflight/SKILL.md` | +2 lines, gating check + capture pointer |
 | `install/routing-process.md` | +1 routing row |
 | `install/using-doctrine.md` | +1 sentence, gating model |
+| `.doctrine/knowledge/**` | new — PHASE-03 dogfood records (DEC-002, ASM-002); selector added at audit (RV-280 F-2) |
 
 No Rust code changes. `src/install.rs` is touched (mtime only) to force
 re-embed — not a content change, not a design target.

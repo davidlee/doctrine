@@ -97,3 +97,26 @@ undeclared rather than falsely claimed as design targets (F-5).
 
 - None. No finding touches an ADR, policy, standard, or spec; ISS-228,
   ISS-229, CHR-045 are backlog work items, not governance edits.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+
+- design.md §Code impact: added the `.doctrine/knowledge/**` row mirroring the
+  design-target selector applied at audit (RV-280 F-2). Registry was the
+  load-bearing change; this is the human mirror.
+- design.md §Current vs target + slice-214.md §Context: corrected the stale
+  zero-records census premise — five SL-158/ADR-017-era records post-dated the
+  2026-06-26 census; dogfood ids are -002; "first records" reads "first
+  authored through the routed skill" (RV-280 F-6).
+
+### REVs completed
+
+- None required — the brief carried no governance/spec items.
+
+### Withdrawn / tolerated
+
+- RV-280 F-4: tolerated — Claude plugin-cache distribution lag; rationale in
+  the finding disposition; process fix tracked as CHR-045.
+
+Reconcile pass complete — handoff to /close.

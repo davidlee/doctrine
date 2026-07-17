@@ -5,7 +5,11 @@
 The knowledge-record command surface ships (SPEC-019: `doctrine knowledge
 new|show|list|status`; **seven** kinds since SL-159 — ASM/DEC/QUE/CON/EVD/HYP/CPT;
 IMP-182's "four kinds" is stale), but no agent skill routes to it. Live census
-2026-06-26: zero knowledge records, zero `shapes` edges. This is RFC-007 workstream 3 ("populate — make gating bite") and the
+2026-06-26: zero knowledge records, zero `shapes` edges. *(Corrected at audit,
+RV-280 F-6: five records — ASM-001, DEC-001, QUE-001, QUE-171, CON-001 — landed
+after that census in the SL-158/ADR-017 era. The premise holds as "no records
+authored through a routed skill"; the slice's dogfood ids are therefore -002.)*
+This is RFC-007 workstream 3 ("populate — make gating bite") and the
 root cause of the empty population blocking RFC-008 (trinary-actionability
 gating, SL-158) — the gate has nothing to gate on until records exist.
 
