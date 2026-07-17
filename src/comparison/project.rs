@@ -446,8 +446,8 @@ mod tests {
             uid: uid.to_string(),
             seq: 0,
             a: winner.to_string(),
-            b: loser.to_string(),
-            response: Response::PreferA,
+            b: Some(loser.to_string()),
+            response: Some(Response::PreferA),
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -457,7 +457,10 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-11".to_string(),
+            date: Some("2026-07-11".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 
@@ -682,7 +685,7 @@ mod tests {
         // component's ladder (SL-216, design internal F3).
         let mut rows = vec![judgement("j0", "a", "b")];
         let mut eq = judgement("j1", "s1", "s2");
-        eq.response = Response::Equal;
+        eq.response = Some(Response::Equal);
         rows.push(eq);
         let refs: Vec<&Judgement> = rows.iter().collect();
         let cs = compile(&refs, &AnchorMap::new(), QuarantinePolicy::Symmetric);

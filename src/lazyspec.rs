@@ -558,6 +558,10 @@ fn spec_date(head: &AuthoredHead, spec_toml: &Path) -> String {
 /// base record's `edges` (the typed spec edges are NOT re-read into tier-1 — D7).
 fn load_specs(root: &Path) -> anyhow::Result<Vec<SpecRecord>> {
     use crate::spec::SpecSubtype;
+    // SL-220 PHASE-06: the value line re-sources from the comparison ladder
+    // (design §6) — ONE pipeline load for the whole scan, threaded into each
+    // per-spec render (never a per-spec reload).
+    let pipeline = crate::priority::graph::load_comparison_pipeline_for_root(root)?;
     let mut out = Vec::new();
     for (subtype, kind, lazyspec_kind) in [
         (
@@ -569,7 +573,15 @@ fn load_specs(root: &Path) -> anyhow::Result<Vec<SpecRecord>> {
     ] {
         let tree = root.join(kind.dir);
         for id in crate::entity::scan_ids(&tree)? {
-            out.push(load_spec(root, &tree, subtype, kind, lazyspec_kind, id)?);
+            out.push(load_spec(
+                root,
+                &tree,
+                subtype,
+                kind,
+                lazyspec_kind,
+                id,
+                &pipeline,
+            )?);
         }
     }
     Ok(out)
@@ -586,6 +598,7 @@ fn load_spec(
     kind: &crate::entity::Kind,
     lazyspec_kind: &str,
     id: u32,
+    pipeline: &crate::comparison::Pipeline,
 ) -> anyhow::Result<SpecRecord> {
     let name = format!("{id:03}");
     let dir = tree.join(&name);
@@ -606,6 +619,15 @@ fn load_spec(
     let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
     let value_unit = crate::value::resolve_unit(&cfg.value);
     let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+    // SL-220 PHASE-06: resolve the value line from the SHARED pipeline (the
+    // scan-wide load in `load_specs`) — the same ladder walk as `spec show`.
+    let value_line = crate::priority::surface::value_line_from_pipeline(
+        pipeline,
+        &listing_canonical(kind.prefix, spec.id),
+        spec.value.as_ref().map(|v| v.value),
+        kind.prefix,
+        &value_unit,
+    );
     let body = crate::spec::render(
         &spec,
         &prose_body,
@@ -613,7 +635,7 @@ fn load_spec(
         &req_bodies,
         &interactions,
         &estimation_unit,
-        &value_unit,
+        value_line.as_deref(),
         lower_pct,
         upper_pct,
     );

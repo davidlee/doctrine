@@ -896,7 +896,7 @@ pub(crate) fn render(
     req_bodies: &[Option<String>],
     interactions: &[Interaction],
     estimation_unit: &str,
-    value_unit: &str,
+    value_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -975,11 +975,10 @@ pub(crate) fn render(
             )
         ));
     }
-    if let Some(ref val) = spec.value {
-        parts.push(format!(
-            "{}\n",
-            crate::value::format_value_normal(val, value_unit)
-        ));
+    // SL-220 PHASE-06: the value line re-sources from the ladder (design §6),
+    // resolved by the shell (`run_show` / lazyspec) and threaded in.
+    if let Some(line) = value_line {
+        parts.push(format!("{line}\n"));
     }
 
     // prose body, verbatim.
@@ -1517,6 +1516,15 @@ pub(crate) fn run_show(
             let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
             let value_unit = crate::value::resolve_unit(&cfg.value);
             let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            // SL-220 PHASE-06: the value line re-sources from the comparison
+            // ladder (design §6) — `spec.value` feeds only the rung-5 fallback.
+            let value_line = crate::priority::surface::show_value_line(
+                &root,
+                &spec.kind.canonical_id(spec.id),
+                spec.value.as_ref().map(|v| v.value),
+                spec.kind.kind().prefix,
+                &value_unit,
+            )?;
             render(
                 &spec,
                 &prose_body,
@@ -1524,7 +1532,7 @@ pub(crate) fn run_show(
                 &req_bodies,
                 &interactions,
                 &estimation_unit,
-                &value_unit,
+                value_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -3583,7 +3591,7 @@ parent = \"SPEC-002\"
             &[],
             &[],
             "points",
-            "points",
+            None,
             0.0,
             1.0,
         );
@@ -3641,7 +3649,7 @@ parent = \"SPEC-002\"
             &[],
             &[],
             "points",
-            "points",
+            None,
             0.0,
             1.0,
         );
@@ -3663,17 +3671,7 @@ parent = \"SPEC-002\"
         let mut r = req(1, "Bare", ReqKind::Functional);
         r.description = None; // no statement (D-P4-1: absent → no line)
         let members = vec![(member("REQ-001", "FR-001", 1), r)];
-        let out = render(
-            &spec,
-            "p\n",
-            &members,
-            &[],
-            &[],
-            "points",
-            "points",
-            0.0,
-            1.0,
-        );
+        let out = render(&spec, "p\n", &members, &[], &[], "points", None, 0.0, 1.0);
         assert!(out.contains("### FR-001 (REQ-001) — Bare"));
         assert!(!out.contains("statement"));
     }
@@ -3693,13 +3691,13 @@ parent = \"SPEC-002\"
                 notes: None,
             },
         ];
-        let with = render(&spec, "p\n", &[], &[], &edges, "points", "points", 0.0, 1.0);
+        let with = render(&spec, "p\n", &[], &[], &edges, "points", None, 0.0, 1.0);
         assert!(with.contains("## Interactions"));
         assert!(with.contains("- SPEC-002 — uses: calls boot"));
         assert!(with.contains("- SPEC-003 — extends\n"));
 
         // empty (product spec or a tech spec with zero edges) → block omitted.
-        let without = render(&spec, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
+        let without = render(&spec, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
         assert!(!without.contains("## Interactions"));
     }
 
@@ -3713,7 +3711,7 @@ parent = \"SPEC-002\"
             responsibilities: vec!["route".to_string()],
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
         assert!(out.contains("descends from: PRD-001\n"));
         assert!(out.contains("parent: SPEC-002\n"));
         // no derived children line ever (ADR-004 §3, outbound-only).
@@ -3730,7 +3728,7 @@ parent = \"SPEC-002\"
     fn render_omits_descent_and_parent_when_none_and_for_product() {
         // VT-2: tech with both None → neither line.
         let tech = tech_spec(1);
-        let out = render(&tech, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
+        let out = render(&tech, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
         assert!(!out.contains("descends from:"));
         assert!(!out.contains("\nparent:"));
 
@@ -3742,7 +3740,7 @@ parent = \"SPEC-002\"
             parent: None,
             ..tech_spec(1)
         };
-        let pout = render(&product, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
+        let pout = render(&product, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
         assert!(!pout.contains("descends from:"));
         assert!(!pout.contains("parent:"));
     }
@@ -3756,7 +3754,7 @@ parent = \"SPEC-002\"
             parent: Some("PRD-003".to_string()),
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
         assert!(out.contains("product level: capability\n"));
         assert!(out.contains("parent: PRD-003\n"));
         // reciprocal children are derived, never rendered (ADR-004 §3).
@@ -3775,7 +3773,7 @@ parent = \"SPEC-002\"
             c4_level: Some(C4Level::Container),
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[], "points", "points", 0.0, 1.0);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
         assert!(!out.contains("c4 level:"));
     }
 
@@ -3787,6 +3785,8 @@ parent = \"SPEC-002\"
             upper: 8.0,
         });
         spec.value = Some(crate::value::ValueFacet { value: 21.0 });
+        // SL-220 PHASE-06: the value line is resolved by the shell and threaded
+        // in; render emits the passed line verbatim (design §6).
         let out = render(
             &spec,
             "p\n",
@@ -3794,7 +3794,7 @@ parent = \"SPEC-002\"
             &[],
             &[],
             "espresso_shots",
-            "magic_beans",
+            Some("value: 21.0 magic_beans (human claim, ada, 2026-07-16)"),
             0.1,
             0.9,
         );
@@ -3802,7 +3802,10 @@ parent = \"SPEC-002\"
             out.contains("estimate: 3.5–7.5 espresso_shots (80% confidence)"),
             "estimate row: {out}"
         );
-        assert!(out.contains("value: 21.0 magic_beans"), "value row: {out}");
+        assert!(
+            out.contains("value: 21.0 magic_beans (human claim, ada, 2026-07-16)"),
+            "value row: {out}"
+        );
     }
 
     // --- FIX 2: build_registry canonicalizes non-canonical author-supplied FKs ---

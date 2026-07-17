@@ -1,23 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
-//! `comparison::wire` — the pairwise comparison-session wire model, schema v2
-//! (SL-213 PHASE-01; v1 retired in place per design D1 — verified zero
-//! exposure, no release ever shipped it).
+//! `comparison::wire` — the comparison-session wire model, schema v3
+//! (SL-220 §1: anchor rows join the pairwise v2 wire of SL-213 PHASE-01;
+//! v1 retired in place per design D1 — verified zero exposure, no release
+//! ever shipped it). Parse accepts {2, 3} and writes 3 (SL-220 D2: every v2
+//! file is a valid v3 document).
 //!
-//! Pure leaf tier (ADR-001): depends only on `crate::kinds` plus serde/toml.
-//! No clock, disk, rng, or git — dates and uids are function inputs; the
-//! command shell mints them.
+//! Pure leaf tier (ADR-001): depends only on `crate::kinds` and
+//! `crate::value` (the value-domain anchor payload mirrors
+//! [`crate::value::validate`] exactly — single source, SL-220 §1) plus
+//! serde/toml. No clock, disk, rng, or git — dates and uids are function
+//! inputs; the command shell mints them.
 //!
 //! The serde model IS the wire model: it serializes 1:1 to the documented
 //! session-file schema — top-level `schema`/`version`, a nested `[session]`
 //! table, singular `[[judgement]]` / `[[tombstone]]` arrays-of-tables,
 //! lowercase/kebab-case enum tokens. `frame` and `domain` stay `String`-typed
 //! so unknown vocab in *future* files round-trips losslessly; `response`,
-//! `rater` and `form` are closed enums by design — an unknown token fails
-//! parse.
+//! `rater`, `form` and `admission` are closed enums by design — an unknown
+//! token fails parse.
 
 use serde::{Deserialize, Serialize};
 
 use crate::kinds;
+use crate::value;
 
 /// The `schema` discriminator every session file carries; checked on parse.
 pub(crate) const COMPARISON_SCHEMA: &str = "doctrine.comparison-session";
@@ -42,19 +47,32 @@ pub(crate) const FRAME_PREFER_FIRST: &str = "prefer-first";
 /// COSTLIER item. `prefer-a` ⇒ edge `c_A > c_B`; `equal` ⇒ cost-equality;
 /// `incomparable` ⇒ no constraint.
 pub(crate) const FRAME_MORE_WORK: &str = "more-work";
+/// Value anchor frame (SL-220 §1): an absolute magnitude claim on a single
+/// subject. Never user-typed — `value set|pin` stamps it.
+pub(crate) const FRAME_VALUE_ANCHOR: &str = "value-anchor";
 
 /// Per-domain closed frame vocabulary (design D2). The frame implies the
 /// domain at capture — users never type a domain; [`domain_for_frame`] is the
 /// single derivation seam and this table its single source (STD-001).
 pub(crate) const DOMAIN_FRAMES: &[(&str, &[&str])] = &[
-    (DOMAIN_VALUE, &[FRAME_EQUAL_EFFORT]),
+    (DOMAIN_VALUE, &[FRAME_EQUAL_EFFORT, FRAME_VALUE_ANCHOR]),
     (DOMAIN_PRIORITY, &[FRAME_PREFER_FIRST]),
     (DOMAIN_ESTIMATE, &[FRAME_MORE_WORK]),
 ];
 
-/// The only wire version this model reads or writes (design D1: `version ≠ 2`
-/// is a parse error — v1 was never released).
-pub(crate) const COMPARISON_VERSION: u32 = 2;
+/// The anchor-frame membership set (SL-220 §1): each domain's frame set names
+/// AT MOST one member of this set, and `form = anchor ⇔ frame ∈ ANCHOR_FRAMES`
+/// is the validation biconditional. Membership anchors on this set, never on
+/// a name pattern (`cost-anchor` joins with Phase 2).
+const ANCHOR_FRAMES: &[&str] = &[FRAME_VALUE_ANCHOR];
+
+/// The wire version this model WRITES (SL-220 D2). Parse accepts every member
+/// of [`SUPPORTED_VERSIONS`] — every v2 file is a valid v3 document, so the
+/// corpus is never rewritten.
+pub(crate) const COMPARISON_VERSION: u32 = 3;
+/// The versions parse accepts (SL-220 D2: a two-member set — v1 was never
+/// released and stays a remedy-naming parse error).
+pub(crate) const SUPPORTED_VERSIONS: &[u32] = &[2, 3];
 
 /// The domain a frame implies at capture (design S1: `--frame prefer-first`
 /// derives `domain = priority` silently).
@@ -73,22 +91,47 @@ fn frames_for_domain(domain: &str) -> Option<&'static [&'static str]> {
         .map(|(_, frames)| *frames)
 }
 
+/// The domain's single anchor frame, if it names one (SL-220 §1). `None` for
+/// domains with no anchor form yet (`priority`, `estimate` — `cost-anchor`
+/// arrives with Phase 2), which bars `form = anchor` there entirely.
+fn anchor_frame_for(domain: &str) -> Option<&'static str> {
+    frames_for_domain(domain)?
+        .iter()
+        .copied()
+        .find(|frame| ANCHOR_FRAMES.contains(frame))
+}
+
 /// Who rendered the judgement. Closed by design: an unknown rater token
 /// fails parse (losslessness covers the frame/domain strings only).
+/// `migrated` (SL-220 §1) marks a facet-import row — anchor form only, with
+/// `observed_at` in place of `date` (the authorship date is honestly unknown).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum RaterKind {
     Human,
     Agent,
+    Migrated,
 }
 
 /// Row form. The verb exposes `order` only; `ratio` keeps capture lossless
-/// for RFC-019 OQ-6. Closed: unknown tokens fail parse.
+/// for RFC-019 OQ-6. `anchor` (SL-220 §1) is a single-subject absolute claim
+/// — `b`/`response` absent, per-domain payload columns instead. Closed:
+/// unknown tokens fail parse.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum RowForm {
     Order,
     Ratio,
+    Anchor,
+}
+
+/// How a claim row was admitted (SL-220 §1). Closed enum, sole variant `pin`:
+/// mintable only by the gated `value pin` path (design §4) — admission is a
+/// contract, not a free column (RV-275 F-5). Unknown tokens fail parse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum AdmissionKind {
+    Pin,
 }
 
 /// The elicited answer (design D1/S1): one of the two sides preferred, an
@@ -114,22 +157,31 @@ pub(crate) struct SessionHeader {
     pub audience: Option<String>,
 }
 
-/// One `[[judgement]]` row: a single pairwise judgement.
+/// One `[[judgement]]` row: a pairwise judgement (order/ratio) or a
+/// single-subject anchor claim (SL-220 §1).
 ///
-/// No `Eq`: `magnitude` is an `f64` column (parsed, uncompiled — RFC-019 OQ-6
-/// stays open; pure order semantics per design D8 ignore it).
+/// No `Eq`: `magnitude` is an `f64` column (parsed, uncompiled on pairwise
+/// rows — RFC-019 OQ-6 stays open; pure order semantics per design D8 ignore
+/// it). Field order is the v2 wire order with the v3 optionals appended, so a
+/// v2-shaped row serializes byte-identically (SL-220 D2).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Judgement {
     pub uid: String,
-    /// Row sequence within the file; ordering key is `(date, session_uid, seq)`.
+    /// Row sequence within the file; ordering key is
+    /// `(ordering_date, session_uid, seq)`.
     pub seq: u32,
     pub a: String,
-    pub b: String,
-    pub response: Response,
+    /// The pair's second side — required for order/ratio, absent for anchor
+    /// rows (SL-220 §1: an anchor claims a single subject).
+    pub b: Option<String>,
+    /// Required for order/ratio, absent for anchor rows.
+    pub response: Option<Response>,
     pub domain: String,
     pub frame: String,
     pub form: RowForm,
-    /// Ratio column — carried losslessly, never compiled (design C1).
+    /// Ratio column on pairwise rows — carried losslessly, never compiled
+    /// (design C1). On a value-domain ANCHOR row: the payload — the claimed
+    /// absolute magnitude (SL-220 D1).
     pub magnitude: Option<f64>,
     /// Explicit supersession target: this row's uid replaces that row's
     /// testimony (design R2 — a durable act, not testimony).
@@ -140,7 +192,30 @@ pub(crate) struct Judgement {
     /// Optional rater identity.
     pub by: Option<String>,
     pub note: Option<String>,
-    pub date: String,
+    /// Asserted-at date — required on every row EXCEPT `rater = migrated`
+    /// (SL-220 §1: a migrated facet's authorship date is honestly absent).
+    pub date: Option<String>,
+    /// Present iff `rater = migrated` (strict biconditional): the migration
+    /// date (SL-220 §1).
+    pub observed_at: Option<String>,
+    /// Free-text evidence citation — e.g. `REQ-059`, or the source facet's
+    /// provenance on migrated rows (SL-220 §1).
+    pub basis: Option<String>,
+    /// Pin admission (SL-220 §1) — see [`AdmissionKind`].
+    pub admission: Option<AdmissionKind>,
+}
+
+impl Judgement {
+    /// The total tier-1 ordering date (SL-220 §1): `date` when present, else
+    /// `observed_at`. Total by the validation matrix — every capturable row
+    /// carries exactly one of the two; a row that somehow carries neither
+    /// still orders (deterministically first) rather than panicking.
+    pub(crate) fn ordering_date(&self) -> &str {
+        self.date
+            .as_deref()
+            .or(self.observed_at.as_deref())
+            .unwrap_or_default()
+    }
 }
 
 /// One `[[tombstone]]` row: an append-only withdrawal of a judgement row,
@@ -170,8 +245,8 @@ pub(crate) struct ComparisonSession {
 }
 
 /// Parse a session-file body. Rejects a wrong `schema` discriminator or any
-/// version other than [`COMPARISON_VERSION`] with a remedy-naming message
-/// (design D1); unknown frame/domain strings parse and round-trip.
+/// version outside [`SUPPORTED_VERSIONS`] with a remedy-naming message
+/// (design D1, SL-220 D2); unknown frame/domain strings parse and round-trip.
 pub(crate) fn parse(text: &str) -> anyhow::Result<ComparisonSession> {
     let s: ComparisonSession = toml::from_str(text)?;
     if s.schema != COMPARISON_SCHEMA {
@@ -180,11 +255,13 @@ pub(crate) fn parse(text: &str) -> anyhow::Result<ComparisonSession> {
             s.schema
         );
     }
-    if s.version != COMPARISON_VERSION {
+    if !SUPPORTED_VERSIONS.contains(&s.version) {
+        let supported: Vec<String> = SUPPORTED_VERSIONS.iter().map(u32::to_string).collect();
         anyhow::bail!(
-            "unsupported comparison-session version {} (expected {COMPARISON_VERSION}) — \
+            "unsupported comparison-session version {} (expected one of: {}) — \
              schema version 1 was never released; delete or recreate this session file",
-            s.version
+            s.version,
+            supported.join(", ")
         );
     }
     Ok(s)
@@ -209,17 +286,16 @@ pub(crate) fn session_of_one(session: SessionHeader, judgement: Judgement) -> Co
     }
 }
 
-/// Structural row validation: a ≠ b, non-empty refs, closed per-domain frame
-/// vocabulary (design D2 — the frame table is normative at capture; parse-level
-/// losslessness is separate). `response` needs no check — the closed enum
-/// makes an invalid answer unrepresentable. Admissibility is separate (needs
-/// kinds).
+/// Structural row validation (capture-time — parse stays lossless): non-empty
+/// refs, closed per-domain frame vocabulary (design D2 — the frame table is
+/// normative at capture), and the SL-220 §1 validation matrix — form/payload
+/// exactness ([`validate_form`]) and rater/date/admission provenance
+/// ([`validate_provenance`]). `response` values need no check — the closed
+/// enum makes an invalid answer unrepresentable. Admissibility is separate
+/// (needs kinds).
 pub(crate) fn validate_judgement(j: &Judgement) -> anyhow::Result<()> {
-    if j.a.is_empty() || j.b.is_empty() {
-        anyhow::bail!("both sides of the pair are required — empty ref");
-    }
-    if j.a == j.b {
-        anyhow::bail!("cannot compare `{}` against itself", j.a);
+    if j.a.is_empty() {
+        anyhow::bail!("the subject ref is required — empty ref");
     }
     let Some(frames) = frames_for_domain(&j.domain) else {
         let domains: Vec<&str> = DOMAIN_FRAMES.iter().map(|(d, _)| *d).collect();
@@ -235,6 +311,122 @@ pub(crate) fn validate_judgement(j: &Judgement) -> anyhow::Result<()> {
             j.frame,
             j.domain,
             frames.join(", ")
+        );
+    }
+    validate_form(j)?;
+    validate_provenance(j)
+}
+
+/// The form half of the SL-220 §1 matrix: `form = anchor` ⇔ the domain's
+/// single anchor frame, with `b`/`response` absent and the domain's payload
+/// set present EXACTLY; order/ratio rows require `b`/`response` and a
+/// pairwise frame (v2 rows satisfy this by construction).
+fn validate_form(j: &Judgement) -> anyhow::Result<()> {
+    let anchor_frame = anchor_frame_for(&j.domain);
+    match j.form {
+        RowForm::Anchor => {
+            if anchor_frame != Some(j.frame.as_str()) {
+                let expected = anchor_frame.map_or_else(
+                    || format!(" (domain `{}` has none)", j.domain),
+                    |f| format!(" (`{f}`)"),
+                );
+                anyhow::bail!(
+                    "form `anchor` requires the domain's anchor frame{expected} — got `{}`",
+                    j.frame
+                );
+            }
+            if j.b.is_some() {
+                anyhow::bail!("an anchor row claims a single subject — `b` must be absent");
+            }
+            if j.response.is_some() {
+                anyhow::bail!(
+                    "an anchor row carries no pairwise response — `response` must be absent"
+                );
+            }
+            validate_anchor_payload(j)
+        }
+        RowForm::Order | RowForm::Ratio => {
+            if anchor_frame == Some(j.frame.as_str()) {
+                anyhow::bail!(
+                    "frame `{}` is the `{}` domain's anchor frame — pairwise rows use a \
+                     pairwise frame",
+                    j.frame,
+                    j.domain
+                );
+            }
+            let Some(b) = j.b.as_deref() else {
+                anyhow::bail!("both sides of the pair are required — `b` is absent");
+            };
+            if b.is_empty() {
+                anyhow::bail!("both sides of the pair are required — empty ref");
+            }
+            if j.a == b {
+                anyhow::bail!("cannot compare `{}` against itself", j.a);
+            }
+            if j.response.is_none() {
+                anyhow::bail!("a pairwise row requires a `response`");
+            }
+            Ok(())
+        }
+    }
+}
+
+/// The per-domain anchor payload, EXACTLY (SL-220 D1). Value: `{magnitude}` —
+/// present and finite, mirroring [`value::validate`] (the single source — no
+/// range policy smuggled in; negatives included). Estimate payload columns
+/// arrive with Phase 2; the frame biconditional already bars anchor rows from
+/// domains without an anchor frame, so `value` is the only reachable arm.
+fn validate_anchor_payload(j: &Judgement) -> anyhow::Result<()> {
+    debug_assert_eq!(
+        j.domain, DOMAIN_VALUE,
+        "the frame biconditional bars anchor rows from other domains"
+    );
+    let Some(magnitude) = j.magnitude else {
+        anyhow::bail!("a value anchor claims a magnitude — `magnitude` is required");
+    };
+    value::validate(&value::ValueFacet { value: magnitude })
+}
+
+/// The provenance half of the SL-220 §1 matrix: `rater = migrated` ⇒ anchor
+/// form, `date` absent, `observed_at` present; any other rater ⇒ `date`
+/// present, `observed_at` absent (strict — every row carries exactly one of
+/// the two). `admission = pin` ⇒ human anchor (RV-275 F-5: contradictory
+/// provenance rejected at capture).
+fn validate_provenance(j: &Judgement) -> anyhow::Result<()> {
+    match j.rater {
+        RaterKind::Migrated => {
+            if !matches!(j.form, RowForm::Anchor) {
+                anyhow::bail!("rater `migrated` is facet-import provenance — anchor rows only");
+            }
+            if j.date.is_some() {
+                anyhow::bail!(
+                    "a migrated row's authorship date is unknown — `date` must be absent \
+                     (`observed_at` carries the migration date)"
+                );
+            }
+            if j.observed_at.is_none() {
+                anyhow::bail!(
+                    "a migrated row records its migration date — `observed_at` is required"
+                );
+            }
+        }
+        RaterKind::Human | RaterKind::Agent => {
+            if j.date.is_none() {
+                anyhow::bail!("`date` is required (absent only on `rater = migrated` rows)");
+            }
+            if j.observed_at.is_some() {
+                anyhow::bail!(
+                    "`observed_at` is migration provenance — `rater = migrated` rows only"
+                );
+            }
+        }
+    }
+    // Sole variant `pin` (closed enum): presence IS the pin claim.
+    if j.admission.is_some()
+        && !(matches!(j.form, RowForm::Anchor) && matches!(j.rater, RaterKind::Human))
+    {
+        anyhow::bail!(
+            "`admission = \"pin\"` requires a human anchor row — contradictory provenance"
         );
     }
     Ok(())
@@ -287,6 +479,47 @@ fn admissible_value_kind(kind: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Anchor supersession scope (SL-220 §4): an anchor claim may supersede only
+/// another ANCHOR claim sharing its `(subject, domain, lens)` — with
+/// `None == None` lens equality. A foreign subject, cross-domain, pairwise-row,
+/// or cross-lens target is refused AT CAPTURE (never deferred to a
+/// resolution-time finding). Pure over the two wire rows; the shell resolves
+/// the target uid against the corpus and passes the row in. `Err` carries the
+/// human-readable refusal naming the mismatch.
+pub(crate) fn validate_anchor_supersedes(
+    new: &Judgement,
+    target: &Judgement,
+) -> Result<(), String> {
+    if !matches!(target.form, RowForm::Anchor) {
+        return Err(format!(
+            "--supersedes target `{}` is a pairwise row — an anchor claim supersedes only another anchor claim",
+            target.uid
+        ));
+    }
+    if new.a != target.a {
+        return Err(format!(
+            "--supersedes target `{}` claims `{}`, not `{}` — supersession stays within one subject",
+            target.uid, target.a, new.a
+        ));
+    }
+    if new.domain != target.domain {
+        return Err(format!(
+            "--supersedes target `{}` is domain `{}`, not `{}` — cross-domain supersession is refused",
+            target.uid, target.domain, new.domain
+        ));
+    }
+    if new.lens != target.lens {
+        let show = |l: &Option<String>| l.clone().unwrap_or_else(|| "(none)".to_string());
+        return Err(format!(
+            "--supersedes target `{}` lens `{}` differs from `{}` — cross-lens supersession is refused",
+            target.uid,
+            show(&target.lens),
+            show(&new.lens)
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,15 +544,15 @@ mod tests {
         }
     }
 
-    /// A judgement with EVERY optional set (magnitude, supersedes, lens, by,
-    /// note) — the golden's maximal row.
+    /// A judgement with EVERY v2 optional set (magnitude, supersedes, lens,
+    /// by, note) — the golden's maximal pairwise row.
     fn full_judgement() -> Judgement {
         Judgement {
             uid: "0197f3a2-6c2f-7d4e-8f5a-2b3c4d5e6f7a".to_string(),
             seq: 0,
             a: "SL-204".to_string(),
-            b: "IMP-118".to_string(),
-            response: Response::PreferA,
+            b: Some("IMP-118".to_string()),
+            response: Some(Response::PreferA),
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -329,7 +562,10 @@ mod tests {
             rater: RaterKind::Agent,
             by: Some("david".to_string()),
             note: Some("auth unblocks the pilot".to_string()),
-            date: "2026-07-10".to_string(),
+            date: Some("2026-07-10".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 
@@ -340,8 +576,8 @@ mod tests {
             uid: "0197f3a2-8f52-7a71-9c8d-5e6f7a8b9c0d".to_string(),
             seq: 2,
             a: "SL-204".to_string(),
-            b: "RSK-004".to_string(),
-            response: Response::PreferB,
+            b: Some("RSK-004".to_string()),
+            response: Some(Response::PreferB),
             domain: DOMAIN_ESTIMATE.to_string(),
             frame: FRAME_MORE_WORK.to_string(),
             form: RowForm::Order,
@@ -351,7 +587,10 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-10".to_string(),
+            date: Some("2026-07-10".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 
@@ -361,8 +600,8 @@ mod tests {
             uid: "0197f3a2-7e41-7f60-8b7c-4d5e6f7a8b9c".to_string(),
             seq: 1,
             a: "IMP-118".to_string(),
-            b: "CHR-042".to_string(),
-            response: Response::PreferB,
+            b: Some("CHR-042".to_string()),
+            response: Some(Response::PreferB),
             domain: DOMAIN_PRIORITY.to_string(),
             frame: FRAME_PREFER_FIRST.to_string(),
             form: RowForm::Order,
@@ -372,25 +611,90 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-10".to_string(),
+            date: Some("2026-07-10".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
+        }
+    }
+
+    // ---- SL-220 §1 anchor-row fixtures (design's sample rows) ---------------
+
+    /// The design's first sample row: a live human anchor claim, `basis` set.
+    fn human_anchor() -> Judgement {
+        Judgement {
+            uid: "0197f3a2-9a63-7b82-8d9e-6f7a8b9c0d1e".to_string(),
+            seq: 0,
+            a: "SL-204".to_string(),
+            b: None,
+            response: None,
+            domain: DOMAIN_VALUE.to_string(),
+            frame: FRAME_VALUE_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: Some(6.5),
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Human,
+            by: Some("david".to_string()),
+            note: None,
+            date: Some("2026-07-16".to_string()),
+            observed_at: None,
+            basis: Some("REQ-059".to_string()),
+            admission: None,
+        }
+    }
+
+    /// A pin: the human anchor plus `admission = "pin"` (design §1).
+    fn pin_anchor() -> Judgement {
+        Judgement {
+            admission: Some(AdmissionKind::Pin),
+            ..human_anchor()
+        }
+    }
+
+    /// The design's second sample row: a migrated facet import —
+    /// `observed_at` in place of `date`, provenance in `basis`.
+    fn migrated_anchor() -> Judgement {
+        Judgement {
+            uid: "0197f3a2-ab74-7c93-9eaf-7a8b9c0d1e2f".to_string(),
+            seq: 1,
+            a: "IMP-118".to_string(),
+            b: None,
+            response: None,
+            domain: DOMAIN_VALUE.to_string(),
+            frame: FRAME_VALUE_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: Some(3.0),
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Migrated,
+            by: None,
+            note: None,
+            date: None,
+            observed_at: Some("2026-07-16".to_string()),
+            basis: Some("facet [value] .doctrine/backlog/imp-118.toml @ 4a12e576".to_string()),
+            admission: None,
         }
     }
 
     /// Pins the vocab constants to the documented schema strings (style
     /// precedent: `kinds::tests::groupings_match_documented_membership`).
+    /// SL-220 §1: version 3 written, `value-anchor` in the value frame set.
     #[test]
     fn vocab_matches_documented_schema() {
         assert_eq!(COMPARISON_SCHEMA, "doctrine.comparison-session");
         assert_eq!(COMPARISONS_DIR, "comparisons");
-        assert_eq!(COMPARISON_VERSION, 2);
+        assert_eq!(COMPARISON_VERSION, 3);
+        assert_eq!(SUPPORTED_VERSIONS, &[2, 3]);
         assert_eq!(DOMAIN_VALUE, "value");
         assert_eq!(DOMAIN_PRIORITY, "priority");
         assert_eq!(DOMAIN_ESTIMATE, "estimate");
         assert_eq!(FRAME_MORE_WORK, "more-work");
+        assert_eq!(FRAME_VALUE_ANCHOR, "value-anchor");
         assert_eq!(
             DOMAIN_FRAMES,
             &[
-                ("value", &["equal-effort"][..]),
+                ("value", &["equal-effort", "value-anchor"][..]),
                 ("priority", &["prefer-first"][..]),
                 ("estimate", &["more-work"][..])
             ]
@@ -400,13 +704,26 @@ mod tests {
     /// The per-domain frame table drives capture derivation both ways
     /// (design D2/S1): frame → domain is total over the closed vocab, and an
     /// unknown frame derives nothing. SL-219 D1: `more-work` derives the
-    /// estimate domain.
+    /// estimate domain. SL-220 §1: `value-anchor` derives value —
+    /// `domain_for_frame` stays total over the grown table.
     #[test]
     fn domain_for_frame_derives_from_the_table() {
         assert_eq!(domain_for_frame(FRAME_EQUAL_EFFORT), Some(DOMAIN_VALUE));
         assert_eq!(domain_for_frame(FRAME_PREFER_FIRST), Some(DOMAIN_PRIORITY));
         assert_eq!(domain_for_frame(FRAME_MORE_WORK), Some(DOMAIN_ESTIMATE));
+        assert_eq!(domain_for_frame(FRAME_VALUE_ANCHOR), Some(DOMAIN_VALUE));
         assert_eq!(domain_for_frame("opportunity-cost"), None);
+    }
+
+    /// SL-220 §1: the anchor-frame derivation is membership in
+    /// `ANCHOR_FRAMES`, per domain — value names one; priority/estimate name
+    /// none yet (`cost-anchor` arrives with Phase 2); unknown domains none.
+    #[test]
+    fn anchor_frame_for_derives_from_the_membership_set() {
+        assert_eq!(anchor_frame_for(DOMAIN_VALUE), Some(FRAME_VALUE_ANCHOR));
+        assert_eq!(anchor_frame_for(DOMAIN_PRIORITY), None);
+        assert_eq!(anchor_frame_for(DOMAIN_ESTIMATE), None);
+        assert_eq!(anchor_frame_for("effort"), None);
     }
 
     /// Byte-exact wire shape: nested `[session]`, singular
@@ -462,13 +779,13 @@ note = \"wrong way round\"
         ];
         for (response, token) in cases {
             let mut s = full_session();
-            s.judgements[0].response = response;
+            s.judgements[0].response = Some(response);
             let text = to_toml(&s).unwrap();
             assert!(
                 text.contains(&format!("response = \"{token}\"")),
                 "{token} on the wire:\n{text}"
             );
-            assert_eq!(parse(&text).unwrap().judgements[0].response, response);
+            assert_eq!(parse(&text).unwrap().judgements[0].response, Some(response));
         }
     }
 
@@ -529,14 +846,38 @@ note = \"wrong way round\"
         assert!(err.contains("delete or recreate"), "remedy named: {err}");
     }
 
-    /// D1: ANY version ≠ 2 is a parse error, not only v1.
+    /// D1/SL-220 D2: ANY version outside the supported set {2, 3} is a parse
+    /// error, not only v1. (Designed churn at SL-220: this test previously
+    /// pinned v3 as rejected; the D2 version bump admits it.)
     #[test]
-    fn parse_rejects_any_non_v2_version() {
+    fn parse_rejects_any_unsupported_version() {
         let mut s = full_session();
-        s.version = 3;
+        s.version = 4;
         let text = to_toml(&s).unwrap();
         let err = parse(&text).unwrap_err().to_string();
-        assert!(err.contains("version 3"), "err names the version: {err}");
+        assert!(err.contains("version 4"), "err names the version: {err}");
+        assert!(err.contains("2, 3"), "err names the supported set: {err}");
+    }
+
+    /// SL-220 D2: parse accepts BOTH members of the supported set — every v2
+    /// file is a valid v3 document, no corpus rewrite.
+    #[test]
+    fn parse_accepts_v2_and_v3() {
+        for version in [2, 3] {
+            let mut s = full_session();
+            s.version = version;
+            let text = to_toml(&s).unwrap();
+            assert_eq!(parse(&text).unwrap().version, version);
+        }
+    }
+
+    /// SL-220 D2: minting writes the CURRENT version (3) — the shell never
+    /// hand-sets the wire discriminators.
+    #[test]
+    fn session_of_one_stamps_version_3() {
+        let s = session_of_one(full_session().session, human_anchor());
+        assert_eq!(s.version, 3);
+        assert!(to_toml(&s).unwrap().contains("version = 3\n"));
     }
 
     #[test]
@@ -606,7 +947,7 @@ note = \"wrong way round\"
     #[test]
     fn validate_rejects_self_pair() {
         let mut j = full_judgement();
-        j.b = j.a.clone();
+        j.b = Some(j.a.clone());
         assert!(validate_judgement(&j).is_err());
     }
 
@@ -630,7 +971,292 @@ note = \"wrong way round\"
         j.a = String::new();
         assert!(validate_judgement(&j).is_err());
         let mut j = full_judgement();
-        j.b = String::new();
+        j.b = Some(String::new());
+        assert!(validate_judgement(&j).is_err());
+    }
+
+    // ---- SL-220 §1: wire v3 battery (VT-1) -----------------------------------
+
+    /// Byte-exact v3 anchor wire shape: the design's sample rows — a live
+    /// human anchor (with `basis`), a pin (`admission = "pin"`), a migrated
+    /// import (`observed_at` in place of `date`) — written at version 3.
+    #[test]
+    fn golden_shape_v3_anchor_rows() {
+        let s = ComparisonSession {
+            schema: COMPARISON_SCHEMA.to_string(),
+            version: COMPARISON_VERSION,
+            session: SessionHeader {
+                uid: "0197f3a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f".to_string(),
+                date: "2026-07-16".to_string(),
+                audience: None,
+            },
+            judgements: vec![human_anchor(), migrated_anchor(), pin_anchor()],
+            tombstones: vec![],
+        };
+        let expected = "\
+schema = \"doctrine.comparison-session\"
+version = 3
+tombstone = []
+
+[session]
+uid = \"0197f3a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f\"
+date = \"2026-07-16\"
+
+[[judgement]]
+uid = \"0197f3a2-9a63-7b82-8d9e-6f7a8b9c0d1e\"
+seq = 0
+a = \"SL-204\"
+domain = \"value\"
+frame = \"value-anchor\"
+form = \"anchor\"
+magnitude = 6.5
+rater = \"human\"
+by = \"david\"
+date = \"2026-07-16\"
+basis = \"REQ-059\"
+
+[[judgement]]
+uid = \"0197f3a2-ab74-7c93-9eaf-7a8b9c0d1e2f\"
+seq = 1
+a = \"IMP-118\"
+domain = \"value\"
+frame = \"value-anchor\"
+form = \"anchor\"
+magnitude = 3.0
+rater = \"migrated\"
+observed_at = \"2026-07-16\"
+basis = \"facet [value] .doctrine/backlog/imp-118.toml @ 4a12e576\"
+
+[[judgement]]
+uid = \"0197f3a2-9a63-7b82-8d9e-6f7a8b9c0d1e\"
+seq = 0
+a = \"SL-204\"
+domain = \"value\"
+frame = \"value-anchor\"
+form = \"anchor\"
+magnitude = 6.5
+rater = \"human\"
+by = \"david\"
+date = \"2026-07-16\"
+basis = \"REQ-059\"
+admission = \"pin\"
+";
+        assert_eq!(to_toml(&s).unwrap(), expected);
+    }
+
+    /// Losslessness over the v3 optionals: anchor rows (human, pin, migrated
+    /// — `observed_at`/`basis`/`admission` set) alongside maximal and bare
+    /// pairwise rows all survive parse(to_toml(s)) == s.
+    #[test]
+    fn round_trip_preserves_anchor_rows_and_new_optionals() {
+        let mut s = full_session();
+        s.judgements.push(bare_judgement());
+        s.judgements.push(human_anchor());
+        s.judgements.push(pin_anchor());
+        s.judgements.push(migrated_anchor());
+        let text = to_toml(&s).unwrap();
+        assert_eq!(parse(&text).unwrap(), s);
+    }
+
+    /// An unknown admission token is a parse error — the enum is closed
+    /// (`pin` is its sole variant).
+    #[test]
+    fn parse_rejects_unknown_admission_token() {
+        let mut s = full_session();
+        s.judgements = vec![pin_anchor()];
+        let text = to_toml(&s)
+            .unwrap()
+            .replace("admission = \"pin\"", "admission = \"vouched\"");
+        assert!(parse(&text).is_err());
+    }
+
+    /// An unknown rater token is a parse error — `migrated` joined the closed
+    /// enum; arbitrary strings did not.
+    #[test]
+    fn parse_rejects_unknown_rater_token() {
+        let mut s = full_session();
+        s.judgements = vec![migrated_anchor()];
+        let text = to_toml(&s)
+            .unwrap()
+            .replace("rater = \"migrated\"", "rater = \"imported\"");
+        assert!(parse(&text).is_err());
+    }
+
+    // The validation matrix, every rule in BOTH directions (§8.1).
+
+    #[test]
+    fn validate_accepts_live_human_anchor() {
+        assert!(validate_judgement(&human_anchor()).is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_pin() {
+        assert!(validate_judgement(&pin_anchor()).is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_migrated_anchor() {
+        assert!(validate_judgement(&migrated_anchor()).is_ok());
+    }
+
+    /// form=anchor ⇒ `b` absent — a present `b` is rejected naming the rule.
+    #[test]
+    fn validate_rejects_anchor_with_b() {
+        let mut j = human_anchor();
+        j.b = Some("IMP-118".to_string());
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("single subject"), "got: {err}");
+    }
+
+    /// form=anchor ⇒ `response` absent.
+    #[test]
+    fn validate_rejects_anchor_with_response() {
+        let mut j = human_anchor();
+        j.response = Some(Response::PreferA);
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("no pairwise response"), "got: {err}");
+    }
+
+    /// Value payload exactness: `magnitude` present…
+    #[test]
+    fn validate_rejects_anchor_without_magnitude() {
+        let mut j = human_anchor();
+        j.magnitude = None;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("magnitude"), "got: {err}");
+    }
+
+    /// …and finite, mirroring `value::validate` exactly: NaN/±Inf rejected,
+    /// negatives ACCEPTED (no range policy smuggled in).
+    #[test]
+    fn validate_anchor_magnitude_mirrors_value_validate() {
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut j = human_anchor();
+            j.magnitude = Some(bad);
+            let err = validate_judgement(&j).unwrap_err().to_string();
+            assert!(
+                err.contains("finite"),
+                "{bad} rejected naming finite: {err}"
+            );
+        }
+        let mut j = human_anchor();
+        j.magnitude = Some(-2.5);
+        assert!(validate_judgement(&j).is_ok(), "negatives are admissible");
+    }
+
+    /// form=anchor ⇔ the domain's anchor frame: a pairwise frame on an anchor
+    /// row is rejected…
+    #[test]
+    fn validate_rejects_anchor_with_pairwise_frame() {
+        let mut j = human_anchor();
+        j.frame = FRAME_EQUAL_EFFORT.to_string();
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("anchor frame"), "got: {err}");
+    }
+
+    /// …an anchor frame on an order/ratio row is rejected…
+    #[test]
+    fn validate_rejects_order_row_with_anchor_frame() {
+        for form in [RowForm::Order, RowForm::Ratio] {
+            let mut j = full_judgement();
+            j.frame = FRAME_VALUE_ANCHOR.to_string();
+            j.form = form;
+            let err = validate_judgement(&j).unwrap_err().to_string();
+            assert!(err.contains("pairwise"), "got: {err}");
+        }
+    }
+
+    /// …and a domain with NO anchor frame admits no anchor row at all.
+    #[test]
+    fn validate_rejects_anchor_in_domain_without_anchor_frame() {
+        let mut j = human_anchor();
+        j.domain = DOMAIN_ESTIMATE.to_string();
+        j.frame = FRAME_MORE_WORK.to_string();
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("has none"), "got: {err}");
+    }
+
+    /// form=order|ratio ⇒ `b` present ∧ `response` present, both directions
+    /// of the presence rule (the accept direction is every v2 validate test).
+    #[test]
+    fn validate_rejects_pairwise_row_missing_b_or_response() {
+        let mut j = full_judgement();
+        j.b = None;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("`b` is absent"), "got: {err}");
+
+        let mut j = full_judgement();
+        j.response = None;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("requires a `response`"), "got: {err}");
+    }
+
+    /// rater=migrated ⇒ form=anchor: a migrated pairwise row is contradictory.
+    #[test]
+    fn validate_rejects_migrated_on_pairwise_row() {
+        let mut j = full_judgement();
+        j.rater = RaterKind::Migrated;
+        j.date = None;
+        j.observed_at = Some("2026-07-16".to_string());
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("anchor rows only"), "got: {err}");
+    }
+
+    /// The date/observed_at strict biconditional, all four violations:
+    /// migrated with `date`, migrated without `observed_at`, live with
+    /// `observed_at`, live without `date`.
+    #[test]
+    fn validate_enforces_date_observed_at_biconditional() {
+        let mut j = migrated_anchor();
+        j.date = Some("2026-07-16".to_string());
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("`date` must be absent"), "got: {err}");
+
+        let mut j = migrated_anchor();
+        j.observed_at = None;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("`observed_at` is required"), "got: {err}");
+
+        let mut j = human_anchor();
+        j.observed_at = Some("2026-07-16".to_string());
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("migration provenance"), "got: {err}");
+
+        let mut j = human_anchor();
+        j.date = None;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("`date` is required"), "got: {err}");
+
+        // The live-row rules hold on pairwise rows too (every row carries
+        // exactly one of the two).
+        let mut j = full_judgement();
+        j.date = None;
+        assert!(validate_judgement(&j).is_err());
+        let mut j = full_judgement();
+        j.observed_at = Some("2026-07-16".to_string());
+        assert!(validate_judgement(&j).is_err());
+    }
+
+    /// admission=pin ⇒ form=anchor ∧ rater=human, both violations.
+    #[test]
+    fn validate_rejects_pin_without_human_anchor() {
+        let mut j = pin_anchor();
+        j.rater = RaterKind::Agent;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("human anchor"), "got: {err}");
+
+        let mut j = full_judgement();
+        j.admission = Some(AdmissionKind::Pin);
+        j.rater = RaterKind::Human;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("human anchor"), "got: {err}");
+    }
+
+    /// An anchor row with an empty subject ref is rejected.
+    #[test]
+    fn validate_rejects_anchor_with_empty_subject() {
+        let mut j = human_anchor();
+        j.a = String::new();
         assert!(validate_judgement(&j).is_err());
     }
 
@@ -689,6 +1315,53 @@ note = \"wrong way round\"
                 "{kind}: admitted iff value-bearing or record"
             );
         }
+    }
+
+    // ---- SL-220 §4: anchor supersession scope --------------------------------
+
+    /// A same-subject, same-domain, same-lens (None==None) anchor supersedes an
+    /// anchor — the sanctioned correction path.
+    #[test]
+    fn validate_anchor_supersedes_accepts_same_scope() {
+        let target = human_anchor();
+        let new = human_anchor();
+        assert!(validate_anchor_supersedes(&new, &target).is_ok());
+    }
+
+    /// A pairwise target is refused — an anchor supersedes only an anchor.
+    #[test]
+    fn validate_anchor_supersedes_refuses_pairwise_target() {
+        let err = validate_anchor_supersedes(&human_anchor(), &full_judgement()).unwrap_err();
+        assert!(err.contains("pairwise row"), "got: {err}");
+    }
+
+    /// A foreign-subject target is refused, naming the subject mismatch.
+    #[test]
+    fn validate_anchor_supersedes_refuses_foreign_subject() {
+        let mut target = human_anchor();
+        target.a = "IMP-118".to_string();
+        let err = validate_anchor_supersedes(&human_anchor(), &target).unwrap_err();
+        assert!(err.contains("within one subject"), "got: {err}");
+    }
+
+    /// A cross-lens target is refused (None vs Some), naming the lens mismatch.
+    #[test]
+    fn validate_anchor_supersedes_refuses_cross_lens() {
+        let mut target = human_anchor();
+        target.lens = Some("user-value".to_string());
+        let err = validate_anchor_supersedes(&human_anchor(), &target).unwrap_err();
+        assert!(err.contains("cross-lens"), "got: {err}");
+    }
+
+    /// A cross-domain target is refused (the target somehow rode another
+    /// domain), naming the domain mismatch — belt-and-braces beyond the
+    /// per-domain anchor-frame gate.
+    #[test]
+    fn validate_anchor_supersedes_refuses_cross_domain() {
+        let mut target = human_anchor();
+        target.domain = DOMAIN_PRIORITY.to_string();
+        let err = validate_anchor_supersedes(&human_anchor(), &target).unwrap_err();
+        assert!(err.contains("cross-domain"), "got: {err}");
     }
 
     /// The refusal names the currency (settle-cost) and the offending kind.

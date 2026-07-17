@@ -5,10 +5,13 @@
 //!
 //! Input: the tier-1 active judgement rows (`&[&Judgement]`, borrowed — the
 //! shape `resolve.rs` hands over) plus the anchor map (authored `value`
-//! facets). Output: a [`ConstraintSet`] (design D12, in-memory only, never
-//! serialized): equality-merged classes, the strict class digraph, per-class
-//! anchors and display bounds, and the quarantine ledger. Pipeline order is
-//! pinned C2 → C3 → C4.
+//! facets). The boundary projects each row into its typed [`PairRow`] view
+//! (SL-220 design §2 — the filter seam), so the rule code below is total
+//! field access and anchor rows can never compile. Output: a
+//! [`ConstraintSet`] (design D12, in-memory only, never serialized):
+//! equality-merged classes, the strict class digraph, per-class anchors and
+//! display bounds, and the quarantine ledger. Pipeline order is pinned
+//! C2 → C3 → C4.
 //!
 //! Determinism idiom: `BTree` collections everywhere, uid tiebreaks, no float
 //! in any key (`f64` compared via `total_cmp` only). A [`ClassId`] is the
@@ -31,6 +34,37 @@ pub(crate) type AnchorMap = BTreeMap<String, f64>;
 
 /// The strict class digraph: `(winner, loser)` → supporting row uids.
 pub(crate) type EdgeMap = BTreeMap<(ClassId, ClassId), BTreeSet<RowUid>>;
+
+/// The typed pairwise projection (SL-220 design §2): a borrowed view over an
+/// order/ratio row whose pairwise payload (`b`, `response`) is present BY
+/// TYPE. Constructed once at the compile boundary — the filter seam — so
+/// every rule below (C1–C8) is total field access with no `Option` handling
+/// inside the constraint layer; anchor rows (single subject, no pairwise
+/// payload — SL-220 §1) can never enter, whatever a caller passes (RV-278
+/// F-6, typed).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PairRow<'a> {
+    pub uid: &'a str,
+    pub a: &'a str,
+    pub b: &'a str,
+    pub response: Response,
+}
+
+impl<'a> PairRow<'a> {
+    /// The pairwise view of one row — `None` when the pairwise payload is
+    /// absent (an anchor row): the row constrains nothing here.
+    pub(crate) fn of(j: &'a Judgement) -> Option<Self> {
+        match (j.b.as_deref(), j.response) {
+            (Some(b), Some(response)) => Some(PairRow {
+                uid: &j.uid,
+                a: &j.a,
+                b,
+                response,
+            }),
+            _ => None,
+        }
+    }
+}
 
 /// One side of a class's value interval (C6). `Closed` arises only via an
 /// anchor on the class itself; reachable anchors give `Open`; no anchor in
@@ -113,7 +147,7 @@ impl ConstraintSet {
         if let Some(reason) = self.quarantined.get(&judgement.uid) {
             return CompilationStatus::Quarantined(reason.clone());
         }
-        if matches!(judgement.response, Response::Incomparable) {
+        if matches!(judgement.response, Some(Response::Incomparable)) {
             return CompilationStatus::NoConstraint;
         }
         CompilationStatus::Constraining
@@ -133,6 +167,11 @@ impl RaterCounts {
         match rater {
             RaterKind::Human => self.human += 1,
             RaterKind::Agent => self.agent += 1,
+            // Unreachable from the pipeline: migrated rows are anchor-form by
+            // the SL-220 §1 validation matrix and terminate at the claims
+            // pass (design §2, RV-278 F-6) — never compile input. Kept total
+            // rather than panicking on a malformed caller.
+            RaterKind::Migrated => {}
         }
     }
 
@@ -162,7 +201,13 @@ pub(crate) fn constraining_counts_by_class(
         if !matches!(cs.status_of(j), CompilationStatus::Constraining) {
             continue;
         }
-        let classes: BTreeSet<&ClassId> = [cs.classes.get(&j.a), cs.classes.get(&j.b)]
+        // The typed pairwise seam (SL-220 design §2): only a row with its
+        // pairwise payload evidences classes — an anchor row contributes
+        // nothing, by type.
+        let Some(pair) = PairRow::of(j) else {
+            continue;
+        };
+        let classes: BTreeSet<&ClassId> = [cs.classes.get(pair.a), cs.classes.get(pair.b)]
             .into_iter()
             .flatten()
             .collect();
@@ -207,50 +252,50 @@ pub(crate) fn compile(
     // C8: the policy is a pure input; symmetric is the only shipped variant.
     let QuarantinePolicy::Symmetric = policy;
 
+    // The filter seam (SL-220 design §2): project the typed [`PairRow`]
+    // views ONCE at the boundary — everything below is total field access.
+    // A row without its pairwise payload (an anchor row) constrains nothing.
+    let pairs: Vec<PairRow<'_>> = active.iter().filter_map(|j| PairRow::of(j)).collect();
+
     // C1 vocabulary. `equal` merges; `prefer-a/b` orients a strict edge
     // winner > loser; `incomparable` constrains nothing (NoConstraint);
     // `magnitude` stays uncompiled — anchors are the only magnitude source.
-    let equal_rows: Vec<&Judgement> = active
+    let equal_rows: Vec<&PairRow<'_>> = pairs
         .iter()
-        .copied()
-        .filter(|j| matches!(j.response, Response::Equal))
+        .filter(|p| matches!(p.response, Response::Equal))
         .collect();
-    let strict_rows: Vec<(&Judgement, &str, &str)> = active
+    let strict_rows: Vec<(&PairRow<'_>, &str, &str)> = pairs
         .iter()
-        .copied()
-        .filter_map(|j| match j.response {
-            Response::PreferA => Some((j, j.a.as_str(), j.b.as_str())),
-            Response::PreferB => Some((j, j.b.as_str(), j.a.as_str())),
-            Response::Equal | Response::Incomparable => None,
+        .filter_map(|p| match p.response {
+            Response::PreferA => Some((p, p.a, p.b)),
+            Response::PreferB => Some((p, p.b, p.a)),
+            _ => None,
         })
         .collect();
 
     // C2 equal-vs-anchors, before class finalization.
     let mut quarantined = c2_quarantine(&equal_rows, anchors);
-    let surviving_equals: Vec<&Judgement> = equal_rows
+    let surviving_equals: Vec<&PairRow<'_>> = equal_rows
         .iter()
         .copied()
-        .filter(|j| !quarantined.contains_key(&j.uid))
+        .filter(|p| !quarantined.contains_key(p.uid))
         .collect();
 
     // Final classes, rebuilt exactly once from the surviving equal rows.
-    let entities: BTreeSet<&str> = active
-        .iter()
-        .flat_map(|j| [j.a.as_str(), j.b.as_str()])
-        .collect();
+    let entities: BTreeSet<&str> = pairs.iter().flat_map(|p| [p.a, p.b]).collect();
     let classes = build_classes(&entities, &surviving_equals);
     let class_anchors = class_anchor_values(&classes, anchors);
 
     // Strict class digraph (C1).
     let mut edges: EdgeMap = BTreeMap::new();
-    for (j, winner, loser) in &strict_rows {
+    for (p, winner, loser) in &strict_rows {
         let (Some(w), Some(l)) = (classes.get(*winner), classes.get(*loser)) else {
             continue; // unreachable: `entities` covers every row endpoint
         };
         edges
             .entry((w.clone(), l.clone()))
             .or_default()
-            .insert(j.uid.clone());
+            .insert(p.uid.to_string());
     }
 
     // Pipeline order pinned (design §2): C2 → C3 → C4.
@@ -285,24 +330,21 @@ pub(crate) fn compile(
 /// removing the connecting rows disconnects every conflicting anchor pair,
 /// and splitting classes can only reduce merging.
 fn c2_quarantine(
-    equal_rows: &[&Judgement],
+    equal_rows: &[&PairRow<'_>],
     anchors: &AnchorMap,
 ) -> BTreeMap<RowUid, QuarantineReason> {
-    let entities: BTreeSet<&str> = equal_rows
-        .iter()
-        .flat_map(|j| [j.a.as_str(), j.b.as_str()])
-        .collect();
+    let entities: BTreeSet<&str> = equal_rows.iter().flat_map(|p| [p.a, p.b]).collect();
     let mut dsu = DisjointSet::new(entities.iter().copied());
     let mut adj: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
     let mut rows_by_edge: BTreeMap<(String, String), BTreeSet<RowUid>> = BTreeMap::new();
-    for j in equal_rows {
-        dsu.union(&j.a, &j.b);
-        adj.entry(j.a.as_str()).or_default().insert(j.b.as_str());
-        adj.entry(j.b.as_str()).or_default().insert(j.a.as_str());
+    for p in equal_rows {
+        dsu.union(p.a, p.b);
+        adj.entry(p.a).or_default().insert(p.b);
+        adj.entry(p.b).or_default().insert(p.a);
         rows_by_edge
-            .entry(vertex_pair(&j.a, &j.b))
+            .entry(vertex_pair(p.a, p.b))
             .or_default()
-            .insert(j.uid.clone());
+            .insert(p.uid.to_string());
     }
 
     let mut members: BTreeMap<String, Vec<&str>> = BTreeMap::new();
@@ -445,11 +487,11 @@ impl DisjointSet {
 
 fn build_classes(
     entities: &BTreeSet<&str>,
-    surviving_equals: &[&Judgement],
+    surviving_equals: &[&PairRow<'_>],
 ) -> BTreeMap<String, ClassId> {
     let mut dsu = DisjointSet::new(entities.iter().copied());
-    for j in surviving_equals {
-        dsu.union(&j.a, &j.b);
+    for p in surviving_equals {
+        dsu.union(p.a, p.b);
     }
     entities
         .iter()
@@ -831,8 +873,8 @@ mod tests {
             uid: uid.to_string(),
             seq: 0,
             a: a.to_string(),
-            b: b.to_string(),
-            response,
+            b: Some(b.to_string()),
+            response: Some(response),
             domain: DOMAIN_VALUE.to_string(),
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
@@ -842,7 +884,10 @@ mod tests {
             rater: RaterKind::Human,
             by: None,
             note: None,
-            date: "2026-07-11".to_string(),
+            date: Some("2026-07-11".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
         }
     }
 

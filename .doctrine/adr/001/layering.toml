@@ -158,9 +158,16 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 # entangled mcp_server WITH the core SCC, so its removal ejects mcp_server plus
 # its core-pointing edges — mcp_server was not a core-separate 2-cycle (correcting
 # RSK-227's model; the precedent SL-204 inherits).
+# SL-220 PHASE-06: 86→99. Design §6 mandates the show value line re-source from
+# the comparison pipeline — every kind-module show shell threads
+# priority::surface::show_value_line / value_line_from_pipeline (the impure scan
+# seam widening the design names explicitly). +10 from the 7 core show shells,
+# +3 from spec/memory/lazyspec/retrieve completing EX-3. Design-mandated
+# coupling, adjudicated at the dispatch funnel (worker halted commit-gate-red;
+# baseline bump is an orchestrator-owned governance edit).
 leaf = 0
 engine = 0
-command = 86
+command = 99
 
 # ── Accepted violations ──────────────────────────────────────────────────
 # Every genuine upward edge (from lower tier to higher tier). Frozen —

@@ -14,7 +14,8 @@ use clap::Subcommand;
 use crate::commands::compare::CompareArgs;
 use crate::commands::config::ConfigCommand;
 use crate::commands::facet::{
-    EstimateClearArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs, ValueClearArgs, ValueSetArgs,
+    EstimateClearArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs, ValueClearArgs, ValuePinArgs,
+    ValueSetArgs,
 };
 use crate::listing::Format;
 use crate::search::SearchArgs;
@@ -57,9 +58,11 @@ pub(crate) enum EstimateAction {
 
 #[derive(clap::Subcommand)]
 pub(crate) enum ValueAction {
-    /// Set value bounds
+    /// Set a value anchor (SL-220 §4) — mints a session-of-one claim
     Set(ValueSetArgs),
-    /// Clear the value facet
+    /// Pin a value anchor, or `--retire` the active pin (gated, operator-only)
+    Pin(ValuePinArgs),
+    /// Clear the active value anchor rows on the subject
     Clear(ValueClearArgs),
 }
 
@@ -1452,6 +1455,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         },
         Command::Value { action } => match action {
             ValueAction::Set(args) => crate::commands::facet::run_value_set(&args),
+            ValueAction::Pin(args) => crate::commands::facet::run_value_pin(&args),
             ValueAction::Clear(args) => crate::commands::facet::run_value_clear(&args),
         },
         Command::Risk { action } => match action {

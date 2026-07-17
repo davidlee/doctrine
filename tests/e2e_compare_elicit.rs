@@ -128,6 +128,25 @@ fn capture(root: &Path, slot: &str, a: &str, b: &str) {
     );
 }
 
+/// Hand-author a HUMAN value-anchor claim (SL-220 §1 wire v3: `form = anchor`,
+/// `value-anchor` frame, magnitude payload) — the post-flip way a fixture pins
+/// a value anchor: `ClaimResolution.anchor_map()` feeds compile (D4/D12); a
+/// `[value]` facet no longer anchors anything.
+fn capture_value_anchor(root: &Path, slot: &str, item: &str, magnitude: f64) {
+    let body = format!(
+        "schema = \"doctrine.comparison-session\"\nversion = 3\n\n\
+         [session]\nuid = \"sess-{slot}\"\ndate = \"2026-01-01\"\n\n\
+         [[judgement]]\nuid = \"row-{slot}\"\nseq = 0\na = \"{item}\"\n\
+         domain = \"value\"\nframe = \"value-anchor\"\nform = \"anchor\"\n\
+         magnitude = {magnitude}\nrater = \"human\"\ndate = \"2026-01-01\"\n"
+    );
+    write(
+        root,
+        &format!(".doctrine/comparisons/2026-01-01-{slot}.toml"),
+        &body,
+    );
+}
+
 /// Hand-author an est-domain `incomparable` session-of-one over the pair
 /// (SL-219 §4): the asked-once row that retires a sizing probe. Compiles to
 /// `NoConstraint`, so it feeds no cost — value-domain determinacy and every
@@ -153,11 +172,15 @@ fn capture_est_incomparable(root: &Path, slot: &str, a: &str, b: &str) {
 
 /// The anchor-conflict corpus (design §5.3): `A(1) > B > C(3)` — the chain order
 /// contradicts the A=1 / C=3 anchors, so both anchors are suspect. Deterministic,
-/// no rng.
+/// no rng. SL-220 PHASE-05 churn (pinned flip evidence, scope R2): the anchors
+/// are minted as HUMAN CLAIM ROWS — the `[value]` facets this fixture used to
+/// author stopped anchoring the compile at the flip (design §3).
 fn seed_anchor_conflict(root: &Path) {
-    seed(root, 40, "[value]\nvalue = 1.0\n");
+    seed(root, 40, "");
     seed(root, 41, "");
-    seed(root, 42, "[value]\nvalue = 3.0\n");
+    seed(root, 42, "");
+    capture_value_anchor(root, "va40", &iss(40), 1.0);
+    capture_value_anchor(root, "va42", &iss(42), 3.0);
     capture(root, "ab", &iss(40), &iss(41));
     capture(root, "bc", &iss(41), &iss(42));
 }

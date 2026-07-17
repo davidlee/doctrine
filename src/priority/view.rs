@@ -18,6 +18,7 @@ use serde::Serialize;
 
 use super::partition::StatusClass;
 use crate::backlog_order::OverrideReason;
+use crate::comparison::ClaimTier;
 
 /// One structured reason behind a node's classification (design §5.4). The render
 /// SOURCE OF TRUTH — every human line and `--json` reason field is produced from a
@@ -61,12 +62,46 @@ pub(crate) enum ReasonKind {
     /// The node sits in a diagnosed dep cycle — its order degraded to the fallback
     /// rather than a false topological order (REQ-076 / F2).
     CycleDegraded { nodes: Vec<String> },
-    /// SL-213 PHASE-06 value-source shape 1 (design §4 S3) — the value came
-    /// from an authored `[value]` facet (an anchor, possibly hoisted from
-    /// another class member). `conflict` names the other class(es) this
-    /// class's anchor was found to violate order against (an `AnchorConflict`
-    /// citation) — empty when none.
-    ValueAuthored { value: f64, conflict: Vec<String> },
+    /// SL-220 PHASE-05 value-source shape (design §3 rung 1, D11) — the value
+    /// is an operator PIN (an anchored claim, `admission = pin`). `conflict`
+    /// names the other class(es) this claim's compiled anchor was found to
+    /// violate order against (an `AnchorConflict` citation) — empty when
+    /// none. Replaces the retired `ValueAuthored` (no code path emits an
+    /// `authored` value source post-flip).
+    ValuePin {
+        value: f64,
+        conflict: Vec<String>,
+        /// SL-220 PHASE-06 render attribution (design §6): a pin renders
+        /// `pin (by, date, basis N)` when singleton. `None` fields drop from
+        /// the parenthetical; `contested` supersedes attribution entirely.
+        by: Option<String>,
+        date: Option<String>,
+        basis: Option<String>,
+        /// Present ⇔ the winning (Pin) tier disagreed on magnitude — the
+        /// "contested pin" render (interval + row count), never attribution.
+        contested: Option<ContestedClaim>,
+    },
+    /// SL-220 PHASE-05 value-source shape — a resolved ledgered claim:
+    /// rung 1 (`tier = Human`, anchoring compile) or rungs 3–4
+    /// (`tier = Agent | Migrated`, the below-projection priors — their
+    /// `conflict` citation is empty by construction: priors never anchor
+    /// compile, D4). SL-220 PHASE-06 threads render attribution: `by`/`date`
+    /// (the migrated tier reads `date` as its `observed_at` timestamp — the
+    /// render frames it as `observed`, and a `None` `by` renders
+    /// `unattributed`).
+    ValueClaim {
+        value: f64,
+        tier: ClaimTier,
+        conflict: Vec<String>,
+        by: Option<String>,
+        date: Option<String>,
+        contested: Option<ContestedClaim>,
+    },
+    /// SL-220 PHASE-05 value-source shape (design §3 rung 5, transitional
+    /// D6) — an unmigrated authored `[value]` facet, consulted only when zero
+    /// claim rows exist for the item. The exit is the migration script (or a
+    /// re-assertion via `value set`/`value pin`).
+    ValueUnmigratedFacet { value: f64 },
     /// SL-213 PHASE-06 value-source shape 2 — projected: budgeted
     /// interpolation between order neighbours. `lower`/`upper` are the C6
     /// display bounds (`None` = unbounded that side); `human`/`agent` are the
@@ -151,6 +186,51 @@ pub(crate) enum ReasonKind {
     /// value inversions were excluded because a member is value-insensitive
     /// (`m = 0`). Present only when `count > 0` (SL-217 D6 scoped-disclosure).
     ZeroWeightExcluded { count: usize },
+}
+
+impl ReasonKind {
+    /// The `value_source` provenance token (SL-220 D11) — the SINGLE source
+    /// for every surface that names where a value came from (explain JSON,
+    /// the elicit participant value block; PHASE-06's row markers and `show`
+    /// line consume the same map). A **disclosed breaking token-set change**:
+    /// `authored` is REMOVED (no code path emits it post-flip — the variant
+    /// is retired); `pin` / `human-claim` / `agent-claim` / `migrated-claim` /
+    /// `unmigrated-facet` are ADDED; `projected` / `gauge` are byte-stable,
+    /// and the scoring floor stays a render *marker*, never a citable source
+    /// (no `default` token minted here — byte-stable by absence). Pinned by
+    /// the post-flip vocabulary golden below.
+    pub(crate) fn value_source_token(&self) -> Option<&'static str> {
+        match self {
+            ReasonKind::ValuePin { .. } => Some("pin"),
+            ReasonKind::ValueClaim { tier, .. } => Some(match tier {
+                // Total over the tier enum; construction routes Pin through
+                // `ValuePin`, so this arm is a belt, not a second source.
+                ClaimTier::Pin => "pin",
+                ClaimTier::Human => "human-claim",
+                ClaimTier::Agent => "agent-claim",
+                ClaimTier::Migrated => "migrated-claim",
+            }),
+            ReasonKind::ValueUnmigratedFacet { .. } => Some("unmigrated-facet"),
+            ReasonKind::ValueProjected { .. } => Some("projected"),
+            ReasonKind::ValueGauge { .. } => Some("gauge"),
+            _ => None,
+        }
+    }
+}
+
+/// SL-220 PHASE-06 render carrier for a same-tier CLAIM conflict (design §6,
+/// the "contested" variant). DISTINCT from the anchor-conflict citation
+/// (`conflict: Vec<String>`, a cross-class order violation): this is the
+/// disagreement WITHIN the winning tier's rows. `rows` is the active
+/// winning-tier row count ("N claims"); `low`/`high` bound the rendered
+/// interval. Sourced from `ResolvedClaim.{conflict, rows}`.
+///
+/// NOT `Eq` — `low`/`high` are `f64`; `PartialEq` carries the golden assertions.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ContestedClaim {
+    pub(crate) low: f64,
+    pub(crate) high: f64,
+    pub(crate) rows: u32,
 }
 
 /// The render-facing cause of a [`ReasonKind::Tension`] (design §3). Structure
@@ -255,8 +335,14 @@ pub(crate) struct NextRow {
     pub(crate) blocking: Vec<String>,
     /// Authored estimate facet (SL-171 PHASE-01) — `None` when no estimate authored.
     pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
-    /// Authored value facet (SL-171 PHASE-01) — `None` when no value authored.
-    pub(crate) value: Option<crate::value::ValueFacet>,
+    /// SL-220 PHASE-06 (design §6) — the RESOLVED value-source reason from the
+    /// comparison ladder (the same input `explain` consumes via
+    /// [`super::surface::value_source_reason`]), NOT the raw authored facet. The
+    /// value cell renders its magnitude + a per-rung source marker. `None` for a
+    /// value-bearing kind with no evidence (the scoring floor — the cell shows
+    /// the marked default) or a valueless kind (absent cell). The facet reader it
+    /// replaces died at PHASE-06 (EX-3 grep-gate).
+    pub(crate) value_source: Option<ReasonKind>,
     /// Authored tags (SL-171 PHASE-01) — empty when no tags authored.
     pub(crate) tags: Vec<String>,
 }
@@ -377,4 +463,130 @@ pub(crate) struct ActionabilityView {
     pub(crate) policy_version: String,
     pub(crate) nodes: Vec<ActionabilityNode>,
     pub(crate) edges: Vec<ActionabilityEdge>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// EX-3 / VT-3: the FULL post-flip `value_source` token vocabulary,
+    /// pinned as a set (SL-220 D11 — a disclosed breaking change, not an
+    /// incremental diff). One shape per ladder rung: `pin` (rung 1, pinned),
+    /// `human-claim` (rung 1), `projected`/`gauge` (rung 2, byte-stable),
+    /// `agent-claim` (rung 3), `migrated-claim` (rung 4), `unmigrated-facet`
+    /// (rung 5). The default floor (rung 6) mints NO token — byte-stable by
+    /// absence (the scoring floor is a render marker, not a citable source).
+    #[test]
+    fn value_source_token_vocabulary_golden_post_flip() {
+        let shapes: Vec<(ReasonKind, &str)> = vec![
+            (
+                ReasonKind::ValuePin {
+                    value: 6.5,
+                    conflict: vec![],
+                    by: None,
+                    date: None,
+                    basis: None,
+                    contested: None,
+                },
+                "pin",
+            ),
+            (
+                ReasonKind::ValueClaim {
+                    value: 6.2,
+                    tier: ClaimTier::Human,
+                    conflict: vec![],
+                    by: None,
+                    date: None,
+                    contested: None,
+                },
+                "human-claim",
+            ),
+            (
+                ReasonKind::ValueProjected {
+                    value: 4.0,
+                    lower: Some(3.2),
+                    upper: Some(9.1),
+                    human: 7,
+                    agent: 2,
+                },
+                "projected",
+            ),
+            (
+                ReasonKind::ValueGauge {
+                    value: 1.0,
+                    judgements: 3,
+                },
+                "gauge",
+            ),
+            (
+                ReasonKind::ValueClaim {
+                    value: 3.0,
+                    tier: ClaimTier::Agent,
+                    conflict: vec![],
+                    by: None,
+                    date: None,
+                    contested: None,
+                },
+                "agent-claim",
+            ),
+            (
+                ReasonKind::ValueClaim {
+                    value: 3.0,
+                    tier: ClaimTier::Migrated,
+                    conflict: vec![],
+                    by: None,
+                    date: None,
+                    contested: None,
+                },
+                "migrated-claim",
+            ),
+            (
+                ReasonKind::ValueUnmigratedFacet { value: 3.0 },
+                "unmigrated-facet",
+            ),
+        ];
+        let tokens: Vec<&str> = shapes
+            .iter()
+            .map(|(reason, _)| reason.value_source_token().expect("a value source"))
+            .collect();
+        let expected: Vec<&str> = shapes.iter().map(|&(_, token)| token).collect();
+        assert_eq!(tokens, expected, "per-shape token map");
+
+        // The COMPLETE vocabulary, as a set: `authored` is gone.
+        let vocabulary: std::collections::BTreeSet<&str> = tokens.into_iter().collect();
+        let pinned: std::collections::BTreeSet<&str> = [
+            "pin",
+            "human-claim",
+            "agent-claim",
+            "migrated-claim",
+            "unmigrated-facet",
+            "projected",
+            "gauge",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(vocabulary, pinned, "full post-flip token set (D11)");
+        assert!(!vocabulary.contains("authored"), "authored removed (D11)");
+
+        // A non-value-source reason mints no token.
+        assert_eq!(
+            ReasonKind::BlockedBy { items: vec![] }.value_source_token(),
+            None
+        );
+    }
+
+    /// D11 belt: a `ValueClaim` accidentally carrying the Pin tier still
+    /// reads `pin` — the token map is total, never a second tier source.
+    #[test]
+    fn value_claim_pin_tier_reads_pin_token() {
+        let reason = ReasonKind::ValueClaim {
+            value: 1.0,
+            tier: ClaimTier::Pin,
+            conflict: vec![],
+            by: None,
+            date: None,
+            contested: None,
+        };
+        assert_eq!(reason.value_source_token(), Some("pin"));
+    }
 }

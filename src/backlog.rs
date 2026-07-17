@@ -1435,7 +1435,7 @@ fn format_metadata(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
     estimation_unit: &str,
-    value_unit: &str,
+    value_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> Vec<String> {
@@ -1495,11 +1495,10 @@ fn format_metadata(
             )
         ));
     }
-    if let Some(ref val) = item.value {
-        parts.push(format!(
-            "{}\n",
-            crate::value::format_value_normal(val, value_unit)
-        ));
+    // SL-220 PHASE-06: the value line re-sources from the comparison ladder
+    // (design §6) — resolved by the shell, never the raw facet (EX-3).
+    if let Some(line) = value_line {
+        parts.push(format!("{line}\n"));
     }
 
     // outbound relations (§5.5) — each axis only when non-empty.
@@ -1603,7 +1602,7 @@ fn format_show(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
     estimation_unit: &str,
-    value_unit: &str,
+    value_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -1611,7 +1610,7 @@ fn format_show(
         item,
         fulfils_inbound,
         estimation_unit,
-        value_unit,
+        value_line,
         lower_pct,
         upper_pct,
     );
@@ -1624,7 +1623,7 @@ fn format_inspect(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
     estimation_unit: &str,
-    value_unit: &str,
+    value_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -1632,7 +1631,7 @@ fn format_inspect(
         item,
         fulfils_inbound,
         estimation_unit,
-        value_unit,
+        value_line,
         lower_pct,
         upper_pct,
     )
@@ -1651,11 +1650,17 @@ fn format_inspect(
 /// relation-graph scan (same machinery `inspect` uses), not from the item's own
 /// outbound (which the migration deletes). `backlog show` becomes corpus-aware —
 /// a deliberate refinement of the former item-local posture.
+///
+/// The table renderer selector — `format_show` (with body) or `format_inspect`
+/// (metadata only). SL-220 PHASE-06 threads the resolved value line
+/// (`Option<&str>`), so the shape earns a name (clippy type-complexity).
+type BacklogTableFn = fn(&BacklogItem, &[FulfilsRef], &str, Option<&str>, f64, f64) -> String;
+
 fn run_show_inspect(
     path: Option<PathBuf>,
     reference: &str,
     format: Format,
-    format_table: fn(&BacklogItem, &[FulfilsRef], &str, &str, f64, f64) -> String,
+    format_table: BacklogTableFn,
     with_body: bool,
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
@@ -1669,11 +1674,19 @@ fn run_show_inspect(
             let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
             let value_unit = crate::value::resolve_unit(&cfg.value);
             let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
+            let value_line = crate::priority::surface::show_value_line(
+                &root,
+                &item.kind.canonical_id(item.id),
+                item.value.as_ref().map(|v| v.value),
+                item.kind.prefix(),
+                &value_unit,
+            )?;
             format_table(
                 &item,
                 &fulfils_inbound,
                 &estimation_unit,
-                &value_unit,
+                value_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -3839,7 +3852,7 @@ tags = []
         // a plain issue and an assessed risk, both reserved id 1 (independent trees).
         new_item(root, ItemKind::Issue, "Auth bug");
         let issue = read_item(root, ItemKind::Issue, 1).unwrap();
-        let issue_out = format_show(&issue, &[], "points", "points", 0.0, 1.0);
+        let issue_out = format_show(&issue, &[], "points", None, 0.0, 1.0);
         assert!(
             issue_out.starts_with("ISS-001 — Auth bug\n"),
             "identity line: {issue_out}"
@@ -3856,7 +3869,7 @@ tags = []
         // an assessed risk (seeded directly) shows its facet axes.
         write_assessed_risk(root, 1);
         let risk = read_item(root, ItemKind::Risk, 1).unwrap();
-        let risk_out = format_show(&risk, &[], "points", "points", 0.0, 1.0);
+        let risk_out = format_show(&risk, &[], "points", None, 0.0, 1.0);
         assert!(risk_out.starts_with("RSK-001 — Token expiry\n"));
         assert!(risk_out.contains("[facet]"), "risk shows the facet block");
         assert!(risk_out.contains("likelihood: high"));
@@ -3878,12 +3891,24 @@ tags = []
         fs::write(&toml_path, &text).unwrap();
 
         let item = read_item(root, ItemKind::Issue, 1).unwrap();
-        let out = format_show(&item, &[], "espresso_shots", "magic_beans", 0.1, 0.9);
+        // SL-220 PHASE-06: the value line is resolved by the shell and threaded
+        // in; format_show renders the passed line verbatim (design §6).
+        let out = format_show(
+            &item,
+            &[],
+            "espresso_shots",
+            Some("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
+            0.1,
+            0.9,
+        );
         assert!(
             out.contains("estimate: 6.5–18.5 espresso_shots (80% confidence)"),
             "estimate row: {out}"
         );
-        assert!(out.contains("value: 42.0 magic_beans"), "value row: {out}");
+        assert!(
+            out.contains("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
+            "value row: {out}"
+        );
     }
 
     // --- VT-3: outbound relations render; inbound is NOT surfaced (ADR-004) ---
@@ -3903,7 +3928,7 @@ tags = []
             &read_item(root, ItemKind::Issue, 1).unwrap(),
             &[],
             "points",
-            "points",
+            None,
             0.0,
             1.0,
         );
@@ -3919,7 +3944,7 @@ tags = []
             &read_item(root, ItemKind::Issue, 2).unwrap(),
             &[],
             "points",
-            "points",
+            None,
             0.0,
             1.0,
         );
@@ -4010,7 +4035,7 @@ tags = []
 
         // table seam: each axis renders, in fixed §5.2 order (needs/after/triggers);
         // a non-zero `after` rank annotates, the trigger note trails its globs.
-        let out = format_show(&item, &[], "points", "points", 0.0, 1.0);
+        let out = format_show(&item, &[], "points", None, 0.0, 1.0);
         assert!(out.contains("needs: ISS-002"), "hard prereq axis: {out}");
         assert!(
             out.contains("after: ISS-003 (rank 2)"),

@@ -242,6 +242,29 @@ fn capture(root: &Path, a: &str, b: &str, flags: &[&str]) -> String {
     row_uid
 }
 
+/// Hand-author a HUMAN value-anchor claim session-of-one (SL-220 §1 wire v3:
+/// `form = anchor`, `value-anchor` frame, magnitude payload) and return the
+/// row's uid — the post-flip way a fixture pins a value anchor: the resolved
+/// claim feeds compile through `ClaimResolution::anchor_map()` (D4/D12); a
+/// `[value]` facet no longer anchors anything.
+fn capture_anchor(root: &Path, item: &str, magnitude: f64) -> String {
+    let session_uid = mint("cap-sess");
+    let row_uid = mint("cap-row");
+    let body = format!(
+        "schema = \"doctrine.comparison-session\"\nversion = 3\n\n\
+         [session]\nuid = \"{session_uid}\"\ndate = \"2026-01-01\"\n\n\
+         [[judgement]]\nuid = \"{row_uid}\"\nseq = 0\na = \"{item}\"\n\
+         domain = \"value\"\nframe = \"value-anchor\"\nform = \"anchor\"\n\
+         magnitude = {magnitude}\nrater = \"human\"\ndate = \"2026-01-01\"\n"
+    );
+    write(
+        root,
+        &format!(".doctrine/comparisons/2026-01-01-{session_uid}.toml"),
+        &body,
+    );
+    row_uid
+}
+
 /// Hand-author a tombstone session withdrawing `target_uid` (the wire shape
 /// `compare withdraw` mints). See the module doc for the write-classed-verb
 /// rationale.
@@ -304,13 +327,16 @@ fn line_for<'a>(listing: &'a str, uid: &str) -> &'a str {
 fn seed_vt1_corpus(root: &Path) {
     for id in 1..=22 {
         match id {
-            12 => seed_issue(root, id, "[value]\nvalue = 1.0\n"),
-            13 => seed_issue(root, id, "[value]\nvalue = 2.0\n"),
             // 18/19 are seeded as slices below (the R6 supersedes scenario).
             18 | 19 => {}
             _ => seed_issue(root, id, ""),
         }
     }
+    // SL-220 PHASE-05 churn (scope R2): the ISS-012/013 anchors are HUMAN
+    // CLAIM ROWS — the `[value]` facets this fixture used to author stopped
+    // anchoring compile at the flip.
+    capture_anchor(root, &iss(12), 1.0);
+    capture_anchor(root, &iss(13), 2.0);
     seed_slice(root, 18, "");
     seed_slice(
         root,
@@ -435,13 +461,17 @@ fn vt2_explain_value_source_shapes_and_json_parity() {
     let dir = tmp();
     let root = dir.path();
 
-    // Authored: ISS-040 carries its own [value] facet.
-    seed_issue(root, 40, "[value]\nvalue = 8.0\n");
+    // Rung 1: ISS-040 carries a human value claim (SL-220 PHASE-05 churn —
+    // the authored-facet shape is retired; `authored` is no longer a value
+    // source, D11).
+    seed_issue(root, 40, "");
+    capture_anchor(root, &iss(40), 8.0);
     // Bracket ends for the projected shape: ISS-041 (no facet) sits strictly
     // between two anchors via two constraining judgements (mixed raters, so
     // the T7 split is observably non-trivial).
     seed_issue(root, 41, "");
-    seed_issue(root, 42, "[value]\nvalue = 2.0\n");
+    seed_issue(root, 42, "");
+    capture_anchor(root, &iss(42), 2.0);
     capture(
         root,
         &iss(40),
@@ -464,10 +494,10 @@ fn vt2_explain_value_source_shapes_and_json_parity() {
     seed_issue(root, 51, "");
     capture(root, &iss(50), &iss(51), &["--prefer", "a"]);
 
-    let authored = explain(root, &iss(40), &[]);
+    let claimed = explain(root, &iss(40), &[]);
     assert!(
-        authored.contains("value 8.0 — authored"),
-        "authored shape: {authored}"
+        claimed.contains("value 8.0 — human claim"),
+        "rung-1 human-claim shape (D11: `authored` retired): {claimed}"
     );
 
     let projected = explain(root, &iss(41), &[]);
@@ -510,9 +540,11 @@ fn vt2_explain_value_source_shapes_and_json_parity() {
     capture(root, &iss(61), &iss(62), &["--prefer", "a"]);
     capture(root, &iss(62), &iss(60), &["--prefer", "a"]);
 
-    // AnchorConflict.
-    seed_issue(root, 70, "[value]\nvalue = 1.0\n");
-    seed_issue(root, 71, "[value]\nvalue = 2.0\n");
+    // AnchorConflict — anchors minted as human claim rows (SL-220 flip).
+    seed_issue(root, 70, "");
+    seed_issue(root, 71, "");
+    capture_anchor(root, &iss(70), 1.0);
+    capture_anchor(root, &iss(71), 2.0);
     capture(root, &iss(70), &iss(71), &["--prefer", "a"]);
 
     // MalformedSupersession — a mutual cycle can only arise from a hand-
@@ -750,8 +782,11 @@ fn vt_b_agent_only_pair_reopens_under_demote_agent_evidence() {
 fn vt_b_anchored_pair_determined_both_knob_states() {
     let dir = tmp();
     let root = dir.path();
-    seed_issue(root, 72, "[value]\nvalue = 2.0\n");
-    seed_issue(root, 73, "[value]\nvalue = 1.0\n");
+    // SL-220 PHASE-05 churn (scope R2): the anchors are human claim rows.
+    seed_issue(root, 72, "");
+    seed_issue(root, 73, "");
+    capture_anchor(root, &iss(72), 2.0);
+    capture_anchor(root, &iss(73), 1.0);
     capture(
         root,
         &iss(72),

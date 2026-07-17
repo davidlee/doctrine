@@ -5,7 +5,9 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use clap::Args;
+use clap::{Args, ValueEnum};
+
+use crate::comparison::{AdmissionKind, RaterKind};
 
 #[cfg(test)]
 use crate::catalog::scan::ScanMode;
@@ -37,7 +39,27 @@ pub(crate) struct EstimateClearArgs {
     pub(crate) path: Option<PathBuf>,
 }
 
-/// `doctrine value set <ID> <magnitude>`
+/// Clap adapter for the anchor rater — the shell boundary that keeps clap out
+/// of the pure [`RaterKind`]. `migrated` is NOT offered: that provenance is
+/// minted only by the facet-import path, never a live `value set`.
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum AnchorRaterArg {
+    Human,
+    Agent,
+}
+
+impl AnchorRaterArg {
+    fn to_kind(self) -> RaterKind {
+        match self {
+            Self::Human => RaterKind::Human,
+            Self::Agent => RaterKind::Agent,
+        }
+    }
+}
+
+/// `doctrine value set <ID> <magnitude> --rater human|agent [flags]` (SL-220
+/// §4): mints a session-of-one value anchor via the `compare record` path.
+/// `--rater` is MANDATORY (no default — a default fabricates provenance).
 #[derive(Args)]
 pub(crate) struct ValueSetArgs {
     /// Canonical entity ref (e.g. SL-118)
@@ -45,15 +67,76 @@ pub(crate) struct ValueSetArgs {
     /// Magnitude (any finite f64 — may be negative)
     #[arg(allow_hyphen_values = true)]
     pub(crate) magnitude: f64,
+    /// Who rendered the claim — MANDATORY (no default: a default fabricates
+    /// provenance).
+    #[arg(long, value_enum)]
+    pub(crate) rater: AnchorRaterArg,
+    /// Optional rater identity (free text).
+    #[arg(long)]
+    pub(crate) by: Option<String>,
+    /// Optional evidence citation (e.g. `REQ-059`).
+    #[arg(long)]
+    pub(crate) basis: Option<String>,
+    /// Optional value lens (the IDE-035 seam).
+    #[arg(long)]
+    pub(crate) lens: Option<String>,
+    /// Optional free-text note.
+    #[arg(long)]
+    pub(crate) note: Option<String>,
+    /// Supersede a prior ANCHOR row by uid (same subject/domain/lens) — the
+    /// explicit correction path. Without it a new row coexists as concurrent
+    /// evidence.
+    #[arg(long)]
+    pub(crate) supersedes: Option<String>,
     /// Explicit project root (default: auto-detect)
     #[arg(short = 'p', long)]
     pub(crate) path: Option<PathBuf>,
 }
 
+/// `doctrine value pin <ID> <magnitude> --by <who> [flags]` — the gated
+/// human-in-the-loop pin (SL-220 §4). `value pin <ID> --retire` retires the
+/// active pin(s). Both require an interactive operator session (D13) and are
+/// refused under worker-mode (guard.rs). `--by` is MANDATORY for a pin.
+#[derive(Args)]
+pub(crate) struct ValuePinArgs {
+    /// Canonical entity ref (e.g. SL-118)
+    pub(crate) id: String,
+    /// Magnitude (any finite f64) — required unless `--retire`.
+    #[arg(allow_hyphen_values = true, required_unless_present = "retire")]
+    pub(crate) magnitude: Option<f64>,
+    /// Retire the active pin(s) on the subject (gated) — no magnitude.
+    #[arg(long, conflicts_with_all = ["magnitude", "by", "basis", "supersedes"])]
+    pub(crate) retire: bool,
+    /// Operator identity — MANDATORY for a pin (absent on `--retire`).
+    #[arg(long, required_unless_present = "retire")]
+    pub(crate) by: Option<String>,
+    /// Optional evidence citation (e.g. `REQ-059`).
+    #[arg(long)]
+    pub(crate) basis: Option<String>,
+    /// Optional free-text note.
+    #[arg(long)]
+    pub(crate) note: Option<String>,
+    /// Supersede a prior ANCHOR row by uid (same subject/domain/lens).
+    #[arg(long)]
+    pub(crate) supersedes: Option<String>,
+    /// Explicit project root (default: auto-detect)
+    #[arg(short = 'p', long)]
+    pub(crate) path: Option<PathBuf>,
+}
+
+/// `doctrine value clear <ID> [--lens <lens>] [--note <text>]` (SL-220 §4):
+/// tombstones ALL active unlensed value-domain anchor rows on the subject
+/// (`--lens` targets that lens's rows instead). REFUSED while a pin is active.
 #[derive(Args)]
 pub(crate) struct ValueClearArgs {
     /// Canonical entity ref (e.g. SL-118)
     pub(crate) id: String,
+    /// Optional free-text note recorded on the tombstones.
+    #[arg(long)]
+    pub(crate) note: Option<String>,
+    /// Clear the rows carrying THIS lens (default: the unlensed rows).
+    #[arg(long)]
+    pub(crate) lens: Option<String>,
     /// Explicit project root (default: auto-detect)
     #[arg(short = 'p', long)]
     pub(crate) path: Option<PathBuf>,
@@ -199,53 +282,187 @@ fn scoring_inert_warning(canonical: &str) -> Option<String> {
     ))
 }
 
+/// D13 pin gate — pure over the injected TTY bit (the shell reads stdin, same
+/// pattern as date/uid injection): the gated `value pin` family requires an
+/// interactive operator session. Refused when stdin is not a TTY, naming the
+/// posture.
+fn require_interactive(is_interactive: bool) -> anyhow::Result<()> {
+    if !is_interactive {
+        anyhow::bail!(
+            "value pin requires an interactive operator session — stdin is not a TTY; a pin is a human-in-the-loop admission, run it from an interactive terminal"
+        );
+    }
+    Ok(())
+}
+
+/// One resolved-ACTIVE value anchor row on a subject (SL-220 §4): its uid, its
+/// lens, and whether it is a pin.
+struct ActiveAnchor {
+    uid: String,
+    lens: Option<String>,
+    is_pin: bool,
+}
+
+/// The LIVE value-domain anchor rows on `subject` (SL-220 §4): the corpus
+/// resolved through the shared `resolve` pass so supersession and tombstones
+/// are already reduced. "Live" is `Active` (unlensed) OR `InertLens`
+/// (lens-tagged) — the same selection the claims pass makes, since `resolve`
+/// marks every lens-tagged row `InertLens` unconditionally. An empty
+/// `StatusMap` suffices (anchor liveness needs no entity-status classes).
+fn active_value_anchors(
+    root: &std::path::Path,
+    subject: &str,
+) -> anyhow::Result<Vec<ActiveAnchor>> {
+    use crate::comparison::ResolutionStatus;
+    let sessions = crate::comparison::load_sessions(root)?;
+    let resolution = crate::comparison::resolve(&sessions, &crate::comparison::StatusMap::new())?;
+    let mut out = Vec::new();
+    for (j, status) in &resolution.rows {
+        if !matches!(
+            status,
+            ResolutionStatus::Active | ResolutionStatus::InertLens
+        ) || j.domain != crate::comparison::DOMAIN_VALUE
+            || !matches!(j.form, crate::comparison::RowForm::Anchor)
+            || j.a != subject
+        {
+            continue;
+        }
+        out.push(ActiveAnchor {
+            uid: j.uid.clone(),
+            lens: j.lens.clone(),
+            is_pin: j.admission == Some(AdmissionKind::Pin),
+        });
+    }
+    Ok(out)
+}
+
 pub(crate) fn run_value_set(args: &ValueSetArgs) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+    let (_path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
 
-    // REV-022 Q1: a value facet on a non-value-bearing kind is scoring-inert.
-    // Warn (to stderr) but still write — the facet is captured, just inert.
+    // REV-022 Q1 / D7: an anchor on a non-value-bearing kind is scoring-inert.
+    // Warn (to stderr) but still capture — the claim lands, just inert.
     if let Some(warning) = scoring_inert_warning(&canonical) {
         writeln!(std::io::stderr(), "{warning}")?;
     }
 
-    // Build facet & validate.
-    let facet = crate::value::ValueFacet {
-        value: args.magnitude,
+    let spec = crate::commands::compare::AnchorSpec {
+        subject: canonical.clone(),
+        magnitude: args.magnitude,
+        rater: args.rater.to_kind(),
+        admission: None,
+        by: args.by.clone(),
+        basis: args.basis.clone(),
+        lens: args.lens.clone(),
+        note: args.note.clone(),
+        supersedes: args.supersedes.clone(),
     };
-    crate::value::validate(&facet)?;
+    let path = crate::commands::compare::record_anchor(&root, &spec)?;
+    writeln!(
+        std::io::stdout(),
+        "value set: {canonical} magnitude={} — session {}",
+        args.magnitude,
+        path.display()
+    )?;
+    Ok(())
+}
 
-    // Write via the leaf.
-    let fields: &[(&str, f64)] = &[("value", args.magnitude)];
-    let changed = crate::facet_write::apply_set(&path, "value", fields)?;
+/// `doctrine value pin` — the gated human-in-the-loop pin (SL-220 §4). The
+/// public entry reads the real TTY; the inner takes the bit injected so both
+/// branches unit-test (the shell-seam pattern).
+pub(crate) fn run_value_pin(args: &ValuePinArgs) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+    run_value_pin_inner(args, std::io::stdin().is_terminal())
+}
 
-    if changed {
+fn run_value_pin_inner(args: &ValuePinArgs, is_interactive: bool) -> anyhow::Result<()> {
+    use std::io::Write;
+    require_interactive(is_interactive)?;
+    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
+    let (_path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+
+    if args.retire {
+        let uids: Vec<String> = active_value_anchors(&root, &canonical)?
+            .into_iter()
+            .filter(|a| a.is_pin)
+            .map(|a| a.uid)
+            .collect();
+        if uids.is_empty() {
+            anyhow::bail!("{canonical}: no active pin to retire");
+        }
+        let path = crate::commands::compare::record_tombstones(&root, &uids, args.note.as_deref())?;
         writeln!(
             std::io::stdout(),
-            "value set: {canonical} value={}",
-            args.magnitude
+            "value pin retired: {canonical} ({} row(s)) — session {}",
+            uids.len(),
+            path.display()
         )?;
-    } else {
-        writeln!(
-            std::io::stdout(),
-            "value unchanged: {canonical} value={}",
-            args.magnitude
-        )?;
+        return Ok(());
     }
+
+    // Clap's `required_unless_present` guarantees both are present off `--retire`.
+    let magnitude = args.magnitude.ok_or_else(|| {
+        anyhow::anyhow!("value pin requires a MAGNITUDE (or --retire to retire the active pin)")
+    })?;
+    let by = args.by.clone().ok_or_else(|| {
+        anyhow::anyhow!("value pin requires --by <who> — a pin records its operator")
+    })?;
+
+    if let Some(warning) = scoring_inert_warning(&canonical) {
+        writeln!(std::io::stderr(), "{warning}")?;
+    }
+
+    let spec = crate::commands::compare::AnchorSpec {
+        subject: canonical.clone(),
+        magnitude,
+        rater: RaterKind::Human,
+        admission: Some(AdmissionKind::Pin),
+        by: Some(by),
+        basis: args.basis.clone(),
+        lens: None,
+        note: args.note.clone(),
+        supersedes: args.supersedes.clone(),
+    };
+    let path = crate::commands::compare::record_anchor(&root, &spec)?;
+    writeln!(
+        std::io::stdout(),
+        "value pinned: {canonical} magnitude={magnitude} — session {}",
+        path.display()
+    )?;
     Ok(())
 }
 
 pub(crate) fn run_value_clear(args: &ValueClearArgs) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
-    let cleared = crate::facet_write::apply_clear(&path, "value")?;
-    if cleared {
-        writeln!(std::io::stdout(), "value cleared: {canonical}")?;
-    } else {
-        writeln!(std::io::stdout(), "no value to clear: {canonical}")?;
+    let (_path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+
+    let active = active_value_anchors(&root, &canonical)?;
+    // A pin is a durable admission — correction is `value pin --retire`, never
+    // clear (design §4).
+    if active.iter().any(|a| a.is_pin) {
+        anyhow::bail!(
+            "{canonical}: a pin is active — value clear is refused; retire the pin first with `doctrine value pin {canonical} --retire`"
+        );
     }
+    // Unlensed rows by default; `--lens` targets that lens's rows explicitly.
+    let uids: Vec<String> = active
+        .into_iter()
+        .filter(|a| a.lens.as_deref() == args.lens.as_deref())
+        .map(|a| a.uid)
+        .collect();
+    if uids.is_empty() {
+        writeln!(std::io::stdout(), "no value anchor to clear: {canonical}")?;
+        return Ok(());
+    }
+    let path = crate::commands::compare::record_tombstones(&root, &uids, args.note.as_deref())?;
+    writeln!(
+        std::io::stdout(),
+        "value cleared: {canonical} ({} row(s)) — session {}",
+        uids.len(),
+        path.display()
+    )?;
     Ok(())
 }
 
@@ -540,105 +757,283 @@ mod tests {
         assert!(body.contains("upper = 3.0"), "missing upper:\n{body}");
     }
 
-    // ---- VT-10: value set / value clear round-trip ----
+    // ---- SL-220 §4: value anchor capture verbs -------------------------------
 
+    /// A `value set` args builder with the mandatory `--rater` supplied and
+    /// every optional absent.
+    fn set_args(id: &str, magnitude: f64, root: &std::path::Path) -> ValueSetArgs {
+        ValueSetArgs {
+            id: id.into(),
+            magnitude,
+            rater: AnchorRaterArg::Human,
+            by: None,
+            basis: None,
+            lens: None,
+            note: None,
+            supersedes: None,
+            path: Some(root.to_path_buf()),
+        }
+    }
+
+    /// The live value-anchor rows on `subject` — read back through the corpus
+    /// resolve pass (excludes superseded/tombstoned rows).
+    fn live_anchors(root: &std::path::Path, subject: &str) -> Vec<ActiveAnchor> {
+        active_value_anchors(root, subject).unwrap()
+    }
+
+    /// `value set` mints a session-of-one anchor with the stamped
+    /// frame/domain/form and the given magnitude; the row is live.
     #[test]
-    fn vt10_value_set_then_clear() {
+    fn value_set_mints_anchor_session() {
         let (_tmp, root) = mk_project_root();
         seed_entity(&root, "SL", 118);
-        // Set value.
-        run_value_set(&ValueSetArgs {
-            id: "SL-118".into(),
-            magnitude: 42.0,
-            path: Some(root.clone()),
-        })
-        .unwrap();
-        let (path, _) = resolve_entity_path_and_canonical(&root, "SL-118").unwrap();
-        let body = std::fs::read_to_string(&path).unwrap();
-        assert!(body.contains("value = 42.0"), "missing value:\n{body}");
-        // Clear value.
-        run_value_clear(&ValueClearArgs {
-            id: "SL-118".into(),
-            path: Some(root),
-        })
-        .unwrap();
-        let body2 = std::fs::read_to_string(&path).unwrap();
-        assert!(
-            !body2.contains("[value]"),
-            "[value] should be gone:\n{body2}"
+        run_value_set(&set_args("SL-118", 42.0, &root)).unwrap();
+
+        let sessions = crate::comparison::load_sessions(&root).unwrap();
+        let rows: Vec<_> = sessions.iter().flat_map(|s| &s.judgements).collect();
+        assert_eq!(rows.len(), 1, "one anchor row minted");
+        let j = rows[0];
+        assert_eq!(j.a, "SL-118");
+        assert_eq!(j.domain, crate::comparison::DOMAIN_VALUE);
+        assert_eq!(j.frame, crate::comparison::FRAME_VALUE_ANCHOR);
+        assert!(matches!(j.form, crate::comparison::RowForm::Anchor));
+        assert_eq!(j.magnitude, Some(42.0));
+        assert_eq!(j.b, None);
+        assert_eq!(j.admission, None);
+    }
+
+    /// D10: EVERY invocation mints — two identical `value set`s yield TWO rows
+    /// (no no-op/idempotency guard), both live as concurrent evidence.
+    #[test]
+    fn value_set_mints_every_invocation() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        run_value_set(&set_args("SL-118", 7.0, &root)).unwrap();
+        run_value_set(&set_args("SL-118", 7.0, &root)).unwrap();
+        assert_eq!(
+            live_anchors(&root, "SL-118").len(),
+            2,
+            "two live rows (D10)"
         );
     }
 
+    /// Negatives are admissible (mirrors `value::validate` — no range policy).
     #[test]
-    fn vt10_value_set_negative() {
+    fn value_set_admits_negative_magnitude() {
         let (_tmp, root) = mk_project_root();
         seed_entity(&root, "SL", 118);
-        run_value_set(&ValueSetArgs {
-            id: "SL-118".into(),
-            magnitude: -5.0,
-            path: Some(root.clone()),
-        })
-        .unwrap();
-        let (path, _) = resolve_entity_path_and_canonical(&root, "SL-118").unwrap();
-        let body = std::fs::read_to_string(&path).unwrap();
-        assert!(body.contains("value = -5.0"), "missing value:\n{body}");
+        run_value_set(&set_args("SL-118", -5.0, &root)).unwrap();
+        let sessions = crate::comparison::load_sessions(&root).unwrap();
+        let j = sessions[0].judgements.first().unwrap();
+        assert_eq!(j.magnitude, Some(-5.0));
     }
 
+    /// Non-finite magnitude is refused at capture, mirroring `value::validate`.
     #[test]
-    fn value_set_warns_on_non_value_bearing_kind() {
-        // REV-022 Q1: a QUE knowledge record is not value-bearing → the warn
-        // fires and names the scoring-inert condition, but the facet still lands.
+    fn value_set_rejects_non_finite() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        for bad in [f64::INFINITY, f64::NAN, f64::NEG_INFINITY] {
+            let err = run_value_set(&set_args("SL-118", bad, &root))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("finite"), "{bad}: got {err}");
+        }
+    }
+
+    /// D7 warn posture: an anchor on a non-value-bearing kind warns but still
+    /// captures; the paired admissibility property over ALL_KINDS pins that the
+    /// warn fires exactly for the non-value-bearing kinds (mirrors `value set`).
+    #[test]
+    fn value_anchor_warn_posture_mirrors_all_kinds() {
+        for &kind in crate::kinds::ALL_KINDS {
+            let canonical = crate::listing::canonical_id(kind, 1);
+            let warns = scoring_inert_warning(&canonical).is_some();
+            assert_eq!(
+                warns,
+                !crate::kinds::is_value_bearing(kind),
+                "{kind}: warns iff not value-bearing"
+            );
+        }
+        // …and the row STILL lands on a non-value-bearing kind (warn, not block).
         let (_tmp, root) = mk_project_root();
         seed_entity(&root, "QUE", 7);
-        let warn = scoring_inert_warning("QUE-007");
-        assert!(
-            warn.is_some_and(|w| w.contains("scoring-inert")),
-            "non-value-bearing kind warns"
+        run_value_set(&set_args("QUE-007", 3.0, &root)).unwrap();
+        assert_eq!(
+            live_anchors(&root, "QUE-007").len(),
+            1,
+            "captured despite warn"
         );
+    }
 
-        run_value_set(&ValueSetArgs {
-            id: "QUE-007".into(),
-            magnitude: 3.0,
+    /// `--supersedes` scope is refused at capture for a FOREIGN subject
+    /// (through the real verb — the pure four-way refusal battery lives in
+    /// `wire`).
+    #[test]
+    fn value_set_supersedes_foreign_subject_refused() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        seed_entity(&root, "SL", 119);
+        run_value_set(&set_args("SL-118", 5.0, &root)).unwrap();
+        let target = live_anchors(&root, "SL-118")[0].uid.clone();
+
+        let mut args = set_args("SL-119", 9.0, &root);
+        args.supersedes = Some(target);
+        let err = run_value_set(&args).unwrap_err().to_string();
+        assert!(err.contains("within one subject"), "got: {err}");
+    }
+
+    /// An unknown `--supersedes` target is refused (not deferred).
+    #[test]
+    fn value_set_supersedes_unknown_target_refused() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let mut args = set_args("SL-118", 5.0, &root);
+        args.supersedes = Some("no-such-uid".into());
+        let err = run_value_set(&args).unwrap_err().to_string();
+        assert!(err.contains("names no judgement row"), "got: {err}");
+    }
+
+    /// The D13 pin gate is pure over the injected TTY bit — BOTH branches:
+    /// non-interactive refuses naming the posture; interactive passes the gate.
+    #[test]
+    fn require_interactive_gates_both_branches() {
+        let err = require_interactive(false).unwrap_err().to_string();
+        assert!(err.contains("not a TTY"), "names the posture: {err}");
+        assert!(require_interactive(true).is_ok());
+    }
+
+    /// `value pin` (interactive branch injected) mints a human anchor stamped
+    /// `admission = pin`.
+    #[test]
+    fn value_pin_mints_pin_row() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let args = ValuePinArgs {
+            id: "SL-118".into(),
+            magnitude: Some(6.5),
+            retire: false,
+            by: Some("david".into()),
+            basis: None,
+            note: None,
+            supersedes: None,
+            path: Some(root.clone()),
+        };
+        run_value_pin_inner(&args, true).unwrap();
+        let sessions = crate::comparison::load_sessions(&root).unwrap();
+        let j = sessions[0].judgements.first().unwrap();
+        assert_eq!(j.admission, Some(AdmissionKind::Pin));
+        assert_eq!(j.rater, RaterKind::Human);
+        assert_eq!(j.magnitude, Some(6.5));
+    }
+
+    /// `value pin` refuses the non-interactive branch BEFORE any write.
+    #[test]
+    fn value_pin_refuses_non_interactive() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let args = ValuePinArgs {
+            id: "SL-118".into(),
+            magnitude: Some(6.5),
+            retire: false,
+            by: Some("david".into()),
+            basis: None,
+            note: None,
+            supersedes: None,
+            path: Some(root.clone()),
+        };
+        let err = run_value_pin_inner(&args, false).unwrap_err().to_string();
+        assert!(err.contains("not a TTY"), "got: {err}");
+        assert!(live_anchors(&root, "SL-118").is_empty(), "no row written");
+    }
+
+    /// `value clear` tombstones all active unlensed rows; `--lens` targets a
+    /// lens's rows and leaves the unlensed ones live.
+    #[test]
+    fn value_clear_tombstones_unlensed_rows() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        run_value_set(&set_args("SL-118", 1.0, &root)).unwrap();
+        run_value_set(&set_args("SL-118", 2.0, &root)).unwrap();
+        let mut lensed = set_args("SL-118", 3.0, &root);
+        lensed.lens = Some("user-value".into());
+        run_value_set(&lensed).unwrap();
+        assert_eq!(live_anchors(&root, "SL-118").len(), 3);
+
+        run_value_clear(&ValueClearArgs {
+            id: "SL-118".into(),
+            note: None,
+            lens: None,
             path: Some(root.clone()),
         })
         .unwrap();
-        let (path, _) = resolve_entity_path_and_canonical(&root, "QUE-007").unwrap();
-        let body = std::fs::read_to_string(&path).unwrap();
-        assert!(body.contains("value = 3.0"), "facet still written:\n{body}");
+        // The two unlensed rows are gone; the lensed row survives.
+        let live = live_anchors(&root, "SL-118");
+        assert_eq!(live.len(), 1);
+        assert_eq!(live[0].lens.as_deref(), Some("user-value"));
+    }
 
-        // A value-bearing kind emits NO warning.
+    /// `value clear` is refused while a pin is active, naming the remedy.
+    #[test]
+    fn value_clear_refused_under_active_pin() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let pin = ValuePinArgs {
+            id: "SL-118".into(),
+            magnitude: Some(6.5),
+            retire: false,
+            by: Some("david".into()),
+            basis: None,
+            note: None,
+            supersedes: None,
+            path: Some(root.clone()),
+        };
+        run_value_pin_inner(&pin, true).unwrap();
+        let err = run_value_clear(&ValueClearArgs {
+            id: "SL-118".into(),
+            note: None,
+            lens: None,
+            path: Some(root.clone()),
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("--retire"), "names the remedy: {err}");
+    }
+
+    /// `value pin --retire` tombstones the active pin; afterwards the ladder
+    /// falls through (no live pin remains).
+    #[test]
+    fn value_pin_retire_tombstones_the_pin() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let pin = ValuePinArgs {
+            id: "SL-118".into(),
+            magnitude: Some(6.5),
+            retire: false,
+            by: Some("david".into()),
+            basis: None,
+            note: None,
+            supersedes: None,
+            path: Some(root.clone()),
+        };
+        run_value_pin_inner(&pin, true).unwrap();
+        assert!(live_anchors(&root, "SL-118").iter().any(|a| a.is_pin));
+
+        let retire = ValuePinArgs {
+            id: "SL-118".into(),
+            magnitude: None,
+            retire: true,
+            by: None,
+            basis: None,
+            note: None,
+            supersedes: None,
+            path: Some(root.clone()),
+        };
+        run_value_pin_inner(&retire, true).unwrap();
         assert!(
-            scoring_inert_warning("SL-118").is_none(),
-            "value-bearing kind does not warn"
+            live_anchors(&root, "SL-118").is_empty(),
+            "the pin row is tombstoned"
         );
-    }
-
-    #[test]
-    fn vt10_value_set_inf_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let err = run_value_set(&ValueSetArgs {
-            id: "SL-118".into(),
-            magnitude: f64::INFINITY,
-            path: Some(root),
-        })
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("finite"), "got: {err}");
-    }
-
-    #[test]
-    fn vt10_value_set_nan_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let err = run_value_set(&ValueSetArgs {
-            id: "SL-118".into(),
-            magnitude: f64::NAN,
-            path: Some(root),
-        })
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("finite"), "got: {err}");
     }
 
     // ---- VT-11: catalog scan round-trip ----

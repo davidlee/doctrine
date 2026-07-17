@@ -1139,6 +1139,15 @@ pub(crate) fn retrieve_reference(
     let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
     let value_unit = crate::value::resolve_unit(&cfg.value);
     let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+    // SL-220 PHASE-06: the value line re-sources from the comparison ladder
+    // (design §6) — same resolution as `memory show`.
+    let value_line = crate::priority::surface::show_value_line(
+        root,
+        &memory.uid,
+        memory.value.as_ref().map(|v| v.value),
+        "memory",
+        &value_unit,
+    )?;
     let rendered = crate::memory::render_show(
         memory,
         &body,
@@ -1146,7 +1155,7 @@ pub(crate) fn retrieve_reference(
         Some(st.label()),
         &[],
         &estimation_unit,
-        &value_unit,
+        value_line.as_deref(),
         lower_pct,
         upper_pct,
     );
@@ -1320,11 +1329,21 @@ pub(crate) fn run_retrieve(
     let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
     match format {
         crate::listing::Format::Table => {
+            // SL-220 PHASE-06: ONE pipeline load for the whole rendered page —
+            // the value line resolves per memory from the shared ladder.
+            let pipeline = crate::priority::graph::load_comparison_pipeline_for_root(&root)?;
             for c in &visible {
                 let body = crate::memory::read_body(&root, &c.memory.uid);
                 // FRESH nonce per BLOCK: one nonce across N bodies lets body i forge
                 // body i+1's close (D2). Minted inside the loop, never hoisted.
                 let nonce = uuid::Uuid::new_v4().simple().to_string();
+                let value_line = crate::priority::surface::value_line_from_pipeline(
+                    &pipeline,
+                    &c.memory.uid,
+                    c.memory.value.as_ref().map(|v| v.value),
+                    "memory",
+                    &value_unit,
+                );
                 parts.push(crate::memory::render_show(
                     c.memory,
                     &body,
@@ -1332,7 +1351,7 @@ pub(crate) fn run_retrieve(
                     Some(c.staleness.label()),
                     &[],
                     &estimation_unit,
-                    &value_unit,
+                    value_line.as_deref(),
                     lower_pct,
                     upper_pct,
                 ));
@@ -1420,6 +1439,10 @@ fn expand_graph(
     // Perform BFS expansion
     let expanded = bfs_expand(&edges, start_uids, max_depth);
 
+    // SL-220 PHASE-06: ONE pipeline load for the whole expansion — the value
+    // line resolves per memory from the shared ladder.
+    let pipeline = crate::priority::graph::load_comparison_pipeline_for_root(root)?;
+
     // Render expanded nodes by depth
     let mut first = true;
     for (depth, uids) in expanded.iter().enumerate() {
@@ -1457,6 +1480,13 @@ fn expand_graph(
             // Reuse render_show with proper parameters
             let guard = "memory-show";
             let wikilinks = Vec::new(); // Empty for now
+            let value_line = crate::priority::surface::value_line_from_pipeline(
+                &pipeline,
+                &memory.uid,
+                memory.value.as_ref().map(|v| v.value),
+                "memory",
+                &value_unit,
+            );
             let rendered = memory::render_show(
                 memory,
                 &body,
@@ -1464,7 +1494,7 @@ fn expand_graph(
                 Some(&staleness_line),
                 &wikilinks,
                 &estimation_unit,
-                &value_unit,
+                value_line.as_deref(),
                 lower_pct,
                 upper_pct,
             );

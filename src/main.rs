@@ -773,8 +773,33 @@ mod write_class_tests {
     #[test]
     fn value_is_write() {
         assert_eq!(
-            cls(&["doctrine", "value", "set", "SL-001", "42"]),
+            cls(&[
+                "doctrine", "value", "set", "SL-001", "42", "--rater", "human"
+            ]),
             Some("value")
+        );
+    }
+
+    // SL-220 §4: the gated pin family is Orchestrator-classed (D13/EN-2) —
+    // worker-refused; `--retire` carries its own verb label.
+    #[test]
+    fn value_pin_is_orchestrator() {
+        let c = Cli::try_parse_from(["doctrine", "value", "pin", "SL-001", "6.5", "--by", "david"])
+            .unwrap()
+            .command;
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("value pin")),
+            "value pin must be Orchestrator(\"value pin\")"
+        );
+        let c = Cli::try_parse_from(["doctrine", "value", "pin", "SL-001", "--retire"])
+            .unwrap()
+            .command;
+        assert!(
+            matches!(
+                write_class(&c),
+                WriteClass::Orchestrator("value pin --retire")
+            ),
+            "value pin --retire must be Orchestrator(\"value pin --retire\")"
         );
     }
 

@@ -1559,11 +1559,18 @@ pub(crate) fn run_show(
             let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
             let value_unit = crate::value::resolve_unit(&cfg.value);
             let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
+            let value_line = crate::priority::surface::show_value_line(
+                &root,
+                &canonical_id(id),
+                doc.value.as_ref().map(|v| v.value),
+                REVIEW_KIND.prefix,
+                &value_unit,
+            )?;
             format_show(
                 &doc,
                 &body,
                 &estimation_unit,
-                &value_unit,
+                value_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -1617,7 +1624,7 @@ fn format_show(
     doc: &ReviewDoc,
     body: &str,
     estimation_unit: &str,
-    value_unit: &str,
+    value_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -1655,11 +1662,9 @@ fn format_show(
             )
         ));
     }
-    if let Some(ref val) = doc.value {
-        parts.push(format!(
-            "{}\n",
-            crate::value::format_value_normal(val, value_unit)
-        ));
+    // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
+    if let Some(line) = value_line {
+        parts.push(format!("{line}\n"));
     }
     parts.push(format!("\n{body}"));
     parts.concat()
@@ -3171,7 +3176,7 @@ mod tests {
             estimate: None,
             value: None,
         };
-        let out = format_show(&doc, "## Brief\n", "points", "points", 0.0, 1.0);
+        let out = format_show(&doc, "## Brief\n", "points", None, 0.0, 1.0);
         assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
         // empty ⇒ Done, await=None.
         assert!(out.contains("done · await=none"), "{out}");
