@@ -1,4 +1,4 @@
-# Skill content refresh = doctrine install -s <id> -y + touch src/skills.rs to re-embed
+# Skill content refresh = doctrine install -s <id> -y + touch src/install.rs to re-embed
 
 > **SL-088 consolidation (supersedes the SL-056 `claude install` rename):** the
 > installer is now ONE verb — **`doctrine install`** (flags `-s <id>` / `-d <domain>`
@@ -12,7 +12,7 @@ After editing a `plugins/<domain>/skills/<id>/SKILL.md` (or a sibling like
 **two-gotcha** sequence:
 
 - **A lone `plugins/` edit does NOT re-embed on `cargo build`** — RustEmbed only
-  re-reads when the embedding crate (`src/skills.rs`, `#[folder = "plugins/"]`)
+  re-reads when the embedding crate (`src/install.rs`, `#[folder = "plugins/"]`, since IMP-226 removed `src/skills.rs`)
   recompiles. A plain `cargo build` finishes in <1s as a no-op and the stale bytes
   ship. See [[mem.pattern.build.rust-embed-no-rerun]] / [[mem.pattern.embed.rustembed-recompile-and-symlinks]].
 - **Run the install from the re-embedded binary, not PATH.** `doctrine install
@@ -24,7 +24,7 @@ After editing a `plugins/<domain>/skills/<id>/SKILL.md` (or a sibling like
 Working sequence:
 
 ```bash
-touch src/skills.rs            # force the embedding crate to recompile
+touch src/install.rs           # force the embedding crate to recompile
 cargo build                    # now re-embeds the edited plugins/ files
 TARGET_DIR=$(cargo metadata --format-version=1 | jq -r '.target_directory')
 $TARGET_DIR/debug/doctrine install -s <id> -y   # refresh .doctrine/skills/* + relink .claude/skills/*

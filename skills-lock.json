@@ -23,7 +23,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/close/SKILL.md",
-      "computedHash": "40980d1adf3b4ca809638129e72c66da26f8fa265cb5a5090a45eb308ab96343"
+      "computedHash": "4377558cf1145860edfc5cf02e871011abd7ee777462468bbe5d783fa36f3937"
     },
     "code-review": {
       "source": "davidlee/doctrine",
@@ -96,6 +96,12 @@
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/inquisition/SKILL.md",
       "computedHash": "c978865b24b43ef04be5d60915387bb0ba99c9c8c452797b813cd21ed9735904"
+    },
+    "knowledge": {
+      "source": "davidlee/doctrine",
+      "sourceType": "github",
+      "skillPath": "plugins/doctrine/skills/knowledge/SKILL.md",
+      "computedHash": "ec2a97b7cbdcd90ef237e3d3c40d12a5ae519b6329a6c49f9673872a4bfd4e93"
     },
     "next": {
       "source": "davidlee/doctrine",

@@ -10,6 +10,7 @@ When unsure, route to the stricter skill. No code without an approved plan.
 | Understanding an artifact is the whole task, no change intended | `/walkthrough` (no slice) |
 | Reviewing code for quality / correctness — ledgered findings | `/code-review` |
 | Authoring or evolving a product / tech spec | `/spec-product` / `/spec-tech` |
+| Capturing or settling an epistemic record (assumption / decision / question / constraint / evidence / hypothesis / concept) | `/knowledge` |
 | Code-changing intent, no governing slice | `/slice` |
 | Slice exists, design missing / stale / unapproved | `/design` (→ `/inquisition` on request) |
 | Design locked, no plan | `/plan` |

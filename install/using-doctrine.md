@@ -50,7 +50,10 @@ Four homes, told apart by what the record *is* — do not conflate them:
   assumptions (ASM), decisions (DEC), questions (QUE), constraints (CON),
   evidence (EVD), hypotheses (HYP), and concepts (CPT); each with its own held→validated
   lifecycle. EVD and HYP carry `supports`/`disputes` evidentiary edges for
-  tracing provenance. Not work; not the backlog.
+  tracing provenance. To gate work on a record, the *dependent* work item
+  authors `doctrine needs <work> <REC-ID>` — blocked while the record is
+  unsettled, unblocked when `knowledge status` settles it; records never
+  author dep/seq themselves. Not work; not the backlog.
 - **ADR = high-impact architectural decisions** (`doctrine adr new`) — a chosen
   direction with consequences (`proposed → accepted → superseded`).
 - **Memory = durable knowledge** (`doctrine memory record`) — a reusable fact,
