@@ -426,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "doctrine"
-version = "0.23.3"
+version = "0.23.4"
 dependencies = [
  "anyhow",
  "async-trait",
