@@ -1610,3 +1610,64 @@ check missed transitive compile fallout of a struct change (~31 literals,
 8 files). Cost: one full worker spin (101k tokens) ending in a hand-back, an
 orchestrator adjudication, and a resume. Plan authoring should compile-check
 struct-motion phases: "can this land green with ONLY its declared files?"
+
+[dispatch; SL220-dispatch-fable]
+PHASE-04 scope-declaration gap: the plan's declared file set omitted
+src/commands/cli.rs, but any new subcommand REQUIRES it (the clap
+ValueAction enum + Command::Value dispatch arm live only there). The opus
+worker spent tokens discovering the gap, justifying the deviation in its
+hand-back, and the orchestrator spent a selector-add + adjudication commit
++ re-derived import path. Pattern: any "verb surface" phase should declare
+cli.rs (and guard.rs) design-target by default at plan time. Secondary
+note: the worker tried to append this case-note itself and couldn't
+(.doctrine ro in the worker jail) — the standing instruction should say
+workers report case-notes in the hand-back for the orchestrator to append.
+
+[dispatch worker PHASE-05 SL-220; agent-a8a8d0825ced237ce] (transplanted by
+orchestrator — worker jail has ro .doctrine)
+(1) NF-001's substring tripwire collided with the design-pinned
+`ValueFacetUnmigrated` name — cost a full e2e cycle; design phases could
+grep the tripwire symbol set when minting identifiers. (2) `doctrine check
+commit` cannot go green in the worker jail (31 marker-poisoned suites fail
+fail-fast before delta-relevant suites) — worker fell back to
+fmt+clippy+`--no-fail-fast` triage; a jail-aware check verb would save
+thousands of tokens of failure classification. (3) Scratchpad /tmp did not
+persist across bash calls in the worker jail; a scripted multi-site edit
+had to be redone single-call after one splice corruption (recovered via
+`git show HEAD:` regeneration).
+
+[dispatch-worker; SL-220 PHASE-06] (transplanted by orchestrator — worker
+jail has ro .doctrine)
+- Absolute paths in Read must target the WORKER's worktree, not
+  /workspace/doctrine (the main tree on edge). Read against the main-tree
+  path silently returned STALE pre-PHASE-05 source; bash (cwd=worktree)
+  disagreed. Cost a full false-start diagnosis. Signposting the
+  worktree-absolute-path rule up front would save this every dispatch.
+- Two design-mandated render fns (spec::render, memory::render_show) are
+  SHARED with files outside the declared file set (lazyspec.rs,
+  retrieve.rs). The "dissolve the 9-fold duplication" mandate was
+  unachievable in-scope for 2 of the 9 because the scope boundary cut
+  through a shared seam. Scoping should either include the shared callers
+  or flag the seam.
+- check commit's architecture-layering ratchet (tangle baseline in
+  .doctrine/adr/001/layering.toml — a forbidden zone) fails the worker on
+  DESIGN-MANDATED coupling growth (+10 Command edges from 7 show-shells
+  calling priority::surface). The worker cannot bump the baseline and
+  cannot retry around commit-gate-red, so a legitimate,
+  green-everywhere-else delta is un-committable by the worker alone. The
+  baseline bump is structurally an orchestrator step, but nothing in the
+  contract signals that a ratchet-only red is an orchestrator handoff
+  rather than a worker defect.
+- e2e explain over a fixture slice needs BOTH the .toml AND the .md
+  companion or the entity is "no such entity"; the existing seed_slice
+  writes only .toml. Non-obvious.
+
+[dispatch-worker; SL-220 PHASE-06 follow-up] (transplanted by orchestrator)
+- The layering gate prints ONLY violating tiers; getting "every tier's
+  baseline vs actual" required inferring zero-baseline tiers are exactly 0
+  and cross-reading .doctrine/adr/001/layering.toml. A gate mode that
+  prints the full per-tier table on failure would make orchestrator
+  baseline bumps mechanical.
+- Scratch fixtures under the session scratchpad dir did not survive
+  between bash calls in the worker jail (cwd + tmp reset);
+  fixture-build-and-assert must be a single bash call.
