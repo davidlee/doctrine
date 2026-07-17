@@ -1,0 +1,172 @@
+# Implementation plan for SL-221 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-221"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Phase order is the behaviour-preservation gate: 01–02 are pure relocation +
+# extraction (invariant assertions stay green with only bounded mechanical edits);
+# 03 is the one deliberate behaviour change (escape hatch → ref); 04 makes the
+# consumer order-safe; 05 retires the working-tree path and proves ISS-225 dead.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Relocate + generalise the object-db commit engine"
+objective = """
+Move the object-db commit engine DOWN from src/mcp_server/dispatch.rs into \
+src/dispatch.rs (engine tier, ADR-001): commit_on_behalf, commit_tree_as, the \
+commit-identity Provenance (Import/Conclude) + Identity, dispatch_identity, \
+CommitOutcome, CommitRefusal, funnel_message, the private const FUNNEL_MARKER, and \
+DISPATCH_NAME/DISPATCH_EMAIL — with their unit tests. Generalise commit_on_behalf \
+to take an explicit `target_ref` instead of deriving the CAS ref from the coord \
+worktree's HEAD. mcp_server/dispatch.rs references them via crate::dispatch::…; the \
+two production call sites (dispatch_import, conclude_boundary_commit) pass \
+dispatch_ref(slice) explicitly. Behaviour-identical: dispatch_ref(slice) == \
+refs/heads/dispatch/NNN == the ref HEAD resolved to in the coord worktree (verified \
+at plan). Disambiguate the Provenance name clash in dispatch.rs (it already imports \
+boundary::Provenance) by aliasing the boundary import, not by renaming the moved \
+type — the design signatures name it `Provenance`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked (RV-281 done, three penances integrated); premises re-verified against the current tree at plan (symbols, DISPATCH_REF_PREFIX = refs/heads/dispatch/, Provenance collision, blast radius self-contained)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "the commit engine lives in src/dispatch.rs; mcp_server/dispatch.rs references it only via crate::dispatch::…; no crate::mcp_server:: reference survives in the moved code (ADR-001: no reverse dispatch→mcp_server edge)" },
+  { id = "EX-2", text = "commit_on_behalf takes an explicit target_ref param; dispatch_import and conclude_boundary_commit pass dispatch_ref(slice), which equals the ref HEAD formerly resolved (behaviour-identical)" },
+  { id = "EX-3", text = "gate green: doctrine check gate (clippy workspace, zero warnings); mcp_server + e2e_dispatch_sync suites green, the only edits being the target_ref call-site churn" },
+]
+verification = [
+  { id = "VT-1", expects = "commit_on_behalf invariants hold after relocation + explicit-ref: empty-delta refusal, lost-ref-race CAS refusal, and byte-unchanged-on-refusal — assertions unchanged, call-sites mechanically updated for target_ref", test_file = "src/dispatch.rs", keywords = ["commit_on_behalf_empty_delta_refuses", "commit_on_behalf_lost_ref_race", "target_ref"], waived = false },
+  { id = "VT-2", expects = "import/conclude identity invariants preserved: IMPORT keeps worker author + dispatch committer; CONCLUDE sets author == committer", test_file = "src/dispatch.rs", keywords = ["commit_on_behalf_import_mode_preserves_worker_author", "commit_on_behalf_conclude_mode_sets_author_equal_committer"], waived = false },
+  { id = "VA-1", expects = "agent greps the relocated engine in src/dispatch.rs and confirms no `crate::mcp_server::` reference remains (ADR-001 clean); FUNNEL_MARKER moved with funnel_message (no up-call)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Extract land_boundary_row; conclude delegates"
+objective = """
+Add the single shared boundary-write helper in src/dispatch.rs: \
+land_boundary_row(git_root, coord_ref, tip, slice, row, prov) -> CommitOutcome — \
+read committed boundaries at tip (read_ledger), UPSERT the row by phase (replace in \
+place / append absent), splice via git::tree_with_file, land with commit_on_behalf. \
+Refactor conclude_boundary_commit (mcp_server) to resolve coord + tip as today, then \
+delegate to crate::dispatch::land_boundary_row with Provenance::Conclude. Conclude \
+stays behaviour-identical (same UPSERT fold, same commit, same identity).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: the engine (incl. commit_on_behalf with target_ref) lives in src/dispatch.rs" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "land_boundary_row exists in src/dispatch.rs and is the sole compose path for a boundary row (UPSERT-by-phase → splice → commit_on_behalf)" },
+  { id = "EX-2", text = "conclude_boundary_commit delegates to land_boundary_row; conclude behaviour unchanged (existing conclude_boundary_commit_* tests green unchanged)" },
+  { id = "EX-3", text = "gate green" },
+]
+verification = [
+  { id = "VT-1", expects = "land_boundary_row UPSERT-by-phase is one behaviour: a new phase appends, an existing phase replaces in place; the tip's other rows are preserved", test_file = "src/dispatch.rs", keywords = ["fn land_boundary_row", "land_boundary_row_upserts_by_phase"], patterns = ["fn land_boundary_row"], waived = false },
+  { id = "VT-2", expects = "conclude delegation is behaviour-identical: the happy / upsert-never-duplicates / fault-leaves-porcelain-clean conclude e2es stay green against the delegating conclude_boundary_commit", test_file = "src/mcp_server/dispatch.rs", keywords = ["conclude_boundary_commit_upserts_by_phase", "land_boundary_row"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Rewire the escape hatch onto the ref"
+objective = """
+run_record_boundary (src/dispatch.rs) resolves the dispatch/<slice> ref tip \
+(resolve_commit) and calls land_boundary_row(root, &coord_ref, &tip, slice, row, \
+&Provenance::Conclude{ who: dispatch_identity() }) instead of \
+ledger::record_boundary. The ROW provenance stays boundary::Provenance::Funnel \
+(unchanged content); the second write, state::record_source_delta (arm-neutral \
+registry), is UNCHANGED. OQ-1 resolved by the design default: reuse \
+dispatch_identity() (Conclude-shaped commit identity) — the row field carries any \
+Manual/Funnel attribution; revisit only if operator attribution is later required. \
+Rewrite the record-boundary e2e to assert the row landed on the ref, not the \
+working tree.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: land_boundary_row is available in src/dispatch.rs" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "record-boundary lands the row on the dispatch/<slice> ref in one step (no working-tree boundaries.toml write); a corrected re-record UPSERTs the ref row" },
+  { id = "EX-2", text = "state::record_source_delta (arm-neutral registry) still runs, unchanged" },
+  { id = "EX-3", text = "gate green; the record-boundary e2e asserts the ref (rewritten), arm-neutral registry assertion preserved" },
+]
+verification = [
+  { id = "VT-1", expects = "escape hatch lands on the ref: record-boundary PHASE-N on a live coord → the row is present in the committed dispatch/<slice> boundaries (NOT the coord working tree); a corrected re-record UPSERTs it", test_file = "tests/e2e_dispatch_sync.rs", keywords = ["record_boundary_lands_on_the_dispatch_ref"], patterns = ["fn record_boundary_lands_on_the_dispatch_ref"], waived = false },
+  { id = "VT-2", expects = "arm-neutral registry write preserved: record-boundary still writes the .doctrine/state/slice/<NNN> source-delta registry (assertion unchanged); only the working-tree committed-ledger assertion is dropped", test_file = "tests/e2e_dispatch_sync.rs", keywords = ["record_boundary_also_writes_the_arm_neutral_registry", "state/slice"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Consumer-normalise phase order (D-B4)"
+objective = """
+plan_phases (src/dispatch.rs) sorts a LOCAL view of boundaries.rows by parsed phase \
+ordinal (stable; malformed / non-PHASE-NN rows keep relative position, sorted last) \
+BEFORE the chaining walk, so phase-order == row-order by construction — independent \
+of write order. Writers stay append-simple; the ledger's on-disk order is untouched \
+(no second normalisation seam). This is the truthful replacement for the retracted \
+"single writer ⇒ ordering cannot arise" claim: the single writer removed the \
+merge-interleave source (SL-221 collapse); phase-order == row-order is established \
+HERE, at the sole order-sensitive consumer.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: the escape hatch can now legitimately land an out-of-order phase (tail append) on the ref, making the ordering hazard real" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "plan_phases chains phases in ascending phase ordinal regardless of ledger row order; malformed labels sort last, stable; the on-disk ledger order is not mutated" },
+  { id = "EX-2", text = "gate green" },
+]
+verification = [
+  { id = "VT-1", expects = "plan_phases chains by phase ordinal, not row order: land PHASE-03 after PHASE-05 exists (tail append) → plan_phases still parents phase/<slice>-03 off -02 and -05 off -04", test_file = "src/dispatch.rs", keywords = ["fn plan_phases", "plan_phases_orders_by_phase_ordinal_not_row_order"], patterns = ["fn plan_phases_orders_by_phase_ordinal_not_row_order"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Retire the working-tree path + ISS-225 clobber regression"
+objective = """
+Delete dispatch::commit_boundaries and its call in prepare_review (collapse to \
+`let tip = tip0;`; plan_phases already reads boundaries from the ref via \
+read_ledger). Delete ledger::read_boundaries_file and ledger::record_boundary \
+(+ their unit tests) — now unreferenced (OQ-2: their only production callers were \
+commit_boundaries and run_record_boundary, both retired/rewired). Delete the \
+CLI-driven e2e splice cluster the compiler will NOT catch (runtime-failing): \
+prepare_review_splices_uncommitted_ledger_then_projects, \
+commit_boundaries_is_content_idempotent_on_rerun, \
+malformed_working_ledger_fails_and_leaves_dispatch_tip_unchanged, and the \
+build_fixture_uncommitted_ledger helper. Add the red-first ISS-225 clobber \
+regression. SL-064 §4.1 (sync reads the ledger from the ref) now holds with no \
+exception; the operator `git restore <ledger paths>` ritual is obsolete.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: ledger::record_boundary is unreferenced in production (run_record_boundary rewired to land_boundary_row)" },
+  { id = "EN-2", text = "PHASE-04 complete: consumer ordering is safe without the working-tree splice" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "commit_boundaries, ledger::read_boundaries_file, ledger::record_boundary (+ tests) deleted; prepare_review reads boundaries from the ref only (tip = tip0)" },
+  { id = "EX-2", text = "no code reads or writes the working-tree boundaries.toml; the four splice e2es removed; compiler + grep clean (no dangling references)" },
+  { id = "EX-3", text = "gate green" },
+]
+verification = [
+  { id = "VT-1", expects = "red-first: ISS-225 clobber is impossible by construction — conclude lands 01–07 on the ref, the coord working tree is a stale prefix (or absent), prepare-review → the resulting ref boundaries are still 01–07 (no commit_boundaries to clobber)", test_file = "tests/e2e_dispatch_sync.rs", keywords = ["prepare_review_cannot_clobber_concluded_rows"], patterns = ["fn prepare_review_cannot_clobber_concluded_rows"], waived = false },
+  { id = "VA-1", expects = "agent greps src/ + tests/ and confirms no surviving reference to the working-tree boundaries ledger path (commit_boundaries / read_boundaries_file / ledger::record_boundary); the ref-side read_boundaries sibling is untouched" },
+]
+specs        = []
+requirements = []
