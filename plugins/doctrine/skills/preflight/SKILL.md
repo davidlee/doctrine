@@ -85,6 +85,8 @@ Search order:
 - `/retrieve-memory`
 - the backlog (`backlog list` / `backlog show <ID>`) — is this work already
   captured, and which open items bear on it?
+- knowledge records (`doctrine knowledge list`) — do unsettled records gate or
+  shape this surface? Assumptions you choose to carry → capture as ASM via `/knowledge`.
 - related artifacts (provisional: may be out of date)
 - code
 

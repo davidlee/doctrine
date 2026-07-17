@@ -101,6 +101,10 @@ Operating principles:
 Continue in this manner until you have sufficient clarity to begin the design
 proper, and the user has accepted your summary.
 
+As answers land, capture what should outlive the session via `/knowledge`: an
+unresolved question → QUE, a locked design choice → DEC, an assumption the
+design carries → ASM.
+
 Once accepted, ensure the slice scope (`slice-nnn.md`) is consistent with and
 reflects your current shared understanding before proceeding.
 
