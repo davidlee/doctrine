@@ -21,14 +21,14 @@ at EPSILON.
 |---|---|---|
 | E1 | Estimate anchor payload = `{est_lower, est_upper}` — two new optional f64 columns on the v3 row, validation mirroring `estimate::validate` exactly (finite, `lower ≥ 0`, `upper ≥ lower`; single source, no policy fork). RFC-020's "range, skew, unit, confidence" payload sentence is a **recorded design-stage deviation**: the shipped facet is `{lower, upper}` only — skew and unit are global config, per-facet confidence does not exist (confidence is inherent in range width). *(Operator-adjudicated Q1)* | Migrate what exists; a confidence/skew column would mint authored numbers with zero consumption seam — the pattern RFC-020 itself rejects. Additive columns mean the deferred seams (structured assumptions, per-claim skew) arrive losslessly later |
 | E2 | Frame `cost-anchor` (`FRAME_COST_ANCHOR`) joins `estimate → {more-work}`; `ANCHOR_FRAMES` grows it; form⇔frame biconditional and the per-domain payload-exactness matrix extend (estimate anchor: `est_lower`+`est_upper` present, `magnitude` absent; value anchor unchanged). **Additive within v3 — no version bump** (SL-220 D1/D2 as designed: parse lossless over absent optionals; validation is capture policy, not wire structure) | Phase 2 was priced at zero schema motion; this cashes that cheque |
-| E3 | The claims pass generalises over a **domain payload**: one generic fold (partition → tier → winning tier → singleton/corroboration/conflict → route) parameterised by payload extraction, per-field mean, and operative-scalar function. Value instantiation = `f64` magnitude, operative ≡ identity — behaviour-preserving refactor of the value pass (existing suites green unchanged, engine gate). Estimate instantiation = `(f64, f64)` range, operative = the one formula site with skew passed as a pure input | RFC-020 T2 made executable in code, not just schema; two hand-maintained copies of tier/conflict/lens logic is the parallel-implementation smell |
-| E4 | Same-tier conflict for ranges = **per-field mean** (mean of lowers, mean of uppers) over the full active winning-tier row multiset (D3 posture — no dedupe); conflict `distinct` counts distinct `(lower, upper)` pairs; the conflict interval `{low, high}` is over per-row **operative costs**. Linearity lemma: β-resolving the per-field mean ≡ the mean of per-row operative costs — payload-level and latent-level aggregation agree by construction; pinned by property test. Closure: per-field means of valid ranges are valid. *(Operator-adjudicated Q3)* | D3 verbatim under linearity; no second aggregation rule smuggled in; the interval is denominated in the quantity scoring divides by (D1) |
+| E3 | The claims pass generalises over a **domain payload**: one generic fold (partition → tier → winning tier → singleton/corroboration/conflict → route) parameterised by payload extraction, per-field mean, and operative-scalar function. Value instantiation = `f64` magnitude, operative ≡ identity — behaviour-preserving refactor of the value pass (assertion semantics + goldens unchanged; mechanical accessor re-path is the sole allowed churn — RV-282 F-3, §2). Estimate instantiation = `(f64, f64)` range, operative = the one formula site with skew passed as a pure input | RFC-020 T2 made executable in code, not just schema; two hand-maintained copies of tier/conflict/lens logic is the parallel-implementation smell |
+| E4 | Same-tier conflict for ranges = **per-field mean** (mean of lowers, mean of uppers) over the full active winning-tier row multiset (D3 posture — no dedupe); conflict `distinct` counts distinct `(lower, upper)` pairs; the conflict interval `{low, high}` is over per-row **operative costs**. Linearity lemma, stated precisely *(RV-282 F-1)*: the **affine** β-resolution `lower + β(upper − lower)` distributes over the per-field mean exactly in the reals; the EPSILON floor composes **after** aggregation (`operative = floor_eps(affine(payload))`) and, being monotone convex, diverges from the mean-of-floored only when a row's affine cost dips below `EPSILON = 1e-12` — a sub-ε corner where determinism, not equality, is the invariant (payload validation keeps costs ≥ 0). The property test asserts float-tolerance equality of `affine(mean)` vs `mean(affines)`, plus the exact-composition rule; nothing downstream depends on exactness — the cached `operative` of the mean IS the resolved cost by definition. Closure: per-field means of valid ranges are valid. *(Operator-adjudicated Q3)* | D3 verbatim under affine linearity; no second aggregation rule smuggled in; the floor caveat named instead of overclaimed |
 | E5 | Anti-laundering (D4 mirror): the estimate `anchor_map()` = operative costs of **Pin/Human** resolved claims only; Agent/Migrated claims are graph-ladder priors and never reach `compile`. **Disclosed behaviour delta**: SL-219's "estimated records anchor too" narrows — only anchored-tier record claims contribute anchor mass; a migrated record estimate is a prior and anchors nothing until a human re-asserts | The exact laundering failure RFC-020 dissolves, cost-side; the records delta is the flip working as designed and the REV must say so |
 | E6 | The flip — `est_cost` resolves by the claim ladder: **pin > human claim > cost projection (non-Gauge) > agent claim > migrated claim > unmigrated `[estimate]` facet (transitional, dies this slice) > bare anchor**. Gauge-never-divides (D2) and the positivity axiom (D11) unchanged: payload validation gives `lower ≥ 0`, every operative cost floors at EPSILON. Verb re-plumbing rides the flip phase (an `estimate set` that stops writing facets before the ladder reads claims would silently change scoring) | REV-023's `authored > projected > bare anchor` dissolves exactly as REV-022 did for value; source precedence only, no numeric-dominance claim (INV-2 restated per E7) |
-| E7 | Bare anchor re-sources: `max_upper` = max over per-item **resolved** estimate-claim uppers (**any tier** — winning-tier resolved payload, conflict means applied) plus transitional unmigrated-facet uppers; projected costs never feed it (D7's no-feedback invariant preserved). INV-2 restated in the REV: the bare anchor dominates every *asserted* range (any-tier claim or facet); projected costs may exceed or undercut it; a bare item with no evidence keeps the dominating divisor. *(Operator-adjudicated Q2)* | The bare anchor is a corpus-scale prior, not an authority contest; anchored-tiers-only collapses to `1.0` on a freshly migrated corpus and resurrects the ISS-057 inversion corpus-wide |
+| E7 | Bare anchor re-sources: `max_upper` = max over **every active unlensed estimate-anchor row's `est_upper`** — any tier, winning or losing, conflict rows individually *(revised at RV-282 F-2: resolved/conflict-mean uppers under-dominate — two same-tier rows `[0,1]`,`[0,100]` mean to upper 50.5, and the bare anchor would sit below the asserted 100)* — plus transitional unmigrated-facet uppers; tombstoned/superseded rows excluded by resolution; projected costs never feed it (D7's no-feedback invariant preserved). Computed **inside the pipeline** after claim resolution (see §3 order fix, RV-282 F-4). INV-2 restated in the REV: the bare anchor dominates every *active asserted* range — true by construction under row-sourcing; projected costs may exceed or undercut it; a bare item with no evidence keeps the dominating divisor. *(Operator-adjudicated Q2; sourcing revised per RV-282 F-2)* | The bare anchor is a corpus-scale prior, not an authority contest; anchored-tiers-only collapses to `1.0` on a freshly migrated corpus and resurrects the ISS-057 inversion; row-sourcing makes domination a construction, not a hope |
 | E8 | Verbs: `estimate set <id> <LOWER> <UPPER> \| -x N` gains mandatory `--rater human\|agent` (+ `--by/--basis/--lens/--note/--supersedes`) and mints an anchor row per invocation (D10 — no no-op guard; the current "estimate unchanged" no-op message dies); `estimate pin` + `estimate pin --retire` new, D13-gated (interactive-TTY + worker-refused class, mandatory `--by`); `estimate clear` tombstones all active unlensed estimate anchor rows, refuses under an active pin, `--lens` explicit. Supersession scope = identical (subject, domain, lens). No entity TOML is touched by any of them post-flip | Verb-for-verb the SL-220 §4 contract with the estimate payload; one admission path per domain (RV-275 F-5) |
 | E9 | Migration: `scripts/migrate_estimate_facets.py`, the SL-220 D8/§5 contract verbatim (throwaway, stdlib-only, dirty-tree refusal, session-per-run, census, `--check`/`--execute`, doctrine-binary parse gate, per-file strip verification, lossless rollback). Idempotency key = **facet state (path, lower, upper)**; emits `rater = migrated` rows — never pins, though REV-023 called authored estimates "operator pins" (importing them as pins would fabricate constitutional weight, RV-275 F-3). Then the **Q4 deletion** (see E10-adjacent §5): with both domains migrated, rung 5 (both ladders), `EntityFacets.value/estimate`, the facet parse/consumption paths, and `facet_write`'s facet machinery delete; a scan-seam **key-presence tripwire** keeps the `UnmigratedFacet` finding alive for both domains, naming the remedy. *(Operator-adjudicated Q4)* | Fires the trigger SL-220 D6/§3/§4 and REV-024 pinned; never-migrated corpora lose facet contribution (disclosed re-rank) but never rot silently |
-| E10 | Sizing probes recompose: the pool predicate's "zero est-domain active rows" narrows to **zero est-domain *pairwise* rows** (an anchor claim is an assertion, not sizing evidence — without the split, any claim row silently retires probes); "no authored estimate" becomes claim-aware and knob-composed — a probe retires iff an **anchored-tier** resolved claim exists, or (`demote_agent_evidence` unset) **any-tier** resolved claim exists. Probe **target** selection ("median-cost item among items with authored estimates") re-sources to items with anchored-tier resolved claims — forced by the anchored-membership postcondition (only Pin/Human claims enter `anchor_map()`; a migrated-claim target would strand the subject in a gauge component). Fallback state detail updates: "estimate any item to seed sizing" → the remedy names `estimate set --rater human` / `estimate pin` | SL-220 §3's demotion semantics ("a number, not an answer") extended to sizing; the postcondition "queue-driven sizing yields anchored membership or nothing" survives by construction |
+| E10 | Sizing probes recompose: the pool predicate's "zero est-domain active rows" narrows to **zero est-domain *pairwise* rows** (an anchor claim is an assertion, not sizing evidence — without the split, any claim row silently retires probes); "no authored estimate" becomes claim-aware and knob-composed — a probe retires iff an **anchored-tier** resolved claim exists, or (`demote_agent_evidence` unset) **any-tier** resolved claim exists. Probe **target** selection ("median-cost item among items with authored estimates") re-sources to items with anchored-tier resolved claims **intersected with estimate-pair admissibility** (`VALUE_BEARING + RECORD` derivation, SL-219 D3 — a human claim on an inadmissible governance kind is captured but never a target, else the probe's answer command would be refused at capture; RV-282 F-8) — forced by the anchored-membership postcondition (only Pin/Human claims enter `anchor_map()`; a migrated-claim target would strand the subject in a gauge component). Fallback state detail updates: "estimate any item to seed sizing" → the remedy names `estimate set --rater human` / `estimate pin` | SL-220 §3's demotion semantics ("a number, not an answer") extended to sizing; the postcondition "queue-driven sizing yields anchored membership or nothing" survives by construction |
 | E11 | Governance: **this slice's REV against ADR-015** (REV-023's dissolution — §7); approved before the flip phase lands, with SPEC-020's estimate normative amendments in the same gate (D12 mirror). Earlier phases strictly additive and REV-independent. The REV also records REV-024's transitional-rung deletion clause as fired (value rung 5 dies here too) | Canon never stale about what `estimate set` does while the corpus is live |
 | E12 | Rendering: `explain` cost-source block gains claim-tier shapes (§6); JSON `cost_source` is a **disclosed breaking token-set change** (D11-of-SL-220 mirror): `authored` and `authored (via class anchor)` removed; `pin`/`human-claim`/`agent-claim`/`migrated-claim`/`unmigrated-facet`/`anchored (via class anchor)` added; `projected`/`bare-anchor` + gauge flag byte-stable. `show`'s estimate line re-sources from the comparison pipeline (capture-lossless: a record's human estimate renders, annotated scoring-inert); absent evidence ⇒ line omitted. Demotion disclosure widens to estimate claims | Honest tokens; no code path emits `authored` post-flip |
 | E13 | The one formula site **relocates to the estimate leaf**: `estimate::operative_cost(bounds: (f64, f64), skew: f64) -> f64` (EPSILON-floored — the floor is part of the formula). `priority::graph::authored_est_cost` delegates to it (callers migrate mechanically); `comparison::claims`' estimate instantiation consumes it with skew threaded as a pure input (the D8/date-uid pattern — no config reads in the pass) | `comparison` must not import `priority` (ADR-001 — priority already imports comparison; a back edge is a cycle); the leaf is the natural home and the one-site invariant survives the move |
@@ -159,11 +159,17 @@ interval). `ClaimFinding::Conflict`'s `{low, high}` carries the operative
 interval for both domains (value: operative ≡ magnitude, so the shipped
 finding shape is unchanged — zero churn).
 
-**Value instantiation is a behaviour-preserving refactor.** `P = f64`,
-`extract = j.magnitude`, `mean` = the existing multiset mean, `operative` =
-identity, `Params = ()`. Proof obligation: the SL-220 claims/gate battery
-green unchanged (engine gate); `ResolvedClaim.value` callers mechanically
-re-path to `.operative` (≡ `.payload` for value).
+**Value instantiation is a behaviour-preserving refactor — the gate stated
+behaviourally (RV-282 F-3).** `P = f64`, `extract = j.magnitude`, `mean` =
+the existing multiset mean, `operative` = identity, `Params = ()`. The
+`ResolvedClaim.value` field is consumed throughout the existing battery and
+downstream (`claims.rs` tests, `store.rs`, `graph.rs`, `surface.rs`,
+`elicit.rs`), so "tests green unchanged" byte-for-byte is unachievable and
+not claimed. The engine gate is the SL-220 §2/RV-277 PHASE-02 precedent:
+**assertion semantics preserved, zero golden churn, mechanical accessor
+re-path only** (`.value` → `.operative`, enumerated at phase-plan as the
+allowed churn class); any assertion whose *expected values* change fails the
+gate.
 
 **Estimate instantiation.** `P = (f64, f64)`, `extract` =
 `(est_lower, est_upper)`, `mean` = per-field (E4), `operative` =
@@ -223,14 +229,28 @@ window. Gauge never divides (D2): gauge-tier placements remain absent from
 the feed, so a gauge-masked item falls to rung 3/4 if it carries a claim —
 an *asserted* range beats a conventional gauge — else rung 6, as today.
 
-**Bare anchor (E7).** The `bare_anchor` helper's input re-sources: max over
-(a) per-item resolved estimate-claim uppers — the winning tier's resolved
-payload upper, any tier, unlensed partition only (D5: lensed output feeds no
-scoring surface), tombstones/supersession already reduced by resolution;
-(b) transitional unmigrated-facet uppers (dies with rung 5). Projected costs
-never enter (D7). `margin` semantics unchanged; empty-evidence corpus keeps
-the `1.0` fallback. Gauge centring (`ProjectionParams.gauge_center =
-ctx.absent`) inherits the re-source automatically — one computation site.
+**Bare anchor (E7, revised at RV-282 F-2/F-4).** `max_upper` = max over
+(a) **every active unlensed estimate-anchor row's `est_upper`** — any tier,
+losing tiers and individual conflict rows included (domination by
+construction; the winning-tier mean under-dominates), lensed rows excluded
+(D5), tombstoned/superseded rows already reduced by resolution;
+(b) transitional unmigrated-facet uppers (dies with rung 5), threaded in as
+a pure input from the scan shell. Projected costs never enter (D7).
+`margin` unchanged; empty-evidence corpus keeps the `1.0` fallback.
+
+**Pipeline order (F-4) — the current architecture computes the gauge centre
+from scanned facets *before* the comparison pipeline runs**
+(`priority::graph::load_comparison_pipeline` builds `est_cfg` ahead of
+`comparison::load_pipeline`; claims resolve inside `pipeline_from_sessions`),
+so "gauge centring inherits automatically" is false as-is. The fix is a
+deliberate re-siting: the bare anchor is **derived inside the pipeline** —
+`pipeline_from_sessions` resolves estimate claims, folds `max_upper` over
+active anchor-row uppers plus the facet-uppers input, applies `margin`
+(threaded config), uses the result as the est system's
+`ProjectionParams.gauge_center`, and exposes it as `Pipeline.bare_anchor`.
+`CostCtx.absent` consumes the exposed value — the priority shell's own
+facet-based computation deletes. One-site test: `CostCtx.absent ==
+pipeline.bare_anchor == est gauge centre`, pinned.
 
 **Coupling honesty (SL-219 D6, restated for claims).** `prefer-first`
 compiles `v_A·c_B > v_B·c_A` over current costs; no priority compiler exists
@@ -329,23 +349,50 @@ rung 5, git-revert rollback):
   superseding re-import; census `facets_found == imported + already-imported
   + re-imported`, exactly one active migrated row per source facet.
 - Strip removes the `[estimate]` table; `[risk]` and `[tags]` untouched.
+- **`--check` is truly non-mutating (RV-282 F-7)** — a deliberate divergence
+  from the SL-220 template, whose `--check` writes the session file before
+  verifying (its own docstring admits it; combined with the dirty-tree
+  refusal, a check blocks the subsequent `--execute`). Here `--check`
+  computes rows and the census in memory and writes **nothing** (tree-hash
+  verified in §8.10); only `--execute` emits the session, runs the parse
+  gate, reconciles the census, and strips. The value script's defect is
+  recorded, not repaired — it has already been consumed on this corpus.
 
 **The deletion (Q4, fires SL-220's trigger).** A final phase, after both
 censuses hold on this corpus:
 
 - Rung 5 deletes from **both** ladders (`effective_raw_value`'s
   unmigrated-facet rung and §3's).
-- `EntityFacets.value` / `EntityFacets.estimate` and their parse plumbing
-  delete; `src/value.rs` / `src/estimate.rs` keep only what claims consume
-  (`validate` as the §1 validation source; `operative_cost`; display
-  helpers that render resolved claims). `facet_write`'s `[value]`/
+- **Full blast radius (RV-282 F-5)** — the raw facet model is replicated
+  well beyond `EntityFacets`; the deletion inventory is: `catalog/scan.rs`
+  (`read_facets`, `ScannedEntity.value/estimate`), `catalog/hydrate.rs`
+  (`CatalogEntity` copies), `catalog/graph.rs` (`CatalogNode` copies), the
+  per-kind document structs and their render/JSON paths in `backlog.rs`,
+  `governance.rs`, `concept_map.rs`, `lazyspec.rs`, `slice.rs` (the value
+  display side was re-sourced at SL-220 PHASE-06; the estimate display
+  paths re-source here, riding the same shared-helper seam), plus
+  `EntityFacets` itself. `src/value.rs` / `src/estimate.rs` keep only what
+  claims consume (`validate` as the §1 validation source; `operative_cost`;
+  display helpers rendering resolved claims). `facet_write`'s `[value]`/
   `[estimate]` set/clear machinery deletes (risk/tags survive).
+- **Grep-gate, widened (F-5)**: not just `EntityFacets.value|estimate` —
+  no parse or consumption of the `value`/`estimate` top-level TOML keys
+  survives anywhere outside the tripwire: named grep targets
+  `read_facets`, `estimate::parse_optional`, `value::parse_optional`,
+  `.estimate`/`.value` field access on scan/hydrate/graph/document types.
 - **Presence tripwire** (Q4=A): a scan-seam key-presence check — does the
-  entity TOML carry a `value`/`estimate` top-level key — fires the
-  `UnmigratedFacet` finding per domain, remedy-naming ("facet no longer
-  read; import via scripts/migrate_*_facets.py — stdlib-only, any corpus
-  root — or re-assert via `estimate set --rater human`"). The tripwire is a
-  key-existence test, not a facet parse — malformed residue still trips it.
+  entity TOML carry a `value`/`estimate` top-level key — fires per domain,
+  remedy-naming ("facet no longer read; import via
+  scripts/migrate_*_facets.py — stdlib-only, any corpus root — or re-assert
+  via `estimate set --rater human`"). Key-existence test, not a facet
+  parse — malformed residue still trips it. **Finding shape reshapes
+  (RV-282 F-9)**: the shipped `Finding::UnmigratedFacet` carries
+  `{domain, entity, value: f64}` populated from a successful parse — a
+  parse-free tripwire cannot fill the scalar (and an estimate residue has
+  two bounds, a malformed one none). At the deletion phase the variant
+  becomes magnitude-free `{domain, entity}`; render drops the magnitude
+  ("unmigrated `[estimate]` facet present (unread)"); the findings-JSON
+  churn is a disclosed breaking change riding E12's token release.
 - Consequence, disclosed in the REV: a never-migrated corpus re-ranks
   (facet-valued items fall to defaults/bare anchor) with loud findings; the
   scripts are committed and corpus-agnostic, so the remedy is real.
@@ -438,11 +485,22 @@ with SPEC-020's estimate normative amendments **before the flip phase**
    recorded as fired; the presence tripwire + re-rank consequence for
    never-migrated corpora disclosed.
 
-**Spec routing.** SPEC-020 §3 (the estimate facet as authored surface,
-set/clear writer semantics, hydration reader) amended in the flip gate;
+**Spec routing — with a REQ disposition map (RV-282 F-6).** SPEC-020's
+authority over the estimate facet is *structured*, not just prose:
+REQ-269–REQ-277 (the `EstimateFacet` model, optional `[estimate]` parse
+seam, present-table validation, parse→hydrate→catalog preservation,
+present/none display, policy-free graph exposure, kind-agnostic reuse,
+schema forward-compat) and REQ-310 (resolved-bounds display) mandate the
+machinery §5 deletes. The flip-gate amendment therefore carries an explicit
+**disposition per REQ** — each rewritten to its claim-schema equivalent
+(capture validation, resolved-claim display, pipeline exposure) or retired
+with the deletion phase named — so no active REQ contradicts the shipped
+binary at any phase boundary. Prose amendments (facet as authored surface,
+set/clear writer semantics, hydration reader) ride the same gate;
 PRD-014/SPEC-020 claim-schema retention REQs and PRD-011/SPEC-001 descent
-prose remain reconciliation obligations, non-contradicting. RFC-020's Phase 2
-row moves to delivered-by-SL-222 at reconciliation (Phase 3 keeps it open).
+prose remain reconciliation obligations, non-contradicting. RFC-020's
+Phase 2 row moves to delivered-by-SL-222 at reconciliation (Phase 3 keeps
+it open).
 
 ## §8 Verification plan
 
@@ -459,11 +517,13 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
    conflict over ranges, conflicting pins, cross-session concurrency, lens
    isolation non-vacuous both directions, anti-laundering property
    (`anchor_map()` ≡ anchored operative costs), no-compile-consumer, no-op
-   duplicate posture); **E4 linearity property**
-   (`operative(mean) == mean(operatives)` over generated multisets);
-   distinct-payload-same-operative conflict (degenerate interval, fires);
-   value-pass refactor: the entire existing claims battery green
-   **unchanged** (E3 engine gate).
+   duplicate posture); **E4 linearity property** — float-tolerance equality
+   of `affine(mean)` vs `mean(affines)` over generated multisets, plus the
+   floor-composes-after-aggregation rule and a sub-EPSILON corner case
+   asserting determinism (RV-282 F-1); distinct-payload-same-operative
+   conflict (degenerate interval, fires); value-pass refactor: assertion
+   semantics + goldens unchanged, accessor re-path the sole churn class
+   (E3 gate as restated, RV-282 F-3).
 3. **Ladder (graph)**: each rung wins in isolation; adjacent-rung dominance
    (pin > human > projection > agent > migrated > facet > bare anchor);
    facet consulted only at zero claim rows; row-less human estimate claim
@@ -473,10 +533,13 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
    demote-knob: rungs 3–4 retire sizing probes iff unset (both directions);
    anchored-tier estimate conflicts enter reprobe, agent/migrated never.
 4. **Bare anchor (E7)**: migrated-only corpus keeps a dominating divisor
-   (the Q2 disaster pin); claim uppers move `max_upper`, projected costs
-   never do; conflict-mean upper (not max row upper) feeds it; lensed claims
-   don't; facet uppers do until deletion; empty corpus → 1.0; gauge-center
-   inherits the re-source (one-site test).
+   (the Q2 disaster pin); claim-row uppers move `max_upper`, projected costs
+   never do; **every active row upper feeds it — losing-tier and individual
+   conflict rows included** (the RV-282 F-2 domination construction: bare
+   anchor ≥ every active asserted upper + margin, property-tested); lensed
+   claims don't; facet uppers do until deletion; empty corpus → 1.0;
+   one-site pin `CostCtx.absent == pipeline.bare_anchor == est gauge centre`
+   (the F-4 re-siting proof).
 5. **Behaviour preservation**: no-estimate-rows-no-facets corpora bitwise
    identical; SL-219 est-domain suites (compile/project/feed/probe) green
    unchanged through the anchor-source swap where fixtures author no facets;
@@ -484,8 +547,9 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
 6. **Probes (E10)**: pool predicate splits pairwise/anchor (an anchor row
    alone never counts as sizing evidence); retirement × knob matrix;
    interregnum: unmigrated-facet item counts as sized knob-independently
-   (dies with rung 5); target selection over anchored-tier claims only,
-   fallbacks re-pinned, facet-only corpus post-flip ⇒ no targets + state
+   (dies with rung 5); target selection over anchored-tier claims ∩
+   estimate-admissible kinds (inadmissible-kind claim never targeted —
+   RV-282 F-8), fallbacks re-pinned, facet-only corpus post-flip ⇒ no targets + state
    detail naming the claim-era remedy; anchored-membership postcondition
    golden (order-bearing answer against a claim-anchored target ⇒ non-Gauge
    provenance next refresh).
@@ -497,7 +561,10 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
    re-token; JSON `cost_source` full post-flip vocabulary golden (breaking
    change pinned); `show` estimate line (resolved, unit, inert annotation,
    absent-omitted); findings render/JSON parity; demotion disclosure;
-   post-deletion grep-gate (`EntityFacets.value|estimate` consumer-free).
+   post-deletion grep-gate, widened per §5 (no `value`/`estimate` key parse
+   or field consumer outside the tripwire — scan/hydrate/graph/document
+   types enumerated); magnitude-free `UnmigratedFacet` shape + findings-JSON
+   churn golden (RV-282 F-9).
 9. **E2E** (`tests/e2e_estimate_claims.rs`): `estimate set` → claim →
    resolution → `est_cost` → `explain` provenance; pin overrides projection;
    human beats agent; migrated loses to projection; conflict → finding →
@@ -506,8 +573,9 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
 10. **Scripts (operational)**: SL-220 §8.9 checklist re-run for the estimate
     script (fixture + live `--check`, census reconciliation, parse gate,
     strip verification, idempotent re-run, interrupted-state rung-5 shadow);
-    pre-flip baseline + post-flip and post-migration diffs attached at
-    audit (R1 evidence).
+    **`--check` leaves the tree byte-identical** (tree-hash before/after —
+    RV-282 F-7); pre-flip baseline + post-flip and post-migration diffs
+    attached at audit (R1 evidence).
 11. **VA**: RFC-020 T2 holds — the generic pass contains nothing
     domain-specific beyond the payload trait (reviewed against Phase 3's
     declared needs: hierarchy subjects ride admissibility only); REV +
@@ -536,10 +604,31 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
 - **Clarification loop** (2026-07-17, operator): Q1 payload = `{lower,
   upper}` (RFC payload sentence recorded as deviation; provenance rides the
   row; assumptions ride `basis`, structured assumptions + per-claim skew
-  override deferred); Q2 bare anchor = any-tier resolved uppers +
+  override deferred); Q2 bare anchor = any-tier claim sourcing +
   transitional facets (E7); Q3 per-field mean + operative interval (E4); Q4
   deletion honoured with presence tripwire (E9/§5). Skeleton (E1–E12)
   approved 2026-07-17.
+- **Internal adversarial pass** (2026-07-17): interregnum probe semantics
+  pinned; est-domain anchor drought stated without euphemism (§3); NF-001
+  symbol-naming hazard noted (§6).
+- **RV-282, codex (default model), hostile whole-doc + tree-verified**
+  (2026-07-17): 2 blockers, 6 majors, 1 minor — all accepted and integrated
+  in this revision. F-1 (blocker): exact linearity false under the EPSILON
+  floor → lemma restated affine-exact/float-tolerant, floor composes after
+  aggregation, sub-ε corner named (E4). F-2 (blocker): conflict-mean uppers
+  under-dominate → bare anchor sources every active row upper; domination by
+  construction (E7/§3). F-3: "battery green unchanged" impossible under the
+  field rename → gate restated behaviourally (assertions + goldens; accessor
+  re-path enumerated churn). F-4: gauge-centre order impossible in current
+  architecture → bare anchor derived in-pipeline, exposed, one-site test.
+  F-5: deletion blast radius missed replicated facet readers
+  (scan/hydrate/graph/document structs) → inventory + widened grep-gate.
+  F-6: SPEC-020 REQ-269–277/REQ-310 undisposed → explicit per-REQ
+  disposition map in the flip gate. F-7: inherited `--check` mutates →
+  non-mutating check pinned, template divergence recorded. F-8 (minor):
+  probe targets need admissibility intersection → E10 restated. F-9:
+  tripwire cannot fill `UnmigratedFacet{value: f64}` → magnitude-free
+  variant at deletion, JSON churn disclosed.
 
 ## Deferred (named seams, not built)
 

@@ -106,6 +106,38 @@ intent = "design-target"
 selector = ".doctrine/adr/015/**"
 intent = "design-target"
 
+[[selector]]
+selector = "src/catalog/scan.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/hydrate.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/backlog.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/governance.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/concept_map.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/lazyspec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-015"
