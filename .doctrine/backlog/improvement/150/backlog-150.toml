@@ -24,6 +24,3 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "drift"
 target = "install/review-ledger.md: the shipped ledger protocol whose invariants should be inlined or linked from MCP tool descriptions"
 
-[estimate]
-lower = 3.0
-upper = 6.0

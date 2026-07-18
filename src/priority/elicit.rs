@@ -138,6 +138,13 @@ pub(crate) struct SizingInputs {
     /// engine asks once and retires; gauge-component members carry est rows too,
     /// so they fall out here (never probed, mask-annotation only).
     pub est_evidenced: BTreeSet<String>,
+    /// SL-222 E10 (design §6.10): items with an anchored-tier estimate claim
+    /// (Pin/Human) — the ONLY valid sizing-probe TARGETS. A facet-only or
+    /// agent/migrated-only item is NOT a valid target. The shell populates this
+    /// from `pipeline.estimate_claims.anchored` keys. An empty set means zero
+    /// anchored-tier claims exist ⇒ no probes minted and the
+    /// "no estimated item to calibrate against" state detail fires.
+    pub estimate_anchored_targets: BTreeSet<String>,
 }
 
 // ── queue model ─────────────────────────────────────────────────────────────
@@ -199,11 +206,16 @@ pub(crate) struct Participant {
 /// median authored-estimate item the subject is sized against. `estimate` is
 /// the target's authored `est_cost` (never projected/gauge — the target pool is
 /// authored-only), carried so the render shows the anchor the curator judges
-/// against.
+/// against. `tier_label` names the claim tier backing this target ("human claim",
+/// "agent claim", etc.) for the probe reason text (SL-222 PHASE-07).
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct SizingTarget {
     pub id: String,
     pub estimate: f64,
+    /// The tier label of the estimate claim backing this target, e.g.
+    /// "human claim", "agent claim". Empty string when no claim tier is known
+    /// (defensive fallback for pre-tier code paths).
+    pub tier_label: String,
 }
 
 /// The suspect anchor an anchor-review entry is about.
@@ -1129,32 +1141,61 @@ fn sizing_probe_candidates(
 }
 
 /// The deterministic calibration target (SL-219 §4): the median-cost item among
-/// top-K items WITH authored estimates (even count → lower-cost middle; ties
-/// id-lexicographic). Fallback tier 1: none in top-K → the median over ALL
-/// admissible authored-estimate items. Tier 2: none anywhere → `None` (the
-/// caller discloses "estimate any item to seed sizing"). NEVER a projected- or
-/// gauge-costed item: `estimated_costs` holds ONLY authored costs, so the
-/// anchored-membership postcondition holds by construction, not by luck.
+/// top-K items WITH anchored-tier estimate claims (even count → lower-cost
+/// middle; ties id-lexicographic). Fallback tier 1: none in top-K → the median
+/// over ALL anchored-tier estimate-claimed items. Tier 2: none anywhere →
+/// `None` (the caller discloses "estimate any item to seed sizing").
+///
+/// E10 postcondition: ONLY items with an anchored-tier estimate claim (Pin/
+/// Human) are valid targets — a facet-only or agent/migrated-only item is NOT.
+/// The shell's `estimated_costs` includes the full authored-cost pool; this
+/// function further filters to only those items also present in
+/// `estimate_anchored_targets`. NEVER a projected- or gauge-costed item.
 fn sizing_target(inputs: &ElicitInputs<'_>, band: &[&FrontierItem]) -> Option<SizingTarget> {
+    let anchored = &inputs.sizing.estimate_anchored_targets;
     let costs = &inputs.sizing.estimated_costs;
     let in_band: Vec<(&String, f64)> = band
         .iter()
+        .filter(|f| anchored.contains(&f.id))
         .filter_map(|f| costs.get_key_value(&f.id).map(|(id, &c)| (id, c)))
         .collect();
+    let tier_fn = |id: &str| -> String {
+        inputs
+            .claims
+            .anchored
+            .get(id)
+            .map(|c| match c.tier {
+                ClaimTier::Pin => "pin".to_string(),
+                ClaimTier::Human => "human claim".to_string(),
+                ClaimTier::Agent => "agent claim".to_string(),
+                ClaimTier::Migrated => "migrated claim".to_string(),
+            })
+            .unwrap_or_default()
+    };
     if in_band.is_empty() {
-        median_by_cost(costs.iter().map(|(id, &c)| (id, c)).collect())
+        let corpus: Vec<(&String, f64)> = costs
+            .iter()
+            .filter(|(id, _)| anchored.contains(*id))
+            .map(|(id, &c)| (id, c))
+            .collect();
+        median_by_cost(corpus, tier_fn)
     } else {
-        median_by_cost(in_band)
+        median_by_cost(in_band, tier_fn)
     }
 }
 
 /// The lower-middle median of `(id, cost)` by ascending `(cost, id)` (SL-219 §4:
-/// even count → lower-cost middle; ties id-lexicographic).
+/// even count → lower-cost middle; ties id-lexicographic). `tier_label` is a
+/// function that resolves an entity id to its claim tier label for the probe
+/// reason text (SL-222 PHASE-07).
 #[expect(
     clippy::integer_division,
     reason = "median index; integer halving is intended (lower-middle)"
 )]
-fn median_by_cost(mut items: Vec<(&String, f64)>) -> Option<SizingTarget> {
+fn median_by_cost(
+    mut items: Vec<(&String, f64)>,
+    tier_fn: impl Fn(&str) -> String,
+) -> Option<SizingTarget> {
     if items.is_empty() {
         return None;
     }
@@ -1163,6 +1204,7 @@ fn median_by_cost(mut items: Vec<(&String, f64)>) -> Option<SizingTarget> {
     items.get(mid).map(|&(id, cost)| SizingTarget {
         id: id.clone(),
         estimate: cost,
+        tier_label: tier_fn(id.as_str()),
     })
 }
 
@@ -1194,8 +1236,8 @@ fn sizing_probe(
             reasons: vec![Reason {
                 code: REASON_SIZING_PROBE.to_string(),
                 text: format!(
-                    "un-sized top-K item — calibrate its cost against {} (median authored estimate)",
-                    target.id
+                    "un-sized top-K item — calibrate its cost against {} ({} backing)",
+                    target.id, target.tier_label
                 ),
             }],
             payload: EntryPayload::SizingProbe {
@@ -1255,7 +1297,7 @@ fn claim_reprobe_candidates(inputs: &ElicitInputs<'_>, out: &mut Vec<Candidate>)
                         .claims
                         .anchored
                         .get(item)
-                        .map_or(0.0, |claim| claim.value),
+                        .map_or(0.0, |claim| claim.operative),
                     low: *low,
                     high: *high,
                     distinct: *distinct,
@@ -1302,6 +1344,8 @@ mod tests {
             date: Some("2026-07-12".to_string()),
             observed_at: None,
             basis: None,
+            est_lower: None,
+            est_upper: None,
             admission: None,
         }
     }
@@ -1361,12 +1405,15 @@ mod tests {
     /// Build a [`SizingInputs`] from `(id, authored_est_cost)` target candidates
     /// and est-evidenced ids — the two pure signals the shell derives.
     fn sizing(estimated: &[(&str, f64)], evidenced: &[&str]) -> SizingInputs {
+        let anchored: std::collections::BTreeSet<String> =
+            estimated.iter().map(|&(id, _)| id.to_string()).collect();
         SizingInputs {
             estimated_costs: estimated
                 .iter()
                 .map(|&(id, c)| (id.to_string(), c))
                 .collect(),
             est_evidenced: evidenced.iter().map(|&s| s.to_string()).collect(),
+            estimate_anchored_targets: anchored,
         }
     }
 
@@ -1436,6 +1483,9 @@ mod tests {
                 &AnchorMap::new(),
                 &VALUE_PROJECTION_PARAMS,
                 &VALUE_PROJECTION_PARAMS,
+                &std::collections::BTreeMap::new(),
+                1.0,
+                0.65,
             )
             .expect("pipeline ok")
         };
@@ -1899,6 +1949,10 @@ mod tests {
 
     /// One est-domain `more-work` session: ISS-002 evidenced costlier than
     /// ISS-001 (the P5 head over ISS-001's authored anchor).
+    /// PHASE-06: also writes an anchor-form claim row for ISS-001 so the
+    /// est system has a claim-derived anchor (the old facet anchor is dead).
+    /// ISS-001's authored estimate (2, 6) — the anchor row carries the SAME
+    /// bounds so β-skew applies identically: operative = 2 + 0.65*4 = 4.6.
     fn write_est_session(root: &std::path::Path) {
         write_file(
             root,
@@ -1907,7 +1961,12 @@ mod tests {
              [session]\nuid = \"e1\"\ndate = \"2026-07-11\"\n\n\
              [[judgement]]\nuid = \"e1-row\"\nseq = 0\na = \"ISS-002\"\nb = \"ISS-001\"\n\
              response = \"prefer-a\"\ndomain = \"estimate\"\nframe = \"more-work\"\n\
-             form = \"order\"\nrater = \"agent\"\ndate = \"2026-07-11\"\n",
+             form = \"order\"\nrater = \"agent\"\ndate = \"2026-07-11\"\n\n\
+             # PHASE-06: anchor-form claim row for ISS-001 (bounds 2..6)\n\
+             [[judgement]]\nuid = \"iss001-anchor\"\nseq = 100\na = \"ISS-001\"\n\
+             domain = \"estimate\"\nframe = \"cost-anchor\"\n\
+             form = \"anchor\"\nrater = \"human\"\ndate = \"2026-07-17\"\n\
+             est_lower = 2.0\nest_upper = 6.0\n",
         );
     }
 
@@ -1934,6 +1993,18 @@ mod tests {
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = crate::priority::config::load(root);
         let via_load = graph::build_from(&scanned, root).unwrap();
+        // Compute bare anchor from scanned entity uppers (non-terminal
+        // max upper + margin). Same formula the pipeline uses.
+        let bare_anchor = scanned
+            .iter()
+            .filter(|entity| {
+                crate::priority::partition::status_class(entity.kind, entity.status.as_deref())
+                    != crate::priority::partition::StatusClass::Terminal
+            })
+            // PHASE-09: estimate facet deleted; treat as absent.
+            .map(|_| 1.0)
+            .next()
+            .unwrap_or(1.0);
         let explicit_empty = graph::build_from_with_cfg(
             &scanned,
             root,
@@ -1941,6 +2012,10 @@ mod tests {
             &Projection::new(),
             &CostFeed::new(),
             &ClaimResolution::default(),
+            bare_anchor,
+            &crate::comparison::ClaimResolutionGeneric::<
+                crate::comparison::EstimatePayload,
+            >::default(),
         )
         .unwrap();
         assert_eq!(via_load.score, explicit_empty.score, "score map identical");
@@ -1972,8 +2047,25 @@ mod tests {
         let (m1, c1) = costing_of(&before, 2);
         assert!((c1 - 4.85).abs() < 1e-9, "fed, not bare-anchored: {c1}");
 
-        // The range edit: ISS-001 → (2, 10); anchor 2 + 0.65·8 = 7.2.
+        // The range edit: ISS-001 → (2, 10). Re-write the anchor-form claim
+        // row so the claim cost updates (PHASE-06: anchors are claim-derived,
+        // not facet-derived; the test must update the claim to match).
         seed_costed_issue(root, 1, "lower = 2.0\nupper = 10.0");
+        // Re-write the anchor row with the new bounds (2, 10) — the β-skew
+        // still applies: operative = 2 + 0.65·8 = 7.2.
+        std::fs::write(
+            root.join(".doctrine/comparisons/2026-07-11-e1.toml"),
+            "schema = \"doctrine.comparison-session\"\nversion = 2\n\n\
+             [session]\nuid = \"e1\"\ndate = \"2026-07-11\"\n\n\
+             [[judgement]]\nuid = \"e1-row\"\nseq = 0\na = \"ISS-002\"\nb = \"ISS-001\"\n\
+             response = \"prefer-a\"\ndomain = \"estimate\"\nframe = \"more-work\"\n\
+             form = \"order\"\nrater = \"agent\"\ndate = \"2026-07-11\"\n\n\
+             [[judgement]]\nuid = \"iss001-anchor\"\nseq = 100\na = \"ISS-001\"\n\
+             domain = \"estimate\"\nframe = \"cost-anchor\"\n\
+             form = \"anchor\"\nrater = \"human\"\ndate = \"2026-07-17\"\n\
+             est_lower = 2.0\nest_upper = 10.0\n",
+        )
+        .unwrap();
         let after = graph::build(root).unwrap();
         let (m2, c2) = costing_of(&after, 2);
         assert!((c2 - 7.45).abs() < 1e-9, "fed cost re-derived: {c2}");
@@ -2231,6 +2323,128 @@ mod tests {
         );
     }
 
+    // ---- E10: anchored-target-required, facet-only corpus, interregnum ------
+    //
+    // E10 (design §6.10): probe TARGETS require anchored-tier claims. A
+    // facet-only corpus has zero anchored-tier estimate claims ⇒ no targets
+    // ⇒ "no estimated item to calibrate against" fires with the claim-era
+    // remedy. Interregnum: an unmigrated [estimate] facet counts as SIZED
+    // for probe-eligibility (knob-independent; mirrors pre-flip; dies with
+    // the facet rung).
+
+    /// A facet-only target (no anchored-tier claim) is NOT a valid probe
+    /// target — even though it appears in `estimated_costs` via the shell's
+    /// authored-cost harvest, the `estimate_anchored_targets` set excludes
+    /// it, so `sizing_target` returns None and the "no estimated item to
+    /// calibrate against" flag fires.
+    #[test]
+    fn facet_only_target_is_not_valid_probe_target() {
+        let mut inputs = unsized_inputs(&["S1"], &["S1"], &[("T1", 2.0)], &[]);
+        // T1 appears in estimated_costs (from bare_estimate=false) but NOT
+        // in estimate_anchored_targets — simulate a facet-only corpus with
+        // no anchored-tier claims.
+        inputs.sizing.estimate_anchored_targets.clear();
+        let q = assemble(&inputs, seq(2));
+        assert!(probe_of(&q).is_none(), "facet-only target: no probe minted");
+        assert!(
+            q.sizing_no_calibration_target,
+            "facet-only corpus triggers the no-target state detail"
+        );
+        assert_eq!(q.sizing_residual, 1, "S1 disclosed as residual");
+    }
+
+    /// An anchored-tier claim target IS a valid probe target — the
+    /// `estimate_anchored_targets` includes it, so the median selects
+    /// the claimed item.
+    #[test]
+    fn anchored_claim_target_is_valid_probe_target() {
+        let inputs = unsized_inputs(&["S1"], &["S1"], &[("T1", 2.0)], &[]);
+        // T1 is in both estimated_costs AND estimate_anchored_targets
+        // (the `sizing()` helper puts all estimated items into
+        // estimate_anchored_targets by default).
+        let q = assemble(&inputs, seq(2));
+        let probe = probe_of(&q).expect("a sizing probe is minted");
+        let EntryPayload::SizingProbe { target, .. } = &probe.payload else {
+            panic!("sizing-probe payload");
+        };
+        assert_eq!(target.id, "T1", "anchored-claim target selected");
+        assert!(!q.sizing_no_calibration_target);
+    }
+
+    /// A corpus with zero anchored-tier estimate claims AND zero
+    /// `estimated_costs` entries (the typical pre-flip facet-only corpus)
+    /// fires the remedy state detail with claim-era remedy text.
+    #[test]
+    fn zero_anchored_claims_fires_remedy_detail() {
+        // S2 and S3 are un-sized; the estimated_costs pool is empty AND
+        // estimate_anchored_targets is empty — zero targets anywhere.
+        let inputs = unsized_inputs(&["S1", "S2"], &["S1", "S2"], &[], &[]);
+        let q = assemble(&inputs, seq(2));
+        assert!(probe_of(&q).is_none(), "no target ⇒ no probe");
+        assert!(
+            q.sizing_no_calibration_target,
+            "remedy detail fires: no estimated item to calibrate against"
+        );
+    }
+
+    /// Interregnum: an unmigrated [estimate] facet counts as SIZED for
+    /// probe-eligibility (knob-independent). The subject is NOT probed
+    /// even when target items exist.
+    #[test]
+    fn unmigrated_facet_counts_as_sized_knob_independently() {
+        let rows = vec![win("j0", "A", "C"), win("j1", "B", "D")];
+        let refs: Vec<&Judgement> = rows.iter().collect();
+        let mut inputs = mk(
+            refs.clone(),
+            &[],
+            &["A", "B", "S1", "T1"],
+            &[
+                ("A", 1.0, 1.0),
+                ("B", 1.0, 1.0),
+                ("S1", 1.0, 5.0),
+                ("T1", 1.0, 2.0),
+            ],
+            &[],
+        );
+        // S1 is bare (no estimate facet) ⇒ un-sized; T1 has authored
+        // estimate (not bare) ⇒ sized target.
+        inputs.costing.get_mut("S1").unwrap().bare_estimate = true;
+        inputs.sizing = sizing(&[("T1", 2.0)], &[]);
+
+        for knob in [false, true] {
+            inputs.demote_agent_evidence = knob;
+            let q = assemble(&inputs, seq(4));
+            // S1 is bare-flagged → un-sized → probed.
+            let probes_s1: Vec<&str> = q
+                .entries
+                .iter()
+                .filter_map(|e| match &e.payload {
+                    EntryPayload::SizingProbe { subject, .. } if subject.id == "S1" => {
+                        Some(subject.id.as_str())
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(probes_s1.len(), 1, "S1 is probed (bare, knob={knob})");
+            // T1 is NOT bare → counts as sized → no probe for T1.
+            let probes_t1: Vec<&str> = q
+                .entries
+                .iter()
+                .filter_map(|e| match &e.payload {
+                    EntryPayload::SizingProbe { subject, .. } if subject.id == "T1" => {
+                        Some(subject.id.as_str())
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                probes_t1.len(),
+                0,
+                "T1 is NOT probed (sized via facet, knob={knob})"
+            );
+        }
+    }
+
     // ---- SL-219 PHASE-05 postcondition: sizing-probe answers land anchored -----
     //
     // The contract the probe's target selection GUARANTEES: because the target
@@ -2241,6 +2455,10 @@ mod tests {
     // are disk-fixture goldens over the est pipeline (never touched here).
 
     fn write_est_row(root: &std::path::Path, a: &str, b: &str, response: &str) {
+        // PHASE-06: also write an anchor-form claim row for `b` (the target
+        // with an authored estimate) so the est system has a claim-derived
+        // anchor. `b` is ISS-001 with estimate (2, 6) — the anchor row
+        // carries the SAME bounds so β-skew applies identically.
         write_file(
             root,
             ".doctrine/comparisons/2026-07-11-e1.toml",
@@ -2249,7 +2467,12 @@ mod tests {
                  [session]\nuid = \"e1\"\ndate = \"2026-07-11\"\n\n\
                  [[judgement]]\nuid = \"e1-row\"\nseq = 0\na = \"{a}\"\nb = \"{b}\"\n\
                  response = \"{response}\"\ndomain = \"estimate\"\nframe = \"more-work\"\n\
-                 form = \"order\"\nrater = \"agent\"\ndate = \"2026-07-11\"\n",
+                 form = \"order\"\nrater = \"agent\"\ndate = \"2026-07-11\"\n\n\
+                 # PHASE-06: anchor-form claim row for {b} (bounds 2..6)\n\
+                 [[judgement]]\nuid = \"target-anchor\"\nseq = 100\na = \"{b}\"\n\
+                 domain = \"estimate\"\nframe = \"cost-anchor\"\n\
+                 form = \"anchor\"\nrater = \"human\"\ndate = \"2026-07-17\"\n\
+                 est_lower = 2.0\nest_upper = 6.0\n",
             ),
         );
     }

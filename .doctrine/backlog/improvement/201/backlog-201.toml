@@ -32,6 +32,3 @@ target = "IMP-174"
 label = "governed_by"
 target = "ADR-012"
 
-[estimate]
-lower = 2.0
-upper = 4.5

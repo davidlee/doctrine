@@ -501,6 +501,8 @@ mod tests {
             date: Some("2026-07-10".to_string()),
             observed_at: None,
             basis: None,
+            est_lower: None,
+            est_upper: None,
             admission: None,
         }
     }

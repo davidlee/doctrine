@@ -15,12 +15,10 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::entity::{self};
-use crate::estimate::{self, EstimateFacet};
 use crate::integrity;
 use crate::listing;
 use crate::relation::RelationEdge;
 use crate::risk::{self, RiskFacet};
-use crate::value::{self, ValueFacet};
 
 use super::diagnostic::{CatalogDiagnostic, Severity};
 use super::hydrate::CatalogKey;
@@ -120,17 +118,10 @@ pub(crate) struct ScannedEntity {
     /// its title.
     pub(crate) title: String,
     pub(crate) outbound: Vec<RelationEdge>,
-    /// The entity's optional `[estimate]` facet (SL-103 PHASE-01) — read
-    /// kind-agnostically in the scan, with per-facet malformed isolation (D4):
-    /// a malformed PRESENT estimate drops to `None` and pushes an `Error`
-    /// diagnostic, leaving the node and the sibling `value` facet intact. Now
-    /// consumed by the hydrate projection (PHASE-02 — `Catalog::from_scanned`
-    /// copies it onto each `CatalogEntity`).
-    pub(crate) estimate: Option<EstimateFacet>,
-    /// The entity's optional `[value]` facet (SL-103 PHASE-01) — read with the
-    /// same kind-agnostic, per-facet isolation as [`Self::estimate`]. Now
-    /// consumed by the hydrate projection (PHASE-02).
-    pub(crate) value: Option<ValueFacet>,
+    /// NOTE: `[estimate]`/`[value]` facets are no longer parsed or consumed
+    /// (deleted at SL-222 PHASE-09). A key-presence tripwire in
+    /// [`check_facet_residue`] detects any extant top-level `value`/`estimate`
+    /// key on the entity and flags it as unmigrated debt.
     /// The entity's optional `[facet]` (risk) table (SL-133 PHASE-03) — read
     /// with the same kind-agnostic, per-facet isolation as [`Self::estimate`]
     /// and [`Self::value`]. A malformed `[facet]` drops only `risk` to `None`
@@ -211,7 +202,8 @@ pub(crate) fn scan_entities(
                     continue;
                 }
             };
-            let (estimate, value, risk, tags) = read_facets(root, kref, id, diagnostics);
+            let (risk, tags) = read_facets(root, kref, id, diagnostics);
+            check_facet_residue(root, kref, id, diagnostics);
             let body = if mode.include_bodies {
                 read_body(root, kref.kind, id, diagnostics)
             } else {
@@ -223,8 +215,6 @@ pub(crate) fn scan_entities(
                 status,
                 title,
                 outbound,
-                estimate,
-                value,
                 risk,
                 tags,
                 body,
@@ -234,13 +224,11 @@ pub(crate) fn scan_entities(
     Ok(out)
 }
 
-/// Read the optional `[estimate]` / `[value]` / `[facet]` (risk) facets and
-/// the `tags` array off one entity's toml, kind-agnostically, with PER-FACET
-/// malformed isolation (SL-103 PHASE-01 / SL-133 PHASE-03, design §5.1 / D4).
-/// Each facet parses independently: a malformed PRESENT facet pushes an `Error`
-/// diagnostic and drops THAT facet to `None` — no bound coercion, no silent
-/// repair — leaving the node and the sibling facets intact. Tags are lenient:
-/// absent or non-array → empty vec; already normalized at rest (SL-136).
+/// Read the `[facet]` (risk) table and the `tags` array off one entity's toml,
+/// kind-agnostically. The `[estimate]`/`[value]` facets are no longer parsed or
+/// consumed (deleted at SL-222 PHASE-09); their presence is detected by the
+/// key-presence tripwire [`check_facet_residue`]. Tags are lenient: absent or
+/// non-array → empty vec; already normalized at rest (SL-136).
 ///
 /// The status read ([`status_and_title_for`]) has already validated this file
 /// parses; a vanished/garbled file HERE is a concurrent-edit window — the status
@@ -251,18 +239,13 @@ fn read_facets(
     kref: &integrity::KindRef,
     id: u32,
     diagnostics: &mut Vec<CatalogDiagnostic>,
-) -> (
-    Option<EstimateFacet>,
-    Option<ValueFacet>,
-    Option<RiskFacet>,
-    Vec<String>,
-) {
+) -> (Option<RiskFacet>, Vec<String>) {
     let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
     let Ok(text) = std::fs::read_to_string(&path) else {
-        return (None, None, None, Vec::new());
+        return (None, Vec::new());
     };
     let Ok(table) = text.parse::<toml::Table>() else {
-        return (None, None, None, Vec::new());
+        return (None, Vec::new());
     };
     let tags: Vec<String> = table
         .get("tags")
@@ -273,24 +256,6 @@ fn read_facets(
                 .collect()
         })
         .unwrap_or_default();
-    let estimate = parse_facet(
-        "estimate",
-        table.get("estimate"),
-        estimate::parse_optional,
-        root,
-        kref,
-        id,
-        diagnostics,
-    );
-    let value = parse_facet(
-        "value",
-        table.get("value"),
-        value::parse_optional,
-        root,
-        kref,
-        id,
-        diagnostics,
-    );
     let risk = parse_facet(
         "facet",
         table.get("facet"),
@@ -300,7 +265,56 @@ fn read_facets(
         id,
         diagnostics,
     );
-    (estimate, value, risk, tags)
+    (risk, tags)
+}
+
+/// SL-222 PHASE-09: parse-free key-presence tripwire for the deleted
+/// `[estimate]`/`[value]` facets. Checks whether the entity TOML carries a
+/// top-level `value` or `estimate` key (any TOML value type, not necessarily a
+/// table). If either key exists, emits a magnitude-free
+/// [`crate::priority::findings::Finding::UnmigratedFacet`]-compatible
+/// diagnostic with a remedy that names the way back. Malformed residue still
+/// trips — a non-table key is caught the same way.
+///
+/// Self-contained parse-free key-presence tripwire: reads the entity TOML,
+/// parses it once, and checks for `value`/`estimate` top-level keys. No facet
+/// parse — just key existence. Malformed residue still trips (a non-table key
+/// is caught the same way).
+fn check_facet_residue(
+    root: &Path,
+    kref: &integrity::KindRef,
+    id: u32,
+    diagnostics: &mut Vec<CatalogDiagnostic>,
+) {
+    let path = entity::id_path(root, kref.kind, id, entity::Ext::Toml);
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let Ok(table) = text.parse::<toml::Table>() else {
+        return;
+    };
+    let file = root.join(kref.kind.dir).join(format!("{id:03}"));
+    let key = CatalogKey::Numbered(EntityKey {
+        prefix: kref.kind.prefix,
+        id,
+    });
+
+    for (field, remedy_domain) in [("value", "value"), ("estimate", "estimate")] {
+        if table.get(field).is_some() {
+            diagnostics.push(CatalogDiagnostic {
+                file: file.clone(),
+                entity_key: Some(key.clone()),
+                field: Some(field.to_string()),
+                message: format!(
+                    "unmigrated `[{field}]` facet present (unread) — facet no longer read; \
+                     import via scripts/migrate_{remedy_domain}_facets.py \
+                     (stdlib-only, any corpus root) or re-assert via \
+                     `{remedy_domain} set --rater human`"
+                ),
+                severity: Severity::Warning,
+            });
+        }
+    }
 }
 
 /// Read the entity's body `.md` file. Missing file → `None`
@@ -1116,22 +1130,29 @@ mod tests {
 
         let sl001 = &scanned[0];
         assert_eq!(sl001.key.canonical(), "SL-001");
-        assert_eq!(
-            sl001.estimate,
-            Some(EstimateFacet {
-                lower: 2.0,
-                upper: 8.0
-            })
+        // PHASE-09: estimate/value facets are no longer parsed onto ScannedEntity.
+        // The key-presence tripwire emits diagnostics instead.
+        // Estimate/value keys ARE present on SL-001's TOML, so diagnostics fire.
+        let est_diags: Vec<_> = diags
+            .iter()
+            .filter(|d| d.field.as_deref() == Some("estimate"))
+            .collect();
+        let val_diags: Vec<_> = diags
+            .iter()
+            .filter(|d| d.field.as_deref() == Some("value"))
+            .collect();
+        assert!(
+            !est_diags.is_empty(),
+            "estimate residue should fire diagnostic"
         );
-        assert_eq!(sl001.value, Some(ValueFacet { value: 5.0 }));
+        assert!(
+            !val_diags.is_empty(),
+            "value residue should fire diagnostic"
+        );
 
         let sl002 = &scanned[1];
         assert_eq!(sl002.key.canonical(), "SL-002");
-        assert!(sl002.estimate.is_none());
-        assert!(sl002.value.is_none());
-
-        // A non-faceted entity raises no facet diagnostic.
-        assert!(diags.is_empty(), "no diagnostics expected: {diags:?}");
+        // SL-002 has no [estimate] or [value] keys, so no facet diagnostics for it.
     }
 
     /// VT-2: per-facet isolation — a malformed `[estimate]` (upper < lower) next
@@ -1151,31 +1172,21 @@ mod tests {
         let mut diags = Vec::new();
         let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
-        // The node survives, with the sibling facet intact.
+        // The node survives; estimate/value facets are no longer parsed onto
+        // ScannedEntity. The malformed estimate key still fires a residue
+        // diagnostic (key presence tripwire) regardless of malformation.
         assert_eq!(scanned.len(), 1);
         let adr = &scanned[0];
         assert_eq!(adr.key.canonical(), "ADR-001");
-        assert!(adr.estimate.is_none(), "malformed estimate drops to None");
-        assert_eq!(
-            adr.value,
-            Some(ValueFacet { value: 7.0 }),
-            "sibling value facet stays intact"
-        );
+        assert!(adr.risk.is_none(), "malformed risk facet drops to None");
 
-        // Exactly one Error diagnostic, for the estimate field, verbatim message.
-        assert_eq!(diags.len(), 1);
-        let d = &diags[0];
-        assert_eq!(d.severity, Severity::Error);
-        assert_eq!(d.field.as_deref(), Some("estimate"));
-        assert_eq!(
-            d.entity_key.as_ref().map(|k| k.canonical()),
-            Some("ADR-001".to_string())
-        );
-        assert!(
-            d.message.contains("upper must be >= lower"),
-            "leaf message verbatim: {}",
-            d.message
-        );
+        // PHASE-09: the estimate and value keys are BOTH present on the TOML,
+        // so BOTH fire residue diagnostics. The malformed estimate content does
+        // not prevent key detection (tripwire checks key existence only).
+        let est_residue = diags.iter().any(|d| d.field.as_deref() == Some("estimate"));
+        let val_residue = diags.iter().any(|d| d.field.as_deref() == Some("value"));
+        assert!(est_residue, "estimate key fires residue diagnostic");
+        assert!(val_residue, "value key fires residue diagnostic");
     }
 
     /// VT-3: a non-table facet value (`estimate = 7`) is fail-loud, NOT
@@ -1191,14 +1202,10 @@ mod tests {
         let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
         assert_eq!(scanned.len(), 1);
-        assert!(scanned[0].estimate.is_none());
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].field.as_deref(), Some("estimate"));
-        assert!(
-            diags[0].message.contains("must be a table"),
-            "{}",
-            diags[0].message
-        );
+        // PHASE-09: estimate field no longer parsed; key presence detected
+        // via tripwire diagnostics.
+        let est_residue = diags.iter().any(|d| d.field.as_deref() == Some("estimate"));
+        assert!(est_residue, "estimate key fires residue diagnostic");
     }
 
     /// VT-4: kind-agnostic read — an `[estimate]` authored on an ADR (a NON-slice
@@ -1218,21 +1225,12 @@ mod tests {
         write(root, ".doctrine/adr/001/adr-001.md", "body\n");
 
         let mut diags = Vec::new();
-        let scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
+        let _scanned = scan_entities(root, &mut diags, ScanMode::default()).unwrap();
 
-        let adr = scanned
-            .iter()
-            .find(|e| e.key.canonical() == "ADR-001")
-            .expect("ADR-001 scanned");
-        assert_eq!(
-            adr.estimate,
-            Some(EstimateFacet {
-                lower: 1.0,
-                upper: 3.0
-            }),
-            "estimate read off a non-slice kind"
-        );
-        assert!(diags.is_empty(), "no diagnostics: {diags:?}");
+        // PHASE-09: estimate no longer parsed onto ScannedEntity.
+        // Key-presence tripwire fires a diagnostic.
+        let est_residue = diags.iter().any(|d| d.field.as_deref() == Some("estimate"));
+        assert!(est_residue, "estimate key fires residue diagnostic");
     }
 
     /// VT-1b (SL-133 PHASE-03): per-facet isolation — a malformed `[facet]`
@@ -1258,25 +1256,18 @@ mod tests {
         let adr = &scanned[0];
         assert_eq!(adr.key.canonical(), "ADR-001");
         assert!(adr.risk.is_none(), "malformed risk facet drops to None");
-        assert_eq!(
-            adr.estimate,
-            Some(EstimateFacet {
-                lower: 2.0,
-                upper: 8.0
-            }),
-            "sibling estimate facet stays intact"
-        );
-        assert_eq!(
-            adr.value,
-            Some(ValueFacet { value: 5.0 }),
-            "sibling value facet stays intact"
-        );
 
-        // Exactly one Error diagnostic, for the facet field, verbatim message.
-        assert_eq!(diags.len(), 1);
-        let d = &diags[0];
+        // PHASE-09: estimate/value facets are no longer parsed onto ScannedEntity.
+        // The keys ARE present on the TOML, so they fire residue diagnostics.
+        // Exactly one Error for the malformed risk facet, plus residue diagnostics
+        // for estimate and value keys.
+        let risk_errs: Vec<_> = diags
+            .iter()
+            .filter(|d| d.field.as_deref() == Some("facet"))
+            .collect();
+        assert_eq!(risk_errs.len(), 1, "exactly one risk error");
+        let d = &risk_errs[0];
         assert_eq!(d.severity, Severity::Error);
-        assert_eq!(d.field.as_deref(), Some("facet"));
         assert_eq!(
             d.entity_key.as_ref().map(|k| k.canonical()),
             Some("ADR-001".to_string())

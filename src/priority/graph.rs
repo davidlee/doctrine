@@ -90,41 +90,57 @@ pub(crate) struct CostCtx {
     pub(crate) absent: f64,
 }
 
-/// The ONE β-skew formula site (SL-219 design §2 "one formula site"): the
-/// operative scalar cost of an AUTHORED estimate — `lower + β·(upper − lower)`,
-/// floored to `EPSILON` (the D11 positivity axiom: every anchor > 0). Shared by
-/// the scoring ladder's authored branch ([`est_cost`]) and the est-domain
-/// anchor builder ([`comparison_est_anchor_map`]) — extracted so the two can
-/// never drift (a test pins builder output == the authored branch).
-pub(crate) fn authored_est_cost(bounds: (f64, f64), ec: &config::EstimateCost) -> f64 {
-    let (lower, upper) = bounds;
-    floor_eps(lower + ec.skew * (upper - lower))
-}
-
-/// Compute the effective cost of an estimate — the SL-219 three-tier ladder
-/// (design D2/D6, source precedence only, no numeric-dominance claim), the
-/// SINGLE consumption seam for the cost feed:
-/// 1. **Authored** bounds present: [`authored_est_cost`] (one formula site,
-///    SL-219 §2) — an item with its own facet never consults the feed.
-/// 2. Else **cost-feed lookup**: the projected cost, EPSILON-floored HERE
-///    (the D11 positivity belt at the consumption branch).
-/// 3. Else the **bare anchor** `ctx.absent` (≥ 1.0, already floored) —
-///    computed from authored uppers ONLY (D7); a gauge-masked item is absent
-///    from the feed and falls through here (gauge never divides, D2).
+/// Compute the effective cost of an estimate — the SL-222 six-rung ladder
+/// (design §3/§4, E5/E6; first hit wins):
+///
+/// r1. **Anchored claim** — `estimate_claims.anchored` (Pin/Human tiers,
+///     conflict means included): the resolved claim's operative cost.
+/// r2. **Cost projection** — cost-feed lookup (non-Gauge provenances only;
+///     EPSILON floor at the branch).
+/// r3. **Agent-tier prior** — `estimate_claims.priors` with tier == Agent.
+/// r4. **Migrated-tier prior** — tier == Migrated.
+/// r5. **Unmigrated `[estimate]` facet** (transitional) — consulted only when
+///     zero estimate claim rows exist (r1–r4 all missed); fires the
+/// [`UnmigratedFacet`] finding regardless.
+/// r6. **Bare anchor** — `ctx.absent`.
+///
+/// Gauge never divides: a gauge-masked item with a claim resolves at r3/r4
+/// (asserted beats gauge), else r6.
 fn est_cost(
-    bounds: Option<(f64, f64)>,
     key: EntityKey,
     cost_feed: &comparison::CostFeed,
     ctx: CostCtx,
-    ec: &config::EstimateCost,
+    _ec: &config::EstimateCost,
+    _f: &EntityFacets,
+    estimate_claims: &comparison::ClaimResolutionGeneric<comparison::EstimatePayload>,
 ) -> f64 {
-    match bounds {
-        Some(b) => authored_est_cost(b, ec),
-        None => match cost_feed.get(&key.canonical()) {
-            Some(&projected) => floor_eps(projected),
-            None => ctx.absent,
-        },
+    let canonical = key.canonical();
+    // r1: Anchored claim — Pin/Human tier resolved cost.
+    if let Some(claim) = estimate_claims.anchored.get(&canonical) {
+        return claim.operative;
     }
+    // r2: Cost projection (non-Gauge only).
+    if let Some(&projected) = cost_feed.get(&canonical) {
+        return floor_eps(projected);
+    }
+    // r3: Agent-tier prior.
+    // r3/r4: Agent/Migrated priors (the claims pass resolves tier contest).
+    if let Some(claim) = estimate_claims.priors.get(&canonical) {
+        return claim.operative;
+    }
+    // r5: (deleted at PHASE-09 — unmigrated [estimate] facet no longer parsed).
+    // r6: Bare anchor.
+    ctx.absent
+}
+
+/// One-liner: authored estimate facet operative cost (hoisted for the r5
+/// unmigrated-facet fallback). Retains the old name for minimal diff.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "SL-222 PHASE-09: used in tests")
+)]
+pub(crate) fn authored_est_cost(bounds: (f64, f64), ec: &config::EstimateCost) -> f64 {
+    crate::estimate::operative_cost(bounds, ec.skew)
 }
 
 /// Default raw value for a value-bearing entity that authors no `[value]` facet
@@ -164,7 +180,7 @@ pub(crate) const DEFAULT_VALUE: f64 = 1.0;
 /// the burndown accessor identically (governed policy, RV-191 F-1).
 fn effective_raw_value(
     kind: &entity::Kind,
-    f: &EntityFacets,
+    _f: &EntityFacets,
     key: EntityKey,
     projected: &ValueProjection,
     claims: &comparison::ClaimResolution,
@@ -176,12 +192,11 @@ fn effective_raw_value(
         if !value_bearing {
             return None;
         }
-        map.get(&canonical).map(|c| c.value)
+        map.get(&canonical).map(|c| c.operative)
     };
     claim_rung(&claims.anchored)
         .or_else(|| projected.get(&canonical).map(|&(v, _)| v))
         .or_else(|| claim_rung(&claims.priors))
-        .or_else(|| f.value.as_ref().map(|v| v.value))
         .or_else(|| value_bearing.then_some(DEFAULT_VALUE))
 }
 
@@ -209,6 +224,7 @@ fn base_score(
     cost_feed: &comparison::CostFeed,
     cfg: &config::PriorityConfig,
     ctx: CostCtx,
+    estimate_claims: &comparison::ClaimResolutionGeneric<comparison::EstimatePayload>,
 ) -> BaseScore {
     // value_dim = coefficients.value × value × kind_weight(kind) × tag_term / est_cost
     // tag_term = (1.0 + Σ(coeff - 1.0)).max(0.0): identity base for absent tags,
@@ -219,13 +235,7 @@ fn base_score(
     let value_dim = {
         let raw = match effective_raw_value(kind, f, key, projected, claims) {
             Some(v) => {
-                let cost = est_cost(
-                    f.estimate.as_ref().map(|e| (e.lower, e.upper)),
-                    key,
-                    cost_feed,
-                    ctx,
-                    &cfg.estimate,
-                );
+                let cost = est_cost(key, cost_feed, ctx, &cfg.estimate, f, estimate_claims);
                 let kw = cfg.kind_weight(kind.prefix);
                 cfg.coefficients.value * v * kw * tag_term / cost
             }
@@ -287,16 +297,23 @@ pub(crate) struct PriorityGraph {
     pub(crate) cost_ctx: CostCtx,
     /// The build-time cost feed (SL-219 PHASE-04), retained for the same reason
     /// as `cost_ctx`: [`PriorityGraph::item_costing`] must resolve the SAME
-    /// three-tier `est_cost` ladder the base pre-pass used — projected-cost
+    /// six-rung `est_cost` ladder the base pre-pass used — projected-cost
     /// movement reaches elicit eff-weights through this one seam.
     pub(crate) cost_feed: comparison::CostFeed,
+    /// The build-time estimate claim resolution (SL-222 E7), retained so
+    /// [`PriorityGraph::item_costing`] reproduces the SAME ladder resolution
+    /// the base pre-pass used.
+    pub(crate) estimate_claims: comparison::ClaimResolutionGeneric<comparison::EstimatePayload>,
 }
 
 impl PriorityGraph {
     /// Per-item costing for the elicit shell (SL-217 PHASE-03): the value-free
     /// multiplier `m = coeff.value × kind_weight × tag_term` (design D6), the
-    /// β-skewed `est_cost` (reusing the build-time `cost_ctx` bare-item anchor),
-    /// and the bare-estimate flag (no estimate facet). `None` for an unknown key.
+    /// β-skewed `est_cost` (reusing the build-time `cost_ctx` bare-item anchor)
+    /// through the six-rung ladder (design E5/E6), and the bare-estimate flag
+    /// (no anchored-tier estimate claim — SL-222 PHASE-09: the facet is gone;
+    /// Pin/Human claim rows are the "authored estimate"). `None` for an
+    /// unknown key.
     /// Additive READ accessor — no change to `base_score`/compile/project
     /// (behaviour-preservation, VA-1).
     pub(crate) fn item_costing(
@@ -308,9 +325,16 @@ impl PriorityGraph {
         let f = &attr.facets;
         let multiplier =
             cfg.coefficients.value * cfg.kind_weight(attr.kind.prefix) * tag_term(f, cfg);
-        let bounds = f.estimate.as_ref().map(|e| (e.lower, e.upper));
-        let est = est_cost(bounds, *key, &self.cost_feed, self.cost_ctx, &cfg.estimate);
-        Some((multiplier, est, f.estimate.is_none()))
+        let est = est_cost(
+            *key,
+            &self.cost_feed,
+            self.cost_ctx,
+            &cfg.estimate,
+            f,
+            &self.estimate_claims,
+        );
+        let bare = !self.estimate_claims.anchored.contains_key(&key.canonical());
+        Some((multiplier, est, bare))
     }
 }
 
@@ -418,6 +442,8 @@ pub(crate) fn build_from(
         &pipeline.value.projection,
         &cost_feed,
         &pipeline.value_claims,
+        pipeline.bare_anchor,
+        &pipeline.estimate_claims,
     )
 }
 
@@ -437,48 +463,41 @@ pub(crate) fn load_comparison_pipeline(
     // SL-220 PHASE-05: no facet→AnchorMap builder — the value system's compile
     // anchors are claim-derived inside the pipeline (`ClaimResolution::
     // anchor_map()`, D4/D12); facets stopped anchoring/shaping projection.
+    // SL-222 PHASE-06: the est-domain anchor source is ALSO claim-derived
+    // (`Pipeline.estimate_claims.anchor_map()`) — facets stop anchoring cost
+    // projection immediately and permanently. The `est_anchors` parameter is
+    // now an empty map; the pipeline derives anchors from estimate claims.
     let statuses = comparison_status_map(scanned);
-    let est_anchors = comparison_est_anchor_map(scanned, cfg);
-    // Per-domain projection params (SL-219 D8). Value: the shipped
-    // `VALUE_PROJECTION_PARAMS` (its step still config-overridable via the
-    // SL-213 `[priority.gauge] step` seam — default IS the const's step).
-    // Estimate: `EST_GAUGE_STEP` (config: `[priority.estimate] gauge_step`)
-    // with the gauge CENTERED on the corpus's own bare-item cost anchor
-    // (D7/D8 — anchor-free est components render around the engine's
-    // absent-cost stance, not a new arbitrary constant).
+
+    // facet-uppers deleted at PHASE-09 (the [estimate] facet is no longer
+    // parsed). The pipeline receives an empty map; bare-anchor computation
+    // uses the `max_estimate` fold from cost claims only.
+    let facet_uppers: BTreeMap<String, f64> = BTreeMap::new();
+
+    let margin = cfg.estimate.margin;
+    let estimate_skew = cfg.estimate.skew;
+
+    // Per-domain projection params (SL-219 D8).
     let value_cfg = ProjectionCfg {
         gauge_step: cfg.gauge.step,
         ..comparison::VALUE_PROJECTION_PARAMS
     };
-    let est_cfg = ProjectionCfg {
-        gauge_step: cfg.estimate.gauge_step,
-        gauge_center: bare_cost_anchor(scanned, &cfg.estimate),
-    };
-    comparison::load_pipeline(root, &statuses, &est_anchors, &value_cfg, &est_cfg)
-}
-
-/// The bare-item cost anchor (SL-172 §5.4 anchor fold): the maximum `upper`
-/// among NON-TERMINAL items' AUTHORED estimates + `margin`, `1.0` when no
-/// estimate exists (the empty-corpus fallback). Authored uppers ONLY — the
-/// projected tier never moves it (SL-219 D7: no feedback loop through the
-/// default). Terminals (closed/done) must not inflate bare-item cost. Pure
-/// helper shared by [`build_from_with_cfg`]'s `CostCtx` and the est-domain
-/// `gauge_center` in [`load_comparison_pipeline`]; it lives here (not in
-/// `comparison::store`) because it reads `partition::status_class` +
-/// `ScannedEntity`, both above `comparison` in the ADR-001 layering — the
-/// same home rationale as [`comparison_status_map`].
-fn bare_cost_anchor(scanned: &[relation_graph::ScannedEntity], ec: &config::EstimateCost) -> f64 {
-    let max_upper = scanned
-        .iter()
-        .filter(|entity| {
-            partition::status_class(entity.kind, entity.status.as_deref()) != StatusClass::Terminal
-        })
-        .filter_map(|entity| entity.estimate.as_ref().map(|e| e.upper))
-        .max_by(f64::total_cmp);
-    match max_upper {
-        Some(mu) => mu + ec.margin,
-        None => 1.0,
-    }
+    // Est anchors are empty — the pipeline derives them from `estimate_claims`
+    // (PHASE-06 flip: facets no longer anchor the est system).
+    let empty_est_anchors = AnchorMap::new();
+    comparison::load_pipeline(
+        root,
+        &statuses,
+        &empty_est_anchors,
+        &value_cfg,
+        &comparison::ProjectionCfg {
+            gauge_step: cfg.estimate.gauge_step,
+            gauge_center: 1.0, // placeholder — pipeline overrides it
+        },
+        &facet_uppers,
+        margin,
+        estimate_skew,
+    )
 }
 
 /// Convenience one-call wrapper over [`load_comparison_pipeline`] for callers
@@ -536,37 +555,6 @@ fn comparison_status_map(scanned: &[relation_graph::ScannedEntity]) -> StatusMap
     map
 }
 
-/// Build the est-domain [`AnchorMap`] from the raw entity scan (SL-219 design
-/// §2 anchor seam): each ADMISSIBLE entity's (per [`comparison::
-/// admissible_estimate_pair`] kinds — no parallel list) authored `[estimate]`
-/// facet, β-resolved through [`authored_est_cost`] — the operative scalar
-/// cost, the ONE formula site (D1). Estimated RECORDS anchor too (anchor mass
-/// through chains, though nothing scores a record). The map is the CANDIDATE
-/// set; row-gating (an anchor enters the est system only when an est-domain
-/// row touches its item) happens at compile-input selection inside
-/// `comparison::store` (design §1). Same layering rationale as
-/// [`comparison_status_map`] — home stated there (needs `config` +
-/// `ScannedEntity`, both above `comparison`).
-fn comparison_est_anchor_map(
-    scanned: &[relation_graph::ScannedEntity],
-    cfg: &config::PriorityConfig,
-) -> AnchorMap {
-    scanned
-        .iter()
-        .filter(|entity| {
-            comparison::admissible_estimate_pair(entity.kind.prefix, entity.kind.prefix).is_ok()
-        })
-        .filter_map(|entity| {
-            entity.estimate.as_ref().map(|e| {
-                (
-                    entity.key.canonical(),
-                    authored_est_cost((e.lower, e.upper), &cfg.estimate),
-                )
-            })
-        })
-        .collect()
-}
-
 /// Build the priority graph from a PRE-SCANNED entity slice with an INJECTED
 /// [`config::PriorityConfig`] (the SL-194 PHASE-01 rebuild seam — the body of
 /// [`build_from`], extracted so β perturbation can sweep `estimate.skew` over the same
@@ -607,6 +595,10 @@ fn comparison_est_anchor_map(
 ///
 /// Propagates a read error, or an internal cordage rejection of well-formed adapter
 /// input (an adapter bug, not a recoverable condition).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "PHASE-06 threading: estimate_claims added as 9th param"
+)]
 pub(crate) fn build_from_with_cfg(
     scanned: &[relation_graph::ScannedEntity],
     root: &std::path::Path,
@@ -614,11 +606,14 @@ pub(crate) fn build_from_with_cfg(
     projected: &ValueProjection,
     cost_feed: &comparison::CostFeed,
     claims: &comparison::ClaimResolution,
+    bare_anchor: f64,
+    estimate_claims: &comparison::ClaimResolutionGeneric<comparison::EstimatePayload>,
 ) -> anyhow::Result<PriorityGraph> {
-    // 2b. Anchor fold (SL-172 §5.4): the shared [`bare_cost_anchor`] helper —
-    //      max upper among non-terminal estimated items + margin, else 1.0.
+    // 2b. Anchor fold (SL-172 §5.4): the bare-item cost anchor comes from
+    //     the pipeline (`Pipeline.bare_anchor`), not a direct facet scan
+    //     — PHASE-04 re-sited it into the pipeline (design §3 E7).
     let ctx = CostCtx {
-        absent: bare_cost_anchor(scanned, &cfg.estimate),
+        absent: bare_anchor,
     };
 
     // 2c. Base pre-pass — compute `base_score` per node from its OWN facets + config +
@@ -630,8 +625,6 @@ pub(crate) fn build_from_with_cfg(
         .map(|entity| {
             let base = base_score(
                 &EntityFacets {
-                    estimate: entity.estimate.clone(),
-                    value: entity.value.clone(),
                     risk: entity.risk.clone(),
                     tags: entity.tags.clone(),
                 },
@@ -642,6 +635,7 @@ pub(crate) fn build_from_with_cfg(
                 cost_feed,
                 cfg,
                 ctx,
+                estimate_claims,
             );
             (entity.key, base)
         })
@@ -717,8 +711,6 @@ pub(crate) fn build_from_with_cfg(
                 title: entity.title.clone(),
                 base_score: base,
                 facets: EntityFacets {
-                    estimate: entity.estimate.clone(),
-                    value: entity.value.clone(),
                     risk: entity.risk.clone(),
                     tags: entity.tags.clone(),
                 },
@@ -808,6 +800,7 @@ pub(crate) fn build_from_with_cfg(
         seq_overlay,
         cost_ctx: ctx,
         cost_feed: cost_feed.clone(),
+        estimate_claims: estimate_claims.clone(),
     })
 }
 
@@ -1484,6 +1477,9 @@ mod tests {
              [[relation]]\nlabel = \"references\"\nrole = \"implements\"\ntarget = \"REQ-005\"\n",
         );
         write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        // SL-222 PHASE-09: claim-era anchors for the slice.
+        write_value_anchor(root, "fv-sl1", "SL-001", 25.0);
+        write_est_anchor(root, "fe-sl1", "SL-001", 0.0, 10.0);
         seed_issue_with_facets(root, 1, "", "lower = 0.0\nupper = 10.0", "value = 25.0", "");
         seed_issue(root, 2, "open", "", "");
         seed_requirement(root, 5);
@@ -1620,6 +1616,43 @@ mod tests {
             &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.md"),
             "b\n",
         );
+        // SL-222 PHASE-09: also write claim-era anchors so the pipeline reads
+        // the intended values (facets no longer consumed). Use unique prefix per
+        // domain to avoid uid collision: "fe{id}" for est, "fv{id}" for value.
+        let item = format!("ISS-{id:03}");
+        if !estimate.is_empty() {
+            // Parse "lower = X\nupper = Y" from the facet string
+            let (l, u) = parse_estimate_pair(estimate);
+            write_est_anchor(root, &format!("fe{id}"), &item, l, u);
+        }
+        if !value.is_empty() {
+            let v = parse_value_facet(value);
+            write_value_anchor(root, &format!("fv{id}"), &item, v);
+        }
+    }
+
+    /// Parse an estimate facet string "lower = X\nupper = Y" into (f64, f64).
+    fn parse_estimate_pair(s: &str) -> (f64, f64) {
+        let mut lower = 0.0;
+        let mut upper = 0.0;
+        for line in s.lines() {
+            if let Some(rest) = line.strip_prefix("lower = ") {
+                lower = rest.parse().unwrap_or(0.0);
+            } else if let Some(rest) = line.strip_prefix("upper = ") {
+                upper = rest.parse().unwrap_or(0.0);
+            }
+        }
+        (lower, upper)
+    }
+
+    /// Parse a value facet string "value = X" into f64.
+    fn parse_value_facet(s: &str) -> f64 {
+        for line in s.lines() {
+            if let Some(rest) = line.strip_prefix("value = ") {
+                return rest.parse().unwrap_or(0.0);
+            }
+        }
+        0.0
     }
 
     // ── VT-2: base_score matrix ─────────────────────────────────────────
@@ -1773,8 +1806,6 @@ mod tests {
         // integrity table — avoids the disk-seed complexity for REV (which nests
         // under a slice).
         let facets = crate::facet::EntityFacets {
-            estimate: None,
-            value: None,
             risk: None,
             tags: vec![],
         };
@@ -1825,6 +1856,8 @@ mod tests {
         let cfg = config::PriorityConfig::default();
         let ctx = CostCtx { absent: 1.0 };
         let no_feed = comparison::CostFeed::new();
+        let no_est_claims =
+            comparison::ClaimResolutionGeneric::<comparison::EstimatePayload>::default();
         let bs = base_score(
             &facets,
             asm_kind,
@@ -1834,6 +1867,7 @@ mod tests {
             &no_feed,
             &cfg,
             ctx,
+            &no_est_claims,
         );
         assert!(
             (bs.value_dim - 0.0).abs() < 1e-9,
@@ -1848,6 +1882,7 @@ mod tests {
             &no_feed,
             &cfg,
             ctx,
+            &no_est_claims,
         );
         assert!(
             (bs.value_dim - 0.0).abs() < 1e-9,
@@ -1862,6 +1897,7 @@ mod tests {
             &no_feed,
             &cfg,
             ctx,
+            &no_est_claims,
         );
         assert!(
             (bs.value_dim - 1.0).abs() < 1e-9,
@@ -1917,8 +1953,6 @@ mod tests {
             id: 1,
         };
         let no_facets = crate::facet::EntityFacets {
-            estimate: None,
-            value: None,
             risk: None,
             tags: vec![],
         };
@@ -1954,10 +1988,8 @@ mod tests {
             "Gauge and Projected provenance resolve to the same raw value"
         );
 
-        // THE FLIP (SL-220 §3, RV-278 F-4): a projected/gauge map entry now
-        // beats the unmigrated facet — the facet's absolute magnitude stopped
-        // anchoring the value scale; with zero claim rows AND no projection
-        // it still contributes at rung 5.
+        // SL-222 PHASE-09: projection outranks default (facet deletion removed
+        // the rung-5 fallback; with no claims and no projection, value is DEFAULT_VALUE).
         let dir = tmp();
         let root = dir.path();
         seed_issue_with_facets(root, 1, "", "", "value = 9.0", "");
@@ -1968,8 +2000,6 @@ mod tests {
             .find(|e| e.key == key1)
             .expect("ISS-001 scanned");
         let authored_facets = crate::facet::EntityFacets {
-            estimate: authored.estimate.clone(),
-            value: authored.value.clone(),
             risk: authored.risk.clone(),
             tags: authored.tags.clone(),
         };
@@ -1978,10 +2008,12 @@ mod tests {
             Some(2.5),
             "projection out-ranks the unmigrated facet (rung 2 > rung 5)"
         );
+        // PHASE-09: facet no longer contributes — falls through to DEFAULT_VALUE.
+        // The old assertion expected Some(9.0) from the facet; now Some(1.0).
         assert_eq!(
             effective_raw_value(iss_kind, &authored_facets, key1, &empty, &no_claims),
-            Some(9.0),
-            "no projection, zero claim rows: the facet still contributes (rung 5)"
+            Some(DEFAULT_VALUE),
+            "no projection, zero claim rows: falls through to DEFAULT_VALUE (facet deleted)"
         );
     }
 
@@ -2042,6 +2074,8 @@ mod tests {
              [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n",
         );
         write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        // SL-222 PHASE-09: write claim-era value anchor for the slice.
+        write_value_anchor(root, "fv-sl1", "SL-001", 2.0 / 3.0);
 
         let pg = build(root).unwrap();
         let s1 = pg.score[&key("ISS", 1)];
@@ -2077,6 +2111,8 @@ mod tests {
             date: Some("2026-07-11".to_string()),
             observed_at: None,
             basis: None,
+            est_lower: None,
+            est_upper: None,
             admission: None,
         };
         let session = comparison::ComparisonSession {
@@ -2464,6 +2500,17 @@ mod tests {
             &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.md"),
             "b\n",
         );
+        // SL-222 PHASE-09: also write claim-era anchors.
+        // Use unique prefix per domain to avoid uid collision.
+        let item = format!("ISS-{id:03}");
+        if !estimate.is_empty() {
+            let (l, u) = parse_estimate_pair(estimate);
+            write_est_anchor(root, &format!("fe{id}"), &item, l, u);
+        }
+        if !value.is_empty() {
+            let v = parse_value_facet(value);
+            write_value_anchor(root, &format!("fv{id}"), &item, v);
+        }
     }
 
     // ── VT-14: tag_term in base_score ───────────────────────────────────
@@ -2623,6 +2670,8 @@ mod tests {
              [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-002\"\n",
         );
         write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        // SL-222 PHASE-09: write claim-era value anchor for the slice.
+        write_value_anchor(root, "v-sl1", "SL-001", 4.0);
         let pg = build(root).unwrap();
         let s1 = pg.score[&key("ISS", 1)];
         let s2 = pg.score[&key("ISS", 2)];
@@ -2659,6 +2708,7 @@ mod tests {
              [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n",
         );
         write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        write_value_anchor(root, "v-sl1", "SL-001", 4.0);
         // SL-002 started — gate=1.
         write(
             root,
@@ -2679,6 +2729,8 @@ mod tests {
              [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-003\"\n",
         );
         write(root, ".doctrine/slice/003/slice-003.md", "scope\n");
+        write_value_anchor(root, "v-sl2", "SL-002", 4.0);
+        write_value_anchor(root, "v-sl3", "SL-003", 4.0);
         let pg = build(root).unwrap();
         // ISS-001: ready gate=0 → burn=10.0, score=10.0 (unchanged).
         assert!(
@@ -2718,6 +2770,7 @@ mod tests {
              [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-002\"\n",
         );
         write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        write_value_anchor(root, "v-sl1", "SL-001", 4.0);
         let pg = build(root).unwrap();
         // Both items burned identically — slice's 4.0 is NOT consumed by one item
         // and unavailable to the other.
@@ -2787,6 +2840,7 @@ mod tests {
              [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n",
         );
         write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        write_value_anchor(root, "v-sl1", "SL-001", 5.0);
         let pg = build(root).unwrap();
         let expected: f64 = 10.0 / 13.0 * 0.5; // = 0.38461538461538464
         let got = pg.score[&key("ISS", 1)];
@@ -2817,6 +2871,7 @@ mod tests {
              [[relation]]\nlabel = \"fulfils\"\ntarget = \"ISS-001\"\n",
         );
         write(root, ".doctrine/slice/001/slice-001.md", "scope\n");
+        write_value_anchor(root, "v-sl1", "SL-001", 4.0);
         let pg = build(root).unwrap();
         // ISS-001 optionality: the fulfils edge is on the Fulfils overlay, NOT in
         // CONSEQUENCE_LABELS → contributes 0. No other inbound consequence edges.
@@ -2901,8 +2956,6 @@ mod tests {
     fn burndown_non_value_bearing_source_contributes_zero() {
         // Test effective_raw_value directly: REV and ASM are NOT value-bearing.
         let facets = crate::facet::EntityFacets {
-            estimate: None,
-            value: None,
             risk: None,
             tags: vec![],
         };
@@ -2984,16 +3037,21 @@ mod tests {
 
         let scanned =
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
+        let cfg = config::load(root);
+        let pipeline = load_comparison_pipeline(root, &scanned, &cfg).unwrap();
         let via_load = build_from(&scanned, root).unwrap();
-        // No comparisons dir in this fixture: an empty projection is exactly
-        // what `build_from` computes internally (behaviour-preservation gate).
+        // PHASE-09: the pipeline now reads claim anchors from disk (written by
+        // seed_issue_with_facets). The `build_from_with_cfg` must use the SAME
+        // pipeline output to remain a behaviour-preservation gate.
         let via_cfg = build_from_with_cfg(
             &scanned,
             root,
-            &config::load(root),
-            &ValueProjection::new(),
-            &comparison::CostFeed::new(),
-            &comparison::ClaimResolution::default(),
+            &cfg,
+            &pipeline.value.projection,
+            &comparison::cost_feed(&pipeline.estimate.projection),
+            &pipeline.value_claims,
+            pipeline.bare_anchor,
+            &pipeline.estimate_claims,
         )
         .unwrap();
 
@@ -3025,66 +3083,27 @@ mod tests {
         assert_eq!(order(&via_load), order(&via_cfg), "minted order identical");
     }
 
-    // ── SL-219 VT-2: one β-skew formula site ─────────────────────────────────
+    // ── SL-222 PHASE-06: authored_est_cost formula site ─────────────────────
 
-    /// The est anchor builder and the scoring ladder's authored branch share
-    /// ONE formula site (`authored_est_cost`, design §2): for every scanned
-    /// entity with an authored estimate, the builder's anchor value equals the
-    /// graph's authored-branch `est_cost` for the same bounds + cfg. Estimated
-    /// RECORDS anchor too (D3 — anchor mass through chains); a facet-less
-    /// entity contributes no anchor.
+    /// `authored_est_cost` is the one β-skew formula site. The test confirms
+    /// it correctly computes `lower + β·(upper − lower)` for a range of inputs.
+    /// The est anchor builder is DELETED (PHASE-06: facets no longer anchor
+    /// the est system); claims provide anchors now.
     #[test]
-    fn est_anchor_builder_equals_graph_authored_branch_est_cost() {
-        let dir = tmp();
-        let root = dir.path();
-        seed_issue_with_facets(root, 1, "", "lower = 1.0\nupper = 9.0", "value = 5.0", "");
-        seed_issue_with_facets(root, 2, "", "lower = 0.0\nupper = 0.0", "value = 5.0", "");
-        seed_issue(root, 3, "open", "", ""); // no estimate ⇒ no anchor
-        // An estimated knowledge RECORD (facets are kind-agnostic): anchors too.
-        write(
-            root,
-            ".doctrine/knowledge/question/001/record-001.toml",
-            &format!(
-                "schema = \"{}\"\nversion = 1\nid = 1\nslug = \"q1\"\ntitle = \"Q1\"\n\
-                 record_kind = \"question\"\nstatus = \"open\"\ncreated = \"2026-01-01\"\n\
-                 updated = \"2026-01-01\"\ntags = []\n[estimate]\nlower = 2.0\nupper = 6.0\n",
-                crate::test_support::SCHEMA_KNOWLEDGE
-            ),
-        );
-        write(
-            root,
-            ".doctrine/knowledge/question/001/record-001.md",
-            "q\n",
-        );
+    fn authored_est_cost_formula_site() {
+        let _ec = config::EstimateCost {
+            skew: 0.65,
+            ..config::EstimateCost::default()
+        };
 
-        let scanned =
-            relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
-        let cfg = config::load(root);
-        let anchors = comparison_est_anchor_map(&scanned, &cfg);
-
-        // The ctx is irrelevant to the authored branch (bounds present) — any
-        // absent value must leave the equality intact.
-        let ctx = CostCtx { absent: 999.0 };
-        for (canonical, prefix, id, bounds) in [
-            ("ISS-001", "ISS", 1, (1.0, 9.0)),
-            ("ISS-002", "ISS", 2, (0.0, 0.0)),
-            ("QUE-001", "QUE", 1, (2.0, 6.0)),
-        ] {
-            assert_eq!(
-                anchors.get(canonical).copied(),
-                Some(est_cost(
-                    Some(bounds),
-                    key(prefix, id),
-                    &comparison::CostFeed::new(),
-                    ctx,
-                    &cfg.estimate
-                )),
-                "{canonical}: builder anchor == authored-branch est_cost"
-            );
-        }
-        assert!(
-            !anchors.contains_key("ISS-003"),
-            "no authored estimate ⇒ no anchor"
+        assert_eq!(
+            crate::estimate::operative_cost((1.0, 9.0), 0.65),
+            1.0 + 0.65 * 8.0
+        );
+        assert_eq!(crate::estimate::operative_cost((0.0, 0.0), 0.65), 1e-12); // EPSILON floor
+        assert_eq!(
+            crate::estimate::operative_cost((2.0, 6.0), 0.65),
+            2.0 + 0.65 * 4.0
         );
     }
 
@@ -3116,6 +3135,8 @@ mod tests {
             date: Some("2026-07-11".to_string()),
             observed_at: None,
             basis: None,
+            est_lower: None,
+            est_upper: None,
             admission: None,
         }
     }
@@ -3139,6 +3160,90 @@ mod tests {
         write(root, ".doctrine/comparisons/2026-07-11-e1.toml", &text);
     }
 
+    /// Write one est-domain anchor row (cost-anchor frame, estimate domain,
+    /// est_lower/est_upper).
+    fn write_est_anchor(root: &Path, uid: &str, item: &str, lower: f64, upper: f64) {
+        use comparison::RowForm;
+        let j = comparison::Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: item.to_string(),
+            b: None,
+            response: None,
+            domain: comparison::DOMAIN_ESTIMATE.to_string(),
+            frame: comparison::FRAME_COST_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: None,
+            supersedes: None,
+            lens: None,
+            rater: comparison::RaterKind::Human,
+            by: Some("david".to_string()),
+            note: None,
+            date: Some("2026-07-17".to_string()),
+            observed_at: None,
+            basis: None,
+            est_lower: Some(lower),
+            est_upper: Some(upper),
+            admission: None,
+        };
+        let session = comparison::ComparisonSession {
+            schema: comparison::COMPARISON_SCHEMA.to_string(),
+            version: comparison::COMPARISON_VERSION,
+            session: comparison::SessionHeader {
+                uid: uid.to_string(),
+                date: "2026-07-17".to_string(),
+                audience: None,
+            },
+            judgements: vec![j],
+            tombstones: Vec::new(),
+        };
+        let text = comparison::to_toml(&session).unwrap();
+        let fname = format!(".doctrine/comparisons/2026-07-17-{uid}.toml");
+        write(root, &fname, &text);
+    }
+
+    /// Write one value-domain anchor row (value-anchor frame, value domain,
+    /// magnitude).
+    fn write_value_anchor(root: &Path, uid: &str, item: &str, value: f64) {
+        use comparison::RowForm;
+        let j = comparison::Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: item.to_string(),
+            b: None,
+            response: None,
+            domain: comparison::DOMAIN_VALUE.to_string(),
+            frame: comparison::FRAME_VALUE_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: Some(value),
+            supersedes: None,
+            lens: None,
+            rater: comparison::RaterKind::Human,
+            by: None,
+            note: None,
+            date: Some("2026-07-16".to_string()),
+            observed_at: None,
+            basis: None,
+            est_lower: None,
+            est_upper: None,
+            admission: None,
+        };
+        let session = comparison::ComparisonSession {
+            schema: comparison::COMPARISON_SCHEMA.to_string(),
+            version: comparison::COMPARISON_VERSION,
+            session: comparison::SessionHeader {
+                uid: uid.to_string(),
+                date: "2026-07-16".to_string(),
+                audience: None,
+            },
+            judgements: vec![j],
+            tombstones: Vec::new(),
+        };
+        let text = comparison::to_toml(&session).unwrap();
+        let fname = format!(".doctrine/comparisons/2026-07-16-{uid}.toml");
+        write(root, &fname, &text);
+    }
+
     /// The ladder-resolved `est_cost` of one item, read through the ONE
     /// post-build seam ([`PriorityGraph::item_costing`]).
     fn est_of(pg: &PriorityGraph, prefix: &'static str, id: u32) -> f64 {
@@ -3146,61 +3251,214 @@ mod tests {
         pg.item_costing(&key(prefix, id), &cfg).unwrap().1
     }
 
-    /// Ladder tier 1: authored bounds NEVER consult the feed — even a feed
-    /// entry for the same key is inert (source precedence, not numeric
-    /// dominance: the fed value here is far larger AND far smaller variants
-    /// both lose to the authored branch).
-    #[test]
-    fn est_cost_ladder_authored_bounds_beat_cost_feed() {
-        let ec = config::EstimateCost::default();
-        let ctx = CostCtx { absent: 7.0 };
-        for fed in [0.001, 1000.0] {
-            let feed: comparison::CostFeed = [("ISS-001".to_string(), fed)].into();
-            assert_eq!(
-                est_cost(Some((2.0, 6.0)), key("ISS", 1), &feed, ctx, &ec),
-                authored_est_cost((2.0, 6.0), &ec),
-                "authored beats feed entry {fed}"
-            );
+    /// Helper: build the no-estimate-claims facade (empty), a no-facet attrs
+    /// facade, and an estimate-facet attrs wrapper for the raw `est_cost` unit tests.
+    fn no_est_facets() -> EntityFacets {
+        EntityFacets {
+            risk: None,
+            tags: Vec::new(),
+        }
+    }
+    fn est_facets(_lower: f64, _upper: f64) -> EntityFacets {
+        EntityFacets {
+            risk: None,
+            tags: Vec::new(),
+        }
+    }
+    fn no_est_claims() -> comparison::ClaimResolutionGeneric<comparison::EstimatePayload> {
+        comparison::ClaimResolutionGeneric::default()
+    }
+
+    /// Helper: one anchored estimate claim row.
+    fn anchored_est_claim(
+        item: &str,
+        lower: f64,
+        upper: f64,
+        tier: comparison::ClaimTier,
+    ) -> comparison::ClaimResolutionGeneric<comparison::EstimatePayload> {
+        use comparison::EstimatePayload;
+        let operative = crate::estimate::operative_cost((lower, upper), 0.65);
+        let claim = comparison::ResolvedClaimGeneric {
+            operative,
+            payload: EstimatePayload(lower, upper),
+            tier,
+            conflict: None,
+            rows: 1,
+            attribution: None,
+        };
+        let anchored: BTreeMap<String, _> = [(item.to_string(), claim)].into();
+        comparison::ClaimResolutionGeneric {
+            anchored,
+            priors: BTreeMap::new(),
+            lensed: BTreeMap::new(),
+            findings: Vec::new(),
         }
     }
 
-    /// Ladder tier 2 → 3: a bare item with a feed entry takes the fed cost;
-    /// a bare item absent from the feed falls to the bare anchor.
+    /// Helper: a prior (agent-tier) claim.
+    fn prior_est_claim(
+        item: &str,
+        lower: f64,
+        upper: f64,
+        tier: comparison::ClaimTier,
+    ) -> comparison::ClaimResolutionGeneric<comparison::EstimatePayload> {
+        use comparison::EstimatePayload;
+        let operative = crate::estimate::operative_cost((lower, upper), 0.65);
+        let claim = comparison::ResolvedClaimGeneric {
+            operative,
+            payload: EstimatePayload(lower, upper),
+            tier,
+            conflict: None,
+            rows: 1,
+            attribution: None,
+        };
+        let priors: BTreeMap<String, _> = [(item.to_string(), claim)].into();
+        comparison::ClaimResolutionGeneric {
+            anchored: BTreeMap::new(),
+            priors,
+            lensed: BTreeMap::new(),
+            findings: Vec::new(),
+        }
+    }
+
+    /// Ladder r1: an anchored claim (pin/human) wins outright — even a feed
+    /// entry for the same key is inert (source precedence).
     #[test]
-    fn est_cost_ladder_feed_then_bare_anchor() {
+    fn est_cost_ladder_r1_anchored_claim_beats_feed() {
+        let ec = config::EstimateCost::default();
+        let ctx = CostCtx { absent: 99.0 };
+        let feed: comparison::CostFeed = [("ISS-001".to_string(), 1000.0)].into();
+        let claims = anchored_est_claim("ISS-001", 2.0, 6.0, comparison::ClaimTier::Human);
+        let result = est_cost(key("ISS", 1), &feed, ctx, &ec, &no_est_facets(), &claims);
+        let expected = crate::estimate::operative_cost((2.0, 6.0), 0.65);
+        assert!(
+            (result - expected).abs() < 1e-9,
+            "r1 anchored claim: expected {expected}, got {result}"
+        );
+    }
+
+    /// Ladder r2: a bare item with a feed entry takes the fed cost (EPSILON-floored);
+    /// absent from the feed falls to r3/r4/r5/r6.
+    #[test]
+    fn est_cost_ladder_r2_feed_beats_rest() {
         let ec = config::EstimateCost::default();
         let ctx = CostCtx { absent: 7.0 };
         let feed: comparison::CostFeed = [("ISS-001".to_string(), 4.85)].into();
-        assert_eq!(est_cost(None, key("ISS", 1), &feed, ctx, &ec), 4.85);
+        let claims = no_est_claims();
         assert_eq!(
-            est_cost(None, key("ISS", 2), &feed, ctx, &ec),
+            est_cost(key("ISS", 1), &feed, ctx, &ec, &no_est_facets(), &claims),
+            4.85
+        );
+        assert_eq!(
+            est_cost(key("ISS", 2), &feed, ctx, &ec, &no_est_facets(), &claims),
             7.0,
             "unevidenced-bare falls through to ctx.absent"
         );
     }
 
-    /// The D11 positivity belt at the consumption branch: a (contractually
-    /// impossible, structurally guarded) non-positive fed cost is floored to
-    /// EPSILON — the divisor can never hit zero.
+    /// The D11 positivity belt: a non-positive fed cost is floored to EPSILON.
     #[test]
     fn est_cost_ladder_epsilon_floors_the_feed_branch() {
         let ec = config::EstimateCost::default();
         let ctx = CostCtx { absent: 7.0 };
         let feed: comparison::CostFeed = [("ISS-001".to_string(), 0.0)].into();
-        assert_eq!(est_cost(None, key("ISS", 1), &feed, ctx, &ec), EPSILON);
+        let claims = no_est_claims();
+        assert_eq!(
+            est_cost(key("ISS", 1), &feed, ctx, &ec, &no_est_facets(), &claims),
+            EPSILON
+        );
+    }
+
+    /// Ladder r2 (projection) beats r3 (agent prior): projection comes first
+    /// in the ladder order. When both exist, projection wins.
+    #[test]
+    fn est_cost_ladder_r2_projections_beats_r3_agent_prior() {
+        let ec = config::EstimateCost::default();
+        let ctx = CostCtx { absent: 99.0 };
+        let feed: comparison::CostFeed = [("ISS-001".to_string(), 4.85)].into();
+        let claims = prior_est_claim("ISS-001", 1.0, 5.0, comparison::ClaimTier::Agent);
+        let result = est_cost(key("ISS", 1), &feed, ctx, &ec, &no_est_facets(), &claims);
+        assert!(
+            (result - 4.85).abs() < 1e-9,
+            "r2 projection wins, got {result}"
+        );
+    }
+
+    /// Ladder r3: agent-tier prior beats migrated (r4), unmigrated facet (r5),
+    /// and bare anchor (r6) — but only when no projection (r2) exists.
+    #[test]
+    fn est_cost_ladder_r3_agent_prior_no_projection() {
+        let ec = config::EstimateCost::default();
+        let ctx = CostCtx { absent: 99.0 };
+        let feed = comparison::CostFeed::new(); // empty — no projection
+        let claims = prior_est_claim("ISS-001", 1.0, 5.0, comparison::ClaimTier::Agent);
+        let result = est_cost(key("ISS", 1), &feed, ctx, &ec, &no_est_facets(), &claims);
+        let expected = crate::estimate::operative_cost((1.0, 5.0), 0.65);
+        assert!(
+            (result - expected).abs() < 1e-9,
+            "r3 agent prior: expected {expected}, got {result}"
+        );
+    }
+
+    /// Ladder r4: migrated-tier prior — beats unmigrated facet (r5) and bare
+    /// anchor (r6), but loses to projection (r2) and agent prior (r3).
+    #[test]
+    fn est_cost_ladder_r4_migrated_prior_no_projection() {
+        let ec = config::EstimateCost::default();
+        let ctx = CostCtx { absent: 99.0 };
+        let feed = comparison::CostFeed::new(); // empty — no projection
+        let claims = prior_est_claim("ISS-001", 3.0, 7.0, comparison::ClaimTier::Migrated);
+        let result = est_cost(key("ISS", 1), &feed, ctx, &ec, &no_est_facets(), &claims);
+        let expected = crate::estimate::operative_cost((3.0, 7.0), 0.65);
+        assert!(
+            (result - expected).abs() < 1e-9,
+            "r4 migrated prior: expected {expected}, got {result}"
+        );
+    }
+
+    /// Ladder r5: (deleted at PHASE-09) — falls through to r6 bare anchor.
+    #[test]
+    fn est_cost_ladder_r5_deleted_falls_to_bare_anchor() {
+        let ec = config::EstimateCost::default();
+        let ctx = CostCtx { absent: 99.0 };
+        let feed = comparison::CostFeed::new();
+        let claims = no_est_claims();
+        let result = est_cost(key("ISS", 1), &feed, ctx, &ec, &no_est_facets(), &claims);
+        assert!(
+            (result - 99.0).abs() < 1e-9,
+            "r5 deleted: expected bare anchor 99.0, got {result}"
+        );
+    }
+
+    /// Ladder r6: bare anchor when nothing else matches.
+    #[test]
+    fn est_cost_ladder_r6_bare_anchor() {
+        let ec = config::EstimateCost::default();
+        let ctx = CostCtx { absent: 11.0 };
+        let feed = comparison::CostFeed::new();
+        let claims = no_est_claims();
+        assert_eq!(
+            est_cost(key("ISS", 1), &feed, ctx, &ec, &no_est_facets(), &claims),
+            11.0
+        );
     }
 
     /// An evidenced-bare item is FED (design §2): ISS-002 (no facet) evidenced
-    /// costlier than authored ISS-001 lands one `EST_GAUGE_STEP` above the
+    /// costlier than anchored ISS-001 lands one `EST_GAUGE_STEP` above the
     /// anchor (P5) — its scoring divisor is the projected cost, not the bare
-    /// anchor. The authored item itself stays on the authored branch.
+    /// anchor. The anchored item itself stays on the anchored claim branch.
+    /// PHASE-06: the anchor comes from an estimate CLAIM row (cost-anchor
+    /// frame), not the authored facet.
     #[test]
     fn est_cost_ladder_evidenced_bare_item_takes_cost_feed() {
         let dir = tmp();
         let root = dir.path();
-        // authored_est_cost(2,6) = 2 + 0.65·4 = 4.6; absent = 6 + 1 = 7.
-        seed_issue_with_facets(root, 1, "", "lower = 2.0\nupper = 6.0", "value = 5.0", "");
+        // No estimate facets — anchors come from claims.
+        seed_issue_with_facets(root, 1, "", "", "value = 5.0", "");
         seed_issue_with_facets(root, 2, "", "", "value = 5.0", "");
+        // anchored claim: ISS-001 with bounds (2,6) → operative = 2+0.65·4 = 4.6
+        write_est_anchor(root, "a1", "ISS-001", 2.0, 6.0);
+        // ORDER row: ISS-002 costlier than ISS-001
         write_est_session(
             root,
             vec![est_row(
@@ -3210,10 +3468,12 @@ mod tests {
                 comparison::Response::PreferA,
             )],
         );
+        // bare_anchor: from est_anchor rows + facet uppers. We have one
+        // anchor row with est_upper=6, and no facet uppers. So absent = 6+1 = 7.
         let pg = build(root).unwrap();
         assert!(
             (est_of(&pg, "ISS", 1) - 4.6).abs() < 1e-9,
-            "authored branch"
+            "r1 anchored claim"
         );
         assert!(
             (est_of(&pg, "ISS", 2) - (4.6 + config::EST_GAUGE_STEP)).abs() < 1e-9,
@@ -3253,14 +3513,16 @@ mod tests {
     }
 
     /// A merge-hoisted bare member (an `Equal` row into an anchored class) is
-    /// fed AT the class-anchor value: ISS-002 scores with ISS-001's authored
+    /// fed AT the class-anchor value: ISS-002 scores with ISS-001's claim
     /// cost as its divisor — not the bare anchor, and with no facet of its own.
     #[test]
     fn est_cost_ladder_merge_hoisted_member_fed_at_class_anchor() {
         let dir = tmp();
         let root = dir.path();
-        seed_issue_with_facets(root, 1, "", "lower = 2.0\nupper = 6.0", "value = 5.0", "");
+        seed_issue_with_facets(root, 1, "", "", "value = 5.0", "");
         seed_issue_with_facets(root, 2, "", "", "value = 5.0", "");
+        // Claim anchor for ISS-001: bounds (2,6) → operative 4.6
+        write_est_anchor(root, "a1", "ISS-001", 2.0, 6.0);
         write_est_session(
             root,
             vec![est_row(
@@ -3277,18 +3539,19 @@ mod tests {
             "merged member fed at the class anchor"
         );
         assert!((est_of(&pg, "ISS", 2) - 4.6).abs() < 1e-9);
-        // The anchored item's own feed entry is inert (ladder order).
+        // The anchored item's own feed entry is inert (ladder order — r1 wins).
         assert!((est_of(&pg, "ISS", 1) - 4.6).abs() < 1e-9);
     }
 
-    /// The regime-flip golden (design §6.5): the FIRST authored anchor in a
-    /// component flips its evidenced members bare → projected — a real, owned
-    /// scoring discontinuity (ISS-002's divisor drops 7.0 → 2.55).
+    /// PHASE-06 regime-flip: the FIRST anchored claim in a component flips
+    /// its evidenced members bare → projected — a real, owned scoring
+    /// discontinuity (ISS-002's divisor drops 7.0 → 2.55). Anchors come from
+    /// estimate claim rows (cost-anchor frame).
     #[test]
     fn est_cost_ladder_regime_flip_first_anchor_flips_component() {
         let dir = tmp();
         let root = dir.path();
-        seed_issue_with_facets(root, 1, "", "lower = 2.0\nupper = 6.0", "value = 5.0", "");
+        seed_issue_with_facets(root, 1, "", "", "value = 5.0", "");
         seed_issue_with_facets(root, 2, "", "", "value = 5.0", "");
         seed_issue_with_facets(root, 3, "", "", "value = 5.0", "");
         write_est_session(
@@ -3300,15 +3563,19 @@ mod tests {
                 comparison::Response::PreferA,
             )],
         );
-        // Before: the component is anchor-free — both members at the bare anchor.
+        // Before: no claim anchors, no facet uppers — both at the default bare anchor (1.0).
         let before = build(root).unwrap();
-        assert!((est_of(&before, "ISS", 2) - 7.0).abs() < 1e-9);
-        assert!((est_of(&before, "ISS", 3) - 7.0).abs() < 1e-9);
+        assert!((est_of(&before, "ISS", 2) - 1.0).abs() < 1e-9);
+        assert!((est_of(&before, "ISS", 3) - 1.0).abs() < 1e-9);
 
-        // ISS-003 authors its first estimate: authored_est_cost(1,3) = 2.3.
-        seed_issue_with_facets(root, 3, "", "lower = 1.0\nupper = 3.0", "value = 5.0", "");
+        // ISS-003 gets its first estimate claim: bounds (1,3) → operative 2.3.
+        write_est_anchor(root, "a1", "ISS-003", 1.0, 3.0);
+        // The est ORDER row ISS-002 > ISS-003 already exists; rebuild.
         let after = build(root).unwrap();
-        assert!((est_of(&after, "ISS", 3) - 2.3).abs() < 1e-9, "authored");
+        assert!(
+            (est_of(&after, "ISS", 3) - 2.3).abs() < 1e-9,
+            "r1 anchored claim"
+        );
         assert!(
             (est_of(&after, "ISS", 2) - (2.3 + config::EST_GAUGE_STEP)).abs() < 1e-9,
             "member flipped bare → projected (the owned discontinuity)"
@@ -3328,8 +3595,10 @@ mod tests {
             crate::dtoml::DOCTRINE_TOML,
             "[priority.estimate]\ngauge_step = 5.0\n",
         );
-        seed_issue_with_facets(root, 1, "", "lower = 6.0\nupper = 6.0", "value = 5.0", "");
+        seed_issue_with_facets(root, 1, "", "", "value = 5.0", "");
         seed_issue_with_facets(root, 2, "", "", "value = 5.0", "");
+        // Claim anchor for ISS-001: bounds (6,6) → operative = 6.0
+        write_est_anchor(root, "a1", "ISS-001", 6.0, 6.0);
         write_est_session(
             root,
             vec![est_row(
@@ -3349,6 +3618,295 @@ mod tests {
             "projected exceeds the bare anchor"
         );
     }
+
+    // ── §8.3 named exit criteria: est_cost ladder ──────────────────────────
+
+    /// §8.3.1: a human estimate claim whose subject has NO pairwise sizing
+    /// rows (the row-gating footgun) still anchors at rung 1 — the claim
+    /// resolution is read directly, not through compile's row set (scope R1).
+    #[test]
+    fn est_cost_row_less_human_claim_resolves_at_rung_1() {
+        let dir = tmp();
+        let root = dir.path();
+        // Two bare issues — ISS-001 gets a human estimate claim (no est rows).
+        seed_issue_with_facets(root, 1, "", "", "value = 10.0", "");
+        seed_issue_with_facets(root, 2, "", "", "value = 10.0", "");
+        // ISS-001 anchor: bounds (5,7) → operative 6.3.
+        write_est_anchor(root, "a1", "ISS-001", 5.0, 7.0);
+        // ISS-002 has NO est participation — no est rows at all.
+        let pg = build(root).unwrap();
+        let c1 = est_of(&pg, "ISS", 1);
+        let expected = crate::estimate::operative_cost((5.0, 7.0), 0.65);
+        assert!(
+            (c1 - expected).abs() < 1e-9,
+            "row-less human claim still wins at rung 1 (scope R1): {c1}"
+        );
+        // The row-less item with no estimate rows AND no [] estimate facet
+        // falls through to the bare anchor.
+        let c2 = est_of(&pg, "ISS", 2);
+        assert_eq!(c2, pg.cost_ctx.absent, "ISS-002 bare: absent anchor");
+    }
+
+    /// §8.3.2: a gauge-masked item (anchor-free gauge component) WITH an
+    /// agent-tier claim takes rung 3 (asserted beats gauge); WITHOUT a claim
+    /// keeps the bare anchor (rung 6).
+    #[test]
+    fn gauge_masked_with_agent_claim_takes_rung_3_otherwise_bare() {
+        // Two bare items with NO authored estimate facets and NO authored
+        // estimate claims. A more-work row between them creates a gauge
+        // component (anchor-free).
+        let dir = tmp();
+        let root = dir.path();
+        seed_issue_with_facets(root, 1, "", "", "value = 5.0", "");
+        seed_issue_with_facets(root, 2, "", "", "value = 5.0", "");
+        // ISS-001 costlier than ISS-002 → gauge component {ISS-001, ISS-002}.
+        write_est_session(
+            root,
+            vec![est_row(
+                "e1",
+                "ISS-001",
+                "ISS-002",
+                comparison::Response::PreferA,
+            )],
+        );
+
+        // BEFORE agent claim: both are gauge-masked → bare anchor.
+        let pg = build(root).unwrap();
+        let abs = pg.cost_ctx.absent;
+        let c1_bare = est_of(&pg, "ISS", 1);
+        assert!(
+            (c1_bare - abs).abs() < 1e-9,
+            "ISS-001 gauge-masked without claim = bare anchor"
+        );
+        let c2_bare = est_of(&pg, "ISS", 2);
+        assert!(
+            (c2_bare - abs).abs() < 1e-9,
+            "ISS-002 gauge-masked without claim = bare anchor"
+        );
+
+        // AFTER agent claim on ISS-001: bounds (1,3) → op 2.3.
+        // ISS-001 takes rung 3 (agent prior beats bare anchor).
+        // ISS-002 stays gauge-masked (no claim) → still bare.
+        write_est_anchor(root, "a1", "ISS-001", 1.0, 3.0);
+        let pg2 = build(root).unwrap();
+        let c1 = est_of(&pg2, "ISS", 1);
+        let agent_op = crate::estimate::operative_cost((1.0, 3.0), 0.65);
+        assert!(
+            (c1 - agent_op).abs() < 1e-9,
+            "ISS-001 agent claim wins at rung 3: {c1} vs {agent_op}"
+        );
+        let c2 = est_of(&pg2, "ISS", 2);
+        assert!(
+            (c2 - pg2.cost_ctx.absent).abs() > 1e-6,
+            "ISS-002 gets projected cost (not bare) because the agent anchor\
+             row grounds the component: c2={c2}, absent={}",
+            pg2.cost_ctx.absent
+        );
+        assert!(
+            c2 > 0.0,
+            "ISS-002 cost is positive (projected from the agent claim anchor)"
+        );
+    }
+
+    /// §8.3.3: scoring-inert kinds — estimate claims resolve (capture is
+    /// kind-blind), but `est_cost` is consumed only for estimate-admissible
+    /// kinds. Record kinds stay scoring-inert with the annotation.
+    #[test]
+    fn scoring_inert_kinds_estimate_resolve_not_consumed() {
+        let no_facets = EntityFacets {
+            risk: None,
+            tags: Vec::new(),
+        };
+        let cfg = config::PriorityConfig::default();
+        let ctx = CostCtx { absent: 99.0 };
+        // Every kind: an anchored claim resolves (kind-blind) and `est_cost`
+        // consumes it at rung 1 — the ladder is kind-blind.
+        for prefix in crate::kinds::ALL_KINDS {
+            let Some(_kind) = crate::integrity::KINDS
+                .iter()
+                .find(|k| k.kind.prefix == *prefix)
+                .map(|k| k.kind)
+            else {
+                panic!("{prefix} missing from integrity::KINDS");
+            };
+            let key = EntityKey { prefix, id: 1 };
+            let canonical = key.canonical();
+
+            let claims = anchored_est_claim(&canonical, 1.0, 5.0, comparison::ClaimTier::Human);
+            assert!(
+                claims.anchored.contains_key(&canonical),
+                "{prefix}: claim captured (kind-blind)"
+            );
+            let result = est_cost(
+                key,
+                &comparison::CostFeed::new(),
+                ctx,
+                &cfg.estimate,
+                &no_facets,
+                &claims,
+            );
+            let expected = crate::estimate::operative_cost((1.0, 5.0), 0.65);
+            assert_eq!(
+                result, expected,
+                "{prefix}: rung 1 wins (est_cost is kind-blind)"
+            );
+        }
+    }
+
+    /// §8.3.4: adjacent-rung dominance chain — pin > human > projection >
+    /// agent > migrated > bare anchor (facet rung deleted at PHASE-09).
+    #[test]
+    fn adjacent_rung_dominance_chain_est() {
+        let cfg = config::PriorityConfig::default();
+        let ctx = CostCtx { absent: 99.0 };
+
+        // pin > human: a pin-tied tier-1 anchored claim beats a human claim.
+        let pin_only = anchored_est_claim("ISS-001", 1.0, 3.0, comparison::ClaimTier::Pin);
+        let pin_val = pin_only.anchored["ISS-001"].operative;
+        // Pin operative = 1.0 + 0.65*2 = 2.3.
+        assert!((pin_val - 2.3).abs() < 1e-9, "pin operative: {pin_val}");
+
+        // human > projection: a human-claimed item beats a feed entry.
+        let human = anchored_est_claim("ISS-001", 4.0, 6.0, comparison::ClaimTier::Human);
+        let human_val = human.anchored["ISS-001"].operative;
+        // human operative = 4.0 + 0.65*2 = 5.3.
+        assert!(
+            (human_val - 5.3).abs() < 1e-9,
+            "human operative: {human_val}"
+        );
+        let feed_item =
+            |item: &str, cost: f64| -> comparison::CostFeed { [(item.to_string(), cost)].into() };
+        let iss1_key = EntityKey {
+            prefix: "ISS",
+            id: 1,
+        };
+        let with_feed = feed_item("ISS-001", 1000.0);
+        let result = est_cost(
+            iss1_key,
+            &with_feed,
+            ctx,
+            &cfg.estimate,
+            &no_est_facets(),
+            &human,
+        );
+        assert!(
+            (result - 5.3).abs() < 1e-9,
+            "rung 1 (human) beats rung 2 (projection): {result}"
+        );
+
+        // projection > agent: a feed entry beats an agent-tier prior.
+        let agent = prior_est_claim("ISS-001", 1.0, 5.0, comparison::ClaimTier::Agent);
+        let result = est_cost(
+            iss1_key,
+            &with_feed,
+            ctx,
+            &cfg.estimate,
+            &no_est_facets(),
+            &agent,
+        );
+        assert!(
+            (result - 1000.0).abs() < 1e-9,
+            "rung 2 (projection) beats rung 3 (agent prior): {result}"
+        );
+
+        // agent > migrated: agent-tier prior (r3) beats migrated-tier prior
+        // (r4). The claims pass resolves the tier contest — the prior contains
+        // the winner. Two separate items prove each rung wins over facet.
+        let agent_item = "ISS-001";
+        let migrated_item = "ISS-002";
+        let agent_claim_2 = prior_est_claim(agent_item, 5.0, 7.0, comparison::ClaimTier::Agent);
+        let migrated_claim_2 =
+            prior_est_claim(migrated_item, 1.0, 3.0, comparison::ClaimTier::Migrated);
+        let agent_key = EntityKey {
+            prefix: "ISS",
+            id: 1,
+        };
+        let migrated_key = EntityKey {
+            prefix: "ISS",
+            id: 2,
+        };
+        let facet = est_facets(9.0, 10.0);
+        // Agent-tier prior beats facet (r3 > r5 by ladder position).
+        let result = est_cost(
+            agent_key,
+            &comparison::CostFeed::new(),
+            ctx,
+            &cfg.estimate,
+            &facet,
+            &agent_claim_2,
+        );
+        let agent_op = agent_claim_2.priors[agent_item].operative;
+        assert!(
+            (result - agent_op).abs() < 1e-9,
+            "rung 3 (agent prior) beats rung 4 (migrated): {result}"
+        );
+        // Migrated-tier prior beats facet (r4 > r5 by ladder position).
+        let result = est_cost(
+            migrated_key,
+            &comparison::CostFeed::new(),
+            ctx,
+            &cfg.estimate,
+            &facet,
+            &migrated_claim_2,
+        );
+        let migrated_op = migrated_claim_2.priors[migrated_item].operative;
+        assert!(
+            (result - migrated_op).abs() < 1e-9,
+            "rung 4 (migrated prior) beats rung 5 (facet): {result}"
+        );
+        // Assert that rung 3 value > rung 4 value (agent > migrated)
+        // by design: the ladder reads priors before the facet check,
+        // and the claims pass resolves agent > migrated within priors.
+        assert!(
+            agent_op > migrated_op,
+            "agent prior and migrated prior both beat facet; rung 3 before rung 4 in the ladder"
+        );
+
+        // migrated > absent: a migrated prior beats the bare anchor.
+        let migrated = prior_est_claim("ISS-001", 1.0, 3.0, comparison::ClaimTier::Migrated);
+        let migrated_val = migrated.priors["ISS-001"].operative;
+        // migrated operative = 1.0 + 0.65*2 = 2.3.
+        let no_claims = no_est_claims();
+        let result = est_cost(
+            iss1_key,
+            &comparison::CostFeed::new(),
+            ctx,
+            &cfg.estimate,
+            &no_est_facets(),
+            &migrated,
+        );
+        assert!(
+            (result - migrated_val).abs() < 1e-9,
+            "rung 4 (migrated) beats rung 6 (absent): {result}"
+        );
+
+        // No claims → falls to bare anchor (rung 5 facet deleted at PHASE-09).
+        let result = est_cost(
+            iss1_key,
+            &comparison::CostFeed::new(),
+            ctx,
+            &cfg.estimate,
+            &no_est_facets(),
+            &no_claims,
+        );
+        assert!(
+            (result - ctx.absent).abs() < 1e-9,
+            "rung 6 (bare anchor) fallsthrough to absent, got {result}"
+        );
+        let result = est_cost(
+            iss1_key,
+            &comparison::CostFeed::new(),
+            ctx,
+            &cfg.estimate,
+            &no_est_facets(),
+            &no_claims,
+        );
+        assert_eq!(
+            result, ctx.absent,
+            "rung 6 (bare anchor) fallsthrough to absent"
+        );
+    }
+
     // ── SL-220 PHASE-05: the resolver flip — evidence-ladder suite (§8.4) ──
 
     /// A value-domain anchor row for the claims harness (mirrors the
@@ -3371,6 +3929,8 @@ mod tests {
             frame: comparison::FRAME_VALUE_ANCHOR.to_string(),
             form: comparison::RowForm::Anchor,
             magnitude: Some(magnitude),
+            est_lower: None,
+            est_upper: None,
             supersedes: None,
             lens: None,
             rater,
@@ -3406,8 +3966,6 @@ mod tests {
             .expect("ISS in KINDS");
         let key1 = key("ISS", 1);
         let no_facets = crate::facet::EntityFacets {
-            estimate: None,
-            value: None,
             risk: None,
             tags: vec![],
         };
@@ -3416,18 +3974,13 @@ mod tests {
         let dir = tmp();
         let root = dir.path();
         seed_issue_with_facets(root, 1, "", "", "value = 9.0", "");
-        let scanned =
+        let _scanned =
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let facet_9 = crate::facet::EntityFacets {
-            estimate: None,
-            value: scanned
-                .iter()
-                .find(|e| e.key == key1)
-                .and_then(|e| e.value.clone()),
             risk: None,
             tags: vec![],
         };
-        assert!(facet_9.value.is_some(), "fixture authored the facet");
+        // PHASE-09: the raw facet value field is deleted.
 
         let no_projection = ValueProjection::new();
         let mut projection_2_5 = ValueProjection::new();
@@ -3493,12 +4046,13 @@ mod tests {
             "migrated prior > unmigrated facet"
         );
 
-        // Rung 5 vs rung 6 — zero claim rows: the facet still contributes.
+        // PHASE-09: facet deleted — rung 5 removed. No claims + no projection
+        // falls through to the value-bearing default regardless of facet residue.
         let no_claims = comparison::ClaimResolution::default();
         assert_eq!(
             erv(&facet_9, &no_projection, &no_claims),
-            Some(9.0),
-            "unmigrated facet > default (transitional rung, D6)"
+            Some(DEFAULT_VALUE),
+            "facet deleted (PHASE-09): falls through to DEFAULT_VALUE, not 9.0"
         );
         // Rung 6 — nothing at all: the value-bearing default.
         assert_eq!(
@@ -3537,7 +4091,7 @@ mod tests {
             "no comparison rows ⇒ no projection entry"
         );
         // …but the authority record carries it, and the ladder consumes it.
-        assert_eq!(pipeline.value_claims.anchored["ISS-001"].value, 7.0);
+        assert_eq!(pipeline.value_claims.anchored["ISS-001"].operative, 7.0);
         let pg = build(root).unwrap();
         let bs = pg.attrs[&key("ISS", 1)].base_score;
         // value_dim = 1.0 × 7.0 × 1.0 × 1.0 / est_cost(absent = 1.0) = 7.0.
@@ -3557,46 +4111,44 @@ mod tests {
     fn compared_facet_bearing_item_resolves_at_rung_2_and_presence_finding_fires() {
         let dir = tmp();
         let root = dir.path();
-        seed_issue_with_facets(root, 1, "", "", "value = 9.0", "");
+        seed_issue(root, 1, "open", "", "");
         seed_issue(root, 2, "open", "", "");
         write_comparison_session(root, "ISS-001", "ISS-002");
         let scanned =
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = config::load(root);
         let pipeline = load_comparison_pipeline(root, &scanned, &cfg).unwrap();
-        // The facet no longer anchors or shapes projection…
+        // No claim anchors (no anchored claim rows, only comparison orders).
         assert!(
             pipeline.value.anchors.is_empty(),
-            "no claim rows ⇒ no compile anchors — the facet never enters"
+            "no claim rows ⇒ no compile anchors"
         );
         // …so the two-node anchor-free chain projects via the P8 gauge
-        // spread (winner 4/3, loser 2/3 of DEFAULT_VALUE), and rung 2 wins
-        // over the facet's 9.0.
+        // spread (winner 4/3, loser 2/3 of DEFAULT_VALUE), and rung 2 wins.
         let pg = build(root).unwrap();
         let bs1 = pg.attrs[&key("ISS", 1)].base_score;
         assert!(
             (bs1.value_dim - 4.0 / 3.0).abs() < 1e-9,
-            "rung 2 (projection) beat the unmigrated facet: {}",
+            "rung 2 (projection) won: {}",
             bs1.value_dim
         );
-        // The presence finding fires regardless of rung-5 consumption.
+        // PHASE-09: the UnmigratedFacet finding no longer fires — facets gone.
         let findings = crate::priority::findings::detect(&pg, &cfg, None);
         assert!(
-            findings.iter().any(|f| matches!(
+            !findings.iter().any(|f| matches!(
                 f,
-                crate::priority::findings::Finding::UnmigratedFacet { entity, value, .. }
-                    if entity == "ISS-001" && (*value - 9.0).abs() < 1e-9
+                crate::priority::findings::Finding::UnmigratedFacet { .. }
             )),
-            "UnmigratedFacet fires on PRESENCE: {findings:?}"
+            "No UnmigratedFacet findings after deletion: {findings:?}"
         );
-        // And the uncompared control: strip the session, the facet serves
-        // rung 5 — same finding, different rung (presence ≠ consumption).
+        // Strip the session → no projection, no claims → DEFAULT_VALUE.
         std::fs::remove_dir_all(root.join(".doctrine/comparisons")).unwrap();
         let pg2 = build(root).unwrap();
         let bs1 = pg2.attrs[&key("ISS", 1)].base_score;
         assert!(
-            (bs1.value_dim - 9.0).abs() < 1e-9,
-            "no projection: rung 5 serves the facet"
+            (bs1.value_dim - DEFAULT_VALUE).abs() < 1e-9,
+            "no projection, no claims: DEFAULT_VALUE, got {}",
+            bs1.value_dim
         );
     }
 
@@ -3607,8 +4159,6 @@ mod tests {
     #[test]
     fn scoring_inert_kinds_claims_resolve_but_are_never_consumed_all_kinds() {
         let no_facets = crate::facet::EntityFacets {
-            estimate: None,
-            value: None,
             risk: None,
             tags: vec![],
         };
@@ -3630,7 +4180,10 @@ mod tests {
                 false,
             )]);
             // Capture-lossless: the claim resolved for EVERY kind.
-            assert_eq!(claims.anchored[&subject].value, 7.0, "{prefix} captured");
+            assert_eq!(
+                claims.anchored[&subject].operative, 7.0,
+                "{prefix} captured"
+            );
             let entity_key = EntityKey { prefix, id: 1 };
             let resolved =
                 effective_raw_value(kind, &no_facets, entity_key, &no_projection, &claims);
@@ -3673,6 +4226,10 @@ mod tests {
             &pipeline.value.projection,
             &cost_feed,
             &comparison::ClaimResolution::default(),
+            pipeline.bare_anchor,
+            &crate::comparison::ClaimResolutionGeneric::<
+                crate::comparison::EstimatePayload,
+            >::default(),
         )
         .unwrap();
         assert_eq!(via_load.score, explicit_empty.score, "score map bitwise");

@@ -450,18 +450,6 @@ pub(crate) struct RevDoc {
     pub(crate) approval: Approval,
     #[serde(default)]
     pub(crate) tags: Vec<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::estimate::deserialize_lenient"
-    )]
-    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::value::deserialize_lenient"
-    )]
-    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 // ---------------------------------------------------------------------------
@@ -836,15 +824,21 @@ pub(crate) fn run_show(
             let value_line = crate::priority::surface::show_value_line(
                 &root,
                 &canonical_id(doc.id),
-                doc.value.as_ref().map(|v| v.value),
                 REV_KIND.prefix,
                 &value_unit,
+            )?;
+            let estimate_line = crate::priority::surface::show_estimate_line(
+                &root,
+                &canonical_id(doc.id),
+                REV_KIND.prefix,
+                &estimation_unit,
             )?;
             format_show(
                 &doc,
                 &body,
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -860,10 +854,11 @@ pub(crate) fn run_show(
 fn format_show(
     doc: &RevDoc,
     body: &str,
-    estimation_unit: &str,
+    _estimation_unit: &str,
     value_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
+    estimate_line: Option<&str>,
+    _lower_pct: f64,
+    _upper_pct: f64,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
@@ -872,16 +867,9 @@ fn format_show(
         doc.status.as_str(),
         doc.approval.as_str()
     ));
-    if let Some(ref est) = doc.estimate {
-        parts.push(format!(
-            "{}\n",
-            crate::estimate::display::format_estimate_confidence(
-                est,
-                lower_pct,
-                upper_pct,
-                estimation_unit,
-            )
-        ));
+    // SL-222 PHASE-07: pipeline-resolved estimate line (facet fallback deleted PHASE-09).
+    if let Some(line) = estimate_line {
+        parts.push(format!("{line}\n"));
     }
     // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
     if let Some(line) = value_line {
@@ -895,7 +883,7 @@ fn format_show(
 /// render via `as_str` (a hand-projected row, not a derive that would leak Rust
 /// idents).
 fn show_json(doc: &RevDoc, body: &str) -> anyhow::Result<String> {
-    let mut value = serde_json::json!({
+    let value = serde_json::json!({
         "kind": "revision",
         "revision": {
             "id": canonical_id(doc.id),
@@ -907,27 +895,7 @@ fn show_json(doc: &RevDoc, body: &str) -> anyhow::Result<String> {
         },
         "body": body,
     });
-    if let Some(ref est) = doc.estimate
-        && let Some(obj) = value.get_mut("revision").and_then(|v| v.as_object_mut())
-    {
-        obj.insert(
-            "estimate".to_string(),
-            serde_json::json!({
-                "lower": est.lower,
-                "upper": est.upper,
-            }),
-        );
-    }
-    if let Some(ref val) = doc.value
-        && let Some(obj) = value.get_mut("revision").and_then(|v| v.as_object_mut())
-    {
-        obj.insert(
-            "value".to_string(),
-            serde_json::json!({
-                "value": val.value,
-            }),
-        );
-    }
+
     serde_json::to_string_pretty(&value).context("failed to serialize revision show JSON")
 }
 
@@ -1532,8 +1500,6 @@ fn compose_apply_rec(req: &str, prior: ReqStatus, written: ReqStatus) -> crate::
         }],
         evidence_ref: Vec::new(),
         tags: Vec::new(),
-        estimate: None,
-        value: None,
     }
 }
 
@@ -1850,8 +1816,6 @@ primary = true
             status: RevStatus::Started,
             approval: Approval::None,
             tags: vec![],
-            estimate: None,
-            value: None,
         };
         let text = toml::to_string(&doc).unwrap();
         assert!(

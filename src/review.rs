@@ -1562,15 +1562,21 @@ pub(crate) fn run_show(
             let value_line = crate::priority::surface::show_value_line(
                 &root,
                 &canonical_id(id),
-                doc.value.as_ref().map(|v| v.value),
                 REVIEW_KIND.prefix,
                 &value_unit,
+            )?;
+            let estimate_line = crate::priority::surface::show_estimate_line(
+                &root,
+                &canonical_id(id),
+                REVIEW_KIND.prefix,
+                &estimation_unit,
             )?;
             format_show(
                 &doc,
                 &body,
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -1623,10 +1629,11 @@ fn read_brief(review_root: &Path, id: u32) -> anyhow::Result<String> {
 fn format_show(
     doc: &ReviewDoc,
     body: &str,
-    estimation_unit: &str,
+    _estimation_unit: &str,
     value_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
+    estimate_line: Option<&str>,
+    _lower_pct: f64,
+    _upper_pct: f64,
 ) -> String {
     let (status, awaited) = doc.derived();
     let mut parts: Vec<String> = Vec::new();
@@ -1651,16 +1658,9 @@ fn format_show(
     if !doc.tags.is_empty() {
         parts.push(format!("tags: {}\n", doc.tags.join(", ")));
     }
-    if let Some(ref est) = doc.estimate {
-        parts.push(format!(
-            "{}\n",
-            crate::estimate::display::format_estimate_confidence(
-                est,
-                lower_pct,
-                upper_pct,
-                estimation_unit,
-            )
-        ));
+    // SL-222 PHASE-07: pipeline-resolved estimate line (facet fallback deleted PHASE-09).
+    if let Some(line) = estimate_line {
+        parts.push(format!("{line}\n"));
     }
     // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
     if let Some(line) = value_line {
@@ -3182,7 +3182,7 @@ mod tests {
             estimate: None,
             value: None,
         };
-        let out = format_show(&doc, "## Brief\n", "points", None, 0.0, 1.0);
+        let out = format_show(&doc, "## Brief\n", "points", None, None, 0.0, 1.0);
         assert!(out.contains("RV-003 — Design review of SL-024"), "{out}");
         // empty ⇒ Done, await=None.
         assert!(out.contains("done · await=none"), "{out}");

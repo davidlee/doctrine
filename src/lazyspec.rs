@@ -624,9 +624,15 @@ fn load_spec(
     let value_line = crate::priority::surface::value_line_from_pipeline(
         pipeline,
         &listing_canonical(kind.prefix, spec.id),
-        spec.value.as_ref().map(|v| v.value),
         kind.prefix,
         &value_unit,
+    );
+    // SL-222 PHASE-07: the estimate line re-sources from the ladder.
+    let estimate_line = crate::priority::surface::estimate_line_from_pipeline(
+        pipeline,
+        &listing_canonical(kind.prefix, spec.id),
+        kind.prefix,
+        &estimation_unit,
     );
     let body = crate::spec::render(
         &spec,
@@ -636,6 +642,7 @@ fn load_spec(
         &interactions,
         &estimation_unit,
         value_line.as_deref(),
+        estimate_line.as_deref(),
         lower_pct,
         upper_pct,
     );

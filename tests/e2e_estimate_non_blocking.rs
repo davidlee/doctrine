@@ -97,6 +97,13 @@ const ALLOWLIST: &[&str] = &[
     // wire model names ValueFacet/value:: — sanctioned capture-side exposure,
     // not a gating path (scoring still never reads the facet here).
     "comparison/wire.rs",
+    // SL-222 §2/E13: the one formula site relocated to
+    // `estimate::operative_cost(bounds, skew)`; the estimate claims pass
+    // (EstimatePayload::operative) calls it, and `graph::authored_est_cost`
+    // delegates to it — sanctioned single-source exposure, not a new gating
+    // path (the ladder still consumes claims, not the facet).
+    "comparison/claims.rs",
+    "priority/graph.rs",
 ];
 
 fn src_dir() -> PathBuf {

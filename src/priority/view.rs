@@ -97,11 +97,15 @@ pub(crate) enum ReasonKind {
         date: Option<String>,
         contested: Option<ContestedClaim>,
     },
-    /// SL-220 PHASE-05 value-source shape (design §3 rung 5, transitional
-    /// D6) — an unmigrated authored `[value]` facet, consulted only when zero
-    /// claim rows exist for the item. The exit is the migration script (or a
-    /// re-assertion via `value set`/`value pin`).
-    ValueUnmigratedFacet { value: f64 },
+    /// SL-222 PHASE-09 (deletion) — a `[value]` top-level key survives on the
+    /// entity's TOML. The raw facet read model has been deleted; this is a
+    /// magnitude-free presence tripwire. The exit is the migration script or
+    /// re-assertion via `value set --rater human`.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-222 PHASE-09: used in tests")
+    )]
+    ValueUnmigratedFacet,
     /// SL-213 PHASE-06 value-source shape 2 — projected: budgeted
     /// interpolation between order neighbours. `lower`/`upper` are the C6
     /// display bounds (`None` = unbounded that side); `human`/`agent` are the
@@ -118,17 +122,53 @@ pub(crate) enum ReasonKind {
     /// convention, not evidence. `judgements` is the constraining-judgement
     /// count (human + agent) that ordered it.
     ValueGauge { value: f64, judgements: u32 },
-    /// SL-219 PHASE-06 cost-source shape 1 (design §5) — the `est_cost` came
-    /// from an authored `[estimate]` facet (the operator pin, D2), OR was
-    /// inherited from the class anchor by an `equal` sizing merge. `pin`
-    /// carries the OWN authored bounds `(lower, upper, β)` when the entity
-    /// authored its own facet; `None` for the facet-less member hoisted onto
-    /// an anchored class (provenance Authored — design §4, no bounds to show).
-    CostAuthored {
+    /// SL-222 PHASE-06 cost-source shape 1 — the `est_cost` came from a
+    /// PIN-tier anchored claim (the operator pin, D2). Carries the claim's
+    /// bounds `(lower, upper, β)`, attribution, and the `basis` ref.
+    /// `contested` is present when the winning Pin tier internally disagreed
+    /// on magnitude.
+    CostPin {
         est_cost: f64,
-        pin: Option<(f64, f64, f64)>,
+        lower: f64,
+        upper: f64,
+        beta: f64,
+        by: Option<String>,
+        date: Option<String>,
+        basis: Option<String>,
+        contested: Option<ContestedClaim>,
     },
-    /// SL-219 PHASE-06 cost-source shape 2 — projected: the deterministic
+    /// SL-222 PHASE-06 cost-source shape 2 — a resolved ledgered claim
+    /// (Human/Agent/Migrated). Rung 1 (Human, anchoring compile) or rungs
+    /// 3–4 (Agent/Migrated, the below-projection priors). The `conflict`
+    /// citation is non-empty for anchored-tier (Pin/Human) cross-class
+    /// anchor-conflicts; priors never anchor compile so they carry empty.
+    /// `tier` discriminates Human (anchored) from Agent/Migrated (priors).
+    /// Migrated claims carry `date` as their `observed_at` timestamp.
+    CostClaim {
+        est_cost: f64,
+        lower: f64,
+        upper: f64,
+        beta: f64,
+        tier: ClaimTier,
+        by: Option<String>,
+        date: Option<String>,
+        conflict: Vec<String>,
+    },
+    /// SL-222 PHASE-06 cost-source shape 3 — the entity inherited its
+    /// cost from the class anchor by an `equal` sizing merge (provenance
+    /// Authored in the est projection). The item is facet-less; its cost
+    /// was set by the class-anchored member.
+    CostClassAnchor { est_cost: f64 },
+    /// SL-222 PHASE-09 (deletion) — a `[estimate]` top-level key survives on
+    /// the entity's TOML. The raw facet read model has been deleted; this is a
+    /// magnitude-free presence tripwire. The exit is the migration script or
+    /// re-assertion via `estimate set --rater human`.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "SL-222 PHASE-09: used in tests")
+    )]
+    CostUnmigratedFacet,
+    /// SL-222 PHASE-06 cost-source shape 5 — projected: the deterministic
     /// point projection in an anchored est component. `lower`/`upper` are the
     /// C6 display bounds (`None` = unbounded that side); `human`/`agent` are
     /// the constraining sizing-judgement rater split (the T7 disclosure;
@@ -140,7 +180,7 @@ pub(crate) enum ReasonKind {
         human: u32,
         agent: u32,
     },
-    /// SL-219 PHASE-06 cost-source shape 3 — the bare anchor `max_upper +
+    /// SL-222 PHASE-06 cost-source shape 6 — the bare anchor `max_upper +
     /// margin` (D7): the divisor a bare item with no sizing evidence takes.
     /// `max_estimate` is `None` in the empty-corpus fallback (`est_cost` is
     /// then the `1.0` default, no authored upper to cite).
@@ -149,7 +189,7 @@ pub(crate) enum ReasonKind {
         max_estimate: Option<f64>,
         margin: f64,
     },
-    /// SL-219 PHASE-06 gauge flag (D2 honesty) — the item sits in a gauge est
+    /// SL-222 PHASE-06 gauge flag (D2 honesty) — the item sits in a gauge est
     /// component (ordered by `judgements`, no anchor in the component), so
     /// scoring used the BARE ANCHOR (`est_cost`/`max_estimate`/`margin`, the
     /// shape-3 fields); the render NEVER implies gauge fed the divisor. Emits
@@ -210,9 +250,34 @@ impl ReasonKind {
                 ClaimTier::Agent => "agent-claim",
                 ClaimTier::Migrated => "migrated-claim",
             }),
-            ReasonKind::ValueUnmigratedFacet { .. } => Some("unmigrated-facet"),
+            ReasonKind::ValueUnmigratedFacet => Some("unmigrated-facet"),
             ReasonKind::ValueProjected { .. } => Some("projected"),
             ReasonKind::ValueGauge { .. } => Some("gauge"),
+            _ => None,
+        }
+    }
+
+    /// The `cost_source` provenance token (SL-222 PHASE-06, design §5) — the
+    /// SINGLE source for every surface that names where a cost came from.
+    /// A **disclosed breaking token-set change**: `authored` is removed;
+    /// `pin` / `human-claim` / `agent-claim` / `migrated-claim` /
+    /// `class-anchor` / `unmigrated-facet` are added; `projected` / `gauge` /
+    /// `bare-anchor` are byte-stable. Pinned by the post-flip vocabulary
+    /// golden below.
+    pub(crate) fn cost_source_token(&self) -> Option<&'static str> {
+        match self {
+            ReasonKind::CostPin { .. } => Some("pin"),
+            ReasonKind::CostClaim { tier, .. } => Some(match tier {
+                ClaimTier::Pin => "pin",
+                ClaimTier::Human => "human-claim",
+                ClaimTier::Agent => "agent-claim",
+                ClaimTier::Migrated => "migrated-claim",
+            }),
+            ReasonKind::CostClassAnchor { .. } => Some("class-anchor"),
+            ReasonKind::CostUnmigratedFacet => Some("unmigrated-facet"),
+            ReasonKind::CostProjected { .. } => Some("projected"),
+            ReasonKind::CostGauge { .. } => Some("gauge"),
+            ReasonKind::CostBareAnchor { .. } => Some("bare-anchor"),
             _ => None,
         }
     }
@@ -333,8 +398,10 @@ pub(crate) struct NextRow {
     pub(crate) reasons: Vec<ReasonKind>,
     pub(crate) blockers: Vec<String>,
     pub(crate) blocking: Vec<String>,
-    /// Authored estimate facet (SL-171 PHASE-01) — `None` when no estimate authored.
-    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
+    /// SL-222 PHASE-09: the cost-source reason from the comparison ladder
+    /// (the `explain` cost block). `None` for a non-value-bearing kind or an
+    /// est-inactive corpus. Mirrors `value_source`.
+    pub(crate) cost_source: Option<ReasonKind>,
     /// SL-220 PHASE-06 (design §6) — the RESOLVED value-source reason from the
     /// comparison ladder (the same input `explain` consumes via
     /// [`super::surface::value_source_reason`]), NOT the raw authored facet. The
@@ -540,10 +607,7 @@ mod tests {
                 },
                 "migrated-claim",
             ),
-            (
-                ReasonKind::ValueUnmigratedFacet { value: 3.0 },
-                "unmigrated-facet",
-            ),
+            (ReasonKind::ValueUnmigratedFacet, "unmigrated-facet"),
         ];
         let tokens: Vec<&str> = shapes
             .iter()
@@ -588,5 +652,135 @@ mod tests {
             contested: None,
         };
         assert_eq!(reason.value_source_token(), Some("pin"));
+    }
+
+    /// EX-3 / VT-3: the FULL post-flip `cost_source` token vocabulary,
+    /// pinned as a set (SL-222 PHASE-06 — a disclosed breaking change).
+    /// One shape per ladder rung: `pin` (rung 1), `human-claim` (rung 1),
+    /// `class-anchor` (rung 2), `projected` (rung 3, byte-stable),
+    /// `gauge` (rung 3, byte-stable), `agent-claim` (rung 4),
+    /// `migrated-claim` (rung 5), `unmigrated-facet` (rung 6),
+    /// `bare-anchor` (rung 7, byte-stable).
+    #[test]
+    fn cost_source_token_vocabulary_golden_post_flip() {
+        let shapes: Vec<(ReasonKind, &str)> = vec![
+            (
+                ReasonKind::CostPin {
+                    est_cost: 5.9,
+                    lower: 2.0,
+                    upper: 8.0,
+                    beta: 0.65,
+                    by: Some("david".into()),
+                    date: Some("2026-07-17".into()),
+                    basis: Some("ASM-014".into()),
+                    contested: None,
+                },
+                "pin",
+            ),
+            (
+                ReasonKind::CostClaim {
+                    est_cost: 5.9,
+                    lower: 2.0,
+                    upper: 8.0,
+                    beta: 0.65,
+                    tier: ClaimTier::Human,
+                    by: Some("david".into()),
+                    date: Some("2026-07-17".into()),
+                    conflict: vec![],
+                },
+                "human-claim",
+            ),
+            (
+                ReasonKind::CostClaim {
+                    est_cost: 2.7,
+                    lower: 1.0,
+                    upper: 4.0,
+                    beta: 0.65,
+                    tier: ClaimTier::Agent,
+                    by: Some("claude".into()),
+                    date: Some("2026-07-12".into()),
+                    conflict: vec![],
+                },
+                "agent-claim",
+            ),
+            (
+                ReasonKind::CostClaim {
+                    est_cost: 2.1,
+                    lower: 1.0,
+                    upper: 3.0,
+                    beta: 0.65,
+                    tier: ClaimTier::Migrated,
+                    by: None,
+                    date: Some("2026-07-17".into()),
+                    conflict: vec![],
+                },
+                "migrated-claim",
+            ),
+            (
+                ReasonKind::CostClassAnchor { est_cost: 4.0 },
+                "class-anchor",
+            ),
+            (ReasonKind::CostUnmigratedFacet, "unmigrated-facet"),
+            (
+                ReasonKind::CostProjected {
+                    est_cost: 3.4,
+                    lower: Some(2.0),
+                    upper: Some(5.65),
+                    human: 3,
+                    agent: 1,
+                },
+                "projected",
+            ),
+            (
+                ReasonKind::CostGauge {
+                    est_cost: 11.0,
+                    max_estimate: Some(10.0),
+                    margin: 1.0,
+                    judgements: 3,
+                },
+                "gauge",
+            ),
+            (
+                ReasonKind::CostBareAnchor {
+                    est_cost: 11.0,
+                    max_estimate: Some(10.0),
+                    margin: 1.0,
+                },
+                "bare-anchor",
+            ),
+        ];
+        let tokens: Vec<&str> = shapes
+            .iter()
+            .map(|(reason, _)| reason.cost_source_token().expect("a cost source"))
+            .collect();
+        let expected: Vec<&str> = shapes.iter().map(|&(_, token)| token).collect();
+        assert_eq!(tokens, expected, "per-shape token map");
+
+        // The COMPLETE vocabulary, as a set: `authored` is gone.
+        let vocabulary: std::collections::BTreeSet<&str> = tokens.into_iter().collect();
+        let pinned: std::collections::BTreeSet<&str> = [
+            "pin",
+            "human-claim",
+            "agent-claim",
+            "migrated-claim",
+            "class-anchor",
+            "unmigrated-facet",
+            "projected",
+            "gauge",
+            "bare-anchor",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(vocabulary, pinned, "full post-flip cost_source token set");
+        assert!(
+            !vocabulary.contains("authored"),
+            "authored removed from cost_source"
+        );
+
+        // A non-cost-source reason mints no token.
+        assert_eq!(
+            ReasonKind::BlockedBy { items: vec![] }.cost_source_token(),
+            None
+        );
     }
 }

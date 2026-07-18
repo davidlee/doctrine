@@ -27,12 +27,18 @@ records local bounds and exposes them; callers decide rollup.
 
 ## Responsibilities
 
-Mirrors the structured `responsibilities` list: the `EstimateFacet` model and parse
-seam, bound-normalization and the validation matrix, project-wide unit resolution,
-round-trip durability, pure display rendering, the policy-free graph-exposure
-contract, and the structural non-blocking guarantee.
+Mirrors the structured `responsibilities` list: the estimate anchor-claim payload
+(REV-026; the `EstimateFacet` parse seam survives transitionally until the
+SL-222 deletion census), bound-normalization and the capture-time validation
+matrix, project-wide unit resolution, round-trip durability, pure display
+rendering of resolved claims, the policy-free graph-exposure contract, and the
+structural non-blocking guarantee.
 
-### The `EstimateFacet` model and parse seam
+### The `EstimateFacet` model and parse seam (transitional, REV-026)
+
+**Superseded as the estimate surface by the estimate-claim capture shape
+(REV-026, below); survives only to serve the unmigrated-facet resolution rung
+and the migration census, and deletes at the SL-222 deletion phase.**
 
 A single reusable `EstimateFacet` carries two finite `f64` bounds, `lower` and
 `upper`. It is parsed from an optional `[estimate]` TOML table off the entity's
@@ -46,9 +52,11 @@ and hydration sit in the imperative shell.
 
 ### Normalization and the validation matrix
 
-Authored bounds may be TOML integers or floats; both normalize to finite `f64` at
-the parse boundary. A *present* `[estimate]` is then either structurally valid or a
-hard parse/validate error — there is no lenient repair:
+Authored bounds may be TOML integers or floats; both normalize to finite `f64`.
+Under REV-026 the matrix is enforced at claim **capture** (the wire validation
+matrix, with `estimate::validate` the single source); the transitional facet
+parse applies the same predicate. A *present* range is either structurally valid
+or a hard refusal — there is no lenient repair:
 
 ```text
 lower required · upper required · both finite · lower >= 0 · upper >= lower
@@ -84,20 +92,24 @@ deferred to IMP-112.
 
 ### Round-trip durability
 
-A valid estimate survives parse → hydrate → catalog projection unchanged: the
-normalized `f64` bounds are stable across the pipeline. Original TOML numeric
-formatting (e.g. `2` vs `2.0`) is not retained — the normalized form is the truth
-that round-trips.
+The durable obligation is wire round-trip losslessness of estimate anchor rows
+(write → parse → write, including absent optionals — REV-026/E2).
+Transitionally, a valid facet also survives parse → hydrate → catalog projection
+unchanged: the normalized `f64` bounds are stable across the pipeline. Original
+TOML numeric formatting (e.g. `2` vs `2.0`) is not retained — the normalized
+form is the truth that round-trips.
 
 ### Display rendering
 
-Rendering is a pure function over the normalized model and the resolved unit:
+Rendering is a pure function over the **claim-resolved** estimate and the
+resolved unit (REV-026): the estimate line renders the resolved range, claim
+tier, attribution, and unit; absent evidence omits the line; record kinds carry
+a scoring-inert annotation.
 
 ```text
-present:   Estimate: 2-8 espresso_shots
-absent:    Estimate: none recorded
-verbose:   Estimate: 2-8 espresso_shots
-           Attention spread: 4x          (upper / lower)
+resolved:  estimate 2.0-8.0 espresso_shots (human claim, david, 2026-07-17)
+absent:    (line omitted)
+verbose:   Attention spread: 4x          (upper / lower)
            Attention width: 6 espresso_shots   (upper - lower)
 lower==0:  Attention spread: ratio unavailable      (width still shown)
 ```
@@ -110,9 +122,11 @@ v1 posture, PRD-014 OQ-1).
 
 ### The graph-exposure contract
 
-Catalog/graph hydration exposes each estimated node's metadata through a stable,
-policy-free contract: entity id, entity kind, estimate `lower`, estimate `upper`,
-the project estimation unit, the node's relations/edges, and lifecycle state where
+The graph consumes **claim-resolved** estimates through the comparison pipeline
+(REV-026); per-node raw-facet exposure retires at the deletion census. The
+contract stays stable and policy-free: entity id, entity kind, the resolved
+bounds and tier, the project estimation unit (a project-wide constant, never
+duplicated per node), the node's relations/edges, and lifecycle state where
 available. The contract carries no aggregation, traversal, or interpretation
 policy — a consumer (Cordage) builds traversal/aggregation primitives over it
 without understanding any doctrine-specific project-management semantics. Estimate
@@ -130,6 +144,29 @@ No dispatch, execute, audit, or close predicate reads estimate presence. The
 guarantee is **structural** — the absence of any such read — and is proven by that
 absence, not by a passing workflow run. A missing estimate is never a validation
 error and can never block, fatally warn, or refuse any workflow.
+
+### The estimate-claim capture shape (REV-026)
+
+The normative estimate capture is the wire-level **anchor-claim row** in the
+comparison ledger: `form = anchor`, `domain = estimate`, `frame = cost-anchor`,
+payload `{est_lower, est_upper}` carrying two finite `f64` bounds satisfying
+`estimate::validate` (finite, `lower >= 0`, `upper >= lower`) — the single
+validation source. Claim resolution (the generic claims fold, estimate
+instantiation: per-field mean over the winning tier, operative-cost conflict
+interval) and rendering are **pure**; only the project-config read (skew,
+margin), ledger IO, and hydration sit in the imperative shell.
+
+`estimate set` **appends** an anchor-claim row (dated, attributed by rater
+tier; `-x N` mints a point range); `estimate clear` appends tombstone rows;
+correction is **supersession** — an explicitly superseding row, never an
+in-place edit. `estimate pin` is the operator-gated admission path for the pin
+tier (interactive-TTY, worker-refused write class; `pin --retire` lifts it).
+`est_cost` consumes the claim-resolved cost by the REV-026 ladder (ADR-015);
+the collapse semantics (range + skew + confidence → scalar, percentile
+framing) are unchanged — only the source precedence moved. The legacy
+`[estimate]` facet parse seam is retired as the estimate surface; it survives
+transitionally to serve the unmigrated-facet resolution rung and the migration
+census only.
 
 ### The value-claim capture shape (REV-024)
 

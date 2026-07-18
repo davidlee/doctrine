@@ -2724,14 +2724,10 @@ target = \"ADR-001\"
         assert_eq!(raw.record_kind, RecordKind::Assumption);
         assert_eq!(raw.title, "Test");
 
-        // Extract and parse the [estimate] sub-table via the pure estimate path.
+        // Key-presence check: [estimate] survives with no parse-failure
+        // (tolerated by the raw struct via #[serde(flatten)]).
         let full: toml::Table = toml.parse().unwrap();
-        let est_table = full.get("estimate").and_then(|v| v.as_table());
-        let facet = crate::estimate::parse_optional(est_table)
-            .unwrap()
-            .expect("estimate should be present");
-        assert_eq!(facet.lower, 3.0);
-        assert_eq!(facet.upper, 3.0);
+        assert!(full.contains_key("estimate"), "estimate key present");
 
         // Full validate is clean — [estimate] is ignored, not rejected.
         let record = validate(raw).unwrap();

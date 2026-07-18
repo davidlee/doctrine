@@ -3,14 +3,14 @@ version = 1
 
 id = 274
 slug = "expose-estimate-metadata-through-a-policy-free-graph-contract"
-title = "Expose estimate metadata through a policy-free graph contract"
+title = "Expose resolved estimates through a policy-free graph contract"
 status = "active"
 kind = "functional"
 
-description = "Catalog/graph hydration exposes each estimated node's metadata through a stable, policy-free contract carrying no aggregation or interpretation."
+description = "The graph consumes claim-resolved estimates through the comparison pipeline behind a stable, policy-free contract carrying no aggregation or interpretation; per-node raw-facet exposure retires at the deletion census (REV-026 disposition: flip + deletion)."
 tags = []
 acceptance_criteria = [
-  "For each estimated node, hydration exposes entity id, kind, lower, upper, the project unit (a project-wide constant reachable from every node via the held graph, not duplicated per node), the node's relations/edges, and lifecycle state where available.",
+  "For each estimated node, the pipeline exposes the resolved cost, tier, and bounds; the project unit stays a project-wide constant, not duplicated per node.",
   "The exposed contract carries no aggregation, traversal, or interpretation policy.",
   "The graph-facing surface uses graph-neutral vocabulary and passes the whole-word denylist (no project/task/schedule/capacity).",
 ]

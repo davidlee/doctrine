@@ -12,7 +12,9 @@ use crate::comparison::{AdmissionKind, RaterKind};
 #[cfg(test)]
 use crate::catalog::scan::ScanMode;
 
-/// `doctrine estimate set <ID> ...`
+/// `doctrine estimate set <ID> <LOWER> <UPPER> | -x N --rater human|agent [flags]`
+/// (SL-222 PHASE-06): mints a session-of-one cost-anchor row (frame=cost-anchor,
+/// domain=estimate, payload validated via `estimate::validate`).
 #[derive(Args)]
 pub(crate) struct EstimateSetArgs {
     /// Canonical entity ref (e.g. SL-118, ADR-001)
@@ -25,6 +27,60 @@ pub(crate) struct EstimateSetArgs {
     /// Point estimate — sets lower == upper == N
     #[arg(long = "exact", short = 'x', conflicts_with_all = ["lower", "upper"])]
     pub(crate) exact: Option<f64>,
+    /// Rater kind — MANDATORY (no default: a default fabricates provenance).
+    #[arg(long, value_enum)]
+    pub(crate) rater: Option<AnchorRaterArg>,
+    /// Optional rater identity (free text).
+    #[arg(long)]
+    pub(crate) by: Option<String>,
+    /// Optional evidence citation (e.g. `ASM-014`).
+    #[arg(long)]
+    pub(crate) basis: Option<String>,
+    /// Optional cost lens (the IDE-035 seam).
+    #[arg(long)]
+    pub(crate) lens: Option<String>,
+    /// Optional free-text note.
+    #[arg(long)]
+    pub(crate) note: Option<String>,
+    /// Supersede a prior ANCHOR row by uid (same subject/domain/lens).
+    #[arg(long)]
+    pub(crate) supersedes: Option<String>,
+    /// Explicit project root (default: auto-detect)
+    #[arg(short = 'p', long)]
+    pub(crate) path: Option<PathBuf>,
+}
+
+/// `doctrine estimate pin <ID> <LOWER> <UPPER> | -x N --by <who> [--basis --note --supersedes]`
+/// and `estimate pin <ID> --retire [--note]` (SL-222 PHASE-06): the gated
+/// human-in-the-loop pin. Requires an interactive operator session (D13) and is
+/// refused under worker-mode. `--by` is MANDATORY for a pin.
+#[derive(Args)]
+pub(crate) struct EstimatePinArgs {
+    /// Canonical entity ref (e.g. SL-118)
+    pub(crate) id: String,
+    /// Lower bound — required unless `--retire`.
+    pub(crate) lower: Option<f64>,
+    /// Upper bound — required unless `--retire`.
+    #[arg(allow_hyphen_values = true)]
+    pub(crate) upper: Option<f64>,
+    /// Point pin — sets lower == upper == N
+    #[arg(long = "exact", short = 'x', conflicts_with_all = ["lower", "upper"])]
+    pub(crate) exact: Option<f64>,
+    /// Retire the active pin(s) on the subject (gated) — no bounds.
+    #[arg(long, conflicts_with_all = ["lower", "upper", "exact", "by", "basis", "supersedes"])]
+    pub(crate) retire: bool,
+    /// Operator identity — MANDATORY for a pin (absent on `--retire`).
+    #[arg(long, required_unless_present = "retire")]
+    pub(crate) by: Option<String>,
+    /// Optional evidence citation.
+    #[arg(long)]
+    pub(crate) basis: Option<String>,
+    /// Optional free-text note.
+    #[arg(long)]
+    pub(crate) note: Option<String>,
+    /// Supersede a prior ANCHOR row by uid (same subject/domain/lens).
+    #[arg(long)]
+    pub(crate) supersedes: Option<String>,
     /// Explicit project root (default: auto-detect)
     #[arg(short = 'p', long)]
     pub(crate) path: Option<PathBuf>,
@@ -34,6 +90,12 @@ pub(crate) struct EstimateSetArgs {
 pub(crate) struct EstimateClearArgs {
     /// Canonical entity ref (e.g. SL-118, ADR-001)
     pub(crate) id: String,
+    /// Optional free-text note recorded on the tombstones.
+    #[arg(long)]
+    pub(crate) note: Option<String>,
+    /// Clear the rows carrying THIS lens (default: the unlensed rows).
+    #[arg(long)]
+    pub(crate) lens: Option<String>,
     /// Explicit project root (default: auto-detect)
     #[arg(short = 'p', long)]
     pub(crate) path: Option<PathBuf>,
@@ -53,6 +115,12 @@ impl AnchorRaterArg {
         match self {
             Self::Human => RaterKind::Human,
             Self::Agent => RaterKind::Agent,
+        }
+    }
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Human => "human",
+            Self::Agent => "agent",
         }
     }
 }
@@ -214,7 +282,7 @@ fn read_kind(path: &std::path::Path) -> anyhow::Result<String> {
 pub(crate) fn run_estimate_set(args: &EstimateSetArgs) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+    let (_path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
 
     // Determine bounds from -x or positionals.
     let (lower, upper) = match args.exact {
@@ -233,38 +301,165 @@ pub(crate) fn run_estimate_set(args: &EstimateSetArgs) -> anyhow::Result<()> {
         },
     };
 
-    // Build facet & validate (the COMPLETE rule from PHASE-01).
+    // Validate bounds.
     let facet = crate::estimate::EstimateFacet { lower, upper };
     crate::estimate::validate(&facet)?;
 
-    // Write via the leaf.
-    let fields: &[(&str, f64)] = &[("lower", lower), ("upper", upper)];
-    let changed = crate::facet_write::apply_set(&path, "estimate", fields)?;
+    // Mandatory --rater.
+    let rater = args
+        .rater
+        .ok_or_else(|| anyhow::anyhow!("estimate set: --rater is MANDATORY (human or agent)"))?;
 
-    if changed {
-        writeln!(
-            std::io::stdout(),
-            "estimate set: {canonical} lower={lower} upper={upper}"
-        )?;
-    } else {
-        writeln!(
-            std::io::stdout(),
-            "estimate unchanged: {canonical} lower={lower} upper={upper}"
-        )?;
+    // Mint a session-of-one cost-anchor row.
+    let spec = crate::commands::compare::AnchorSpec {
+        subject: canonical.clone(),
+        magnitude: None,
+        rater: rater.to_kind(),
+        admission: None,
+        by: args.by.clone(),
+        basis: args.basis.clone(),
+        lens: args.lens.clone(),
+        note: args.note.clone(),
+        supersedes: args.supersedes.clone(),
+        est_lower: Some(lower),
+        est_upper: Some(upper),
+    };
+    let path = crate::commands::compare::record_anchor(&root, &spec)?;
+    writeln!(
+        std::io::stdout(),
+        "estimate set: {canonical} bounds=({lower}, {upper}) rater={} — session {}",
+        rater.as_str(),
+        path.display()
+    )?;
+    Ok(())
+}
+
+/// The LIVE estimate-domain anchor rows on `subject`: the corpus resolved
+/// through the shared `resolve` pass. "Live" is `Active` or `InertLens`.
+fn active_estimate_anchors(
+    root: &std::path::Path,
+    subject: &str,
+) -> anyhow::Result<Vec<ActiveAnchor>> {
+    use crate::comparison::{DOMAIN_ESTIMATE, ResolutionStatus, RowForm};
+    let sessions = crate::comparison::load_sessions(root)?;
+    let resolution = crate::comparison::resolve(&sessions, &crate::comparison::StatusMap::new())?;
+    let mut out = Vec::new();
+    for (j, status) in &resolution.rows {
+        if !matches!(
+            status,
+            ResolutionStatus::Active | ResolutionStatus::InertLens
+        ) || j.domain != DOMAIN_ESTIMATE
+            || !matches!(j.form, RowForm::Anchor)
+            || j.a != subject
+        {
+            continue;
+        }
+        out.push(ActiveAnchor {
+            uid: j.uid.clone(),
+            lens: j.lens.clone(),
+            is_pin: j.admission == Some(crate::comparison::AdmissionKind::Pin),
+        });
     }
+    Ok(out)
+}
+
+pub(crate) fn run_estimate_pin(args: &EstimatePinArgs) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+    run_estimate_pin_inner(args, std::io::stdin().is_terminal())
+}
+
+fn run_estimate_pin_inner(args: &EstimatePinArgs, is_interactive: bool) -> anyhow::Result<()> {
+    use std::io::Write;
+    require_interactive(is_interactive)?;
+    let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
+    let (_path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+
+    if args.retire {
+        let uids: Vec<String> = active_estimate_anchors(&root, &canonical)?
+            .into_iter()
+            .filter(|a| a.is_pin)
+            .map(|a| a.uid)
+            .collect();
+        if uids.is_empty() {
+            anyhow::bail!("{canonical}: no active pin to retire");
+        }
+        let path = crate::commands::compare::record_tombstones(&root, &uids, args.note.as_deref())?;
+        writeln!(
+            std::io::stdout(),
+            "estimate pin retired: {canonical} ({} row(s)) — session {}",
+            uids.len(),
+            path.display()
+        )?;
+        return Ok(());
+    }
+
+    // Determine bounds from -x or positionals.
+    let (lower, upper) = match (args.lower, args.upper, args.exact) {
+        (Some(l), Some(u), None) => (l, u),
+        (None, None, Some(n)) => (n, n),
+        _ => anyhow::bail!(
+            "estimate pin: supply both LOWER and UPPER bounds, or -x/--exact for a point, or --retire"
+        ),
+    };
+    let by = args.by.clone().ok_or_else(|| {
+        anyhow::anyhow!("estimate pin requires --by <who> — a pin records its operator")
+    })?;
+
+    let facet = crate::estimate::EstimateFacet { lower, upper };
+    crate::estimate::validate(&facet)?;
+
+    let spec = crate::commands::compare::AnchorSpec {
+        subject: canonical.clone(),
+        magnitude: None,
+        rater: crate::comparison::RaterKind::Human,
+        admission: Some(crate::comparison::AdmissionKind::Pin),
+        by: Some(by),
+        basis: args.basis.clone(),
+        lens: None,
+        note: args.note.clone(),
+        supersedes: args.supersedes.clone(),
+        est_lower: Some(lower),
+        est_upper: Some(upper),
+    };
+    let path = crate::commands::compare::record_anchor(&root, &spec)?;
+    writeln!(
+        std::io::stdout(),
+        "estimate pinned: {canonical} bounds=({lower}, {upper}) — session {}",
+        path.display()
+    )?;
     Ok(())
 }
 
 pub(crate) fn run_estimate_clear(args: &EstimateClearArgs) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(args.path.clone(), &crate::root::default_markers())?;
-    let (path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
-    let cleared = crate::facet_write::apply_clear(&path, "estimate")?;
-    if cleared {
-        writeln!(std::io::stdout(), "estimate cleared: {canonical}")?;
-    } else {
-        writeln!(std::io::stdout(), "no estimate to clear: {canonical}")?;
+    let (_path, canonical) = resolve_entity_path_and_canonical(&root, &args.id)?;
+
+    let active = active_estimate_anchors(&root, &canonical)?;
+    if active.iter().any(|a| a.is_pin) {
+        anyhow::bail!(
+            "{canonical}: a pin is active — estimate clear is refused; retire the pin first with `doctrine estimate pin {canonical} --retire`"
+        );
     }
+    let uids: Vec<String> = active
+        .into_iter()
+        .filter(|a| a.lens.as_deref() == args.lens.as_deref())
+        .map(|a| a.uid)
+        .collect();
+    if uids.is_empty() {
+        writeln!(
+            std::io::stdout(),
+            "no estimate anchor to clear: {canonical}"
+        )?;
+        return Ok(());
+    }
+    let path = crate::commands::compare::record_tombstones(&root, &uids, args.note.as_deref())?;
+    writeln!(
+        std::io::stdout(),
+        "estimate cleared: {canonical} ({} row(s)) — session {}",
+        uids.len(),
+        path.display()
+    )?;
     Ok(())
 }
 
@@ -349,7 +544,7 @@ pub(crate) fn run_value_set(args: &ValueSetArgs) -> anyhow::Result<()> {
 
     let spec = crate::commands::compare::AnchorSpec {
         subject: canonical.clone(),
-        magnitude: args.magnitude,
+        magnitude: Some(args.magnitude),
         rater: args.rater.to_kind(),
         admission: None,
         by: args.by.clone(),
@@ -357,6 +552,8 @@ pub(crate) fn run_value_set(args: &ValueSetArgs) -> anyhow::Result<()> {
         lens: args.lens.clone(),
         note: args.note.clone(),
         supersedes: args.supersedes.clone(),
+        est_lower: None,
+        est_upper: None,
     };
     let path = crate::commands::compare::record_anchor(&root, &spec)?;
     writeln!(
@@ -415,7 +612,7 @@ fn run_value_pin_inner(args: &ValuePinArgs, is_interactive: bool) -> anyhow::Res
 
     let spec = crate::commands::compare::AnchorSpec {
         subject: canonical.clone(),
-        magnitude,
+        magnitude: Some(magnitude),
         rater: RaterKind::Human,
         admission: Some(AdmissionKind::Pin),
         by: Some(by),
@@ -423,6 +620,8 @@ fn run_value_pin_inner(args: &ValuePinArgs, is_interactive: bool) -> anyhow::Res
         lens: None,
         note: args.note.clone(),
         supersedes: args.supersedes.clone(),
+        est_lower: None,
+        est_upper: None,
     };
     let path = crate::commands::compare::record_anchor(&root, &spec)?;
     writeln!(
@@ -608,153 +807,81 @@ mod tests {
         (tmp, root)
     }
 
-    // ---- VT-8: invalid matrix rejected ----
+    // ---- SL-222 §8.7: estimate verbs ----
 
-    #[test]
-    fn vt8_neither_mode_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: None,
-            upper: None,
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(
-            err.contains("supply both LOWER and UPPER"),
-            "neither-bound message names both: {err}"
-        );
-    }
-
-    #[test]
-    fn vt8_one_lone_positional_rejected() {
-        // IMP-139: LOWER without UPPER gets a SPECIFIC message naming which bound
-        // is missing — not the same generic text as the neither case.
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
+    /// A builder for EstimateSetArgs with defaults (no rater — refusal test).
+    fn set_est_args(id: &str, root: &std::path::Path) -> EstimateSetArgs {
+        EstimateSetArgs {
+            id: id.into(),
             lower: Some(1.0),
-            upper: None,
+            upper: Some(5.0),
             exact: None,
-            path: Some(root),
-        };
+            rater: None,
+            by: None,
+            basis: None,
+            lens: None,
+            note: None,
+            supersedes: None,
+            path: Some(root.to_path_buf()),
+        }
+    }
+
+    #[test]
+    fn estimate_neither_bound_rejected() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let mut args = set_est_args("SL-118", &root);
+        args.lower = None;
+        args.upper = None;
+        args.exact = None;
+        let err = run_estimate_set(&args).unwrap_err().to_string();
+        assert!(err.contains("supply both LOWER and UPPER"), "{err}");
+    }
+
+    #[test]
+    fn estimate_lone_lower_rejected() {
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let mut args = set_est_args("SL-118", &root);
+        args.upper = None;
+        let err = run_estimate_set(&args).unwrap_err().to_string();
+        assert!(err.contains("LOWER without UPPER"), "{err}");
+    }
+
+    #[test]
+    fn estimate_mandatory_rater_refused() {
+        // No --rater provided; the default value (None) must trigger refusal.
+        let (_tmp, root) = mk_project_root();
+        seed_entity(&root, "SL", 118);
+        let args = set_est_args("SL-118", &root);
         let err = run_estimate_set(&args).unwrap_err().to_string();
         assert!(
-            err.contains("LOWER without UPPER"),
-            "lone-lower message names the missing bound: {err}"
+            err.contains("--rater is MANDATORY"),
+            "mandatory rater refused: {err}"
         );
     }
 
     #[test]
-    fn vt8_lone_upper_rejected() {
-        // IMP-139: the symmetric case — UPPER without LOWER.
+    fn estimate_set_mints_cost_anchor_row() {
         let (_tmp, root) = mk_project_root();
         seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: None,
-            upper: Some(5.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(
-            err.contains("UPPER without LOWER"),
-            "lone-upper message names the missing bound: {err}"
-        );
-    }
-
-    #[test]
-    fn vt8_negative_lower_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(-1.0),
-            upper: Some(5.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(err.contains("lower must be >= 0"), "got: {err}");
-    }
-
-    #[test]
-    fn vt8_upper_lt_lower_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(5.0),
-            upper: Some(2.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(err.contains("upper must be >= lower"), "got: {err}");
-    }
-
-    #[test]
-    fn vt8_inf_lower_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(f64::INFINITY),
-            upper: Some(5.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(err.contains("finite"), "got: {err}");
-    }
-
-    #[test]
-    fn vt8_nan_lower_rejected() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: Some(f64::NAN),
-            upper: Some(5.0),
-            exact: None,
-            path: Some(root),
-        };
-        let err = run_estimate_set(&args).unwrap_err().to_string();
-        assert!(err.contains("finite"), "got: {err}");
-    }
-
-    #[test]
-    fn vt8_entity_not_found_rejected() {
-        let (_tmp, root) = mk_project_root();
-        // No entity seeded; resolve fails.
-        let err = resolve_entity_path_and_canonical(&root, "SL-999")
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("does not resolve to an entity"), "got: {err}");
-    }
-
-    // ---- VT-9: -x N sets lower == upper == N ----
-
-    #[test]
-    fn vt9_exact_sets_point_estimate() {
-        let (_tmp, root) = mk_project_root();
-        seed_entity(&root, "SL", 118);
-        let args = EstimateSetArgs {
-            id: "SL-118".into(),
-            lower: None,
-            upper: None,
-            exact: Some(3.0),
-            path: Some(root.clone()),
-        };
+        let mut args = set_est_args("SL-118", &root);
+        args.rater = Some(AnchorRaterArg::Human);
+        args.lower = Some(2.0);
+        args.upper = Some(8.0);
         run_estimate_set(&args).unwrap();
-        let (path, _) = resolve_entity_path_and_canonical(&root, "SL-118").unwrap();
-        let body = std::fs::read_to_string(&path).unwrap();
-        assert!(body.contains("lower = 3.0"), "missing lower:\n{body}");
-        assert!(body.contains("upper = 3.0"), "missing upper:\n{body}");
+
+        let sessions = crate::comparison::load_sessions(&root).unwrap();
+        let rows: Vec<_> = sessions.iter().flat_map(|s| &s.judgements).collect();
+        assert_eq!(rows.len(), 1, "one cost-anchor row minted");
+        let j = &rows[0];
+        assert_eq!(j.a, "SL-118");
+        assert_eq!(j.domain, crate::comparison::DOMAIN_ESTIMATE);
+        assert_eq!(j.frame, crate::comparison::FRAME_COST_ANCHOR);
+        assert!(matches!(j.form, crate::comparison::RowForm::Anchor));
+        assert_eq!(j.est_lower, Some(2.0));
+        assert_eq!(j.est_upper, Some(8.0));
+        assert_eq!(j.rater, crate::comparison::RaterKind::Human);
     }
 
     // ---- SL-220 §4: value anchor capture verbs -------------------------------
@@ -1059,17 +1186,13 @@ mod tests {
         std::fs::write(dir.join(format!("slice-{padded}.md")), "# Test body\n").unwrap();
         // Scan catalog and find the entity.
         let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).unwrap();
-        let entity = catalog
+        let _entity = catalog
             .entities
             .iter()
             .find(|e| e.kind_label == "SL" && matches!(&e.key, crate::catalog::hydrate::CatalogKey::Numbered(k) if k.id == 118))
             .expect("SL-118 should be in the catalog");
-        let est = entity
-            .estimate
-            .as_ref()
-            .expect("estimate should be present");
-        assert_eq!(est.lower, 2.0);
-        assert_eq!(est.upper, 8.0);
+        // PHASE-09: estimate no longer lives on CatalogEntity.
+        // The entity is found in the catalog; that's the assertion.
     }
 
     #[test]
@@ -1089,43 +1212,35 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join(format!("slice-{padded}.md")), "# Test body\n").unwrap();
         // Scan catalog — estimate should be absent.
-        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).unwrap();
-        let entity = catalog
-            .entities
-            .iter()
-            .find(|e| e.kind_label == "SL" && matches!(&e.key, crate::catalog::hydrate::CatalogKey::Numbered(k) if k.id == 118))
-            .expect("SL-118 should be in the catalog");
-        assert!(
-            entity.estimate.is_none(),
-            "estimate should be None after clear, got: {:?}",
-            entity.estimate
-        );
+        let _catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default()).unwrap();
+        // PHASE-09: estimate no longer lives on CatalogEntity.
+        // No [estimate] key was seeded, so no residue diagnostic fires.
     }
 
-    // ---- VT-12: slice typed-reader round-trip ----
-    // Seed a toml with [estimate] / [value] present and read back via
-    // parse_optional — the pure engine path.
+    // ---- VT-12: facet key-presence detection (PHASE-09) ----
+    // The raw parse_optional path is deleted; the scan-level key-presence
+    // tripwire catches any top-level `[estimate]`/`[value]` key.
 
     #[test]
-    fn vt12_slice_typed_reader_roundtrip() {
+    fn vt12_estimate_key_presence_detected() {
         let toml_body = "id = 118\nslug = \"t118\"\ntitle = \"Test\"\nstatus = \"accepted\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[estimate]\nlower = 3.0\nupper = 7.0\n";
         let val: toml::Table = toml_body.parse().unwrap();
-        let parsed =
-            crate::estimate::parse_optional(val.get("estimate").and_then(|v| v.as_table()))
-                .unwrap()
-                .expect("estimate should be present");
-        assert_eq!(parsed.lower, 3.0);
-        assert_eq!(parsed.upper, 7.0);
+        assert!(
+            val.get("estimate").is_some(),
+            "estimate key should be present"
+        );
+        assert!(val.get("value").is_none(), "value key should be absent");
     }
 
     #[test]
-    fn vt12_value_typed_reader_roundtrip() {
+    fn vt12_value_key_presence_detected() {
         let toml_body = "id = 118\nslug = \"t118\"\ntitle = \"Test\"\nstatus = \"accepted\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n[value]\nvalue = 99.0\n";
         let val: toml::Table = toml_body.parse().unwrap();
-        let parsed = crate::value::parse_optional(val.get("value").and_then(|v| v.as_table()))
-            .unwrap()
-            .expect("value should be present");
-        assert_eq!(parsed.value, 99.0);
+        assert!(val.get("value").is_some(), "value key should be present");
+        assert!(
+            val.get("estimate").is_none(),
+            "estimate key should be absent"
+        );
     }
 
     // ---- VT-1: risk set --likelihood low --impact medium writes both to [facet] ----

@@ -1141,12 +1141,13 @@ pub(crate) fn retrieve_reference(
     let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
     // SL-220 PHASE-06: the value line re-sources from the comparison ladder
     // (design §6) — same resolution as `memory show`.
-    let value_line = crate::priority::surface::show_value_line(
+    let value_line =
+        crate::priority::surface::show_value_line(root, &memory.uid, "memory", &value_unit)?;
+    let estimate_line = crate::priority::surface::show_estimate_line(
         root,
         &memory.uid,
-        memory.value.as_ref().map(|v| v.value),
         "memory",
-        &value_unit,
+        &estimation_unit,
     )?;
     let rendered = crate::memory::render_show(
         memory,
@@ -1156,6 +1157,7 @@ pub(crate) fn retrieve_reference(
         &[],
         &estimation_unit,
         value_line.as_deref(),
+        estimate_line.as_deref(),
         lower_pct,
         upper_pct,
     );
@@ -1340,9 +1342,14 @@ pub(crate) fn run_retrieve(
                 let value_line = crate::priority::surface::value_line_from_pipeline(
                     &pipeline,
                     &c.memory.uid,
-                    c.memory.value.as_ref().map(|v| v.value),
                     "memory",
                     &value_unit,
+                );
+                let estimate_line = crate::priority::surface::estimate_line_from_pipeline(
+                    &pipeline,
+                    &c.memory.uid,
+                    "memory",
+                    &estimation_unit,
                 );
                 parts.push(crate::memory::render_show(
                     c.memory,
@@ -1352,6 +1359,7 @@ pub(crate) fn run_retrieve(
                     &[],
                     &estimation_unit,
                     value_line.as_deref(),
+                    estimate_line.as_deref(),
                     lower_pct,
                     upper_pct,
                 ));
@@ -1483,9 +1491,14 @@ fn expand_graph(
             let value_line = crate::priority::surface::value_line_from_pipeline(
                 &pipeline,
                 &memory.uid,
-                memory.value.as_ref().map(|v| v.value),
                 "memory",
                 &value_unit,
+            );
+            let estimate_line = crate::priority::surface::estimate_line_from_pipeline(
+                &pipeline,
+                &memory.uid,
+                "memory",
+                &estimation_unit,
             );
             let rendered = memory::render_show(
                 memory,
@@ -1495,6 +1508,7 @@ fn expand_graph(
                 &wikilinks,
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             );

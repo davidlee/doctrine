@@ -138,6 +138,106 @@ intent = "design-target"
 selector = "src/slice.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/comparison/compile.rs"
+intent = "design-target"
+note = "PHASE-02 initializer ripple of the est_lower/est_upper columns (design §1: resolve.rs non-semantic; struct-literal sites must name new fields)"
+
+[[selector]]
+selector = "src/comparison/project.rs"
+intent = "design-target"
+note = "PHASE-02 initializer ripple of the est_lower/est_upper columns (design §1: resolve.rs non-semantic; struct-literal sites must name new fields)"
+
+[[selector]]
+selector = "src/comparison/query.rs"
+intent = "design-target"
+note = "PHASE-02 initializer ripple of the est_lower/est_upper columns (design §1: resolve.rs non-semantic; struct-literal sites must name new fields)"
+
+[[selector]]
+selector = "src/comparison/resolve.rs"
+intent = "design-target"
+note = "PHASE-02 initializer ripple of the est_lower/est_upper columns (design §1: resolve.rs non-semantic; struct-literal sites must name new fields)"
+
+[[selector]]
+selector = "tests/e2e_estimate_non_blocking.rs"
+intent = "design-target"
+note = "NF-001 allowlist enrolls each designed estimate::/value:: exposure (E13 at PHASE-03; flip/deletion phases will extend)"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "PHASE-06 flip surfaces: estimate pin verb wiring (cli), worker-refused write class (guard), compare-estimate goldens (design §4/§6)"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "PHASE-06 flip surfaces: estimate pin verb wiring (cli), worker-refused write class (guard), compare-estimate goldens (design §4/§6)"
+
+[[selector]]
+selector = "tests/e2e_compare_estimate.rs"
+intent = "design-target"
+note = "PHASE-06 flip surfaces: estimate pin verb wiring (cli), worker-refused write class (guard), compare-estimate goldens (design §4/§6)"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+note = "PHASE-07 show-line ripple: estimate_line threads every entity render/format_show seam (design §6 — same call-site family as the SL-220 value line)"
+
+[[selector]]
+selector = "src/rec.rs"
+intent = "design-target"
+note = "PHASE-07 show-line ripple: estimate_line threads every entity render/format_show seam (design §6 — same call-site family as the SL-220 value line)"
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "design-target"
+note = "PHASE-07 show-line ripple: estimate_line threads every entity render/format_show seam (design §6 — same call-site family as the SL-220 value line)"
+
+[[selector]]
+selector = "src/review.rs"
+intent = "design-target"
+note = "PHASE-07 show-line ripple: estimate_line threads every entity render/format_show seam (design §6 — same call-site family as the SL-220 value line)"
+
+[[selector]]
+selector = "src/revision.rs"
+intent = "design-target"
+note = "PHASE-07 show-line ripple: estimate_line threads every entity render/format_show seam (design §6 — same call-site family as the SL-220 value line)"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "design-target"
+note = "PHASE-07 show-line ripple: estimate_line threads every entity render/format_show seam (design §6 — same call-site family as the SL-220 value line)"
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+note = "PHASE-09 deletion ripple: facet-read consumers outside the F-5 named list (doctor/knowledge/map/reconcile/relation surfaces) — the design's 'replicated well beyond EntityFacets' clause"
+
+[[selector]]
+selector = "src/estimate/display.rs"
+intent = "design-target"
+note = "PHASE-09 deletion ripple: facet-read consumers outside the F-5 named list (doctor/knowledge/map/reconcile/relation surfaces) — the design's 'replicated well beyond EntityFacets' clause"
+
+[[selector]]
+selector = "src/knowledge.rs"
+intent = "design-target"
+note = "PHASE-09 deletion ripple: facet-read consumers outside the F-5 named list (doctor/knowledge/map/reconcile/relation surfaces) — the design's 'replicated well beyond EntityFacets' clause"
+
+[[selector]]
+selector = "src/map_server/routes.rs"
+intent = "design-target"
+note = "PHASE-09 deletion ripple: facet-read consumers outside the F-5 named list (doctor/knowledge/map/reconcile/relation surfaces) — the design's 'replicated well beyond EntityFacets' clause"
+
+[[selector]]
+selector = "src/reconcile.rs"
+intent = "design-target"
+note = "PHASE-09 deletion ripple: facet-read consumers outside the F-5 named list (doctor/knowledge/map/reconcile/relation surfaces) — the design's 'replicated well beyond EntityFacets' clause"
+
+[[selector]]
+selector = "src/relation_query.rs"
+intent = "design-target"
+note = "PHASE-09 deletion ripple: facet-read consumers outside the F-5 named list (doctor/knowledge/map/reconcile/relation surfaces) — the design's 'replicated well beyond EntityFacets' clause"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-015"
