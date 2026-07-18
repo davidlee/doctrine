@@ -5,10 +5,10 @@ id = 230
 slug = "jail-bind-dst-tilde-is-a-literal-relative-path-spawns-workspacedoctrine-every-jail-cycle"
 title = "Jail bind dst tilde is a literal relative path — spawns /workspace/doctrine/~ every jail cycle"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-17"
-updated = "2026-07-17"
+updated = "2026-07-18"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

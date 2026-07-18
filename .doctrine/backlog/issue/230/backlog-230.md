@@ -48,7 +48,45 @@ launcher shell" comment while there.
 only on the **host** (nix is absent in-jail): rebuild the jail, spawn a worker,
 confirm no `/workspace/doctrine/~` appears.
 
+## CORRECTION (2026-07-19) — original root cause above is WRONG
+
+The diagnosis above (`flake.nix:113` tilde bind) is falsified. Investigation
+(`/rigour`) reproduced the actual mechanism; the real cause is in a different
+subsystem entirely.
+
+**Actual root cause:** `cargo` runs with `CARGO_HOME` set to a **literal,
+unexpanded `~/.cargo`** in the host shell. Cargo does not tilde-expand
+`CARGO_HOME`, so it resolves relative to cwd and creates `./~/.cargo/registry/…`
+in the repo root. Trigger is any cargo invocation in the repo — observed via
+`just lint` → `cargo clippy` → `Updating crates.io index`.
+
+The literal tilde came from a recent **nushell** config change: `~` only expands
+in nushell in command-position bare paths, **not** inside a string literal
+assigned to an env var (`$env.CARGO_HOME = "~/.cargo"` stores the literal `~`).
+Fixed host-side by expanding the tilde (`"~/.cargo" | path expand`). Not in any
+tracked repo config (`.envrc`, justfiles, flake devshell all clean).
+
+**Why the filed diagnosis was wrong:**
+- bwrap resolves a *relative* bind dest against the **new root `/`** (→ ephemeral
+  `/~`), NOT the jail cwd — reproduced directly, and already documented at
+  `scripts/pi-spawn-confined.sh:34-35`. It cannot produce a cwd-relative,
+  host-persistent `/workspace/doctrine/~`.
+- The observed path had a `.cargo/registry` cargo cache under it — a
+  `CARGO_HOME` fingerprint, not a doctrine-bin mount.
+- Symptom is jail-independent: reproduces on the bare host and under codex's own
+  sandbox, never in the doctrine jail (where `CARGO_HOME` resolves correctly).
+
+**Collateral:** commit `7021221f5 "fix: flake path"` (tilde→absolute in
+`flake.nix:113`) chased this phantom; it is harmless (absolute dst is equally
+correct) but fixed nothing here. `noescape` renders the dst raw/unquoted into the
+launcher shell, so the original tilde *did* expand — the comment was right and the
+diagnosis inverted it. Left as-is; no revert needed.
+
+**Resolution:** fixed in host nushell env; no doctrine code change required.
+
 ## Links
 
 - IMP-249 (resolved) — introduced the bind line; the atomic-rename stale-bind
   fix this rides on.
+- Superseded diagnosis: the "Root cause"/"Fix"/"Validation" sections above are
+  retained as the audit trail of the misdiagnosis.

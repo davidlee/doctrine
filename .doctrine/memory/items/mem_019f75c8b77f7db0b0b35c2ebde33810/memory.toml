@@ -1,0 +1,46 @@
+memory_uid = "mem_019f75c8b77f7db0b0b35c2ebde33810"
+memory_key = "mem.pattern.env.literal-tilde-cargo-home-spawns-repo-root-tilde-dir"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Stray ./~ in repo root = literal-tilde CARGO_HOME, not a bwrap/jail bind"
+summary = "A stray ./~ dir in the repo root = cargo with a literal-tilde CARGO_HOME/HOME, not a jail/bwrap bind"
+created = "2026-07-18"
+updated = "2026-07-18"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["env", "cargo", "nushell", "debugging"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "8cd5129e19217a76a6bcabe4762f498381a771a3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "f8201b63a952af26eb86e75f733e90dc979fa470eb9a98610979c9e7bde4692d"
+base_commit = "a9c092bd0b3adaff6ab2a32eb026fde60a1497ba"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "issue"
+ref = "ISS-230"
+

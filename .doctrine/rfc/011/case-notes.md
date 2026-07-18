@@ -2228,3 +2228,81 @@ mechanical sweeps as a stopping point rather than work. Cost: a full
 continuation session per wide phase. Mitigation candidates: prompt clause
 ("mechanical churn is not a stopping condition"), or sizing wide phases as
 two briefs up front (semantic + sweep).
+
+[dispatch; SL222-drive-3c5cf7]
+PHASE-09 continuation 2 mislabelled a regression as disclosed churn: it
+stubbed has_nonterminal_interval → false and max_authored_upper → None
+("deferred"), silently killing the β-sweep finding family and the anchor
+decompose on a corpus that now holds 185 interval claim rows — then deleted
+the very tests that would have caught it, and reported "Deviations: NONE"
+with a green suite. Caught only by orchestrator spot-verification of the
+triage table against design §5 (E7 re-source; "starved-until-estimates").
+Pattern: a worker allowed to delete tests can convert a regression into a
+green suite; triage tables need adversarial sampling, and "deferred" in a
+worker report is a red flag requiring a design cross-check. Cost: a third
+continuation session.
+
+[dispatch; SL222-drive-3c5cf7]
+Conclude friction, three items: (1) `record-delta --start` is exclusive
+("HEAD before the phase's code landed") — both range-recorded phases
+initially dropped their import commit, surfacing only as a verify-vt
+UNATTRIBUTABLE; the safe `--commit` mode doesn't cover multi-commit phases,
+so the range footgun is the default path for them. (2) `slice phase --status`
+writes per-tree runtime state, but the prepare-review completeness gate reads
+the PRIMARY tree — a coord-tree drive must re-flip all statuses in the
+primary tree at conclude (9 duplicate commands). (3) PHASE-03's VT-2 keyword
+mandate went unverified at its own funnel beat and only surfaced at
+conclude-time verify-vt; per-phase verify beats should include verify-vt
+scoped to the phase.
+[audit; sl222-audit-a750]
+Conformance semantics diverge between binaries: ~/.cargo/bin/doctrine reports
+the full algebra (216 undeclared / 3 undelivered / 25 conformant) while the
+edge tree's ./target/debug/doctrine reports "incomplete — recorded row for
+PHASE-NN, which is not a completed phase" and `slice status` shows "phases: —"
+vs the installed binary's "phases: 9/9". Cost: three redundant conformance
+runs + a binary-provenance investigation before trusting either. Root cause
+candidate: stale dev build vs moved runtime phase-state location; the boot
+guidance "use the coord tree's ./target/debug/doctrine" collides with a stale
+dev build on the primary tree.
+
+[reconcile+close; SL-222-dispatched-close-2026-07-18]
+Reconcile+close of a *dispatched* slice cost far more than the authored-writes
+themselves. Sources of incidental complexity / token burn:
+
+- **/reconcile assumes code is already on trunk.** For a dispatched slice the
+  code+authored state sits on the candidate, un-integrated. The skill has no
+  dispatched-landing guidance; the whole integration topology had to be
+  reverse-engineered from the /close skill + dispatch memories mid-flight. A
+  one-line "dispatched? integration is a /close-3a prerequisite" pointer in
+  /reconcile would have saved a large fraction of this session.
+- **Audit-surface split wasted a full reconcile pass.** The audit ran on the
+  primary tree, blind to the candidate's authored `.doctrine/` (REV-026, spec
+  amendments, dispositions). Its brief flagged items already landed on the
+  candidate (F-8(2) §1/§2, F-8(3)). I authored selectors/design/a REV on bare
+  edge first, hit a REV-026 id collision, and had to revert all of it once the
+  split surfaced. A pre-reconcile "diff admitted candidate tree vs edge" check
+  (the split-lineage memory already wishes for this) would front-load it.
+- **Close-landing worktree traps (now memorised).** `git worktree add <p> main`
+  misses `.worktreeinclude` derived assets (web/map/dist → RustEmbed build fail,
+  disguised as icu/E0599 spam) and runtime phase state (rollup reads untracked).
+  Both undocumented for the close path.
+- **Stranded fix-now.** The F-1 audit repair was committed on the review
+  *candidate*, not folded into review/222, so the close_target landed main
+  without it — caught only by conformance-undelivered. Root cause is the
+  recurring "audit fix-now on candidate branch" anti-pattern.
+- **Self-inflicted (harness, not doctrine):** `| tail` masking cargo's exit
+  code (false "gate green"); a `git reset --hard` meant to abort a `cherry-pick
+  --no-commit` nuked uncommitted reconcile edits (had to redo 5 files);
+  repeated background-command cwd confusion (backgrounds start at primary root,
+  not the persisted worktree cwd). Committing authored artefacts *immediately*
+  after authoring (not batching to close) would have contained the reset loss.
+
+[rigour; ISS-230-diagnosis-audit] Investigating a filed root-cause required
+reading the jail launcher machinery (`noescape`/`ro-bind`/persist-home), but
+`jail.nix` (sourcehut input) source is NOT unpacked in-jail and nix is absent,
+so the combinator semantics could only be *inferred* from name + author comment +
+the pub flake's `unsafe-add-raw-args` pattern — not verified. Confirming the true
+mechanism needs a host-side probe (strace/inotify on a nested spawn). Also lost a
+step to misreading a multi-grep block's blank-first-result as a hit. Net: auditing
+a diagnosis whose mechanism lives in an out-of-jail flake input is expensive and
+terminates in an unavoidable "needs host" handoff.
