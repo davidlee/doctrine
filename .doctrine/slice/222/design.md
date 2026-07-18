@@ -304,7 +304,9 @@ knob-independently; agent/migrated conflicts never do (D14 — the shared
 the estimate-claims view; `CostCtx` builder re-source; `build_from_with_cfg`
 threading); `src/priority/surface.rs` (shell wiring); `src/priority/elicit.rs`
 (§E10 pool predicate + target re-source, sizing-input assembly);
-`src/priority/config.rs` (docs only — no new knobs).
+`src/priority/config.rs` (docs only — no new knobs; the `demote_agent_evidence`
+doc text already read domain-generically pre-slice, so no edit shipped —
+selector removed as spurious-undelivered, RV-284 F-3).
 
 ## §4 Verb surface: `estimate set | pin | clear`
 
@@ -642,6 +644,35 @@ Suites → rules pinned; VT/VA/VH ids mint at `/plan`.
   probe targets need admissibility intersection → E10 restated. F-9:
   tripwire cannot fill `UnmigratedFacet{value: f64}` → magnitude-free
   variant at deletion, JSON churn disclosed.
+
+## Reconciliation addendum (RV-284 F-8(4)) — shipped blast radius
+
+The §2/§3/§5 code-impact and deletion inventories were authored at design time
+and undercount the blast radius the implementation actually shipped. Recorded
+here so canon matches the selector registry (`slice selector list SL-222`).
+Inventory reconciliation only — no §1–§5 behaviour claim changes; the shipped
+behaviour is exactly the designed ladder, flip, and deletion.
+
+Mid-flight ripple families beyond the design-time inventories:
+
+- **Comparison initializer ripple** — the estimate-claims pipeline wiring (§2)
+  reached further into `src/comparison/store.rs` initialization than the §2
+  line named; within the declared `src/comparison/**` scope glob.
+- **Flip verb/guard/golden surfaces** — the §3 flip and §4 verb surface rippled
+  across `src/priority/{view,render,findings}.rs` (within the `src/priority/**`
+  glob) and the golden/e2e fixtures the orchestrator converted at `a2775657a`
+  (`tests/e2e_compare_elicit.rs`, `tests/e2e_priority_golden.rs` — F-4).
+- **Show-line seam** — the resolved-claim display helpers (§5) replaced facet
+  display across every kind's `show` renderer: `src/memory.rs`, `src/rec.rs`,
+  `src/retrieve.rs`, `src/review.rs`, `src/revision.rs`, `src/spec.rs`.
+- **PHASE-09 deletion ripple** — the facet-model deletion (§5) reached beyond
+  the named catalog/document readers into `src/knowledge.rs`,
+  `src/map_server/routes.rs`, `src/reconcile.rs`, `src/relation_query.rs`, and
+  `src/estimate/display.rs`; the selector `doctor` path rides the already-
+  inventoried `src/slice.rs`.
+
+F-5's tolerated conformance wrinkle (the `.doctrine/**` undeclared set the
+selector algebra can't express) is unchanged by this addendum.
 
 ## Deferred (named seams, not built)
 

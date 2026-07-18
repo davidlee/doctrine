@@ -195,9 +195,17 @@ Invariants:
 
 ## 6. Behaviour
 
-Primary flow — record an estimate: an author adds an optional `[estimate]` table with
-`lower` and `upper` to an entity's TOML. Integers or floats are accepted and
-normalized to floats internally. The entity remains valid with or without the table.
+Primary flow — record an estimate (REV-026): an author runs `estimate set`, which
+appends a dated, attributed anchor-claim row with two bounds (`est_lower`,
+`est_upper`) to the comparison ledger; `estimate clear` appends tombstones and
+correction is supersession; `estimate pin` is the governed operator override.
+Integers or floats are accepted and normalized to floats. The entity remains valid
+with or without claim rows. (Pre-REV-026 corpora may still carry a transitional
+`[estimate]` entity-file table, consulted only when no claim rows exist; migrate it
+via `scripts/migrate_estimate_facets.py` or re-assert via `estimate set --rater
+human`.)
+
+The transitional `[estimate]` table shape:
 
 ```toml
 [estimate]
@@ -212,11 +220,13 @@ or floats are accepted and normalized to a float. The entity remains valid with 
 without claim rows. (Pre-REV-024 corpora may still carry a transitional `[value]`
 entity-file table, consulted only when no claim rows exist.)
 
-Validation flow — estimate: when `[estimate]` is present it must be structurally valid
-— `lower` required, `upper` required, both finite TOML integers or floats,
-`lower >= 0`, `upper >= lower`. Invalid cases (missing `lower`/`upper`, `NaN`,
-`±Infinity`, negative `lower`, `upper < lower`) are hard validation errors. When
-`[estimate]` is absent, validation passes — absence is not malformation.
+Validation flow — estimate: a present estimate claim requires both bounds present
+and finite, `est_lower >= 0`, `est_upper >= est_lower`; invalid cases (missing
+bound, `NaN`, `±Infinity`, negative `est_lower`, `est_upper < est_lower`) are hard
+validation errors. An entity with no estimate claims passes validation — absence is
+not malformation. (The same present-required-valid / absent-clean rule applies to a
+transitional `[estimate]` table where one survives — `lower`/`upper` required,
+finite, `lower >= 0`, `upper >= lower`.)
 
 Validation flow — value: a present claim row requires its magnitude present and
 finite; missing or non-finite (`NaN`, `±Infinity`) is a hard validation error.

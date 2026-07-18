@@ -79,10 +79,6 @@ selector = "src/priority/elicit.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/priority/config.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/priority/view.rs"
 intent = "design-target"
 
@@ -237,6 +233,16 @@ note = "PHASE-09 deletion ripple: facet-read consumers outside the F-5 named lis
 selector = "src/relation_query.rs"
 intent = "design-target"
 note = "PHASE-09 deletion ripple: facet-read consumers outside the F-5 named list (doctor/knowledge/map/reconcile/relation surfaces) — the design's 'replicated well beyond EntityFacets' clause"
+
+[[selector]]
+selector = "tests/e2e_compare_elicit.rs"
+intent = "design-target"
+note = "orchestrator fixture-conversion (a2775657a); note-matched to mid-flight declarations — RV-284 F-4"
+
+[[selector]]
+selector = "tests/e2e_priority_golden.rs"
+intent = "design-target"
+note = "orchestrator fixture-conversion (a2775657a); note-matched to mid-flight declarations — RV-284 F-4"
 
 [[relation]]
 label = "governed_by"
