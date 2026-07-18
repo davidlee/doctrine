@@ -19,11 +19,11 @@ severity = "blocker"
 title = "Expected one canonical independent-property model; ADR-019 defines incompatible five-property sets"
 detail = ".doctrine/adr/019/adr-019.md §Decision and .doctrine/revision/028/revision-028.md Edit 1.3 D6. The decision sentence names ownership, distribution, embedding, publication, and projection as the five independent properties, but the immediately following canonical-looking block omits publication and substitutes versioning; REV-028 D6 repeats that second set and then treats publication as an extra axis. The load-bearing rule therefore has either five or six properties depending on which line a descendant follows, so asset policy and the publication≠projection verification cannot be enforced consistently. Define one canonical property vocabulary and cardinality (including publication explicitly), then propagate it unchanged through ADR-019, REV-028, SPEC-009 D6, consequences, and verification."
 disposition = "fixed"
-response = "Canonical seven-property vocabulary (owned/versioned/distributed/embedded/runtime-loaded/published/projected) defined once in ADR-019 Decision, publication explicit; REV-028 D6 cites it unchanged. commit defd8973."
+response = "Rationale intro reworded from 'five ... properties' to ADR-019's canonical seven (owned/versioned/distributed/embedded/runtime-loaded/published/projected). No 'five' residue remains (grep-clean). commit 971c41da."
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected the reviewed revision to contain its final requirement payload; REV-028 defers structured rows until after review"
 detail = ".doctrine/revision/028/revision-028.md §Scope of the staged delta and §Requirement delta; .doctrine/revision/028/revision-028.toml [[change]]. REV-028 currently contains only two entity-level modify rows and says the frozen requirement create/modify rows will be added post-review. Those later append-only rows are the actual durable targets, titles, statements, and statuses; adding them after RV-285 settles changes the accused bundle beyond what was reviewed. Freeze every requirement change row before this review is accepted, then re-prime/re-open RV-285 (or require an explicit second design review) against the exact final payload."
@@ -32,7 +32,7 @@ response = "All requirement change rows frozen into revision-028.toml before app
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected planned target architecture to remain distinguishable from verified truth; the distinction exists only in REV-028 rationale"
 detail = ".doctrine/revision/028/revision-028.md §Rationale, Edit 1.1–1.4, and §Requirement delta; current `spec show SPEC-009` identity and requirements. REV-028 acknowledges that SPEC-009 will become partly forward-intent, but none of the staged SPEC-009 text marks D1/D4/D6–D9 or the revised active REQ-164/REQ-165/REQ-171 as planned/unimplemented. Once the manual revision lands, readers of the evergreen `spec show SPEC-009` surface will not see the temporary REV rationale and will read target behaviour beside verified current behaviour under one active spec. Add a durable current-state/target-state marker in SPEC-009 and an explicit requirement standing/evidence transition that keeps planned obligations visibly pending until implementation reconciliation verifies them."
@@ -46,11 +46,11 @@ severity = "blocker"
 title = "Expected contract B to remain a sibling; PRD-006 scope and ADR-019 verification make publication delivery part of this bundle"
 detail = ".doctrine/revision/028/revision-028.md Edit 2.1–2.2 and .doctrine/adr/019/adr-019.md §Verification (third VA). The bundle declares library/publication/federated search excluded, yet the revised PRD-006 in-scope text promises publishing remaining framework-owned material for inspection/copy, and ADR-019 requires an actually published non-projected asset to verify the decision. That turns success of the C1 projection revision into delivery of sibling contract B, violating RFC-021 §The RFC contains three programs and the stated staging boundary. Keep only the abstract publication≠projection policy in ADR-019; move the existence VA and publication behaviour to contract B, and describe PRD-006 publication solely as an out-of-scope interaction/dependency rather than install scope."
 disposition = "fixed"
-response = "ADR-019 3rd VA removed — publication delivery (published non-projected asset) confined to contract B; only publication *policy* stays in the ADR. PRD-006 scope moves publishing to out-of-scope dependency (Edit 2.2). Install neither publishes nor depends on B delivery."
+response = "Edit 2.1 (PRD Intent) no longer asserts material 'is published' — reworded so un-projected material 'stays framework-owned and materializes on demand', with user-control framed as a dependency on sibling contract B that install neither delivers nor promises. commit 971c41da."
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected every intended edit to be staged in its owning tier; responsibility changes are mislabeled as prose-only"
 detail = ".doctrine/revision/028/revision-028.md §Scope, Edit 1.4, and Edit 2.3; synthesized `spec show SPEC-009` / `spec show PRD-006` responsibility lists. REV-028 calls both modify rows prose amendments and says apply surfaces prose for manual editing, but SPEC responsibilities are structured TOML mirrored by prose and PRD-006 has no prose Responsibilities section at all. Applying only the described prose edits leaves the synthesized top-level responsibilities asserting the old embed-and-lay-down contract and omits PRD minimality, creating two contradictory truths in one `spec show`. Stage explicit structured-responsibility replacements through the sanctioned revision/manual-landing instructions and verify the post-apply synthesized views, or remove those responsibility edits from this revision."
@@ -59,7 +59,7 @@ response = "Responsibility edits restaged as structured spec-009.toml/spec-006.t
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected revised product intent to be enforced by product requirements; PRD-006 requirements still permit monolithic projection"
 detail = ".doctrine/revision/028/revision-028.md Change row 2 and §Requirement delta; `spec show PRD-006` REQ-043 and REQ-048. The product scope changes to an exact minimal base plus on-demand surfaces, but the delta revises/adds only SPEC-009 requirements. PRD-006 REQ-043 still requires provisioning unspecified working files and REQ-048 only requires a correct default layout, so the current all-files projection would continue satisfying every product requirement after the prose changes. Revise or add PRD-006 requirement entities with acceptance criteria for the three-file base, exclusion of auxiliary assets, and on-demand boundaries; keep mechanism-specific manifest details in SPEC-009."
@@ -73,11 +73,11 @@ severity = "major"
 title = "Expected independently testable materialization obligations; one FR conflates three triggers and an undefined trust gate"
 detail = ".doctrine/revision/028/revision-028.md D8–D9 and §Requirement delta ADD FR — materialize on first use. One proposed requirement combines entity-root creation, customized-hymn materialization, and standing-governance materialization even though each has a different trigger, owner, and mutation authority; `first use` is undefined, and governance is simultaneously declared approval-gated without saying whether the trigger is an explicit user definition or a future Stage-5 trust-acceptance mechanism. The requirement cannot be tested without inventing behaviour and risks quietly acquiring RFC-021 Stage 5. Split the obligations by surface, define the observable trigger and permitted actor for each, and constrain this bundle to physical governance/orientation separation while explicitly deferring trust acceptance/enforcement."
 disposition = "fixed"
-response = "Materialization split into per-surface FRs (FR-008 entity roots, FR-009 hymns, FR-010 governance) each with its own trigger+actor; 'first use' defined per surface; governance trigger is explicit user definition, and trust/approval enforcement explicitly deferred to Stage 5 in ADR-019 position 3, D9, and FR-010."
+response = "'approval-gated' dropped from Rationale settled-forks bullet AND ADR-019 governance VA (both now 'physically distinct', trust/approval enforcement explicitly Stage-5). Frozen FR-008/FR-009 --new-statements now carry trigger+actor (scaffolding verb / customization verb); FR-010 already had explicit-user-definition trigger. commit 971c41da."
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected stale cross-spec claims to be repaired with the source anchor; SPEC-009 still cites a nonexistent PHASE-05 interaction"
 detail = ".doctrine/spec/tech/009/spec-009.md §Overview and .doctrine/spec/tech/009/interactions.toml. The overview says the skills interaction edge is `PHASE-05`, but no slice is identified and the tech-spec interaction table is empty; a mobile phase label is neither a durable relation nor a resolvable anchor. REV-028 repairs `doc/install-spec.md` but leaves this dangling claim in a section it already reframes. Delete the phase claim or author/cite the durable SPEC interaction that actually expresses the sibling boundary."
