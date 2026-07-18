@@ -241,6 +241,7 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [PRD-013 — Requirement Reconciliation](.doctrine/spec/product/013/spec-013.md) — `active`
 - [PRD-014 — Estimation & Value](.doctrine/spec/product/014/spec-014.md) — `active`
 - [PRD-015 — Dispatch & worktree](.doctrine/spec/product/015/spec-015.md) — `active`
+- [PRD-016 — Graph exploration](.doctrine/spec/product/016/spec-016.md) — `draft`
 
 ### Technical Specifications
 
@@ -267,6 +268,8 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [SPEC-021 — Dispatch orchestrator process](.doctrine/spec/tech/021/spec-021.md) — `active`
 - [SPEC-022 — Git interaction model](.doctrine/spec/tech/022/spec-022.md) — `active`
 - [SPEC-023 — Prompt cascade](.doctrine/spec/tech/023/spec-023.md) — `active`
+- [SPEC-024 — Comparison engine](.doctrine/spec/tech/024/spec-024.md) — `draft`
+- [SPEC-025 — Web explorer](.doctrine/spec/tech/025/spec-025.md) — `draft`
 
 ### Request for Comments
 
@@ -288,6 +291,9 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [RFC-016 — Zero-rescue dispatch: invariants into verbs, lineage rows](.doctrine/rfc/016/rfc-016.md) — `open`
 - [RFC-017 — Human onboarding docs: tour, quickstart, mental model](.doctrine/rfc/017/rfc-017.md) — `open`
 - [RFC-018 — Claude harness field notes: empirical findings and design-artifact map](.doctrine/rfc/018/rfc-018.md) — `open`
+- [RFC-019 — Comparison-based value elicitation](.doctrine/rfc/019/rfc-019.md) — `open`
+- [RFC-020 — Ledgered facet claims](.doctrine/rfc/020/rfc-020.md) — `open`
+- [RFC-021 — Dynamic behaviours and minimal projection](.doctrine/rfc/021/rfc-021.md) — `resolved`
 
 ### Architecture Decision Records
 
@@ -309,3 +315,4 @@ Doctrine's capabilities. Regenerate this list with `just readme-index`.
 - [ADR-016 — Relation intent as a closed role dimension](.doctrine/adr/016/adr-016.md) — `accepted`
 - [ADR-017 — Actionability gating via inbound needs on unsettled records](.doctrine/adr/017/adr-017.md) — `accepted`
 - [ADR-018 — Finish Axis B: neutral originates_from provenance, fulfils label with completion degree, value-burndown](.doctrine/adr/018/adr-018.md) — `accepted`
+- [ADR-019 — Embedding, publication, and projection are independent asset policies](.doctrine/adr/019/adr-019.md) — `proposed`
