@@ -3,12 +3,12 @@ version = 1
 
 id = 165
 slug = "parse-manifesttoml-from-the-embedded-copy-for-target-dirs-to-create-gitignore-entries-and-root-markers-excluding-it-from-the-installed-fileset"
-title = "Parse manifest.toml from the embedded copy for target, dirs-to-create, gitignore entries, and root markers, excluding it from the installed fileset"
-status = "active"
+title = "The manifest declares the projection policy, embedded and excluded from every projected set"
+status = "pending"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);
 # the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "The manifest declares the projection policy (base fileset, materialize-on-demand surfaces, dirs, gitignore, markers), parsed from the embedded copy and excluded from every projected set."
 tags = []
 acceptance_criteria = []

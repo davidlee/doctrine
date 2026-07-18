@@ -3,12 +3,12 @@ version = 1
 
 id = 164
 slug = "embed-the-install-source-tree-at-compile-time-and-reproduce-it-into-a-target-directory-under-the-project-root"
-title = "Embed the install source tree at compile time and reproduce it into a target directory under the project root"
-status = "active"
+title = "Embed the semantic source roots at compile time as the storage mechanism"
+status = "pending"
 kind = "functional"
 
 # description — optional one-line summary (queryable). Omitted by default (None);
 # the full statement/rationale stays prose in the sister `.md`. Add as:
-#   description = "…"
+description = "Embed the semantic source roots at compile time (rust-embed) as the storage mechanism; embedding is storage only and does not define the projected fileset."
 tags = []
 acceptance_criteria = []

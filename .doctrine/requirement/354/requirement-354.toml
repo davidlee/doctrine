@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 354
+slug = "entity-roots-materialize-on-first-use-of-the-kind"
+title = "Entity roots materialize on first use of the kind"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+description = "Create an authored-kind entity root on first use of that kind, not at install. Trigger: first scaffold of the kind; actor: the entity-scaffolding verb."
+tags = []
+acceptance_criteria = []

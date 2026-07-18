@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 353
+slug = "project-the-minimal-three-file-base-from-the-projection-policy"
+title = "Project the minimal three-file base from the projection policy"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+description = "Project exactly the three-file base (.gitignore, doctrine.toml, boot-project.md) from the declared projection policy, not from embed contents. Trigger: doctrine install; actor: installer."
+tags = []
+acceptance_criteria = []

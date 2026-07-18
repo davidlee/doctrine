@@ -3,14 +3,15 @@ version = 1
 
 id = 43
 slug = "provision-doctrines-files-into-a-project"
-title = "Provision Doctrine's files into a project"
-status = "active"
+title = "Provision a minimal, justified base fileset into a project"
+status = "pending"
 kind = "functional"
 
-description = "An operator can provision Doctrine's working files into a target project, creating the directories it needs and writing the files it ships."
+description = "An operator can provision a minimal, explicitly justified base fileset into a target project; auxiliary framework material (templates, references, agent definitions, hymns, integrations) is not projected by default, and further surfaces (entity roots, standing governance) materialize on demand."
 tags = []
 acceptance_criteria = [
-  "Provisioning creates the directories Doctrine requires and writes the files it ships into the resolved target location.",
-  "The provisioned files travel with the tool itself, requiring no external source to fetch from.",
+  "Provisioning writes only the justified base fileset — and the directories it needs — into the resolved target location, not the whole embedded corpus.",
+  "Auxiliary framework material (templates, references, agent definitions, hymns, integrations) is not projected into the project by default.",
+  "The provisioned base travels with the tool itself, requiring no external source to fetch from.",
   "On completion the operator is told which directories were created, files written, and entries appended.",
 ]

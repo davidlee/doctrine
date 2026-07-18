@@ -42,6 +42,36 @@ order = 8
 requirement = "REQ-172"
 label = "NF-003"
 order = 9
+
+[[member]]
+requirement = "REQ-353"
+label = "FR-007"
+order = 10
+
+[[member]]
+requirement = "REQ-354"
+label = "FR-008"
+order = 11
+
+[[member]]
+requirement = "REQ-355"
+label = "FR-009"
+order = 12
+
+[[member]]
+requirement = "REQ-356"
+label = "FR-010"
+order = 13
+
+[[member]]
+requirement = "REQ-357"
+label = "NF-004"
+order = 14
+
+[[member]]
+requirement = "REQ-358"
+label = "NF-005"
+order = 15
 # Members — the requirements this spec is woven from.
 # Seeded empty; `spec req add` (PHASE-03) appends rows edit-preservingly:
 #   [[member]]

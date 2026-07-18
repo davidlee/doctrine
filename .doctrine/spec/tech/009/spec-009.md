@@ -5,36 +5,55 @@
 
 ## Overview
 
+> **Status — partly forward-intent (RFC-021 C1 / ADR-019).** The
+> embed-as-storage, root-detection, idempotent-plan, and `asset_text` mechanisms
+> are **shipped and verified**. The projection model described below — minimal
+> three-file base, embed/publish/project separation, semantic source roots,
+> materialize-on-demand surfaces (D6–D9) — is **target architecture**: authored
+> intent the shipped code does not yet implement. Its requirements stand
+> `pending` until an implementation slice lands them and reconciliation verifies
+> coverage. Do not read D6–D9 or the `pending` requirements as current behaviour.
+
 Install & distribution is the container that gets Doctrine *into* a project: how
-the binary carries the files a fresh repo needs and lays them down beside the
-code. `doctrine install` embeds the whole `install/` source tree into the binary
-at compile time and reproduces it into a target directory (default `.doctrine`)
-under the detected project root. There is no second asset bundle and no network
-fetch — distribution is the single self-contained binary plus a compile-time
-embed.
+the binary carries the files a fresh repo needs and provisions them beside the
+code. `doctrine install` embeds the semantic source roots into the binary at
+compile time as the **storage** mechanism, then projects a **minimal, explicitly
+justified** base fileset into a target directory (default `.doctrine`) under the
+detected project root and materializes the rest on first use. There is no second
+asset bundle and no network fetch — distribution is the single self-contained
+binary plus a compile-time embed, but embedding is *storage*, not the projection
+policy: what lands is drawn from an explicit manifest policy, not from what the
+binary happens to embed (ADR-019).
 
 It sits beneath the whole-system root (SPEC-003) and rides the shared entity
 engine (SPEC-004) for nothing it materialises — install writes raw bytes into a
-target tree, it does not scaffold entities. What it owns is the embed-and-lay-down
-mechanism: the manifest that configures the lay-down, project-root detection, the
-idempotent plan/execute split, and the shared `asset_text` read seam that the
-entity-scaffolding verbs draw their templates through.
+target tree, it does not scaffold entities. What it owns is the
+project-then-materialize mechanism: the manifest that declares the projection
+policy, project-root detection, the idempotent plan/execute split, and the shared
+`asset_text` read seam that the entity-scaffolding verbs draw their templates
+through. Physical source roots follow semantic ownership (directional per
+ADR-019: templates / composable guidance / sealed definitions / curated
+reference / integrations / base-projection policy / memory corpus) rather than a
+single `install/` root — exact root names are left to the implementing slice.
 
 Two boundaries are deliberate. **Skills distribution is a sibling container**
-(PRD-003): install does not own the skill symlink tree — it only ensures the
-skills gitignore negation and shares its confirm prompt; the skill provisioning
-mechanism lives next door, and install *uses* it as a peer (the interaction edge is
-PHASE-05). **Global-memory materialisation is not orchestrated here**: install
-prints a next-step hint pointing at the standalone `doctrine memory sync` verb
-rather than running it as a hidden side effect.
+(PRD-003 / SPEC-010): install does not own the skill symlink tree — it only
+ensures the skills gitignore negation and shares its confirm prompt; the skill
+provisioning mechanism lives next door, and install *uses* it as a peer. That
+peer `uses` edge (not containment) is authored as a durable `spec interactions`
+edge by the implementing slice, not asserted here. **Global-memory
+materialisation is not orchestrated here**: install prints a next-step hint
+pointing at the standalone `doctrine memory sync` verb rather than running it as a
+hidden side effect.
 
 ## Responsibilities
 
-Mirrors the structured `responsibilities` list: embed the source tree and
-reproduce it into a target; own the manifest as install configuration; detect the
-project root; build and idempotently run an inspectable plan; ship the entity
-templates and the shared `asset_text` read seam; and carry the authored-entity
-wiring contract.
+Mirrors the structured `responsibilities` list: embed the semantic source roots
+as the *storage* mechanism; project a minimal, justified base fileset from the
+manifest's projection policy and materialize the rest on first use; own the
+manifest as the projection policy; detect the project root; build and idempotently
+run an inspectable plan; ship the entity templates and the shared `asset_text`
+read seam; and carry the authored-entity wiring contract.
 
 ### Compile-time embed, runtime lay-down
 
@@ -136,10 +155,12 @@ declared.
 
 ## Decisions
 
-- **D1 — distribution is a compile-time embed, not a bundle.** The `install/` tree
-  is embedded via rust-embed and reproduced at runtime; there is no second asset
-  artefact and no network fetch. The manifest is embedded but excluded from the
-  installed fileset — it configures the install rather than being installed.
+- **D1 — embedding is a storage mechanism, not the projection policy (ADR-019).**
+  Compile-time rust-embed remains the production *storage* default — one
+  self-contained binary, no sidecar bundle, no network fetch. It no longer defines
+  the *installed* fileset: what lands in a project is drawn from an explicit
+  projection policy (D7), not from what the binary happens to embed. The manifest
+  is embedded but excluded from every projected set.
 - **D2 — install is idempotent and never overwrites.** Files are written only when
   absent, directories are create-if-missing, and gitignore lines are
   deduplicated; re-install is a no-op and local edits survive. The cost — install
@@ -148,12 +169,36 @@ declared.
   and the entity-scaffolding verbs fetch templates through one helper, so the
   shipped template set has one source of truth and scaffolding reads the same bytes
   install lays down.
-- **D4 — distributability is declared in the manifest.** A new authored kind is made
-  distributable by adding its directory to `[dirs].create` and negating its
-  derived/runtime subtrees narrowly in `[gitignore].entries` — never by changing
-  install code.
+- **D4 — the manifest declares projection *policy*, not embed contents.** The
+  manifest declares the minimal base fileset (D7), the materialize-on-demand
+  surfaces (D8), the dirs, gitignore negations, and root markers. A new authored
+  kind is made *materializable* — its root appears on first use — via a manifest
+  edit, not by base-projecting its tree or changing install code.
 - **D5 — skills distribution and memory sync are not absorbed.** The skill symlink
   tree is a sibling container's mechanism (install only ensures its gitignore
   negation and shares the confirm prompt), and global-memory materialisation is a
   standalone `memory sync` verb install only hints at — install orchestrates
   neither.
+- **D6 — the seven independent asset properties (ADR-019).** Cite ADR-019's
+  canonical vocabulary *unchanged* — owned, versioned, distributed, embedded,
+  runtime-loaded, published, projected — no property implies another; in
+  particular embedding ≠ publication ≠ projection. (Publication *policy* only;
+  publication *delivery* is contract B.)
+- **D7 — minimal, justified base projection.** The base install is exactly three
+  files — `.gitignore`, `doctrine.toml`, `boot-project.md`. A file is projected
+  only when its presence at a stable project path is operationally necessary or
+  materially improves discoverability, integration, control, or supported
+  customization. No template, reference doc, agent definition, hymn, or
+  integration asset is projected by default.
+- **D8 — materialize on first use.** Surfaces that are distinct but not yet
+  populated are not shipped empty: entity roots, customized hymns, and standing
+  governance appear on disk only when first used/customized — the pattern already
+  used for entity roots and hymns.
+- **D9 — governance is a *physically distinct* surface (trust deferred).**
+  Standing project governance materializes on **explicit user definition** into
+  its own surface (candidate `governance.md`), never folded into the
+  agent-improvable `boot-project.md` orientation surface. This draws the
+  volatility / mutation-authority boundary up front (ADR-019 position 3).
+  Enforcing trust/approval on edits to that surface is a **Stage-5 concern,
+  explicitly out of scope here** — D9 establishes physical separability, not an
+  approval mechanism.

@@ -1,4 +1,4 @@
-# REQ-043: Provision Doctrine's files into a project
+# REQ-043: Provision a minimal, justified base fileset into a project
 
 ## Statement
 

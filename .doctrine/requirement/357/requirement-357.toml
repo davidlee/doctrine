@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 357
+slug = "no-auxiliary-framework-asset-is-projected-by-default"
+title = "No auxiliary framework asset is projected by default"
+status = "pending"
+kind = "quality"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+description = "No template, reference doc, agent definition, hymn, or integration asset is projected into a client repo by default."
+tags = []
+acceptance_criteria = []

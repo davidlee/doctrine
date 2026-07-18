@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 356
+slug = "standing-governance-materializes-on-explicit-user-definition"
+title = "Standing governance materializes on explicit user definition"
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+description = "Materialize the standing-governance surface only on explicit user definition, physically distinct from boot-project.md. Trigger: explicit user governance-definition command; actor: the user via that command. Trust/approval enforcement is out of scope (Stage 5)."
+tags = []
+acceptance_criteria = []

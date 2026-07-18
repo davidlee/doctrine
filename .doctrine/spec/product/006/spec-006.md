@@ -19,12 +19,23 @@ without ever disturbing the edits the operator has since made to what was alread
 there. The operator can see the full effect before committing to it, so trust is
 never asked for blind.
 
+Provisioning is also *minimal and justified*: only files with an operational,
+discoverability, integration, control, or customization reason land at a stable
+project path. Other framework-owned material stays framework-owned and
+materializes on demand — it is not installed by default. The operator's control
+over that un-projected material is a *dependency* served by a sibling capability
+(publication / library — a separate contract), **not** something install itself
+delivers or promises. The value is a clean, legible project surface: the operator's
+`.doctrine/` holds what their project actually needs, not everything the framework
+happens to ship.
+
 ## 2. Scope
 
 In scope:
 
-- Provisioning Doctrine's working files into a target project — creating the
-  directories it needs and writing the files it ships.
+- Provisioning a **minimal, explicitly justified** base fileset into a target
+  project; creating the directories it needs; materializing further surfaces
+  (entity roots, standing governance) on first use / explicit definition.
 - Determining where the target project's root is when the operator has not said,
   so provisioning is correct from anywhere inside the project.
 - Presenting the complete set of intended changes for review before any of them
@@ -43,6 +54,10 @@ Out of scope:
 - Removing, relocating, or de-provisioning Doctrine from a project.
 - Choosing or enforcing a particular version-control system; provisioning is
   VCS-agnostic and only touches the ignore boundary as a plain file.
+- **Publishing** framework-owned material for inspection/copy — that is a sibling
+  capability (a separate contract: library / publication / search), a dependency of
+  the user-control story but **not** part of install's scope. Install neither
+  publishes nor depends on publication being delivered.
 
 Boundary: provisioning owns *getting Doctrine's files correctly into a project and
 keeping that placement convergent and non-destructive*. It does not own the
