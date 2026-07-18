@@ -940,7 +940,7 @@ future_key = \"survives\"
     #[test]
     fn scaffold_prose_is_detected_for_pure_template() {
         // The scaffold template: headings + HTML comments only.
-        let body = "# REQ-001: Route\n\n## Statement\n\n<!-- The requirement in full: what must hold, stated testably. -->\n\n## Rationale\n\n<!-- Why it must hold — the force behind it, not the implementation. -->\n";
+        let body = "# REQ-001: Route\n\n## Statement\n\n<!-- The sister TOML's `description` field is the primary, normative statement.\n     Prose here may elaborate, expand upon, or disambiguate it — never\n     duplicate it. -->\n\n## Rationale\n\n<!-- Why it must hold — the force behind it, not the implementation. -->\n";
         assert!(is_scaffold_prose(body));
     }
 

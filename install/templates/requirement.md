@@ -2,7 +2,9 @@
 
 ## Statement
 
-<!-- The requirement in full: what must hold, stated testably. -->
+<!-- The sister TOML's `description` field is the primary, normative statement.
+     Prose here may elaborate, expand upon, or disambiguate it — never
+     duplicate it. -->
 
 ## Rationale
 
