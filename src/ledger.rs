@@ -292,8 +292,7 @@ impl Candidates {
 // Some symbols below are test-live but have no *non-test* caller yet: the
 // round-trip `parse`/`to_toml` surface, the filesystem `read_*` (the sync verb
 // tree-reads via `read_path_at` instead), and `record_orthogonal` (its driver is
-// the deferred OQ-B classifier). `record_boundary`/`store` ARE now live — wired to
-// `dispatch record-boundary` (PHASE-06). Each still-dead symbol carries a
+// the deferred OQ-B classifier). Each still-dead symbol carries a
 // per-symbol `cfg_attr(not(test))` expect so
 // the test build — where they ARE called — sees no unfulfilled expect
 // (mem.pattern.lint.dead-code-expect-vs-cfg-test); per-symbol, not a module
@@ -515,28 +514,6 @@ pub(crate) fn read_boundaries(root: &Path, slice: u32) -> anyhow::Result<Boundar
     load(&dispatch_dir(root, slice).join("boundaries.toml"))
 }
 
-/// Raw working-file read of `boundaries.toml` for `slice` — the verbatim bytes,
-/// `None` when the file is absent. Unlike [`read_boundaries`] (which parses to
-/// [`Boundaries`] and defaults an absent file to empty), this returns the
-/// **unparsed** text so the caller (`dispatch::commit_boundaries`, PHASE-04) can
-/// validate it before committing and distinguish *absent* (no-op) from
-/// *present-but-malformed* (a hard error — never committed). Reads the working
-/// filesystem under the private [`dispatch_dir`] path: the funnel's coordination
-/// worktree is the only place an *uncommitted* ledger lives (design §5.2 / OQ-4),
-/// so this raw reader stays here rather than rebuilt in `dispatch.rs`. The sync
-/// verb tree-reads the committed tip instead ([`crate::dispatch`] `read_ledger`).
-pub(crate) fn read_boundaries_file(
-    worktree_root: &Path,
-    slice: u32,
-) -> anyhow::Result<Option<String>> {
-    let path = dispatch_dir(worktree_root, slice).join("boundaries.toml");
-    match std::fs::read_to_string(&path) {
-        Ok(text) => Ok(Some(text)),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.into()),
-    }
-}
-
 /// Read `orthogonal.toml` for `slice` (empty when absent).
 #[cfg_attr(
     not(test),
@@ -547,23 +524,6 @@ pub(crate) fn read_boundaries_file(
 )]
 pub(crate) fn read_orthogonal(root: &Path, slice: u32) -> anyhow::Result<Orthogonal> {
     load(&dispatch_dir(root, slice).join("orthogonal.toml"))
-}
-
-/// Append a per-phase code boundary to `boundaries.toml` (EX-5). Read-modify-
-/// write — the dir/file are created on first write. Wired to the
-/// `dispatch record-boundary` funnel verb (PHASE-06).
-pub(crate) fn record_boundary(root: &Path, slice: u32, row: BoundaryRow) -> anyhow::Result<()> {
-    let path = dispatch_dir(root, slice).join("boundaries.toml");
-    let mut manifest: Boundaries = load(&path)?;
-    // UPSERT by phase — a funnel retry that re-records the same phase REPLACES
-    // its row, never appends a duplicate (a duplicate phase is a double
-    // phase-cut for prepare-review). Mirrors the journal manifest and the
-    // neutral registry (`state::record_source_delta`).
-    match manifest.rows.iter_mut().find(|r| r.phase == row.phase) {
-        Some(existing) => *existing = row,
-        None => manifest.rows.push(row),
-    }
-    store(&path, &manifest)
 }
 
 /// Append an orthogonal-projection mark to `orthogonal.toml` (EX-5).
@@ -686,30 +646,6 @@ mod tests {
         assert_eq!(Orthogonal::parse("").unwrap(), Orthogonal::default());
     }
 
-    // --- PHASE-04 EX-1: raw working-file reader (verbatim bytes / None) -----
-
-    #[test]
-    fn read_boundaries_file_returns_verbatim_some_or_none() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let root = dir.path();
-        let slice = 64;
-
-        // Absent file ⇒ None (distinct from read_boundaries, which defaults to
-        // empty — commit_boundaries needs absent↔present to drive its no-op).
-        assert_eq!(read_boundaries_file(root, slice).unwrap(), None);
-
-        // Present ⇒ the EXACT bytes, unparsed and un-normalised: the reader does
-        // no toml round-trip, so commit_boundaries owns validation.
-        let raw =
-            "  [[boundary]]\nphase=\"PHASE-01\"\ncode_start_oid = \"s\"\ncode_end_oid=\"e\"\n";
-        std::fs::create_dir_all(root.join(".doctrine/dispatch/064")).unwrap();
-        std::fs::write(root.join(".doctrine/dispatch/064/boundaries.toml"), raw).unwrap();
-        assert_eq!(
-            read_boundaries_file(root, slice).unwrap().as_deref(),
-            Some(raw)
-        );
-    }
-
     // --- VT-5: recording surface writes rows prepare-review reads back ------
 
     #[test]
@@ -722,28 +658,30 @@ mod tests {
         assert_eq!(read_boundaries(root, slice).unwrap(), Boundaries::default());
         assert_eq!(read_orthogonal(root, slice).unwrap(), Orthogonal::default());
 
-        record_boundary(
-            root,
-            slice,
-            BoundaryRow {
-                phase: "PHASE-01".into(),
-                code_start_oid: "s1".into(),
-                code_end_oid: "e1".into(),
-                provenance: Provenance::Funnel,
+        // SL-221 PHASE-05: the working-tree recording surface (`record_boundary`)
+        // is retired — all boundary rows now land straight on the dispatch ref via
+        // `dispatch::land_boundary_row`. Seed the on-disk manifest directly so this
+        // test still exercises the KEEP-side disk reader `read_boundaries`.
+        store(
+            &dispatch_dir(root, slice).join("boundaries.toml"),
+            &Boundaries {
+                rows: vec![
+                    BoundaryRow {
+                        phase: "PHASE-01".into(),
+                        code_start_oid: "s1".into(),
+                        code_end_oid: "e1".into(),
+                        provenance: Provenance::Funnel,
+                    },
+                    BoundaryRow {
+                        phase: "PHASE-02".into(),
+                        code_start_oid: "s2".into(),
+                        code_end_oid: "e2".into(),
+                        provenance: Provenance::Funnel,
+                    },
+                ],
             },
         )
-        .expect("record boundary 1");
-        record_boundary(
-            root,
-            slice,
-            BoundaryRow {
-                phase: "PHASE-02".into(),
-                code_start_oid: "s2".into(),
-                code_end_oid: "e2".into(),
-                provenance: Provenance::Funnel,
-            },
-        )
-        .expect("record boundary 2");
+        .expect("seed boundaries");
         record_orthogonal(
             root,
             slice,
@@ -769,51 +707,6 @@ mod tests {
         assert_eq!(orthogonal.rows[0].status, LedgerStatus::Verified);
         // The untouched journal manifest is still an absent-file empty default.
         assert_eq!(read_journal(root, slice).unwrap(), Journal::default());
-    }
-
-    #[test]
-    fn record_boundary_upserts_by_phase_never_duplicates() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let root = dir.path();
-        let slice = 64;
-
-        // Re-recording the same phase (e.g. a funnel retry) must REPLACE its row,
-        // never append a duplicate — mirrors the journal upsert and the neutral
-        // registry (`state::record_source_delta`). A duplicate phase row is a
-        // double phase-cut for prepare-review.
-        record_boundary(
-            root,
-            slice,
-            BoundaryRow {
-                phase: "PHASE-04".into(),
-                code_start_oid: "a".into(),
-                code_end_oid: "b".into(),
-                provenance: Provenance::Funnel,
-            },
-        )
-        .expect("record boundary 1");
-        record_boundary(
-            root,
-            slice,
-            BoundaryRow {
-                phase: "PHASE-04".into(),
-                code_start_oid: "a".into(),
-                code_end_oid: "c".into(),
-                provenance: Provenance::Funnel,
-            },
-        )
-        .expect("record boundary 2 (same phase)");
-
-        let boundaries = read_boundaries(root, slice).unwrap();
-        assert_eq!(
-            boundaries.rows.len(),
-            1,
-            "same-phase re-record upserts, never duplicates"
-        );
-        assert_eq!(
-            boundaries.rows[0].code_end_oid, "c",
-            "the upsert replaces with the latest row"
-        );
     }
 
     // --- candidate ledger (SL-068 PHASE-01) --------------------------------
