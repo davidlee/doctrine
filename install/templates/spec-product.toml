@@ -7,4 +7,9 @@ title = {{title}}
 status = "draft"
 kind = "product"
 tags = []
-# parent = "PRD-NNN"   # decomposition parent (product→product)
+
+# product_level — closed product ladder: domain | capability | feature | story. Add as:
+#   product_level = "capability"
+# parent — single decomposition parent (PRD-NNN, product→product); the tree must
+#   stay acyclic. Add as:
+#   parent = "PRD-001"

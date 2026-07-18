@@ -670,7 +670,7 @@ kind = \"functional\"
         // keys survive — toml_edit, not a reserialize).
         assert!(body.contains("kind = \"quality\""));
         assert!(!body.contains("kind = \"functional\""));
-        assert!(body.contains("# description — optional"));
+        assert!(body.contains("# description — the requirement statement"));
         assert!(body.contains("acceptance_criteria = []"));
     }
 
