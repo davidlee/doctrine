@@ -14,7 +14,7 @@ ref   = "REV-028"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected one canonical independent-property model; ADR-019 defines incompatible five-property sets"
 detail = ".doctrine/adr/019/adr-019.md §Decision and .doctrine/revision/028/revision-028.md Edit 1.3 D6. The decision sentence names ownership, distribution, embedding, publication, and projection as the five independent properties, but the immediately following canonical-looking block omits publication and substitutes versioning; REV-028 D6 repeats that second set and then treats publication as an extra axis. The load-bearing rule therefore has either five or six properties depending on which line a descendant follows, so asset policy and the publication≠projection verification cannot be enforced consistently. Define one canonical property vocabulary and cardinality (including publication explicitly), then propagate it unchanged through ADR-019, REV-028, SPEC-009 D6, consequences, and verification."
