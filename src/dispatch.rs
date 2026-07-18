@@ -26,7 +26,7 @@ use clap::Subcommand;
 use crate::slice::parse_cli_id;
 use crate::worktree::JailPolicy;
 
-use crate::boundary::{BoundaryRow, Provenance};
+use crate::boundary::{BoundaryRow, Provenance as BoundaryProvenance};
 use crate::corpus_guard;
 use crate::git::{self, MergeTree, RefCas, ZERO_OID};
 use crate::kinds::{
@@ -867,8 +867,27 @@ pub(crate) fn run_record_boundary(
         provenance: crate::boundary::Provenance::Funnel,
     };
     // (1) The committed claude-arm ledger (`.doctrine/dispatch/<N>/boundaries.toml`)
-    // — UNCHANGED, the phase-cut input prepare-review tree-reads.
-    crate::ledger::record_boundary(&root, slice, row.clone())?;
+    // — the phase-cut input prepare-review tree-reads. SL-221 PHASE-03 (ISS-225):
+    // land it WORKING-TREE-FREE on the `dispatch/<slice>` ref, exactly as the
+    // conclude path does (`conclude_boundary_commit`), collapsing the split write
+    // seam. The row keeps its `Funnel` attribution; the commit identity is the
+    // shared dispatch identity under a `Conclude`-shaped provenance (OQ-1 default).
+    let dref = dispatch_ref(slice);
+    let tip = resolve_commit(&root, &dref)?
+        .with_context(|| format!("record-boundary: {dref} does not resolve to a commit"))?;
+    match land_boundary_row(
+        &root,
+        &dref,
+        &tip,
+        slice,
+        row.clone(),
+        &Provenance::Conclude {
+            who: dispatch_identity(),
+        },
+    )? {
+        CommitOutcome::Landed { .. } => {}
+        CommitOutcome::Refused(refusal) => bail!("record-boundary: {}", refusal.token()),
+    }
     // (2) ALONGSIDE it (SL-147 PHASE-04, T3): the arm-NEUTRAL recorded source-delta
     // registry. The funnel runs this same `record-boundary` beat for BOTH arms with
     // the per-phase coordination boundary (B → B+1), so this is the funnel's
@@ -1949,7 +1968,12 @@ fn missing_committed_funnel_phases<'a>(
 ) -> Vec<&'a str> {
     registry
         .iter()
-        .filter(|r| matches!(r.provenance, Provenance::Funnel | Provenance::Unknown))
+        .filter(|r| {
+            matches!(
+                r.provenance,
+                BoundaryProvenance::Funnel | BoundaryProvenance::Unknown
+            )
+        })
         .map(|r| r.phase.as_str())
         .filter(|p| !committed.contains(p))
         .collect()
@@ -1963,16 +1987,13 @@ fn prepare_review(root: &Path, slice: u32) -> anyhow::Result<()> {
 
     let tip0 = resolve_commit(root, &coord_ref)?
         .with_context(|| format!("prepare-review: dispatch/{slice3} does not exist"))?;
-    // (ISS-039, design §5.2 step 1) Splice the live coord worktree's UNCOMMITTED
-    // boundaries ledger onto the tip BEFORE any read, mirroring `commit_journal`,
-    // so `read_ledger`/`plan_phases` (and the PHASE-05 derive) read one committed,
-    // checkout-independent source (SPEC-022-legal, D7/D10). No-op when there is no
-    // live coord worktree or no working file (D9 liveness wrapper); content-
-    // idempotent, so a re-run with identical content does not advance the ref.
-    let tip = match git::live_worktree_for_ref(root, &coord_ref)? {
-        Some(coord) => commit_boundaries(root, &tip0, &coord_ref, &coord, slice)?,
-        None => tip0,
-    };
+    // SL-221 PHASE-05: the run ledger is sourced EXCLUSIVELY from the dispatch ref
+    // (object db). `conclude`/`land_boundary_row` (P03) commit every boundary row
+    // straight onto `dispatch/<slice>`, so there is no uncommitted working-tree
+    // ledger left to splice — the working-tree path is retired (ISS-225: a stale
+    // working ledger can no longer clobber the concluded ref rows). `read_ledger`/
+    // `plan_phases` read the ref directly below.
+    let tip = tip0;
     let tip_tree = tree_of(root, &tip)?;
     // Project off the PINNED FORK-POINT — merge-base(dispatch/<slice>, trunk) —
     // not the live trunk tip (RV-030 F-1, design §4.2/§4.3 trunk_base_B). The
@@ -2706,8 +2727,24 @@ fn plan_phases(
     boundaries: &Boundaries,
     planned: &mut Vec<Planned>,
 ) -> anyhow::Result<()> {
+    // Chain by ascending PHASE ordinal, NOT on-disk row order: the escape hatch
+    // (PHASE-03, D-B4) can tail-append an out-of-order row onto the boundaries
+    // ref, so row order ≠ phase order. Normalise HERE, at the sole order-sensitive
+    // consumer — a LOCAL sorted view; the on-disk ledger order is left untouched.
+    // Parse the ordinal from the same `strip_prefix("PHASE-")` the walk uses;
+    // malformed / non-`PHASE-NN` labels (`None`) sort LAST, stably (stable sort
+    // preserves input order among equal keys).
+    let ordinal = |row: &BoundaryRow| -> Option<u32> {
+        row.phase.strip_prefix("PHASE-")?.parse::<u32>().ok()
+    };
+    let mut ordered: Vec<&BoundaryRow> = boundaries.rows.iter().collect();
+    ordered.sort_by_key(|row| {
+        let ord = ordinal(row);
+        (ord.is_none(), ord.unwrap_or(0))
+    });
+
     let mut parent = trunk_base.to_owned();
-    for boundary in &boundaries.rows {
+    for boundary in ordered {
         if boundary.code_start_oid == boundary.code_end_oid {
             continue; // empty-code phase — no branch cut (design §4.3)
         }
@@ -2770,53 +2807,6 @@ fn commit_journal(
         RefCas::Updated => Ok(commit),
         RefCas::Moved { actual } => bail!(
             "journal-commit: dispatch branch moved under us (expected {parent}, found {})",
-            actual.as_deref().unwrap_or("?")
-        ),
-    }
-}
-
-/// Splice the **uncommitted** working boundaries ledger from the live coordination
-/// worktree onto `dispatch/<slice>` (design §5.2 step 1, ISS-039) — the boundaries
-/// twin of [`commit_journal`], with two hardenings over a naive byte splice:
-///
-/// 1. **Validate before commit (F3).** The working file is parsed to [`Boundaries`];
-///    a malformed ledger is a clean `Err` and the tip is left untouched — never
-///    commit garbage, unlike a verbatim-byte splice.
-/// 2. **Content-idempotent via TREE-oid compare (F1).** The parsed ledger is
-///    re-serialized to canonical TOML and spliced into the tip tree; if the
-///    candidate tree equals the current tip tree the ref is **not** advanced
-///    (returns `parent`). git dedups identical content to the same blob — hence
-///    the same tree — so a TREE compare is formatting-immune where a raw-blob
-///    compare would falsely diff.
-///
-/// `parent` is the branch's current tip (both the new commit's parent and the CAS
-/// expected-old). Absent working file ⇒ no-op (`parent`), so a re-run after the
-/// coord worktree's removal is safe. A moved ref bails like `commit_journal` (R6).
-fn commit_boundaries(
-    root: &Path,
-    parent: &str,
-    coord_ref: &str,
-    coord: &git::WorktreeEntry,
-    slice: u32,
-) -> anyhow::Result<String> {
-    let Some(raw) = crate::ledger::read_boundaries_file(&coord.path, slice)? else {
-        return Ok(parent.to_owned()); // no working ledger to splice
-    };
-    let boundaries = Boundaries::parse(&raw).with_context(|| {
-        format!("commit_boundaries: working boundaries.toml for dispatch/{slice:03} is malformed")
-    })?;
-    let canonical = boundaries.to_toml()?;
-    let path = format!(".doctrine/dispatch/{slice:03}/boundaries.toml");
-    let tip_tree = tree_of(root, parent)?;
-    let candidate = git::tree_with_file(root, &tip_tree, &path, &canonical)?;
-    if candidate == tip_tree {
-        return Ok(parent.to_owned()); // identical content — no ref advance (F1)
-    }
-    let commit = git::commit_tree(root, &candidate, parent, "ledger: boundaries")?;
-    match git::update_ref_cas(root, coord_ref, &commit, parent)? {
-        RefCas::Updated => Ok(commit),
-        RefCas::Moved { actual } => bail!(
-            "commit_boundaries: dispatch branch moved under us (expected {parent}, found {})",
             actual.as_deref().unwrap_or("?")
         ),
     }
@@ -3691,11 +3681,685 @@ impl NextGuidance {
     }
 }
 
+// ======================================================================================
+// The object-db commit engine (SL-221 PHASE-01 — relocated DOWN from the command tier,
+// ADR-001: `dispatch.rs` is engine, `mcp_server` is command). Composes ONE non-merge
+// commit working-tree-free onto an EXPLICIT `target_ref` and lands it with a
+// compare-and-swap; on ANY fault the live index + worktree are BYTE-UNCHANGED.
+// ======================================================================================
+
+/// The stable funnel marker every landed dispatch commit is grepped by (STD-001
+/// single-source — no bare literal at the call sites). Naming the slice/phase keeps the
+/// history greppable across a run.
+const FUNNEL_MARKER: &str = "dispatch-funnel";
+
+/// The grep-stable commit message the funnel lands: `<marker>: SL-<NNN> <phase>`
+/// (provenance contract — the orchestrator recovers slice/phase from the subject).
+pub(crate) fn funnel_message(slice: u32, phase: &str) -> String {
+    format!("{FUNNEL_MARKER}: SL-{slice:03} {phase}")
+}
+
+/// The canonical coordination branch ref for a slice, `refs/heads/dispatch/<NNN>` (STD-001
+/// single-source — the CAS target [`commit_on_behalf`] advances). The one seam both funnel
+/// production call sites derive the explicit `target_ref` from.
+pub(crate) fn dispatch_ref(slice: u32) -> String {
+    format!("{DISPATCH_REF_PREFIX}{slice:03}")
+}
+
+/// A git author/committer identity (`<name> <email>`), form `<id> <id@doctrine>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Identity {
+    pub(crate) name: String,
+    pub(crate) email: String,
+}
+
+/// Which identities a landed commit carries (provenance contract, design §B):
+/// IMPORT preserves the worker AUTHOR + dispatch COMMITTER; CONCLUDE sets
+/// author == committer == the dispatch id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Provenance {
+    /// Import a worker delta: keep the worker's authorship, stamp the dispatch committer.
+    Import {
+        author: Identity,
+        committer: Identity,
+    },
+    /// Conclude on the funnel's own behalf: author == committer == the dispatch id.
+    Conclude { who: Identity },
+}
+
+impl Provenance {
+    fn author(&self) -> &Identity {
+        match self {
+            Provenance::Import { author, .. } => author,
+            Provenance::Conclude { who } => who,
+        }
+    }
+
+    fn committer(&self) -> &Identity {
+        match self {
+            Provenance::Import { committer, .. } => committer,
+            Provenance::Conclude { who } => who,
+        }
+    }
+}
+
+/// Why [`commit_on_behalf`] refuses (design §B) — a semantic refusal, distinct from a
+/// plumbing error (which stays an `anyhow` `Err`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CommitRefusal {
+    /// The composed tree equals the parent's tree — no change; never mint an empty commit.
+    EmptyDelta,
+    /// The CAS found the tip moved off `expected_old` (a lost-ref race). Nothing written;
+    /// the composed commit is left dangling, the ref untouched.
+    LostRefRace,
+}
+
+impl CommitRefusal {
+    /// The distinct named token each refusal fails closed with.
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            CommitRefusal::EmptyDelta => "empty-delta",
+            CommitRefusal::LostRefRace => "lost-ref-race",
+        }
+    }
+}
+
+/// The outcome of [`commit_on_behalf`]: a landed commit oid, or a typed refusal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CommitOutcome {
+    /// One non-merge commit `C` landed on the coord branch, `C^ == expected_old`.
+    Landed { oid: String },
+    /// A belt refused; the ref + live index + worktree are byte-unchanged.
+    Refused(CommitRefusal),
+}
+
+/// The dispatch committer identity every funnel commit carries (STD-001 — the same
+/// `<name> <email>` the §B provenance tests pin).
+const DISPATCH_NAME: &str = "dispatch";
+const DISPATCH_EMAIL: &str = "dispatch@doctrine";
+
+/// The dispatch committer/author identity (`Conclude` author==committer; `Import`
+/// committer).
+pub(crate) fn dispatch_identity() -> Identity {
+    Identity {
+        name: DISPATCH_NAME.to_owned(),
+        email: DISPATCH_EMAIL.to_owned(),
+    }
+}
+
+/// Compose a commit of `tree` onto `parent` with EXPLICIT author/committer identities,
+/// working-tree-free (mirror of `git::commit_empty_tree_as`, but on a NAMED tree with a
+/// two-identity provenance — the one variant the shipped `commit_tree` lacks). Reads no
+/// index and no working tree; `git commit-tree` operates on object-db oids only.
+fn commit_tree_as(
+    root: &Path,
+    tree: &str,
+    parent: &str,
+    message: &str,
+    prov: &Provenance,
+) -> anyhow::Result<String> {
+    let author = prov.author();
+    let committer = prov.committer();
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["commit-tree", tree, "-p", parent, "-m", message])
+        .env("GIT_AUTHOR_NAME", &author.name)
+        .env("GIT_AUTHOR_EMAIL", &author.email)
+        .env("GIT_COMMITTER_NAME", &committer.name)
+        .env("GIT_COMMITTER_EMAIL", &committer.email)
+        .output()
+        .with_context(|| format!("spawn git commit-tree in {}", root.display()))?;
+    if !output.status.success() {
+        bail!(
+            "commit-tree {tree} -p {parent}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+/// Compose ONE non-merge commit of `tree` onto `target_ref`'s tip and land it with a
+/// compare-and-swap against `expected_old` (design §B). `git_root` is the git tree the
+/// object-db reads/writes route through; `target_ref` is the EXPLICIT branch the CAS
+/// advances (no longer derived from the coord worktree's `HEAD`). The commit is built
+/// object-db-only (`commit-tree` — VT-4: a pre-existing staged/dirty tree is NEVER swept
+/// in, because the compose reads the NAMED `tree`, not the live index).
+///
+/// Refuses (typed, not an error): `empty-delta` when `tree` matches the parent's tree
+/// (no change); `lost-ref-race` when the CAS finds the tip moved off `expected_old`. On
+/// EITHER refusal — and on any fault before the ref advance — the ref, index, and
+/// worktree are BYTE-UNCHANGED (the primitive touches none of them; a dangling commit
+/// object is inert). A genuine plumbing failure stays an `anyhow` `Err`.
+pub(crate) fn commit_on_behalf(
+    git_root: &Path,
+    target_ref: &str,
+    expected_old: &str,
+    tree: &str,
+    message: &str,
+    prov: &Provenance,
+) -> anyhow::Result<CommitOutcome> {
+    // empty-delta: the composed tree equals the parent's tree ⇒ no change (never mint an
+    // empty commit). Peeling `^{tree}` accepts either a tree or a commit as `tree`.
+    let parent_tree = git::git_text(
+        git_root,
+        &["rev-parse", &format!("{expected_old}^{{tree}}")],
+    )
+    .context("resolve parent tree")?;
+    let new_tree = git::git_text(git_root, &["rev-parse", &format!("{tree}^{{tree}}")])
+        .context("resolve composed tree")?;
+    if new_tree == parent_tree {
+        return Ok(CommitOutcome::Refused(CommitRefusal::EmptyDelta));
+    }
+
+    // Compose the single non-merge commit (one `-p`) — object-db only, no working tree.
+    let oid = commit_tree_as(git_root, tree, expected_old, message, prov)?;
+
+    // Lost-ref-race guard: advance the EXPLICIT target ref ONLY if it still equals
+    // `expected_old`.
+    match git::update_ref_cas(git_root, target_ref, &oid, expected_old)? {
+        git::RefCas::Updated => Ok(CommitOutcome::Landed { oid }),
+        git::RefCas::Moved { .. } => Ok(CommitOutcome::Refused(CommitRefusal::LostRefRace)),
+    }
+}
+
+/// UPSERT `row` (by phase) into the committed boundaries at `tip` and land it on
+/// `coord_ref` with one working-tree-free commit. The single boundary writer for
+/// both the funnel (conclude) and the CLI escape hatch (record-boundary).
+pub(crate) fn land_boundary_row(
+    git_root: &Path,
+    coord_ref: &str,
+    tip: &str,
+    slice: u32,
+    row: BoundaryRow,
+    prov: &Provenance,
+) -> anyhow::Result<CommitOutcome> {
+    let path = format!(".doctrine/dispatch/{slice:03}/boundaries.toml");
+    let phase = row.phase.clone(); // captured before the UPSERT consumes `row`
+    let mut b =
+        read_ledger::<Boundaries>(git_root, tip, &format!("{slice:03}"), "boundaries.toml")?;
+    match b.rows.iter_mut().find(|r| r.phase == row.phase) {
+        Some(existing) => *existing = row, // UPSERT by phase (funnel + escape hatch alike)
+        None => b.rows.push(row),
+    }
+    let tree = git::tree_with_file(git_root, &tree_of(git_root, tip)?, &path, &b.to_toml()?)?;
+    commit_on_behalf(
+        git_root,
+        coord_ref,
+        tip,
+        &tree,
+        &funnel_message(slice, &phase),
+        prov,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::SCHEMA_PLAN_OVERVIEW;
+    use std::fs;
     use std::path::Path;
+
+    // ==================================================================================
+    // The object-db commit engine — relocated unit tests (SL-221 PHASE-01, VT-1/VT-2).
+    // ==================================================================================
+
+    fn git_run(dir: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    fn disp() -> Provenance {
+        Provenance::Conclude {
+            who: Identity {
+                name: "dispatch".to_string(),
+                email: "dispatch@doctrine".to_string(),
+            },
+        }
+    }
+
+    /// Stand up a primary repo at base B with a linked coordination worktree on
+    /// `dispatch/<NNN>` at `<tmp>/coord`. Returns `(tmp, primary, coord, base, base_tree)`.
+    fn primary_with_coord(slice: u32) -> (tempfile::TempDir, PathBuf, PathBuf, String, String) {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = fs::canonicalize(tmp.path()).unwrap().join("primary");
+        fs::create_dir_all(&primary).unwrap();
+        git_run(&primary, &["init", "-q", "-b", "main"]);
+        git_run(&primary, &["config", "user.email", "t@t"]);
+        git_run(&primary, &["config", "user.name", "t"]);
+        fs::write(primary.join("seed"), "base\n").unwrap();
+        git_run(&primary, &["add", "-A"]);
+        git_run(&primary, &["commit", "-q", "-m", "base"]);
+        let base = git_run(&primary, &["rev-parse", "HEAD^{commit}"]);
+        let base_tree = git_run(&primary, &["rev-parse", "HEAD^{tree}"]);
+
+        let coord = fs::canonicalize(tmp.path()).unwrap().join("coord");
+        git_run(
+            &primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                &format!("dispatch/{slice:03}"),
+                coord.to_str().unwrap(),
+                &base,
+            ],
+        );
+        let coord = fs::canonicalize(&coord).unwrap();
+        (tmp, primary, coord, base, base_tree)
+    }
+
+    impl CommitOutcome {
+        fn token_is(&self, want: &str) -> bool {
+            matches!(self, CommitOutcome::Refused(r) if r.token() == want)
+        }
+    }
+
+    // --- VT-1: land_boundary_row (the single UPSERT-by-phase boundary writer) ----------
+
+    /// Read the COMMITTED `boundaries.toml` at `oid` (object-db, never the working tree).
+    fn boundaries_at(coord: &Path, oid: &str) -> Boundaries {
+        let text = git_run(
+            coord,
+            &[
+                "show",
+                &format!("{oid}:.doctrine/dispatch/199/boundaries.toml"),
+            ],
+        );
+        Boundaries::parse(&text).unwrap()
+    }
+
+    #[test]
+    fn land_boundary_row_upserts_by_phase() {
+        let (_tmp, _primary, coord, base, _bt) = primary_with_coord(199);
+        let coord_ref = dispatch_ref(199);
+        let mk = |phase: &str, s: &str, e: &str| BoundaryRow {
+            phase: phase.to_owned(),
+            code_start_oid: s.to_owned(),
+            code_end_oid: e.to_owned(),
+            provenance: BoundaryProvenance::Funnel,
+        };
+        let land = |tip: &str, row: BoundaryRow| match land_boundary_row(
+            &coord,
+            &coord_ref,
+            tip,
+            199,
+            row,
+            &disp(),
+        )
+        .unwrap()
+        {
+            CommitOutcome::Landed { oid } => oid,
+            other => panic!("expected Landed, got {other:?}"),
+        };
+
+        // Seed committed boundaries with an existing phase row.
+        let tip1 = land(&base, mk("PHASE-01", "aaa", "bbb"));
+
+        // (i) a NEW phase APPENDS at the tail; the existing row is preserved untouched.
+        let tip2 = land(&tip1, mk("PHASE-02", "ccc", "ddd"));
+        let rows2 = boundaries_at(&coord, &tip2).rows;
+        assert_eq!(rows2.len(), 2, "append, never duplicate");
+        assert_eq!(rows2[0].phase, "PHASE-01");
+        assert_eq!(rows2[0].code_end_oid, "bbb", "existing row preserved");
+        assert_eq!(rows2[1].phase, "PHASE-02", "new row lands at the tail");
+        assert_eq!(rows2[1].code_end_oid, "ddd");
+
+        // (ii) an EXISTING phase REPLACES its row IN PLACE (oids updated); no duplicate,
+        //      order preserved, the sibling row untouched.
+        let tip3 = land(&tip2, mk("PHASE-01", "aaa", "zzz"));
+        let rows3 = boundaries_at(&coord, &tip3).rows;
+        assert_eq!(rows3.len(), 2, "replace in place, never a second PHASE-01");
+        assert_eq!(rows3[0].phase, "PHASE-01");
+        assert_eq!(
+            rows3[0].code_end_oid, "zzz",
+            "PHASE-01 row updated in place"
+        );
+        assert_eq!(rows3[1].phase, "PHASE-02", "sibling preserved, order kept");
+        assert_eq!(rows3[1].code_end_oid, "ddd");
+    }
+
+    // --- plan_phases ordering (SL-221 PHASE-04, D-B4) ---------------------------------
+
+    /// `plan_phases` chains cuts in ascending PHASE ordinal, independent of the
+    /// on-disk ledger row order. The escape hatch (PHASE-03) can tail-append an
+    /// out-of-order row onto the boundaries ref, so row order ≠ phase order; the
+    /// consumer must normalise. Fixture: rows for PHASE-01..05 with PHASE-03
+    /// appended AFTER PHASE-05 (row order 01,02,04,05,03), each a distinct
+    /// non-empty code tree. The emitted chain must still be 01←02←03←04←05.
+    #[test]
+    fn plan_phases_orders_by_phase_ordinal_not_row_order() {
+        let (_tmp, primary, _coord, base, _bt) = primary_with_coord(85);
+        let trunk_base = base.clone();
+        // Five distinct non-empty code tips (each adds a file ⇒ a distinct tree).
+        let commit = |file: &str, content: &str, msg: &str| -> String {
+            fs::write(primary.join(file), content).unwrap();
+            git_run(&primary, &["add", "-A"]);
+            git_run(&primary, &["commit", "-q", "-m", msg]);
+            git_run(&primary, &["rev-parse", "HEAD^{commit}"])
+        };
+        let c1 = commit("p1.txt", "one", "c1");
+        let c2 = commit("p2.txt", "two", "c2");
+        let c3 = commit("p3.txt", "three", "c3");
+        let c4 = commit("p4.txt", "four", "c4");
+        let c5 = commit("p5.txt", "five", "c5");
+        let row = |phase: &str, end: &str| BoundaryRow {
+            phase: phase.to_owned(),
+            // start ≠ end ⇒ non-empty phase, a cut is emitted.
+            code_start_oid: trunk_base.clone(),
+            code_end_oid: end.to_owned(),
+            provenance: BoundaryProvenance::Funnel,
+        };
+        // SCRAMBLED: PHASE-03 tail-appended after PHASE-05 (out-of-order landing).
+        let scrambled = vec![
+            row("PHASE-01", &c1),
+            row("PHASE-02", &c2),
+            row("PHASE-04", &c4),
+            row("PHASE-05", &c5),
+            row("PHASE-03", &c3),
+        ];
+        let boundaries = Boundaries {
+            rows: scrambled.clone(),
+        };
+
+        let mut planned: Vec<Planned> = Vec::new();
+        plan_phases(&primary, "085", &trunk_base, &boundaries, &mut planned)
+            .expect("plan_phases succeeds on the scrambled ledger");
+
+        // The commit emitted for a given ordinal (by its `phase/085-NN` ref).
+        let commit_for = |nn: &str| -> String {
+            let target = format!("{PHASE_REF_PREFIX}085-{nn}");
+            planned
+                .iter()
+                .find(|p| p.target_ref == target)
+                .unwrap_or_else(|| panic!("no planned cut for {nn}"))
+                .commit_oid
+                .clone()
+        };
+        let parent_of = |oid: &str| git_run(&primary, &["rev-parse", &format!("{oid}^")]);
+
+        // Ascending-ordinal chain: NN parents off (NN-1); 01 parents off trunk_base.
+        // Under a row-order walk 03 would parent off 05 and 04 off 02 — this fails.
+        assert_eq!(parent_of(&commit_for("01")), trunk_base, "01 ← trunk_base");
+        assert_eq!(parent_of(&commit_for("02")), commit_for("01"), "02 ← 01");
+        assert_eq!(
+            parent_of(&commit_for("03")),
+            commit_for("02"),
+            "03 ← 02 (not the scrambled predecessor 05)"
+        );
+        assert_eq!(
+            parent_of(&commit_for("04")),
+            commit_for("03"),
+            "04 ← 03 (not the scrambled predecessor 02)"
+        );
+        assert_eq!(parent_of(&commit_for("05")), commit_for("04"), "05 ← 04");
+
+        // The on-disk ledger order is NOT mutated — no second normalisation seam.
+        assert_eq!(
+            boundaries.rows, scrambled,
+            "plan_phases must not reorder the input ledger rows"
+        );
+    }
+
+    // --- VT-2: commit_on_behalf (compose + empty-delta + lost-ref-race) ---------------
+
+    #[test]
+    fn commit_on_behalf_happy_lands_one_non_merge_commit() {
+        let (_tmp, _primary, coord, base, base_tree) = primary_with_coord(199);
+        let tree = git::tree_with_file(&coord, &base_tree, "added.txt", "hi\n").unwrap();
+        let out = commit_on_behalf(
+            &coord,
+            "refs/heads/dispatch/199",
+            &base,
+            &tree,
+            "m",
+            &disp(),
+        )
+        .unwrap();
+        let oid = match out {
+            CommitOutcome::Landed { oid } => oid,
+            other => panic!("expected Landed, got {other:?}"),
+        };
+        // The branch advanced base → oid, exactly one parent == base, tree == composed.
+        assert_eq!(
+            git_run(&coord, &["rev-parse", "refs/heads/dispatch/199"]),
+            oid
+        );
+        let parents = git_run(&coord, &["rev-list", "--parents", "-n", "1", &oid]);
+        let cols: Vec<&str> = parents.split_whitespace().collect();
+        assert_eq!(cols.len(), 2, "exactly one parent: {parents}");
+        assert_eq!(cols[1], base, "C^ == expected_old");
+        assert_eq!(
+            git_run(&coord, &["rev-parse", &format!("{oid}^{{tree}}")]),
+            tree
+        );
+    }
+
+    #[test]
+    fn commit_on_behalf_empty_delta_refuses_and_leaves_the_tip() {
+        let (_tmp, _primary, coord, base, base_tree) = primary_with_coord(199);
+        // Composing the parent's own tree ⇒ no change.
+        let out = commit_on_behalf(
+            &coord,
+            "refs/heads/dispatch/199",
+            &base,
+            &base_tree,
+            "m",
+            &disp(),
+        )
+        .unwrap();
+        assert_eq!(out, CommitOutcome::Refused(CommitRefusal::EmptyDelta));
+        assert_eq!(out.token_is("empty-delta"), true);
+        assert_eq!(
+            git_run(&coord, &["rev-parse", "refs/heads/dispatch/199"]),
+            base
+        );
+    }
+
+    #[test]
+    fn commit_on_behalf_lost_ref_race_refuses_and_leaves_the_tip() {
+        let (_tmp, _primary, coord, base, base_tree) = primary_with_coord(199);
+        // Move the ref to a same-tree dangling commit so expected_old=base is now STALE,
+        // without touching the index / worktree (status stays identical).
+        let other = git_run(
+            &coord,
+            &["commit-tree", &base_tree, "-p", &base, "-m", "other"],
+        );
+        git_run(&coord, &["update-ref", "refs/heads/dispatch/199", &other]);
+        let tree = git::tree_with_file(&coord, &base_tree, "added.txt", "hi\n").unwrap();
+        let out = commit_on_behalf(
+            &coord,
+            "refs/heads/dispatch/199",
+            &base,
+            &tree,
+            "m",
+            &disp(),
+        )
+        .unwrap();
+        assert_eq!(out, CommitOutcome::Refused(CommitRefusal::LostRefRace));
+        // The ref is untouched — still at the racing commit, never clobbered.
+        assert_eq!(
+            git_run(&coord, &["rev-parse", "refs/heads/dispatch/199"]),
+            other
+        );
+    }
+
+    // --- VT-3: provenance (author/committer/message on the produced commit object) ----
+
+    fn commit_idents(dir: &Path, oid: &str) -> (String, String, String, String, String) {
+        let raw = git_run(dir, &["log", "-1", "--format=%an%n%ae%n%cn%n%ce%n%s", oid]);
+        let mut it = raw.lines();
+        (
+            it.next().unwrap().to_string(),
+            it.next().unwrap().to_string(),
+            it.next().unwrap().to_string(),
+            it.next().unwrap().to_string(),
+            it.next().unwrap().to_string(),
+        )
+    }
+
+    #[test]
+    fn commit_on_behalf_import_mode_preserves_worker_author_and_dispatch_committer() {
+        let (_tmp, _primary, coord, base, base_tree) = primary_with_coord(199);
+        let tree = git::tree_with_file(&coord, &base_tree, "added.txt", "hi\n").unwrap();
+        let prov = Provenance::Import {
+            author: Identity {
+                name: "worker-x".to_string(),
+                email: "worker-x@doctrine".to_string(),
+            },
+            committer: Identity {
+                name: "dispatch".to_string(),
+                email: "dispatch@doctrine".to_string(),
+            },
+        };
+        let msg = funnel_message(199, "PHASE-02");
+        let oid =
+            match commit_on_behalf(&coord, "refs/heads/dispatch/199", &base, &tree, &msg, &prov)
+                .unwrap()
+            {
+                CommitOutcome::Landed { oid } => oid,
+                other => panic!("expected Landed, got {other:?}"),
+            };
+        let (an, ae, cn, ce, subject) = commit_idents(&coord, &oid);
+        assert_eq!(
+            (an.as_str(), ae.as_str()),
+            ("worker-x", "worker-x@doctrine")
+        );
+        assert_eq!(
+            (cn.as_str(), ce.as_str()),
+            ("dispatch", "dispatch@doctrine")
+        );
+        assert_eq!(subject, msg);
+        assert!(
+            subject.starts_with(FUNNEL_MARKER),
+            "grep-stable marker: {subject}"
+        );
+        assert!(subject.contains("SL-199") && subject.contains("PHASE-02"));
+    }
+
+    #[test]
+    fn commit_on_behalf_conclude_mode_sets_author_equal_committer() {
+        let (_tmp, _primary, coord, base, base_tree) = primary_with_coord(199);
+        let tree = git::tree_with_file(&coord, &base_tree, "added.txt", "hi\n").unwrap();
+        let msg = funnel_message(199, "PHASE-02");
+        let oid = match commit_on_behalf(
+            &coord,
+            "refs/heads/dispatch/199",
+            &base,
+            &tree,
+            &msg,
+            &disp(),
+        )
+        .unwrap()
+        {
+            CommitOutcome::Landed { oid } => oid,
+            other => panic!("expected Landed, got {other:?}"),
+        };
+        let (an, ae, cn, ce, _s) = commit_idents(&coord, &oid);
+        assert_eq!(an, "dispatch");
+        assert_eq!(ae, "dispatch@doctrine");
+        assert_eq!((an, ae), (cn, ce), "author == committer == dispatch id");
+    }
+
+    // --- VT-4: no-residue atomicity ---------------------------------------------------
+
+    fn dirty_coord(coord: &Path) {
+        fs::write(coord.join("seed"), "dirtied\n").unwrap(); // unstaged tracked mod
+        fs::write(coord.join("staged.txt"), "s\n").unwrap();
+        git_run(coord, &["add", "staged.txt"]); // staged add
+    }
+
+    #[test]
+    fn commit_on_behalf_composes_the_named_tree_not_the_live_index() {
+        let (_tmp, _primary, coord, base, base_tree) = primary_with_coord(199);
+        dirty_coord(&coord);
+        // The index state (HEAD-independent — `status` is HEAD-relative and the ref moves
+        // on a happy land, so it is the wrong probe here).
+        let index_before = git_run(&coord, &["ls-files", "--stage"]);
+        // Compose from the base tree — the staged/dirty entries live only in the index /
+        // worktree, never in `base_tree`.
+        let tree = git::tree_with_file(&coord, &base_tree, "committed.txt", "c\n").unwrap();
+        let oid = match commit_on_behalf(
+            &coord,
+            "refs/heads/dispatch/199",
+            &base,
+            &tree,
+            "m",
+            &disp(),
+        )
+        .unwrap()
+        {
+            CommitOutcome::Landed { oid } => oid,
+            other => panic!("expected Landed, got {other:?}"),
+        };
+        // The commit carries ONLY the named-tree content — not the staged/dirty files.
+        let names = git_run(&coord, &["ls-tree", "-r", "--name-only", &oid]);
+        let names: Vec<&str> = names.lines().collect();
+        assert!(
+            names.contains(&"committed.txt"),
+            "named tree landed: {names:?}"
+        );
+        assert!(
+            !names.contains(&"staged.txt"),
+            "index NOT swept in: {names:?}"
+        );
+        assert_eq!(
+            git_run(&coord, &["cat-file", "-p", &format!("{oid}:seed")]),
+            "base",
+            "the dirty worktree seed is NOT in the commit"
+        );
+        // The live index + worktree are byte-unchanged (the primitive never touched them).
+        assert_eq!(
+            git_run(&coord, &["ls-files", "--stage"]),
+            index_before,
+            "index untouched"
+        );
+        assert_eq!(fs::read_to_string(coord.join("seed")).unwrap(), "dirtied\n");
+        assert_eq!(fs::read_to_string(coord.join("staged.txt")).unwrap(), "s\n");
+    }
+
+    #[test]
+    fn commit_on_behalf_fault_leaves_ref_index_and_worktree_byte_unchanged() {
+        let (_tmp, _primary, coord, base, base_tree) = primary_with_coord(199);
+        // Move the ref to a same-tree dangling commit so the CAS will fault (expected_old
+        // stale) — a fault injected exactly at the ref-update step.
+        let other = git_run(
+            &coord,
+            &["commit-tree", &base_tree, "-p", &base, "-m", "other"],
+        );
+        git_run(&coord, &["update-ref", "refs/heads/dispatch/199", &other]);
+        dirty_coord(&coord);
+        let ref_before = git_run(&coord, &["rev-parse", "refs/heads/dispatch/199"]);
+        let status_before = git_run(&coord, &["status", "--porcelain"]);
+        let tree = git::tree_with_file(&coord, &base_tree, "committed.txt", "c\n").unwrap();
+        let out = commit_on_behalf(
+            &coord,
+            "refs/heads/dispatch/199",
+            &base,
+            &tree,
+            "m",
+            &disp(),
+        )
+        .unwrap();
+        assert_eq!(out, CommitOutcome::Refused(CommitRefusal::LostRefRace));
+        // Ref, index, and worktree are all byte-unchanged.
+        assert_eq!(
+            git_run(&coord, &["rev-parse", "refs/heads/dispatch/199"]),
+            ref_before
+        );
+        assert_eq!(git_run(&coord, &["status", "--porcelain"]), status_before);
+    }
 
     fn git(dir: &Path, args: &[&str]) -> String {
         let out = std::process::Command::new("git")
@@ -4813,7 +5477,7 @@ mod tests {
 
     // --- PHASE-05 (ISS-052) projection-source guard predicate (D11) ----------
 
-    fn reg_row(phase: &str, provenance: Provenance) -> BoundaryRow {
+    fn reg_row(phase: &str, provenance: BoundaryProvenance) -> BoundaryRow {
         BoundaryRow {
             phase: phase.to_string(),
             code_start_oid: "s".to_string(),
@@ -4831,8 +5495,8 @@ mod tests {
     #[test]
     fn guard_total_loss_names_every_funnel_phase() {
         let registry = vec![
-            reg_row("PHASE-01", Provenance::Funnel),
-            reg_row("PHASE-02", Provenance::Funnel),
+            reg_row("PHASE-01", BoundaryProvenance::Funnel),
+            reg_row("PHASE-02", BoundaryProvenance::Funnel),
         ];
         let committed = committed_set(&[]);
         let missing = missing_committed_funnel_phases(&registry, &committed);
@@ -4844,8 +5508,8 @@ mod tests {
     #[test]
     fn guard_partial_loss_names_only_the_uncommitted_phase() {
         let registry = vec![
-            reg_row("PHASE-01", Provenance::Funnel),
-            reg_row("PHASE-02", Provenance::Funnel),
+            reg_row("PHASE-01", BoundaryProvenance::Funnel),
+            reg_row("PHASE-02", BoundaryProvenance::Funnel),
         ];
         assert_eq!(
             missing_committed_funnel_phases(&registry, &committed_set(&["PHASE-01"])),
@@ -4863,9 +5527,9 @@ mod tests {
     #[test]
     fn guard_includes_unknown_excludes_solo_and_manual() {
         let registry = vec![
-            reg_row("PHASE-01", Provenance::Unknown),
-            reg_row("PHASE-02", Provenance::Solo),
-            reg_row("PHASE-03", Provenance::Manual),
+            reg_row("PHASE-01", BoundaryProvenance::Unknown),
+            reg_row("PHASE-02", BoundaryProvenance::Solo),
+            reg_row("PHASE-03", BoundaryProvenance::Manual),
         ];
         // None present in the committed ledger; only the Unknown row is funnel-owned.
         let missing = missing_committed_funnel_phases(&registry, &committed_set(&[]));
