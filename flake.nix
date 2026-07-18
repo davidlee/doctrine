@@ -107,10 +107,13 @@
           # (rename → unlinked inode → hooks/MCP ENOENT) into benign staleness —
           # the bound store path stays valid for the jail's whole life; a rebuild
           # produces a NEW store path, picked up only on the next jail cycle. See
-          # IMP-249. dst tilde expands in the host launcher shell (in-jail $HOME is
-          # also /home/david). Dev-iteration binary is ./target/debug/doctrine,
-          # never bound — unaffected.
-          (ro-bind "${doctrine}/bin/doctrine" (noescape "/home/david/.cargo/bin/doctrine"))
+          # IMP-249. dst tilde expands in the host launcher shell (noescape emits
+          # it raw/unquoted, so the launcher bash expands ~ → $HOME; portable
+          # across homes, unlike a hardcoded /home/david). Dev-iteration binary is
+          # ./target/debug/doctrine, never bound — unaffected. (ISS-230: the stray
+          # repo-root ~ was NEVER this line — it was a literal-~ CARGO_HOME in the
+          # host shell; this bind's ~ expands correctly.)
+          (ro-bind "${doctrine}/bin/doctrine" (noescape "~/.cargo/bin/doctrine"))
           # Put cargo-bin on the jail PATH so the SessionStart hook's bare
           # `doctrine boot` resolves to the shared binary above.
           #(ro-bind "${pkgs.coreutils}/bin/env" "/usr/bin/env")
