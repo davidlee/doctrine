@@ -2306,3 +2306,17 @@ mechanism needs a host-side probe (strace/inotify on a nested spawn). Also lost 
 step to misreading a multi-grep block's blank-first-result as a hit. Net: auditing
 a diagnosis whose mechanism lives in an out-of-jail flake input is expensive and
 terminates in an unavoidable "needs host" handoff.
+
+[revision apply (REV-028); sess-rev028-land]
+Landing `modify REQ-NNN` rows for statement revisions cost extra reads/edits for
+two reasons: (1) requirement statements have *two* template homes across the
+corpus vintage — older reqs (164/165/171) carry the statement in the `## Statement`
+prose body (template comment says so), newer scaffolds (353-358) make the TOML
+`description` field normative and warn prose must not duplicate it. Landing a
+consistent roster meant reconciling both by hand and setting `description` on the
+old reqs too. (2) There is no `spec req` verb to revise a requirement's
+statement/title — `spec req` has only add/status/list, and `spec edit` only touches
+descent/parent. So every `modify` row is a raw TOML+MD hand-edit with no
+edit-preserving CLI seam, and the apply surface just says "land by operator
+hand-edit" without pointing at where the statement actually lives. A `spec req
+edit --statement` verb (writing `description`, edit-preserving) would collapse this.
