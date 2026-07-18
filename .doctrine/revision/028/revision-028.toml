@@ -38,3 +38,93 @@ primary = false
 target = "PRD-006"
 action = "modify"
 primary = false
+
+[[change]]
+target = "REQ-164"
+action = "modify"
+primary = false
+
+[[change]]
+target = "REQ-165"
+action = "modify"
+primary = false
+
+[[change]]
+target = "REQ-171"
+action = "modify"
+primary = false
+
+[[change]]
+target = "REQ-164"
+action = "status"
+primary = false
+from = "active"
+to_status = "pending"
+
+[[change]]
+target = "REQ-165"
+action = "status"
+primary = false
+from = "active"
+to_status = "pending"
+
+[[change]]
+target = "REQ-171"
+action = "status"
+primary = false
+from = "active"
+to_status = "pending"
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-007"
+member_of = "SPEC-009"
+new_statement = "Project exactly the three-file base (.gitignore, doctrine.toml, boot-project.md) from the declared projection policy, not from embed contents"
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-008"
+member_of = "SPEC-009"
+new_statement = "Create an authored-kind entity root on first use of that kind, not at install"
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-009"
+member_of = "SPEC-009"
+new_statement = "Materialize a hymn on disk only when it is first customized"
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-010"
+member_of = "SPEC-009"
+new_statement = "Materialize the standing-governance surface only on explicit user definition, physically distinct from boot-project.md; trust/approval enforcement is out of scope (Stage 5)"
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "NF-004"
+member_of = "SPEC-009"
+new_statement = "No template, reference doc, agent definition, hymn, or integration asset is projected into a client repo by default"
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "NF-005"
+member_of = "SPEC-009"
+new_statement = "Standing governance never ships as base projection and is never folded into the boot-project.md orientation surface"
+
+[[change]]
+target = "REQ-043"
+action = "modify"
+primary = false
+
+[[change]]
+target = "REQ-043"
+action = "status"
+primary = false
+from = "active"
+to_status = "pending"
