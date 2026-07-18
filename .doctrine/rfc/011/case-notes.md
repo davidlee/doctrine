@@ -2200,3 +2200,20 @@ state) is annotated onto IMP-233.
   partial worktrees; scheduled wakeups queued during the stall did not fire
   until ~5h later. Orchestrating around usage windows needs the harness to
   honor post-reset wakeups promptly.
+
+[dispatch; SL222-drive-3c5cf7]
+Session scratchpad (/tmp/claude-1000/...) was wiped mid-drive (host tmp clean).
+Lost: staged PHASE-08 worker prompt, the pi-respawn-confined.sh continuation
+wrapper, and the prior background-task output file. Cost: re-authoring the
+prompt from plan/design (~1 worker-prompt's worth of tokens) and rebuilding the
+respawn wrapper if another continuation is needed. Staged dispatch artifacts
+that must survive a whole drive should live in gitignored runtime state
+(.doctrine/state/dispatch/) rather than the session scratchpad.
+
+[route/governance-edit; pf-imp295-0718]
+Edited install/routing-process.md then ran `doctrine boot` — snapshot
+regenerated *without* the edit, silently: boot reads the binary's embedded
+copy of install/ assets, not the working tree. Cost a verification loop +
+rebuild to discover. The boot-sector guidance names the cargo-build step for
+shipped memories but not for install/ assets; either document it there or
+have `boot` warn when the on-disk asset differs from the embedded copy.
