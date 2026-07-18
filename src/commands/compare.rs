@@ -352,6 +352,8 @@ fn run_capture(args: &RecordArgs) -> anyhow::Result<()> {
         frame: frame.to_string(),
         form: RowForm::Order,
         magnitude: None,
+        est_lower: None,
+        est_upper: None,
         supersedes: args.supersedes.clone(),
         lens: args.lens.clone(),
         rater: args.rater.to_kind(),
@@ -395,7 +397,7 @@ fn run_capture(args: &RecordArgs) -> anyhow::Result<()> {
 pub(crate) struct AnchorSpec {
     /// The single subject (a resolved canonical id).
     pub(crate) subject: String,
-    pub(crate) magnitude: f64,
+    pub(crate) magnitude: Option<f64>,
     pub(crate) rater: RaterKind,
     /// `Some(Pin)` for the gated `value pin` path; `None` for `value set`.
     pub(crate) admission: Option<crate::comparison::AdmissionKind>,
@@ -404,6 +406,10 @@ pub(crate) struct AnchorSpec {
     pub(crate) lens: Option<String>,
     pub(crate) note: Option<String>,
     pub(crate) supersedes: Option<String>,
+    /// Estimate-domain: lower bound (cost-anchor rows only).
+    pub(crate) est_lower: Option<f64>,
+    /// Estimate-domain: upper bound (cost-anchor rows only).
+    pub(crate) est_upper: Option<f64>,
 }
 
 /// Mint + write ONE value-anchor session-of-one via the `compare record` path
@@ -417,16 +423,30 @@ pub(crate) fn record_anchor(root: &Path, spec: &AnchorSpec) -> anyhow::Result<Pa
     let row_uid = uuid::Uuid::now_v7().to_string();
     let date = crate::clock::today();
 
+    // Estimate-domain vs value-domain anchor detection:
+    let is_estimate = spec.est_lower.is_some() || spec.est_upper.is_some();
+    let domain = if is_estimate {
+        comparison::DOMAIN_ESTIMATE.to_string()
+    } else {
+        comparison::DOMAIN_VALUE.to_string()
+    };
+    let frame = if is_estimate {
+        comparison::FRAME_COST_ANCHOR.to_string()
+    } else {
+        comparison::FRAME_VALUE_ANCHOR.to_string()
+    };
     let judgement = Judgement {
         uid: row_uid,
         seq: 0,
         a: spec.subject.clone(),
         b: None,
         response: None,
-        domain: comparison::DOMAIN_VALUE.to_string(),
-        frame: comparison::FRAME_VALUE_ANCHOR.to_string(),
+        domain,
+        frame,
         form: RowForm::Anchor,
-        magnitude: Some(spec.magnitude),
+        magnitude: spec.magnitude,
+        est_lower: spec.est_lower,
+        est_upper: spec.est_upper,
         supersedes: spec.supersedes.clone(),
         lens: spec.lens.clone(),
         rater: spec.rater.clone(),
@@ -742,19 +762,56 @@ fn build_elicit_inputs<'a>(
     for (key, attr) in &graph.attrs {
         if let Some((multiplier, est_cost, bare_estimate)) = graph.item_costing(key, cfg) {
             let canonical = key.canonical();
-            if !bare_estimate
-                && comparison::admissible_estimate_pair(attr.kind.prefix, attr.kind.prefix).is_ok()
-            {
-                estimated_costs.insert(canonical.clone(), est_cost);
-            }
             costing.insert(
-                canonical,
+                canonical.clone(),
                 ItemCosting {
                     multiplier,
                     est_cost,
                     bare_estimate,
                 },
             );
+            // SL-222 PHASE-06: the target pool also includes anchored-tier
+            // estimate claim costs (Pin/Human from estimate_claims). These
+            // replace the old facet-anchor targets where facets are absent.
+            if !bare_estimate
+                && comparison::admissible_estimate_pair(attr.kind.prefix, attr.kind.prefix).is_ok()
+            {
+                estimated_costs.insert(canonical, est_cost);
+            }
+        }
+    }
+    // Phase-06: also include anchored-tier claim costs (Pin/Human) — items
+    // with claim rows but no authored estimate facet (the claim is the anchor
+    // source, not the facet).
+    for (item, claim) in &pipeline.estimate_claims.anchored {
+        if comparison::admissible_estimate_pair(
+            item.as_str().split_once('-').map_or("", |(p, _)| p),
+            item.as_str().split_once('-').map_or("", |(p, _)| p),
+        )
+        .is_ok()
+            && !estimated_costs.contains_key(item.as_str())
+        {
+            estimated_costs.insert(item.clone(), claim.operative);
+        }
+    }
+    // Phase-06: priors (Agent/Migrated) only enter as probe-eligible
+    // when knob is SET; when UNSET they retire from probes (the shell's
+    // `demote_agent_evidence` knob gates this downstream).
+    if cfg.compare.demote_agent_evidence {
+        for (item, claim) in &pipeline.estimate_claims.priors {
+            if pipeline
+                .estimate_claims
+                .anchored
+                .contains_key(item.as_str())
+            {
+                continue;
+            }
+            let prefix = item.as_str().split_once('-').map_or("", |(p, _)| p);
+            if comparison::admissible_estimate_pair(prefix, prefix).is_ok()
+                && !estimated_costs.contains_key(item.as_str())
+            {
+                estimated_costs.insert(item.clone(), claim.operative);
+            }
         }
     }
 
@@ -774,14 +831,9 @@ fn build_elicit_inputs<'a>(
     }
 
     // SL-220 §3 rung-5 set: items carrying an unmigrated `[value]` facet —
-    // valued for queue purposes like a prior (knob-off retired, knob-on
-    // probe-eligible).
-    let facet_valued: std::collections::BTreeSet<String> = graph
-        .attrs
-        .iter()
-        .filter(|(_, attr)| attr.facets.value.is_some())
-        .map(|(key, _)| key.canonical())
-        .collect();
+    // valued for queue purposes like a prior. Deleted at PHASE-09 (the raw
+    // facet is no longer parsed); always empty.
+    let facet_valued: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     ElicitInputs {
         // The pairwise view (SL-220 §2): `assemble` recompiles its baseline
@@ -798,6 +850,11 @@ fn build_elicit_inputs<'a>(
         sizing: SizingInputs {
             estimated_costs,
             est_evidenced,
+            // SL-222 E10: only anchored-tier estimate claims are valid
+            // probe targets. The filtered `estimated_costs` (with no
+            // facet-only costs) feeds the median, and this set gates which
+            // items are eligible.
+            estimate_anchored_targets: pipeline.estimate_claims.anchored.keys().cloned().collect(),
         },
         // SL-220 §3/D14: the claim facts — probe retirement + the
         // knob-independent claim-reprobe source.
@@ -942,8 +999,8 @@ fn entry_human(rank: usize, entry: &QueueEntry, ctx: &RenderCtx<'_>) -> String {
         }
         EntryPayload::SizingProbe { subject, target } => {
             parts.push(format!(
-                "   size: {} — which is more work vs {} (est {:.2})?\n",
-                subject.id, target.id, target.estimate
+                "   size: {} — which is more work vs {} (est {:.2}, {})?\n",
+                subject.id, target.id, target.estimate, target.tier_label
             ));
             parts.push(participant_human(ctx, subject));
         }
@@ -1062,9 +1119,9 @@ impl<'a> RenderCtx<'a> {
         let point = match &reason {
             ReasonKind::ValuePin { value, .. }
             | ReasonKind::ValueClaim { value, .. }
-            | ReasonKind::ValueUnmigratedFacet { value }
             | ReasonKind::ValueProjected { value, .. }
             | ReasonKind::ValueGauge { value, .. } => *value,
+            ReasonKind::ValueUnmigratedFacet => 0.0,
             _ => return None,
         };
         let bounds = crate::priority::surface::class_bounds_structural(
@@ -1897,6 +1954,8 @@ mod tests {
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
             magnitude: None,
+            est_lower: None,
+            est_upper: None,
             supersedes: None,
             lens: None,
             rater: RaterKind::Agent,
@@ -1935,6 +1994,9 @@ mod tests {
             &comparison::AnchorMap::new(),
             &comparison::VALUE_PROJECTION_PARAMS,
             &comparison::VALUE_PROJECTION_PARAMS,
+            &std::collections::BTreeMap::new(),
+            1.0,
+            0.65,
         )
         .unwrap()
         .rows
@@ -2655,6 +2717,7 @@ mod tests {
         crate::priority::elicit::SizingTarget {
             id: id.to_string(),
             estimate,
+            tier_label: "human claim".to_string(),
         }
     }
 
@@ -2777,6 +2840,48 @@ mod tests {
         let (_tmp, root) = mk_project_root();
         let target = seed_estimated_issue(&root, 7, 2.0, 6.0); // ISS-007, anchor 4.6
         let subject = seed_scored_slice(&root, 1); // SL-001, un-sized
+        // ISS-007 needs an anchored-tier estimate claim (E10: facet-only
+        // items are no longer valid probe targets).
+        let est_session_text = comparison::to_toml(&ComparisonSession {
+            schema: comparison::COMPARISON_SCHEMA.to_string(),
+            version: comparison::COMPARISON_VERSION,
+            session: SessionHeader {
+                uid: "iss007-anchor".to_string(),
+                date: "2026-07-17".to_string(),
+                audience: None,
+            },
+            judgements: vec![Judgement {
+                uid: "iss007-anchor".to_string(),
+                seq: 0,
+                a: "ISS-007".to_string(),
+                b: None,
+                response: None,
+                domain: comparison::DOMAIN_ESTIMATE.to_string(),
+                frame: comparison::FRAME_COST_ANCHOR.to_string(),
+                form: RowForm::Anchor,
+                magnitude: None,
+                supersedes: None,
+                lens: None,
+                rater: RaterKind::Human,
+                by: Some("david".to_string()),
+                note: None,
+                date: Some("2026-07-17".to_string()),
+                observed_at: None,
+                basis: None,
+                est_lower: Some(2.0),
+                est_upper: Some(6.0),
+                admission: None,
+            }],
+            tombstones: Vec::new(),
+        })
+        .unwrap();
+        let comps_dir = root.join(".doctrine/comparisons");
+        std::fs::create_dir_all(&comps_dir).unwrap();
+        std::fs::write(
+            comps_dir.join("2026-07-17-iss007-anchor.toml"),
+            &est_session_text,
+        )
+        .unwrap();
 
         let cfg = crate::priority::config::load(&root);
         let build = || {
@@ -2809,6 +2914,163 @@ mod tests {
         assert!(
             probe["ask"].get("yield_by_answer").is_none(),
             "no yield claim on a probe"
+        );
+    }
+
+    // ── PHASE-07: estimate mixed-fixture list golden ────────────────────────
+    // PRIOR / CONFLICTED / ANCHORED token routing for estimate-domain
+    // anchor rows — never a CompilationStatus token.
+
+    /// An estimate-domain anchor judgement with the given tier rater.
+    fn est_anchor(
+        uid: &str,
+        seq: u32,
+        a: &str,
+        rater: RaterKind,
+        magnitude: f64,
+        date: &str,
+        supersedes: Option<&str>,
+    ) -> Judgement {
+        Judgement {
+            uid: uid.to_string(),
+            seq,
+            a: a.to_string(),
+            b: None,
+            response: None,
+            domain: comparison::DOMAIN_ESTIMATE.to_string(),
+            frame: comparison::FRAME_COST_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: None,
+            est_lower: Some(magnitude * 0.8),
+            est_upper: Some(magnitude * 1.2),
+            supersedes: supersedes.map(str::to_string),
+            lens: None,
+            rater,
+            by: Some("david".to_string()),
+            note: None,
+            date: Some(date.to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
+        }
+    }
+
+    #[test]
+    fn compare_list_estimate_mixed_fixture_token_routing() {
+        // A MIXED estimate fixture:
+        // - anchored (human) anchor row → status=anchored
+        // - prior (agent) anchor row → status=prior
+        // - conflicted (two human anchors disagreeing) → status=conflicted
+        // - active (pairwise est row) → status=active (not anchor, so
+        //   normal row-summary token, not anchor claim token)
+        // NO CompilationStatus token on any row.
+        let anchored = est_anchor(
+            "row-anchored",
+            0,
+            "SL-100",
+            RaterKind::Human,
+            6.0,
+            "2026-07-10",
+            None,
+        );
+        let prior = est_anchor(
+            "row-prior",
+            1,
+            "SL-101",
+            RaterKind::Agent,
+            3.0,
+            "2026-07-10",
+            None,
+        );
+        // Two human anchors on the same entity create a conflict
+        let conflicted_a = est_anchor(
+            "row-conf-a",
+            0,
+            "SL-102",
+            RaterKind::Human,
+            4.0,
+            "2026-07-10",
+            None,
+        );
+        let conflicted_b = est_anchor(
+            "row-conf-b",
+            1,
+            "SL-102",
+            RaterKind::Human,
+            8.0,
+            "2026-07-11",
+            None,
+        );
+        // A pairwise est row (not an anchor)
+        let mut pairwise = mk_judgement("row-pair", 2, "SL-100", "SL-101");
+        pairwise.domain = comparison::DOMAIN_ESTIMATE.to_string();
+        pairwise.frame = comparison::FRAME_MORE_WORK.to_string();
+        pairwise.date = Some("2026-07-10".to_string());
+
+        let sessions = vec![
+            mk_session("2026-07-10", "sess-1", vec![anchored, prior, pairwise]),
+            mk_session("2026-07-10", "sess-2", vec![conflicted_a]),
+            mk_session("2026-07-11", "sess-3", vec![conflicted_b]),
+        ];
+        let lines = list_lines(&rows_of(&sessions), None, false);
+        // All rows present
+        let line_of = |uid: &str| {
+            lines
+                .iter()
+                .find(|l| l.contains(uid))
+                .unwrap_or_else(|| panic!("{uid} listed: {lines:?}"))
+        };
+
+        // Anchored: status=anchored token, NO CompilationStatus
+        let l = line_of("row-anchored");
+        assert!(
+            l.contains("status=anchored"),
+            "anchored row wears anchored token: {l}"
+        );
+        assert!(
+            !l.contains("CompilationStatus"),
+            "anchored row never carries CompilationStatus: {l}"
+        );
+        assert!(!l.contains("prior"), "anchored row is not prior: {l}");
+
+        // Prior: status=prior token
+        let l = line_of("row-prior");
+        assert!(
+            l.contains("status=prior"),
+            "prior row wears prior token: {l}"
+        );
+        assert!(
+            !l.contains("CompilationStatus"),
+            "prior row never carries CompilationStatus: {l}"
+        );
+        assert!(!l.contains("anchored"), "prior row is not anchored: {l}");
+
+        // Both conflicted rows: status=conflicted token
+        for uid in ["row-conf-a", "row-conf-b"] {
+            let l = line_of(uid);
+            assert!(
+                l.contains("status=conflicted"),
+                "{uid} wears conflicted token: {l}"
+            );
+            assert!(
+                !l.contains("CompilationStatus"),
+                "{uid} never carries CompilationStatus: {l}"
+            );
+        }
+
+        // Pairwise: normal status (active), never an anchor claim token
+        let l = line_of("row-pair");
+        assert!(
+            l.contains("status=active"),
+            "pairwise row wears active token: {l}"
+        );
+        assert!(
+            !l.contains("CompilationStatus"),
+            "pairwise row never carries CompilationStatus: {l}"
+        );
+        assert!(
+            !l.contains("anchored") && !l.contains("prior") && !l.contains("conflicted"),
+            "pairwise row has no anchor claim token: {l}"
         );
     }
 }

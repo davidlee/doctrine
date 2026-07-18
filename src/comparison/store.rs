@@ -27,8 +27,9 @@ use super::resolve::{
     self, MalformedSupersession, ResolutionStatus, RowState, StatusMap, rater_key,
 };
 use super::{
-    COMPARISONS_DIR, ClaimResolution, ComparisonSession, DOMAIN_ESTIMATE, DOMAIN_PRIORITY,
-    Judgement, Response, RowForm, resolve_claims,
+    COMPARISONS_DIR, ClaimResolution, ClaimResolutionGeneric, ComparisonSession, DOMAIN_ESTIMATE,
+    DOMAIN_PRIORITY, EstimatePayload, Judgement, Response, RowForm, resolve_claims,
+    resolve_claims_generic,
 };
 
 /// Scan `.doctrine/comparisons/*.toml` and parse every session (moved
@@ -141,6 +142,19 @@ pub(crate) struct Pipeline {
     /// its `anchor_map()` IS the value system's compile anchor source (D4/
     /// D12), and the graph ladder reads `anchored`/`priors` directly (§3).
     pub value_claims: ClaimResolution,
+    /// The estimate-domain claim resolution (SL-222 E7): the anchor-side
+    /// output over estimate-anchor rows. Like `value_claims` but over
+    /// `EstimatePayload` with β-skew params. Its `anchor_map()` is the
+    /// Pin/Human estimate cost anchors; the resource ladder reads them.
+    /// PHASE-06 consumption — read by `graph::load_comparison_pipeline`'s
+    /// caller chain (the graph scoring ladder's rungs 1/3/4).
+    pub estimate_claims: ClaimResolutionGeneric<EstimatePayload>,
+    /// The estimate-domain bare anchor: `max_upper` over the union of (a)
+    /// EVERY active unlensed estimate-anchor row's `est_upper` and (b) the
+    /// facet-uppers threaded from the scan shell, + `margin`. Equals the
+    /// est system's `ProjectionCfg.gauge_center` and `CostCtx.absent`.
+    /// 1.0 fallback on empty-evidence corpus (§3 E7, RV-282 F-2/F-4).
+    pub bare_anchor: f64,
     /// The resolved-ACTIVE VALUE-domain PAIRWISE judgements, owned (SL-217
     /// PHASE-03; domain-scoped by SL-219 — the est rows compile in their own
     /// system and must not leak into the value recompiles; anchor-free by
@@ -209,15 +223,31 @@ impl DomainSystem {
 /// behaviour-preservation gate: every existing priority suite runs with zero
 /// comparison sessions on disk, so this must cost nothing beyond the one
 /// directory read.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "PHASE-04 pipeline wiring: load_pipeline receives 7 params — root + 5 shared (statuses, est_anchors, value_cfg, est_cfg) + 3 new PHASE-04 params (facet_uppers, margin, estimate_skew). Acceptable for an integration seam."
+)]
 pub(crate) fn load_pipeline(
     root: &Path,
     statuses: &StatusMap,
     est_anchors: &AnchorMap,
     value_cfg: &ProjectionCfg,
     est_cfg: &ProjectionCfg,
+    facet_uppers: &BTreeMap<String, f64>,
+    margin: f64,
+    estimate_skew: f64,
 ) -> anyhow::Result<Pipeline> {
     let sessions = load_sessions(root)?;
-    pipeline_from_sessions(&sessions, statuses, est_anchors, value_cfg, est_cfg)
+    pipeline_from_sessions(
+        &sessions,
+        statuses,
+        est_anchors,
+        value_cfg,
+        est_cfg,
+        facet_uppers,
+        margin,
+        estimate_skew,
+    )
 }
 
 /// The disk-FREE inner half of [`load_pipeline`]: `resolve` → `compile` →
@@ -225,16 +255,30 @@ pub(crate) fn load_pipeline(
 /// an ALREADY-LOADED session slice. Split out so tests compose sessions in
 /// memory without a filesystem round-trip (the pure/impure split the
 /// project's conventions ask for).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "PHASE-04 pipeline wiring: 8 params for the core pipeline function — 5 shared domain params + 3 new PHASE-04 params (facet_uppers, margin, estimate_skew). Acceptable for a central integration seam."
+)]
 pub(crate) fn pipeline_from_sessions(
     sessions: &[ComparisonSession],
     statuses: &StatusMap,
-    est_anchors: &AnchorMap,
+    _est_anchors: &AnchorMap,
     value_cfg: &ProjectionCfg,
     est_cfg: &ProjectionCfg,
+    facet_uppers: &BTreeMap<String, f64>,
+    margin: f64,
+    estimate_skew: f64,
 ) -> anyhow::Result<Pipeline> {
     if sessions.is_empty() {
         // No sessions ⇒ no claim rows ⇒ no value anchors (SL-220 D4: claims
         // are the ONLY value-anchor source since the PHASE-05 flip).
+        // Bare anchor falls back to facet uppers (the old `bare_cost_anchor`
+        // computation — transitional, will be PHASE-06's flip).
+        let max_upper = facet_uppers.values().copied().max_by(f64::total_cmp);
+        let bare_anchor = match max_upper {
+            Some(mu) => mu + margin,
+            None => 1.0,
+        };
         return Ok(Pipeline {
             rows: Vec::new(),
             value: DomainSystem::empty(&AnchorMap::new()),
@@ -245,6 +289,8 @@ pub(crate) fn pipeline_from_sessions(
             malformed: Vec::new(),
             priority_domain_count: 0,
             value_claims: ClaimResolution::default(),
+            estimate_claims: ClaimResolutionGeneric::default(),
+            bare_anchor,
             active_pairwise: Vec::new(),
         });
     }
@@ -258,7 +304,56 @@ pub(crate) fn pipeline_from_sessions(
     // value system's compile anchor source since the PHASE-05 flip: facets
     // stopped anchoring/shaping projection (design §3, RV-278 F-4).
     let value_claims = resolve_claims(&resolution.rows);
+    // SL-222 E7: the estimate-domain claims pass — selects estimate-anchor
+    // rows (Active/InertLens), folded via `EstimatePayload` with β-skew.
+    let estimate_claims = resolve_claims_generic::<EstimatePayload>(
+        &resolution.rows,
+        DOMAIN_ESTIMATE,
+        &estimate_skew,
+    );
     let value_anchors = value_claims.anchor_map();
+
+    // ── In-pipeline bare anchor (§3 E7, RV-282 F-2/F-4) ────────────────
+    // Must be computed BEFORE the estimate system compiles so we can thread
+    // it as the gauge_center. max_upper = max over:
+    //   (a) EVERY active unlensed estimate-anchor row's est_upper — any
+    //       tier, losing tiers and individual conflict rows included, lensed
+    //       rows excluded, tombstoned/superseded rows already reduced by
+    //       resolution;
+    //   (b) the facet-uppers pure input threaded from the scan shell
+    //       (transitional — the current authored-uppers source).
+    // Projected costs never enter. Margin applies. Empty → 1.0 fallback.
+    let max_anchor_upper = resolution
+        .rows
+        .iter()
+        .filter(|(j, status)| {
+            j.domain == DOMAIN_ESTIMATE
+                && matches!(j.form, RowForm::Anchor)
+                && matches!(
+                    status,
+                    ResolutionStatus::Active | ResolutionStatus::InertLens
+                )
+                && j.lens.is_none()
+        })
+        .filter_map(|(j, _)| j.est_upper)
+        .max_by(f64::total_cmp);
+    let max_facet_upper = facet_uppers.values().copied().max_by(f64::total_cmp);
+    let max_upper = max_anchor_upper
+        .into_iter()
+        .chain(max_facet_upper)
+        .max_by(f64::total_cmp);
+    let bare_anchor = match max_upper {
+        Some(mu) => mu + margin,
+        None => 1.0,
+    };
+    // The est system's gauge center IS the bare anchor (the pipeline owns
+    // it now). Override the caller's est_cfg gauge_center with the
+    // computed value — ensures the P8 spread centres correctly.
+    let est_cfg = ProjectionCfg {
+        gauge_center: bare_anchor,
+        ..*est_cfg
+    };
+
     // The pairwise boundary (SL-220 §2, RV-278 F-6): anchor rows terminate
     // at `claims` and reach NO compile consumer — every downstream system
     // (compile, project, elicit's owned evidence) is anchor-free.
@@ -276,10 +371,14 @@ pub(crate) fn pipeline_from_sessions(
     // Active estimate row used to flow into value compilation).
     let (est_active, value_active): (Vec<&Judgement>, Vec<&Judgement>) =
         active.iter().partition(|j| j.domain == DOMAIN_ESTIMATE);
-    // Row-gating (SL-219 §1, mem.fact.comparison.anchor-attachment-row-gated-
-    // per-system): an authored estimate enters the est system only when an
-    // est-domain row touches its item.
-    let gated_est_anchors: AnchorMap = est_anchors
+    // SL-222 PHASE-06: est-domain anchors now come from
+    // `estimate_claims.anchor_map()` — operative costs of Pin/Human resolved
+    // claims — replacing the old authored-facet anchor builder. The caller's
+    // `est_anchors` (facet-derived) is no longer the anchor source.
+    let est_anchors_from_claims = estimate_claims.anchor_map();
+    // Row-gating applies identically: an item anchors the est system only
+    // when an est-domain row touches it.
+    let gated_est_anchors: AnchorMap = est_anchors_from_claims
         .iter()
         .filter(|(item, _)| {
             est_active
@@ -290,7 +389,7 @@ pub(crate) fn pipeline_from_sessions(
         .collect();
 
     let value = DomainSystem::compiled(&value_active, &value_anchors, value_cfg);
-    let estimate = DomainSystem::compiled(&est_active, &gated_est_anchors, est_cfg);
+    let estimate = DomainSystem::compiled(&est_active, &gated_est_anchors, &est_cfg);
     let constraining_by_class =
         compile::constraining_counts_by_class(&value.constraint_set, &value_active);
     // SL-219 PHASE-06: the est system's own rater split, for the cost-source
@@ -323,7 +422,13 @@ pub(crate) fn pipeline_from_sessions(
                     }
                 });
             let claim = (is_anchor && matches!(status, ResolutionStatus::Active))
-                .then(|| claim_token(&value_claims, &j.a))
+                .then(|| {
+                    if j.domain == DOMAIN_ESTIMATE {
+                        claim_token_estimate(&estimate_claims, &j.a)
+                    } else {
+                        claim_token(&value_claims, &j.a)
+                    }
+                })
                 .flatten();
             RowSummary {
                 uid: j.uid.clone(),
@@ -356,6 +461,8 @@ pub(crate) fn pipeline_from_sessions(
         malformed: resolution.malformed,
         priority_domain_count,
         value_claims,
+        estimate_claims,
+        bare_anchor,
         active_pairwise,
     })
 }
@@ -366,6 +473,28 @@ pub(crate) fn pipeline_from_sessions(
 /// (Agent/Migrated). Item-level — every active anchor row on the item wears
 /// its resolved state; the row's own tier stays visible via `rater_token`.
 fn claim_token(claims: &ClaimResolution, item: &str) -> Option<&'static str> {
+    if let Some(claim) = claims.anchored.get(item) {
+        return Some(if claim.conflict.is_some() {
+            "conflicted"
+        } else {
+            "anchored"
+        });
+    }
+    claims.priors.get(item).map(|claim| {
+        if claim.conflict.is_some() {
+            "conflicted"
+        } else {
+            "prior"
+        }
+    })
+}
+
+/// Estimate-domain analog of [`claim_token`]: resolves display tokens for
+/// estimate-anchor rows via the estimate claims pass.
+fn claim_token_estimate(
+    claims: &ClaimResolutionGeneric<EstimatePayload>,
+    item: &str,
+) -> Option<&'static str> {
     if let Some(claim) = claims.anchored.get(item) {
         return Some(if claim.conflict.is_some() {
             "conflicted"
@@ -414,13 +543,25 @@ mod tests {
     use super::{AnchorMap, Projection, ProjectionCfg, StatusMap, load_pipeline, load_sessions};
     use crate::comparison::{
         COMPARISON_SCHEMA, COMPARISON_VERSION, ClaimResolution, ComparisonSession, DOMAIN_ESTIMATE,
-        DOMAIN_VALUE, FRAME_EQUAL_EFFORT, FRAME_MORE_WORK, FRAME_VALUE_ANCHOR, Judgement,
-        QuarantinePolicy, QuarantineReason, RaterKind, Response, RowForm, SessionHeader,
+        DOMAIN_VALUE, FRAME_COST_ANCHOR, FRAME_EQUAL_EFFORT, FRAME_MORE_WORK, FRAME_VALUE_ANCHOR,
+        Judgement, QuarantinePolicy, QuarantineReason, RaterKind, Response, RowForm, SessionHeader,
         VALUE_PROJECTION_PARAMS, ValueProvenance, cost_feed, pipeline_from_sessions,
     };
     use crate::priority::config::EST_GAUGE_STEP;
+    use std::collections::BTreeMap;
 
     const CFG: ProjectionCfg = VALUE_PROJECTION_PARAMS;
+
+    /// The default test skew (matches `EstimateCost::default().skew`).
+    const EST_SKEW: f64 = 0.65;
+    /// The default test margin (matches `EstimateCost::default().margin`).
+    const EST_MARGIN: f64 = 1.0;
+
+    /// A convenience empty facet-uppers map for tests that don't exercise
+    /// the bare-anchor dimension (behaviour preservation).
+    fn empty_facet_uppers() -> BTreeMap<String, f64> {
+        BTreeMap::new()
+    }
 
     /// The est-domain projection params the VT-2 fixtures run under (SL-219
     /// D8): the shipped `EST_GAUGE_STEP` and a gauge center standing in for
@@ -458,6 +599,8 @@ mod tests {
             date: Some("2026-07-11".to_string()),
             observed_at: None,
             basis: None,
+            est_lower: None,
+            est_upper: None,
             admission: None,
         }
     }
@@ -538,6 +681,9 @@ mod tests {
             &Default::default(),
             &CFG,
             &EST_CFG,
+            &empty_facet_uppers(),
+            EST_MARGIN,
+            EST_SKEW,
         )
         .unwrap();
         assert!(pipeline.value.projection.is_empty());
@@ -560,8 +706,17 @@ mod tests {
             ))
             .unwrap(),
         );
-        let pipeline =
-            load_pipeline(root, &StatusMap::new(), &Default::default(), &CFG, &EST_CFG).unwrap();
+        let pipeline = load_pipeline(
+            root,
+            &StatusMap::new(),
+            &Default::default(),
+            &CFG,
+            &EST_CFG,
+            &empty_facet_uppers(),
+            EST_MARGIN,
+            EST_SKEW,
+        )
+        .unwrap();
         let projected = &pipeline.value.projection;
         // Anchor-free two-node chain: the P8 gauge spread places both ends.
         assert!(projected.contains_key("SL-100"));
@@ -586,11 +741,75 @@ mod tests {
     }
 
     /// The in-memory pipeline over one session of `judgements` with the given
-    /// est anchor map (the VT-1 harness). Value anchors are claim-derived
-    /// inside the pipeline since the SL-220 PHASE-05 flip — no caller input.
+    /// est anchor map (the VT-1 harness). SL-222 PHASE-06: the old explicit
+    /// `est_anchors` map is DEAD — anchors are now claim-derived from
+    /// anchor-form rows. This helper ignores the anchor map (the `_` prefix
+    /// on the pipeline parameter means the map doesn't reach compile). Callers
+    /// that need anchored est behaviour should use `pipeline_with_est_anchors`
+    /// instead, or add `est_anchor_row` + a gate row to the judgements vec.
     fn pipeline_of(judgements: Vec<Judgement>, est_anchors: &AnchorMap) -> super::Pipeline {
         let sessions = vec![session("s1", "2026-07-11", judgements)];
-        pipeline_from_sessions(&sessions, &StatusMap::new(), est_anchors, &CFG, &EST_CFG).unwrap()
+        pipeline_from_sessions(
+            &sessions,
+            &StatusMap::new(),
+            est_anchors,
+            &CFG,
+            &EST_CFG,
+            &empty_facet_uppers(),
+            EST_MARGIN,
+            EST_SKEW,
+        )
+        .unwrap()
+    }
+
+    /// Like `pipeline_of` but converts `est_anchors` entries into actual
+    /// anchor-form + gate rows so the est system is properly anchored.
+    /// Used by tests that depend on anchored cost behaviour (the PHASE-06
+    /// class-b churn fix).
+    fn pipeline_with_est_anchors(
+        judgements: Vec<Judgement>,
+        est_anchors: &AnchorMap,
+    ) -> super::Pipeline {
+        let mut all = judgements;
+        for (i, (item, &cost)) in est_anchors.iter().enumerate() {
+            all.push(est_anchor_row(&format!("a-{item}"), item, cost, cost));
+            // Gate row: Order-form so it enters est_active (anchor rows
+            // are excluded from the compile-active set).
+            all.push(Judgement {
+                uid: format!("ag-{item}"),
+                seq: i as u32 + 100,
+                a: item.to_string(),
+                b: None,
+                response: Some(Response::PreferA),
+                domain: DOMAIN_ESTIMATE.to_string(),
+                frame: FRAME_MORE_WORK.to_string(),
+                form: RowForm::Order,
+                magnitude: None,
+                supersedes: None,
+                lens: None,
+                rater: RaterKind::Agent,
+                by: None,
+                note: None,
+                date: Some("2026-07-17".to_string()),
+                observed_at: None,
+                basis: None,
+                est_lower: None,
+                est_upper: None,
+                admission: None,
+            });
+        }
+        let sessions = vec![session("s1", "2026-07-11", all)];
+        pipeline_from_sessions(
+            &sessions,
+            &StatusMap::new(),
+            est_anchors,
+            &CFG,
+            &EST_CFG,
+            &empty_facet_uppers(),
+            EST_MARGIN,
+            EST_SKEW,
+        )
+        .unwrap()
     }
 
     /// The DomainSystem split: each domain compiles ONLY its own rows — an
@@ -635,7 +854,24 @@ mod tests {
         .into_iter()
         .collect();
 
-        let pipeline = pipeline_of(vec![est_judgement("e1", "SL-300", "SL-100")], &est_anchors);
+        // PHASE-06: anchors now come from anchor-form claim rows. Use
+        // `pipeline_with_est_anchors` so SL-100 and SL-300 get anchor rows
+        // (and gate rows). SL-400's anchor stays excluded because no real
+        // est-domain row touches it (its gate row IS an est-domain row, so
+        // the claim rows must use the same mechanism).
+        // Actually: we only add anchor+gate rows for the two that have
+        // real est rows. The cold-start sub-test uses pipeline_of (ignores
+        // anchors) to show no est rows ⇒ empty system.
+        let pipeline = pipeline_with_est_anchors(
+            vec![est_judgement("e1", "SL-300", "SL-100")],
+            // Only the items that appear in `e1` get gate rows:
+            &[
+                ("SL-100".to_string(), cost((1.0, 3.0))),
+                ("SL-300".to_string(), cost((5.0, 9.0))),
+            ]
+            .into_iter()
+            .collect(),
+        );
         // Gated map: SL-400 (row-less) never enters the compiled system.
         let gated: Vec<&String> = pipeline.estimate.anchors.keys().collect();
         assert_eq!(gated, ["SL-100", "SL-300"], "row-gated anchor set");
@@ -646,6 +882,7 @@ mod tests {
         assert_eq!(cs.anchors.get(class_of("SL-300")), Some(&cost((5.0, 9.0))));
 
         // Cold start: no est rows ⇒ empty est system despite candidate anchors.
+        // pipeline_of ignores the anchors map (PHASE-06), so this still works.
         let cold = pipeline_of(vec![judgement("v1", "SL-100", "SL-200")], &est_anchors);
         assert!(cold.estimate.anchors.is_empty(), "no rows ⇒ no est anchors");
         assert!(cold.estimate.constraint_set.classes.is_empty());
@@ -661,7 +898,9 @@ mod tests {
             .collect();
         let mut equal_row = est_judgement("e1", "SL-100", "SL-300");
         equal_row.response = Some(Response::Equal);
-        let pipeline = pipeline_of(vec![equal_row], &est_anchors);
+        // PHASE-06: use pipeline_with_est_anchors so the anchors become
+        // anchor-form claim rows (with gate rows for row-gating).
+        let pipeline = pipeline_with_est_anchors(vec![equal_row], &est_anchors);
         assert!(
             matches!(
                 pipeline.estimate.constraint_set.quarantined.get("e1"),
@@ -687,7 +926,9 @@ mod tests {
         .into_iter()
         .collect();
         // …but the sizing row says SL-100 is MORE work than SL-300.
-        let pipeline = pipeline_of(vec![est_judgement("e1", "SL-100", "SL-300")], &est_anchors);
+        // PHASE-06: use pipeline_with_est_anchors so anchors come from claim rows.
+        let pipeline =
+            pipeline_with_est_anchors(vec![est_judgement("e1", "SL-100", "SL-300")], &est_anchors);
         assert_eq!(
             pipeline.estimate.constraint_set.quarantined.get("e1"),
             Some(&QuarantineReason::AnchorConflict {
@@ -710,7 +951,8 @@ mod tests {
         let est_anchors: AnchorMap = [("SL-100".to_string(), 1.0), ("SL-300".to_string(), 5.0)]
             .into_iter()
             .collect();
-        let pipeline = pipeline_of(
+        // PHASE-06: use pipeline_with_est_anchors so anchors come from claim rows.
+        let pipeline = pipeline_with_est_anchors(
             vec![
                 judgement("v1", "SL-100", "SL-200"),
                 judgement("v2", "SL-200", "SL-500"),
@@ -750,13 +992,96 @@ mod tests {
     /// The in-memory pipeline over one est-domain session with the given cost
     /// anchors and est projection params (the VT-2 harness; the value system
     /// stays empty — the domains are independent by PHASE-02).
+    /// The in-memory pipeline over one est-domain session with the given cost
+    /// anchors, est projection params, facet uppers, and margin (the VT-2
+    /// harness; the value system stays empty — the domains are independent by
+    /// PHASE-02). Override params are for the bare-anchor test fixtures.
+    fn est_pipeline_with_uppers(
+        judgements: Vec<Judgement>,
+        est_anchors: &AnchorMap,
+        est_cfg: &ProjectionCfg,
+        facet_uppers: &BTreeMap<String, f64>,
+        margin: f64,
+    ) -> super::Pipeline {
+        let mut all = judgements;
+        for (i, (item, &cost)) in est_anchors.iter().enumerate() {
+            all.push(est_anchor_row(&format!("a-{item}"), item, cost, cost));
+            all.push(Judgement {
+                uid: format!("ag-{item}"),
+                seq: i as u32 + 100,
+                a: item.to_string(),
+                b: None,
+                response: Some(Response::PreferA),
+                domain: DOMAIN_ESTIMATE.to_string(),
+                frame: FRAME_MORE_WORK.to_string(),
+                form: RowForm::Order,
+                magnitude: None,
+                supersedes: None,
+                lens: None,
+                rater: RaterKind::Agent,
+                by: None,
+                note: None,
+                date: Some("2026-07-17".to_string()),
+                observed_at: None,
+                basis: None,
+                est_lower: None,
+                est_upper: None,
+                admission: None,
+            });
+        }
+        let sessions = vec![session("s1", "2026-07-11", all)];
+        pipeline_from_sessions(
+            &sessions,
+            &StatusMap::new(),
+            est_anchors,
+            &CFG,
+            est_cfg,
+            facet_uppers,
+            margin,
+            EST_SKEW,
+        )
+        .unwrap()
+    }
+
+    /// Build an est pipeline from `judgements` and an old-style `est_anchors`
+    /// map. SL-222 PHASE-06: the anchors map is no longer a direct parameter
+    /// — anchors are claim-derived from anchor-form rows. We convert each
+    /// map entry into an `est_anchor_row` (degenerate lower=upper=operative)
+    /// and add a gate row so the claim enters the gated est system.
     fn est_pipeline(
         judgements: Vec<Judgement>,
         est_anchors: &AnchorMap,
         est_cfg: &ProjectionCfg,
     ) -> super::Pipeline {
-        let sessions = vec![session("s1", "2026-07-11", judgements)];
-        pipeline_from_sessions(&sessions, &StatusMap::new(), est_anchors, &CFG, est_cfg).unwrap()
+        let mut all = judgements;
+        for (i, (item, &cost)) in est_anchors.iter().enumerate() {
+            all.push(est_anchor_row(&format!("a-{item}"), item, cost, cost));
+            // Gate row: Order-form so it enters est_active (anchor rows
+            // are excluded from the compile-active set).
+            all.push(Judgement {
+                uid: format!("ag-{item}"),
+                seq: i as u32 + 100,
+                a: item.to_string(),
+                b: None,
+                response: Some(Response::PreferA),
+                domain: DOMAIN_ESTIMATE.to_string(),
+                frame: FRAME_MORE_WORK.to_string(),
+                form: RowForm::Order,
+                magnitude: None,
+                supersedes: None,
+                lens: None,
+                rater: RaterKind::Agent,
+                by: None,
+                note: None,
+                date: Some("2026-07-17".to_string()),
+                observed_at: None,
+                basis: None,
+                est_lower: None,
+                est_upper: None,
+                admission: None,
+            });
+        }
+        est_pipeline_with_uppers(all, est_anchors, est_cfg, &empty_facet_uppers(), EST_MARGIN)
     }
 
     fn anchors_of(pairs: &[(&str, f64)]) -> AnchorMap {
@@ -851,16 +1176,22 @@ mod tests {
 
     /// D2: a gauge component is PRESENT in the est projection (render-only,
     /// centered on the corpus's own bare anchor — the est `gauge_center`) and
-    /// ABSENT from the cost feed: gauge renders, never divides.
+    /// ABSENT from the cost feed: gauge renders, never divides. The bare
+    /// anchor is computed in-pipeline: max over facet uppers + margin.
     #[test]
     fn gauge_component_present_in_projection_absent_from_feed() {
-        let pipeline = est_pipeline(
+        // Feed facet uppers so the computed bare anchor = 10.0 + 1.0 = 11.0.
+        let facet_uppers: BTreeMap<String, f64> =
+            [("SL-100".to_string(), 10.0)].into_iter().collect();
+        let pipeline = est_pipeline_with_uppers(
             vec![
                 est_judgement("e1", "SL-100", "SL-200"),
                 est_judgement("e2", "SL-500", "SL-600"),
             ],
             &anchors_of(&[("SL-100", 5.0)]),
             &EST_CFG,
+            &facet_uppers,
+            EST_MARGIN,
         );
         let p = &pipeline.estimate.projection;
         // The anchor-free island spreads around the bare anchor (P8, H = 1).
@@ -926,6 +1257,403 @@ mod tests {
         }
     }
 
+    // ---- SL-222 §8.4 bare-anchor test helpers ---------------------------------
+
+    /// An estimate-domain anchor row (cost-anchor frame, est_lower/est_upper).
+    /// Builds from a value-style `anchor_row` then overrides the domain-specific
+    /// fields so there's no code duplication with the SL-220 helpers above.
+    fn est_anchor_row(uid: &str, item: &str, lower: f64, upper: f64) -> Judgement {
+        Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: item.to_string(),
+            b: None,
+            response: None,
+            domain: DOMAIN_ESTIMATE.to_string(),
+            frame: FRAME_COST_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: None,
+            est_lower: Some(lower),
+            est_upper: Some(upper),
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Human,
+            by: None,
+            note: None,
+            date: Some("2026-07-17".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
+        }
+    }
+
+    /// Overwrite a judgement's rater to Agent (for losing-tier scenarios).
+    fn as_agent(mut j: Judgement) -> Judgement {
+        j.rater = RaterKind::Agent;
+        j
+    }
+
+    /// Add a lens on an anchor row (so resolution marks it `InertLens`).
+    fn with_lens(mut j: Judgement, lens: &str) -> Judgement {
+        j.lens = Some(lens.to_string());
+        j
+    }
+
+    /// Build a bare-anchor pipeline via `pipeline_from_sessions` using
+    /// an explicit session slices, facet uppers, and margin. Overrides the
+    /// est_cfg gauge_center to a dummy — the pipeline overwrites it anyway.
+    fn bare_pipeline(
+        sessions: Vec<ComparisonSession>,
+        facet_uppers: &BTreeMap<String, f64>,
+        margin: f64,
+    ) -> super::Pipeline {
+        pipeline_from_sessions(
+            &sessions,
+            &StatusMap::new(),
+            &AnchorMap::new(),
+            &CFG,
+            &EST_CFG,
+            facet_uppers,
+            margin,
+            EST_SKEW,
+        )
+        .unwrap()
+    }
+
+    // ---- SL-222 §8.4 bare-anchor test battery --------------------------------
+
+    /// 1. Domination property: with several active estimate anchor rows (mixed
+    /// tiers), pipeline.bare_anchor >= every active asserted est_upper + margin.
+    #[test]
+    fn bare_anchor_dominates_all_active_estimate_uppers() {
+        // Three estimate anchor rows on three different items, mixed tiers:
+        // human (SL-100, upper=8.0), agent (SL-200, upper=15.0 — losing tier
+        // but still contributes its upper), human (SL-300, upper=3.0).
+        let pipeline = bare_pipeline(
+            vec![session(
+                "s1",
+                "2026-07-17",
+                vec![
+                    est_anchor_row("h1", "SL-100", 2.0, 8.0),
+                    as_agent(est_anchor_row("a1", "SL-200", 5.0, 15.0)),
+                    est_anchor_row("h2", "SL-300", 1.0, 3.0),
+                ],
+            )],
+            &empty_facet_uppers(),
+            EST_MARGIN,
+        );
+        // max_upper = 15.0, margin = 1.0 → bare_anchor = 16.0
+        assert!((pipeline.bare_anchor - 16.0).abs() < EPS);
+        // Domination: bare_anchor >= every row's est_upper + margin
+        for (item, upper) in [("SL-100", 8.0), ("SL-200", 15.0), ("SL-300", 3.0)] {
+            assert!(
+                pipeline.bare_anchor >= upper + EST_MARGIN,
+                "bare_anchor {:.4} < {item} upper {upper:.4} + margin {EST_MARGIN:.4}",
+                pipeline.bare_anchor
+            );
+        }
+        // Confirm the agent row's upper IS the max (losing-tier inclusion).
+        assert!((pipeline.bare_anchor - 15.0 - EST_MARGIN).abs() < EPS);
+    }
+
+    /// 2. Losing-tier inclusion: a row whose tier LOSES resolution (an agent
+    /// row beaten by a human row on the same item) still contributes its
+    /// est_upper to the bare-anchor fold. The est_upper of the losing tier
+    /// is part of the max computation (the bare-anchor filter works on ALL
+    /// Active rows directly, NOT the claim resolution — claims fold losing
+    /// tiers out, but the bare_anchor max includes them).
+    #[test]
+    fn bare_anchor_includes_losing_tier_upper() {
+        // Same item SL-100: two human anchors (upper=10.0, upper=8.0) and one
+        // agent anchor (upper=20.0). All rows must be in SEPARATE sessions
+        // (different raters share an identity key otherwise, R3 supersedes).
+        // Claim resolution Human-wins with mean operative from humans only.
+        // But bare_anchor should still see the agent's 20.0 as max.
+        let pipeline = bare_pipeline(
+            vec![
+                session(
+                    "s1",
+                    "2026-07-17",
+                    vec![est_anchor_row("h1", "SL-100", 1.0, 10.0)],
+                ),
+                session(
+                    "s2",
+                    "2026-07-17",
+                    vec![est_anchor_row("h2", "SL-100", 2.0, 8.0)],
+                ),
+                session(
+                    "s3",
+                    "2026-07-17",
+                    vec![as_agent(est_anchor_row("a1", "SL-100", 15.0, 20.0))],
+                ),
+            ],
+            &empty_facet_uppers(),
+            EST_MARGIN,
+        );
+        // max_upper = 20.0 (agent's), + margin = 21.0
+        assert!(
+            (pipeline.bare_anchor - 21.0).abs() < EPS,
+            "bare_anchor={}",
+            pipeline.bare_anchor
+        );
+        // The claim on SL-100 is anchored (Human wins) — the agent row is
+        // IGNORED by the claim fold (winning tier = Human, losing tiers
+        // contribute nothing — not even to priors). The anchored claim
+        // only reflects the two Human rows' mean.
+        assert!(pipeline.estimate_claims.anchored.contains_key("SL-100"));
+        assert!(
+            !pipeline.estimate_claims.priors.contains_key("SL-100"),
+            "priors empty: losing-tier Agent rows vanish from the fold"
+        );
+        let claim = &pipeline.estimate_claims.anchored["SL-100"];
+        // The claim's operative is the mean of the two human rows:
+        // lower = (1.0+2.0)/2=1.5, upper = (10.0+8.0)/2=9.0,
+        // operative = 1.5 + 0.65*(9.0-1.5) = 1.5 + 4.875 = 6.375
+        let expected_op = 1.5 + 0.65 * (9.0 - 1.5);
+        assert!(
+            (claim.operative - expected_op).abs() < 1e-12,
+            "operative={}",
+            claim.operative
+        );
+        // The bare anchor (21.0) is NOT the same as the anchored claim's
+        // operative (6.375) — evidence that bare_anchor reads ALL rows.
+        assert!(
+            (pipeline.bare_anchor - claim.operative).abs() > 10.0,
+            "bare_anchor and claim operative should differ"
+        );
+    }
+
+    /// 3. Conflict-row inclusion: individual rows of a same-tier conflict each
+    /// contribute their uppers (not just the winning mean). Two human rows on
+    /// the same item disagree (upper=20.0, upper=2.0); the max = 20.0.
+    /// Rows are in DIFFERENT sessions so R3 doesn't mark one as superseded.
+    #[test]
+    fn bare_anchor_includes_conflict_individual_uppers() {
+        let pipeline = bare_pipeline(
+            vec![
+                session(
+                    "s1",
+                    "2026-07-17",
+                    vec![est_anchor_row("h1", "SL-100", 5.0, 20.0)],
+                ),
+                session(
+                    "s2",
+                    "2026-07-17",
+                    vec![est_anchor_row("h2", "SL-100", 1.0, 2.0)],
+                ),
+            ],
+            &empty_facet_uppers(),
+            EST_MARGIN,
+        );
+        // max_upper = 20.0 (h1's), h2's 2.0 doesn't affect max. Bare anchor = 21.0.
+        assert!(
+            (pipeline.bare_anchor - 21.0).abs() < EPS,
+            "bare_anchor={}",
+            pipeline.bare_anchor
+        );
+        // The conflict flag is set (the pipeline resolved Human-tier conflict).
+        assert!(
+            pipeline.estimate_claims.anchored["SL-100"]
+                .conflict
+                .is_some(),
+            "same-tier disagreement should produce conflict"
+        );
+    }
+
+    /// 4. Lensed exclusion: a lensed estimate anchor row's upper does NOT enter
+    /// the fold. A lensed row resolves `InertLens` which the bare-anchor filter
+    /// excludes (the filter requires `.lens.is_none()`).
+    #[test]
+    fn bare_anchor_excludes_lensed_upper() {
+        // Two rows on different items: SL-100 human (upper=8.0), SL-200 lensed
+        // human (upper=50.0). The lensed 50.0 must NOT enter the max.
+        let pipeline = bare_pipeline(
+            vec![session(
+                "s1",
+                "2026-07-17",
+                vec![
+                    est_anchor_row("h1", "SL-100", 2.0, 8.0),
+                    with_lens(est_anchor_row("l1", "SL-200", 10.0, 50.0), "user-value"),
+                ],
+            )],
+            &empty_facet_uppers(),
+            EST_MARGIN,
+        );
+        // max_upper = 8.0 only (50.0 excluded), + margin = 9.0
+        assert!((pipeline.bare_anchor - 9.0).abs() < EPS);
+        // The lensed row resolves inert(lens) — confirm via RowSummary.
+        let l1 = row_of(&pipeline, "l1");
+        assert_eq!(l1.display_token(), "inert(lens)");
+    }
+
+    /// 5. Tombstone/supersession reduction: a superseded or tombstoned row's
+    /// upper does not enter (resolution already reduced it). The superseding
+    /// row's upper DOES enter.
+    #[test]
+    fn bare_anchor_excludes_superseded_and_tombstoned_uppers() {
+        // Four rows:
+        //   h1: SL-100, upper=100.0, superseded by h2 (h2.supersedes = "h1")
+        //   h2: SL-100, upper=10.0  ← the superseder, ACTIVE
+        //   h3: SL-200, upper=50.0, tombstoned (via tombstones list)
+        //   h4: SL-300, upper=5.0, ACTIVE
+        let mut h2 = est_anchor_row("h2", "SL-100", 1.0, 10.0);
+        h2.supersedes = Some("h1".to_string());
+        let h1 = est_anchor_row("h1", "SL-100", 50.0, 100.0);
+        let h3 = est_anchor_row("h3", "SL-200", 20.0, 50.0);
+        let h4 = est_anchor_row("h4", "SL-300", 2.0, 5.0);
+
+        // Tombstone h3 via the session's tombstones list.
+        let s = session("s1", "2026-07-17", vec![h1, h2, h3, h4]);
+        let s = crate::comparison::ComparisonSession {
+            tombstones: vec![crate::comparison::Tombstone {
+                uid: "t1".to_string(),
+                seq: 0,
+                target: "h3".to_string(),
+                date: "2026-07-17".to_string(),
+                note: None,
+            }],
+            ..s
+        };
+
+        let pipeline = bare_pipeline(vec![s], &empty_facet_uppers(), EST_MARGIN);
+        // Active uppers: h2=10.0, h4=5.0. Max = 10.0 + 1.0 = 11.0.
+        assert!((pipeline.bare_anchor - 11.0).abs() < EPS);
+        // Confirm h1 is superseded, h3 is tombstoned.
+        assert_eq!(row_of(&pipeline, "h1").display_token(), "superseded→h2");
+        assert_eq!(row_of(&pipeline, "h3").display_token(), "tombstoned");
+        // h2 and h4 are active.
+        assert_eq!(row_of(&pipeline, "h2").display_token(), "anchored");
+        assert_eq!(row_of(&pipeline, "h4").display_token(), "anchored");
+    }
+
+    /// 6. Facet-uppers input: the transitional facet-uppers pure input
+    /// participates in the max alongside anchor-row uppers.
+    #[test]
+    fn bare_anchor_facet_uppers_join_anchor_uppers() {
+        let facet_uppers: BTreeMap<String, f64> =
+            [("SL-100".to_string(), 30.0)].into_iter().collect();
+        // Anchor upper = 8.0, facet upper = 30.0. Max = 30.0 + 1.0 = 31.0.
+        let pipeline = bare_pipeline(
+            vec![session(
+                "s1",
+                "2026-07-17",
+                vec![est_anchor_row("h1", "SL-100", 2.0, 8.0)],
+            )],
+            &facet_uppers,
+            EST_MARGIN,
+        );
+        assert!((pipeline.bare_anchor - 31.0).abs() < EPS);
+
+        // Reverse: anchor upper dominates.
+        let facet_low: BTreeMap<String, f64> = [("SL-100".to_string(), 2.0)].into_iter().collect();
+        let pipeline2 = bare_pipeline(
+            vec![session(
+                "s1",
+                "2026-07-17",
+                vec![est_anchor_row("h1", "SL-100", 2.0, 50.0)],
+            )],
+            &facet_low,
+            EST_MARGIN,
+        );
+        assert!((pipeline2.bare_anchor - 51.0).abs() < EPS);
+    }
+
+    /// 7. Empty corpus: no anchor rows, no facet uppers -> bare_anchor == 1.0
+    /// fallback (margin semantics preserved as the previous computation had).
+    #[test]
+    fn bare_anchor_empty_corpus_falls_back_to_one() {
+        let pipeline = bare_pipeline(vec![], &empty_facet_uppers(), EST_MARGIN);
+        assert!((pipeline.bare_anchor - 1.0).abs() < EPS);
+
+        // Even with a session with no estimate anchor rows, no facets:
+        let pipeline2 = bare_pipeline(
+            vec![session(
+                "s1",
+                "2026-07-17",
+                vec![judgement("j1", "SL-100", "SL-200")],
+            )],
+            &empty_facet_uppers(),
+            EST_MARGIN,
+        );
+        assert!((pipeline2.bare_anchor - 1.0).abs() < EPS);
+    }
+
+    /// 8. Pinned one-site equality: `bare_anchor` becomes the est system's
+    /// `gauge_center`, which means an anchor-free component (P8) is spread
+    /// centred on `bare_anchor`. Add an anchor-free pair ordered by an est
+    /// judgement and verify the midpoint ≈ `bare_anchor`.
+    #[test]
+    fn bare_anchor_equals_absent_and_gauge_center() {
+        // Four estimate anchor rows on different items (max_upper=25.0) plus
+        // an anchor-free pair (SL-500, SL-600) connected by an est judgement.
+        let pipeline = bare_pipeline(
+            vec![session(
+                "s1",
+                "2026-07-17",
+                vec![
+                    est_anchor_row("h1", "SL-100", 2.0, 8.0),
+                    est_anchor_row("h2", "SL-200", 3.0, 12.0),
+                    as_agent(est_anchor_row("a1", "SL-300", 10.0, 25.0)),
+                    est_anchor_row("h3", "SL-400", 1.0, 5.0),
+                    // Anchor-free pair — no anchor touches SL-500/SL-600.
+                    est_judgement("e1", "SL-500", "SL-600"),
+                ],
+            )],
+            &empty_facet_uppers(),
+            EST_MARGIN,
+        );
+        // max_upper = 25.0, + 1.0 = 26.0
+        let expected = 26.0;
+        assert!((pipeline.bare_anchor - expected).abs() < EPS);
+        // P8 gauge spread centres on bare_anchor. With gauge_step=0.25 (the
+        // EST_GAUGE_STEP shipped value), two anchor-free nodes spread 1 step
+        // apart with midpoint = gauge_center.
+        let (hi_got, hi_prov) = pipeline.estimate.projection["SL-500"];
+        let (lo_got, lo_prov) = pipeline.estimate.projection["SL-600"];
+        assert_eq!(hi_prov, Gauge);
+        assert_eq!(lo_prov, Gauge);
+        let midpoint = (hi_got + lo_got) / 2.0;
+        assert!(
+            (midpoint - expected).abs() < EPS,
+            "gauge midpoint {midpoint:.4} ≠ bare_anchor {expected:.4}"
+        );
+    }
+
+    /// 9. Behaviour preservation pin: facets but zero estimate anchor rows ->
+    /// bare_anchor equals the old facet-derived computation (pin the expected
+    /// value explicitly in the test).
+    #[test]
+    fn bare_anchor_facet_only_falls_back_to_facet_upper() {
+        let facet_uppers: BTreeMap<String, f64> =
+            [("ISS-001".to_string(), 12.0), ("ISS-002".to_string(), 7.0)]
+                .into_iter()
+                .collect();
+        // No estimate anchor rows at all, only value pairwise rows.
+        let pipeline = bare_pipeline(
+            vec![session(
+                "s1",
+                "2026-07-17",
+                vec![judgement("j1", "SL-100", "SL-200")],
+            )],
+            &facet_uppers,
+            EST_MARGIN,
+        );
+        // Old facet-derived computation: max facet upper (12.0) + margin (1.0) = 13.0
+        assert!((pipeline.bare_anchor - 13.0).abs() < EPS);
+
+        // No facets, no anchor rows: 1.0 fallback.
+        let pipeline2 = bare_pipeline(
+            vec![session(
+                "s1",
+                "2026-07-17",
+                vec![judgement("j1", "SL-100", "SL-200")],
+            )],
+            &empty_facet_uppers(),
+            EST_MARGIN,
+        );
+        assert!((pipeline2.bare_anchor - 1.0).abs() < EPS);
+    }
+
     // ---- SL-220 PHASE-03: the claims pass wiring (design §2) -----------------
 
     /// A live human value-anchor row (SL-220 §1): single subject, no pairwise
@@ -970,8 +1698,8 @@ mod tests {
         );
 
         // The claim resolution rides the Pipeline, routed by tier (D4).
-        assert_eq!(with_anchors.value_claims.anchored["SL-100"].value, 6.0);
-        assert_eq!(with_anchors.value_claims.priors["SL-300"].value, 2.0);
+        assert_eq!(with_anchors.value_claims.anchored["SL-100"].operative, 6.0);
+        assert_eq!(with_anchors.value_claims.priors["SL-300"].operative, 2.0);
         // The pairwise view is anchor-free (the SL-220 split).
         let pairwise: Vec<&str> = with_anchors
             .active_pairwise()
@@ -1036,11 +1764,14 @@ mod tests {
             &AnchorMap::new(),
             &CFG,
             &EST_CFG,
+            &empty_facet_uppers(),
+            EST_MARGIN,
+            EST_SKEW,
         )
         .unwrap();
         // q (8.0) and r (2.0) are concurrent → conflicted, mean 5.0.
         let claim = &pipeline.value_claims.anchored["SL-100"];
-        assert_eq!(claim.value, 5.0);
+        assert_eq!(claim.operative, 5.0);
         assert!(claim.conflict.is_some());
         assert_eq!(row_of(&pipeline, "q").display_token(), "conflicted");
         assert_eq!(row_of(&pipeline, "r").display_token(), "conflicted");
@@ -1050,7 +1781,7 @@ mod tests {
         assert_eq!(row_of(&pipeline, "l1").display_token(), "inert(lens)");
         // …and the lensed partition still resolved (RV-278 F-2).
         let key = ("user-value".to_string(), "SL-100".to_string());
-        assert_eq!(pipeline.value_claims.lensed[&key].value, 9.0);
+        assert_eq!(pipeline.value_claims.lensed[&key].operative, 9.0);
     }
 
     /// The empty-claims property (design §8.5, pipeline level): a corpus with

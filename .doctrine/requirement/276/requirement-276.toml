@@ -3,14 +3,14 @@ version = 1
 
 id = 276
 slug = "keep-the-estimate-facet-kind-agnostic-reusable-and-pure-layer"
-title = "Keep the estimate facet kind-agnostic, reusable, and pure-layer"
+title = "Keep estimate claim capture kind-agnostic, reusable, and pure-layer"
 status = "active"
 kind = "quality"
 
-description = "The facet model is defined once and shared; attaching it to a new kind wires only parse/hydrate; normalize/validate/render stay in the pure layer."
+description = "Claim capture is kind-agnostic (any resolving entity id; consumption gated at the scoring seam); resolution, validation, and rendering stay in the pure layer over (ledger, statuses, config) with disk at the scan seam (REV-026)."
 tags = []
 acceptance_criteria = [
-  "The estimate model is defined once and shared, not duplicated or specialised per entity kind.",
-  "Attaching the facet to a new entity kind requires only wiring that kind's parse/hydrate path, not remodelling the schema.",
-  "Normalization, validation, and rendering are pure (no clock, rng, git, or disk); only unit resolution and hydration touch the shell.",
+  "Estimate anchor capture accepts any entity id that resolves; consumption is gated at the scoring seam, not capture.",
+  "The claims pass is one generic fold parameterised by payload; the estimate instantiation shares tiering, supersession, and conflict machinery.",
+  "Resolution, validation, and rendering are pure (no clock, rng, git, or disk); only config threading and session IO touch the shell.",
 ]

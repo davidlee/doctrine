@@ -3,15 +3,15 @@ version = 1
 
 id = 269
 slug = "define-a-reusable-estimatefacet-and-normalize-bounds-to-finite-f64"
-title = "Define a reusable EstimateFacet and normalize bounds to finite f64"
+title = "Define the estimate anchor-claim payload and normalize bounds to finite f64"
 status = "active"
 kind = "functional"
 
-description = "A single reusable EstimateFacet is parsed from an optional [estimate] table; lower/upper authored as TOML integers or floats normalize to finite f64 internally, and non-finite values are rejected at the parse boundary."
+description = "The estimate-domain anchor claim (form=anchor, domain=estimate, frame=cost-anchor) carries est_lower/est_upper on the v3 judgement row; bounds authored as TOML integers or floats normalize to finite f64 at the wire seam, non-finite values are rejected at capture, and estimate::validate remains the single validation source (REV-026)."
 tags = []
 acceptance_criteria = [
-  "An optional [estimate] table parses into one shared EstimateFacet model carrying lower and upper as f64.",
+  "An estimate-domain anchor row carries est_lower and est_upper as f64 payload columns on the shared v3 judgement row.",
   "Bounds authored as TOML integers and as floats both normalize to finite f64.",
-  "NaN, +Infinity, and -Infinity are rejected at normalization, never carried inward.",
-  "The model is defined once, not specialised per entity kind.",
+  "NaN, +Infinity, and -Infinity are rejected at capture validation, never carried inward.",
+  "The payload validation predicate is defined once (estimate::validate), not specialised per entity kind or surface.",
 ]

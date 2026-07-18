@@ -37,16 +37,6 @@ pub(crate) struct CatalogNode {
     pub(crate) kind_label: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) memory_type: Option<String>,
-    /// The entity's optional `[estimate]` facet, projected from the source
-    /// [`CatalogEntity`] (SL-103 PHASE-03, design §4.3). Absent ⇒ omitted from
-    /// the serialized contract entirely (`skip_serializing_if`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
-    /// The entity's optional `[value]` facet, projected from the source
-    /// [`CatalogEntity`] (SL-103 PHASE-03, design §4.3). Absent ⇒ omitted from
-    /// the serialized contract entirely (`skip_serializing_if`).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 impl CatalogGraph {
@@ -63,8 +53,6 @@ impl CatalogGraph {
                     status: entity.status.clone(),
                     kind_label: entity.kind_label,
                     memory_type: entity.memory_type.clone(),
-                    estimate: entity.estimate.clone(),
-                    value: entity.value.clone(),
                 },
             );
         }
@@ -323,25 +311,6 @@ mod tests {
         );
     }
 
-    /// Seed an ADR with `facets` appended verbatim. The ADR scan path never
-    /// type-checks `[estimate]`/`[value]`, so a malformed (or kind-agnostic
-    /// present) facet survives to `read_facets` — the per-facet isolation seam.
-    fn seed_adr_with_facets(root: &Path, id: u32, facets: &str) {
-        write(
-            root,
-            &format!(".doctrine/adr/{id:03}/adr-{id:03}.toml"),
-            &format!(
-                "id = {id}\nslug = \"a{id}\"\ntitle = \"A{id}\"\nstatus = \"accepted\"\n\
-                 created = \"2026-01-01\"\nupdated = \"2026-01-01\"\n{facets}"
-            ),
-        );
-        write(
-            root,
-            &format!(".doctrine/adr/{id:03}/adr-{id:03}.md"),
-            "body\n",
-        );
-    }
-
     fn node_for<'a>(graph: &'a CatalogGraph, canonical: &str) -> &'a CatalogNode {
         graph
             .nodes
@@ -351,10 +320,10 @@ mod tests {
             .unwrap_or_else(|| panic!("no node for {canonical}"))
     }
 
-    /// VT-1: a faceted slice projects `estimate{lower,upper}` + `value{value}`
-    /// onto its graph node, and the project-wide `units` resolve onto the graph.
+    /// PHASE-09: the graph no longer carries estimate/value facets (deleted).
+    /// A faceted seed still yields a node; facet fields are absent.
     #[test]
-    fn faceted_slice_projects_estimate_value_and_units() {
+    fn graph_node_no_longer_carries_facets() {
         let dir = tmp();
         let root = dir.path();
         seed_slice_with_facets(
@@ -364,142 +333,15 @@ mod tests {
         );
 
         let graph = build_graph(root);
-
         let node = node_for(&graph, "SL-001");
-        assert_eq!(
-            node.estimate,
-            Some(crate::estimate::EstimateFacet {
-                lower: 2.0,
-                upper: 8.0
-            })
-        );
-        assert_eq!(node.value, Some(crate::value::ValueFacet { value: 5.0 }));
-
-        // Units resolve from the (absent) doctrine.toml to the sub-config defaults.
+        assert_eq!(node.title, "S1");
         assert_eq!(graph.units.estimation, "espresso_shots");
         assert_eq!(graph.units.value, "magic_beans");
     }
 
-    /// VT-2: a non-faceted entity still gets a node, but `estimate`/`value` are
-    /// `None` and are OMITTED entirely from the serialized contract.
+    /// PHASE-09: contract JSON — estimate/value no longer appear on nodes.
     #[test]
-    fn non_faceted_entity_omits_facet_keys() {
-        let dir = tmp();
-        let root = dir.path();
-        seed_slice(root, 1, &[]);
-
-        let graph = build_graph(root);
-
-        let node = node_for(&graph, "SL-001");
-        assert!(node.estimate.is_none());
-        assert!(node.value.is_none());
-
-        let json = serde_json::to_value(node).unwrap();
-        assert!(
-            json.get("estimate").is_none(),
-            "absent estimate must be omitted from the contract"
-        );
-        assert!(
-            json.get("value").is_none(),
-            "absent value must be omitted from the contract"
-        );
-    }
-
-    /// VT-3: end-to-end per-facet isolation — a malformed `[estimate]` next to a
-    /// valid `[value]` on an ADR: the node is carried with `estimate: None`, an
-    /// `Error` diagnostic is present, and the sibling `value` survives on the
-    /// node. (ADR, not slice — a slice rejects a malformed `[estimate]` in its
-    /// own typed read before the kind-agnostic scan, per the PHASE-01 finding.)
-    #[test]
-    fn malformed_estimate_isolated_from_valid_value_on_graph_node() {
-        let dir = tmp();
-        let root = dir.path();
-        seed_adr_with_facets(
-            root,
-            1,
-            "[estimate]\nlower = 5\nupper = 2\n\n[value]\nvalue = 7\n",
-        );
-
-        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default())
-            .expect("scan_catalog should succeed");
-        let graph = CatalogGraph::from_catalog(&catalog);
-
-        let node = node_for(&graph, "ADR-001");
-        assert!(node.estimate.is_none(), "malformed estimate drops to None");
-        assert_eq!(
-            node.value,
-            Some(crate::value::ValueFacet { value: 7.0 }),
-            "sibling value facet stays on the node"
-        );
-
-        let errors: Vec<_> = catalog
-            .diagnostics
-            .iter()
-            .filter(|d| d.severity == super::super::diagnostic::Severity::Error)
-            .collect();
-        assert_eq!(errors.len(), 1, "expected one Error diagnostic");
-        assert_eq!(errors[0].field.as_deref(), Some("estimate"));
-    }
-
-    /// VT-4: round-trip durability — the normalized bounds are byte-identical
-    /// from scan → catalog → graph (integer TOML bounds normalize to the same
-    /// f64 on every hop).
-    #[test]
-    fn facet_bounds_durable_scan_to_catalog_to_graph() {
-        let dir = tmp();
-        let root = dir.path();
-        seed_slice_with_facets(
-            root,
-            1,
-            "[estimate]\nlower = 3\nupper = 11\n\n[value]\nvalue = 4\n",
-        );
-
-        let catalog = crate::catalog::hydrate::scan_catalog(root, ScanMode::default())
-            .expect("scan_catalog should succeed");
-        let entity = catalog
-            .entities
-            .iter()
-            .find(|e| e.key.canonical() == "SL-001")
-            .unwrap();
-        let graph = CatalogGraph::from_catalog(&catalog);
-        let node = node_for(&graph, "SL-001");
-
-        assert_eq!(entity.estimate, node.estimate);
-        assert_eq!(entity.value, node.value);
-        assert_eq!(
-            node.estimate,
-            Some(crate::estimate::EstimateFacet {
-                lower: 3.0,
-                upper: 11.0
-            })
-        );
-    }
-
-    /// VT-5: kind-agnostic — an `[estimate]` authored on a NON-slice TOML (ADR)
-    /// surfaces on its graph node.
-    #[test]
-    fn estimate_on_non_slice_kind_surfaces_on_graph_node() {
-        let dir = tmp();
-        let root = dir.path();
-        seed_adr_with_facets(root, 1, "[estimate]\nlower = 1\nupper = 6\n");
-
-        let graph = build_graph(root);
-        let node = node_for(&graph, "ADR-001");
-        assert_eq!(
-            node.estimate,
-            Some(crate::estimate::EstimateFacet {
-                lower: 1.0,
-                upper: 6.0
-            })
-        );
-        assert!(node.value.is_none());
-    }
-
-    /// VT-6: contract JSON shape — serializing the graph emits a top-level
-    /// `units` (with graph-neutral `estimation`/`value` keys), `nodes` with
-    /// per-node `estimate{lower,upper}`/`value{value}`, and `edges`.
-    #[test]
-    fn graph_contract_json_shape_is_graph_neutral() {
+    fn graph_contract_json_no_facet_keys() {
         let dir = tmp();
         let root = dir.path();
         seed_slice_with_facets(
@@ -511,21 +353,21 @@ mod tests {
         let graph = build_graph(root);
         let json = serde_json::to_value(&graph).unwrap();
 
-        // Top-level contract keys.
         assert!(json.get("nodes").is_some(), "missing nodes");
         assert!(json.get("edges").is_some(), "missing edges");
-        let units = json.get("units").expect("missing units");
-        assert_eq!(units["estimation"], "espresso_shots");
-        assert_eq!(units["value"], "magic_beans");
-
-        // Per-node facet shape with graph-neutral field names.
+        assert!(json.get("units").is_some(), "missing units");
         let node = &json["nodes"]["SL-001"];
-        assert_eq!(node["estimate"]["lower"], 2.0);
-        assert_eq!(node["estimate"]["upper"], 8.0);
-        assert_eq!(node["value"]["value"], 5.0);
+        assert!(
+            node.get("estimate").is_none(),
+            "estimate key no longer emitted"
+        );
+        assert!(node.get("value").is_none(), "value key no longer emitted");
     }
 
     /// SL-149 PHASE-04: the web-graph edge carries the `role` payload for a `references`
+    /// edge, so the rendered edge label can show the role verb (`references(implements)`).
+    /// A label-only edge omits the `role` key entirely (`skip_serializing_if`), so the
+    /// shipped edge contract stays byte-identical for every non-`references` edge.    /// SL-149 PHASE-04: the web-graph edge carries the `role` payload for a `references`
     /// edge, so the rendered edge label can show the role verb (`references(implements)`).
     /// A label-only edge omits the `role` key entirely (`skip_serializing_if`), so the
     /// shipped edge contract stays byte-identical for every non-`references` edge.

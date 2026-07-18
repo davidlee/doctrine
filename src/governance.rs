@@ -309,10 +309,11 @@ fn format_show(
     doc: &Doc,
     related: &[String],
     body: &str,
-    estimation_unit: &str,
+    _estimation_unit: &str,
     value_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
+    estimate_line: Option<&str>,
+    _lower_pct: f64,
+    _upper_pct: f64,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
@@ -325,16 +326,9 @@ fn format_show(
         "created {} · updated {}\n",
         doc.created, doc.updated
     ));
-    if let Some(ref est) = doc.estimate {
-        parts.push(format!(
-            "{}\n",
-            crate::estimate::display::format_estimate_confidence(
-                est,
-                lower_pct,
-                upper_pct,
-                estimation_unit,
-            )
-        ));
+    // SL-222 PHASE-07: pipeline-resolved estimate line (facet fallback deleted PHASE-09).
+    if let Some(line) = estimate_line {
+        parts.push(format!("{line}\n"));
     }
     // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
     if let Some(line) = value_line {
@@ -526,9 +520,14 @@ pub(crate) fn run_show(
             let value_line = crate::priority::surface::show_value_line(
                 &root,
                 &listing::canonical_id(g.kind.prefix, doc.id),
-                doc.value.as_ref().map(|v| v.value),
                 g.kind.prefix,
                 &value_unit,
+            )?;
+            let estimate_line = crate::priority::surface::show_estimate_line(
+                &root,
+                &listing::canonical_id(g.kind.prefix, doc.id),
+                g.kind.prefix,
+                &estimation_unit,
             )?;
             format_show(
                 g,
@@ -537,6 +536,7 @@ pub(crate) fn run_show(
                 &body,
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -1134,6 +1134,7 @@ mod tests {
             "# ADR-007: Use Rust\n\nbody.\n",
             "points",
             None,
+            None,
             0.0,
             1.0,
         );
@@ -1149,12 +1150,13 @@ mod tests {
         );
     }
 
+    // SL-222 PHASE-07: pipeline-resolved estimate line overrides the facet.
     #[test]
-    fn format_show_renders_estimate_and_value_when_present() {
+    fn format_show_renders_pipeline_estimate_line() {
         let doc = Doc {
-            id: 8,
-            slug: "use-rust".into(),
-            title: "Use Rust".into(),
+            id: 9,
+            slug: "rust-lang".into(),
+            title: "Rust".into(),
             status: "accepted".into(),
             created: "2026-01-01".into(),
             updated: "2026-01-02".into(),
@@ -1164,7 +1166,7 @@ mod tests {
                 lower: 3.0,
                 upper: 8.0,
             }),
-            value: Some(crate::value::ValueFacet { value: 42.0 }),
+            value: None,
         };
         let related: Vec<String> = vec![];
         let out = format_show(
@@ -1173,18 +1175,41 @@ mod tests {
             &related,
             "# Body\n",
             "espresso_shots",
-            Some("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
+            None,
+            Some("estimate: 2.0–8.0 espresso_shots (human claim, ada, 2026-07-16)"),
             0.1,
             0.9,
         );
         assert!(
-            out.contains("estimate: 3.5–7.5 espresso_shots (80% confidence)"),
-            "estimate row: {out}"
+            out.contains("estimate: 2.0–8.0 espresso_shots (human claim, ada, 2026-07-16)"),
+            "pipeline estimate line: {out}"
         );
         assert!(
-            out.contains("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
-            "value row: {out}"
+            !out.contains("80% confidence"),
+            "facet estimate suppressed: {out}"
         );
+    }
+
+    // SL-222 PHASE-07: absent estimate (pipeline None, no facet) omits the line.
+    #[test]
+    fn format_show_omits_estimate_when_absent() {
+        let doc = Doc {
+            id: 10,
+            slug: "no-est".into(),
+            title: "No Est".into(),
+            status: "accepted".into(),
+            created: "2026-01-01".into(),
+            updated: "2026-01-02".into(),
+            tags: vec![],
+            relationships: Relationships::default(),
+            estimate: None,
+            value: None,
+        };
+        let related: Vec<String> = vec![];
+        let out = format_show(
+            &ADR_KIND, &doc, &related, "# Body\n", "points", None, None, 0.0, 1.0,
+        );
+        assert!(!out.contains("estimate"), "no estimate line: {out}");
     }
 
     #[test]

@@ -23,8 +23,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::catalog::scan::ScanMode;
 use crate::comparison::{
-    self, ConstraintSet, Judgement, Projection as ValueProjection, QuarantinePolicy, RaterCounts,
-    Reachability, compile_human_only, constraining_counts_by_class, determined,
+    self, ClaimTier, ConstraintSet, Judgement, Projection as ValueProjection, QuarantinePolicy,
+    RaterCounts, Reachability, compile_human_only, constraining_counts_by_class, determined,
 };
 use crate::relation_graph::{self, EntityKey};
 
@@ -400,6 +400,8 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
         &pipeline.value.projection,
         &cost_feed,
         &pipeline.value_claims,
+        pipeline.bare_anchor,
+        &pipeline.estimate_claims,
     )?;
     // The actionable, non-promoted set (a promoted item is excluded by its own reason,
     // F1 / REQ-075 AC2 — the same exclusion `survey` applies).
@@ -423,13 +425,10 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
                 });
             }
             reasons.push(score_reason(&g, k));
-            // Project the estimate/tags facets from NodeAttr (SL-171 PHASE-01, D2);
-            // the value cell re-paths to the RESOLVED ladder (SL-220 PHASE-06,
-            // design §6) — the facet reader here died with the flip (EX-3).
-            let (estimate, tags) = attr(&g, k).map_or((None, Vec::new()), |a| {
-                (a.facets.estimate.clone(), a.facets.tags.clone())
-            });
+            // Tags still come from NodeAttr; estimate facet deleted at PHASE-09.
+            let tags = attr(&g, k).map_or(Vec::new(), |a| a.facets.tags.clone());
             let value_source = value_source_reason(&g, k, &pipeline);
+            let cost_source = cost_source_reason(&g, k, &pipeline, &cfg);
             NextRow {
                 id: k.canonical(),
                 title: title_of(&g, k),
@@ -440,7 +439,7 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
                 reasons,
                 blockers: Vec::new(),
                 blocking,
-                estimate,
+                cost_source,
                 value_source,
                 tags,
             }
@@ -521,6 +520,8 @@ pub(crate) fn explain(root: &Path, id: &str) -> anyhow::Result<Explanation> {
         &pipeline.value.projection,
         &cost_feed,
         &pipeline.value_claims,
+        pipeline.bare_anchor,
+        &pipeline.estimate_claims,
     )?;
     // Existence gate (SL-050 F6): a well-formed but never-minted id errors rather than
     // explaining a phantom node.
@@ -902,7 +903,7 @@ pub(crate) fn claim_reason(claim: &comparison::ResolvedClaim, conflict: Vec<Stri
     };
     match claim.tier {
         comparison::ClaimTier::Pin => ReasonKind::ValuePin {
-            value: claim.value,
+            value: claim.operative,
             conflict,
             by: attr.by,
             date,
@@ -910,7 +911,7 @@ pub(crate) fn claim_reason(claim: &comparison::ResolvedClaim, conflict: Vec<Stri
             contested,
         },
         tier => ReasonKind::ValueClaim {
-            value: claim.value,
+            value: claim.operative,
             tier,
             conflict,
             by: attr.by,
@@ -921,18 +922,16 @@ pub(crate) fn claim_reason(claim: &comparison::ResolvedClaim, conflict: Vec<Stri
 }
 
 pub(crate) fn value_source_reason(
-    g: &PriorityGraph,
+    _g: &PriorityGraph,
     key: EntityKey,
     pipeline: &comparison::Pipeline,
 ) -> Option<ReasonKind> {
-    let attrs = g.attrs.get(&key)?;
     if !crate::kinds::is_value_bearing(key.prefix) {
         return None;
     }
-    // Rung 5 fallback is the entity's own authored `[value]` facet — the ONE
-    // sanctioned ladder read of `EntityFacets.value` (EX-3 enumerated exception).
-    let facet_value = attrs.facets.value.as_ref().map(|v| v.value);
-    resolve_value_reason(pipeline, &key.canonical(), facet_value)
+    // Rung 5 (authored `[value]` facet) deleted at PHASE-09.
+    // The pipeline holds all claim-derived reasons.
+    resolve_value_reason(pipeline, &key.canonical())
 }
 
 /// The kind-AGNOSTIC value ladder resolver (SL-220 PHASE-06, design §3/§6) —
@@ -947,7 +946,6 @@ pub(crate) fn value_source_reason(
 pub(crate) fn resolve_value_reason(
     pipeline: &comparison::Pipeline,
     canonical: &str,
-    facet_value: Option<f64>,
 ) -> Option<ReasonKind> {
     let claims = &pipeline.value_claims;
     // Rung 1: an anchored claim (Pin/Human) — row-less included (scope R1).
@@ -984,8 +982,8 @@ pub(crate) fn resolve_value_reason(
         // Priors never anchor compile (D4) — no anchor-conflict citation.
         return Some(claim_reason(claim, Vec::new()));
     }
-    // Rung 5: the unmigrated authored facet (zero claim rows by construction here).
-    facet_value.map(|value| ReasonKind::ValueUnmigratedFacet { value })
+    // Rung 5 (authored `[value]` facet) deleted at PHASE-09.
+    None
 }
 
 /// The impure `show` value-line helper (SL-220 PHASE-06, design §6) — the ONE
@@ -1000,17 +998,12 @@ pub(crate) fn resolve_value_reason(
 pub(crate) fn show_value_line(
     root: &Path,
     canonical: &str,
-    facet_value: Option<f64>,
     kind: &str,
     value_unit: &str,
 ) -> anyhow::Result<Option<String>> {
     let pipeline = graph::load_comparison_pipeline_for_root(root)?;
     Ok(value_line_from_pipeline(
-        &pipeline,
-        canonical,
-        facet_value,
-        kind,
-        value_unit,
+        &pipeline, canonical, kind, value_unit,
     ))
 }
 
@@ -1018,16 +1011,135 @@ pub(crate) fn show_value_line(
 /// callers that render many entities in one scan and must not reload the
 /// pipeline per entity (`lazyspec`'s spec catalog, `retrieve`'s memory loop).
 /// Same ladder walk, same render, same scoring-inert annotation.
+/// NOTE: `facet_value` parameter removed at PHASE-09 (rung 5 deleted).
 pub(crate) fn value_line_from_pipeline(
     pipeline: &comparison::Pipeline,
     canonical: &str,
-    facet_value: Option<f64>,
     kind: &str,
     value_unit: &str,
 ) -> Option<String> {
-    let reason = resolve_value_reason(pipeline, canonical, facet_value)?;
+    let reason = resolve_value_reason(pipeline, canonical)?;
     let inert = (!crate::kinds::is_value_bearing(kind)).then_some(kind);
     super::render::show_value_render(&reason, value_unit, inert)
+}
+
+/// SL-222 PHASE-07: the `show` estimate line helper analogous to [`show_value_line`]
+/// — walks the cost-source ladder for `canonical` and renders the resolved
+/// provenance line. A non-value-bearing kind (record/governance) still renders
+/// its captured cost claim, annotated `scoring-inert` (D7). `None` ⇔ no
+/// evidence at any rung (the line is omitted).
+pub(crate) fn show_estimate_line(
+    root: &Path,
+    canonical: &str,
+    kind: &str,
+    est_unit: &str,
+) -> anyhow::Result<Option<String>> {
+    let pipeline = graph::load_comparison_pipeline_for_root(root)?;
+    Ok(estimate_line_from_pipeline(
+        &pipeline, canonical, kind, est_unit,
+    ))
+}
+
+/// The pure body of [`show_estimate_line`] over an ALREADY-LOADED pipeline — for
+/// callers that render many entities in one scan and must not reload the
+/// pipeline per entity. Same ladder walk, same render, same scoring-inert
+/// annotation.
+pub(crate) fn estimate_line_from_pipeline(
+    pipeline: &comparison::Pipeline,
+    canonical: &str,
+    kind: &str,
+    est_unit: &str,
+) -> Option<String> {
+    if pipeline.estimate.projection.is_empty() {
+        return None;
+    }
+    let cost_reason = pipeline_cost_reason(pipeline, canonical)?;
+    let inert = (!crate::kinds::is_value_bearing(kind)).then_some(kind);
+    super::render::show_cost_render(&cost_reason, est_unit, inert)
+}
+
+/// Walk the cost-source ladder over pipeline facts alone (no `PriorityGraph`).
+/// This is the pure body used by `estimate_line_from_pipeline` and parallels
+/// `cost_source_reason` in the surface layer but without graph dependency.
+fn pipeline_cost_reason(pipeline: &comparison::Pipeline, canonical: &str) -> Option<ReasonKind> {
+    // Rung 1: anchored claim (Pin/Human) from estimate claims.
+    if let Some(claim) = pipeline.estimate_claims.anchored.get(canonical) {
+        let est_cost = claim.operative;
+        let attr = claim.attribution.clone().unwrap_or_default();
+        return match claim.tier {
+            ClaimTier::Pin => Some(ReasonKind::CostPin {
+                est_cost,
+                lower: est_cost,
+                upper: est_cost,
+                beta: 0.65,
+                by: attr.by,
+                date: attr.date,
+                basis: attr.basis,
+                contested: claim.conflict.as_ref().map(|c| ContestedClaim {
+                    low: c.low,
+                    high: c.high,
+                    rows: claim.rows,
+                }),
+            }),
+            _ => Some(ReasonKind::CostClaim {
+                est_cost,
+                lower: est_cost,
+                upper: est_cost,
+                beta: 0.65,
+                tier: claim.tier,
+                by: attr.by,
+                date: if matches!(claim.tier, ClaimTier::Migrated) {
+                    attr.observed_at
+                } else {
+                    attr.date
+                },
+                conflict: Vec::new(),
+            }),
+        };
+    }
+
+    // Rung 2: projection (class anchor, projected, or gauge)
+    if let Some(&(cost, provenance)) = pipeline.estimate.projection.get(canonical) {
+        return Some(match provenance {
+            comparison::ValueProvenance::Authored => ReasonKind::CostClassAnchor { est_cost: cost },
+            comparison::ValueProvenance::Projected => ReasonKind::CostProjected {
+                est_cost: cost,
+                lower: None,
+                upper: None,
+                human: 0,
+                agent: 0,
+            },
+            comparison::ValueProvenance::Gauge => ReasonKind::CostGauge {
+                est_cost: cost,
+                max_estimate: None,
+                margin: 0.0,
+                judgements: 0,
+            },
+        });
+    }
+
+    // Rungs 3-4: priors (Agent/Migrated)
+    if let Some(claim) = pipeline.estimate_claims.priors.get(canonical) {
+        let est_cost = claim.operative;
+        let attr = claim.attribution.clone().unwrap_or_default();
+        return Some(ReasonKind::CostClaim {
+            est_cost,
+            lower: est_cost,
+            upper: est_cost,
+            beta: 0.65,
+            tier: claim.tier,
+            by: attr.by,
+            date: if matches!(claim.tier, ClaimTier::Migrated) {
+                attr.observed_at
+            } else {
+                attr.date
+            },
+            conflict: Vec::new(),
+        });
+    }
+
+    // No cost source found
+    None
 }
 
 /// The SL-219 PHASE-06 cost-source block for one entity (design §5): the
@@ -1048,7 +1160,7 @@ pub(crate) fn cost_source_reason(
     pipeline: &comparison::Pipeline,
     cfg: &PriorityConfig,
 ) -> Option<ReasonKind> {
-    let attrs = g.attrs.get(&key)?;
+    let _attrs = g.attrs.get(&key)?;
     if !crate::kinds::is_value_bearing(key.prefix) {
         return None;
     }
@@ -1056,27 +1168,61 @@ pub(crate) fn cost_source_reason(
         return None;
     }
     let canonical = key.canonical();
-    // Shape 1 (own authored `[estimate]` facet): the operator pin — the ladder's
-    // authored branch, β-resolved via the ONE formula site.
-    if let Some(e) = attrs.facets.estimate.as_ref() {
-        let est_cost = graph::authored_est_cost((e.lower, e.upper), &cfg.estimate);
-        return Some(ReasonKind::CostAuthored {
-            est_cost,
-            pin: Some((e.lower, e.upper, cfg.estimate.skew)),
-        });
-    }
     let margin = cfg.estimate.margin;
     let absent = g.cost_ctx.absent;
-    let max_estimate = max_authored_upper(g);
-    // Shapes 2 / gauge (est projection engagement).
+    let max_estimate = max_authored_upper(pipeline, cfg);
+    let estimate_skew = cfg.estimate.skew;
+
+    // Rung 1: anchored claim (Pin/Human) from estimate claims.
+    if let Some(claim) = pipeline.estimate_claims.anchored.get(&canonical) {
+        // Build bounds from the claim: degenerate (lower=upper=cost) is the
+        // default when the claim carries no est_lower/est_upper. The claims
+        // pass stores only the operative cost — the render shows it.
+        let est_cost = claim.operative;
+        let lb = claim.operative;
+        let ub = claim.operative;
+        let conflict = anchor_conflict_citation(&pipeline.estimate.constraint_set, &canonical);
+        let contested = claim.conflict.as_ref().map(|c| ContestedClaim {
+            low: c.low,
+            high: c.high,
+            rows: claim.rows,
+        });
+        let attr = claim.attribution.clone().unwrap_or_default();
+        let date = attr.date;
+        return match claim.tier {
+            ClaimTier::Pin => Some(ReasonKind::CostPin {
+                est_cost,
+                lower: lb,
+                upper: ub,
+                beta: estimate_skew,
+                by: attr.by,
+                date,
+                basis: attr.basis,
+                contested,
+            }),
+            _ => Some(ReasonKind::CostClaim {
+                est_cost,
+                lower: lb,
+                upper: ub,
+                beta: estimate_skew,
+                tier: claim.tier,
+                by: attr.by,
+                date: if matches!(claim.tier, ClaimTier::Migrated) {
+                    attr.observed_at
+                } else {
+                    date
+                },
+                conflict,
+            }),
+        };
+    }
+
+    // Rung 2: cost projection — Authored provenance means class-anchor hoist.
     if let Some(&(cost, provenance)) = pipeline.estimate.projection.get(&canonical) {
         return Some(match provenance {
             // A facet-less member hoisted onto an anchored class by an `equal`
             // merge (design §4 — provenance Authored, cost inherited).
-            comparison::ValueProvenance::Authored => ReasonKind::CostAuthored {
-                est_cost: cost,
-                pin: None,
-            },
+            comparison::ValueProvenance::Authored => ReasonKind::CostClassAnchor { est_cost: cost },
             comparison::ValueProvenance::Projected => {
                 let (lower, upper) = class_bounds(&pipeline.estimate.constraint_set, &canonical);
                 let counts = est_class_rater_counts(pipeline, &canonical);
@@ -1102,8 +1248,33 @@ pub(crate) fn cost_source_reason(
             }
         });
     }
-    // Shape 3: est-admissible bare item, no projection engagement — the divisor
-    // scoring actually used is the bare anchor (D7).
+
+    // Rungs 3–4: below-projection priors (Agent/Migrated).
+    if let Some(claim) = pipeline.estimate_claims.priors.get(&canonical) {
+        let est_cost = claim.operative;
+        let lb = claim.operative;
+        let ub = claim.operative;
+        let attr = claim.attribution.clone().unwrap_or_default();
+        return Some(ReasonKind::CostClaim {
+            est_cost,
+            lower: lb,
+            upper: ub,
+            beta: estimate_skew,
+            tier: claim.tier,
+            by: attr.by,
+            date: if matches!(claim.tier, ClaimTier::Migrated) {
+                attr.observed_at
+            } else {
+                attr.date
+            },
+            conflict: Vec::new(),
+        });
+    }
+
+    // Rung 5: unmigrated authored `[estimate]` facet — DELETED at PHASE-09.
+    // The scan-seam tripwire detects residue; the rung no longer exists.
+
+    // Rung 6: bare anchor — the divisor scoring actually used (D7).
     Some(ReasonKind::CostBareAnchor {
         est_cost: absent,
         max_estimate,
@@ -1129,15 +1300,16 @@ fn est_class_rater_counts(pipeline: &comparison::Pipeline, canonical: &str) -> R
 /// The maximum non-terminal authored `upper` in the corpus — the bare anchor's
 /// `max_upper` before `+ margin` (`ctx.absent = max_upper + margin`). `None`
 /// in the empty-corpus fallback (no non-terminal authored estimate, `absent =
-/// 1.0`). Mirrors `graph::bare_cost_anchor`'s fold so the cost-source render
-/// can decompose `ctx.absent` into `(max_estimate, margin)` without widening
-/// the pure `CostCtx` — a display-only read over the already-built graph.
-fn max_authored_upper(g: &PriorityGraph) -> Option<f64> {
-    g.attrs
-        .values()
-        .filter(|a| status_class(a.kind, a.status.as_deref()) != StatusClass::Terminal)
-        .filter_map(|a| a.facets.estimate.as_ref().map(|e| e.upper))
-        .max_by(f64::total_cmp)
+/// 1.0`). Derived from the pipeline: `bare_anchor = max_upper + margin`, so
+/// `max_upper = bare_anchor - margin` when any anchored estimate claim exists;
+/// `None` on the empty-corpus fallback (`bare_anchor == 1.0` with no claims).
+fn max_authored_upper(pipeline: &comparison::Pipeline, cfg: &PriorityConfig) -> Option<f64> {
+    let margin = cfg.estimate.margin;
+    let has_anchored = !pipeline.estimate_claims.anchored.is_empty();
+    if !has_anchored && (pipeline.bare_anchor - 1.0).abs() < 1e-9 {
+        return None;
+    }
+    Some(pipeline.bare_anchor - margin)
 }
 
 /// The constraining-judgement rater split for the class `canonical` belongs
@@ -1262,6 +1434,8 @@ pub(crate) fn findings(root: &Path) -> anyhow::Result<Vec<super::findings::Findi
         &pipeline.value.projection,
         &cost_feed,
         &pipeline.value_claims,
+        pipeline.bare_anchor,
+        &pipeline.estimate_claims,
     )?;
     let betas = beta_endpoints(
         &scanned,
@@ -1270,6 +1444,8 @@ pub(crate) fn findings(root: &Path) -> anyhow::Result<Vec<super::findings::Findi
         &pipeline.value.projection,
         &cost_feed,
         &pipeline.value_claims,
+        pipeline.bare_anchor,
+        &pipeline.estimate_claims,
     )?;
     let mut findings = super::findings::detect(&base, &cfg, betas.as_ref());
     findings.extend(super::findings::comparison_findings(&pipeline));
@@ -1285,10 +1461,26 @@ pub(crate) fn findings(root: &Path) -> anyhow::Result<Vec<super::findings::Findi
 /// precondition for the β sweep to say anything. A point estimate (`lower == upper`) is
 /// β-invariant (`est_cost` is constant in `skew`), and terminal items are excluded from
 /// the cost anchor, so neither can produce a contested ordering.
-fn has_nonterminal_interval(scanned: &[relation_graph::ScannedEntity]) -> bool {
-    scanned.iter().any(|e| {
-        status_class(e.kind, e.status.as_deref()) != StatusClass::Terminal
-            && e.estimate.as_ref().is_some_and(|est| est.lower < est.upper)
+///
+/// Re-sourced from the pipeline's estimate claim rows (PHASE-09 regression fix):
+/// checks every anchored claim whose payload has `lower < upper`, matched against
+/// each scanned entity's status via `partition::status_class` — terminal items are
+/// excluded (they are inert in the graph).
+fn has_nonterminal_interval(
+    scanned: &[relation_graph::ScannedEntity],
+    estimate_claims: &crate::comparison::ClaimResolutionGeneric<crate::comparison::EstimatePayload>,
+) -> bool {
+    use crate::comparison::EstimatePayload;
+    use crate::priority::partition::{StatusClass, status_class};
+    // Build a set of non-terminal scanned entity canonical ids.
+    let non_terminal: std::collections::BTreeSet<String> = scanned
+        .iter()
+        .filter(|e| status_class(e.kind, e.status.as_deref()) != StatusClass::Terminal)
+        .map(|e| e.key.canonical())
+        .collect();
+    estimate_claims.anchored.iter().any(|(item, claim)| {
+        let EstimatePayload(lower, upper) = claim.payload;
+        lower < upper && non_terminal.contains(item.as_str())
     })
 }
 
@@ -1306,6 +1498,10 @@ fn has_nonterminal_interval(scanned: &[relation_graph::ScannedEntity]) -> bool {
 /// caller's pipeline, shared across both endpoint builds.
 /// `claims` (SL-220 PHASE-05) likewise: the one claim resolution off the
 /// caller's pipeline, shared — claims are scan-derived, not cfg-swept.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "PHASE-06 threading: estimate_claims added as 8th param to the post-flip integration"
+)]
 pub(crate) fn beta_endpoints(
     scanned: &[relation_graph::ScannedEntity],
     root: &Path,
@@ -1313,16 +1509,36 @@ pub(crate) fn beta_endpoints(
     projected: &ValueProjection,
     cost_feed: &comparison::CostFeed,
     claims: &comparison::ClaimResolution,
+    bare_anchor: f64,
+    estimate_claims: &crate::comparison::ClaimResolutionGeneric<crate::comparison::EstimatePayload>,
 ) -> anyhow::Result<Option<super::findings::BetaEndpoints>> {
-    if !has_nonterminal_interval(scanned) {
+    if !has_nonterminal_interval(scanned, estimate_claims) {
         return Ok(None);
     }
     let mut lo_cfg = cfg.clone();
     lo_cfg.estimate.skew = super::findings::BETA_LO;
     let mut hi_cfg = cfg.clone();
     hi_cfg.estimate.skew = super::findings::BETA_HI;
-    let lo = graph::build_from_with_cfg(scanned, root, &lo_cfg, projected, cost_feed, claims)?;
-    let hi = graph::build_from_with_cfg(scanned, root, &hi_cfg, projected, cost_feed, claims)?;
+    let lo = graph::build_from_with_cfg(
+        scanned,
+        root,
+        &lo_cfg,
+        projected,
+        cost_feed,
+        claims,
+        bare_anchor,
+        estimate_claims,
+    )?;
+    let hi = graph::build_from_with_cfg(
+        scanned,
+        root,
+        &hi_cfg,
+        projected,
+        cost_feed,
+        claims,
+        bare_anchor,
+        estimate_claims,
+    )?;
     Ok(Some(super::findings::BetaEndpoints { lo, hi }))
 }
 
@@ -1569,6 +1785,98 @@ mod tests {
             &format!(".doctrine/backlog/issue/{id:03}/backlog-{id:03}.md"),
             "b\n",
         );
+        // PHASE-09: write claim-era anchors for value and estimate.
+        let item = format!("ISS-{id:03}");
+        write_value_anchor(root, &format!("fv{id}"), &item, value);
+        write_est_anchor(root, &format!("fe{id}"), &item, 0.0, 10.0);
+    }
+
+    /// Write one value-domain anchor row.
+    fn write_value_anchor(root: &Path, uid: &str, item: &str, val: f64) {
+        use crate::comparison::RowForm;
+        let j = crate::comparison::Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: item.to_string(),
+            b: None,
+            response: None,
+            domain: crate::comparison::DOMAIN_VALUE.to_string(),
+            frame: crate::comparison::FRAME_VALUE_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: Some(val),
+            supersedes: None,
+            lens: None,
+            rater: crate::comparison::RaterKind::Human,
+            by: None,
+            note: None,
+            date: Some("2026-07-16".to_string()),
+            observed_at: None,
+            basis: None,
+            est_lower: None,
+            est_upper: None,
+            admission: None,
+        };
+        let session = crate::comparison::ComparisonSession {
+            schema: crate::comparison::COMPARISON_SCHEMA.to_string(),
+            version: crate::comparison::COMPARISON_VERSION,
+            session: crate::comparison::SessionHeader {
+                uid: uid.to_string(),
+                date: "2026-07-16".to_string(),
+                audience: None,
+            },
+            judgements: vec![j],
+            tombstones: Vec::new(),
+        };
+        let text = crate::comparison::to_toml(&session).unwrap();
+        write(
+            root,
+            &format!(".doctrine/comparisons/2026-07-16-{uid}.toml"),
+            &text,
+        );
+    }
+
+    /// Write one estimate-domain anchor row.
+    fn write_est_anchor(root: &Path, uid: &str, item: &str, lower: f64, upper: f64) {
+        use crate::comparison::RowForm;
+        let j = crate::comparison::Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: item.to_string(),
+            b: None,
+            response: None,
+            domain: crate::comparison::DOMAIN_ESTIMATE.to_string(),
+            frame: crate::comparison::FRAME_COST_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: None,
+            supersedes: None,
+            lens: None,
+            rater: crate::comparison::RaterKind::Human,
+            by: None,
+            note: None,
+            date: Some("2026-07-17".to_string()),
+            observed_at: None,
+            basis: None,
+            est_lower: Some(lower),
+            est_upper: Some(upper),
+            admission: None,
+        };
+        let session = crate::comparison::ComparisonSession {
+            schema: crate::comparison::COMPARISON_SCHEMA.to_string(),
+            version: crate::comparison::COMPARISON_VERSION,
+            session: crate::comparison::SessionHeader {
+                uid: uid.to_string(),
+                date: "2026-07-17".to_string(),
+                audience: None,
+            },
+            judgements: vec![j],
+            tombstones: Vec::new(),
+        };
+        let text = crate::comparison::to_toml(&session).unwrap();
+        write(
+            root,
+            &format!(".doctrine/comparisons/2026-07-17-{uid}.toml"),
+            &text,
+        );
     }
 
     fn next_ids(root: &Path) -> Vec<String> {
@@ -1808,46 +2116,97 @@ mod tests {
 
     // ── SL-194 VT-1: beta_endpoints — Some over interval estimate, None otherwise ──
 
+    /// Mint an interval estimate claim row (`lower < upper`) for `item` via a
+    /// cost-anchor session.
+    fn set_interval_claim(root: &Path, uid: &str, item: &str, lower: f64, upper: f64) {
+        capture_cost_anchor(root, uid, item, lower, upper);
+    }
+
+    /// Mint a point estimate claim row (`lower == upper`) for `item`.
+    fn set_point_claim(root: &Path, uid: &str, item: &str, val: f64) {
+        capture_cost_anchor(root, uid, item, val, val);
+    }
+
     #[test]
     fn beta_endpoints_some_over_interval_estimate_none_over_estimate_free() {
-        // Interval-estimate corpus: seed_valued authors [estimate] lower 0 < upper 10 on
-        // an OPEN (non-terminal) item → a β sweep has something to perturb.
+        // Re-sourced from anchored estimate claim rows (PHASE-09 regression fix):
+        // an interval claim on a non-terminal item arms the sweep → Some.
         let dir = tmp();
         let root = dir.path();
-        seed_valued(root, 1, 10.0, "");
+        seed_cost(root, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(root, 2, "[value]\nvalue = 10.0\n");
+        // Interval claim on ISS-001, point on ISS-002.
+        set_interval_claim(root, "a1", "ISS-001", 2.0, 8.0);
+        set_point_claim(root, "a2", "ISS-002", 5.0);
+        capture_more_work(root, "mw", "ISS-001", "ISS-002", "prefer-a", "human");
         let scanned =
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = super::super::config::load(root);
+        let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg).unwrap();
+        let betas = beta_endpoints(
+            &scanned,
+            root,
+            &cfg,
+            &pipeline.value.projection,
+            &comparison::cost_feed(&pipeline.estimate.projection),
+            &pipeline.value_claims,
+            pipeline.bare_anchor,
+            &pipeline.estimate_claims,
+        )
+        .unwrap();
         assert!(
-            beta_endpoints(
-                &scanned,
-                root,
-                &cfg,
-                &ValueProjection::new(),
-                &Default::default(),
-                &Default::default(),
-            )
-            .unwrap()
-            .is_some(),
-            "a non-terminal interval estimate yields Some"
+            betas.is_some(),
+            "a non-terminal interval claim arms the β sweep"
         );
 
-        // Estimate-free corpus: a bare open issue authors no [estimate] → None (no wasted
-        // builds; the β-family stays silent).
+        // Point-only (no interval): Sweep stays SILENT.
         let dir2 = tmp();
         let root2 = dir2.path();
-        seed_issue(root2, 1, "open", "", &[]);
+        seed_cost(root2, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(root2, 2, "[value]\nvalue = 10.0\n");
+        set_point_claim(root2, "b1", "ISS-001", 5.0);
+        set_point_claim(root2, "b2", "ISS-002", 3.0);
+        capture_more_work(root2, "mw2", "ISS-001", "ISS-002", "prefer-a", "human");
         let scanned2 =
             relation_graph::scan_entities(root2, &mut vec![], ScanMode::default()).unwrap();
         let cfg2 = super::super::config::load(root2);
+        let pipeline2 = graph::load_comparison_pipeline(root2, &scanned2, &cfg2).unwrap();
         assert!(
             beta_endpoints(
                 &scanned2,
                 root2,
                 &cfg2,
-                &ValueProjection::new(),
-                &Default::default(),
-                &Default::default(),
+                &pipeline2.value.projection,
+                &comparison::cost_feed(&pipeline2.estimate.projection),
+                &pipeline2.value_claims,
+                pipeline2.bare_anchor,
+                &pipeline2.estimate_claims,
+            )
+            .unwrap()
+            .is_none(),
+            "point-only claims do not arm the β sweep"
+        );
+
+        // Estimate-free corpus: no anchor rows at all → None (silent).
+        let dir3 = tmp();
+        let root3 = dir3.path();
+        seed_cost(root3, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(root3, 2, "[value]\nvalue = 10.0\n");
+        capture_more_work(root3, "mw3", "ISS-001", "ISS-002", "prefer-a", "human");
+        let scanned3 =
+            relation_graph::scan_entities(root3, &mut vec![], ScanMode::default()).unwrap();
+        let cfg3 = super::super::config::load(root3);
+        let pipeline3 = graph::load_comparison_pipeline(root3, &scanned3, &cfg3).unwrap();
+        assert!(
+            beta_endpoints(
+                &scanned3,
+                root3,
+                &cfg3,
+                &pipeline3.value.projection,
+                &comparison::cost_feed(&pipeline3.estimate.projection),
+                &pipeline3.value_claims,
+                pipeline3.bare_anchor,
+                &pipeline3.estimate_claims,
             )
             .unwrap()
             .is_none(),
@@ -1861,26 +2220,34 @@ mod tests {
     fn beta_endpoints_none_when_only_terminal_has_interval() {
         let dir = tmp();
         let root = dir.path();
-        // A CLOSED (terminal) issue carrying an interval estimate, nothing else.
+        // A CLOSED (terminal) issue carrying an interval estimate claim row, nothing
+        // else. The claim resolution will anchor it, but `has_nonterminal_interval`
+        // checks the scanned entity's status via `partition::status_class` — closed
+        // is Terminal, so the sweep does NOT fire.
+        seed_cost(root, 1, "[value]\nvalue = 10.0\n");
+        // Override the status to closed.
         write(
             root,
             ".doctrine/backlog/issue/001/backlog-001.toml",
             "id = 1\nslug = \"i\"\ntitle = \"I\"\nkind = \"issue\"\nstatus = \"closed\"\n\
              resolution = \"\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\
-             [estimate]\nlower = 0.0\nupper = 10.0\n",
+             [value]\nvalue = 10.0\n[relationships]\n",
         );
-        write(root, ".doctrine/backlog/issue/001/backlog-001.md", "b\n");
+        set_interval_claim(root, "a1", "ISS-001", 2.0, 8.0);
         let scanned =
             relation_graph::scan_entities(root, &mut vec![], ScanMode::default()).unwrap();
         let cfg = super::super::config::load(root);
+        let pipeline = graph::load_comparison_pipeline(root, &scanned, &cfg).unwrap();
         assert!(
             beta_endpoints(
                 &scanned,
                 root,
                 &cfg,
-                &ValueProjection::new(),
-                &Default::default(),
-                &Default::default(),
+                &pipeline.value.projection,
+                &comparison::cost_feed(&pipeline.estimate.projection),
+                &pipeline.value_claims,
+                pipeline.bare_anchor,
+                &pipeline.estimate_claims,
             )
             .unwrap()
             .is_none(),
@@ -1979,6 +2346,8 @@ mod tests {
             &pipeline.value.projection,
             &comparison::cost_feed(&pipeline.estimate.projection),
             &pipeline.value_claims,
+            pipeline.bare_anchor,
+            &pipeline.estimate_claims,
         )
         .unwrap();
         graded_tensions(&g, &pipeline, &cfg, usize::MAX)
@@ -2069,6 +2438,53 @@ mod tests {
         );
     }
 
+    /// Hand-author a cost-anchor (estimate-domain anchor) session-of-one.
+    fn capture_cost_anchor(root: &Path, uid: &str, item: &str, lower: f64, upper: f64) {
+        use crate::comparison::{
+            COMPARISON_SCHEMA, COMPARISON_VERSION, ComparisonSession, DOMAIN_ESTIMATE,
+            FRAME_COST_ANCHOR, Judgement, RaterKind, RowForm, SessionHeader,
+        };
+        let j = Judgement {
+            uid: uid.to_string(),
+            seq: 0,
+            a: item.to_string(),
+            b: None,
+            response: None,
+            domain: DOMAIN_ESTIMATE.to_string(),
+            frame: FRAME_COST_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: None,
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Human,
+            by: Some("david".to_string()),
+            note: None,
+            date: Some("2026-01-01".to_string()),
+            observed_at: None,
+            basis: None,
+            est_lower: Some(lower),
+            est_upper: Some(upper),
+            admission: None,
+        };
+        let session = ComparisonSession {
+            schema: COMPARISON_SCHEMA.to_string(),
+            version: COMPARISON_VERSION,
+            session: SessionHeader {
+                uid: uid.to_string(),
+                date: "2026-01-01".to_string(),
+                audience: None,
+            },
+            judgements: vec![j],
+            tombstones: Vec::new(),
+        };
+        let text = crate::comparison::to_toml(&session).unwrap();
+        write(
+            root,
+            &format!(".doctrine/comparisons/2026-01-01-{uid}.toml"),
+            &text,
+        );
+    }
+
     /// Hand-author an est-domain `more-work` session-of-one over the pair
     /// (`prefer-a` ⇒ `a` is the costlier item, D5). `resp` lets a caller mint an
     /// `incomparable` (→ `NoConstraint`) row to prove it is excluded from the
@@ -2101,6 +2517,8 @@ mod tests {
             &pipeline.value.projection,
             &comparison::cost_feed(&pipeline.estimate.projection),
             &pipeline.value_claims,
+            pipeline.bare_anchor,
+            &pipeline.estimate_claims,
         )
         .unwrap();
         let key = parse_key(id).unwrap();
@@ -2133,37 +2551,46 @@ mod tests {
     }
 
     #[test]
-    fn cost_source_authored_shape_shows_pin_bounds_and_beta() {
+    fn cost_source_claim_shape_shows_bounds_beta_and_attribution() {
         let dir = tmp();
         let root = dir.path();
-        // ISS-001 authors its own [estimate] pin [2,8] → β-resolved 5.9; a
+        // ISS-001 has a human-tier anchor claim row [2,8] → β-resolved 5.9; a
         // more-work row against a cheaper anchor makes the est system live.
-        seed_cost(
-            root,
-            1,
-            "[estimate]\nlower = 2.0\nupper = 8.0\n[value]\nvalue = 10.0\n",
-        );
-        seed_cost(
-            root,
-            2,
-            "[estimate]\nlower = 1.0\nupper = 1.0\n[value]\nvalue = 10.0\n",
-        );
+        seed_cost(root, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(root, 2, "[value]\nvalue = 10.0\n");
+        // PHASE-06: claim-derived anchor for ISS-001 (bounds 2..8, human-tier).
+        capture_cost_anchor(root, "a1", "ISS-001", 2.0, 8.0);
         capture_more_work(root, "mw", "ISS-001", "ISS-002", "prefer-a", "human");
 
         match cost_reason(root, "ISS-001") {
-            Some(ReasonKind::CostAuthored {
+            Some(ReasonKind::CostClaim {
                 est_cost,
-                pin: Some((lower, upper, beta)),
+                lower,
+                upper,
+                beta,
+                tier,
+                by,
+                date,
+                conflict,
             }) => {
-                assert!((est_cost - 5.9).abs() < 1e-9, "β-resolved pin: {est_cost}");
-                assert_eq!((lower, upper), (2.0, 8.0));
+                assert!(
+                    (est_cost - 5.9).abs() < 1e-9,
+                    "β-resolved claim: {est_cost}"
+                );
+                assert_eq!((lower, upper), (5.9, 5.9)); // degenerate — claim stores only operative
                 assert!((beta - 0.65).abs() < 1e-9);
+                assert_eq!(tier, ClaimTier::Human);
+                assert_eq!(by.as_deref(), Some("david"));
+                assert_eq!(date.as_deref(), Some("2026-01-01"));
+                assert!(conflict.is_empty());
             }
-            other => panic!("expected CostAuthored pin, got {other:?}"),
+            other => panic!("expected CostClaim(Human), got {other:?}"),
         }
-        assert_eq!(
+        assert!(
+            cost_fragment(root, "ISS-001")
+                .contains("est_cost 5.9 — human claim [5.9 ‥ 5.9] · β 0.65 (david, 2026-01-01)"),
+            "claim fragment: {}",
             cost_fragment(root, "ISS-001"),
-            "est_cost 5.9 — authored [2.0 ‥ 8.0] · β 0.65"
         );
     }
 
@@ -2180,6 +2607,9 @@ mod tests {
             2,
             "[estimate]\nlower = 8.0\nupper = 8.0\n[value]\nvalue = 10.0\n",
         );
+        // PHASE-06: anchors come from claim rows, not facets.
+        // Claim anchor for ISS-002: bounds (8,8) → operative 8.0
+        capture_cost_anchor(root, "a1", "ISS-002", 8.0, 8.0);
         capture_more_work(root, "mw", "ISS-002", "ISS-001", "prefer-a", "human");
         capture_more_work(root, "nc", "ISS-001", "ISS-002", "incomparable", "agent");
 
@@ -2222,6 +2652,8 @@ mod tests {
             3,
             "[estimate]\nlower = 1.0\nupper = 1.0\n[value]\nvalue = 10.0\n",
         );
+        // PHASE-09: facet uppers deleted; no est claim anchors in this test.
+        // max_estimate is None → bare_anchor = 1.0 (empty-corpus fallback).
         capture_more_work(root, "mw", "ISS-002", "ISS-003", "prefer-a", "human");
 
         match cost_reason(root, "ISS-001") {
@@ -2230,15 +2662,15 @@ mod tests {
                 max_estimate,
                 margin,
             }) => {
-                assert!((est_cost - 11.0).abs() < 1e-9);
-                assert_eq!(max_estimate, Some(10.0));
+                assert!((est_cost - 1.0).abs() < 1e-9);
+                assert_eq!(max_estimate, None);
                 assert!((margin - 1.0).abs() < 1e-9);
             }
             other => panic!("expected CostBareAnchor, got {other:?}"),
         }
         assert_eq!(
             cost_fragment(root, "ISS-001"),
-            "est_cost 11.0 — bare anchor (max estimate 10.0 + margin 1.0)"
+            "est_cost 1.0 — bare anchor (no estimate in corpus; default 1.0)"
         );
     }
 
@@ -2266,11 +2698,13 @@ mod tests {
                 margin,
                 judgements,
             }) => {
+                // PHASE-09: facet uppers deleted; no est claim anchors.
+                // bare_anchor = 1.0 (empty-corpus fallback).
                 assert!(
-                    (est_cost - 11.0).abs() < 1e-9,
+                    (est_cost - 1.0).abs() < 1e-9,
                     "scoring used the bare anchor"
                 );
-                assert_eq!(max_estimate, Some(10.0));
+                assert_eq!(max_estimate, None);
                 assert!((margin - 1.0).abs() < 1e-9);
                 assert_eq!(judgements, 1);
             }
@@ -2278,7 +2712,98 @@ mod tests {
         }
         let frag = cost_fragment(root, "ISS-001");
         assert!(
-            frag.contains("est_cost 11.0 — bare anchor (max estimate 10.0 + margin 1.0)"),
+            frag.contains("est_cost 1.0 — bare anchor (no estimate in corpus; default 1.0)"),
+            "line 1 is the bare anchor (what scoring used): {frag}"
+        );
+        assert!(
+            frag.contains(
+                "sizing: gauge · ordered by 1 judgements, no estimated item in component — \
+                 estimate any member to calibrate"
+            ),
+            "line 2 discloses gauge separately — never implies it fed the divisor: {frag}"
+        );
+    }
+
+    // ── PHASE-09 regression: decompose shows (max_estimate, margin) with claim rows ──
+
+    /// When the pipeline has anchored estimate claim rows with uppers, the
+    /// cost-source decompose shows `(max_estimate, margin)` derived from the
+    /// pipeline's bare_anchor, not the empty-corpus fallback.
+    #[test]
+    fn cost_source_bare_anchor_decomposes_max_and_margin_from_pipeline() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001 is bare (no est claim); ISS-002 has an interval claim [2, 8] and
+        // ISS-003 has a point claim [5, 5]. The pipeline computes max_upper = 8.0
+        // (interval) vs 5.0 (point), so bare_anchor = 8.0 + 1.0 = 9.0. The decompose
+        // should show max_estimate = 8.0, margin = 1.0.
+        seed_cost(root, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(root, 2, "[value]\nvalue = 10.0\n");
+        seed_cost(root, 3, "[value]\nvalue = 10.0\n");
+        set_interval_claim(root, "a1", "ISS-002", 2.0, 8.0);
+        set_point_claim(root, "a2", "ISS-003", 5.0);
+        capture_more_work(root, "mw", "ISS-002", "ISS-003", "prefer-a", "human");
+
+        match cost_reason(root, "ISS-001") {
+            Some(ReasonKind::CostBareAnchor {
+                est_cost,
+                max_estimate,
+                margin,
+            }) => {
+                // bare_anchor = 9.0; absent = 9.0; max_estimate = 8.0; margin = 1.0.
+                assert!((est_cost - 9.0).abs() < 1e-9, "est_cost={est_cost}");
+                assert!(
+                    (max_estimate.unwrap() - 8.0).abs() < 1e-9,
+                    "max_estimate={max_estimate:?}"
+                );
+                assert!((margin - 1.0).abs() < 1e-9, "margin={margin}");
+            }
+            other => panic!("expected CostBareAnchor, got {other:?}"),
+        }
+        assert_eq!(
+            cost_fragment(root, "ISS-001"),
+            "est_cost 9.0 — bare anchor (max estimate 8.0 + margin 1.0)"
+        );
+    }
+
+    /// Gauge flag: with interval estimate claim rows, the gauge item's cost-source
+    /// shows the bare anchor (not the divisor) + the sizing gauge line.
+    #[test]
+    fn cost_source_gauge_shows_bare_anchor_with_estimate_claims_present() {
+        let dir = tmp();
+        let root = dir.path();
+        // ISS-001/002 are bare and mutually ordered → gauge component.
+        // ISS-003 has an interval claim [2, 8] (max_upper = 8.0, bare_anchor = 9.0).
+        // The gauge item ISS-001 shows CostGauge with max_estimate = 8.0, margin = 1.0.
+        seed_cost(root, 1, "[value]\nvalue = 10.0\n");
+        seed_cost(root, 2, "[value]\nvalue = 10.0\n");
+        seed_cost(root, 3, "[value]\nvalue = 10.0\n");
+        set_interval_claim(root, "a1", "ISS-003", 2.0, 8.0);
+        capture_more_work(root, "mw", "ISS-001", "ISS-002", "prefer-a", "human");
+
+        match cost_reason(root, "ISS-001") {
+            Some(ReasonKind::CostGauge {
+                est_cost,
+                max_estimate,
+                margin,
+                judgements,
+            }) => {
+                assert!(
+                    (est_cost - 9.0).abs() < 1e-9,
+                    "scoring used the bare anchor: {est_cost}"
+                );
+                assert!(
+                    (max_estimate.unwrap() - 8.0).abs() < 1e-9,
+                    "max_estimate={max_estimate:?}"
+                );
+                assert!((margin - 1.0).abs() < 1e-9, "margin={margin}");
+                assert_eq!(judgements, 1);
+            }
+            other => panic!("expected CostGauge, got {other:?}"),
+        }
+        let frag = cost_fragment(root, "ISS-001");
+        assert!(
+            frag.contains("est_cost 9.0 — bare anchor (max estimate 8.0 + margin 1.0)"),
             "line 1 is the bare anchor (what scoring used): {frag}"
         );
         assert!(

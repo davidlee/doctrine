@@ -112,24 +112,6 @@ impl<'de> Deserialize<'de> for EstimateFacet {
 }
 
 // ---------------------------------------------------------------------------
-// Parse
-// ---------------------------------------------------------------------------
-
-/// Parse an optional `[estimate]` table. Returns `Ok(None)` absent,
-/// `Ok(Some(facet))` present+valid, `Err(_)` malformed. Bakes in validation —
-/// callers never hold an invalid facet.
-pub(crate) fn parse_optional(
-    table: Option<&toml::value::Table>,
-) -> anyhow::Result<Option<EstimateFacet>> {
-    let Some(table) = table else {
-        return Ok(None);
-    };
-    let raw: EstimateRaw = toml::from_str(&toml::to_string(table)?)?;
-    let facet = normalise(raw)?;
-    Ok(Some(facet))
-}
-
-// ---------------------------------------------------------------------------
 // Normalise
 // ---------------------------------------------------------------------------
 
@@ -196,6 +178,31 @@ pub(crate) fn validate(facet: &EstimateFacet) -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Operative cost
+// ---------------------------------------------------------------------------
+
+/// The floor epsilon — guards against division by zero from an (0, 0)
+/// estimate. Shared constant so [`operative_cost`] and [`floor_eps`] cannot
+/// drift (STD-001).
+pub(crate) const EPSILON: f64 = 1e-12;
+
+/// Floor to `EPSILON` if the value dips below it — guarantees every operative
+/// cost is > 0.
+pub(crate) fn floor_eps(x: f64) -> f64 {
+    if x < EPSILON { EPSILON } else { x }
+}
+
+/// The ONE β-skew formula site (SL-222 design §2/E13): the operative scalar
+/// cost of an authored estimate — `lower + β·(upper − lower)`, floored to
+/// `EPSILON` (the D11 positivity axiom: every anchor > 0). Relocated here
+/// from `priority::graph::authored_est_cost` so the claims pass can call it
+/// directly; the graph function now delegates.
+pub(crate) fn operative_cost(bounds: (f64, f64), skew: f64) -> f64 {
+    let (lower, upper) = bounds;
+    floor_eps(lower + skew * (upper - lower))
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -206,96 +213,6 @@ mod tests {
     // Helper: build a TOML table from a string like "lower=2\nupper=8"
     fn table_from(s: &str) -> toml::value::Table {
         s.parse::<toml::Table>().unwrap()
-    }
-
-    // ---- E1: absent table ----
-    #[test]
-    fn e1_absent() {
-        let result = parse_optional(None).unwrap();
-        assert!(result.is_none());
-    }
-
-    // ---- E2: integer bounds ----
-    #[test]
-    fn e2_integer_bounds() {
-        let t = table_from("lower=2\nupper=8");
-        let facet = parse_optional(Some(&t)).unwrap().unwrap();
-        assert_eq!(facet.lower, 2.0);
-        assert_eq!(facet.upper, 8.0);
-    }
-
-    // ---- E3: float bounds ----
-    #[test]
-    fn e3_float_bounds() {
-        let t = table_from("lower=2.5\nupper=8.0");
-        let facet = parse_optional(Some(&t)).unwrap().unwrap();
-        assert_eq!(facet.lower, 2.5);
-        assert_eq!(facet.upper, 8.0);
-    }
-
-    // ---- E4: zero-width estimate ----
-    #[test]
-    fn e4_zero_width() {
-        let t = table_from("lower=2\nupper=2");
-        let facet = parse_optional(Some(&t)).unwrap().unwrap();
-        assert_eq!(facet.lower, 2.0);
-        assert_eq!(facet.upper, 2.0);
-    }
-
-    // ---- E5: missing lower ----
-    #[test]
-    fn e5_missing_lower() {
-        let t = table_from("upper=8");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("lower is required"), "got: {}", err);
-    }
-
-    // ---- E6: missing upper ----
-    #[test]
-    fn e6_missing_upper() {
-        let t = table_from("lower=2");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("upper is required"), "got: {}", err);
-    }
-
-    // ---- E7: lower = nan ----
-    #[test]
-    fn e7_nan_lower() {
-        let t = table_from("lower=nan\nupper=8");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("lower must be finite"), "got: {}", err);
-    }
-
-    // ---- E8: lower = -inf ----
-    #[test]
-    fn e8_neg_inf_lower() {
-        let t = table_from("lower=-inf\nupper=8");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("lower must be finite"), "got: {}", err);
-    }
-
-    // ---- E9: lower = inf ----
-    #[test]
-    fn e9_inf_lower() {
-        let t = table_from("lower=inf\nupper=8");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("lower must be finite"), "got: {}", err);
-    }
-
-    // ---- E10: lower negative ----
-    #[test]
-    fn e10_negative_lower() {
-        let t = table_from("lower=-1\nupper=8");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("lower must be >= 0"), "got: {}", err);
-    }
-
-    // ---- E11: upper < lower ----
-    #[test]
-    fn e11_upper_lt_lower() {
-        let t = table_from("lower=5\nupper=2");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("upper must be >= lower"), "got: {}", err);
     }
 
     // ---- E12: resolve_unit default ----
@@ -391,22 +308,6 @@ mod tests {
             err.contains("lower_confidence must be in [0.0, 1.0]"),
             "got: {}",
             err
-        );
-    }
-
-    // ---- E19: unknown keys tolerated (NF-003) ----
-    #[test]
-    fn e19_unknown_keys_tolerated() {
-        let t = table_from("lower=2\nupper=8\nmode=\"pert\"");
-        let facet = parse_optional(Some(&t)).unwrap().unwrap();
-        assert_eq!(facet.lower, 2.0);
-        assert_eq!(facet.upper, 8.0);
-        // Serialised form must NOT contain the extra key
-        let serialised = toml::to_string(&facet).unwrap();
-        assert!(
-            !serialised.contains("mode"),
-            "extra key leaked: {}",
-            serialised
         );
     }
 
@@ -519,6 +420,69 @@ mod tests {
         assert!(raw.upper.is_some());
         assert!(raw._extra.contains_key("foo"));
         assert!(raw._extra.contains_key("baz"));
+    }
+
+    // ---- operative_cost formula-site tests (E13) ----------------------------
+
+    /// Collapse semantics: (2, 6) at skew 0.65 → 2 + 0.65·4 = 4.6.
+    #[test]
+    fn operative_cost_collapse_semantics() {
+        let cost = operative_cost((2.0, 6.0), 0.65);
+        assert!((cost - 4.6).abs() < 1e-12, "expected 4.6, got {cost}");
+    }
+
+    /// Zero-width estimate: (5, 5) → 5 (no range to skew).
+    #[test]
+    fn operative_cost_zero_width() {
+        let cost = operative_cost((5.0, 5.0), 0.65);
+        assert!((cost - 5.0).abs() < 1e-12, "expected 5.0, got {cost}");
+    }
+
+    /// Zero skew: (2, 8) → lower = 2.
+    #[test]
+    fn operative_cost_zero_skew_returns_lower() {
+        let cost = operative_cost((2.0, 8.0), 0.0);
+        assert!((cost - 2.0).abs() < 1e-12, "expected 2.0, got {cost}");
+    }
+
+    /// Unit skew: (2, 8) → upper = 8.
+    #[test]
+    fn operative_cost_unit_skew_returns_upper() {
+        let cost = operative_cost((2.0, 8.0), 1.0);
+        assert!((cost - 8.0).abs() < 1e-12, "expected 8.0, got {cost}");
+    }
+
+    /// EPSILON floor: zero-range-zero (0, 0) at any skew floors to EPSILON.
+    #[test]
+    fn operative_cost_floors_to_epsilon() {
+        let cost = operative_cost((0.0, 0.0), 0.65);
+        assert!(
+            (cost - EPSILON).abs() < 1e-18,
+            "expected EPSILON ({EPSILON}), got {cost}"
+        );
+    }
+
+    /// Sub-EPSILON result: (0, 1e-15) at skew 0.5 → 5e-16 < EPSILON, floor.
+    #[test]
+    fn operative_cost_sub_epsilon_floors() {
+        let cost = operative_cost((0.0, 1e-15), 0.5);
+        assert!(
+            (cost - EPSILON).abs() < 1e-18,
+            "expected EPSILON ({EPSILON}), got {cost}"
+        );
+    }
+
+    /// Pinned equality: graph::authored_est_cost delegates to
+    /// operative_cost, so (2, 6) at skew 0.65 must match.
+    #[test]
+    fn operative_cost_matches_graph_delegation() {
+        let ec = crate::priority::config::EstimateCost::default();
+        let graph_cost = crate::priority::graph::authored_est_cost((2.0, 6.0), &ec);
+        let direct = operative_cost((2.0, 6.0), 0.65);
+        assert!(
+            (direct - graph_cost).abs() < 1e-12,
+            "delegation mismatch: direct {direct} vs graph {graph_cost}"
+        );
     }
 }
 

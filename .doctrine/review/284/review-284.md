@@ -128,3 +128,58 @@ where it does not.
 No plan.toml or criterion edits are proposed (all `PHASE-NN`/`EN-/EX-/VT-`
 ids untouched). ADR-015 itself needs no further motion — REV-026 applied its
 text pre-flip (verified conformant after the F-2 re-record).
+
+## Reconciliation Outcome
+
+Reconcile ran on the **integrated `main` tree** (dispatched slice), not bare
+edge. Integration ritual: promoted `edge → main` (brought RV-284 onto main),
+built + admitted a `close_target` candidate, `dispatch sync --integrate --trunk
+refs/heads/main` landed the slice's code + authored governance (REV-026,
+PRD-014/SPEC-020 amendments, requirement dispositions, slice deltas, notes,
+phase snapshots) onto main. Reconcile leftovers authored on a `main` worktree;
+primary tree stayed on `edge` throughout.
+
+**Audit-surface split (key context).** The audit ran on the primary tree, blind
+to the candidate's authored `.doctrine/` state, so its brief flagged items
+already satisfied on the candidate. Confirmed post-integration:
+- **F-8(2)** PRD-014 §1/§2 already claims-era (REV-026); only §6 primary/
+  validation flow lagged — completed here (see REVs).
+- **F-8(3)** SPEC-020 disposition map (REQ-269..277, 310) + the PRD-014/SPEC-020
+  retention REQs already applied by REV-026; PRD-011/SPEC-001 descent prose
+  verified non-contradicting. `spec validate` clean for SPEC-020, PRD-014,
+  PRD-011, SPEC-001. No text change (F-8(3) satisfied).
+
+### Direct edits applied (per-slice)
+- `slice-222.toml` selector registry: removed `src/priority/config.rs`
+  (spurious-undelivered, F-3); added `tests/e2e_compare_elicit.rs` +
+  `tests/e2e_priority_golden.rs` as design-targets, note-matched to the
+  orchestrator fixture-conversion `a2775657a` (F-4).
+- `design.md`: §3 config.rs code-impact line annotated (F-3); Reconciliation
+  addendum recording the 20 mid-flight ripple selector families so canon
+  matches the registry (F-8(4)).
+- `rfc/020/rfc-020.md`: Phase-2 row → delivered-by-SL-222, with the E1 payload
+  deviation, E5 records-anchor narrowing, and F-9 null re-rank recordings
+  (F-8(1); direct edit — the CLI/ADR-014 refuses an RFC as a REV `revises`
+  target).
+
+### REVs completed
+- **REV-027** (`reconcile-sl-222`): done/approved — PRD-014 §6 estimate primary
+  + validation flow amended to claims-era wording, mirroring the ratified value
+  half (covers RV-284 F-8(2) residual). Rationale + before/after in
+  revision-027.md.
+
+### F-1 residual (audit repair on trunk)
+The F-1 fix (`estimate_pin_is_orchestrator` write-class test, main.rs) was
+committed **on the review candidate** (`3c456029e`), on top of `review/222`,
+never folded into the bundle. The close_target sourced `review/222` and so
+landed main **without** it — caught at the conformance re-check (`src/main.rs`
+read undelivered). Repair cherry-picked onto trunk at close; conformance's
+residual `.doctrine/**` undeclared set is the F-5-tolerated wrinkle (selector
+algebra cannot express a data-dependent path set), unchanged.
+
+### Withdrawn / tolerated
+- **F-5** tolerated — conformance `.doctrine/**` undeclared set; rationale in
+  finding disposition. **F-7** follow-up → CHR-047 (deliberate code residue).
+  F-6/F-9 aligned; F-3/F-4/F-8 verified.
+
+Reconcile pass complete — handoff to /close.

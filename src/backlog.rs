@@ -581,17 +581,22 @@ struct RawBacklogToml {
     facet: Option<risk::RawRiskFacet>,
     #[serde(default)]
     relationships: Relationships,
+    // SL-222 PHASE-09: [estimate]/[value] raw fields retained for serde
+    // round-trip compatibility (not consumed — the key-presence tripwire in
+    // scan.rs operates at the toml::Table level).
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "crate::estimate::deserialize_lenient"
     )]
+    #[expect(dead_code, reason = "SL-222 PHASE-09")]
     estimate: Option<crate::estimate::EstimateFacet>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "crate::value::deserialize_lenient"
     )]
+    #[expect(dead_code, reason = "SL-222 PHASE-09")]
     value: Option<crate::value::ValueFacet>,
 }
 
@@ -619,8 +624,6 @@ pub(crate) struct BacklogItem {
     tier1: Vec<crate::relation::RelationEdge>,
     /// Prose body read from the sibling `backlog-NNN.md`.
     pub(crate) body: String,
-    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
-    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 /// A `triggers` rider (PRD-009 §5.7): the source `globs` this item watches, with
@@ -704,8 +707,6 @@ fn validate(raw: RawBacklogToml) -> anyhow::Result<BacklogItem> {
         tier1: Vec::new(),
         // Filled by `read_item` from the sibling .md; empty otherwise.
         body: String::new(),
-        estimate: raw.estimate,
-        value: raw.value,
     })
 }
 
@@ -1434,10 +1435,11 @@ fn derive_fulfils_inbound(
 fn format_metadata(
     item: &BacklogItem,
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
-    estimation_unit: &str,
+    _estimation_unit: &str,
     value_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
+    estimate_line: Option<&str>,
+    _lower_pct: f64,
+    _upper_pct: f64,
 ) -> Vec<String> {
     use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut parts: Vec<String> = Vec::new();
@@ -1483,17 +1485,11 @@ fn format_metadata(
         }
     }
 
-    // estimate / value facets — advisory, rendered only when authored.
-    if let Some(ref est) = item.estimate {
-        parts.push(format!(
-            "{}\n",
-            crate::estimate::display::format_estimate_confidence(
-                est,
-                lower_pct,
-                upper_pct,
-                estimation_unit,
-            )
-        ));
+    // Estimate line — re-sourced from the comparison ladder by the shell
+    // (SL-222 PHASE-07, D7-EST). The [estimate] facet fallback is deleted
+    // (PHASE-09).
+    if let Some(line) = estimate_line {
+        parts.push(format!("{line}\n"));
     }
     // SL-220 PHASE-06: the value line re-sources from the comparison ladder
     // (design §6) — resolved by the shell, never the raw facet (EX-3).
@@ -1603,6 +1599,7 @@ fn format_show(
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
     estimation_unit: &str,
     value_line: Option<&str>,
+    estimate_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -1611,6 +1608,7 @@ fn format_show(
         fulfils_inbound,
         estimation_unit,
         value_line,
+        estimate_line,
         lower_pct,
         upper_pct,
     );
@@ -1624,6 +1622,7 @@ fn format_inspect(
     fulfils_inbound: &[(String, Option<crate::relation::Degree>)],
     estimation_unit: &str,
     value_line: Option<&str>,
+    estimate_line: Option<&str>,
     lower_pct: f64,
     upper_pct: f64,
 ) -> String {
@@ -1632,6 +1631,7 @@ fn format_inspect(
         fulfils_inbound,
         estimation_unit,
         value_line,
+        estimate_line,
         lower_pct,
         upper_pct,
     )
@@ -1653,8 +1653,9 @@ fn format_inspect(
 ///
 /// The table renderer selector — `format_show` (with body) or `format_inspect`
 /// (metadata only). SL-220 PHASE-06 threads the resolved value line
-/// (`Option<&str>`), so the shape earns a name (clippy type-complexity).
-type BacklogTableFn = fn(&BacklogItem, &[FulfilsRef], &str, Option<&str>, f64, f64) -> String;
+/// (`Option<&str>`); SL-222 PHASE-07 adds the estimate line.
+type BacklogTableFn =
+    fn(&BacklogItem, &[FulfilsRef], &str, Option<&str>, Option<&str>, f64, f64) -> String;
 
 fn run_show_inspect(
     path: Option<PathBuf>,
@@ -1678,15 +1679,22 @@ fn run_show_inspect(
             let value_line = crate::priority::surface::show_value_line(
                 &root,
                 &item.kind.canonical_id(item.id),
-                item.value.as_ref().map(|v| v.value),
                 item.kind.prefix(),
                 &value_unit,
+            )?;
+            // SL-222 PHASE-07: the estimate line re-sources from the ladder.
+            let estimate_line = crate::priority::surface::show_estimate_line(
+                &root,
+                &item.kind.canonical_id(item.id),
+                item.kind.prefix(),
+                &estimation_unit,
             )?;
             format_table(
                 &item,
                 &fulfils_inbound,
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -1747,23 +1755,6 @@ fn show_json(
         inner.insert("body".into(), serde_json::json!(item.body));
     }
     inner.insert("facet".into(), serde_json::json!(facet));
-    if let Some(ref est) = item.estimate {
-        inner.insert(
-            "estimate".into(),
-            serde_json::json!({
-                "lower": est.lower,
-                "upper": est.upper,
-            }),
-        );
-    }
-    if let Some(ref val) = item.value {
-        inner.insert(
-            "value".into(),
-            serde_json::json!({
-                "value": val.value,
-            }),
-        );
-    }
     // SL-176 PHASE-03: `fulfilled_by` replaces `slices` (derived inbound with degree).
     let fulfils_json: Vec<serde_json::Value> = fulfils_inbound
         .iter()
@@ -3852,7 +3843,7 @@ tags = []
         // a plain issue and an assessed risk, both reserved id 1 (independent trees).
         new_item(root, ItemKind::Issue, "Auth bug");
         let issue = read_item(root, ItemKind::Issue, 1).unwrap();
-        let issue_out = format_show(&issue, &[], "points", None, 0.0, 1.0);
+        let issue_out = format_show(&issue, &[], "points", None, None, 0.0, 1.0);
         assert!(
             issue_out.starts_with("ISS-001 — Auth bug\n"),
             "identity line: {issue_out}"
@@ -3869,7 +3860,7 @@ tags = []
         // an assessed risk (seeded directly) shows its facet axes.
         write_assessed_risk(root, 1);
         let risk = read_item(root, ItemKind::Risk, 1).unwrap();
-        let risk_out = format_show(&risk, &[], "points", None, 0.0, 1.0);
+        let risk_out = format_show(&risk, &[], "points", None, None, 0.0, 1.0);
         assert!(risk_out.starts_with("RSK-001 — Token expiry\n"));
         assert!(risk_out.contains("[facet]"), "risk shows the facet block");
         assert!(risk_out.contains("likelihood: high"));
@@ -3893,22 +3884,66 @@ tags = []
         let item = read_item(root, ItemKind::Issue, 1).unwrap();
         // SL-220 PHASE-06: the value line is resolved by the shell and threaded
         // in; format_show renders the passed line verbatim (design §6).
+        // PHASE-09: estimate facet fallback deleted; no estimate line when
+        // pipeline line is None.
         let out = format_show(
             &item,
             &[],
             "espresso_shots",
             Some("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
+            None,
             0.1,
             0.9,
         );
+        // PHASE-09: the authored [estimate] facet is no longer rendered.
         assert!(
-            out.contains("estimate: 6.5–18.5 espresso_shots (80% confidence)"),
-            "estimate row: {out}"
+            !out.contains("estimate:"),
+            "estimate row should be absent: {out}"
         );
         assert!(
             out.contains("value: 42.0 magic_beans (human claim, ada, 2026-07-16)"),
             "value row: {out}"
         );
+    }
+
+    // SL-222 PHASE-07: the pipeline-resolved estimate line renders when
+    // supplied, replacing the facet-based estimate.
+    #[test]
+    fn backlog_show_renders_pipeline_estimate_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "Size me");
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        // estimate_line supplied → replaces facet-based estimate.
+        let out = format_show(
+            &item,
+            &[],
+            "espresso_shots",
+            None,
+            Some("estimate: 2.0–8.0 espresso_shots (human claim, david, 2026-07-17)"),
+            0.1,
+            0.9,
+        );
+        assert!(
+            out.contains("estimate: 2.0–8.0 espresso_shots (human claim, david, 2026-07-17)"),
+            "pipeline estimate line: {out}"
+        );
+        // Facet-based estimate is NOT present (overridden by pipeline).
+        assert!(
+            !out.contains("80% confidence"),
+            "facet estimate suppressed: {out}"
+        );
+    }
+
+    // SL-222 PHASE-07: absent estimate line and no facet → no estimate row.
+    #[test]
+    fn backlog_show_omits_estimate_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        new_item(root, ItemKind::Issue, "No est");
+        let item = read_item(root, ItemKind::Issue, 1).unwrap();
+        let out = format_show(&item, &[], "points", None, None, 0.0, 1.0);
+        assert!(!out.contains("estimate"), "no estimate line: {out}");
     }
 
     // --- VT-3: outbound relations render; inbound is NOT surfaced (ADR-004) ---
@@ -3929,6 +3964,7 @@ tags = []
             &[],
             "points",
             None,
+            None,
             0.0,
             1.0,
         );
@@ -3944,6 +3980,7 @@ tags = []
             &read_item(root, ItemKind::Issue, 2).unwrap(),
             &[],
             "points",
+            None,
             None,
             0.0,
             1.0,
@@ -4035,7 +4072,7 @@ tags = []
 
         // table seam: each axis renders, in fixed §5.2 order (needs/after/triggers);
         // a non-zero `after` rank annotates, the trigger note trails its globs.
-        let out = format_show(&item, &[], "points", None, 0.0, 1.0);
+        let out = format_show(&item, &[], "points", None, None, 0.0, 1.0);
         assert!(out.contains("needs: ISS-002"), "hard prereq axis: {out}");
         assert!(
             out.contains("after: ISS-003 (rank 2)"),

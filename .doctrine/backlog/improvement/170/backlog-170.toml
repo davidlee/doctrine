@@ -25,6 +25,3 @@ label = "references"
 role = "concerns"
 target = "SL-153"
 
-[estimate]
-lower = 3.0
-upper = 6.0

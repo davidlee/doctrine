@@ -14,8 +14,8 @@ use clap::Subcommand;
 use crate::commands::compare::CompareArgs;
 use crate::commands::config::ConfigCommand;
 use crate::commands::facet::{
-    EstimateClearArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs, ValueClearArgs, ValuePinArgs,
-    ValueSetArgs,
+    EstimateClearArgs, EstimatePinArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs,
+    ValueClearArgs, ValuePinArgs, ValueSetArgs,
 };
 use crate::listing::Format;
 use crate::search::SearchArgs;
@@ -50,9 +50,11 @@ impl DirArg {
 
 #[derive(clap::Subcommand)]
 pub(crate) enum EstimateAction {
-    /// Set estimate bounds
+    /// Set estimate bounds (SL-222 PHASE-06) — mints a session-of-one cost-anchor row
     Set(EstimateSetArgs),
-    /// Clear the estimate facet
+    /// Pin an estimate, or --retire the active pin (gated, operator-only)
+    Pin(EstimatePinArgs),
+    /// Clear the active estimate anchor rows on the subject
     Clear(EstimateClearArgs),
 }
 
@@ -1451,6 +1453,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Status { format, json, path } => crate::status::run(path, format, json),
         Command::Estimate { action } => match action {
             EstimateAction::Set(args) => crate::commands::facet::run_estimate_set(&args),
+            EstimateAction::Pin(args) => crate::commands::facet::run_estimate_pin(&args),
             EstimateAction::Clear(args) => crate::commands::facet::run_estimate_clear(&args),
         },
         Command::Value { action } => match action {

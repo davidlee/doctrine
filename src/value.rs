@@ -72,24 +72,6 @@ impl<'de> Deserialize<'de> for ValueFacet {
 }
 
 // ---------------------------------------------------------------------------
-// Parse
-// ---------------------------------------------------------------------------
-
-/// Parse an optional `[value]` table. Returns `Ok(None)` absent,
-/// `Ok(Some(facet))` present+valid, `Err(_)` malformed. Bakes in validation —
-/// callers never hold an invalid facet.
-pub(crate) fn parse_optional(
-    table: Option<&toml::value::Table>,
-) -> anyhow::Result<Option<ValueFacet>> {
-    let Some(table) = table else {
-        return Ok(None);
-    };
-    let raw: ValueRaw = toml::from_str(&toml::to_string(table)?)?;
-    let facet = normalise(raw)?;
-    Ok(Some(facet))
-}
-
-// ---------------------------------------------------------------------------
 // Normalise
 // ---------------------------------------------------------------------------
 
@@ -151,67 +133,8 @@ mod tests {
     }
 
     #[test]
-    fn v1_absent() {
-        let result = parse_optional(None).unwrap();
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn v2_integer_value() {
-        let t = table_from("value=5");
-        let facet = parse_optional(Some(&t)).unwrap().unwrap();
-        assert_eq!(facet.value, 5.0);
-    }
-
-    #[test]
-    fn v3_float_value() {
-        let t = table_from("value=3.5");
-        let facet = parse_optional(Some(&t)).unwrap().unwrap();
-        assert_eq!(facet.value, 3.5);
-    }
-
-    #[test]
-    fn v4_missing_value() {
-        let t = table_from("unit=\"beans\"");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("value: value is required"), "got: {err}");
-    }
-
-    #[test]
-    fn v5_nan_value() {
-        let t = table_from("value=nan");
-        let err = parse_optional(Some(&t)).unwrap_err().to_string();
-        assert!(err.contains("value: value must be finite"), "got: {err}");
-    }
-
-    #[test]
-    fn v5a_negative_finite() {
-        let t = table_from("value=-5");
-        let facet = parse_optional(Some(&t)).unwrap().unwrap();
-        assert_eq!(facet.value, -5.0);
-        // No range constraint — validate must also accept negative finite
-        assert!(validate(&facet).is_ok());
-    }
-
-    #[test]
     fn v6_resolve_unit_default() {
         assert_eq!(resolve_unit(&ValueConfig::default()), "magic_beans");
-    }
-
-    #[test]
-    fn v7_unknown_keys_tolerated() {
-        let t = table_from("value=5\ncurrency=\"USD\"\nsource=\"guess\"");
-        let facet = parse_optional(Some(&t)).unwrap().unwrap();
-        assert_eq!(facet.value, 5.0);
-        let serialised = toml::to_string(&facet).unwrap();
-        assert!(
-            !serialised.contains("currency"),
-            "extra key leaked: {serialised}"
-        );
-        assert!(
-            !serialised.contains("source"),
-            "extra key leaked: {serialised}"
-        );
     }
 
     #[test]

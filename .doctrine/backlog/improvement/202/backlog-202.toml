@@ -28,6 +28,3 @@ target = "RFC-011"
 label = "related"
 target = "IMP-192"
 
-[estimate]
-lower = 0.5
-upper = 1.5

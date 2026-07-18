@@ -34,6 +34,3 @@ target = "SL-186"
 label = "related"
 target = "IMP-197"
 
-[estimate]
-lower = 2.0
-upper = 4.0

@@ -634,6 +634,24 @@ fn capture(root: &Path, slot: &str, a: &str, b: &str, rater: &str) {
     );
 }
 
+/// Hand-author a HUMAN value-anchor claim (SL-220 §1 wire v3: `form = anchor`,
+/// `value-anchor` frame, magnitude payload) — the post-deletion way a fixture
+/// pins a value magnitude: a `[value]` facet no longer anchors anything
+/// (SL-222 PHASE-09).
+fn capture_value_anchor(root: &Path, slot: &str, item: &str, magnitude: f64) {
+    write(
+        root,
+        &format!(".doctrine/comparisons/2026-01-01-{slot}.toml"),
+        &format!(
+            "schema = \"doctrine.comparison-session\"\nversion = 3\n\n\
+             [session]\nuid = \"sess-{slot}\"\ndate = \"2026-01-01\"\n\n\
+             [[judgement]]\nuid = \"row-{slot}\"\nseq = 0\na = \"{item}\"\n\
+             domain = \"value\"\nframe = \"value-anchor\"\nform = \"anchor\"\n\
+             magnitude = {magnitude}\nrater = \"human\"\ndate = \"2026-01-01\"\n"
+        ),
+    );
+}
+
 /// Turn the D7 knob on (`.doctrine/doctrine.toml` — the config load path, NOT the
 /// project-root `doctrine.toml`).
 fn knob_on(root: &Path) {
@@ -722,8 +740,10 @@ fn next_json_carries_structured_tensions() {
 fn next_composition_hidden_by_default_shown_verbose() {
     let dir = tmp();
     let root = dir.path();
-    seed_val(root, 20, "[value]\nvalue = 3.0\n");
-    seed_val(root, 24, "[value]\nvalue = 2.0\n");
+    seed_val(root, 20, "");
+    seed_val(root, 24, "");
+    capture_value_anchor(root, "va20", "ISS-020", 3.0);
+    capture_value_anchor(root, "va24", "ISS-024", 2.0);
     for d in [30u32, 31, 32] {
         seed_val(root, d, "needs = [\"ISS-024\"]\n");
     }
@@ -758,12 +778,15 @@ fn next_composition_hidden_by_default_shown_verbose() {
 fn next_tension_callouts_capped_json_uncapped() {
     let dir = tmp();
     let root = dir.path();
-    seed_val(root, 1, "[value]\nvalue = 1.0\n");
+    seed_val(root, 1, "");
+    capture_value_anchor(root, "va1", "ISS-001", 1.0);
     for d in [2u32, 3, 4, 5] {
-        seed_val(
+        seed_val(root, d, "after = [[\"ISS-001\", 0]]\n");
+        capture_value_anchor(
             root,
-            d,
-            &format!("after = [[\"ISS-001\", 0]]\n[value]\nvalue = {}.0\n", d + 5),
+            &format!("va{d}"),
+            &format!("ISS-00{d}"),
+            f64::from(d + 5),
         );
     }
 

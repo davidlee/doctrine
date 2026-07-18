@@ -7,10 +7,10 @@ title = "Keep the estimate schema forward-compatible"
 status = "active"
 kind = "quality"
 
-description = "The v1 two-bound schema extends without invalidating estimates authored under v1."
+description = "The wire's lossless-over-absent-optionals posture (SL-222 E2) is the forward-compat mechanism: the v3 row extends with optional columns without version bumps, and rows authored before an extension remain valid (REV-026)."
 tags = []
 acceptance_criteria = [
-  "A v1-valid estimate (lower/upper only) remains valid when later optional fields (e.g. mode, distribution) are added.",
-  "The parser tolerates additive unknown facet fields rather than rejecting the table.",
-  "v1 persists no inferred mode or distribution.",
+  "Adding optional payload columns (as est_lower/est_upper were added) invalidates no previously-authored session rows.",
+  "The parser preserves unknown/absent optional fields losslessly rather than rejecting the row.",
+  "No inferred mode or distribution is persisted.",
 ]

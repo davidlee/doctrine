@@ -25,6 +25,3 @@ label = "references"
 role = "originates_from"
 target = "SL-121"
 
-[estimate]
-lower = 0.5
-upper = 1.0

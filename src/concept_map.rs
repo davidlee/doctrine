@@ -362,18 +362,6 @@ pub(crate) struct ConceptMapDoc {
     pub(crate) description: String,
     #[serde(default)]
     pub(crate) dsl: String,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::estimate::deserialize_lenient"
-    )]
-    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::value::deserialize_lenient"
-    )]
-    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 /// Parse a concept-map reference - `CM-001`, `cm-1`, or the bare id `1` - to its
@@ -1139,9 +1127,14 @@ pub(crate) fn run_show(
             let value_line = crate::priority::surface::show_value_line(
                 &root,
                 &crate::listing::canonical_id(CONCEPT_MAP_KIND.prefix, doc.id),
-                doc.value.as_ref().map(|v| v.value),
                 CONCEPT_MAP_KIND.prefix,
                 &value_unit,
+            )?;
+            let estimate_line = crate::priority::surface::show_estimate_line(
+                &root,
+                &crate::listing::canonical_id(CONCEPT_MAP_KIND.prefix, doc.id),
+                CONCEPT_MAP_KIND.prefix,
+                &estimation_unit,
             )?;
             format_show(
                 &doc,
@@ -1151,6 +1144,7 @@ pub(crate) fn run_show(
                 parsed.as_ref(),
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -1172,10 +1166,11 @@ fn format_show(
     edges: bool,
     nodes: bool,
     parsed: Option<&ParsedConceptMap>,
-    estimation_unit: &str,
+    _estimation_unit: &str,
     value_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
+    estimate_line: Option<&str>,
+    _lower_pct: f64,
+    _upper_pct: f64,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!(
@@ -1190,16 +1185,9 @@ fn format_show(
     if !doc.description.is_empty() {
         parts.push(format!("\nDescription: {}", doc.description));
     }
-    if let Some(ref est) = doc.estimate {
-        parts.push(format!(
-            "\n{}\n",
-            crate::estimate::display::format_estimate_confidence(
-                est,
-                lower_pct,
-                upper_pct,
-                estimation_unit,
-            )
-        ));
+    // SL-222 PHASE-07: pipeline-resolved estimate line (facet fallback deleted PHASE-09).
+    if let Some(line) = estimate_line {
+        parts.push(format!("\n{line}\n"));
     }
     // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
     if let Some(line) = value_line {
@@ -1252,27 +1240,7 @@ fn show_json(
       "dsl": doc.dsl,
       "body": body,
     });
-    if let Some(ref est) = doc.estimate
-        && let Some(obj) = value.as_object_mut()
-    {
-        obj.insert(
-            "estimate".to_string(),
-            serde_json::json!({
-                "lower": est.lower,
-                "upper": est.upper,
-            }),
-        );
-    }
-    if let Some(ref val) = doc.value
-        && let Some(obj) = value.as_object_mut()
-    {
-        obj.insert(
-            "value".to_string(),
-            serde_json::json!({
-                "value": val.value,
-            }),
-        );
-    }
+
     if edges
         && let Some(p) = parsed
         && let serde_json::Value::Object(ref mut map) = value
@@ -2334,7 +2302,7 @@ mod tests {
         std::fs::write(&toml_path, text).unwrap();
 
         let (doc, _toml_text, _body) = read_concept_map(&cm_root, 1).unwrap();
-        let out = format_show(&doc, "", false, false, None, "points", None, 0.0, 1.0);
+        let out = format_show(&doc, "", false, false, None, "points", None, None, 0.0, 1.0);
         assert!(out.contains("CM-001"));
         assert!(out.contains("Domain Model"));
         assert!(out.contains("draft"));
@@ -2369,6 +2337,7 @@ mod tests {
             Some(&parsed),
             "points",
             None,
+            None,
             0.0,
             1.0,
         );
@@ -2383,6 +2352,7 @@ mod tests {
             true,
             Some(&parsed),
             "points",
+            None,
             None,
             0.0,
             1.0,
@@ -2403,11 +2373,6 @@ mod tests {
             created: "2026-01-01".into(),
             updated: "2026-01-02".into(),
             dsl: String::new(),
-            estimate: Some(crate::estimate::EstimateFacet {
-                lower: 2.0,
-                upper: 5.0,
-            }),
-            value: Some(crate::value::ValueFacet { value: 7.0 }),
         };
         let out = format_show(
             &doc,
@@ -2417,12 +2382,14 @@ mod tests {
             None,
             "espresso_shots",
             Some("value: 7.0 magic_beans (human claim, ada, 2026-07-16)"),
+            None,
             0.1,
             0.9,
         );
+        // PHASE-09: estimate facet deleted.
         assert!(
-            out.contains("estimate: 2.3–4.7 espresso_shots (80% confidence)"),
-            "estimate row: {out}"
+            !out.contains("estimate:"),
+            "estimate line should be absent: {out}"
         );
         assert!(
             out.contains("value: 7.0 magic_beans (human claim, ada, 2026-07-16)"),

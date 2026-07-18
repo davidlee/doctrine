@@ -29,6 +29,20 @@ use anyhow::Context;
 
 /// Extract an `f64` from a `toml_edit::Value`, accepting integer or float forms.
 /// Returns `None` if the value is absent, not a number, or non-finite.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
+    )
+)]
+#[cfg_attr(
+    test,
+    allow(
+        dead_code,
+        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
+    )
+)]
 fn toml_edit_value_as_f64(value: &toml_edit::Value) -> Option<f64> {
     value.as_float().or_else(|| {
         #[expect(
@@ -82,6 +96,20 @@ pub(crate) enum FacetField {
 /// Before writing, every managed key is compared to its current value (via
 /// `Item::as_value().and_then(|v| v.as_float())`). If all match, the call is a
 /// no-op — `false` is returned and nothing is mutated.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
+    )
+)]
+#[cfg_attr(
+    test,
+    allow(
+        dead_code,
+        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
+    )
+)]
 pub(crate) fn set_facet(
     doc: &mut toml_edit::DocumentMut,
     table: &str,
@@ -284,6 +312,20 @@ fn edit_in_place(
 
 /// Read an entity TOML and set managed facet keys via [`set_facet`]. Returns
 /// `true` iff the document changed.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
+    )
+)]
+#[cfg_attr(
+    test,
+    allow(
+        dead_code,
+        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
+    )
+)]
 pub(crate) fn apply_set(path: &Path, table: &str, fields: &[(&str, f64)]) -> anyhow::Result<bool> {
     edit_in_place(path, |doc| set_facet(doc, table, fields))
 }

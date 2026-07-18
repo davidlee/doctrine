@@ -3,14 +3,15 @@ version = 1
 
 id = 275
 slug = "read-estimate-presence-in-no-workflow-predicate"
-title = "Read estimate presence in no workflow predicate"
+title = "Read estimate-claim presence in no workflow predicate"
 status = "active"
 kind = "quality"
 
-description = "No dispatch/execute/audit/close predicate reads estimate presence; the non-blocking guarantee is structural, not run-proven."
+description = "No dispatch/execute/audit/close predicate reads estimate-claim presence; probe-eligibility is knob-governed elicitation policy, not a workflow gate. The non-blocking guarantee is structural, not run-proven (REV-026)."
 tags = []
 acceptance_criteria = [
-  "No dispatch, execute, audit, or close predicate reads estimate presence.",
+  "No dispatch, execute, audit, or close predicate reads estimate-claim (or transitional facet) presence.",
   "A missing estimate cannot block, fatally warn, or refuse any workflow, and is never a validation error.",
+  "Probe eligibility and retirement are elicitation policy under demote_agent_evidence, not workflow gating.",
   "The absence of a gating read is demonstrable structurally, not merely by a passing run.",
 ]

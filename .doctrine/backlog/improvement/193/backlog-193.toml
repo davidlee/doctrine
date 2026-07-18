@@ -24,6 +24,3 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "related"
 target = "SL-168"
 
-[estimate]
-lower = 1.0
-upper = 1.5

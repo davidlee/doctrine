@@ -798,8 +798,6 @@ mod tests {
                     Some(crate::relation::Role::Implements),
                     "REQ-001".to_string(),
                 )],
-                estimate: None,
-                value: None,
                 risk: None,
                 tags: vec![],
                 body: None,

@@ -22,8 +22,3 @@ triggers = []                   # watched source globs: { globs, note? }
 
 [after]
 
-[estimate]
-lower = 6.0
-upper = 18.0
-# ordered after the existing relation-surface backlog items that this review
-# subsumes or touches (sequencing, not hard deps)
