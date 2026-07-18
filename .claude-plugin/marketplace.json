@@ -1,7 +1,7 @@
 {
   "name": "doctrine",
   "owner": { "name": "doctrine" },
-  "version": "0.24.0",
+  "version": "0.25.0",
   "source": {
     "source": "github",
     "repo": "davidlee/doctrine",
