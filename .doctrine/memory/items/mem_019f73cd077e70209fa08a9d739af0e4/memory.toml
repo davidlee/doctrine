@@ -1,0 +1,42 @@
+memory_uid = "mem_019f73cd077e70209fa08a9d739af0e4"
+memory_key = "mem.pattern.dispatch.fixnow-stranded-detected-by-conformance-undelivered"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Stranded audit fix-now surfaces as slice conformance undelivered; cherry-pick onto trunk at close"
+summary = "When an audit fix-now was committed on the review candidate (not folded into review/NNN), the close_target sourced from review/NNN lands trunk without it; `slice conformance` flags the declared file undelivered — cherry-pick the repair onto trunk at close."
+created = "2026-07-18"
+updated = "2026-07-18"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch", "slice"]
+tags = ["dispatch", "close", "conformance", "audit", "candidate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "29e8be1d0d0260f4ddd28d9e2982326815d2c34c"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0b1ce5adf3423628eafec4bccda5dce2781b944fb2b0d21d8fc73248e743b646"
+base_commit = "02b53d98510daa53860312f9637004aa3ef25c05"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

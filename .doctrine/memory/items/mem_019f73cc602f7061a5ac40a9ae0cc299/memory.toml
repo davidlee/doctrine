@@ -1,0 +1,42 @@
+memory_uid = "mem_019f73cc602f7061a5ac40a9ae0cc299"
+memory_key = "mem.pattern.dispatch.close-worktree-needs-derived-assets-and-runtime-state"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Close-landing worktree on main needs derived assets + runtime phase state copied from primary"
+summary = "A plain `git worktree add <path> main` for a dispatched close misses .worktreeinclude derived assets (web/map/dist → RustEmbed build fail) and runtime phase state (.doctrine/state/slice/NNN → rollup untracked); copy both from the primary tree."
+created = "2026-07-18"
+updated = "2026-07-18"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch", "slice"]
+tags = ["dispatch", "close", "worktree", "build", "conformance"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "29e8be1d0d0260f4ddd28d9e2982326815d2c34c"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9502b12cd7f53df3a2c98351a8e6251ee129dff4d301cfa647020526017b1446"
+base_commit = "02b53d98510daa53860312f9637004aa3ef25c05"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
