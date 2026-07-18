@@ -1,0 +1,97 @@
+id    = 284
+slug  = "sl-222-audit-ledgered-estimate-claims"
+title = "SL-222 audit — ledgered estimate claims"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-222"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "E8 write-class regression test for estimate pin never authored — expected estimate mirror of value_pin_is_orchestrator, observed none"
+detail = 'Design E8 / §4: "main.rs write-class tests extend (estimate pin verbs join the refused class; estimate_is_write stays true)"; PHASE-06 EX-2 requires "§8.7 verb suite green incl. write-class regression". The guard.rs classification landed (Estimate Pin → Orchestrator("estimate pin") / Pin(retire) → Orchestrator("estimate pin --retire"), src/commands/guard.rs:382-389) but no test anywhere asserts it: src/main.rs is unmodified on the candidate (value_pin_is_orchestrator exists at main.rs:786; no estimate mirror), tests/e2e_worker_guard.rs has zero estimate coverage. This is also the sole cause of the undelivered `src/main.rs` conformance cell. A regression re-classifying estimate pin as plain Write("estimate") would silently re-admit worker pins (D13 gate) with no failing test.'
+disposition = "fix-now"
+response = """Repaired during audit on the candidate branch: estimate_pin_is_orchestrator added to src/main.rs write_class_tests mirroring value_pin_is_orchestrator — asserts Orchestrator("estimate pin") and Orchestrator("estimate pin --retire"). Commit 3c456029e on candidate/222/review-001 (branch ref advanced from bafaa3a88); test green, all 56 write-class tests green. Registry note: the repair commit sits on the candidate lineage, outside any phase's recorded delta, so the `src/main.rs` undelivered cell persists in conformance until integration lands the edit — recorded honestly here rather than force-fitted into a phase range."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "PHASE-05 recorded delta misses the REV-026 approve/apply commits — .doctrine/adr/015/** reports undelivered though the edit shipped"
+detail = 'Conformance reports design-target `.doctrine/adr/015/**` undelivered, but adr-015.md changed on the impl bundle (93 insertions, applied at 9ab197428 "governance(SL-222): apply REV-026"). The PHASE-05 registry row covers the authoring commit (revision/026 files appear in the recorded set) but not the approve (d4c7177b1) and apply (9ab197428) commits, so the registry understates delivery. F-2-backstop class: never read a partial registry as clean. Remedy is the registry verb: `doctrine slice record-delta 222 PHASE-05 --start 4c55eb580^ --end 9ab197428` (governance commits are consecutive on dispatch/222), which flips the cell to conformant.'
+disposition = "fix-now"
+response = "Re-recorded during audit: `doctrine slice record-delta 222 PHASE-05 --start 4c55eb580^ --end 9ab197428` UPSERTed the PHASE-05 row to span author → approve → apply (the three consecutive governance commits on dispatch/222). Conformance re-run confirms `.doctrine/adr/015/adr-015.md ⟵ .doctrine/adr/015/**` now conformant (undelivered dropped from 3 to 2, both remaining cells owned by F-1/F-3)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Spurious undelivered: src/priority/config.rs design-target — the planned docs-only edit was already satisfied by SL-220-era text"
+detail = """Design §3 code impact listed "src/priority/config.rs (docs only — no new knobs)". No edit landed (conformance: undelivered). Inspection of the candidate shows the demote_agent_evidence doc comment already reads domain-generically ("agent- and migrated-tier resolved claim values leave an item probe-eligible — a number, not an answer; anchored-tier conflict items enter the reprobe queue knob-independently (D14)", config.rs:194-197) — it covers estimate claims without amendment. The selector is a plan-time over-declaration. Load-bearing fix per the brief-surface guardrail: `doctrine slice selector rm SL-222 src/priority/config.rs` (design §3's code-impact line is the prose mirror)."""
+disposition = "verified"
+response = """Observation confirmed; remediation delegated to /reconcile (per-slice direct edit surface). The authoritative selector registry rides the impl bundle's slice-222.toml (the primary tree's copy lacks the 20 mid-flight selectors), so running `slice selector rm` pre-integration would fork the file and conflict at landing. Brief item: post-integration, `doctrine slice selector rm SL-222 src/priority/config.rs`; design §3 code-impact line ("config.rs docs only") gets the prose-mirror note that the SL-220-era doc text already covered estimate claims."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Orchestrator fixture-conversion files undeclared: tests/e2e_compare_elicit.rs and tests/e2e_priority_golden.rs missing from the design-target registry"
+detail = "The a2775657a intervention converted facet-era e2e fixtures to hand-authored anchor rows (e2e_priority_golden: composition + capped tensions; e2e_compare_elicit: stall corpus + frontier pairs; new capture_value_anchor/capture_cost_anchor helpers). The drive declared 20 ripple selectors mid-flight (incl. e2e_compare_estimate.rs, e2e_estimate_non_blocking.rs) but these two files were missed — they remain undeclared under the bundle registry. Remedy: `doctrine slice selector add` for both, matching the PHASE-06/09 declaration pattern."
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile for the same integration-conflict reason as F-3. Brief item: post-integration, `doctrine slice selector add SL-222 tests/e2e_compare_elicit.rs` and `... tests/e2e_priority_golden.rs` with a note matching the a2775657a fixture-conversion intervention; design.md gains no new obligation (the §3 class-b churn clause already covers golden fixtures)."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Corpus-wide migration strip and REV-026 artifacts undeclared — selector path-algebra cannot express the strip set"
+detail = """~190 undeclared .doctrine/** paths are the PHASE-08 live migration's [estimate] strips (backlog/*, slice/118, slice/151, knowledge/assumption/001) plus its comparison-session output (.doctrine/comparisons/2026-07-18-c5c72cf4-*.toml), plus the PHASE-05 REV-026 artifacts (.doctrine/revision/026*), plus the slice's own evidence/registry files (.doctrine/slice/222/*). All are declared work — design §5 ("scan every [estimate] table under the authored entity dirs; strip removes the table"), §7 (the REV), and the plan's evidence cadence — but no design-target selector can express "every entity TOML carrying an [estimate] key" without making conformance vacuous (a .doctrine/** selector would swallow the signal). Census bounds the set: 185 facets = 185 imported + 0 + 0, verified per-file."""
+disposition = "tolerated"
+response = 'Accepted drift with rationale: the conformance selector algebra is path-shaped and cannot express "every entity TOML carrying an [estimate] key" — the strip set is data-dependent, corpus-wide, and bounded instead by the migration census (185 facets = 185 imported + 0 already + 0 re-imported, per-file strip verification, idempotent re-scan finds 0). Declaring `.doctrine/**` as a design-target to silence the cells would make the undeclared signal vacuous for every future slice — worse than the drift. The REV-026 artifacts and slice-222 evidence files are likewise inherent side-outputs of the governed process, not scope creep. SL-220 set the precedent (same strip pattern, value domain).'
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "PHASE-09 laundered-stub seams and flip invariants — cold re-verification of the orchestrator interventions"
+detail = "The drive record flags three worker-laundered stubs repaired at a2775657a and asks audit to re-check the seams cold. Verified on the candidate: (1) has_nonterminal_interval re-sourced over estimate_claims anchored interval rows (surface.rs:1469, consumed :1515); (2) bare anchor one-site — CostCtx.absent fed from Pipeline.bare_anchor (graph.rs:609-616, pinned by est_cost_ladder_r6_bare_anchor and est_cost_ladder_projected_may_exceed_bare_anchor); (3) item_costing.bare_estimate re-keyed to the Pin/Human anchored map (elicit.rs:645,1104-1126). Also verified: E6 ladder order literal in graph.rs::est_cost (r1 anchored → r2 feed → r3/r4 priors → r5 deleted → r6 ctx.absent) with per-rung tests; E5 anti-laundering property test anchor_map_never_launders_agent_or_migrated_claims (claims.rs:853, exhaustive 16^3 tier mask); scan-seam key-presence tripwire parse-free with remedy text (scan.rs:272-309, malformed-residue test). Full suite + doctrine check gate green on the candidate (exit 0 both)."
+disposition = "aligned"
+response = "Observed behaviour matches the design at every probed seam: E6 ladder order literal with per-rung tests, E5 anti-laundering exhaustively property-tested, E7/F-4 one-site bare anchor pinned, all three laundered-stub repairs (a2775657a) verified against the design's stated re-sources, tripwire parse-free with remedy text. Suite + gate green on the candidate incl. the audit repair commit. No change needed; the orchestrator's intervention record was accurate."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Deliberate code residue: unreachable render arms, NF-001 allowlist minimality unenforced, deserialize_lenient retained"
+detail = 'Notes.md "Deferred / known residue", confirmed present on the candidate: (a) render.rs CostUnmigratedFacet => (0.0, 0.0) and ValueUnmigratedFacet => (0.0, MARKER) arms are unreachable-by-construction — the parse-free tripwire mints no magnitude; (b) NF-001 facet-substring allowlist entries were refreshed but no minimality pass was run; (c) estimate.rs/value.rs retain deserialize_lenient solely for serde round-trip on doc structs. None affects behaviour (suite + gate green); all are cleanup owed to the claims-era shape. Durable follow-up work, not audit-scope fixes.'
+disposition = "follow-up"
+response = 'Owned future work, captured as CHR-047 "Claims-era render/allowlist residue sweep" (unreachable render arms, NF-001 allowlist minimality pass, deserialize_lenient retention — full detail in the item body). Not deferred for size: the residue is deliberate shape debt noted by the orchestrator at PHASE-09, has zero behaviour impact under the green suite/gate, and collapsing the render arms is a small design question (tripwire finding shape) better taken as its own unit than smuggled into an audit repair.'
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Spec/governance reconciliation obligations left open by design §7/§8.11 — RFC-020 row, E1/E5 recording, spec-014 prose, design §5 inventory mirror"
+detail = """Confirmed open after inspection: (1) RFC-020's Phase 2 row must move to delivered-by-SL-222 with the E1 payload deviation ({lower,upper} only — no skew/unit/confidence columns) and the E5 records-anchor delta recorded (design §8.11 VA, deferred to reconciliation by design); the observed null re-rank (F-9) belongs in that record. (2) spec-014 PRD prose still mentions authored [estimate] tables (notes residue — prose, not parse; contradicts the post-deletion corpus). (3) PRD-014/SPEC-020 claim-schema retention REQs and PRD-011/SPEC-001 descent prose were named "reconciliation obligations, non-contradicting" in design §7. (4) design.md §5's F-5 deletion inventory and §2-§3 code-impact lists undercount the shipped blast radius — the 20 mid-flight ripple selectors (doctor/knowledge/map/reconcile/relation/estimate-display/comparison-initializer/verb surfaces) need the prose mirror updated so canon matches the registry. SPEC-020's REQ-269..277+310 disposition map itself is already applied (spec-020.md carries the claims-era payload wording — verified on candidate)."""
+disposition = "verified"
+response = "Observation confirmed; all four items are reconcile write-surface work, mapped in this review's ## Reconciliation Brief: (1) RFC-020 Phase-2 row → delivered-by-SL-222 + E1 deviation + E5 delta + F-9 null-re-rank recording; (2) spec-014 PRD [estimate] prose amendment; (3) PRD-014/SPEC-020 retention REQs + PRD-011/SPEC-001 descent prose check; (4) design.md §2/§3/§5 code-impact/inventory prose mirrors of the 20 ripple selectors. Audit makes no spec/governance edits (anti-escape: none of these route to follow-up)."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "R1 evidence shows a null re-rank — all four snapshots byte-identical, vs design §3's expectation of a flip-wide deliberate re-rank"
+detail = """phase1-preflip, phase6-postflip, phase8-postmigration and phase9-final are the same blob (4c9f2f80, 246 rows). Design §3 class (b) predicted "corpora with facets re-rank deliberately … wider than Phase 1's by the divisor position". Credibility verified two ways: the journal captured each snapshot at its phase boundary with a rank-neutral diff claim, and a fresh snapshot run on the audited candidate reproduces the evidence exactly modulo post-capture corpus drift (new REQ-337..352/SPEC-024/025/PRD-016/IMP-295/296 entities; identical scores on the overlap). The null is genuine and explainable: est_cost is source-stable across the flip (rung 1 facet, rung 5 facet, and rung 4 migrated claim all collapse the same bounds through the same operative formula), and the live corpus carried zero est-domain pairwise judgements, so no projection anchoring existed to lose (the E5 anchored-classes-dissolve consequence had an empty extension). Expected-evidence framing in the design was a prediction, not a contract; the RFC-020 recording (F-8) should state the null result explicitly."""
+disposition = "aligned"
+response = """The null re-rank is correct behaviour, verified two ways (journal-boundary capture + fresh reproduction on the audited candidate). Design §3's "wider re-rank" was a prediction about corpora with facet-anchored projections; this corpus had none (zero est-domain pairwise judgements), and the ladder's operative-cost collapse is source-stable by construction — the null is the flip working as designed on a projection-free corpus, and the byte-identical snapshots are stronger class-(a)/(c) evidence than a re-rank would have been. No change needed; the RFC-020 recording of the result rides F-8's brief item."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

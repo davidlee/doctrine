@@ -1,0 +1,42 @@
+memory_uid = "mem_019f738d55707ed1a1204bd6288bf7db"
+memory_key = "mem.pattern.audit.dispatched-slice-surface-split"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Dispatched-slice audit: primary tree answers the algebra, candidate tree the code"
+summary = "Candidate worktrees lack phase runtime state (conformance reads incomplete there) and check out detached; run registry/ledger/lifecycle verbs from the primary tree, advance the candidate branch ref after repair commits, and route selector edits to post-integration reconcile."
+created = "2026-07-18"
+updated = "2026-07-18"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine slice conformance", "doctrine dispatch candidate", "doctrine slice record-delta", "doctrine slice selector"]
+tags = ["audit", "dispatch", "worktree", "conformance", "review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "f90da8c76f9026f96c2019e472d8856465f0a3fe"
+ref_name = "refs/heads/edge"
+checkout_state_id = "65b7e0e035eb15ec8248f1870b4f7e32de079b8b30524bcff0a69bafcffcf0b8"
+base_commit = "051367407ec9d4f89479cc84b3a51cbd2adbf0ca"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
