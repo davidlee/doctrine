@@ -60,3 +60,27 @@ against the design.
   on doc structs; NF-001 allowlist entries refreshed but a minimality pass
   was not enforced.
 - spec-014 PRD prose still mentions `[estimate]` tables (prose, not parse).
+
+## Reconcile + close session (2026-07-18)
+
+Dispatched-slice landing on `main`. Ritual: promote `edge → main` (bring RV-284
+onto main) → build+admit a `close_target` candidate on the new main base →
+`dispatch sync --integrate --trunk refs/heads/main` (pure-ref advance, main
+checked out nowhere → no dirty-checkout refusal). Reconcile leftovers authored on
+a `main` worktree; primary stayed on `edge`.
+
+Two traps hit and recorded to memory:
+- **F-1 repair stranded on the review candidate.** The `estimate_pin_is_orchestrator`
+  fix-now was committed on `candidate/222/review-001` (3c456029e), never folded
+  into `review/222`. The `close_target` sourced `review/222`, so integrate landed
+  main WITHOUT it — caught by the conformance re-check (`src/main.rs` undelivered).
+  Fixed by cherry-picking 3c456029e onto trunk at close (lighter than the pre-FF /
+  journal-fold routes).
+- **Close-landing worktree needs the derived assets + runtime state.** A plain
+  `git worktree add <path> main` skips `.worktreeinclude` (web/map/dist →
+  RustEmbed build failure) and runtime phase state (`.doctrine/state/slice/222` →
+  rollup reads untracked). Copy both from the primary tree.
+
+Audit-surface split: the audit ran on the primary tree, blind to the candidate's
+authored `.doctrine/` state, so its brief flagged items already landed via the
+bundle (F-8(2) §1/§2, F-8(3) dispositions). Only genuine leftovers were authored.
