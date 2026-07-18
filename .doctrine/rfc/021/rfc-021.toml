@@ -7,7 +7,7 @@ title = "Dynamic behaviours and minimal projection"
 status = "open"
 created = "2026-07-18"
 updated = "2026-07-19"
-tags = ["activation", "adherence", "behaviours", "determinism", "hymns", "install", "library", "projection", "prompt", "skills", "token-efficiency", "workflows"]
+tags = ["activation", "adherence", "behaviours", "determinism", "hymns", "install", "library", "projection", "prompt", "skills", "token-efficiency", "trust", "workflows"]
 
 [relationships]
 # RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
