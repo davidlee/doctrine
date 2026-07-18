@@ -2162,3 +2162,41 @@ simply unavailable in this repo state. Worth a backlog item: candidate status/ad
 resolve candidates.toml to a tree the create writer never populates.
 Minor: `grep --include=*.rs` and `echo ===` both tripped zsh `=`-expansion under the
 eval'd shell (needs quoting) — same class as the pf-imp295 case-note.
+
+[audit; SL-221-audit-rv283 · CORRECTION at reconcile]
+The "read/write-seam-split on the candidates ledger" diagnosis above is WRONG —
+retained as a data point (the misdiagnosis IS the incidental complexity RFC-011
+measures). Root cause: the worktree-root CWD auto-detect footgun. `read_candidates`
+and `write_candidates` resolve the SAME path (`ledger.rs:590`/`:601`, both
+`dispatch_dir(root,slice).join("candidates.toml")`, `dispatch_dir` at `:367`); no
+split exists. The variable is `root`, auto-detected from CWD. During the audit my
+shell sat inside the candidate worktree
+(`.doctrine/state/dispatch/candidate/cand-221-review-001`, detached at 06442a5e — a
+main-based snapshot PREDATING the `create` write), so `root` resolved there, whose
+`.doctrine/dispatch/221/candidates.toml` is absent → `read_candidates` returns
+empty-when-absent (VT-2) → "(none recorded)". The "repo-wide" confirmation was the
+same trap: every slice looked empty because the snapshot tree carried none of them.
+Run from the primary root, `candidate status --slice 221` shows the row and `admit`
+works — the ledger is sound, the admit pin was NOT unavailable, just resolved
+against the wrong tree. This is the SAME silent CWD-root footgun that mis-read
+`slice status 221` as `ready` earlier this session, and the same CLASS as IMP-233
+(arm-spawn wrong-root write) — but on the READ side, and silent (empty-is-valid), so
+harder to spot. Real cost of the misdiagnosis: ~15min + a false "worth a backlog
+item: candidates ledger read/write split" recommendation now retracted. The genuine
+latent gap (read verbs silently resolving to a linked worktree's empty runtime
+state) is annotated onto IMP-233.
+
+[overnight-loop; pf-imp295-0718]
+- Subagent write-jail (seatbelt) blocks ALL primary-tree writes for spawned
+  agents: each discovers it independently, burns tokens probing (one spawned
+  a grandchild agent to route around it; another self-redirected to a
+  worktree). Orchestrator must plan for worktree-diff import up front;
+  worth stating in dispatch/worker guidance so agents stop rediscovering it.
+- Cross-worktree id allocation is collision-prone: two drafters running
+  `spec new`/`spec req add` in separate worktrees fork the same base and
+  allocate identical SPEC-/REQ- ids; fork-safe reservation protects one tree
+  only. Mitigation used: single applier agent does all CLI allocation.
+- Session-limit interaction: background agents die mid-task on the limit with
+  partial worktrees; scheduled wakeups queued during the stall did not fire
+  until ~5h later. Orchestrating around usage windows needs the harness to
+  honor post-reset wakeups promptly.
