@@ -7,26 +7,21 @@ title = "Web explorer"
 status = "draft"
 kind = "tech"
 c4_level = "container"
-tags = []
-responsibilities = []
+category = "explorer"
+tags = ["web", "explorer", "map-server", "frontend", "concept-map", "actionability", "graph", "http"]
+responsibilities = [
+  "Serve the authored corpus as a browsable local web application: hydrate catalog, priority graph, and presentation projection into one atomic `DataStores` generation behind a single lock, bound to a loopback-only axum listener.",
+  "Expose the three independent read surfaces — presentation graph (`/api/graph`), actionability view (`/api/survey`), and per-entity concept maps (`/api/concept-map/{id}`) — as separately-fetched, separately-shaped JSON resources built by three pure functions, never merged server-side.",
+  "Rebuild and swap all three stores in one write-lock acquisition on `POST /api/refresh`, so readers never observe a mixed-generation corpus view.",
+  "Render DOT to SVG behind an injectable `DotRenderer` seam (`POST /api/dot/svg`): text in, bytes out, request body capped at 1 MiB, the dot child process bounded by a 10-second timeout and killed on drop.",
+  "Gate `GET /api/entity/{id}/markdown` disk reads on prior membership in the in-memory graph snapshot — an unknown or deleted entity 404s without probing the filesystem.",
+  "Provide the concept-map HTTP read/write surface over DSL text only: reads return parsed nodes/edges/diagnostics plus a content hash; writes apply one typed mutation against a required base hash (optimistic concurrency, `StaleConceptMap` refusal), persisting via atomic file write, with the edit algebra kept pure over DSL text.",
+  "Embed the built frontend via RustEmbed (`web/map/dist/`) so the server ships with no separate static-file deploy step and no runtime dependency on the frontend source tree.",
+  "Compose the TypeScript SPA from one mutable state singleton plus DOM-free pure modules (router/model/dot/viewport) and an impure DOM layer: the semantic and concept-map views share the DOT→server-SVG pipeline; the actionability view lays out d3-dag client-side with no DOT round-trip.",
+  "Report component liveness independently (`/api/health`: dot vs graph) so a missing Graphviz binary degrades the DOT-dependent views without failing the server.",
+]
 parent = "SPEC-003"
 descends_from = "PRD-016"
-
-# category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:
-#   category = "cli"
-# c4_level — closed C4 set: context | container | component | code. Add as:
-#   c4_level = "container"
-# descends_from — the product capability (PRD-NNN) this spec realises; tech-only,
-#   single-valued, validated against the product specs. Add as:
-#   descends_from = "PRD-001"
-# parent — single decomposition parent (SPEC-NNN or PRD-NNN); subtype-aware, single-valued, the
-#   tree must stay acyclic. Add as:
-#   parent = "SPEC-002"
-# [[source]] — code anchors this spec governs (tech-only, repeatable). Add as:
-#   [[source]]
-#   language = "rust"
-#   identifier = "doctrine/cli"
-#   module = "doctrine::cli"   # optional
 
 [[source]]
 language = "rust"

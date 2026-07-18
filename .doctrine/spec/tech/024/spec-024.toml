@@ -7,26 +7,22 @@ title = "Comparison engine"
 status = "draft"
 kind = "tech"
 c4_level = "component"
-tags = []
-responsibilities = []
+category = "elicitation"
+tags = ["comparison", "value", "estimate", "elicitation", "ledger", "evidence", "provenance", "pure-layer"]
+responsibilities = [
+  "Own the comparison session wire schema (`doctrine.comparison-session`): append-only judgement/tombstone rows carrying closed domain/frame/form/rater/response vocabularies, a mandatory rater, an optional lens, and NaN/Infinity-guarded magnitudes — pairwise and anchor claims sharing one row type and one supersession machinery.",
+  "Provide the capture shell (`compare record|list|withdraw` and `value set|pin|clear` riding the same path): ref resolution to canonical ids, frame-derived domain, supersedes validation, clobber-refusing session-of-one files, and the operator-gated pin path — no defaulted provenance anywhere.",
+  "Resolve every ledger row to exactly one deterministic `ResolutionStatus` (active / superseded / tombstoned / inert / malformed) in an order-free pass, with in-session re-answers as implicit revision and cross-session duplicates as concurrent evidence.",
+  "Compile active pairwise rows plus anchors into a satisfiable `ConstraintSet` — equality-merged classes, strict winner→loser digraph, per-class anchors and bounds — degrading only by named symmetric quarantine rules (preference cycle, anchor conflict), surfaced as findings, never infeasible.",
+  "Project a `ConstraintSet` into a per-entity value scalar with disclosed `ValueProvenance` (Authored/Projected/Gauge) via reverse-topological greedy placement per weakly-connected component.",
+  "Resolve anchor-form claims through the authority ladder (Migrated < Agent < Human < Pin): Pin/Human anchor the constraint graph, Agent/Migrated feed priors below it, same-tier conflicts always flagged, Pin/Human conflicts nominating a reprobe.",
+  "Serve the read-only elicitation queue (`compare elicit`): determinacy predicate, hypothetical outcome/yield, and the bounded indeterminate-pair candidate pool.",
+  "Feed `priority::graph` through one seam: `effective_raw_value`'s ladder (anchored claim > projection > agent prior > migrated prior > legacy facet > default) and the estimate-domain cost feed, from a single `load_pipeline` call per graph build.",
+  "Hold determinism end to end: BTree-keyed collections with uid/canonical-id tiebreaks, no raw f64 ordering, output independent of session-file read and merge order.",
+  "Preserve behaviour with an empty ledger: zero comparison sessions on disk short-circuits to an empty pipeline and every pre-existing priority suite passes unchanged.",
+]
 descends_from = "PRD-014"
 parent = "SPEC-004"
-
-# category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:
-#   category = "cli"
-# c4_level — closed C4 set: context | container | component | code. Add as:
-#   c4_level = "container"
-# descends_from — the product capability (PRD-NNN) this spec realises; tech-only,
-#   single-valued, validated against the product specs. Add as:
-#   descends_from = "PRD-001"
-# parent — single decomposition parent (SPEC-NNN or PRD-NNN); subtype-aware, single-valued, the
-#   tree must stay acyclic. Add as:
-#   parent = "SPEC-002"
-# [[source]] — code anchors this spec governs (tech-only, repeatable). Add as:
-#   [[source]]
-#   language = "rust"
-#   identifier = "doctrine/cli"
-#   module = "doctrine::cli"   # optional
 
 [[source]]
 language = "rust"
