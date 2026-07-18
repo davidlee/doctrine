@@ -9,8 +9,9 @@ for prose-body section edits.
 
 RFC-021 Claim C1 (semantic ownership + minimal projection), directionally accepted
 at high confidence, is bound to a project-global principle by **ADR-019**
-(embedding / publication / distribution / ownership / projection are five
-independent asset properties; embedding ≠ projection). This REV lands the two
+(ADR-019's canonical seven independent asset properties — owned, versioned,
+distributed, embedded, runtime-loaded, published, projected — where embedding ≠
+publication ≠ projection). This REV lands the two
 descending spec-prose amendments that principle requires. It does **not** touch
 code — the minimal-projection *mechanism* descends later as implementation slices;
 SPEC-009 becomes partly **forward-intent** (target architecture the shipped code
@@ -25,11 +26,13 @@ The library / publication / federated-search capability is a **separate contract
   root of both A and B — not buried in SPEC-009 prose.
 - Base install shape: **three-file** base projection (`.gitignore`, `doctrine.toml`,
   `boot-project.md`). *Not* a fourth `governance.md` in the base set.
-- Governance/orientation: standing governance is a **distinct, approval-gated,
+- Governance/orientation: standing governance is a **physically distinct,
   materialize-on-first-use surface**, never folded into `boot-project.md`. This
   reconciles minimal projection (nothing empty ships) with the mutation-authority
-  rule (orientation is agent-improvable; governance is approval-gated) — the split
-  is *drawn now* so a Stage-5 trust-acceptance mechanism inherits a lift-out.
+  rule (orientation is agent-improvable; governance is high-consequence) — the
+  physical split is *drawn now* so a Stage-5 trust-acceptance/approval mechanism
+  inherits a lift-out. Enforcing that gate is **out of scope here** (Stage 5); C1
+  establishes only that the surfaces are separable.
 
 Scope of the staged delta: **two entity `modify` rows** (SPEC-009, PRD-006) covering
 decisions, structured `responsibilities` (both tiers), overview, and sources; plus a
@@ -217,10 +220,11 @@ mechanism, and it improves fresh-install ergonomics — a clean, legible `.doctr
 
 **Edit 2.1 — §1 Intent (append).** Add: provisioning is *minimal and justified* —
 only files with an operational, discoverability, integration, control, or
-customization reason land at a stable project path; other framework-owned material is
-published (inspectable/copyable) or materialized on demand, not installed by default.
-User control is served by a publication surface, not by projecting files no one
-services.
+customization reason land at a stable project path; other framework-owned material
+stays framework-owned and materializes on demand, not installed by default. User
+control over un-projected material is a *dependency* served by a sibling capability
+(publication / library — contract B), **not** something install itself delivers or
+promises.
 
 **Edit 2.2 — §2 Scope.**
 
