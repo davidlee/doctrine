@@ -803,6 +803,31 @@ mod write_class_tests {
         );
     }
 
+    // SL-222 §4/E8: the estimate pin family joins the Orchestrator class (D13)
+    // — worker-refused; `--retire` carries its own verb label (RV-284 F-1).
+    #[test]
+    fn estimate_pin_is_orchestrator() {
+        let c = Cli::try_parse_from([
+            "doctrine", "estimate", "pin", "SL-001", "2", "8", "--by", "david",
+        ])
+        .unwrap()
+        .command;
+        assert!(
+            matches!(write_class(&c), WriteClass::Orchestrator("estimate pin")),
+            "estimate pin must be Orchestrator(\"estimate pin\")"
+        );
+        let c = Cli::try_parse_from(["doctrine", "estimate", "pin", "SL-001", "--retire"])
+            .unwrap()
+            .command;
+        assert!(
+            matches!(
+                write_class(&c),
+                WriteClass::Orchestrator("estimate pin --retire")
+            ),
+            "estimate pin --retire must be Orchestrator(\"estimate pin --retire\")"
+        );
+    }
+
     // ── PHASE-01: Behaviour-preservation verification net (SL-115) ──────────────
 
     #[test]
