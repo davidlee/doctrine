@@ -5,10 +5,10 @@ id = 225
 slug = "prepare-review-ledger-commit-clobbers-object-db-conclude-rows-from-a-stale-coord-working-tree"
 title = "prepare-review ledger commit clobbers object-db conclude rows from a stale coord working tree"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-17"
-updated = "2026-07-17"
+updated = "2026-07-18"
 tags = ["area:correctness", "area:dispatch"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
