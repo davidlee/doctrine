@@ -14,8 +14,8 @@ specs, then use the /retrieve-memory skill.
 
 Finish every turn which references a doctrine entity by printing its ID:
 ```text
-```
 [SL-123 phase 03]: short session descriptor
+```
 
 if your first message is a handover from another agent, read it and follow 
 the instructions.
