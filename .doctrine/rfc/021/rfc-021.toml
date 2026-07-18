@@ -1,0 +1,55 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 21
+slug = "dynamic-behaviours-and-minimal-projection"
+title = "Dynamic behaviours and minimal projection"
+status = "open"
+created = "2026-07-18"
+updated = "2026-07-18"
+tags = ["activation", "behaviours", "hymns", "install", "library", "prompt", "skills", "token-efficiency"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "related"
+target = "IDE-029"
+
+[[relation]]
+label = "related"
+target = "ADR-005"
+
+[[relation]]
+label = "related"
+target = "ADR-011"
+
+[[relation]]
+label = "related"
+target = "PRD-003"
+
+[[relation]]
+label = "related"
+target = "SPEC-010"
+
+[[relation]]
+label = "related"
+target = "PRD-006"
+
+[[relation]]
+label = "related"
+target = "SPEC-009"
+
+[[relation]]
+label = "related"
+target = "SPEC-023"
+
+[[relation]]
+label = "related"
+target = "RFC-011"
+
+[[relation]]
+label = "related"
+target = "IMP-059"
