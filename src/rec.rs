@@ -129,18 +129,7 @@ pub(crate) struct RecDoc {
     pub(crate) evidence_ref: Vec<EvidenceRef>,
     #[serde(default, deserialize_with = "deserialize_tags_lenient")]
     pub(crate) tags: Vec<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::estimate::deserialize_lenient"
-    )]
-    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::value::deserialize_lenient"
-    )]
-    pub(crate) value: Option<crate::value::ValueFacet>,
+    // NOTE: `[estimate]`/`[value]` facet fields deleted at SL-222 PHASE-09.
 }
 
 /// Lenient [`tags`] deserializer: absent → empty vec; non-array value
@@ -516,15 +505,21 @@ pub(crate) fn run_show(
             let value_line = crate::priority::surface::show_value_line(
                 &root,
                 &canonical_id(doc.id),
-                doc.value.as_ref().map(|v| v.value),
                 REC_KIND.prefix,
                 &value_unit,
+            )?;
+            let estimate_line = crate::priority::surface::show_estimate_line(
+                &root,
+                &canonical_id(doc.id),
+                REC_KIND.prefix,
+                &estimation_unit,
             )?;
             format_show(
                 &doc,
                 &body,
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -548,10 +543,11 @@ fn read_rationale(rec_root: &Path, id: u32) -> anyhow::Result<String> {
 fn format_show(
     doc: &RecDoc,
     body: &str,
-    estimation_unit: &str,
+    _estimation_unit: &str,
     value_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
+    estimate_line: Option<&str>,
+    _lower_pct: f64,
+    _upper_pct: f64,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("{} — {}\n", canonical_id(doc.id), doc.title));
@@ -568,16 +564,9 @@ fn format_show(
         doc.status_delta.len(),
         doc.evidence_ref.len()
     ));
-    if let Some(ref est) = doc.estimate {
-        parts.push(format!(
-            "{}\n",
-            crate::estimate::display::format_estimate_confidence(
-                est,
-                lower_pct,
-                upper_pct,
-                estimation_unit,
-            )
-        ));
+    // SL-222 PHASE-07: pipeline-resolved estimate line (facet fallback deleted PHASE-09).
+    if let Some(line) = estimate_line {
+        parts.push(format!("{line}\n"));
     }
     // SL-220 PHASE-06: the value line re-sources from the ladder (design §6).
     if let Some(line) = value_line {
@@ -597,28 +586,7 @@ struct ShowJson<'a> {
 /// Render the `Json` show under the shared `{kind, …}` envelope.
 fn show_json(doc: &RecDoc, body: &str) -> anyhow::Result<String> {
     let row = ShowJson { doc };
-    let mut value = serde_json::json!({ "kind": "rec", "rec": row, "body": body });
-    if let Some(ref est) = doc.estimate
-        && let Some(obj) = value.get_mut("rec").and_then(|v| v.as_object_mut())
-    {
-        obj.insert(
-            "estimate".to_string(),
-            serde_json::json!({
-                "lower": est.lower,
-                "upper": est.upper,
-            }),
-        );
-    }
-    if let Some(ref val) = doc.value
-        && let Some(obj) = value.get_mut("rec").and_then(|v| v.as_object_mut())
-    {
-        obj.insert(
-            "value".to_string(),
-            serde_json::json!({
-                "value": val.value,
-            }),
-        );
-    }
+    let value = serde_json::json!({ "kind": "rec", "rec": row, "body": body });
     serde_json::to_string_pretty(&value).context("failed to serialize rec show JSON")
 }
 
@@ -926,8 +894,6 @@ mod tests {
                 mode: "VT".to_owned(),
             }],
             tags: Vec::new(),
-            estimate: None,
-            value: None,
         };
         let text = toml::to_string(&doc).unwrap();
         let back: RecDoc = toml::from_str(&text).unwrap();
@@ -950,8 +916,6 @@ mod tests {
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
             tags: Vec::new(),
-            estimate: None,
-            value: None,
         };
         let text = toml::to_string(&doc).unwrap();
         let back: RecDoc = toml::from_str(&text).unwrap();
@@ -984,8 +948,6 @@ mod tests {
                 mode: "VT".to_owned(),
             }],
             tags: Vec::new(),
-            estimate: None,
-            value: None,
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // A REAL (un-commented) array-of-tables header, not the template's `#  …`
@@ -1021,8 +983,6 @@ mod tests {
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
             tags: Vec::new(),
-            estimate: None,
-            value: None,
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // No REAL (un-commented) status_delta table — only the template's `#  …`
@@ -1055,8 +1015,6 @@ mod tests {
             }],
             evidence_ref: Vec::new(),
             tags: Vec::new(),
-            estimate: None,
-            value: None,
         };
         let text = render_rec_toml_populated(&doc).unwrap();
         // The document still parses (the breaker was escaped, not spliced raw) …
@@ -1084,8 +1042,6 @@ mod tests {
             status_delta: Vec::new(),
             evidence_ref: Vec::new(),
             tags: Vec::new(),
-            estimate: None,
-            value: None,
         };
         let text = toml::to_string(&doc).unwrap();
         assert!(text.contains("move = \"accept\""), "bare move key: {text}");

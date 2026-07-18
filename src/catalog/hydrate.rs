@@ -104,16 +104,9 @@ pub(crate) struct CatalogEntity {
     /// Memory type classification for `CatalogKey::Memory` entities;
     /// `None` for numbered entities.
     pub(crate) memory_type: Option<String>,
-    /// The entity's optional `[estimate]` facet, carried through from the scan
-    /// (SL-103 PHASE-02). Memory entities have no facets ⇒ `None`. Serialized
-    /// onto the catalog; projected onto the graph in PHASE-03.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
-    /// The entity's optional `[value]` facet, carried through from the scan
-    /// (SL-103 PHASE-02). Memory entities have no facets ⇒ `None`. Serialized
-    /// onto the catalog; projected onto the graph in PHASE-03.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) value: Option<crate::value::ValueFacet>,
+    /// NOTE: `[estimate]`/`[value]` facets are no longer carried through the
+    /// catalog (deleted at SL-222 PHASE-09). A key-presence tripwire in the
+    /// scan layer detects any extant top-level key as unmigrated residue.
     /// The entity's body prose, read from its `.md` file.
     /// `None` when bodies were not requested or the `.md` file is missing.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -241,8 +234,7 @@ impl Catalog {
                 title: se.title.clone(),
                 status: se.status.clone(),
                 memory_type: None,
-                estimate: se.estimate.clone(),
-                value: se.value.clone(),
+
                 body: se.body.clone(),
                 source: SourceSpan {
                     file: entity_dir.clone(),
@@ -306,9 +298,7 @@ impl Catalog {
                 title: record.title.clone(),
                 status: Some(record.status.clone()),
                 memory_type: Some(record.memory_type.clone()),
-                // Memory entities carry no estimate/value facets.
-                estimate: None,
-                value: None,
+
                 body: None,
                 source: SourceSpan {
                     file: record.path.clone(),
@@ -1072,13 +1062,13 @@ mod tests {
         }
     }
 
-    /// A numbered `ScannedEntity` with the given facets — bypasses the disk scan
+    /// A numbered `ScannedEntity` with the given risk facet — bypasses the disk scan
     /// so `from_scanned`'s carry-through is exercised in isolation (it is pure).
+    /// NOTE: `estimate`/`value` were deleted at SL-222 PHASE-09 and are no longer
+    /// carried through the catalog.
     fn scanned_numbered(
         prefix: &'static str,
         id: u32,
-        estimate: Option<crate::estimate::EstimateFacet>,
-        value: Option<crate::value::ValueFacet>,
         risk: Option<crate::risk::RiskFacet>,
     ) -> ScannedEntity {
         ScannedEntity {
@@ -1087,29 +1077,22 @@ mod tests {
             status: Some("proposed".to_string()),
             title: format!("{prefix}-{id}"),
             outbound: Vec::new(),
-            estimate,
-            value,
             risk,
             tags: vec![],
             body: None,
         }
     }
 
-    /// VT-1: `from_scanned` copies estimate/value onto each numbered
-    /// `CatalogEntity`; memory entities carry `None`.
+    /// PHASE-09: `from_scanned` no longer carries estimate/value facets through
+    /// the catalog (deleted). Only risk/tags are present.
     #[test]
-    fn from_scanned_carries_facets_onto_numbered_and_none_for_memory() {
+    fn from_scanned_carries_no_facets_after_deletion() {
         let dir = tmp();
         let root = dir.path();
 
-        let est = crate::estimate::EstimateFacet {
-            lower: 2.0,
-            upper: 8.0,
-        };
-        let val = crate::value::ValueFacet { value: 5.0 };
         let scanned = vec![
-            scanned_numbered("SL", 1, Some(est.clone()), Some(val.clone()), None),
-            scanned_numbered("SL", 2, None, None, None),
+            scanned_numbered("SL", 1, None),
+            scanned_numbered("SL", 2, None),
         ];
 
         let record = MemoryCatalogRecord {
@@ -1126,29 +1109,14 @@ mod tests {
         let catalog =
             Catalog::from_scanned(root, &scanned, &[record], &BTreeMap::new(), test_units());
 
+        // The scan succeeds and entities are present; estimate/value no longer
+        // appear on CatalogEntity.
         let sl001 = catalog
             .entities
             .iter()
             .find(|e| e.key.canonical() == "SL-001")
             .unwrap();
-        assert_eq!(sl001.estimate, Some(est));
-        assert_eq!(sl001.value, Some(val));
-
-        let sl002 = catalog
-            .entities
-            .iter()
-            .find(|e| e.key.canonical() == "SL-002")
-            .unwrap();
-        assert!(sl002.estimate.is_none());
-        assert!(sl002.value.is_none());
-
-        let mem = catalog
-            .entities
-            .iter()
-            .find(|e| matches!(e.key, CatalogKey::Memory(_)))
-            .unwrap();
-        assert!(mem.estimate.is_none(), "memory carries no estimate facet");
-        assert!(mem.value.is_none(), "memory carries no value facet");
+        assert_eq!(sl001.key.canonical(), "SL-001");
 
         // The injected units are stored verbatim on the catalog.
         assert_eq!(catalog.units.estimation, "espresso_shots");

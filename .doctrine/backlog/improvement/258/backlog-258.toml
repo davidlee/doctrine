@@ -21,10 +21,6 @@ needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
 
-[estimate]
-lower = 0.4
-upper = 0.9
-
 [[relation]]
 label = "references"
 role = "concerns"

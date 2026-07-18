@@ -150,18 +150,36 @@ const NEXT_DEFAULT: &[&str] = &["id", "status", "score", "estimate", "value", "t
 // Facet cell formatters — pure fn(&NextRow) -> String (SL-171 PHASE-01, D4)
 // ---------------------------------------------------------------------------
 
-/// Render the estimate column cell: `{format_bound(lo)} - {format_bound(hi)}`,
-/// each side right-padded to 4 chars (accommodates 1.0–99.9).
-/// Unset estimates render [`listing::ABSENT_CELL`].
+/// Render the estimate column cell from the resolved cost-source reason
+/// (SL-222 PHASE-09). Falls back to [`listing::ABSENT_CELL`] when no cost
+/// source is available.
 fn estimate_cell(r: &NextRow) -> String {
-    match &r.estimate {
-        Some(e) => format!(
-            "{:>4} - {:>4}",
-            format_bound(e.lower),
-            format_bound(e.upper)
-        ),
+    match &r.cost_source {
+        Some(reason) => estimate_cell_from_reason(reason),
         None => listing::ABSENT_CELL.to_string(),
     }
+}
+
+/// Extract the lower/upper bounds from a cost-source reason for the
+/// estimate column cell.
+fn estimate_cell_from_reason(reason: &ReasonKind) -> String {
+    let (lo, hi) = match reason {
+        ReasonKind::CostPin { lower, upper, .. } | ReasonKind::CostClaim { lower, upper, .. } => {
+            (*lower, *upper)
+        }
+        ReasonKind::CostProjected {
+            lower: Some(l),
+            upper: Some(u),
+            ..
+        } => (*l, *u),
+        ReasonKind::CostProjected { est_cost, .. }
+        | ReasonKind::CostClassAnchor { est_cost, .. }
+        | ReasonKind::CostBareAnchor { est_cost, .. }
+        | ReasonKind::CostGauge { est_cost, .. } => (*est_cost, *est_cost),
+        ReasonKind::CostUnmigratedFacet => (0.0, 0.0),
+        _ => return listing::ABSENT_CELL.to_string(),
+    };
+    format!("{:>4} - {:>4}", format_bound(lo), format_bound(hi))
 }
 
 /// Marker suffix on a value cell showing the effective *default* value (a
@@ -221,7 +239,7 @@ fn value_cell_parts(reason: &ReasonKind) -> (f64, &'static str) {
                 ClaimTier::Migrated => VALUE_MARKER_MIGRATED,
             },
         ),
-        ReasonKind::ValueUnmigratedFacet { value } => (*value, VALUE_MARKER_UNMIGRATED),
+        ReasonKind::ValueUnmigratedFacet => (DEFAULT_VALUE, VALUE_MARKER_UNMIGRATED),
         ReasonKind::ValueProjected { value, .. } => (*value, VALUE_MARKER_PROJECTED),
         ReasonKind::ValueGauge { value, .. } => (*value, VALUE_MARKER_GAUGE),
         _ => (DEFAULT_VALUE, DEFAULT_VALUE_MARKER),
@@ -416,12 +434,15 @@ fn reason_line(reason: &ReasonKind) -> String {
         }
         ReasonKind::ValuePin { .. }
         | ReasonKind::ValueClaim { .. }
-        | ReasonKind::ValueUnmigratedFacet { .. }
+        | ReasonKind::ValueUnmigratedFacet
         | ReasonKind::ValueProjected { .. }
         | ReasonKind::ValueGauge { .. } => {
             format!("  {}\n", value_source_fragment(reason).unwrap_or_default())
         }
-        ReasonKind::CostAuthored { .. }
+        ReasonKind::CostPin { .. }
+        | ReasonKind::CostClaim { .. }
+        | ReasonKind::CostClassAnchor { .. }
+        | ReasonKind::CostUnmigratedFacet
         | ReasonKind::CostProjected { .. }
         | ReasonKind::CostBareAnchor { .. }
         | ReasonKind::CostGauge { .. } => {
@@ -638,9 +659,9 @@ pub(crate) fn value_source_fragment(reason: &ReasonKind) -> Option<String> {
             contested.as_ref(),
             conflict,
         )),
-        ReasonKind::ValueUnmigratedFacet { value } => Some(format!(
-            "value {value:.1} — unmigrated [value] facet — run scripts/migrate_value_facets.py"
-        )),
+        ReasonKind::ValueUnmigratedFacet => Some(
+            "value — unmigrated [value] facet — run scripts/migrate_value_facets.py".to_string(),
+        ),
         ReasonKind::ValueProjected {
             value,
             lower,
@@ -789,6 +810,86 @@ pub(crate) fn show_value_render(
     })
 }
 
+/// The SL-222 PHASE-07 `show` cost line (design §6 remainder) — the SINGLE
+/// renderer for the entity `show`'s estimate provenance line, analogous to
+/// [`show_value_render`]. Consumes the RESOLVED cost-source reason (never the
+/// raw facet). `inert_kind` annotates a record-kind entity whose captured
+/// estimate claim is scoring-inert (D7). Absent evidence ⇒ `None` (line
+/// omitted).
+pub(crate) fn show_cost_render(
+    reason: &ReasonKind,
+    unit: &str,
+    inert_kind: Option<&str>,
+) -> Option<String> {
+    let provenance = show_cost_provenance(reason)?;
+    // Extract range (lower–upper) from the reason; single-value variants use
+    // est_cost for both sides.
+    let (lo, hi): (f64, f64) = match reason {
+        ReasonKind::CostPin { lower, upper, .. } | ReasonKind::CostClaim { lower, upper, .. } => {
+            (*lower, *upper)
+        }
+        ReasonKind::CostUnmigratedFacet => (0.0, 0.0),
+        ReasonKind::CostProjected {
+            lower: Some(l),
+            upper: Some(u),
+            ..
+        } => (*l, *u),
+        ReasonKind::CostProjected { est_cost, .. }
+        | ReasonKind::CostClassAnchor { est_cost, .. }
+        | ReasonKind::CostBareAnchor { est_cost, .. }
+        | ReasonKind::CostGauge { est_cost, .. } => (*est_cost, *est_cost),
+        _ => return None,
+    };
+    let base = format!("estimate: {lo:.1}–{hi:.1} {unit} ({provenance})");
+    Some(match inert_kind {
+        Some(kind) => format!("{base} — scoring-inert ({kind} kind)"),
+        None => base,
+    })
+}
+
+/// The compact provenance phrase for the `show` estimate line (design §6 remainder),
+/// analogous to [`show_provenance`] — tier word + singleton attribution. `None`
+/// for a non-cost-source reason.
+pub(crate) fn show_cost_provenance(reason: &ReasonKind) -> Option<String> {
+    match reason {
+        ReasonKind::CostPin {
+            by,
+            date,
+            contested,
+            ..
+        } => {
+            let head = if contested.is_some() {
+                "contested pin"
+            } else {
+                "pin"
+            };
+            Some(join_provenance(head, by.as_deref(), date.as_deref(), false))
+        }
+        ReasonKind::CostClaim { tier, by, date, .. } => {
+            let word = match tier {
+                ClaimTier::Pin => "pin",
+                ClaimTier::Human => "human claim",
+                ClaimTier::Agent => "agent claim",
+                ClaimTier::Migrated => "migrated claim",
+            };
+            let migrated = matches!(tier, ClaimTier::Migrated);
+            let head = word.to_string();
+            Some(join_provenance(
+                &head,
+                by.as_deref(),
+                date.as_deref(),
+                migrated,
+            ))
+        }
+        ReasonKind::CostClassAnchor { .. } => Some("class anchor".to_string()),
+        ReasonKind::CostUnmigratedFacet => Some("unmigrated [estimate] facet".to_string()),
+        ReasonKind::CostProjected { .. } => Some("projected".to_string()),
+        ReasonKind::CostGauge { .. } => Some("gauge".to_string()),
+        ReasonKind::CostBareAnchor { .. } => Some("bare anchor".to_string()),
+        _ => None,
+    }
+}
+
 /// The compact provenance phrase for the `show` value line (design §6) — tier
 /// word + singleton attribution (`, by, date`; migrated reads
 /// `, unattributed, observed <date>`), with a leading "contested" for an
@@ -835,7 +936,7 @@ fn show_provenance(reason: &ReasonKind) -> Option<String> {
                 migrated,
             ))
         }
-        ReasonKind::ValueUnmigratedFacet { .. } => Some("unmigrated [value] facet".to_string()),
+        ReasonKind::ValueUnmigratedFacet => Some("unmigrated [value] facet".to_string()),
         ReasonKind::ValueProjected { .. } => Some("projected".to_string()),
         ReasonKind::ValueGauge { .. } => Some("gauge".to_string()),
         _ => None,
@@ -878,12 +979,92 @@ fn bound_fragment(bound: Option<f64>) -> String {
 /// reason.
 pub(crate) fn cost_source_fragment(reason: &ReasonKind) -> Option<String> {
     match reason {
-        ReasonKind::CostAuthored { est_cost, pin } => Some(match pin {
-            Some((lower, upper, beta)) => {
-                format!("est_cost {est_cost:.1} — authored [{lower:.1} ‥ {upper:.1}] · β {beta:.2}")
-            }
-            None => format!("est_cost {est_cost:.1} — authored (via class anchor)"),
-        }),
+        ReasonKind::CostPin {
+            est_cost,
+            lower,
+            upper,
+            beta,
+            by,
+            date,
+            basis,
+            contested,
+        } => {
+            let base =
+                format!("est_cost {est_cost:.1} — pin [{lower:.1} ‥ {upper:.1}] · β {beta:.2}");
+            let suffix = if let Some(c) = contested {
+                format!(
+                    " — contested · {} claims, cost interval ({:.1} ‥ {:.1}), mean range [{:.1} ‥ {:.1}] — resolve by superseding row",
+                    c.rows, c.low, c.high, c.low, c.high,
+                )
+            } else {
+                let mut parts = Vec::new();
+                if let Some(b) = by {
+                    parts.push(b.clone());
+                }
+                if let Some(d) = date {
+                    parts.push(d.clone());
+                }
+                if let Some(b) = basis {
+                    parts.push(format!("basis {b}"));
+                }
+                if parts.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", parts.join(", "))
+                }
+            };
+            Some(format!("{base}{suffix}"))
+        }
+        ReasonKind::CostClaim {
+            est_cost,
+            lower,
+            upper,
+            beta,
+            tier,
+            by,
+            date,
+            conflict,
+        } => {
+            let tier_label = match tier {
+                ClaimTier::Human => "human claim",
+                ClaimTier::Agent => "agent claim",
+                ClaimTier::Migrated => "migrated claim",
+                ClaimTier::Pin => "claim",
+            };
+            let conflict_rider = if conflict.is_empty() {
+                String::new()
+            } else {
+                let cls = conflict.join(" vs ");
+                format!(" · anchor conflict with {cls} — resolve by superseding row")
+            };
+            let attribution = {
+                let mut parts = Vec::new();
+                let by_str = by.as_deref().unwrap_or("unattributed");
+                parts.push(by_str.to_string());
+                if let Some(d) = date {
+                    let prep = match tier {
+                        ClaimTier::Migrated => format!("observed {d}"),
+                        _ => d.clone(),
+                    };
+                    parts.push(prep);
+                }
+                if parts.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", parts.join(", "))
+                }
+            };
+            Some(format!(
+                "est_cost {est_cost:.1} — {tier_label} [{lower:.1} ‥ {upper:.1}] · β {beta:.2}{attribution}{conflict_rider}"
+            ))
+        }
+        ReasonKind::CostClassAnchor { est_cost } => Some(format!(
+            "est_cost {est_cost:.1} — anchored (via class anchor)"
+        )),
+        ReasonKind::CostUnmigratedFacet => Some(
+            "est_cost — unmigrated [estimate] facet — run scripts/migrate_estimate_facets.py"
+                .to_string(),
+        ),
         ReasonKind::CostProjected {
             est_cost,
             lower,
@@ -1106,15 +1287,14 @@ fn finding_line(f: &Finding) -> String {
             domain_tag(*domain),
             rows.join(", ")
         ),
-        Finding::UnmigratedFacet {
-            domain,
-            entity,
-            value,
-        } => format!(
-            "  {}{entity} authors an unmigrated [value] facet ({value}) — evidence debt; exit: \
-             run scripts/migrate_value_facets.py (or re-assert via value set/pin, then value \
-             clear)\n",
+        Finding::UnmigratedFacet { domain, entity } => format!(
+            "  {}{entity} authors an unmigrated `[{}]` facet — facet no longer read; exit: \
+             run scripts/migrate_{}_facets.py (stdlib-only, any corpus root) \
+             or re-assert via `{} set --rater human`\n",
             domain_tag(*domain),
+            domain.token(),
+            domain.token(),
+            domain.token(),
         ),
         Finding::ClaimConflict {
             domain,
@@ -1239,12 +1419,8 @@ fn finding_json(f: &Finding) -> serde_json::Value {
         Finding::MalformedSupersession { domain, rows } => {
             serde_json::json!({ "domain": domain.token(), "rows": rows })
         }
-        Finding::UnmigratedFacet {
-            domain,
-            entity,
-            value,
-        } => {
-            serde_json::json!({ "domain": domain.token(), "entity": entity, "value": value })
+        Finding::UnmigratedFacet { domain, entity } => {
+            serde_json::json!({ "domain": domain.token(), "entity": entity })
         }
         Finding::ClaimConflict {
             domain,
@@ -1366,9 +1542,8 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
                 "conflict": conflict,
             })
         }
-        ReasonKind::ValueUnmigratedFacet { value } => serde_json::json!({
+        ReasonKind::ValueUnmigratedFacet => serde_json::json!({
             "kind": reason.value_source_token(),
-            "value": value,
         }),
         ReasonKind::ValueProjected {
             value,
@@ -1389,17 +1564,63 @@ fn reason_json(reason: &ReasonKind) -> serde_json::Value {
             "value": value,
             "judgements": judgements,
         }),
-        ReasonKind::CostAuthored { est_cost, pin } => {
-            let (lower, upper, beta) = match pin {
-                Some((l, u, b)) => (Some(*l), Some(*u), Some(*b)),
-                None => (None, None, None),
-            };
+        ReasonKind::CostPin {
+            est_cost,
+            lower,
+            upper,
+            beta,
+            by,
+            date,
+            basis,
+            contested,
+        } => {
             serde_json::json!({
-                "kind": "cost_authored",
+                "kind": reason.cost_source_token(),
                 "est_cost": est_cost,
                 "lower": lower,
                 "upper": upper,
                 "beta": beta,
+                "by": by,
+                "date": date,
+                "basis": basis,
+                "contested": contested.as_ref().map(|c| serde_json::json!({
+                    "low": c.low,
+                    "high": c.high,
+                    "rows": c.rows,
+                })),
+            })
+        }
+        ReasonKind::CostClaim {
+            est_cost,
+            lower,
+            upper,
+            beta,
+            tier,
+            by,
+            date,
+            conflict,
+        } => {
+            serde_json::json!({
+                "kind": reason.cost_source_token(),
+                "est_cost": est_cost,
+                "lower": lower,
+                "upper": upper,
+                "beta": beta,
+                "tier": format!("{tier:?}"),
+                "by": by,
+                "date": date,
+                "conflict": conflict,
+            })
+        }
+        ReasonKind::CostClassAnchor { est_cost } => {
+            serde_json::json!({
+                "kind": reason.cost_source_token(),
+                "est_cost": est_cost,
+            })
+        }
+        ReasonKind::CostUnmigratedFacet => {
+            serde_json::json!({
+                "kind": reason.cost_source_token(),
             })
         }
         ReasonKind::CostProjected {
@@ -1585,7 +1806,6 @@ pub(crate) fn actionability_block_value(block: &ActionabilityBlock) -> serde_jso
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::estimate::EstimateFacet;
     use crate::listing::ABSENT_CELL;
     use crate::priority::view::Actionability;
 
@@ -1611,7 +1831,7 @@ mod tests {
             reasons: vec![],
             blockers: vec![],
             blocking: vec![],
-            estimate: None,
+            cost_source: None,
             value_source: None,
             tags: vec![],
         }
@@ -1631,7 +1851,7 @@ mod tests {
     }
 
     /// Build a NextRow with facets.
-    fn faceted_row(id: &str, lo: f64, hi: f64, val: f64, tags: &[&str]) -> NextRow {
+    fn faceted_row(id: &str, _lo: f64, _hi: f64, val: f64, tags: &[&str]) -> NextRow {
         NextRow {
             id: id.to_string(),
             title: "Title".to_string(),
@@ -1642,10 +1862,7 @@ mod tests {
             reasons: vec![],
             blockers: vec![],
             blocking: vec![],
-            estimate: Some(EstimateFacet {
-                lower: lo,
-                upper: hi,
-            }),
+            cost_source: None,
             value_source: Some(human_value(val)),
             tags: tags.iter().map(|t| (*t).to_string()).collect(),
         }
@@ -1772,15 +1989,35 @@ mod tests {
 
     #[test]
     fn vt4_format_bound_estimate_fractional() {
-        let rows = vec![faceted_row("ISS-001", 3.2, 4.8, 5.0, &[])];
-        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
+        let mut row = faceted_row("ISS-001", 3.2, 4.8, 5.0, &[]);
+        row.cost_source = Some(ReasonKind::CostClaim {
+            est_cost: 4.0,
+            lower: 3.2,
+            upper: 4.8,
+            beta: 0.65,
+            tier: crate::comparison::ClaimTier::Human,
+            by: None,
+            date: None,
+            conflict: Vec::new(),
+        });
+        let out = next_human(&nv(&[row]), RenderOpts::default(), None, 20, 0, false).unwrap();
         assert!(out.contains(" 3.2 -  4.8"), "fractional estimate: {out}");
     }
 
     #[test]
     fn vt4_format_bound_estimate_integral() {
-        let rows = vec![faceted_row("ISS-001", 3.0, 8.0, 5.0, &[])];
-        let out = next_human(&nv(&rows), RenderOpts::default(), None, 20, 0, false).unwrap();
+        let mut row = faceted_row("ISS-001", 3.0, 8.0, 5.0, &[]);
+        row.cost_source = Some(ReasonKind::CostClaim {
+            est_cost: 6.25,
+            lower: 3.0,
+            upper: 8.0,
+            beta: 0.65,
+            tier: crate::comparison::ClaimTier::Human,
+            by: None,
+            date: None,
+            conflict: Vec::new(),
+        });
+        let out = next_human(&nv(&[row]), RenderOpts::default(), None, 20, 0, false).unwrap();
         assert!(
             out.contains(" 3.0 -  8.0"),
             "integral estimate shows .0: {out}"
@@ -2098,6 +2335,75 @@ mod tests {
         );
     }
 
+    /// SL-222 PHASE-07: estimate-domain claim conflict render carries the
+    /// [estimate] tag prefix (D9 parity with value domain).
+    #[test]
+    fn claim_conflict_finding_estimate_domain_parity() {
+        let est_conflict = Finding::ClaimConflict {
+            domain: ComparisonDomain::Estimate,
+            item: "SL-100".to_string(),
+            tier: ClaimTier::Human,
+            low: 4.0,
+            high: 8.0,
+            rows: 2,
+        };
+        let line = finding_line(&est_conflict);
+        assert!(
+            line.contains("[estimate] SL-100 contested human claim"),
+            "estimate domain line has [estimate] tag: {line}"
+        );
+        assert!(
+            line.contains("resolve by superseding row"),
+            "anchored tier has contested framing: {line}"
+        );
+
+        let v = finding_json(&est_conflict);
+        assert_eq!(v["domain"], "estimate", "JSON domain is estimate");
+        assert_eq!(v["item"], "SL-100");
+        assert_eq!(v["tier"], "human-claim");
+        assert_eq!(v["magnitude"], 2.0);
+    }
+
+    /// SL-222 PHASE-09: estimate-domain UnmigratedFacet render carries the
+    /// [estimate] tag prefix; the finding is magnitude-free.
+    #[test]
+    fn unmigrated_facet_finding_estimate_domain_magnitude_free() {
+        let est_facet = Finding::UnmigratedFacet {
+            domain: ComparisonDomain::Estimate,
+            entity: "ISS-007".to_string(),
+        };
+        let line = finding_line(&est_facet);
+        assert!(line.contains("[estimate]"), "estimate tagged: {line}");
+        assert!(
+            line.contains("facet no longer read"),
+            "unread message: {line}"
+        );
+
+        let v = finding_json(&est_facet);
+        assert_eq!(v["domain"], "estimate");
+        assert_eq!(v["entity"], "ISS-007");
+        assert!(v.get("value").is_none(), "PHAE-09: magnitude omitted");
+    }
+
+    /// SL-222 PHASE-09: value-domain UnmigratedFacet has NO [estimate] tag
+    /// (untagged); the finding is magnitude-free.
+    #[test]
+    fn unmigrated_facet_finding_value_domain_magnitude_free() {
+        let val_facet = Finding::UnmigratedFacet {
+            domain: ComparisonDomain::Value,
+            entity: "SL-100".to_string(),
+        };
+        let line = finding_line(&val_facet);
+        assert!(
+            !line.contains("[estimate]"),
+            "value domain unmigrated facet is untagged: {line}"
+        );
+
+        let v = finding_json(&val_facet);
+        assert_eq!(v["domain"], "value");
+        assert!(v.get("value").is_none(), "PHASE-09: magnitude omitted");
+    }
+
     #[test]
     fn vt6_findings_json_provenance_nests_reason() {
         let findings = vec![Finding::Provenance(ReasonKind::CycleDegraded {
@@ -2360,5 +2666,334 @@ mod tests {
             reason_line(&ReasonKind::ZeroWeightExcluded { count: 1 }),
             "  1 pair value-insensitive, zero weight\n"
         );
+    }
+
+    // ── §8.8 cost-source render fragments ────────────────────────────────────
+
+    /// Helper: create a CostPin ReasonKind.
+    fn cost_pin(
+        est_cost: f64,
+        contested: bool,
+        by: Option<&str>,
+        date: Option<&str>,
+    ) -> ReasonKind {
+        ReasonKind::CostPin {
+            est_cost,
+            lower: est_cost * 0.8,
+            upper: est_cost * 1.2,
+            beta: 0.65,
+            by: by.map(String::from),
+            date: date.map(String::from),
+            basis: None,
+            contested: contested.then(|| ContestedClaim {
+                low: est_cost * 0.7,
+                high: est_cost * 1.3,
+                rows: 2,
+            }),
+        }
+    }
+
+    /// Helper: create a CostClaim ReasonKind.
+    fn cost_claim(
+        est_cost: f64,
+        tier: ClaimTier,
+        by: Option<&str>,
+        date: Option<&str>,
+    ) -> ReasonKind {
+        ReasonKind::CostClaim {
+            est_cost,
+            lower: est_cost * 0.8,
+            upper: est_cost * 1.2,
+            beta: 0.65,
+            tier,
+            by: by.map(String::from),
+            date: date.map(String::from),
+            conflict: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn cost_source_fragment_pin_singleton() {
+        let r = cost_pin(6.0, false, Some("david"), Some("2026-07-17"));
+        let frag = cost_source_fragment(&r).unwrap();
+        assert_eq!(
+            frag,
+            "est_cost 6.0 — pin [4.8 ‥ 7.2] · β 0.65 (david, 2026-07-17)"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_pin_no_attribution() {
+        let r = cost_pin(2.5, false, None, None);
+        let frag = cost_source_fragment(&r).unwrap();
+        assert_eq!(frag, "est_cost 2.5 — pin [2.0 ‥ 3.0] · β 0.65");
+    }
+
+    #[test]
+    fn cost_source_fragment_pin_contested() {
+        let r = cost_pin(6.0, true, Some("david"), Some("2026-07-17"));
+        let frag = cost_source_fragment(&r).unwrap();
+        assert!(
+            frag.contains("contested") && frag.contains("resolve by superseding row"),
+            "contested cost pin: {frag}"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_human_claim() {
+        let r = cost_claim(4.0, ClaimTier::Human, Some("ada"), Some("2026-07-16"));
+        let frag = cost_source_fragment(&r).unwrap();
+        assert_eq!(
+            frag,
+            "est_cost 4.0 — human claim [3.2 ‥ 4.8] · β 0.65 (ada, 2026-07-16)"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_agent_claim() {
+        let r = cost_claim(3.0, ClaimTier::Agent, Some("bot"), None);
+        let frag = cost_source_fragment(&r).unwrap();
+        assert_eq!(
+            frag,
+            "est_cost 3.0 — agent claim [2.4 ‥ 3.6] · β 0.65 (bot)"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_migrated_claim() {
+        let r = cost_claim(5.0, ClaimTier::Migrated, None, Some("2026-06-01"));
+        let frag = cost_source_fragment(&r).unwrap();
+        assert_eq!(
+            frag,
+            "est_cost 5.0 — migrated claim [4.0 ‥ 6.0] · β 0.65 (unattributed, observed 2026-06-01)"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_class_anchor() {
+        let r = ReasonKind::CostClassAnchor { est_cost: 3.5 };
+        let frag = cost_source_fragment(&r).unwrap();
+        assert_eq!(frag, "est_cost 3.5 — anchored (via class anchor)");
+    }
+
+    #[test]
+    fn cost_source_fragment_unmigrated_facet() {
+        let r = ReasonKind::CostUnmigratedFacet;
+        let frag = cost_source_fragment(&r).unwrap();
+        assert!(
+            frag.contains("unmigrated [estimate] facet"),
+            "unmigrated facet: {frag}"
+        );
+        assert!(
+            frag.contains("scripts/migrate_estimate_facets.py"),
+            "migration hint: {frag}"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_projected() {
+        let r = ReasonKind::CostProjected {
+            est_cost: 5.5,
+            lower: Some(3.0),
+            upper: Some(8.0),
+            human: 2,
+            agent: 1,
+        };
+        let frag = cost_source_fragment(&r).unwrap();
+        assert!(
+            frag.contains("est_cost 5.5 — projected · bounds (3.0 ‥ 8.0) · from 3 constraining sizing judgements (2 human, 1 agent)"),
+            "projected: {frag}"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_bare_anchor_with_max() {
+        let r = ReasonKind::CostBareAnchor {
+            est_cost: 11.0,
+            max_estimate: Some(10.0),
+            margin: 1.0,
+        };
+        let frag = cost_source_fragment(&r).unwrap();
+        assert_eq!(
+            frag,
+            "est_cost 11.0 — bare anchor (max estimate 10.0 + margin 1.0)"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_bare_anchor_default() {
+        let r = ReasonKind::CostBareAnchor {
+            est_cost: 1.0,
+            max_estimate: None,
+            margin: 0.0,
+        };
+        let frag = cost_source_fragment(&r).unwrap();
+        assert!(
+            frag.contains("no estimate in corpus; default 1.0"),
+            "bare anchor default: {frag}"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_gauge() {
+        let r = ReasonKind::CostGauge {
+            est_cost: 11.0,
+            max_estimate: Some(10.0),
+            margin: 1.0,
+            judgements: 3,
+        };
+        let frag = cost_source_fragment(&r).unwrap();
+        assert!(
+            frag.contains("gauge · ordered by 3 judgements"),
+            "gauge: {frag}"
+        );
+    }
+
+    #[test]
+    fn cost_source_fragment_none_for_value_reason() {
+        let r = ReasonKind::ValuePin {
+            value: 1.0,
+            conflict: vec![],
+            by: None,
+            date: None,
+            basis: None,
+            contested: None,
+        };
+        assert!(
+            cost_source_fragment(&r).is_none(),
+            "value reason yields None"
+        );
+    }
+
+    // ── show_cost_render tests (§8.8 show-line helper) ───────────────────
+
+    #[test]
+    fn show_cost_render_pin_with_attribution() {
+        let r = cost_pin(6.0, false, Some("david"), Some("2026-07-17"));
+        let line = show_cost_render(&r, "espresso_shots", None).unwrap();
+        assert_eq!(
+            line,
+            "estimate: 4.8–7.2 espresso_shots (pin, david, 2026-07-17)"
+        );
+    }
+
+    #[test]
+    fn show_cost_render_human_claim() {
+        let r = cost_claim(4.0, ClaimTier::Human, Some("ada"), Some("2026-07-16"));
+        let line = show_cost_render(&r, "espresso_shots", None).unwrap();
+        assert_eq!(
+            line,
+            "estimate: 3.2–4.8 espresso_shots (human claim, ada, 2026-07-16)"
+        );
+    }
+
+    #[test]
+    fn show_cost_render_class_anchor() {
+        let r = ReasonKind::CostClassAnchor { est_cost: 3.5 };
+        let line = show_cost_render(&r, "hours", None).unwrap();
+        assert_eq!(line, "estimate: 3.5–3.5 hours (class anchor)");
+    }
+
+    #[test]
+    fn show_cost_render_projected() {
+        let r = ReasonKind::CostProjected {
+            est_cost: 5.5,
+            lower: Some(3.0),
+            upper: Some(8.0),
+            human: 2,
+            agent: 1,
+        };
+        let line = show_cost_render(&r, "espresso_shots", None).unwrap();
+        assert_eq!(line, "estimate: 3.0–8.0 espresso_shots (projected)");
+    }
+
+    #[test]
+    fn show_cost_render_bare_anchor() {
+        let r = ReasonKind::CostBareAnchor {
+            est_cost: 11.0,
+            max_estimate: Some(10.0),
+            margin: 1.0,
+        };
+        let line = show_cost_render(&r, "espresso_shots", None).unwrap();
+        assert_eq!(line, "estimate: 11.0–11.0 espresso_shots (bare anchor)");
+    }
+
+    #[test]
+    fn show_cost_render_gauge() {
+        let r = ReasonKind::CostGauge {
+            est_cost: 11.0,
+            max_estimate: Some(10.0),
+            margin: 1.0,
+            judgements: 3,
+        };
+        let line = show_cost_render(&r, "espresso_shots", None).unwrap();
+        assert_eq!(line, "estimate: 11.0–11.0 espresso_shots (gauge)");
+    }
+
+    #[test]
+    fn show_cost_render_scoring_inert() {
+        let r = cost_claim(4.0, ClaimTier::Human, Some("ada"), Some("2026-07-16"));
+        let line = show_cost_render(&r, "espresso_shots", Some("REC")).unwrap();
+        assert_eq!(
+            line,
+            "estimate: 3.2–4.8 espresso_shots (human claim, ada, 2026-07-16) — scoring-inert (REC kind)"
+        );
+    }
+
+    #[test]
+    fn show_cost_render_none_for_absent_evidence() {
+        // A non-cost-source reason yields None (line omitted).
+        let r = ReasonKind::Score {
+            base: 1.0,
+            value_dim: 1.0,
+            risk_dim: 0.0,
+            leverage: 1.0,
+            optionality: 0.0,
+            total: 2.0,
+        };
+        assert!(show_cost_render(&r, "espresso_shots", None).is_none());
+    }
+
+    #[test]
+    fn show_cost_render_none_for_no_cost_source_reason() {
+        // Even a value-source reason returns None (not a cost source).
+        let r = ReasonKind::ValuePin {
+            value: 1.0,
+            conflict: vec![],
+            by: None,
+            date: None,
+            basis: None,
+            contested: None,
+        };
+        assert!(show_cost_render(&r, "espresso_shots", None).is_none());
+    }
+
+    // ── show_cost_provenance tests ──────────────────────────────────────
+
+    #[test]
+    fn show_cost_provenance_unmigrated_facet() {
+        let r = ReasonKind::CostUnmigratedFacet;
+        assert_eq!(
+            show_cost_provenance(&r).unwrap(),
+            "unmigrated [estimate] facet"
+        );
+    }
+
+    #[test]
+    fn show_cost_provenance_class_anchor() {
+        let r = ReasonKind::CostClassAnchor { est_cost: 3.5 };
+        assert_eq!(show_cost_provenance(&r).unwrap(), "class anchor");
+    }
+
+    #[test]
+    fn show_cost_provenance_none_for_value_reason() {
+        let r = ReasonKind::ValueProjected {
+            value: 5.5,
+            lower: Some(3.0),
+            upper: Some(8.0),
+            human: 2,
+            agent: 1,
+        };
+        assert!(show_cost_provenance(&r).is_none());
     }
 }

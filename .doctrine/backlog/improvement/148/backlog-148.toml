@@ -24,6 +24,3 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "drift"
 target = "mem.concept.doctrine.memory-model: the memory model concept that should be linked from the tool descriptions"
 
-[estimate]
-lower = 1.0
-upper = 2.0

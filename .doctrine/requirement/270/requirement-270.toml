@@ -3,15 +3,15 @@ version = 1
 
 id = 270
 slug = "validate-a-present-estimate-as-a-hard-error-and-accept-absence"
-title = "Validate a present estimate as a hard error and accept absence"
+title = "Validate a present estimate claim at capture and accept absence"
 status = "active"
 kind = "functional"
 
-description = "A present [estimate] is structurally validated as a hard error; an absent table validates. Optional means omittable, not malformed."
+description = "A captured estimate anchor row is validated by the capture-time validation matrix as a hard refusal; absence of estimate claims validates everywhere. Optional means omittable, not malformed (REV-026)."
 tags = []
 acceptance_criteria = [
-  "A present estimate validates only when lower and upper are both present and finite with lower >= 0 and upper >= lower.",
-  "Missing lower, missing upper, negative lower, and upper < lower are each hard validation errors.",
-  "An absent [estimate] passes validation.",
-  "A malformed present estimate is rejected loudly, never silently repaired.",
+  "An estimate anchor row validates only when est_lower and est_upper are both present and finite with lower >= 0 and upper >= lower (estimate::validate).",
+  "Missing est_lower, missing est_upper, negative lower, and upper < lower are each hard capture refusals.",
+  "An item with no estimate claims passes validation on every surface.",
+  "A malformed row is refused loudly at capture, never silently repaired.",
 ]

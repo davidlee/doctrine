@@ -26,6 +26,3 @@ label = "references"
 role = "concerns"
 target = "RFC-011"
 
-[estimate]
-lower = 0.5
-upper = 2.0

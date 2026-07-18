@@ -67,6 +67,7 @@ pub(crate) fn format_estimate_verbose(facet: Option<&EstimateFacet>, unit: &str)
 /// Formula: `lower_bound = facet.lower + lower_pct * (facet.upper - facet.lower)`,
 /// `upper_bound = facet.lower + upper_pct * (facet.upper - facet.lower)`.
 /// Output: `"{:.1}–{:.1} {unit} ({:.0}% confidence)"`
+#[expect(dead_code, reason = "SL-222 PHASE-09")]
 pub(crate) fn format_estimate_confidence(
     facet: &EstimateFacet,
     lower_pct: f64,

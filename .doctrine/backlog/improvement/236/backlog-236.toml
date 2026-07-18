@@ -25,6 +25,3 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "related"
 target = "IMP-127"
 
-[estimate]
-lower = 3.0
-upper = 6.0

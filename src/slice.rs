@@ -2165,6 +2165,7 @@ struct SliceDoc {
     tags: Vec<String>,
     #[serde(default)]
     gate: Gate,
+    // SL-222 PHASE-09: retained for serde round-trip compatibility.
     #[serde(default)]
     estimate: Option<crate::estimate::EstimateFacet>,
     #[serde(default)]
@@ -2232,20 +2233,23 @@ pub(crate) fn run_show(
             let value_unit = crate::value::resolve_unit(&cfg.value);
             let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation)?;
             let facets = crate::facet::EntityFacets {
-                estimate: doc.estimate.clone(),
-                value: doc.value.clone(),
                 risk: None,
                 tags: doc.tags.clone(),
             };
             // SL-220 PHASE-06: the value line re-sources from the comparison
-            // ladder (design §6) — never the raw facet (EX-3). `doc.value` feeds
-            // only the rung-5 fallback.
+            // ladder (design §6) — never the raw facet (EX-3). Rung 5 fallback
+            // deleted at PHASE-09.
             let value_line = crate::priority::surface::show_value_line(
                 &root,
                 &canonical_id(doc.id),
-                doc.value.as_ref().map(|v| v.value),
                 SLICE_KIND.prefix,
                 &value_unit,
+            )?;
+            let estimate_line = crate::priority::surface::show_estimate_line(
+                &root,
+                &canonical_id(doc.id),
+                SLICE_KIND.prefix,
+                &estimation_unit,
             )?;
             format_show(
                 &doc,
@@ -2256,6 +2260,7 @@ pub(crate) fn run_show(
                 &facets,
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -2353,11 +2358,12 @@ fn format_show(
     dep_seq: &crate::dep_seq::DepSeq,
     body: &str,
     posture: crate::conduct::Conduct,
-    facets: &crate::facet::EntityFacets,
-    estimation_unit: &str,
+    _facets: &crate::facet::EntityFacets,
+    _estimation_unit: &str,
     value_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
+    estimate_line: Option<&str>,
+    _lower_pct: f64,
+    _upper_pct: f64,
 ) -> String {
     use crate::relation::{RelationLabel, Role, targets_for, targets_for_role};
     let mut parts: Vec<String> = Vec::new();
@@ -2374,17 +2380,10 @@ fn format_show(
         doc.created, doc.updated
     ));
 
-    // Estimate row — confidence-framed when present (D2). Absent → no row (D3).
-    if let Some(ref est) = facets.estimate {
-        parts.push(format!(
-            "{}\n",
-            crate::estimate::display::format_estimate_confidence(
-                est,
-                lower_pct,
-                upper_pct,
-                estimation_unit,
-            )
-        ));
+    // Estimate row — pipeline-resolved (SL-222 PHASE-07, D7-EST).
+    // Facet fallback deleted at PHASE-09.
+    if let Some(line) = estimate_line {
+        parts.push(format!("{line}\n"));
     }
 
     // Value row — the resolved provenance line (SL-220 PHASE-06, design §6),
@@ -4095,6 +4094,7 @@ mod tests {
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
             None,
+            None,
             0.1,
             0.9,
         );
@@ -4145,6 +4145,7 @@ mod tests {
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
             None,
+            None,
             0.1,
             0.9,
         );
@@ -4164,57 +4165,6 @@ mod tests {
         assert_eq!(
             out, expected,
             "absent facets must be byte-identical to pre-change format_show output"
-        );
-    }
-
-    // VT-1: estimate present → confidence row rendered in show output.
-    #[test]
-    fn vt1_format_show_estimate_present_renders_confidence_row() {
-        use crate::relation::{RelationEdge, RelationLabel, Role};
-        let doc = SliceDoc {
-            id: 25,
-            slug: "uniform-cli".into(),
-            title: "Uniform CLI".into(),
-            status: "started".into(),
-            created: "2026-06-01".into(),
-            updated: "2026-06-08".into(),
-            tags: vec![],
-            gate: Gate::default(),
-            estimate: None,
-            value: None,
-            selectors: vec![],
-        };
-        let tier1 = vec![RelationEdge::with_role(
-            RelationLabel::References,
-            Some(Role::Implements),
-            "PRD-010".into(),
-        )];
-        let posture =
-            crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
-        let facets = crate::facet::EntityFacets {
-            estimate: Some(crate::estimate::EstimateFacet {
-                lower: 3.0,
-                upper: 5.0,
-            }),
-            value: None,
-            risk: None,
-            tags: vec![],
-        };
-        let out = format_show(
-            &doc,
-            &tier1,
-            &crate::dep_seq::DepSeq::default(),
-            "# Scope\n",
-            posture,
-            &facets,
-            "espresso_shots",
-            None,
-            0.1,
-            0.9,
-        );
-        assert!(
-            out.contains("estimate: 3.2–4.8 espresso_shots (80% confidence)"),
-            "VT-1 estimate row: {out}"
         );
     }
 
@@ -4245,6 +4195,7 @@ mod tests {
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
             None,
+            None,
             0.1,
             0.9,
         );
@@ -4273,8 +4224,6 @@ mod tests {
         let posture =
             crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
         let facets = crate::facet::EntityFacets {
-            estimate: None,
-            value: Some(crate::value::ValueFacet { value: 5.0 }),
             risk: None,
             tags: vec![],
         };
@@ -4289,6 +4238,7 @@ mod tests {
             &facets,
             "espresso_shots",
             Some("value: 5.0 magic_beans (human claim, alice, 2026-07-16)"),
+            None,
             0.1,
             0.9,
         );
@@ -4325,6 +4275,7 @@ mod tests {
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
             None,
+            None,
             0.1,
             0.9,
         );
@@ -4335,96 +4286,6 @@ mod tests {
     }
 
     // VT-9: custom confidence bounds in doctrine.toml → correct percentile band.
-    #[test]
-    fn vt9_format_show_custom_confidence_bounds() {
-        let doc = SliceDoc {
-            id: 25,
-            slug: "uniform-cli".into(),
-            title: "Uniform CLI".into(),
-            status: "started".into(),
-            created: "2026-06-01".into(),
-            updated: "2026-06-08".into(),
-            tags: vec![],
-            gate: Gate::default(),
-            estimate: None,
-            value: None,
-            selectors: vec![],
-        };
-        let posture =
-            crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
-        let facets = crate::facet::EntityFacets {
-            estimate: Some(crate::estimate::EstimateFacet {
-                lower: 3.0,
-                upper: 5.0,
-            }),
-            value: None,
-            risk: None,
-            tags: vec![],
-        };
-        // 25%–75% band → 50% confidence
-        let out = format_show(
-            &doc,
-            &[],
-            &crate::dep_seq::DepSeq::default(),
-            "# Scope\n",
-            posture,
-            &facets,
-            "espresso_shots",
-            None,
-            0.25,
-            0.75,
-        );
-        assert!(
-            out.contains("estimate: 3.5–4.5 espresso_shots (50% confidence)"),
-            "VT-9 custom bounds: {out}"
-        );
-    }
-
-    // VT-10: zero-width estimate (lower==upper) → single-value display.
-    #[test]
-    fn vt10_format_show_zero_width_estimate() {
-        let doc = SliceDoc {
-            id: 25,
-            slug: "uniform-cli".into(),
-            title: "Uniform CLI".into(),
-            status: "started".into(),
-            created: "2026-06-01".into(),
-            updated: "2026-06-08".into(),
-            tags: vec![],
-            gate: Gate::default(),
-            estimate: None,
-            value: None,
-            selectors: vec![],
-        };
-        let posture =
-            crate::conduct::resolve(&crate::conduct::ConductConfig::default(), &doc.status);
-        let facets = crate::facet::EntityFacets {
-            estimate: Some(crate::estimate::EstimateFacet {
-                lower: 5.0,
-                upper: 5.0,
-            }),
-            value: None,
-            risk: None,
-            tags: vec![],
-        };
-        let out = format_show(
-            &doc,
-            &[],
-            &crate::dep_seq::DepSeq::default(),
-            "# Scope\n",
-            posture,
-            &facets,
-            "espresso_shots",
-            None,
-            0.1,
-            0.9,
-        );
-        assert!(
-            out.contains("estimate: 5.0–5.0 espresso_shots (80% confidence)"),
-            "VT-10 zero-width: {out}"
-        );
-    }
-
     #[test]
     fn show_does_not_fold_in_design_plan_or_notes() {
         // A-5: slice show reassembles metadata + scope ONLY. Even with sibling
@@ -4450,6 +4311,7 @@ mod tests {
             posture,
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
+            None,
             None,
             0.1,
             0.9,
@@ -4633,6 +4495,7 @@ mod tests {
             posture,
             &crate::facet::EntityFacets::default(),
             "espresso_shots",
+            None,
             None,
             0.1,
             0.9,
@@ -4828,62 +4691,6 @@ mod tests {
     }
 
     // VT-11: shell integration — run_show against a fixture slice with [estimate] +
-    // doctrine.toml with [estimation] → confidence row in output.
-    #[test]
-    fn vt11_run_show_fixture_with_estimate_renders_confidence_row() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-
-        // doctrine.toml with custom estimation config
-        let config = root.join(crate::dtoml::DOCTRINE_TOML);
-        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
-        fs::write(
-            &config,
-            "[estimation]\nunit = \"story_points\"\nlower_confidence = 0.1\nupper_confidence = 0.9\n",
-        )
-        .unwrap();
-
-        // slice TOML with estimate
-        let sr = slice_root(root);
-        fs::create_dir_all(sr.join("001")).unwrap();
-        fs::write(
-            sr.join("001/slice-001.toml"),
-            "id = 1\nslug = \"test\"\ntitle = \"Test\"\nstatus = \"proposed\"\ncreated = \"2026-01-01\"\nupdated = \"2026-01-01\"\n\n[estimate]\nlower = 3\nupper = 8\n",
-        )
-        .unwrap();
-        fs::write(sr.join("001/slice-001.md"), "# Test slice\n").unwrap();
-
-        let (doc, toml_text, body) = read_slice(&sr, 1).unwrap();
-        let cfg = crate::dtoml::load_doctrine_toml(root).unwrap();
-        let posture = crate::conduct::resolve(&cfg.conduct, &doc.status);
-        let estimation_unit = crate::estimate::resolve_unit(&cfg.estimation);
-        let (lower_pct, upper_pct) = crate::estimate::resolve_confidence(&cfg.estimation).unwrap();
-        let facets = crate::facet::EntityFacets {
-            estimate: doc.estimate.clone(),
-            value: doc.value.clone(),
-            risk: None,
-            tags: doc.tags.clone(),
-        };
-        let tier1 = crate::relation::tier1_edges(&SLICE_KIND, &toml_text).unwrap();
-        let dep_seq = crate::dep_seq::DepSeq::default();
-        let out = format_show(
-            &doc,
-            &tier1,
-            &dep_seq,
-            &body,
-            posture,
-            &facets,
-            &estimation_unit,
-            None,
-            lower_pct,
-            upper_pct,
-        );
-        assert!(
-            out.contains("estimate: 3.5–7.5 story_points (80% confidence)"),
-            "VT-11: {out}"
-        );
-    }
-
     // VT-12: malformed doctrine.toml → run_show returns Err (not silently defaulted).
     #[test]
     fn vt12_run_show_malformed_doctrine_toml_propagates_error() {
@@ -5742,8 +5549,6 @@ mod tests {
                 to: to.as_str().to_owned(),
             }],
             evidence_ref: evidence,
-            estimate: None,
-            value: None,
         };
         crate::rec::materialise_populated(root, &doc).unwrap()
     }
@@ -5973,8 +5778,6 @@ mod tests {
                 },
             ],
             evidence_ref: Vec::new(),
-            estimate: None,
-            value: None,
         };
         assert!(
             !rec_discharges(Some(&rec), "REQ-001", ReqStatus::Pending, &[]),

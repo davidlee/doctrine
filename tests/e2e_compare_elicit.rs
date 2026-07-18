@@ -147,6 +147,25 @@ fn capture_value_anchor(root: &Path, slot: &str, item: &str, magnitude: f64) {
     );
 }
 
+/// Hand-author a HUMAN cost-anchor claim (SL-222 §1 wire v3: `form = anchor`,
+/// `cost-anchor` frame, `est_lower`/`est_upper` payload) — the post-deletion
+/// way a fixture pins a settle cost: an `[estimate]` facet no longer feeds
+/// anything (SL-222 PHASE-09).
+fn capture_cost_anchor(root: &Path, slot: &str, item: &str, lower: f64, upper: f64) {
+    let body = format!(
+        "schema = \"doctrine.comparison-session\"\nversion = 3\n\n\
+         [session]\nuid = \"sess-{slot}\"\ndate = \"2026-01-01\"\n\n\
+         [[judgement]]\nuid = \"row-{slot}\"\nseq = 0\na = \"{item}\"\n\
+         domain = \"estimate\"\nframe = \"cost-anchor\"\nform = \"anchor\"\n\
+         est_lower = {lower}\nest_upper = {upper}\nrater = \"human\"\ndate = \"2026-01-01\"\n"
+    );
+    write(
+        root,
+        &format!(".doctrine/comparisons/2026-01-01-{slot}.toml"),
+        &body,
+    );
+}
+
 /// Hand-author an est-domain `incomparable` session-of-one over the pair
 /// (SL-219 §4): the asked-once row that retires a sizing probe. Compiles to
 /// `NoConstraint`, so it feeds no cost — value-domain determinacy and every
@@ -299,10 +318,12 @@ fn json_median_probe_surfaces_for_unconstrained_item() {
 /// touching the pinned participant shapes (probe-render e2e is PHASE-06's
 /// `e2e_compare_estimate.rs`, not this file).
 fn seed_frontier_pairs(root: &Path) {
-    seed(root, 70, "[estimate]\nlower = 2.0\nupper = 2.0\n");
-    seed(root, 71, "[estimate]\nlower = 2.0\nupper = 2.0\n");
+    seed(root, 70, "");
+    seed(root, 71, "");
     seed(root, 72, "");
     seed(root, 73, "");
+    capture_cost_anchor(root, "ca70", &iss(70), 2.0, 2.0);
+    capture_cost_anchor(root, "ca71", &iss(71), 2.0, 2.0);
     capture(root, "ax", &iss(70), &iss(72));
     capture(root, "by", &iss(71), &iss(73));
 }
@@ -392,10 +413,14 @@ fn json_comparison_carries_value_bounds_and_estimate_mask_split() {
 fn render_stall_names_depth_and_disclaims_stability() {
     let dir = project();
     let root = dir.path();
-    seed(root, 60, "[value]\nvalue = 5.0\n");
-    seed(root, 61, "[estimate]\nlower = 1.0\nupper = 1.0\n");
-    seed(root, 62, "[estimate]\nlower = 4.0\nupper = 4.0\n");
-    seed(root, 63, "[value]\nvalue = -5.0\n");
+    seed(root, 60, "");
+    seed(root, 61, "");
+    seed(root, 62, "");
+    seed(root, 63, "");
+    capture_value_anchor(root, "va60", &iss(60), 5.0);
+    capture_cost_anchor(root, "ca61", &iss(61), 1.0, 1.0);
+    capture_cost_anchor(root, "ca62", &iss(62), 4.0, 4.0);
+    capture_value_anchor(root, "va63", &iss(63), -5.0);
     capture(root, "ta", &iss(60), &iss(61));
     capture(root, "al", &iss(61), &iss(63));
     capture(root, "tb", &iss(60), &iss(62));

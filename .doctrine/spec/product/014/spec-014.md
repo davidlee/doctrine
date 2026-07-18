@@ -14,7 +14,10 @@ other.
 
 An **estimate** answers the first: a bounded, project-local claim about the **human
 attention burden** required to move an entity through interpretation, design,
-coordination, execution, verification, audit reconciliation, and close. It is *not*
+coordination, execution, verification, audit reconciliation, and close — since
+REV-026 (RFC-020) a *ledgered* claim, dated, attributed, and supersedable in the
+comparison corpus, rather than an entity-file facet; validation and absence
+semantics are unchanged in force. It is *not*
 a prediction of wall-clock time, labour hours, velocity, or a delivery commitment —
 the coding phase may be a small part of it. Its value is decision support: it helps
 answer whether an entity is too large or ambiguous to reason about, whether work is
@@ -32,9 +35,9 @@ let graph tooling surface where cost and value concentrate or diverge. Value is 
 not price: it is decision support, never a monetary amount, a budget, a committed
 return, or a gate.
 
-The desired end state is two thin, optional claim surfaces — `[estimate]` (two
-bounds, an entity-file facet) and value (one magnitude, a ledgered anchor-claim
-row since REV-024) — that record their claim, validate when present, display
+The desired end state is two thin, optional claim surfaces — estimate (two
+bounds) and value (one magnitude), both ledgered anchor-claim rows since
+REV-024/REV-026 — that record their claim, validate when present, display
 cleanly, and are exposed to graph tooling, defensibly compatible with PERT-flavoured
 and cost-vs-value reasoning without importing project-management ceremony. They are
 inputs to scope control, dispatch safety, epistemic calibration, audit planning, graph
@@ -45,8 +48,11 @@ primitive, price tag, or commitment.
 
 In scope:
 
-- An optional `[estimate]` facet carrying two bounded effort claims (`lower`,
-  `upper`) in a project-wide unit, attachable to any TOML-backed addressable entity.
+- An optional estimate claim carrying two bounded effort assertions
+  (`est_lower`, `est_upper`) in a project-wide unit, attachable to any
+  TOML-backed addressable entity. Captured as a ledgered anchor-claim row
+  (REV-026); the legacy `[estimate]` facet survives transitionally for
+  unmigrated corpora only.
 - An optional value claim carrying a single finite worth/payoff magnitude in a
   project-wide unit, attachable to the same entities — the value counterpart to
   `[estimate]`. Captured as a ledgered anchor-claim row (REV-024); the legacy

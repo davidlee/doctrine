@@ -37,6 +37,3 @@ target = "QUE-001"
 label = "shapes"
 target = "RFC-008"
 
-[estimate]
-lower = 1.0
-upper = 2.0

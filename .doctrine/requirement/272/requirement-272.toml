@@ -7,10 +7,10 @@ title = "Preserve a valid estimate through parse, hydrate, and catalog"
 status = "active"
 kind = "functional"
 
-description = "A valid estimate survives parse -> hydrate -> catalog projection unchanged in its normalized form."
+description = "Transitional until the SL-222 deletion census: a valid [estimate] facet survives parse -> hydrate -> catalog projection unchanged in its normalized form. The durable successor obligation is wire round-trip losslessness of estimate anchor rows (SL-222 design 8.1 goldens); this requirement retires when the facet read paths delete (REV-026 disposition: retire at deletion)."
 tags = []
 acceptance_criteria = [
-  "A valid estimate's normalized lower/upper are identical after parse, hydrate, and catalog projection.",
-  "Original TOML numeric formatting is not retained; the normalized form is what round-trips.",
-  "Equal bounds (lower == upper) round-trip as a valid zero-width estimate.",
+  "Until the deletion census, a valid facet's normalized lower/upper are identical after parse, hydrate, and catalog projection.",
+  "Estimate anchor rows round-trip byte-losslessly through the wire (write -> parse -> write), including absent-optional posture.",
+  "Equal bounds (lower == upper) round-trip as a valid zero-width range in both the transitional facet and the claim payload.",
 ]

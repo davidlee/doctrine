@@ -28,6 +28,3 @@ target = "RFC-005"
 label = "governed_by"
 target = "ADR-011"
 
-[estimate]
-lower = 2.0
-upper = 3.5

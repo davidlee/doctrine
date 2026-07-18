@@ -25,6 +25,3 @@ label = "references"
 role = "concerns"
 target = "SPEC-001"
 
-[estimate]
-lower = 1.0
-upper = 2.0

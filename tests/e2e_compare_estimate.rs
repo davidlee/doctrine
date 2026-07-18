@@ -111,6 +111,24 @@ fn capture_more_work(root: &Path, slot: &str, a: &str, b: &str, resp: &str) {
     );
 }
 
+/// Hand-author an estimate-domain anchor row (cost-anchor frame, human-tier).
+/// PHASE-06: anchors are claim-derived — this mint a Pin/Human claim row
+/// so the est system has a claim-derived anchor.
+fn capture_cost_anchor(root: &Path, uid: &str, item: &str, lower: f64, upper: f64) {
+    write(
+        root,
+        &format!(".doctrine/comparisons/2026-01-01-{uid}.toml"),
+        &format!(
+            "schema = \"doctrine.comparison-session\"\nversion = 2\n\n\
+             [session]\nuid = \"sess-{uid}\"\ndate = \"2026-01-01\"\n\n\
+             [[judgement]]\nuid = \"{uid}\"\nseq = 0\na = \"{item}\"\n\
+             domain = \"estimate\"\nframe = \"cost-anchor\"\n\
+             form = \"anchor\"\nrater = \"human\"\ndate = \"2026-01-01\"\n\
+             est_lower = {lower}\nest_upper = {upper}\n"
+        ),
+    );
+}
+
 fn explain(root: &Path, id: &str) -> String {
     ok(&run(root, &["explain", id]))
 }
@@ -154,6 +172,9 @@ fn capture_more_work_shifts_score_and_reveals_cost_source() {
     let score_before = score_line(&before);
 
     // ISS-010 is more work than ISS-011 ⇒ ISS-011 projects below the 8.0 anchor.
+    // PHASE-06: add an anchor-form claim row for ISS-010 so the est system
+    // has a claim-derived anchor (the old facet anchor is dead).
+    capture_cost_anchor(root, "a10", &iss(10), 8.0, 8.0);
     capture_more_work(root, "mw", &iss(10), &iss(11), "prefer-a");
 
     let after = explain(root, &iss(11));
@@ -168,10 +189,10 @@ fn capture_more_work_shifts_score_and_reveals_cost_source() {
             && after.contains("constraining sizing judgements (1 human, 0 agent)"),
         "ISS-011 shows the projected cost-source block: {after}"
     );
-    // The authored anchor shows the operator-pin shape.
+    // The anchored claim shows the human-claim shape (rater=human → tier=Human).
     assert!(
-        explain(root, &iss(10)).contains("est_cost 8.0 — authored [8.0 ‥ 8.0] · β 0.65"),
-        "ISS-010 shows the authored pin shape"
+        explain(root, &iss(10)).contains("est_cost 8.0 — human claim [8.0 ‥ 8.0] · β 0.65"),
+        "ISS-010 shows the human claim shape"
     );
 }
 
@@ -203,6 +224,10 @@ fn sizing_probe_round_trip_lands_the_subject_sized() {
         2,
         "[estimate]\nlower = 4.0\nupper = 4.0\n[value]\nvalue = 10.0\n",
     ); // target
+    // PHASE-06: add an anchor-form claim row for the target so the est
+    // system has a claim-derived anchor (the authored facet still grounds
+    // the target pool via estimated_costs).
+    capture_cost_anchor(root, "a2", &iss(2), 4.0, 4.0);
 
     // The probe surfaces: subject, target, ask (more-work / estimate), command.
     let json = elicit_json(root, &["--kind", "sizing-probe", "--json"]);
@@ -241,7 +266,7 @@ fn sizing_probe_round_trip_lands_the_subject_sized() {
         "the answered subject no longer raises a sizing probe: {after}"
     );
     assert!(
-        explain(root, &iss(1)).contains("est_cost 4.0 — authored (via class anchor)"),
+        explain(root, &iss(1)).contains("est_cost 4.0 — anchored (via class anchor)"),
         "the subject is sized via the target's class anchor"
     );
 }
@@ -270,6 +295,9 @@ fn est_anchor_conflict_is_domain_tagged_with_json_parity() {
         22,
         "[estimate]\nlower = 3.0\nupper = 3.0\n[value]\nvalue = 10.0\n",
     );
+    // PHASE-06: anchor-form claim rows for the two anchor items.
+    capture_cost_anchor(root, "a20", &iss(20), 1.0, 1.0);
+    capture_cost_anchor(root, "a22", &iss(22), 3.0, 3.0);
     capture_more_work(root, "ab", &iss(20), &iss(21), "prefer-a");
     capture_more_work(root, "bc", &iss(21), &iss(22), "prefer-a");
 

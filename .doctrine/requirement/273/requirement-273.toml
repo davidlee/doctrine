@@ -3,15 +3,14 @@ version = 1
 
 id = 273
 slug = "render-the-estimate-in-display-without-classifying-spread"
-title = "Render the estimate in display without classifying spread"
+title = "Render the resolved estimate in display without classifying spread"
 status = "active"
 kind = "functional"
 
-description = "Display renders the estimate as a pure function: present/absent in detailed view, ratio + width in verbose view, classifying nothing."
+description = "Display renders the claim-resolved estimate as a pure function: resolved range + tier + attribution + unit when evidence exists, omitted when absent, scoring-inert annotation for record kinds, classifying nothing (REV-026)."
 tags = []
 acceptance_criteria = [
-  "Detailed display shows 'Estimate: <lower>-<upper> <unit>' present and 'Estimate: none recorded' absent, using normalized compact bounds.",
-  "Verbose/review display shows attention spread (ratio) and attention width (absolute).",
-  "When lower == 0 the spread ratio is reported unavailable while width is still shown.",
+  "The estimate line renders the resolved range, claim tier, attribution, and unit from the comparison pipeline; absent evidence omits the line.",
+  "Rater-stated range confidence renders as claim content, distinct from any derived certainty.",
   "Normal display never classifies spread as wide, very wide, risky, or split-worthy.",
 ]

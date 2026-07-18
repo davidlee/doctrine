@@ -769,18 +769,6 @@ pub(crate) struct Spec {
     /// outbound; the reciprocal children view is derived, never stored (§5.2).
     #[serde(default)]
     pub(crate) parent: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::estimate::deserialize_lenient"
-    )]
-    pub(crate) estimate: Option<crate::estimate::EstimateFacet>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "crate::value::deserialize_lenient"
-    )]
-    pub(crate) value: Option<crate::value::ValueFacet>,
 }
 
 /// One membership row in a spec's `members.toml` — the spec→requirement edge with
@@ -920,10 +908,11 @@ pub(crate) fn render(
     members: &[(Member, Requirement)],
     req_bodies: &[Option<String>],
     interactions: &[Interaction],
-    estimation_unit: &str,
+    _estimation_unit: &str,
     value_line: Option<&str>,
-    lower_pct: f64,
-    upper_pct: f64,
+    estimate_line: Option<&str>,
+    _lower_pct: f64,
+    _upper_pct: f64,
 ) -> String {
     let canonical_ref = spec.kind.canonical_id(spec.id);
     // House style: collect pre-formatted pieces (each carrying its own newlines)
@@ -989,16 +978,10 @@ pub(crate) fn render(
             parts.push(format!("  - {} {}{module}\n", s.language, s.identifier));
         }
     }
-    if let Some(ref est) = spec.estimate {
-        parts.push(format!(
-            "{}\n",
-            crate::estimate::display::format_estimate_confidence(
-                est,
-                lower_pct,
-                upper_pct,
-                estimation_unit,
-            )
-        ));
+    // Estimate line — pipeline-resolved (SL-222 PHASE-07, D7-EST).
+    // Facet fallback deleted at PHASE-09.
+    if let Some(line) = estimate_line {
+        parts.push(format!("{line}\n"));
     }
     // SL-220 PHASE-06: the value line re-sources from the ladder (design §6),
     // resolved by the shell (`run_show` / lazyspec) and threaded in.
@@ -1546,9 +1529,15 @@ pub(crate) fn run_show(
             let value_line = crate::priority::surface::show_value_line(
                 &root,
                 &spec.kind.canonical_id(spec.id),
-                spec.value.as_ref().map(|v| v.value),
                 spec.kind.kind().prefix,
                 &value_unit,
+            )?;
+            // SL-222 PHASE-07: the estimate line re-sources from the ladder.
+            let estimate_line = crate::priority::surface::show_estimate_line(
+                &root,
+                &spec.kind.canonical_id(spec.id),
+                spec.kind.kind().prefix,
+                &estimation_unit,
             )?;
             render(
                 &spec,
@@ -1558,6 +1547,7 @@ pub(crate) fn run_show(
                 &interactions,
                 &estimation_unit,
                 value_line.as_deref(),
+                estimate_line.as_deref(),
                 lower_pct,
                 upper_pct,
             )
@@ -3594,8 +3584,6 @@ parent = \"SPEC-002\"
             sources: Vec::new(),
             descends_from: None,
             parent: None,
-            estimate: None,
-            value: None,
         }
     }
 
@@ -3624,6 +3612,7 @@ parent = \"SPEC-002\"
             &[],
             &[],
             "points",
+            None,
             None,
             0.0,
             1.0,
@@ -3683,6 +3672,7 @@ parent = \"SPEC-002\"
             &[],
             "points",
             None,
+            None,
             0.0,
             1.0,
         );
@@ -3704,7 +3694,18 @@ parent = \"SPEC-002\"
         let mut r = req(1, "Bare", ReqKind::Functional);
         r.description = None; // no statement (D-P4-1: absent → no line)
         let members = vec![(member("REQ-001", "FR-001", 1), r)];
-        let out = render(&spec, "p\n", &members, &[], &[], "points", None, 0.0, 1.0);
+        let out = render(
+            &spec,
+            "p\n",
+            &members,
+            &[],
+            &[],
+            "points",
+            None,
+            None,
+            0.0,
+            1.0,
+        );
         assert!(out.contains("### FR-001 (REQ-001) — Bare"));
         assert!(!out.contains("statement"));
     }
@@ -3724,13 +3725,24 @@ parent = \"SPEC-002\"
                 notes: None,
             },
         ];
-        let with = render(&spec, "p\n", &[], &[], &edges, "points", None, 0.0, 1.0);
+        let with = render(
+            &spec,
+            "p\n",
+            &[],
+            &[],
+            &edges,
+            "points",
+            None,
+            None,
+            0.0,
+            1.0,
+        );
         assert!(with.contains("## Interactions"));
         assert!(with.contains("- SPEC-002 — uses: calls boot"));
         assert!(with.contains("- SPEC-003 — extends\n"));
 
         // empty (product spec or a tech spec with zero edges) → block omitted.
-        let without = render(&spec, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
+        let without = render(&spec, "p\n", &[], &[], &[], "points", None, None, 0.0, 1.0);
         assert!(!without.contains("## Interactions"));
     }
 
@@ -3744,7 +3756,7 @@ parent = \"SPEC-002\"
             responsibilities: vec!["route".to_string()],
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", None, None, 0.0, 1.0);
         assert!(out.contains("descends from: PRD-001\n"));
         assert!(out.contains("parent: SPEC-002\n"));
         // no derived children line ever (ADR-004 §3, outbound-only).
@@ -3761,7 +3773,7 @@ parent = \"SPEC-002\"
     fn render_omits_descent_and_parent_when_none_and_for_product() {
         // VT-2: tech with both None → neither line.
         let tech = tech_spec(1);
-        let out = render(&tech, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
+        let out = render(&tech, "p\n", &[], &[], &[], "points", None, None, 0.0, 1.0);
         assert!(!out.contains("descends from:"));
         assert!(!out.contains("\nparent:"));
 
@@ -3773,7 +3785,18 @@ parent = \"SPEC-002\"
             parent: None,
             ..tech_spec(1)
         };
-        let pout = render(&product, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
+        let pout = render(
+            &product,
+            "p\n",
+            &[],
+            &[],
+            &[],
+            "points",
+            None,
+            None,
+            0.0,
+            1.0,
+        );
         assert!(!pout.contains("descends from:"));
         assert!(!pout.contains("parent:"));
     }
@@ -3787,7 +3810,7 @@ parent = \"SPEC-002\"
             parent: Some("PRD-003".to_string()),
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", None, None, 0.0, 1.0);
         assert!(out.contains("product level: capability\n"));
         assert!(out.contains("parent: PRD-003\n"));
         // reciprocal children are derived, never rendered (ADR-004 §3).
@@ -3806,39 +3829,8 @@ parent = \"SPEC-002\"
             c4_level: Some(C4Level::Container),
             ..tech_spec(1)
         };
-        let out = render(&spec, "p\n", &[], &[], &[], "points", None, 0.0, 1.0);
+        let out = render(&spec, "p\n", &[], &[], &[], "points", None, None, 0.0, 1.0);
         assert!(!out.contains("c4 level:"));
-    }
-
-    #[test]
-    fn render_estimate_and_value_when_present() {
-        let mut spec = tech_spec(1);
-        spec.estimate = Some(crate::estimate::EstimateFacet {
-            lower: 3.0,
-            upper: 8.0,
-        });
-        spec.value = Some(crate::value::ValueFacet { value: 21.0 });
-        // SL-220 PHASE-06: the value line is resolved by the shell and threaded
-        // in; render emits the passed line verbatim (design §6).
-        let out = render(
-            &spec,
-            "p\n",
-            &[],
-            &[],
-            &[],
-            "espresso_shots",
-            Some("value: 21.0 magic_beans (human claim, ada, 2026-07-16)"),
-            0.1,
-            0.9,
-        );
-        assert!(
-            out.contains("estimate: 3.5–7.5 espresso_shots (80% confidence)"),
-            "estimate row: {out}"
-        );
-        assert!(
-            out.contains("value: 21.0 magic_beans (human claim, ada, 2026-07-16)"),
-            "value row: {out}"
-        );
     }
 
     // --- FIX 2: build_registry canonicalizes non-canonical author-supplied FKs ---

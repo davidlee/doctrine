@@ -50,6 +50,10 @@ pub(crate) const FRAME_MORE_WORK: &str = "more-work";
 /// Value anchor frame (SL-220 §1): an absolute magnitude claim on a single
 /// subject. Never user-typed — `value set|pin` stamps it.
 pub(crate) const FRAME_VALUE_ANCHOR: &str = "value-anchor";
+/// Estimate anchor frame (SL-222 §1): a bounded settle-cost claim on a single
+/// subject — carries `est_lower`/`est_upper` in place of `magnitude`. Never
+/// user-typed — `estimate set|pin` stamps it.
+pub(crate) const FRAME_COST_ANCHOR: &str = "cost-anchor";
 
 /// Per-domain closed frame vocabulary (design D2). The frame implies the
 /// domain at capture — users never type a domain; [`domain_for_frame`] is the
@@ -57,14 +61,14 @@ pub(crate) const FRAME_VALUE_ANCHOR: &str = "value-anchor";
 pub(crate) const DOMAIN_FRAMES: &[(&str, &[&str])] = &[
     (DOMAIN_VALUE, &[FRAME_EQUAL_EFFORT, FRAME_VALUE_ANCHOR]),
     (DOMAIN_PRIORITY, &[FRAME_PREFER_FIRST]),
-    (DOMAIN_ESTIMATE, &[FRAME_MORE_WORK]),
+    (DOMAIN_ESTIMATE, &[FRAME_MORE_WORK, FRAME_COST_ANCHOR]),
 ];
 
 /// The anchor-frame membership set (SL-220 §1): each domain's frame set names
 /// AT MOST one member of this set, and `form = anchor ⇔ frame ∈ ANCHOR_FRAMES`
 /// is the validation biconditional. Membership anchors on this set, never on
 /// a name pattern (`cost-anchor` joins with Phase 2).
-const ANCHOR_FRAMES: &[&str] = &[FRAME_VALUE_ANCHOR];
+const ANCHOR_FRAMES: &[&str] = &[FRAME_VALUE_ANCHOR, FRAME_COST_ANCHOR];
 
 /// The wire version this model WRITES (SL-220 D2). Parse accepts every member
 /// of [`SUPPORTED_VERSIONS`] — every v2 file is a valid v3 document, so the
@@ -91,9 +95,9 @@ fn frames_for_domain(domain: &str) -> Option<&'static [&'static str]> {
         .map(|(_, frames)| *frames)
 }
 
-/// The domain's single anchor frame, if it names one (SL-220 §1). `None` for
-/// domains with no anchor form yet (`priority`, `estimate` — `cost-anchor`
-/// arrives with Phase 2), which bars `form = anchor` there entirely.
+/// The domain's single anchor frame, if it names one (SL-220 §1 / SL-222 §1).
+/// `None` for domains with no anchor form yet (`priority`), which bars
+/// `form = anchor` there entirely.
 fn anchor_frame_for(domain: &str) -> Option<&'static str> {
     frames_for_domain(domain)?
         .iter()
@@ -183,6 +187,12 @@ pub(crate) struct Judgement {
     /// (design C1). On a value-domain ANCHOR row: the payload — the claimed
     /// absolute magnitude (SL-220 D1).
     pub magnitude: Option<f64>,
+    /// Estimate anchor payload: lower bound (SL-222 §1). Present on
+    /// cost-anchor rows; absent on all other forms/domains.
+    pub est_lower: Option<f64>,
+    /// Estimate anchor payload: upper bound (SL-222 §1). Present on
+    /// cost-anchor rows; absent on all other forms/domains.
+    pub est_upper: Option<f64>,
     /// Explicit supersession target: this row's uid replaces that row's
     /// testimony (design R2 — a durable act, not testimony).
     pub supersedes: Option<String>,
@@ -354,6 +364,12 @@ fn validate_form(j: &Judgement) -> anyhow::Result<()> {
                     j.domain
                 );
             }
+            if j.est_lower.is_some() || j.est_upper.is_some() {
+                anyhow::bail!(
+                    "a pairwise row carries no estimate payload — `est_lower`/`est_upper` \
+                     must be absent"
+                );
+            }
             let Some(b) = j.b.as_deref() else {
                 anyhow::bail!("both sides of the pair are required — `b` is absent");
             };
@@ -371,20 +387,49 @@ fn validate_form(j: &Judgement) -> anyhow::Result<()> {
     }
 }
 
-/// The per-domain anchor payload, EXACTLY (SL-220 D1). Value: `{magnitude}` —
-/// present and finite, mirroring [`value::validate`] (the single source — no
-/// range policy smuggled in; negatives included). Estimate payload columns
-/// arrive with Phase 2; the frame biconditional already bars anchor rows from
-/// domains without an anchor frame, so `value` is the only reachable arm.
+/// The per-domain anchor payload, EXACTLY (SL-220 D1 / SL-222 §1). Value:
+/// `{magnitude}` — present and finite, mirroring [`value::validate`] (the
+/// single source — no range policy smuggled in; negatives included); the
+/// estimate payload fields MUST be absent (payload exactness cuts both ways).
+/// Estimate: `{est_lower, est_upper}` — both present, finite, lower >= 0,
+/// upper >= lower, mirroring [`estimate::validate`] (the single source, never
+/// duplicated); `magnitude` MUST be absent.
 fn validate_anchor_payload(j: &Judgement) -> anyhow::Result<()> {
-    debug_assert_eq!(
-        j.domain, DOMAIN_VALUE,
-        "the frame biconditional bars anchor rows from other domains"
-    );
-    let Some(magnitude) = j.magnitude else {
-        anyhow::bail!("a value anchor claims a magnitude — `magnitude` is required");
-    };
-    value::validate(&value::ValueFacet { value: magnitude })
+    match j.domain.as_str() {
+        DOMAIN_VALUE => {
+            if j.est_lower.is_some() || j.est_upper.is_some() {
+                anyhow::bail!(
+                    "a value anchor carries no estimate payload — `est_lower`/`est_upper` \
+                     must be absent"
+                );
+            }
+            let Some(magnitude) = j.magnitude else {
+                anyhow::bail!("a value anchor claims a magnitude — `magnitude` is required");
+            };
+            value::validate(&value::ValueFacet { value: magnitude })
+        }
+        DOMAIN_ESTIMATE => {
+            if j.magnitude.is_some() {
+                anyhow::bail!("a cost anchor carries no magnitude — `magnitude` must be absent");
+            }
+            let Some(lower) = j.est_lower else {
+                anyhow::bail!("a cost anchor claims a lower bound — `est_lower` is required");
+            };
+            let Some(upper) = j.est_upper else {
+                anyhow::bail!("a cost anchor claims an upper bound — `est_upper` is required");
+            };
+            let facet = crate::estimate::EstimateFacet { lower, upper };
+            crate::estimate::validate(&facet)
+        }
+        _ => {
+            // The frame biconditional bars anchor rows from domains without
+            // an anchor frame, so this arm is unreachable for valid rows.
+            anyhow::bail!(
+                "anchor payload validation not implemented for domain `{}`",
+                j.domain
+            );
+        }
+    }
 }
 
 /// The provenance half of the SL-220 §1 matrix: `rater = migrated` ⇒ anchor
@@ -557,6 +602,8 @@ mod tests {
             frame: FRAME_EQUAL_EFFORT.to_string(),
             form: RowForm::Order,
             magnitude: Some(2.5),
+            est_lower: None,
+            est_upper: None,
             supersedes: Some("0197f3a1-1111-7abc-8def-0a1b2c3d4e5f".to_string()),
             lens: Some("user-value".to_string()),
             rater: RaterKind::Agent,
@@ -582,6 +629,8 @@ mod tests {
             frame: FRAME_MORE_WORK.to_string(),
             form: RowForm::Order,
             magnitude: None,
+            est_lower: None,
+            est_upper: None,
             supersedes: None,
             lens: None,
             rater: RaterKind::Human,
@@ -606,6 +655,8 @@ mod tests {
             frame: FRAME_PREFER_FIRST.to_string(),
             form: RowForm::Order,
             magnitude: None,
+            est_lower: None,
+            est_upper: None,
             supersedes: None,
             lens: None,
             rater: RaterKind::Human,
@@ -632,6 +683,8 @@ mod tests {
             frame: FRAME_VALUE_ANCHOR.to_string(),
             form: RowForm::Anchor,
             magnitude: Some(6.5),
+            est_lower: None,
+            est_upper: None,
             supersedes: None,
             lens: None,
             rater: RaterKind::Human,
@@ -652,6 +705,99 @@ mod tests {
         }
     }
 
+    // ---- SL-222 §1 estimate anchor-row fixtures (design's sample rows) ------
+
+    /// The design's live-human estimate anchor sample (SL-222 §1):
+    /// `cost-anchor` frame, `est_lower`/`est_upper` in place of `magnitude`.
+    fn human_estimate_anchor() -> Judgement {
+        Judgement {
+            uid: "0197f3a2-bc85-7da4-9fb0-8b9c0d1e2f3a".to_string(),
+            seq: 0,
+            a: "SL-221".to_string(),
+            b: None,
+            response: None,
+            domain: DOMAIN_ESTIMATE.to_string(),
+            frame: FRAME_COST_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: None,
+            est_lower: Some(2.0),
+            est_upper: Some(8.0),
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Human,
+            by: Some("david".to_string()),
+            note: None,
+            date: Some("2026-07-17".to_string()),
+            observed_at: None,
+            basis: Some("ASM-014; assumes v3 wire reuse".to_string()),
+            admission: None,
+        }
+    }
+
+    /// A pin estimate anchor: `admission = "pin"` on an estimate anchor.
+    fn pin_estimate_anchor() -> Judgement {
+        Judgement {
+            admission: Some(AdmissionKind::Pin),
+            ..human_estimate_anchor()
+        }
+    }
+
+    /// A migrated estimate anchor: `rater = migrated`, `observed_at` in
+    /// place of `date`.
+    fn migrated_estimate_anchor() -> Judgement {
+        Judgement {
+            uid: "0197f3a2-cd96-7eb5-9fc1-9b0c1d2e3f4b".to_string(),
+            seq: 1,
+            a: "IMP-118".to_string(),
+            b: None,
+            response: None,
+            domain: DOMAIN_ESTIMATE.to_string(),
+            frame: FRAME_COST_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: None,
+            est_lower: Some(1.0),
+            est_upper: Some(3.0),
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Migrated,
+            by: None,
+            note: None,
+            date: None,
+            observed_at: Some("2026-07-17".to_string()),
+            basis: Some(
+                "facet [estimate] .doctrine/backlog/imp-118.toml @ 9c01d2aa david 2026-06-28"
+                    .to_string(),
+            ),
+            admission: None,
+        }
+    }
+
+    /// A point estimate: lower == upper, the `-x` point form (SL-222 §1).
+    fn point_estimate_anchor() -> Judgement {
+        Judgement {
+            uid: "0197f3a2-dea7-7fc6-9fd2-ac1d2e3f5c6d".to_string(),
+            seq: 2,
+            a: "PLAN-001".to_string(),
+            b: None,
+            response: None,
+            domain: DOMAIN_ESTIMATE.to_string(),
+            frame: FRAME_COST_ANCHOR.to_string(),
+            form: RowForm::Anchor,
+            magnitude: None,
+            est_lower: Some(5.0),
+            est_upper: Some(5.0),
+            supersedes: None,
+            lens: None,
+            rater: RaterKind::Human,
+            by: None,
+            note: None,
+            date: Some("2026-07-17".to_string()),
+            observed_at: None,
+            basis: None,
+            admission: None,
+        }
+    }
+
     /// The design's second sample row: a migrated facet import —
     /// `observed_at` in place of `date`, provenance in `basis`.
     fn migrated_anchor() -> Judgement {
@@ -665,6 +811,8 @@ mod tests {
             frame: FRAME_VALUE_ANCHOR.to_string(),
             form: RowForm::Anchor,
             magnitude: Some(3.0),
+            est_lower: None,
+            est_upper: None,
             supersedes: None,
             lens: None,
             rater: RaterKind::Migrated,
@@ -680,6 +828,7 @@ mod tests {
     /// Pins the vocab constants to the documented schema strings (style
     /// precedent: `kinds::tests::groupings_match_documented_membership`).
     /// SL-220 §1: version 3 written, `value-anchor` in the value frame set.
+    /// SL-222 §1: `cost-anchor` joins the estimate frame set and anchor set.
     #[test]
     fn vocab_matches_documented_schema() {
         assert_eq!(COMPARISON_SCHEMA, "doctrine.comparison-session");
@@ -691,12 +840,13 @@ mod tests {
         assert_eq!(DOMAIN_ESTIMATE, "estimate");
         assert_eq!(FRAME_MORE_WORK, "more-work");
         assert_eq!(FRAME_VALUE_ANCHOR, "value-anchor");
+        assert_eq!(FRAME_COST_ANCHOR, "cost-anchor");
         assert_eq!(
             DOMAIN_FRAMES,
             &[
                 ("value", &["equal-effort", "value-anchor"][..]),
                 ("priority", &["prefer-first"][..]),
-                ("estimate", &["more-work"][..])
+                ("estimate", &["more-work", "cost-anchor"][..])
             ]
         );
     }
@@ -706,23 +856,26 @@ mod tests {
     /// unknown frame derives nothing. SL-219 D1: `more-work` derives the
     /// estimate domain. SL-220 §1: `value-anchor` derives value —
     /// `domain_for_frame` stays total over the grown table.
+    /// SL-222 §1: `cost-anchor` derives the estimate domain.
     #[test]
     fn domain_for_frame_derives_from_the_table() {
         assert_eq!(domain_for_frame(FRAME_EQUAL_EFFORT), Some(DOMAIN_VALUE));
         assert_eq!(domain_for_frame(FRAME_PREFER_FIRST), Some(DOMAIN_PRIORITY));
         assert_eq!(domain_for_frame(FRAME_MORE_WORK), Some(DOMAIN_ESTIMATE));
         assert_eq!(domain_for_frame(FRAME_VALUE_ANCHOR), Some(DOMAIN_VALUE));
+        assert_eq!(domain_for_frame(FRAME_COST_ANCHOR), Some(DOMAIN_ESTIMATE));
         assert_eq!(domain_for_frame("opportunity-cost"), None);
     }
 
-    /// SL-220 §1: the anchor-frame derivation is membership in
-    /// `ANCHOR_FRAMES`, per domain — value names one; priority/estimate name
-    /// none yet (`cost-anchor` arrives with Phase 2); unknown domains none.
+    /// SL-220 §1 / SL-222 §1: the anchor-frame derivation is membership in
+    /// `ANCHOR_FRAMES`, per domain — value names `value-anchor`; estimate
+    /// names `cost-anchor`; priority (no anchor yet) names none; unknown
+    /// domains none.
     #[test]
     fn anchor_frame_for_derives_from_the_membership_set() {
         assert_eq!(anchor_frame_for(DOMAIN_VALUE), Some(FRAME_VALUE_ANCHOR));
         assert_eq!(anchor_frame_for(DOMAIN_PRIORITY), None);
-        assert_eq!(anchor_frame_for(DOMAIN_ESTIMATE), None);
+        assert_eq!(anchor_frame_for(DOMAIN_ESTIMATE), Some(FRAME_COST_ANCHOR));
         assert_eq!(anchor_frame_for("effort"), None);
     }
 
@@ -1170,8 +1323,8 @@ admission = \"pin\"
     #[test]
     fn validate_rejects_anchor_in_domain_without_anchor_frame() {
         let mut j = human_anchor();
-        j.domain = DOMAIN_ESTIMATE.to_string();
-        j.frame = FRAME_MORE_WORK.to_string();
+        j.domain = DOMAIN_PRIORITY.to_string();
+        j.frame = FRAME_PREFER_FIRST.to_string();
         let err = validate_judgement(&j).unwrap_err().to_string();
         assert!(err.contains("has none"), "got: {err}");
     }
@@ -1258,6 +1411,273 @@ admission = \"pin\"
         let mut j = human_anchor();
         j.a = String::new();
         assert!(validate_judgement(&j).is_err());
+    }
+
+    // ---- SL-222 §1: estimate anchor payload (VT-1) --------------------------
+
+    /// Goldens: the four canonical estimate anchor rows — live human,
+    /// pin, migrated, and point estimate (lower == upper).
+    #[test]
+    fn golden_shape_estimate_anchor_rows() {
+        let s = ComparisonSession {
+            schema: COMPARISON_SCHEMA.to_string(),
+            version: COMPARISON_VERSION,
+            session: SessionHeader {
+                uid: "0197f3a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f".to_string(),
+                date: "2026-07-17".to_string(),
+                audience: None,
+            },
+            judgements: vec![
+                human_estimate_anchor(),
+                pin_estimate_anchor(),
+                migrated_estimate_anchor(),
+                point_estimate_anchor(),
+            ],
+            tombstones: vec![],
+        };
+        let expected = r#"schema = "doctrine.comparison-session"
+version = 3
+tombstone = []
+
+[session]
+uid = "0197f3a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f"
+date = "2026-07-17"
+
+[[judgement]]
+uid = "0197f3a2-bc85-7da4-9fb0-8b9c0d1e2f3a"
+seq = 0
+a = "SL-221"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 2.0
+est_upper = 8.0
+rater = "human"
+by = "david"
+date = "2026-07-17"
+basis = "ASM-014; assumes v3 wire reuse"
+
+[[judgement]]
+uid = "0197f3a2-bc85-7da4-9fb0-8b9c0d1e2f3a"
+seq = 0
+a = "SL-221"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 2.0
+est_upper = 8.0
+rater = "human"
+by = "david"
+date = "2026-07-17"
+basis = "ASM-014; assumes v3 wire reuse"
+admission = "pin"
+
+[[judgement]]
+uid = "0197f3a2-cd96-7eb5-9fc1-9b0c1d2e3f4b"
+seq = 1
+a = "IMP-118"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 1.0
+est_upper = 3.0
+rater = "migrated"
+observed_at = "2026-07-17"
+basis = "facet [estimate] .doctrine/backlog/imp-118.toml @ 9c01d2aa david 2026-06-28"
+
+[[judgement]]
+uid = "0197f3a2-dea7-7fc6-9fd2-ac1d2e3f5c6d"
+seq = 2
+a = "PLAN-001"
+domain = "estimate"
+frame = "cost-anchor"
+form = "anchor"
+est_lower = 5.0
+est_upper = 5.0
+rater = "human"
+date = "2026-07-17"
+"#;
+        assert_eq!(to_toml(&s).unwrap(), expected);
+    }
+
+    /// Round-trip losslessness over the new optional columns: estimate anchor
+    /// rows (human, pin, migrated, point) alongside existing pairwise and value
+    /// anchor rows survive parse(to_toml(s)) == s.
+    #[test]
+    fn round_trip_preserves_estimate_anchor_est_lower_est_upper() {
+        let mut s = full_session();
+        s.judgements = vec![
+            full_judgement(),
+            bare_judgement(),
+            human_anchor(),
+            migrated_anchor(),
+            pin_anchor(),
+            human_estimate_anchor(),
+            pin_estimate_anchor(),
+            migrated_estimate_anchor(),
+            point_estimate_anchor(),
+        ];
+        let text = to_toml(&s).unwrap();
+        let parsed = parse(&text).unwrap();
+        assert_eq!(parsed, s);
+        // Verify the est_lower/est_upper values survive byte-identically.
+        for j in &parsed.judgements {
+            if j.frame == FRAME_COST_ANCHOR {
+                assert!(
+                    j.est_lower.is_some(),
+                    "cost-anchor row must carry est_lower"
+                );
+                assert!(
+                    j.est_upper.is_some(),
+                    "cost-anchor row must carry est_upper"
+                );
+            }
+        }
+    }
+
+    // Validation matrix — every arm in BOTH directions (§8.1).
+
+    #[test]
+    fn validate_accepts_human_estimate_anchor() {
+        assert!(validate_judgement(&human_estimate_anchor()).is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_pin_estimate_anchor() {
+        assert!(validate_judgement(&pin_estimate_anchor()).is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_migrated_estimate_anchor() {
+        assert!(validate_judgement(&migrated_estimate_anchor()).is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_point_estimate_anchor() {
+        assert!(validate_judgement(&point_estimate_anchor()).is_ok());
+    }
+
+    /// form=anchor ∧ domain=estimate ⇒ est_lower present ∧ est_upper present.
+    #[test]
+    fn validate_rejects_estimate_anchor_without_est_lower() {
+        let mut j = human_estimate_anchor();
+        j.est_lower = None;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("est_lower"), "got: {err}");
+    }
+
+    #[test]
+    fn validate_rejects_estimate_anchor_without_est_upper() {
+        let mut j = human_estimate_anchor();
+        j.est_upper = None;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("est_upper"), "got: {err}");
+    }
+
+    /// Estimate payload mirroring `estimate::validate` exactly: finite,
+    /// lower >= 0, upper >= lower.
+    #[test]
+    fn validate_estimate_anchor_est_pair_mirrors_estimate_validate() {
+        // NAN lower
+        let mut j = human_estimate_anchor();
+        j.est_lower = Some(f64::NAN);
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("finite"), "nan lower: {err}");
+
+        // INF upper
+        let mut j = human_estimate_anchor();
+        j.est_upper = Some(f64::INFINITY);
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("finite"), "inf upper: {err}");
+
+        // Negative lower
+        let mut j = human_estimate_anchor();
+        j.est_lower = Some(-1.0);
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains(">= 0"), "negative lower: {err}");
+
+        // upper < lower
+        let mut j = human_estimate_anchor();
+        j.est_lower = Some(8.0);
+        j.est_upper = Some(2.0);
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("upper"), "upper < lower: {err}");
+    }
+
+    /// frame=cost-anchor ⇔ (form=anchor ∧ domain=estimate). A more-work frame
+    /// on an estimate anchor row, or cost-anchor on a pairwise row, is rejected.
+    #[test]
+    fn validate_rejects_cost_anchor_on_pairwise_row() {
+        let mut j = estimate_judgement();
+        j.frame = FRAME_COST_ANCHOR.to_string();
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(
+            err.contains("anchor frame") || err.contains("pairwise"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_estimate_anchor_with_pairwise_frame() {
+        let mut j = human_estimate_anchor();
+        j.frame = FRAME_MORE_WORK.to_string();
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("anchor frame"), "got: {err}");
+    }
+
+    /// Pairwise rows (order/ratio) ⇒ est_lower/est_upper absent. A pairwise
+    /// row with these fields set is refused.
+    #[test]
+    fn validate_rejects_pairwise_row_with_est_fields() {
+        let mut j = full_judgement();
+        j.est_lower = Some(2.0);
+        j.est_upper = Some(8.0);
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(
+            err.contains("est_lower") || err.contains("est_upper"),
+            "extra est fields on pairwise: {err}"
+        );
+    }
+
+    /// form=anchor ∧ domain=value ⇒ est_lower/est_upper ABSENT (payload
+    /// exactness cuts both ways).
+    #[test]
+    fn validate_rejects_value_anchor_with_est_fields() {
+        let mut j = human_anchor();
+        j.est_lower = Some(2.0);
+        j.est_upper = Some(8.0);
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(
+            err.contains("must be absent"),
+            "extra estimate fields on value anchor: {err}"
+        );
+    }
+
+    /// form=anchor ∧ domain=estimate ⇒ magnitude absent.
+    #[test]
+    fn validate_rejects_estimate_anchor_with_magnitude() {
+        let mut j = human_estimate_anchor();
+        j.magnitude = Some(3.5);
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(
+            err.contains("magnitude") && err.contains("must be absent"),
+            "got: {err}"
+        );
+    }
+
+    /// rater=migrated / admission=pin rules: unchanged, domain-agnostic.
+    /// A pin on an estimate anchor is valid; migrated estimate anchor is valid.
+    #[test]
+    fn validate_pin_on_estimate_anchor_is_valid() {
+        assert!(validate_judgement(&pin_estimate_anchor()).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_agent_pin_on_estimate_anchor() {
+        let mut j = pin_estimate_anchor();
+        j.rater = RaterKind::Agent;
+        let err = validate_judgement(&j).unwrap_err().to_string();
+        assert!(err.contains("human anchor"), "got: {err}");
     }
 
     #[test]

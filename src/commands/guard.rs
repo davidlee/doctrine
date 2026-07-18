@@ -379,7 +379,15 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         // in one transaction (SL-062 §5.4).
         Command::Supersede { .. } => Write("supersede"),
         // Estimate / Value / Risk facet writes (SL-118 PHASE-03, SL-134 PHASE-02).
-        Command::Estimate { .. } => Write("estimate"),
+        // SL-222 PHASE-06: estimate pin verbs join the worker-refused class.
+        Command::Estimate { action } => match action {
+            crate::commands::cli::EstimateAction::Set(_)
+            | crate::commands::cli::EstimateAction::Clear(_) => Write("estimate"),
+            crate::commands::cli::EstimateAction::Pin(pin) if pin.retire => {
+                Orchestrator("estimate pin --retire")
+            }
+            crate::commands::cli::EstimateAction::Pin(_) => Orchestrator("estimate pin"),
+        },
         // `value set`/`clear` stay ordinary writes; the SL-220 §4 pin family is
         // operator-gated (D13/EN-2) — Orchestrator-classed, worker-refused.
         Command::Value { action } => match action {
