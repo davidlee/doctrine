@@ -9,6 +9,7 @@ When unsure, route to the stricter skill. No code without an approved plan.
 | Substantive work, path not yet clear | `/preflight` |
 | Understanding an artifact is the whole task, no change intended | `/walkthrough` (no slice) |
 | Reviewing code for quality / correctness — ledgered findings | `/code-review` |
+| Spec target or boundary unclear — what's governed, what's dark, where a new spec sits | `/spec-coverage-assessment` |
 | Authoring or evolving a product / tech spec | `/spec-product` / `/spec-tech` |
 | Capturing or settling an epistemic record (assumption / decision / question / constraint / evidence / hypothesis / concept) | `/knowledge` |
 | Code-changing intent, no governing slice | `/slice` |

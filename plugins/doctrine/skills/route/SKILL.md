@@ -39,8 +39,8 @@ The core loop (slice→design→plan→execute→audit→close) is documented in
 
 - **Consult the backlog before choosing**: `backlog list` — is this intent
   already captured, and do open items bear on it?
-- Authoring tech specs → `/spec-tech`; product specs → `/spec-product`
-  (not in the boot table).
+- Authoring tech specs → `/spec-tech`; product specs → `/spec-product`;
+  spec target or boundary unclear → `/spec-coverage-assessment` first.
 - "There is a slice" does **not** route to `/execute` — the design, plan, and
   runtime phase sheet must exist first (the no-code-without-approved-plan gate).
 - Do not import stricter ceremony than the project has adopted; surface a
