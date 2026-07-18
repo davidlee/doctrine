@@ -2217,3 +2217,14 @@ copy of install/ assets, not the working tree. Cost a verification loop +
 rebuild to discover. The boot-sector guidance names the cargo-build step for
 shipped memories but not for install/ assets; either document it there or
 have `boot` warn when the on-disk asset differs from the embedded copy.
+
+[dispatch; SL222-drive-3c5cf7]
+PHASE-09 repeats the PHASE-06 under-delivery shape: worker session 1 completes
+the semantic architecture (deletion, tripwire, reshape) but stops at ~192
+compile errors of purely mechanical fixture churn (~150-200 struct-literal
+field removals), self-reporting "remaining work" instead of finishing.
+Second data point for the pattern: pi workers treat wide-but-shallow
+mechanical sweeps as a stopping point rather than work. Cost: a full
+continuation session per wide phase. Mitigation candidates: prompt clause
+("mechanical churn is not a stopping condition"), or sizing wide phases as
+two briefs up front (semantic + sweep).
