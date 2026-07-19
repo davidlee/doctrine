@@ -3,14 +3,14 @@ version = 1
 
 id = 359
 slug = "declare-published-assets-in-a-manifest"
-title = "Declare published assets in a manifest"
+title = "Publication is deliberate and fully declared"
 status = "pending"
 kind = "functional"
 
-description = "A publication manifest declares which framework-owned assets are public and, for each, its stable logical address, backing source, content kind, human title or summary, licence, and customization status."
+description = "Publication is a deliberate act: a user or agent can see exactly which framework-owned assets are public and, per asset, its stable logical address, content kind, human title or summary, licence, and customization status. Nothing becomes public as a side effect of being embedded in the tool."
 tags = []
 acceptance_criteria = [
-  "The manifest is the sole authority for what is published; an asset absent from it is not public regardless of whether the binary embeds it.",
-  "Each published entry carries all of: logical address, source, content kind, title or summary, licence, and customization status.",
-  "The manifest travels with the distributed tool, so publication requires no external source to fetch.",
+  "What is public is fully declared and inspectable, independent of what the tool happens to embed; an embedded-but-undeclared asset is not public.",
+  "Every published asset carries all of: logical address, content kind, title or summary, licence, and customization status.",
+  "A user can tell that an asset is published deliberately, not because the binary happens to carry its bytes.",
 ]

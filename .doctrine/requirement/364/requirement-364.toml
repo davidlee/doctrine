@@ -7,9 +7,9 @@ title = "Search every corpus from one entry point"
 status = "pending"
 kind = "functional"
 
-description = "A single search entry point runs a plain query across every registered corpus provider — published library, memory, RFCs, entities, and others."
+description = "A single search entry point runs a plain query across every discoverable corpus, so a user need not know which store holds a thing before they can find it."
 tags = []
 acceptance_criteria = [
-  "A bare query with no corpus named is executed against every registered provider.",
-  "The entry point accepts only discovery arguments common to all providers; no provider-specific query syntax is accepted there.",
+  "A bare query with no corpus named is executed against every discoverable corpus; the initial mandatory set is entities (including RFCs), memory, and the published library.",
+  "The entry point accepts only discovery arguments common to all corpora; no corpus-specific query syntax is accepted there.",
 ]

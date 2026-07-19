@@ -41,8 +41,8 @@ In scope:
 - **Publication** — a declared seam that exposes chosen framework-owned material
   for inspection and copy, without projecting it. Which assets are public, and
   the per-asset metadata that governs that exposure (stable logical address,
-  source, content kind, title/summary, licence, customization status), is
-  declared deliberately, not inherited from the embed root.
+  content kind, title/summary, licence, customization status), is declared
+  deliberately, not inherited from the embed root.
 - **Library** — a read-only surface to enumerate, browse, and emit published
   material by stable logical address: list a path, show the tree, print an
   asset's bytes cleanly for piping.
@@ -69,6 +69,10 @@ Out of scope:
   C2/C3 and Stage 5. Publication exposes bytes for inspection; it does not make
   any published fragment *active instruction*, and it does not establish which
   repository-supplied content a user has accepted.
+- **Addressing below whole-asset granularity** — C1 exposes whole published
+  assets; addressable *fragments* within an asset (e.g. one hymn section) are a
+  C2-triggered concern (RFC-021's exposed-fragment / composition model), not
+  reintroduced here.
 - **Migrating or cleaning up existing installs** (RFC-021 non-goal).
 
 Boundary: this capability owns *what framework-owned material is public, how it
@@ -85,13 +89,15 @@ whether it is trusted as instruction.
 - **Publication is deliberate, not incidental.** An asset is public because a
   manifest declares it public — never because the binary happens to embed it.
   Embedded ≠ published; Doctrine-owned ≠ opaque.
-- **Publication is independent of storage.** Whether an asset is compiled in or
-  loaded from an external source at runtime does not change whether, or how, it
-  is published (ADR-019 seven-property vocabulary).
-- **Licence is predictable and auditable.** A user can tell, before copying,
-  which licence governs an asset, from a crisp manifest-driven rule — not from a
-  semantic category they must guess. Prose that looks copyable may still encode
-  owned process logic; the rule, not appearances, decides.
+- **Publication is independent of storage.** Whether an asset is stored one way
+  or delivered another does not change whether, or how, it is published (ADR-019
+  seven-property vocabulary).
+- **Licence is declared and predictable.** Every published asset carries an
+  explicit declared licence a user can read before copying — not a semantic
+  category they must guess, and not an appearance that may mislead. Prose that
+  looks copyable may still encode owned process logic; the declared licence, not
+  appearances, governs, and an asset whose licence cannot be established is not
+  published.
 - **The library reads, it never writes.** No library operation mutates the
   project, installs a file, or overwrites anything. Emitting an asset is
   emitting bytes.
@@ -143,8 +149,11 @@ Invariants:
   visibly grouped by corpus, each hit resolvable through that corpus's native
   show command.
 - Removing every non-base file from a fresh install still leaves onboarding,
-  inspection, supported customization, and offline reference intact — because
-  the library serves them (the RFC-021 minimal-projection test).
+  inspection, and offline reference available through the library — the material
+  a user can read and copy is preserved without projection. (Materializing a
+  supported customization is its owning feature's job — SPEC-009 / the hymn
+  cascade — not the library's; the complete Stage-1 user-control story is a
+  cross-contract scenario, not the library's sole measure.)
 - No library invocation changes a byte of the project; running the full library
   surface over a clean repo leaves it clean.
 
@@ -177,11 +186,12 @@ specialized query language into the federated entry point.
 
 Edge cases and failure modes: a query that matches nothing in any corpus reports
 an empty grouped result, not an error. A provider that is unavailable is
-reported as such without failing the whole search. A logical address that
-collides across sources is resolved deterministically by the manifest, never
-ambiguously. An asset present in a source but absent from the manifest is *not*
-published — it is invisible to the library, by design, until the manifest
-declares it.
+reported as such without failing the whole search. A logical address that would
+collide across independent sources is rejected at publication admission, not
+silently resolved by precedence — the hymn cascade's own overlay is not such a
+collision, its precedence being owned by the cascade (SPEC-023). An asset present
+in a source but absent from the manifest is *not* published — it is invisible to
+the library, by design, until the manifest declares it.
 
 ## 7. Verification
 
@@ -219,18 +229,16 @@ duplicated here.
   *retrieval* through its own native surface; whether it is also *published for
   copy* through the library is a distinct classification decision. Blocks the
   manifest's initial collection set and the licence rule's reach.
-- OQ-2 — Where exactly does the licence boundary fall for material that *looks*
-  like a copyable template but encodes owned process logic (RFC-021 § "Licence
-  boundaries can surprise")? The rule must be crisp enough to classify a
-  borderline fragment without per-asset human judgement. Blocks a predictable,
-  auditable licence manifest.
-- OQ-3 — Is federated `search` delivered together with the library, or does the
-  library land first with search federation following once the library is one of
-  several providers? Blocks the slice sequencing under this PRD, not the product
-  intent. (The coverage census notes IMP-154 — `search --all` with a path column
-  — already seeds the federation work.)
-- OQ-4 — Does the library expose only whole assets, or also **addressable
-  fragments** within an asset (e.g. one hymn section)? RFC-021 keeps exposed
-  fragments as a concept for C2; whether C1's read API addresses below
-  whole-asset granularity is open. Blocks the logical-address scheme's
-  granularity.
+- OQ-2 — How far can a licence *classification rule* reach for material that
+  *looks* like a copyable template but encodes owned process logic (RFC-021
+  § "Licence boundaries can surprise")? Licence itself is not blocked on this —
+  it is an explicit declared field that fails closed if unestablished — so this
+  bounds only how much of the classification a rule can automate for authors
+  before per-asset human judgement is needed.
+- OQ-3 — Are logical addresses permanent, or versioned / deprecatable / allowed
+  to alias after a source reorganisation? The namespace is a durable contract
+  users may script against; its change policy is unspecified. Blocks the
+  address-stability contract's edges.
+- OQ-4 — When runtime-loaded backing sources are supported, how is an externally
+  supplied publication package's version and integrity established before its
+  assets are trusted as published? Blocks the runtime-loaded delivery story.

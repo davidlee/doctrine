@@ -3,13 +3,14 @@ version = 1
 
 id = 367
 slug = "classify-every-published-assets-licence"
-title = "Classify every published asset's licence"
+title = "Every published asset carries a declared licence"
 status = "pending"
 kind = "functional"
 
-description = "Every published asset is assigned a licence by a crisp, manifest-driven classification rule that separates copyable authoring material from owned process, engine, and registry content."
+description = "Every published asset carries an explicit, declared licence drawn from a fixed allowed set, so a user knows before copying what terms govern the asset. Publication fails for any asset whose licence is not established."
 tags = []
 acceptance_criteria = [
-  "No asset is published without a declared licence and customization status.",
-  "The licence follows a stated rule — copyable authoring material versus owned internal content — not an ad-hoc per-asset choice.",
+  "No asset is published without a declared licence from the allowed set and a declared customization status.",
+  "The declared licence is visible alongside the asset in list, tree, and show.",
+  "An asset whose licence cannot be established fails publication rather than being published under a guessed licence.",
 ]

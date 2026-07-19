@@ -3,14 +3,14 @@ version = 1
 
 id = 374
 slug = "resolver-maps-logical-addresses-to-backing-storage"
-title = "Resolver maps logical addresses to backing storage"
+title = "Resolver maps logical addresses to backing sources via adapters"
 status = "pending"
 kind = "functional"
 
-description = "A resolver maps each stable logical address to its backing source — an embedded asset key or a runtime-loaded path — so addressing is decoupled from physical storage layout."
+description = "A resolver maps each stable logical address to its backing source through a source adapter, so addressing is decoupled from any particular storage or delivery mechanism. The embedded-asset adapter is the production default; other adapters (e.g. runtime-loaded) resolve the same addresses."
 tags = []
 acceptance_criteria = [
-  "The same logical address resolves whether its backing asset is embedded or runtime-loaded.",
+  "The same logical address resolves across different backing sources through their adapters — the resolver is not written against one fixed storage type.",
   "A change to the physical source-root layout leaves logical addresses unchanged.",
   "A logical address exposes no embed key, crate path, or filesystem detail.",
 ]

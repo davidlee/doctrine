@@ -7,10 +7,11 @@ title = "Publication manifest is the sole authority for the public set"
 status = "pending"
 kind = "functional"
 
-description = "The publication manifest, embedded and parsed at runtime, is the sole authority for which framework-owned assets are public; an asset absent from it is not published regardless of embed reachability."
+description = "The publication manifest is the sole authority for which framework-owned assets are public; an asset absent from it is not published regardless of embed reachability. The manifest is supplied with the tool, embedded by default, but the sole-authority contract does not bind publication to embedding as the only storage."
 tags = []
 acceptance_criteria = [
   "Only manifest-declared assets are reachable through the library; an embedded-but-undeclared asset is invisible.",
   "The manifest is a distinct surface from install's projection manifest, parsed independently.",
-  "The manifest travels with the binary — publication needs no external fetch.",
+  "The embedded manifest is the production default; the sole-authority contract holds equally for a runtime-loaded manifest, so publication is not fixed to embedding.",
+  "A duplicate logical address is rejected at manifest admission; the hymn cascade's own overlay precedence (SPEC-023) is not a collision and is resolved by the cascade, not the manifest.",
 ]

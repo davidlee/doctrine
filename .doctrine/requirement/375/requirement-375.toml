@@ -7,10 +7,11 @@ title = "Library read surface over the resolver"
 status = "pending"
 kind = "functional"
 
-description = "The library exposes `list`, `tree`, and `show` over the resolver: list and tree read manifest metadata at a logical path; show resolves an address and streams its asset to stdout."
+description = "The library exposes `list`, `tree`, and `show` over the resolver: list and tree read manifest metadata at a logical path; show resolves an address and streams its asset to stdout. Malformed policy, invalid addresses, and unavailable sources fail as distinct, reported error classes."
 tags = []
 acceptance_criteria = [
   "`list [path]` and `tree [path]` return the published entries at / beneath a logical path with their manifest metadata.",
-  "`show <logical-path>` emits the resolved asset's exact bytes; an unknown or unpublished address is refused.",
-  "A published address with a missing backing source is a distinct, reported failure, not a silent empty result.",
+  "`show <logical-path>` emits the resolved asset's exact bytes; an unknown or unpublished address is refused with a stable diagnostic on stderr and non-zero status.",
+  "Distinct, reported failures are raised for: a missing backing source, malformed or unreadable publication policy, an unsupported source type, and metadata present but bytes absent — none is a silent empty result.",
+  "Invalid or traversal-like logical addresses are rejected; list and tree state whether an entry whose backing source is unavailable remains visible and how its state is represented.",
 ]

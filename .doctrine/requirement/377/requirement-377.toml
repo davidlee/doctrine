@@ -7,10 +7,11 @@ title = "Search provider interface and federation coordinator"
 status = "pending"
 kind = "functional"
 
-description = "A search-provider interface fronts each corpus and a federation coordinator dispatches one common-argument query to every registered provider, assembling their results."
+description = "A search-provider interface fronts each corpus and a federation coordinator dispatches one query — carrying only the fixed common request fields — to every registered provider, assembling their results into a grouped envelope."
 tags = []
 acceptance_criteria = [
-  "A bare query runs against every registered provider with no corpus named.",
-  "The coordinator accepts only arguments common to all providers; provider-specific query syntax is not accepted at the federated entry point.",
+  "The common request contract is fixed: query text, optional provider selection, and a result limit; no provider-specific query syntax is accepted at the federated entry point.",
+  "A bare query runs against every registered provider; provider selection narrows the set without invoking any native query language.",
   "The provider set is open — the coordinator does not special-case individual corpora.",
+  "The library provider indexes published metadata (title or summary, kind, address, licence) for C1; indexing published asset content is a later option, not required here.",
 ]

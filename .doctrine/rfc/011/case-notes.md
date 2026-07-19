@@ -2329,3 +2329,30 @@ statement/description/acceptance. Same seam gap already captured as IMP-298;
 authoring at volume makes it concrete (14 files, one script). A
 `spec req add --statement/--acceptance` (or the IMP-298 `spec req edit`) would
 remove the raw-TOML step entirely.
+
+[preflight; ISS-232-dedup-diagnosis]
+ISS-232 root-caused: Claude Code dedups PreToolUse *command hooks by command
+string* (docs/claude/hooks.md:456). doctrine's hooks.json repeats
+`memory surface` ×2 (Bash + Read|Edit|Write) and `worktree pretooluse` ×4
+(Bash/Edit|Write/Agent/Workflow) → each collapses to ONE registration firing for
+only one matcher. Path surface + 3/4 worktree-guard matchers silently dead.
+Token cost drivers in the diagnosis:
+- Mid-session NO hot-reload of plugin hooks.json forced a restart-gated repro
+  loop (edit → can't observe → restart → observe). Several cycles + a full
+  marker-instrumentation rig before the dedup mechanism surfaced. A one-line
+  doc fact (dedup-by-command-string) would have short-circuited ~half the probing
+  had it been checked against the cache first.
+- `memory surface` logs/writes seen-state ONLY when admitted>0, so "no log" was
+  ambiguous (didn't-fire vs fired-empty); needed marker hooks + seen-file forensics
+  to disambiguate. A no-op/heartbeat log line would make hook-firing observable.
+- Loose `grep 089ae3ff` collided with manual probe session-ids (089ae3ff-sanity)
+  — cost one false "it fired" before exact-id grep corrected it.
+
+[feedback; sess-prd017-codex-rework] Integrating a 15-finding external
+review (codex) into PRD-017 + SPEC-026 meant rewriting ~16 requirement
+entities. With no CLI to set a requirement's `description`/`acceptance_criteria`
+(the standing IMP-298 gap), each was a full-file Write of hand-authored TOML —
+the rework's dominant token cost was re-emitting boilerplate scaffold
+(schema/version/id/slug/kind) around the few fields that actually changed. A
+`requirement edit --description/--criteria` verb (or a spec-scoped batch form)
+would have cut the rework to targeted field edits.

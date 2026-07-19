@@ -1,3 +1,17 @@
+[[edge]]
+target = "SPEC-007"
+type = "uses"
+notes = "memory engine exposed as a federation search provider"
+
+[[edge]]
+target = "SPEC-013"
+type = "uses"
+notes = "CLI grammar and JSON machine-envelope conventions"
+
+[[edge]]
+target = "SPEC-009"
+type = "uses"
+notes = "embed storage + byte asset-read seam (generalised from asset_text); seam to be extracted to a neutral asset-source layer per D3"
 # Interactions — outbound spec -> spec edges (tech specs only).
 # Seeded empty; authored via `doctrine spec interactions add`:
 #   [[edge]]

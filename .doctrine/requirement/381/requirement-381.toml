@@ -3,14 +3,14 @@ version = 1
 
 id = 381
 slug = "library-surface-has-no-reachable-write-path"
-title = "Library surface has no reachable write path"
+title = "Library surface has no reachable write path over any protected root"
 status = "pending"
 kind = "quality"
 
-description = "The library surface has no reachable write capability — read-only is structural, provable once, not a per-verb absence of write calls."
+description = "The library surface has no reachable write capability over any protected root — read-only is structural and provable once, not a per-verb absence of write calls."
 tags = []
 acceptance_criteria = [
-  "No library verb writes, installs, or overwrites any project file.",
-  "Running the full library surface over a clean repo leaves it byte-for-byte unchanged.",
-  "The surface's construction admits no code path from a library command to a project mutation.",
+  "The protected boundary is defined: the client project, doctrine runtime state, and the source packages / backing sources; no library operation writes within it.",
+  "Library-domain code receives read-only source capabilities and no project-mutation capability, so no code path from a library command to a mutation exists by construction.",
+  "Running the full library surface — including failure paths — over a clean repo leaves every protected root byte-for-byte unchanged; operator redirection of stdout is not a library write.",
 ]

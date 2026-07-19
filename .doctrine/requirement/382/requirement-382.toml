@@ -3,13 +3,15 @@ version = 1
 
 id = 382
 slug = "federation-is-fail-soft-per-provider"
-title = "Federation is fail-soft per provider"
+title = "Federation is fail-soft and bounded per provider"
 status = "pending"
 kind = "quality"
 
-description = "Federated search is fail-soft per provider: an unavailable or failing provider degrades to a reported gap in its group without failing or stalling the whole search."
+description = "Federated search is fail-soft and bounded: each provider runs under a deadline with its errors and panics isolated, so a slow or failing provider degrades to a typed terminal status in its group without stalling or aborting the whole search."
 tags = []
 acceptance_criteria = [
-  "An unavailable provider yields a reported empty/failed group; other providers' results still return.",
-  "One slow or erroring provider does not abort the federated query.",
+  "Each provider runs under an explicit deadline or budget; the coordinator returns the groups that completed once the bound expires.",
+  "Provider errors and panics are isolated; one failing provider never aborts the federated query.",
+  "Each group carries a typed terminal status distinguishing success-with-hits, success-empty, unavailable, failed, and timed-out.",
+  "Partial success has a deterministic, documented exit contract.",
 ]

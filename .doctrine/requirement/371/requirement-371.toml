@@ -3,13 +3,13 @@ version = 1
 
 id = 371
 slug = "licence-classification-is-predictable-and-auditable"
-title = "Licence classification is predictable and auditable"
+title = "Licence is visible and auditable before copying"
 status = "pending"
 kind = "quality"
 
-description = "Licence classification is predictable and auditable: a user can determine which licence governs an asset before copying it, from the stated rule alone."
+description = "A user can determine which licence governs a published asset before copying it by reading the asset's declared licence — not by guessing from its appearance or category."
 tags = []
 acceptance_criteria = [
-  "The classification rule is stated and lets a user predict an asset's licence without inspecting its content.",
-  "Every published asset's licence is traceable to the rule.",
+  "Each published asset's declared licence is visible before the asset is copied.",
+  "The set of possible licences is fixed and documented, so any declared licence is interpretable.",
 ]

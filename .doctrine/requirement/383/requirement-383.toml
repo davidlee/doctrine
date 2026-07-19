@@ -7,9 +7,9 @@ title = "Adding a provider leaves existing providers untouched"
 status = "pending"
 kind = "quality"
 
-description = "Adding a new search provider requires no change to existing providers or the coordinator's dispatch (open for extension, closed for modification)."
+description = "Adding a new search provider requires only a provider implementation and a registration declaration — no change to existing providers, and no provider-specific branching in the coordinator."
 tags = []
 acceptance_criteria = [
-  "A new provider is registered without editing existing provider implementations.",
-  "The coordinator dispatches uniformly across providers with no per-corpus branching.",
+  "A new provider is added without editing existing provider implementations.",
+  "The coordinator dispatches uniformly across providers with no per-corpus branching; only a registration declaration is added.",
 ]
