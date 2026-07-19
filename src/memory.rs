@@ -9542,7 +9542,7 @@ fn cap_for(surface: Surface) -> usize {
 /// (design §5.4): `Read|Edit|Write` ⇒ a path surface keyed on `file_path`;
 /// `Bash` ⇒ a command surface keyed on `command`. An unregistered tool, or a
 /// missing/empty key, ⇒ `None` ⇒ emit nothing.
-fn probe_for(input: &SurfaceInput) -> Option<(Surface, crate::retrieve::ScopeProbe)> {
+fn probe_for(input: &SurfaceInput, root: &Path) -> Option<(Surface, crate::retrieve::ScopeProbe)> {
     match input.tool_name.as_deref() {
         Some(TOOL_READ | TOOL_EDIT | TOOL_WRITE) => {
             let fp = input
@@ -9550,10 +9550,13 @@ fn probe_for(input: &SurfaceInput) -> Option<(Surface, crate::retrieve::ScopePro
                 .file_path
                 .as_deref()
                 .filter(|s| !s.is_empty())?;
-            Some((
-                Surface::Path,
-                crate::retrieve::ScopeProbe::Path(PathBuf::from(fp)),
-            ))
+            // The live harness sends `file_path` ABSOLUTE; the downstream scope
+            // match anchors at component 0 against root-relative `scope.paths`,
+            // so an absolute probe matches nothing (ISS-232). Relativize against
+            // the surface root; an out-of-root absolute path ⇒ `None` ⇒ nothing
+            // (INV-2 fail-open).
+            let rel = relativize_probe_path(fp, root)?;
+            Some((Surface::Path, crate::retrieve::ScopeProbe::Path(rel)))
         }
         Some(TOOL_BASH) => {
             let cmd = input
@@ -9577,6 +9580,27 @@ fn probe_key(probe: &crate::retrieve::ScopeProbe) -> String {
         crate::retrieve::ScopeProbe::Path(p) => p.to_string_lossy().into_owned(),
         crate::retrieve::ScopeProbe::Command(c) => c.clone(),
     }
+}
+
+/// Relativize a harness-supplied `file_path` against the surface `root` so the
+/// downstream path-scope match (component-prefix, anchored at component 0
+/// against root-relative `scope.paths`) sees the form it expects. Pure — the
+/// root is threaded in as data, no IO here (root discovery stays in the shell).
+///
+/// - A RELATIVE path passes through unchanged (what the fixtures/manual probes
+///   used, and a form the match already accepts).
+/// - An ABSOLUTE path UNDER the root is stripped to its root-relative form (what
+///   the live harness actually sends: `/workspace/doctrine/src/x.rs` ⇒
+///   `src/x.rs`).
+/// - An ABSOLUTE path OUTSIDE the root ⇒ `None` (fail-open: surface nothing,
+///   never a bogus match). A lexical strip — never canonicalize `fp`, which may
+///   not exist yet (a `Write` to a new file).
+fn relativize_probe_path(fp: &str, root: &Path) -> Option<PathBuf> {
+    let p = Path::new(fp);
+    if p.is_relative() {
+        return Some(p.to_path_buf());
+    }
+    p.strip_prefix(root).ok().map(Path::to_path_buf)
 }
 
 /// Resolve the doctrine root by walking up from the stdin `cwd` (canonicalized),
@@ -9710,12 +9734,15 @@ fn run_surface_to(writer: &mut impl Write, raw: &str) -> Result<()> {
     if input.agent_id.is_some() {
         return Ok(());
     }
-    // Discriminate the surface; an unregistered tool / missing key ⇒ nothing.
-    let Some((surface, probe)) = probe_for(&input) else {
+    // Root discovery from the stdin `cwd`; no discoverable root ⇒ nothing
+    // (INV-2). Discovered BEFORE the probe: the path surface relativizes an
+    // absolute `file_path` against this root (ISS-232).
+    let Some(root) = discover_surface_root(input.cwd.as_deref()) else {
         return Ok(());
     };
-    // Root discovery from the stdin `cwd`; no discoverable root ⇒ nothing (INV-2).
-    let Some(root) = discover_surface_root(input.cwd.as_deref()) else {
+    // Discriminate the surface; an unregistered tool / missing key / an
+    // out-of-root absolute path ⇒ nothing.
+    let Some((surface, probe)) = probe_for(&input, &root) else {
         return Ok(());
     };
     let key = probe_key(&probe);
@@ -10020,6 +10047,46 @@ mod ambient_surface_tests {
         assert!(
             hso.get("additionalContext").is_some(),
             "additionalContext only"
+        );
+    }
+
+    /// ISS-232 (red→green): the live harness sends `file_path` ABSOLUTE
+    /// (`/workspace/doctrine/src/x.rs`); the path surface must relativize it
+    /// against the discovered root so the component-prefix scope match (anchored
+    /// at component 0 against root-relative `scope.paths`) still hits. Before the
+    /// fix this surfaced 0 — the path surface was silently dead in every live
+    /// session since ship (relative-path fixtures masked it).
+    #[test]
+    fn iss232_absolute_file_path_surfaces_like_relative() {
+        let root = temp_root_path_hit();
+        // The shell canonicalizes the stdin `cwd` to derive the root; a real
+        // harness sends `file_path` sharing that same (symlink-free) prefix.
+        let abs = fs::canonicalize(root.path()).unwrap().join("src/x.rs");
+        let raw = stdin_read(root.path(), Some("s1"), None, &abs.to_string_lossy());
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        let v: serde_json::Value = serde_json::from_slice(&out).expect("emitted JSON parses");
+        let ctx = v["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .expect("absolute file_path still surfaces the path block");
+        assert!(
+            ctx.contains("Path footgun"),
+            "block carries the memory: {ctx}"
+        );
+    }
+
+    /// ISS-232 fail-open (INV-2): an absolute `file_path` OUTSIDE the surface
+    /// root relativizes to nothing ⇒ surface nothing, never a panic or a bogus
+    /// match.
+    #[test]
+    fn iss232_absolute_file_path_outside_root_surfaces_nothing() {
+        let root = temp_root_path_hit();
+        let raw = stdin_read(root.path(), Some("s1"), None, "/nowhere/else/src/x.rs");
+        let mut out: Vec<u8> = Vec::new();
+        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(
+            out.is_empty(),
+            "out-of-root absolute path surfaces nothing: {out:?}"
         );
     }
 
