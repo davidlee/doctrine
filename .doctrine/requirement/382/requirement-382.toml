@@ -7,10 +7,12 @@ title = "Federation is fail-soft and bounded per provider"
 status = "pending"
 kind = "quality"
 
-description = "Federated search is fail-soft and bounded: each provider runs under a deadline with its errors and panics isolated, so a slow or failing provider degrades to a typed terminal status in its group without stalling or aborting the whole search."
+description = "Federated search is fail-soft and bounded: providers execute concurrently under a federation-wide deadline with each provider's errors and panics isolated, so a slow or failing provider degrades to a typed terminal status in its group without stalling or aborting the whole search. Total search time is bounded by the federation deadline, not the sum of per-provider deadlines."
 tags = []
 acceptance_criteria = [
-  "Each provider runs under an explicit deadline or budget; the coordinator returns the groups that completed once the bound expires.",
+  "Providers execute concurrently under a single federation-wide deadline (or explicit total budget); total search time is bounded by that deadline, not the sum of per-provider times.",
+  "The result limit is per provider — each group is independently ranked and capped — never a single federation-wide cap across incomparable scores.",
+  "Once the federation deadline expires, the coordinator returns the groups that completed; providers still running are reported as timed-out.",
   "Provider errors and panics are isolated; one failing provider never aborts the federated query.",
   "Each group carries a typed terminal status distinguishing success-with-hits, success-empty, unavailable, failed, and timed-out.",
   "Partial success has a deterministic, documented exit contract.",

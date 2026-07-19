@@ -50,9 +50,10 @@ In scope:
   discoverable corpus (published library, memory, RFCs, entities, and other
   registered providers), returning results grouped by corpus with each
   provider's own trust, severity, and staleness preserved.
-- **Licence classification** of published material — every published asset
-  carries a declared, predictable licence so a user knows what they may copy or
-  adapt.
+- **Licence declaration and visibility** for published material — every
+  published asset carries an explicit declared licence, drawn from a fixed
+  allowed set (MIT for copyable authoring material, GPL for owned internal
+  content — RFC-021), so a user knows what terms govern what they copy or adapt.
 
 Out of scope:
 
@@ -60,8 +61,10 @@ Out of scope:
   reads and emits; semantic materialization of a supported customization stays
   with the owning feature (install, the hymn cascade), not here.
 - **Deciding which physical source roots hold which material**, and the embed /
-  runtime-load storage choice — those are ADR-019's semantic-ownership cut and
-  SPEC-009's projection revision (Contract A), upstream of this.
+  runtime-load storage choice — physical storage policy is governed by ADR-019's
+  semantic-ownership cut and the descending technical contracts, not by this
+  capability. (SPEC-009 owns projection and today's embedded source; it does not
+  own the whole publication storage choice.)
 - **The specialized query languages** of individual corpora — federated search
   exposes only common discovery arguments; a corpus keeps its own rich query
   surface behind its native command (`memory find`, entity search).
@@ -86,18 +89,18 @@ whether it is trusted as instruction.
   inspection and copy through a declared seam; it is never, by virtue of being
   published, written into a client repo. Visibility and residence are different
   properties (ADR-019 position 2).
-- **Publication is deliberate, not incidental.** An asset is public because a
-  manifest declares it public — never because the binary happens to embed it.
+- **Publication is deliberate, not incidental.** An asset is public because it
+  is deliberately declared public — never because the binary happens to embed it.
   Embedded ≠ published; Doctrine-owned ≠ opaque.
 - **Publication is independent of storage.** Whether an asset is stored one way
   or delivered another does not change whether, or how, it is published (ADR-019
   seven-property vocabulary).
-- **Licence is declared and predictable.** Every published asset carries an
-  explicit declared licence a user can read before copying — not a semantic
-  category they must guess, and not an appearance that may mislead. Prose that
-  looks copyable may still encode owned process logic; the declared licence, not
-  appearances, governs, and an asset whose licence cannot be established is not
-  published.
+- **Licence is declared and visible.** Every published asset carries an explicit
+  declared licence, drawn from a fixed allowed set, that a user can read before
+  copying — not a semantic category they must guess, and not an appearance that
+  may mislead. Prose that looks copyable may still encode owned process logic; the
+  declared licence, not appearances, governs, and an asset whose licence cannot be
+  established is not published.
 - **The library reads, it never writes.** No library operation mutates the
   project, installs a file, or overwrites anything. Emitting an asset is
   emitting bytes.
@@ -143,8 +146,9 @@ Invariants:
 - From a project with a minimal base install, a user can enumerate and read any
   framework-owned published asset without that asset existing anywhere in their
   repo, and without network access beyond the installed binary.
-- Before copying an asset, a user can see its licence and customization status
-  and correctly predict which licence applies from the stated rule alone.
+- Before copying an asset, a user can read its declared licence — one of the
+  fixed allowed set — and its customization status directly, without inferring
+  either from the asset's category or appearance.
 - A single `search` over a plain query returns hits from more than one corpus,
   visibly grouped by corpus, each hit resolvable through that corpus's native
   show command.
@@ -160,16 +164,15 @@ Invariants:
 ## 6. Behaviour
 
 Primary flow — browse the library: a user asks for the published material at a
-logical path; the system consults the publication manifest and returns the
-entries there (list) or the subtree beneath (tree), each with its title/summary,
-content kind, licence, and customization status. Nothing is written.
+logical path; the system returns the declared entries there (list) or the subtree
+beneath (tree), each with its title/summary, content kind, licence, and
+customization status. Nothing is written.
 
 Primary flow — read a published asset: a user names a logical address; the
-system resolves it through the manifest to its backing source (embedded or
-runtime-loaded), and emits the asset's bytes cleanly to stdout, suitable for
-piping or redirect. An unknown or unpublished address is refused, not guessed
-at; an address that is published but whose backing source is unavailable is a
-distinct, clearly reported failure.
+system emits the asset published at that address as clean bytes to stdout,
+suitable for piping or redirect. An unknown or unpublished address is refused,
+not guessed at; an address that is published but whose backing material is
+unavailable is a distinct, clearly reported failure.
 
 Primary flow — federated search: a user issues one query with only common
 discovery arguments; the system runs it across every registered corpus provider
@@ -190,31 +193,32 @@ reported as such without failing the whole search. A logical address that would
 collide across independent sources is rejected at publication admission, not
 silently resolved by precedence — the hymn cascade's own overlay is not such a
 collision, its precedence being owned by the cascade (SPEC-023). An asset present
-in a source but absent from the manifest is *not* published — it is invisible to
-the library, by design, until the manifest declares it.
+in a source but absent from the publication declaration is *not* published — it
+is invisible to the library, by design, until it is declared public.
 
 ## 7. Verification
 
 Verification confirms that publication exposes without projecting, that the
-library only ever reads, that licence classification is predictable, and that
-search federates without flattening — without binding the spec to a particular
-manifest schema or storage mechanism.
+library only ever reads, that every published asset's licence is declared and
+visible, and that search federates without flattening — without binding the spec
+to a particular declaration schema or storage mechanism.
 
 The non-projection invariant is proven by exercising the full library surface
 (list, tree, show over a representative set of published addresses) against a
 clean project and confirming not one byte of the repo changes. Publication
-determinism is proven by confirming an embedded asset absent from the manifest
-is not reachable through the library, and that a manifest-declared asset is —
-i.e. publication tracks the manifest, not the embed root. Storage independence
-is proven by resolving the same logical address against both an embedded and a
-runtime-loaded backing source. Licence predictability is proven by asserting the
-classification rule over representative assets — copyable authoring material
-versus owned process prose — and confirming the declared licence matches the
-rule, with no asset published unclassified. Federation is proven by a query that
-hits multiple corpora, asserting the results are grouped (not interleaved), that
-memory hits retain trust/severity/staleness, and that the machine envelope
-carries typed groups; and by an unavailable provider degrading to a reported
-gap rather than a failed search.
+determinism is proven by confirming an asset absent from the publication
+declaration is not reachable through the library, and that a declared asset is —
+i.e. publication tracks the declaration, not the embed root. Storage independence
+is proven by changing how or where a published asset is stored or delivered and
+confirming its logical address and its publication are unchanged. Licence is
+proven by confirming every published asset carries a declared licence from the
+fixed allowed set, that the licence is visible in list, tree, and show before any
+copy, that an asset whose licence cannot be established fails publication, and
+that each entry records its licence provenance. Federation is proven by a query
+that hits multiple corpora, asserting the results are grouped (not interleaved),
+that memory hits retain trust/severity/staleness, and that the machine envelope
+carries typed groups; and by an unavailable provider degrading to a reported gap
+rather than a failed search.
 
 Where a check must cite a specific obligation, it references the durable
 requirement entity (REQ-NNN), never a mobile membership label. Coverage of the
@@ -228,7 +232,8 @@ duplicated here.
   scripts/modules? The memory corpus is already exposed for *search* and
   *retrieval* through its own native surface; whether it is also *published for
   copy* through the library is a distinct classification decision. Blocks the
-  manifest's initial collection set and the licence rule's reach.
+  published library's initial collection set and how far the licence
+  classification reaches.
 - OQ-2 — How far can a licence *classification rule* reach for material that
   *looks* like a copyable template but encodes owned process logic (RFC-021
   § "Licence boundaries can surprise")? Licence itself is not blocked on this —
@@ -242,3 +247,9 @@ duplicated here.
 - OQ-4 — When runtime-loaded backing sources are supported, how is an externally
   supplied publication package's version and integrity established before its
   assets are trusted as published? Blocks the runtime-loaded delivery story.
+- OQ-5 — What is the allowed vocabulary of **customization status**, and what may
+  a user infer from each value? Every published asset must carry the field, but
+  its meaning is bound up with the supported-customization model (RFC-021 C2),
+  which C1 does not deliver. Until C2 settles it, C1 declares the field with a
+  minimal, provisional meaning (whether an asset is intended to be customized).
+  Blocks the field's stable value set and its product interpretation.

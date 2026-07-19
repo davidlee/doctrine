@@ -7,10 +7,10 @@ title = "Licence is an explicit declared field validated against an allowed poli
 status = "pending"
 kind = "functional"
 
-description = "Each published asset's licence is an explicit field on its manifest entry, validated at build/validate time against a fixed allowed licence policy. Rule-based classification may assist authoring but is not the source of truth — the declared field is."
+description = "Each published asset's licence is an explicit field on its manifest entry, validated at build/validate time against a fixed allowed licence policy — the set is {MIT, GPL} (MIT for copyable authoring material, GPL for owned internal content, per RFC-021). Rule-based classification may assist authoring but is not the source of truth — the declared field is."
 tags = []
 acceptance_criteria = [
-  "Every publication entry declares a licence from the allowed set; build/validate fails if one is missing or outside the set.",
-  "An asset whose licence cannot be established fails publication rather than being silently defaulted; `owned` is a runtime fallback only, never the classifier.",
+  "Every publication entry declares a licence from the allowed set {MIT, GPL}; build/validate fails if one is missing or outside the set.",
+  "An asset whose licence cannot be established fails publication at build/validate rather than being silently defaulted; because publication fails closed, no runtime licence fallback exists.",
   "Classification provenance (declared, or rule-suggested and confirmed) is recorded per entry, so the licence is auditable.",
 ]

@@ -13,5 +13,5 @@ acceptance_criteria = [
   "`list [path]` and `tree [path]` return the published entries at / beneath a logical path with their manifest metadata.",
   "`show <logical-path>` emits the resolved asset's exact bytes; an unknown or unpublished address is refused with a stable diagnostic on stderr and non-zero status.",
   "Distinct, reported failures are raised for: a missing backing source, malformed or unreadable publication policy, an unsupported source type, and metadata present but bytes absent — none is a silent empty result.",
-  "Invalid or traversal-like logical addresses are rejected; list and tree state whether an entry whose backing source is unavailable remains visible and how its state is represented.",
+  "Invalid or traversal-like logical addresses are rejected. An entry whose backing source is unavailable remains visible in list and tree — its publication metadata is still valid — marked with an explicit unavailable state; only `show` on that entry fails.",
 ]

@@ -11,5 +11,5 @@ description = "A user can determine which licence governs a published asset befo
 tags = []
 acceptance_criteria = [
   "Each published asset's declared licence is visible before the asset is copied.",
-  "The set of possible licences is fixed and documented, so any declared licence is interpretable.",
+  "The set of possible licences is fixed and documented (MIT for copyable authoring material, GPL for owned internal content), so any declared licence is interpretable.",
 ]

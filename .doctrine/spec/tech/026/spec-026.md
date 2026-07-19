@@ -78,7 +78,11 @@ its native command.
 A manifest — supplied with the tool (embedded by default) and parsed at
 runtime — is the sole authority for what is public. Each entry binds a **logical
 address** to a **backing source** and carries the exposure metadata: content
-kind, human title or summary, licence, and customization status. An embedded
+kind, human title or summary, licence, and customization status. (The
+customization-status *vocabulary* — its allowed values and their meaning — is
+settled with the supported-customization model of RFC-021 C2, which C1 does not
+deliver; C1 carries the field with a minimal provisional meaning, PRD-017 OQ-5.)
+An embedded
 asset absent from the manifest is not public, however reachable it is in the
 embed tree; publication tracks the manifest, never the embed root. This is the
 same manifest-as-policy shape SPEC-009 uses for projection, applied to the
@@ -125,32 +129,36 @@ error).
 ### Licence classification
 
 Each manifest entry's licence is an **explicit declared field**, validated at
-validate/build time against a fixed allowed licence policy. A classification rule
-— copyable authoring material (schemas, examples, editable starters, selectors,
-declared seams) versus owned internal content (process bodies, engine contracts,
-registry definitions, orchestration knowledge) — *assists authoring* by
-suggesting a licence, but the declared field, not the rule, is the source of
-truth; each entry records its provenance (declared, or rule-suggested and
-confirmed) so the licence is auditable. An asset whose licence cannot be
-established **fails publication** rather than being silently defaulted; `owned` is
-a runtime fallback only, never the classifier. Because licence fails closed, the
-open question of *how far the rule can reach* (OQ-2 on the product spec) does not
-block publication — it only bounds how much authoring the rule can automate.
+validate/build time against the fixed allowed set **{MIT, GPL}** — MIT for
+copyable authoring material (schemas, examples, editable starters, selectors,
+declared seams), GPL for owned internal content (process bodies, engine
+contracts, registry definitions, orchestration knowledge), per RFC-021. A
+classification rule over that same copyable-vs-owned distinction *assists
+authoring* by suggesting which of the two applies, but the declared field, not
+the rule, is the source of truth; each entry records its provenance (declared, or
+rule-suggested and confirmed) so the licence is auditable. An asset whose licence
+cannot be established **fails publication at validate/build** rather than being
+silently defaulted; because publication fails closed, no runtime licence fallback
+exists (and `owned` — an ADR-019 *ownership* property — is never used as a
+licence). Because licence fails closed, the open question of *how far the rule can
+reach* (OQ-2 on the product spec) does not block publication — it only bounds how
+much authoring the rule can automate.
 
 ### Search federation
 
 A `SearchProvider`-style interface fronts each corpus; a federation coordinator
 dispatches one query — carrying only the **fixed common request** (query text,
-optional provider selection, result limit) — to every registered provider and
-assembles their results **grouped by corpus**. The shipped entity-corpus BM25
+optional provider selection, per-provider result limit) — to every registered
+provider and assembles their results **grouped by corpus**. The shipped entity-corpus BM25
 search becomes one provider; memory (SPEC-007) another; the library another (the
 library provider indexing published *metadata* — title/summary, kind, address,
-licence — for C1; content indexing is a later option). Each provider runs under a
-**deadline with its errors and panics isolated**, and each group carries a
-**typed terminal status** — success-with-hits, success-empty, unavailable,
-failed, or timed-out — so a slow or failing provider degrades to a reported gap,
-never stalls or aborts the whole search, and the coordinator returns the groups
-that completed once the bound expires. Each group keeps its provider's native
+licence — for C1; content indexing is a later option). Providers run **concurrently under one
+federation-wide deadline**, each provider's errors and panics isolated, and each
+group carries a **typed terminal status** — success-with-hits, success-empty,
+unavailable, failed, or timed-out — so a slow or failing provider degrades to a
+reported gap, never stalls or aborts the whole search; total search time is
+bounded by the federation deadline (not the sum of per-provider deadlines), and
+the coordinator returns the groups that completed once that deadline expires. Each group keeps its provider's native
 result semantics — memory retains trust, severity, and staleness — and each hit
 stays resolvable through that corpus's native `show`. Provider scores are not
 asserted mutually comparable, so results are never flattened into one global
@@ -244,26 +252,32 @@ native command; the federated entry point is discovery-only.
   output contract; cross-provider scores are not comparable and are never merged
   into one ranking. Native trust/severity/staleness ride through each group. The
   machine envelope carries typed groups (SPEC-013), not a flat list.
-- **D6 — Licence is an explicit declared field, validated against an allowed
-  policy.** Licence is declared per manifest entry and validated at
-  validate/build against a fixed allowed set; rule-based classification assists
-  authoring but is not the source of truth, and provenance is recorded per entry.
-  An asset whose licence cannot be established **fails publication** (`owned` is a
-  runtime fallback only, never the silent classifier). This keeps the library
-  predictable and auditable before it invites copying (RFC-021 licence-surprise
-  principle) without resting the contract on an unproven inference rule.
+- **D6 — Licence is an explicit declared field, validated against the allowed set
+  {MIT, GPL}.** Licence is declared per manifest entry and validated at
+  validate/build against the fixed allowed set **{MIT, GPL}** — MIT for copyable
+  authoring material, GPL for owned internal content (RFC-021). Rule-based
+  classification assists authoring but is not the source of truth, and provenance
+  is recorded per entry. An asset whose licence cannot be established **fails
+  publication at validate/build**; because publication fails closed there is no
+  runtime licence fallback (`owned` is an ADR-019 ownership property, not a licence
+  identifier, and is never used as one). This keeps the library auditable before
+  it invites copying (RFC-021 licence-surprise principle) without resting the
+  contract on an unproven inference rule.
 - **D7 — Federation entry point is discovery-only.** The bare `search` surface
   accepts only arguments common to all providers; each provider's specialized
   query language stays behind its native command. This bounds the federated
   surface and preserves the rich native searches (`memory find`, entity `-k`).
 - **D8 — The federation request and response contracts are fixed and typed.** The
-  common request is exactly query text, optional provider selection, and a result
-  limit. Each provider runs under a deadline with errors and panics isolated; each
-  response group carries a typed terminal status (success-with-hits,
-  success-empty, unavailable, failed, timed-out); the machine envelope is one
-  outer envelope of typed groups; and partial success has a deterministic,
-  documented exit contract. This is what makes fail-soft (D-concern) falsifiable
-  rather than aspirational.
+  common request is exactly query text, optional provider selection, and a
+  **per-provider** result limit (each group is independently ranked, so a single
+  federation-wide cap across incomparable scores would be incoherent). Providers
+  run **concurrently under one federation-wide deadline**, each provider's errors
+  and panics isolated, so total search time is bounded by that deadline, not the
+  sum of per-provider deadlines; each response group carries a typed terminal
+  status (success-with-hits, success-empty, unavailable, failed, timed-out); the
+  machine envelope is one outer envelope of typed groups; and partial success has a
+  deterministic, documented exit contract. This is what makes fail-soft
+  (D-concern) falsifiable rather than aspirational.
 - **D9 — Duplicate logical addresses are rejected, not silently resolved.**
   Collisions across independent sources are rejected at manifest admission so
   publication never depends on source ordering. The hymn cascade's overlay
@@ -273,6 +287,6 @@ native command; the federated entry point is discovery-only.
 - **D10 — Library search indexes published metadata for C1.** The library
   provider indexes title/summary, kind, address, and licence — not asset content.
   Content indexing is a deferred option, not a C1 obligation. There is no secrecy
-  boundary at stake (all published bytes are open-source licensed, MIT or GPL);
-  the library corpus is simply the manifest, so unpublished bytes are out of
-  search by construction, not by a guard.
+  boundary at stake (every published asset is open-source licensed under the
+  declared set — D6); the library corpus is simply the manifest, so unpublished
+  bytes are out of search by construction, not by a guard.

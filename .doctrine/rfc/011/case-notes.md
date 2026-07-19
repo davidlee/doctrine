@@ -2356,3 +2356,14 @@ the rework's dominant token cost was re-emitting boilerplate scaffold
 (schema/version/id/slug/kind) around the few fields that actually changed. A
 `requirement edit --description/--criteria` verb (or a spec-scoped batch form)
 would have cut the rework to targeted field edits.
+
+[feedback; sess-prd017-codex-round2] Second codex pass on the same two specs
+(PRD-017 + SPEC-026) was a stale-prose consistency sweep: round 1 fixed the
+requirement *entities* but left the superseded rule-derived-licence and
+resolver/manifest language in the PRD's §3/§5/§6/§7 section prose. Cost was
+~20 individual Edit calls across two .md + three .toml files to re-align prose
+the requirement entities had already moved past. Same IMP-298 root as round 1
+(no `requirement edit --description/--criteria` verb → full-field TOML
+hand-edits), compounded here by there being no single "sync section prose to
+requirement entities" affordance — the drift between the entity tier and the
+narrative tier is invisible until an external reviewer greps for it.
