@@ -1,0 +1,43 @@
+memory_uid = "mem_019f78bce7097bd28d36c165c3ed928d"
+memory_key = "mem.pattern.doctrine.spec-prose-requirement-drift"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Spec requirement entities and their §-prose drift silently — sweep the narrative when a requirement changes"
+summary = "When a REQ-NNN entity changes, sweep the spec's §-prose describing it — the two tiers drift silently; mechanism nouns in a PRD are the smell."
+created = "2026-07-19"
+updated = "2026-07-19"
+
+[scope]
+paths = []
+globs = [".doctrine/spec/**"]
+commands = []
+tags = ["spec-authoring", "requirements", "drift", "prd", "feedback"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "faf4ef8f6590df1a7cd5cb6329334cdd024e52c4"
+ref_name = "refs/heads/edge"
+checkout_state_id = "300597517949d34b6e9d42394d75ee533f342a3478b16ee36d1b2e5ade79426d"
+base_commit = "4908d0e90892de3296e365d2b40f088aac1e3a07"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
