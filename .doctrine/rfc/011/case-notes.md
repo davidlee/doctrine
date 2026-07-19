@@ -2367,3 +2367,51 @@ the requirement entities had already moved past. Same IMP-298 root as round 1
 hand-edits), compounded here by there being no single "sync section prose to
 requirement entities" affordance — the drift between the entity tier and the
 narrative tier is invisible until an external reviewer greps for it.
+
+[slice; SL-223-publication-seam]
+Command-shape guesses that cost round-trips while scoping (all "CLI is source of
+truth" reminders, but the shapes aren't discoverable from the entity being acted
+on):
+- `doctrine memory retrieve <key>` — retrieve is scope-probe based (--query/--tag/
+  --path), takes no positional key; single-key lookup is `memory show <key>`.
+- `doctrine spec interactions <ID>` — interactions is add/remove only, not a query;
+  no verb to *list* a spec's interaction edges from the id.
+- `doctrine link SL-NNN specs SPEC-NNN` — `specs` is not SL-authorable; slice→spec
+  is `references --role implements`. The legal-label error message is good and
+  self-corrected it in one hop.
+- `doctrine relation census <ID>` / `doctrine explore inspect <ID>` — both wrong;
+  inspecting one entity's edges is `doctrine slice show` (renders relationships).
+Net: ~4 failed invocations. A `doctrine <kind> relations <ID>` / uniform inspect
+verb would remove most of this.
+
+[preflight; ISS-232-ROOT-CAUSE-CORRECTION]
+SUPERSEDES the earlier ISS-232-dedup-diagnosis note — that conclusion (command-
+string dedup) was WRONG. Confirmed deterministic root cause: `probe_for`
+(src/memory.rs:9545) wraps the harness-supplied `tool_input.file_path` into
+`ScopeProbe::Path` verbatim. Claude Code sends `file_path` ABSOLUTE
+(`/workspace/doctrine/src/x.rs`); the path-surface scope match expects cwd-RELATIVE
+(`src/x.rs`), so it surfaces 0 for every live Read/Edit/Write. Command surface
+(Bash, keyed on command string) is unaffected → the 86:5 command:path log skew.
+Deterministic repro: `echo '{...file_path abs...}' | doctrine memory surface` ⇒ 0;
+same with a relative path ⇒ surfaces. Fix: relativize file_path against
+`discover_surface_root(cwd)` before the probe (accept abs OR rel).
+META (the expensive lesson): this took ~4 harness restart cycles + heavy hook
+instrumentation because EVERY manual probe I ran used a relative file_path, which
+MASKED the bug and sent me chasing dedup/stdin/alternation/stale-process ghosts.
+The bug only surfaced once I captured the REAL harness stdin envelope and saw the
+absolute path. Lesson: when reproducing a hook, replay the harness's ACTUAL
+captured stdin, not a hand-authored envelope — hand-authored inputs silently
+"fix" the very defect under investigation. The unit tests (mem surface synthetic
+stdin, ~src/memory.rs:9927) have the same relative-path blind spot → they pass
+while prod is dead. Test hardening: fixtures must use absolute file_paths.
+
+[route→small-backlog-fix; iss232-abs-path-surface]
+Live-repro verification against `./target/debug/doctrine` returned empty on
+first try because `cargo test <filter>` rebuilds only the test-harness binary
+(`target/debug/deps/doctrine-<hash>`), NOT the top-level `target/debug/doctrine`.
+A green test suite therefore does not imply the CLI binary reflects the fix — an
+explicit `cargo build --bin doctrine` is required before any `| doctrine ...`
+end-to-end check. Cost: one wasted repro round + a re-run. Latent trap for any
+skill that verifies a code change by piping to the built binary rather than
+trusting the test suite alone (which is correct discipline for a "never fired
+live" class of bug — the tests were exactly what masked ISS-232).
