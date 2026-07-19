@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 381
+slug = "library-surface-has-no-reachable-write-path"
+title = "Library surface has no reachable write path"
+status = "pending"
+kind = "quality"
+
+description = "The library surface has no reachable write capability — read-only is structural, provable once, not a per-verb absence of write calls."
+tags = []
+acceptance_criteria = [
+  "No library verb writes, installs, or overwrites any project file.",
+  "Running the full library surface over a clean repo leaves it byte-for-byte unchanged.",
+  "The surface's construction admits no code path from a library command to a project mutation.",
+]

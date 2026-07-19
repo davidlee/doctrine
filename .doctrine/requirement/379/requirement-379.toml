@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 379
+slug = "licence-derived-by-a-build-asserted-classification-rule"
+title = "Licence derived by a build-asserted classification rule"
+status = "pending"
+kind = "functional"
+
+description = "Each published asset's licence is derived from a crisp, manifest-encoded classification rule (copyable authoring material vs owned internal content), asserted at validate/build time."
+tags = []
+acceptance_criteria = [
+  "No asset publishes with an unclassified licence; the build/validate step fails if one would.",
+  "An asset that cannot be classified as copyable defaults to owned, not copyable.",
+  "The licence is predictable from the stated rule without inspecting asset content.",
+]

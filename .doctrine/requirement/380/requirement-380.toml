@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 380
+slug = "publication-and-projection-manifests-are-independent-surfaces"
+title = "Publication and projection manifests are independent surfaces"
+status = "pending"
+kind = "quality"
+
+description = "The publication manifest and install's projection manifest are independent surfaces: a change to one does not alter the other's policy."
+tags = []
+acceptance_criteria = [
+  "Projected and published sets are computed from separate manifests; neither is derived from the other.",
+  "An asset may be projected, published, both, or neither, with no coupling between the two decisions.",
+]

@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 377
+slug = "search-provider-interface-and-federation-coordinator"
+title = "Search provider interface and federation coordinator"
+status = "pending"
+kind = "functional"
+
+description = "A search-provider interface fronts each corpus and a federation coordinator dispatches one common-argument query to every registered provider, assembling their results."
+tags = []
+acceptance_criteria = [
+  "A bare query runs against every registered provider with no corpus named.",
+  "The coordinator accepts only arguments common to all providers; provider-specific query syntax is not accepted at the federated entry point.",
+  "The provider set is open — the coordinator does not special-case individual corpora.",
+]

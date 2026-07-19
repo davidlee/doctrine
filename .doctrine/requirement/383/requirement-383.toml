@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 383
+slug = "adding-a-provider-leaves-existing-providers-untouched"
+title = "Adding a provider leaves existing providers untouched"
+status = "pending"
+kind = "quality"
+
+description = "Adding a new search provider requires no change to existing providers or the coordinator's dispatch (open for extension, closed for modification)."
+tags = []
+acceptance_criteria = [
+  "A new provider is registered without editing existing provider implementations.",
+  "The coordinator dispatches uniformly across providers with no per-corpus branching.",
+]

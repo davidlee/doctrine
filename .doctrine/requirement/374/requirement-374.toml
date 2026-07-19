@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 374
+slug = "resolver-maps-logical-addresses-to-backing-storage"
+title = "Resolver maps logical addresses to backing storage"
+status = "pending"
+kind = "functional"
+
+description = "A resolver maps each stable logical address to its backing source — an embedded asset key or a runtime-loaded path — so addressing is decoupled from physical storage layout."
+tags = []
+acceptance_criteria = [
+  "The same logical address resolves whether its backing asset is embedded or runtime-loaded.",
+  "A change to the physical source-root layout leaves logical addresses unchanged.",
+  "A logical address exposes no embed key, crate path, or filesystem detail.",
+]

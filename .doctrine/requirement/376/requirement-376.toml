@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 376
+slug = "byte-level-asset-read-seam-for-published-assets"
+title = "Byte-level asset-read seam for published assets"
+status = "pending"
+kind = "functional"
+
+description = "A byte-level asset-read seam — generalising install's text-only `asset_text` — serves both text and binary published assets faithfully to stdout."
+tags = []
+acceptance_criteria = [
+  "Binary assets emit byte-for-byte without corruption or added framing in the content stream.",
+  "The seam is the single place published bytes are fetched, shared with install's read path.",
+]

@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 382
+slug = "federation-is-fail-soft-per-provider"
+title = "Federation is fail-soft per provider"
+status = "pending"
+kind = "quality"
+
+description = "Federated search is fail-soft per provider: an unavailable or failing provider degrades to a reported gap in its group without failing or stalling the whole search."
+tags = []
+acceptance_criteria = [
+  "An unavailable provider yields a reported empty/failed group; other providers' results still return.",
+  "One slow or erroring provider does not abort the federated query.",
+]

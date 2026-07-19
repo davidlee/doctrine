@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 378
+slug = "entity-and-memory-searches-exposed-as-providers"
+title = "Entity and memory searches exposed as providers"
+status = "pending"
+kind = "functional"
+
+description = "The shipped entity-corpus search and the memory search are exposed as federation providers behind the common interface without losing their native query surfaces."
+tags = []
+acceptance_criteria = [
+  "Entity search and memory search each appear as a provider in federated results.",
+  "Their native commands (entity search `-k`, `memory find`) retain their full specialized query surfaces.",
+  "The entity-search refactor preserves its existing behaviour (behaviour-preservation gate: existing suites stay green).",
+]

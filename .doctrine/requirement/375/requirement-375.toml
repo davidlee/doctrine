@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 375
+slug = "library-read-surface-over-the-resolver"
+title = "Library read surface over the resolver"
+status = "pending"
+kind = "functional"
+
+description = "The library exposes `list`, `tree`, and `show` over the resolver: list and tree read manifest metadata at a logical path; show resolves an address and streams its asset to stdout."
+tags = []
+acceptance_criteria = [
+  "`list [path]` and `tree [path]` return the published entries at / beneath a logical path with their manifest metadata.",
+  "`show <logical-path>` emits the resolved asset's exact bytes; an unknown or unpublished address is refused.",
+  "A published address with a missing backing source is a distinct, reported failure, not a silent empty result.",
+]

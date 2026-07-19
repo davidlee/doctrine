@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 373
+slug = "publication-manifest-is-the-sole-authority-for-the-public-set"
+title = "Publication manifest is the sole authority for the public set"
+status = "pending"
+kind = "functional"
+
+description = "The publication manifest, embedded and parsed at runtime, is the sole authority for which framework-owned assets are public; an asset absent from it is not published regardless of embed reachability."
+tags = []
+acceptance_criteria = [
+  "Only manifest-declared assets are reachable through the library; an embedded-but-undeclared asset is invisible.",
+  "The manifest is a distinct surface from install's projection manifest, parsed independently.",
+  "The manifest travels with the binary — publication needs no external fetch.",
+]
