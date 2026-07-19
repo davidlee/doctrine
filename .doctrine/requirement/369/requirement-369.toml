@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 369
+slug = "publication-is-independent-of-storage-mechanism"
+title = "Publication is independent of storage mechanism"
+status = "pending"
+kind = "quality"
+
+description = "An asset's publication status and library addressing are independent of its storage mechanism — compile-time embedded versus runtime-loaded."
+tags = []
+acceptance_criteria = [
+  "The same logical address resolves whether its backing asset is embedded or runtime-loaded.",
+  "Changing an asset's storage mechanism does not change whether or how it is published.",
+]

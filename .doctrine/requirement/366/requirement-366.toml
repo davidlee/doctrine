@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 366
+slug = "wrap-machine-search-output-in-a-typed-envelope"
+title = "Wrap machine search output in a typed envelope"
+status = "pending"
+kind = "functional"
+
+description = "Machine-readable federated-search output wraps the per-corpus groups in one common outer envelope with typed result groups."
+tags = []
+acceptance_criteria = [
+  "Structured output has a single outer envelope containing typed groups keyed by corpus.",
+  "Each group identifies its provider and carries that provider's result fields.",
+]

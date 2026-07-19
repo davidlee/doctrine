@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 359
+slug = "declare-published-assets-in-a-manifest"
+title = "Declare published assets in a manifest"
+status = "pending"
+kind = "functional"
+
+description = "A publication manifest declares which framework-owned assets are public and, for each, its stable logical address, backing source, content kind, human title or summary, licence, and customization status."
+tags = []
+acceptance_criteria = [
+  "The manifest is the sole authority for what is published; an asset absent from it is not public regardless of whether the binary embeds it.",
+  "Each published entry carries all of: logical address, source, content kind, title or summary, licence, and customization status.",
+  "The manifest travels with the distributed tool, so publication requires no external source to fetch.",
+]

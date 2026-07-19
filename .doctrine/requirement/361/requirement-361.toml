@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 361
+slug = "list-published-material-at-a-logical-path"
+title = "List published material at a logical path"
+status = "pending"
+kind = "functional"
+
+description = "The library lists the published entries directly at a given logical path, each with its title or summary, content kind, licence, and customization status."
+tags = []
+acceptance_criteria = [
+  "Listing a logical path returns the published entries at that path with their manifest metadata.",
+  "An unknown logical path is reported as such rather than silently returning an empty success.",
+]

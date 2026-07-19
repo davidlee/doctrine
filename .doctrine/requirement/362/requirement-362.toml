@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 362
+slug = "show-the-published-tree-beneath-a-logical-path"
+title = "Show the published tree beneath a logical path"
+status = "pending"
+kind = "functional"
+
+description = "The library renders the hierarchical tree of published material beneath a given logical path."
+tags = []
+acceptance_criteria = [
+  "A tree request returns the nested structure of published addresses beneath the path.",
+  "The tree reflects logical addressing, independent of physical embed or source-root layout.",
+]

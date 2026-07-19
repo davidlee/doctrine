@@ -16,3 +16,7 @@ responsibilities = [
   "Preserve operator-owned edits across repeated runs — provisioning adds what is missing and never overwrites what already exists.",
   "Keep the project's ignore boundary correct so Doctrine's disposable and private files stay out of version control.",
 ]
+
+[[relation]]
+label = "consumes"
+target = "PRD-017"

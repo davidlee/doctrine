@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 365
+slug = "group-federated-results-by-corpus"
+title = "Group federated results by corpus"
+status = "pending"
+kind = "functional"
+
+description = "Federated search returns results grouped by their originating corpus, each group preserving that provider's native trust, severity, and staleness semantics."
+tags = []
+acceptance_criteria = [
+  "Results are presented in per-corpus groups, not a single interleaved list.",
+  "Memory results retain trust, severity, and staleness, and each result stays resolvable through its corpus's native show command.",
+  "Scores from different providers are not presented as globally comparable.",
+]

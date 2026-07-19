@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 363
+slug = "emit-a-published-asset-by-logical-address"
+title = "Emit a published asset by logical address"
+status = "pending"
+kind = "functional"
+
+description = "The library resolves a logical address to its backing source and emits the published asset's bytes to stdout."
+tags = []
+acceptance_criteria = [
+  "Showing a published address emits that asset's exact bytes to stdout.",
+  "An unknown or unpublished address is refused; a published address whose backing source is unavailable is a distinct, clearly reported failure.",
+]

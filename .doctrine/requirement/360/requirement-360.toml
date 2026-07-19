@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 360
+slug = "expose-published-material-without-projecting-it"
+title = "Expose published material without projecting it"
+status = "pending"
+kind = "functional"
+
+description = "Published material is exposed for inspection and copy through the library seam without being written into the client repo."
+tags = []
+acceptance_criteria = [
+  "A user can read a published asset in a project where that asset exists nowhere on disk.",
+  "Listing or reading published material creates, modifies, or deletes no file in the project.",
+]

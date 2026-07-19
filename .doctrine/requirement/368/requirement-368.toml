@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 368
+slug = "library-operations-never-mutate-the-project"
+title = "Library operations never mutate the project"
+status = "pending"
+kind = "quality"
+
+description = "No library operation mutates the client project — listing, browsing, and emitting are strictly read-only."
+tags = []
+acceptance_criteria = [
+  "Running the full library surface over a clean repo leaves it byte-for-byte unchanged.",
+  "The library exposes no verb that writes, installs, or overwrites a project file.",
+]

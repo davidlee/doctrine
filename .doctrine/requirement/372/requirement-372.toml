@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 372
+slug = "emitted-asset-bytes-are-clean-and-pipeable"
+title = "Emitted asset bytes are clean and pipeable"
+status = "pending"
+kind = "quality"
+
+description = "The library emits an asset's bytes cleanly to stdout, suitable for piping or redirect, with no decorative framing mixed into the content stream."
+tags = []
+acceptance_criteria = [
+  "Showing an asset writes only the asset's bytes to stdout; diagnostics go elsewhere.",
+  "Emitted output can be piped or redirected to reproduce the asset faithfully.",
+]

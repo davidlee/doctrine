@@ -1,0 +1,22 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 17
+slug = "library-search"
+title = "Library & search"
+status = "draft"
+kind = "product"
+category = "discovery"
+product_level = "capability"
+tags = ["publication", "library", "search", "licence", "manifest", "federated-search", "inspection", "framework-owned"]
+responsibilities = [
+  "Expose framework-owned material for inspection and copy through a declared publication seam, without projecting it into the client repo.",
+  "Declare, per published asset, its stable logical address, source, content kind, title or summary, licence, and customization status — a manifest that makes publication deliberate, never a by-product of embedding.",
+  "Offer a read-only library surface to list, browse, and emit published material by stable logical address, independent of how or where the asset is stored.",
+  "Federate discovery across every corpus: one search entry point, results grouped by corpus, with each provider's trust, severity, and staleness preserved.",
+  "Preserve the inspection, copy, and offline-reference control that minimal projection removes — without reintroducing wholesale projection.",
+]
+
+[[relation]]
+label = "governed_by"
+target = "ADR-019"

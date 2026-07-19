@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 364
+slug = "search-every-corpus-from-one-entry-point"
+title = "Search every corpus from one entry point"
+status = "pending"
+kind = "functional"
+
+description = "A single search entry point runs a plain query across every registered corpus provider — published library, memory, RFCs, entities, and others."
+tags = []
+acceptance_criteria = [
+  "A bare query with no corpus named is executed against every registered provider.",
+  "The entry point accepts only discovery arguments common to all providers; no provider-specific query syntax is accepted there.",
+]

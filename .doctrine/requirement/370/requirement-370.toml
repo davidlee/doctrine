@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 370
+slug = "logical-addresses-are-stable-across-storage-changes"
+title = "Logical addresses are stable across storage changes"
+status = "pending"
+kind = "quality"
+
+description = "Logical addresses are stable POSIX-like paths independent of physical embed or source-root layout, surviving a storage reorganisation."
+tags = []
+acceptance_criteria = [
+  "A published asset keeps its logical address across a change to the physical source-root layout.",
+  "Logical addressing exposes no detail of the embed or filesystem layout.",
+]

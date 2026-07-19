@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 367
+slug = "classify-every-published-assets-licence"
+title = "Classify every published asset's licence"
+status = "pending"
+kind = "functional"
+
+description = "Every published asset is assigned a licence by a crisp, manifest-driven classification rule that separates copyable authoring material from owned process, engine, and registry content."
+tags = []
+acceptance_criteria = [
+  "No asset is published without a declared licence and customization status.",
+  "The licence follows a stated rule — copyable authoring material versus owned internal content — not an ad-hoc per-asset choice.",
+]

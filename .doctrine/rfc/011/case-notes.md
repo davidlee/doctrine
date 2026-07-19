@@ -2320,3 +2320,12 @@ descent/parent. So every `modify` row is a raw TOML+MD hand-edit with no
 edit-preserving CLI seam, and the apply surface just says "land by operator
 hand-edit" without pointing at where the statement actually lives. A `spec req
 edit --statement` verb (writing `description`, edit-preserving) would collapse this.
+
+[spec-product (PRD-017); sess-prd017-author]
+Authoring a 14-requirement PRD, each requirement's normative `description` and
+`acceptance_criteria` had to be injected by a bulk Python hand-edit of the
+scaffold TOML — `spec req add` reserves the member but exposes no flag for
+statement/description/acceptance. Same seam gap already captured as IMP-298;
+authoring at volume makes it concrete (14 files, one script). A
+`spec req add --statement/--acceptance` (or the IMP-298 `spec req edit`) would
+remove the raw-TOML step entirely.
