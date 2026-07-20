@@ -501,7 +501,82 @@ pub(crate) fn set_phase_status(
         warn_capture(phase_id, &format!("recording source delta failed: {e:#}"));
     }
 
+    // Primary-completion mirror (ISS-212, generalising IMP-272): a phase driven to
+    // `Completed` in a dispatch COORDINATION tree must also read `completed` in the
+    // PRIMARY sheet, because `prepare-review`'s completeness gate reads the completed
+    // set from the primary (`registry_completeness(&primary, &primary, …)`). The
+    // single writer both the conclude tool and a raw `slice phase --status` funnel
+    // through, so the mirror lives here — not per call site (RFC-015: one writer seam
+    // is one migration point). A no-op outside the dispatch split; DEGRADING (a mirror
+    // fault warns, never fails the transition).
+    if status == PhaseStatus::Completed {
+        mirror_completion_into_primary(project_root, slice_id, phase_id, note, now);
+    }
+
     Ok(())
+}
+
+/// Mirror a `Completed` flip driven in a dispatch COORDINATION tree DOWN into the
+/// PRIMARY tree (ISS-212, generalising IMP-272). Called for every `Completed`
+/// transition; a no-op unless BOTH hold:
+/// * the primary tree is DISTINCT from `project_root` (a split — a dispatch coord
+///   tree or a `/worktree` fork), AND
+/// * a LIVE coordination worktree owns `dispatch/<slice_id>` — the SAME liveness
+///   signal [`capture_phase_boundary`] keys on (state.rs, D3/D9): this is a dispatch
+///   drive, not a solo fork.
+///
+/// A solo `/worktree` fork satisfies the first but not the second, and must NOT
+/// mirror: its inner capture has no live coord to self-skip on, so it would record a
+/// bogus `Solo` boundary row against the primary's HEAD. The inner
+/// `set_phase_status(&primary, …)` TERMINATES — `primary_worktree(primary) == primary`
+/// makes the distinct-primary guard false, so it never recurses. DEGRADING throughout:
+/// every probe/mirror fault emits a named [`warn_capture`] warning and is swallowed —
+/// a status transition must never fail over the mirror (matches the capture tail, D5).
+fn mirror_completion_into_primary(
+    project_root: &Path,
+    slice_id: u32,
+    phase_id: &str,
+    note: Option<&str>,
+    now: &str,
+) {
+    // Bare / not-a-repo cwd (e.g. a solo CLI flip in a plain dir): nothing to mirror.
+    // `capture_phase_boundary` already degrades on the same cwd — stay silent to avoid
+    // a second redundant warning per transition.
+    let Ok(primary) = crate::git::primary_worktree(project_root) else {
+        return;
+    };
+    // Base case + no-split: canonicalise `project_root` so a symlinked primary path
+    // still compares equal (else the mirror would redundantly re-flip its own sheet).
+    let here = fs::canonicalize(project_root).unwrap_or_else(|_| project_root.to_path_buf());
+    if primary == here {
+        return;
+    }
+    // Dispatch-only: narrow past a solo fork to the live-coord case (the same signal
+    // the capture arm guard keys on at state.rs:542).
+    match crate::git::live_worktree_for_ref(
+        project_root,
+        &format!("{DISPATCH_REF_PREFIX}{slice_id:03}"),
+    ) {
+        Ok(Some(_)) => {}
+        Ok(None) => return,
+        Err(e) => {
+            warn_capture(phase_id, &format!("primary-mirror coord probe failed: {e}"));
+            return;
+        }
+    }
+    if let Err(e) = set_phase_status(
+        &primary,
+        slice_id,
+        phase_id,
+        PhaseStatus::Completed,
+        note,
+        now,
+    ) {
+        warn_capture(
+            phase_id,
+            &format!("mirroring completion into the primary tree failed: {e:#}"),
+        );
+    }
 }
 
 /// The resolved completion boundary handed back by [`capture_phase_boundary`]
@@ -2563,6 +2638,158 @@ mod tests {
                 ..row("PHASE-01", &start, &end)
             }],
             "solo context: exactly one boundary"
+        );
+    }
+
+    // ISS-212 (generalising IMP-272): a `Completed` flip driven in the COORD tree while a
+    // live `dispatch/<NNN>` worktree owns the slice must ALSO read `completed` in the
+    // PRIMARY sheet — the source `prepare-review`'s completeness gate reads. The mirror
+    // now lives in the single `set_phase_status` writer, so a raw coord-side flip carries
+    // it (not just the conclude tool).
+    #[test]
+    fn completed_flip_in_the_coord_tree_mirrors_into_the_primary_sheet() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+        // A live coordination worktree owns dispatch/147 — the dispatch-drive signal.
+        let coord = tmp.path().join("coord");
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "dispatch/147",
+                &coord.to_string_lossy(),
+            ],
+        );
+        let coord = std::fs::canonicalize(&coord).unwrap();
+        seed_phase_sheet(&coord, 147, "phase-01"); // coord's own gitignored sheet
+
+        // Flip from the COORD tree (the orchestrator-author path), not the primary.
+        set_phase_status(&coord, 147, "PHASE-01", PhaseStatus::Completed, None, "T1").unwrap();
+
+        assert_eq!(
+            read_phase_status(&phases_dir(&coord, 147), "phase-01").unwrap(),
+            Some("completed".to_string()),
+            "coord sheet flipped",
+        );
+        assert_eq!(
+            read_phase_status(&phases_dir(&repo, 147), "phase-01").unwrap(),
+            Some("completed".to_string()),
+            "primary sheet mirrored (ISS-212)",
+        );
+        // The mirror must NOT clobber the funnel registry: the live coord worktree makes
+        // the primary-side inner capture self-skip, so no bogus Solo row lands.
+        assert!(
+            read_source_deltas(&repo, 147).unwrap().is_empty(),
+            "no bogus registry row from the mirror (inner capture self-skips under the coord wt)",
+        );
+    }
+
+    // ISS-212 negative arm: a solo `/worktree` fork also has a distinct primary tree, but
+    // with NO live `dispatch/<NNN>` worktree it must NOT mirror — else the primary sheet
+    // flips spuriously and the fork's inner capture records a bogus Solo row against the
+    // primary HEAD. The fork's OWN capture (primary-resolved registry) still lands.
+    #[test]
+    fn completed_flip_in_a_solo_fork_does_not_mirror_into_the_primary_sheet() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+        // A solo fork on its OWN feature branch — never dispatch/147.
+        let fork = tmp.path().join("fork");
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "feat/solo",
+                &fork.to_string_lossy(),
+            ],
+        );
+        let fork = std::fs::canonicalize(&fork).unwrap();
+        seed_phase_sheet(&fork, 147, "phase-01");
+
+        let start = git(&fork, &["rev-parse", "HEAD"]);
+        set_phase_status(&fork, 147, "PHASE-01", PhaseStatus::InProgress, None, "T1").unwrap();
+        git(&fork, &["commit", "-q", "--allow-empty", "-m", "code"]);
+        let end = git(&fork, &["rev-parse", "HEAD"]);
+        set_phase_status(&fork, 147, "PHASE-01", PhaseStatus::Completed, None, "T2").unwrap();
+
+        assert_eq!(
+            read_phase_status(&phases_dir(&repo, 147), "phase-01").unwrap(),
+            Some("planned".to_string()),
+            "primary sheet UNTOUCHED — no mirror for a solo fork",
+        );
+        assert_eq!(
+            read_source_deltas(&repo, 147).unwrap(),
+            vec![BoundaryRow {
+                provenance: Provenance::Solo,
+                ..row("PHASE-01", &start, &end)
+            }],
+            "exactly the fork's own capture — no bogus mirror-induced row",
+        );
+    }
+
+    // ISS-212 termination: flipping the PRIMARY tree directly (even with a live coord
+    // worktree present) does not self-mirror — `primary_worktree(primary) == primary`
+    // makes the distinct-primary guard false, so the inner recursion never fires.
+    #[test]
+    fn completed_flip_on_the_primary_tree_does_not_self_mirror() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        seed_phase_sheet(&repo, 147, "phase-01");
+        let coord = tmp.path().join("coord");
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "dispatch/147",
+                &coord.to_string_lossy(),
+            ],
+        );
+
+        // Direct primary flip returns Ok and lands exactly once (no recursion / hang).
+        set_phase_status(&repo, 147, "PHASE-01", PhaseStatus::Completed, None, "T1").unwrap();
+
+        assert_eq!(
+            read_phase_status(&phases_dir(&repo, 147), "phase-01").unwrap(),
+            Some("completed".to_string()),
+            "primary sheet flipped once",
+        );
+    }
+
+    // ISS-212 degrade: a coord flip whose PRIMARY sheet is absent must still succeed —
+    // the mirror wraps its fault as a named warning, never returns it (matches the
+    // capture tail, D5).
+    #[test]
+    fn coord_flip_degrades_when_the_primary_sheet_is_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        // NOTE: primary sheet deliberately NOT seeded.
+        let coord = tmp.path().join("coord");
+        git(
+            &repo,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "dispatch/147",
+                &coord.to_string_lossy(),
+            ],
+        );
+        let coord = std::fs::canonicalize(&coord).unwrap();
+        seed_phase_sheet(&coord, 147, "phase-01");
+
+        // The outer coord flip still succeeds despite the mirror hitting a missing sheet.
+        set_phase_status(&coord, 147, "PHASE-01", PhaseStatus::Completed, None, "T1").unwrap();
+        assert_eq!(
+            read_phase_status(&phases_dir(&coord, 147), "phase-01").unwrap(),
+            Some("completed".to_string()),
+            "coord flip stands even when the primary mirror degrades",
         );
     }
 

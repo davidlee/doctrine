@@ -5,10 +5,10 @@ id = 212
 slug = "orchestrator-author-phase-completion-divergence-prepare-review-reads-primary-tree-sheets-while"
 title = "Orchestrator-author phase-completion divergence: prepare-review reads primary-tree sheets while author flips completion from coord cwd"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "fixed"
 created = "2026-07-03"
-updated = "2026-07-03"
+updated = "2026-07-20"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

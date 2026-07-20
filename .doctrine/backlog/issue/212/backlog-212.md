@@ -65,3 +65,28 @@ worktree holds `dispatch/<slice>`, so the primary write never clobbers the funne
 registry rows. Candidate (b) — reading the completed-set from the `dispatch/<slice>`
 tip — remains the alternative but collapses the gate's registry-vs-completion
 cross-check into a tautology, so (a) is preferred.
+
+## Resolution (2026-07-20) — FIXED
+
+Candidate (a) shipped. The primary-completion mirror was relocated OUT of
+`dispatch_conclude_phase` and DOWN into the single writer `set_phase_status`
+(`src/state.rs`), `completed`-only. On a `Completed` flip it mirrors into the
+primary sheet iff BOTH: the primary tree is distinct from `project_root` AND a
+LIVE `dispatch/<slice>` coordination worktree exists (the same liveness signal
+`capture_phase_boundary` keys on). This narrows past a solo `/worktree` fork —
+whose inner capture, lacking a live coord to self-skip on, would otherwise record
+a bogus `Solo` row against the primary HEAD. The inner `set_phase_status(&primary…)`
+terminates (`primary_worktree(primary) == primary` ⇒ distinct-primary guard false).
+DEGRADING: a mirror fault warns (`warn_capture`), never fails the transition.
+
+Dissolves every trigger path at once: the orchestrator-author raw
+`slice phase --status completed` path (this issue), the claude-arm
+`dispatch_conclude_phase` (IMP-272, whose narrow inline mirror + its
+`use std::io::Write` import were removed as redundant), and the codex/pi
+`record-delta` remainder (IDE-028). Tests: `src/state.rs` — coord-flip-mirrors,
+solo-fork-no-mirror (+ no bogus row), primary-self-no-recursion, absent-primary
+degrades; the kept `dispatch_conclude_phase_mirrors_…` test now exercises the
+relocated path end-to-end. `doctrine check gate` green.
+
+Only the IDE-028 "mirror EVERY transition (not just `completed`)" enhancement
+remains open.

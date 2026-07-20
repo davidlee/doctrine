@@ -34,7 +34,6 @@ use crate::ledger::Boundaries;
 use crate::worktree::{Apply, classify_import, run_gc};
 use anyhow::Context;
 use serde::Serialize;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 // --- resolve_coord: coord-by-slice ----------------------------------------------------
@@ -372,37 +371,11 @@ pub(crate) fn dispatch_conclude_phase(
         note,
         &now,
     )?;
-    // (a') MIRROR the flip into the PRIMARY tree (IMP-272). The coord flip above keeps
-    // coord-side `dispatch status`/`dispatch_next_ready` accurate mid-drive (they read
-    // the coord phase sheet), but `prepare-review`'s completeness gate reads the
-    // completed-phase SET from the PRIMARY tree (`registry_completeness(&primary,
-    // &primary, …)`). Without this mirror the landed boundary row has no completed
-    // phase behind it in primary and the gate refuses it — the SL-205 symptom, cured
-    // by hand with `slice phase --status completed -p <primary>`. Skipped when
-    // primary == coord (solo / no split). The mirror is SAFE: `set_phase_status`'s
-    // boundary capture self-skips while a live coord worktree holds `dispatch/<slice>`
-    // (arm guard), so it never clobbers the funnel registry rows. DEGRADES on a missing
-    // primary sheet (named stderr warning, never the MCP stdout channel) — the boundary
-    // row is durable and the gate still guards a genuine gap; failing the per-phase
-    // conclude over an abnormal state would halt the drive.
-    if let Ok(primary) = crate::git::primary_worktree(&coord.root)
-        && primary != coord.root
-        && let Err(e) = crate::state::set_phase_status(
-            &primary,
-            slice,
-            phase,
-            crate::state::PhaseStatus::Completed,
-            note,
-            &now,
-        )
-    {
-        let _ignored = writeln!(
-            std::io::stderr(),
-            "warning: dispatch conclude could not mirror {phase} completion into the \
-             primary tree ({e}): prepare-review may refuse it — re-flip with \
-             `slice phase --status completed -p <primary>` (IMP-272)"
-        );
-    }
+    // (a') The coord flip above auto-mirrors its `completed` into the PRIMARY tree
+    // (ISS-212): `set_phase_status` is the single writer and now owns the mirror, so
+    // `prepare-review`'s completeness gate — which reads the completed set from the
+    // primary sheet — sees this phase without a per-call-site block here (IMP-272's
+    // narrow mirror, now generalised down into the writer).
     // (b) the working-tree-free boundary commit — the durable, committed tier.
     conclude_boundary_commit(&coord.root, &coord.tip, slice, phase, code_start, code_end)
 }

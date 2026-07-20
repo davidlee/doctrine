@@ -55,3 +55,17 @@ Both are cleanest as the general `set_phase_status` completion-mirror described 
 ISS-212 candidate (a) — which subsumes the funnel-Record-beat framing here (the
 mirror rides the shared writer, not a per-arm Record-beat wrap, so IDE-027 /
 RFC-005 topology churn no longer gates it).
+
+## Status (2026-07-20, update) — orchestrator-author + codex/pi now covered
+
+ISS-212 shipped candidate (a): the completion mirror now lives in the single
+`set_phase_status` writer (`completed`-only, guarded to the live-coord dispatch
+split). That subsumes BOTH this idea's realised claude-arm half AND its still-open
+codex/pi `record-delta` half — every arm that flips completion in a coord tree
+now mirrors into the primary sheet through the shared writer.
+
+Remaining open (this idea's residue): the fuller "mirror **every** transition
+(not just `completed`) so primary `slice status` / `slice list` are continuously
+honest mid-drive" enhancement. The `completed`-only mirror keeps the
+completeness gate honest but leaves `in_progress`/`blocked`/reopen flips
+primary-invisible mid-drive.
