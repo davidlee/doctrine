@@ -121,17 +121,24 @@ Three components across two ADR-001 tiers; no command tier this slice.
 ```
 
 - **`src/asset_source.rs` (new, leaf).** Owns `#[derive(RustEmbed)] #[folder =
-  "install/"] struct Assets`, *relocated from `install.rs`*. Exposes
-  `read_bytes(key) -> Option<Cow<'static, [u8]>>` (binary-safe) and `read_text(key)
-  -> anyhow::Result<String>` (`from_utf8` on `read_bytes`, preserving the current
-  error text). This is the D3 neutral seam — owned by neither projection nor
-  publication.
+  "install/"] struct Assets` (kept *private* to the module — the embed type does
+  not leak across the seam), *relocated from `install.rs`*. Exposes
+  `read_bytes(key) -> Option<Cow<'static, [u8]>>` (binary-safe), `read_text(key) ->
+  anyhow::Result<String>` (`from_utf8` on `read_bytes`, preserving the current
+  error text), and `iter() -> impl Iterator<Item = Cow<'static, str>>` (wrapping
+  `Assets::iter()` for enumeration callers). This is the D3 neutral seam — owned by
+  neither projection nor publication.
 - **`src/publication.rs` (new, engine).** The manifest schema + admission, the
   `SourceAdapter` trait, the `EmbeddedAdapter`, and the `Resolver`. Pure-first: all
   IO is the leaf seam behind the adapter. `resolve(addr) -> Result<Cow<[u8]>>` is
   the byte-emit path a later `library show` wraps unchanged (decision D-A).
-- **`install.rs`** keeps `asset_text` / `embedded_asset` signatures, delegating to
-  `asset_source` — so the ~30 call sites and install's suites are untouched.
+- **`install.rs`** keeps `asset_text` / `embedded_asset` signatures (delegating to
+  `asset_source`), so their **external** callers (~30 sites across `slice.rs`,
+  `spec.rs`, `backlog.rs`, etc.) are untouched. Install's own **internal** `Assets::`
+  sites — `Assets::get` (manifest load `:1363`, hymn body `:1580`) and
+  `Assets::iter()` (hymn/agent enumeration `:899,:914,:1433,:2191`) — rewire to the
+  `asset_source` accessors. This is behaviour-preserving (same embed, same bytes);
+  install's suites staying green unchanged is the proof.
 
 ### 5.2 Interfaces & Contracts
 
@@ -139,6 +146,7 @@ Three components across two ADR-001 tiers; no command tier this slice.
 // ── leaf: src/asset_source.rs ────────────────────────────────────────────
 pub(crate) fn read_bytes(key: &str) -> Option<std::borrow::Cow<'static, [u8]>>;
 pub(crate) fn read_text(key: &str) -> anyhow::Result<String>;
+pub(crate) fn iter() -> impl Iterator<Item = std::borrow::Cow<'static, str>>;
 
 // ── engine: src/publication.rs ───────────────────────────────────────────
 pub(crate) struct PublicationManifest { entries: Vec<PublicationEntry> }
@@ -217,8 +225,9 @@ customization = "customizable"
   logical addresses** (D9) → build the address→entry index. Any failure returns a
   typed `AdmissionError`; nothing is silently defaulted.
 - **Resolution.** `resolve(addr)`: look up the entry (miss → `UnknownAddress`),
-  select the adapter for its backing source (none → `UnsupportedSourceType`), read
-  bytes (absent → `BackingSourceMissing`). Never a silent empty result.
+  read its bytes through the single `EmbeddedAdapter` (absent → `BackingSourceMissing`).
+  Never a silent empty result. (Multi-adapter routing and `UnsupportedSourceType`
+  arrive with the runtime-loaded adapter — see §5.5.)
 - **Build-time gate.** A `#[test]` calls `PublicationManifest::load()` on the
   *shipped embedded* manifest and asserts it admits — so a mis-classified or
   unlicensed shipped asset fails CI (`just gate`). This is the "validate/build
@@ -231,14 +240,15 @@ entry carries licence ∈ {MIT, GPL} and a customization status; (3) a logical
 address resolves independent of the physical layout; (4) an embedded-but-undeclared
 asset is unreachable through the resolver.
 
-Edge cases → typed errors: unknown/undeclared address → `UnknownAddress`; duplicate
-address → `DuplicateAddress` at admission; malformed TOML → `MalformedManifest`;
-missing field / out-of-set licence → `MissingField` / `LicenceMissingOrOutOfSet`;
-absent backing bytes → `BackingSourceMissing`; unknown source type →
-`UnsupportedSourceType`; traversal-like address → rejected at `LogicalAddress`
-construction (`TraversalRejected`). The hymn-cascade overlay is **not** a duplicate
-(D9) — but this slice declares no hymns, so no overlay arises here; the note is
-carried for the manifest schema's future.
+Edge cases → typed errors **constructed this slice**: unknown/undeclared address →
+`UnknownAddress`; duplicate address → `DuplicateAddress` at admission; malformed
+TOML → `MalformedManifest`; missing field / out-of-set licence → `MissingField` /
+`LicenceMissingOrOutOfSet`; absent backing bytes → `BackingSourceMissing`;
+traversal-like address → rejected at `LogicalAddress` construction
+(`TraversalRejected`). **Deferred** (would be dead code with one adapter):
+`UnsupportedSourceType`, which lands with the runtime-loaded adapter (OQ-4). The
+hymn-cascade overlay is **not** a duplicate (D9) — but this slice declares no hymns,
+so no overlay arises here; the note is carried for the manifest schema's future.
 
 ## 6. Open Questions & Unknowns
 
@@ -323,8 +333,10 @@ TDD red/green/refactor. Engine integration tests in `publication.rs`:
 - **missing customization / malformed TOML** → typed admission error;
 - **storage independence** — same `LogicalAddress`, relocated `backing`, second
   (test) adapter → resolves identically (D2/REQ-374);
-- **binary round-trip** — a binary fixture emits byte-for-byte through
-  `asset_source::read_bytes` (REQ-376);
+- **binary round-trip** — an in-memory test `SourceAdapter` holding non-UTF-8 bytes
+  resolves byte-for-byte (proves the seam is `Cow<[u8]>`-clean, no `from_utf8`),
+  without shipping a binary asset into the projection embed (REQ-376); a companion
+  test asserts `read_text` and `read_bytes` agree on a real text asset;
 - **traversal** addresses rejected at `LogicalAddress` construction.
 
 Build-time / behaviour-preservation:
