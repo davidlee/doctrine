@@ -46,6 +46,14 @@ intent = "design-target"
 selector = ".doctrine/adr/001/layering.toml"
 intent = "design-target"
 
+[[selector]]
+selector = "flake.nix"
+intent = "design-target"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-019"
