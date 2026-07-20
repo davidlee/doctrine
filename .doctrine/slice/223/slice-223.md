@@ -114,16 +114,18 @@ durable, cross-slice items are recorded as knowledge records:
 - **D3 seam-extraction → extract now (D-B).** This slice extracts `asset_text`
   into a neutral leaf `asset_source` seam (binary-safe), no physical file
   relocation. REQ-376's neutral-ownership criterion is met here.
-- **Verification without a read surface → engine layer + build-time gate (D-A).**
-  No `doctrine library` CLI verb this slice; the byte-emit consumer path is built
-  and tested, and the shipped manifest's build-time admission is the observable
-  licence gate.
+- **Verification without a read surface → one `publication validate` command (D-A,
+  revised after codex RV-287).** No `doctrine library` *read* verb this slice, but a
+  thin `publication validate` command ships as the production consumer: it admits the
+  shipped manifest and emits every entry to a sink. It is required to satisfy
+  `deny(unused)` (a test-only seam won't compile), and doubles as the observable
+  licence/resolvability gate and the release-artifact probe. `library list|tree|show`
+  stay deferred.
 
-Deferred to later slices: `library list|tree|show` and search federation;
+Deferred to later slices: `library list|tree|show` read UX and search federation;
 physical relocation of published material into semantically-owned source roots
-(ADR-019 downstream); a working runtime-loaded adapter (OQ-4); an author-facing
-`publication validate` CLI verb. Tooling gaps IMP-298 / IMP-299 are open context,
-not blockers.
+(ADR-019 downstream); a working runtime-loaded adapter (OQ-4). Tooling gaps
+IMP-298 / IMP-299 are open context, not blockers.
 
 Honoured `mem.pattern.doctrine.spec-prose-requirement-drift`: mechanism nouns
 (manifest, resolver, adapter) live in `design.md` (per-slice tech tier), kept out

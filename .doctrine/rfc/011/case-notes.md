@@ -2415,3 +2415,32 @@ end-to-end check. Cost: one wasted repro round + a re-run. Latent trap for any
 skill that verifies a code change by piping to the built binary rather than
 trusting the test suite alone (which is correct discipline for a "never fired
 live" class of bug — the tests were exactly what masked ISS-232).
+
+[design; SL-223-publication-seam]
+Design-review lesson (codex RV-286 F1, a blocker): a load-bearing design premise
+("install projects selectively, so a manifest under install/ won't leak") was
+reached by GREP over install.rs (saw the hymn/agent/skill forward steps) and was
+FALSE — build_plan step 2 (install.rs:1395-1438) blanket-projects every embedded
+file except root manifest.toml. The external reviewer read the projection loop; I
+had grepped. Cost: a full design revision (new publication/ embed root + flake
+graft). Cheap prevention: when a decision rests on "does subsystem X do Y?", READ
+the function that does Y, don't grep-and-infer. Instance of docs/source-first over
+probe-inference. Also: an earlier truncated `spec show SPEC-026` (head -400) hid
+REQ-381/382/383 — truncation of a show can silently drop in-scope requirements.
+
+[design; SL-223 publication-seam round-2]
+Design decision D-A ("ship no CLI verb this slice; verify the pub(crate) seam via
+tested-only emit path") was user-approved in round 1, then invalidated in round 2
+by codex RV-287 F-4: the crate's lint posture (`warnings=deny`, `unused=deny`,
+`unreachable_pub=deny`) makes a `pub(crate)` API a binary reaches only from
+`#[cfg(test)]` dead code = a HARD COMPILE ERROR. So "internal seam, tested not
+wired" is not a buildable shape here at all. Token cost: a full design section
+(D-A) + scope follow-up + reviewer round were spent on a decision that a single
+read of the crate's `[lints]` block at design time would have ruled out.
+Lesson (candidate memory): when a slice deliberately ships code that is "internal
+/ not yet wired to a command", check the dead-code lint posture DURING design —
+under deny-unused every shipped pub(crate) item needs a production caller, so the
+production consumer is a design input, not a plan-time detail. Cf. the RV-286 F1
+"read the function, don't grep-and-infer" lesson — same failure family: a
+governing constraint (there projection behaviour, here lint posture) assumed
+rather than read from source.

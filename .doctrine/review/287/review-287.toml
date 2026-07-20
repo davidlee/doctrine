@@ -1,0 +1,61 @@
+id    = 287
+slug  = "second-round-adversarial-verification-of-revised-sl-223-publication-seam"
+title = "Second-round adversarial verification of revised SL-223 publication seam"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "gpt-5.5"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-223"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Expected the single injected adapter to be substitutable; observed Resolver fixes EmbeddedAdapter concretely"
+detail = "Revised design section 5.2 declares SourceAdapter, then defines Resolver { manifest: PublicationManifest, source: EmbeddedAdapter }. D-F and section 9 nevertheless require the same resolver to run through a second in-memory adapter with address != backing. That cannot be expressed through the shown API: the field is concrete, Resolver is neither generic over A: SourceAdapter nor stores a trait object, and no constructor/injection contract is specified. F3 is therefore not genuinely resolved, and the mapped storage-independence test for REQ-374 cannot compile against the designed contract. Expected correction: make Resolver hold exactly one substitutable adapter (generic or boxed/borrowed trait object) while retaining the honest no-registry scope, then exercise EmbeddedAdapter and the in-memory adapter through that same resolver API."
+disposition = "fix-now"
+response = "Valid. `Resolver` is now generic `Resolver<A: SourceAdapter>` with a `new(manifest, source)` constructor (§5.2, D-F). Production wires `EmbeddedAdapter`; the REQ-374 storage-independence test wires an in-memory adapter through the same new/resolve/emit API — one substitutable adapter, still no registry. The concrete-field version could not compile the second-adapter test; this can."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Expected every new RustEmbed root to ship through Cargo packaging; observed publication is absent from the explicit package allow-list"
+detail = 'SL-223 adds #[folder = "publication/"] but discusses only the flake.nix graft. Cargo.toml uses an explicit [package] include allow-list and its own comment says every compile-time embed root must be listed; the list contains /src/**, /install/**, /plugins/**, /memory/**, /templates/mcp.ts, and web assets, but no /publication/**. cargo publish therefore omits the new root from the crate source, so downstream cargo install either fails the RustEmbed derive because the folder is absent or ships an empty publication embed. just gate and a repository-local embedded-admission test cannot catch the packaged-source omission. The design must include /publication/** in Cargo.toml and verify the packaged crate/artifact path, not only the working tree and Nix graft.'
+disposition = "fix-now"
+response = "Valid, confirmed against Cargo.toml — the `[package] include` allow-list omitted the new root. Added `/publication/**` to `include` (and to the embed-root comment). §9 adds a packaged-source check: `cargo package --list` must contain `publication/manifest.toml`. Recorded as R7. The Nix graft and the Cargo include are two independent gates; both now covered."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected just nix-build to prove publication bytes in the Nix binary; observed the recipe only builds and the design names no observable probe"
+detail = "Revised sections 3, 5.4, R6, and 9 say just nix-build is a presence-of-asset check confirming the publication graft landed in the release artifact. The live justfile recipe only runs nix build .#doctrine --no-link --print-out-paths and never executes or inspects the resulting binary; flake.nix also has doCheck = false. Moreover cleanCargoSource retains .toml, so publication/manifest.toml can remain available even if the full publication-root graft is forgotten, making build success unable to establish that the graft exists. With no library command this slice, the current scripts/smoke.sh has no publication observation either. The design must name an artifact-level observable check and wire it into nix-build/release-check that fails when PublicationAssets lacks manifest.toml or the full required root is not in srcWithDist; build success alone is not that check."
+disposition = "fix-now"
+response = "Valid — bare `nix build` cannot prove the graft (doCheck=false skips tests; `.toml` survives cleanCargoSource, so manifest.toml alone can mislead). The artifact probe is now running the built binary: `just nix-build` invokes `doctrine publication validate`, which load()s the embedded manifest and emits every entry — a hollow embed exits non-zero. §3, §5.4, R6, §9. This is enabled by the new command (F-4)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "blocker"
+title = "Expected the command-free publication seam to pass the repository gate; observed every production entry point is test-only under deny-unused"
+detail = "SL-223 deliberately ships no command and section 9 exercises PublicationManifest, Resolver, and emit only from tests. The shown API is pub(crate), and src/main.rs would merely add mod publication; no non-test production path calls load, resolve, or emit. Cargo.toml sets warnings = deny and unused = deny, which implies dead_code; rustc rejects unused pub(crate) structs and methods in a binary crate. Thus the designed implementation cannot satisfy its own just gate/cargo build criterion without suppressing the lint, hiding the module behind cfg(test) (which would ship no seam), or adding a genuine production/artifact consumer. F6 added the right consumer shape but only as test-called engine code; the design must specify a non-test reachability path that preserves the no-library-verb boundary and also enables the release-artifact probe."
+disposition = "fix-now"
+response = """Valid and decisive — confirmed against Cargo.toml (`warnings=deny`, `unused=deny`, `unreachable_pub=deny`): a pub(crate) seam a binary reaches only from #[cfg(test)] is dead code = hard error, so the original D-A ("no CLI verb") could not compile. Reversed D-A: ship one `publication validate` command (publication-tier, NOT a library read verb) as the production consumer — it load→resolve→emits every entry into io::sink(), reaching the whole API + error types on a non-test path, and doubles as the licence/resolvability gate and F-3's artifact probe. `library list|tree|show` stay deferred. User chose this over folding into `doctor` (b) or a thin `library show` (c). §5.1, §5.2, D-A, §9."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected met requirements to have tests satisfying their acceptance criteria; observed deferred library behaviours credited as complete"
+detail = "Design section 9 records PRD-017 REQ-359, REQ-363, REQ-367, and REQ-369 as met. The mapped tests do not establish those complete requirements. REQ-363 requires the library to emit exact bytes to stdout and report unavailable backing distinctly, but this slice has no library command and emit only targets an injected writer. REQ-367 requires licence visibility alongside assets in list, tree, and show before copying, but all three verbs are deferred. REQ-369 requires the same address and publication across storage/delivery mechanisms; only embedded production wiring exists, and the designed concrete Resolver cannot run the proposed second adapter. REQ-359 includes an inspectable user/agent public-set outcome that an internal admitted manifest alone does not fully deliver. These may be foundations or partial coverage, but section 9 must not mark the durable requirements met until their acceptance criteria are exercised."
+disposition = "fix-now"
+response = "Valid — §9 over-credited PRD invariants whose acceptance criteria need the deferred library verbs. Reclassified: **met** only this slice's own mechanism requirements (REQ-374/376/379/380). REQ-359/363/367/369 dropped to **partial/foundation** — the mechanism (declaration, emit, licence gate, address stability) is built and validated, but the user-facing outcomes (inspectable public set, stdout emission with distinct unavailable-backing reporting, licence visibility in list/tree/show, multi-storage delivery) pend the verbs / OQ-4. REQ-373 and REQ-381 were already partial."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

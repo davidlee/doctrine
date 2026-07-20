@@ -18,10 +18,13 @@ is the sole authority for the public set (REQ-373 / REQ-359), a storage-independ
 logical-address resolver over a source-adapter interface (REQ-374), a fail-closed
 {MIT, GPL} licence field with recorded provenance (REQ-379 / REQ-367), and a
 neutral byte-level asset-read seam extracted from install's text-only helper
-(REQ-376 / D3). It deliberately ships **no `doctrine library` command** — the read
-UX is the next slice — and verifies at the engine layer via a command-free
-`emit(addr, writer)` consumer path plus a source-level admission gate (locked
-decision D-A below).
+(REQ-376 / D3). It ships **no `doctrine library` read UX** (`list|tree|show` is the
+next slice), but does ship one thin `doctrine publication validate` command — a
+*publication*-tier verb, not a library read verb — that admits the shipped manifest
+and emits every declared entry to a sink. That command is the production consumer
+that (a) makes the `pub(crate)` seam reachable under `deny(unused)`, (b) is the
+observable licence/resolvability gate, and (c) is the release-artifact probe (locked
+decision D-A below, revised after codex RV-287).
 
 ## 2. Current State
 
@@ -66,10 +69,19 @@ decision D-A below).
   scope: REQ-375 (library verbs), REQ-377/378 (federation), REQ-382/383 (federation
   NF-003/004).
 - **ADR-001 layering.** The byte-read + embed ownership is a leaf seam;
-  declaration/admission/resolver/emit are engine (pure-first); no command tier this
-  slice.
+  declaration/admission/resolver/emit are engine (pure-first); a thin `publication
+  validate` handler is the one command-tier addition (calls engine, no logic of its
+  own).
 - **STD-001.** Licence and customization vocabularies are closed enums / named
   constants, never free-text magic strings.
+- **`deny(unused)` reachability** (Cargo.toml `warnings="deny"`, `unused="deny"`,
+  `unreachable_pub="deny"`): a `pub(crate)` API a binary crate reaches only from
+  `#[cfg(test)]` is dead code = a hard compile error. Every shipped seam item must be
+  reachable from a production path — here, the `publication validate` command (D-A).
+- **Cargo packaging allow-list** (Cargo.toml `[package] include`): every compile-time
+  embed root must be listed or `cargo publish`/`cargo install` ships it hollow. The new
+  `publication/` root is added to `include` (codex RV-287 F-2); a packaged-source check
+  guards it (§9).
 - **Behaviour-preservation gate** (AGENTS.md): changing the shared asset-read
   machinery must keep install's existing suites green *unchanged* — that is the
   proof the extraction is behaviour-preserving.
@@ -81,9 +93,13 @@ decision D-A below).
 - **flake.nix / crane embed-strip** (AGENTS.md): crane's `cleanCargoSource` keeps
   only `.rs`/`.toml`/`.lock`; a *new* RustEmbed `#[folder]` root must be grafted
   into `srcWithDist` or the nix binary ships hollow. The new `publication/` root
-  (D-C) **must** be grafted, validated with `just nix-build` (host-only —
-  `doCheck = false`, so nix skips tests; the graft check is presence-of-asset, and
-  the authoritative admission gate runs in `just gate`/CI, which does run tests).
+  (D-C) **must** be grafted. Because nix `doCheck = false` skips tests *and*
+  `cleanCargoSource` keeps `.toml` (so `manifest.toml` can survive even if the full
+  root graft is forgotten), build-success alone proves nothing (codex RV-287 F-3). The
+  observable probe is **running the built binary**: `doctrine publication validate`
+  against the release artifact exits non-zero if the embedded `publication/` root is
+  missing or hollow. `just nix-build` (host-only) wires that binary invocation, not a
+  bare build.
 - **Spec-prose drift** (`mem.pattern.doctrine.spec-prose-requirement-drift`):
   mechanism nouns are tech-tier; this design (per-slice) is the correct home for
   them.
@@ -111,16 +127,22 @@ decision D-A below).
 
 ### 5.1 System Model
 
-Components across two ADR-001 tiers; no command tier this slice.
+Components across three ADR-001 tiers (a thin command handler over engine + leaf).
 
 ```text
+                 ┌───────────── command: publication validate ─────────────────┐
+  production ───►│  load() ─► Resolver::new(EmbeddedAdapter) ─► for each entry:  │
+  entry point    │    emit(entry.address, &mut io::sink()) ─► ok / collect fail │
+                 │  report pass/fail via the command output seam (no raw print) │
+                 └───────────────────────────────┬─────────────────────────────┘
+                                                 │ calls (command → engine)
                  ┌────────────────────────── engine ──────────────────────────┐
   source-level   │  publication.rs                                             │
   admission ───► │   PublicationManifest::admit(bytes) ─(fail-closed)─►        │
   gate (disk)    │   PublicationManifest::load()  ── embedded convenience ─┐   │
-                 │   Resolver { manifest, EmbeddedAdapter }                │   │
+                 │   Resolver<A: SourceAdapter> { manifest, source: A }     │   │
   engine  ─────► │     resolve(LogicalAddress) ─► entry.backing ─►         │   │
-  integ. tests   │       EmbeddedAdapter::read(backing) ─► bytes           │   │
+  integ. tests   │       A::read(backing) ─► bytes                         │   │
                  │     emit(LogicalAddress, &mut dyn Write) ─► framing-free │   │
                  └───────┬───────────────────────────────────────────┬─────────┘
              reads       │ manifest bytes            template bytes    │
@@ -150,6 +172,14 @@ Components across two ADR-001 tiers; no command tier this slice.
 - **`src/publication.rs` (new, engine).** The manifest schema + source-agnostic
   admission, the `SourceAdapter` trait, the one `EmbeddedAdapter`, the `Resolver`,
   and `emit`. Pure-first: all IO is the leaf seam behind the adapter.
+- **`publication validate` command handler (new, command tier).** A thin verb wired
+  into the CLI dispatch: `load()` the embedded manifest, build
+  `Resolver::new(EmbeddedAdapter)`, `emit` each declared entry into `io::sink()`,
+  and report pass or the list of failing addresses through the established command
+  output path (raw `print*` macros are clippy-denied). No business logic of its own —
+  it is the production consumer that makes the seam reachable (D-A). It exercises
+  `load`→`resolve`→`emit` and every error type in a non-test path. It is **not** a
+  `library` read verb: it emits to a sink for validation, not asset bytes to the user.
 - **`install.rs`** keeps `asset_text` / `embedded_asset` signatures (delegating to
   `asset_source`), so their **external** callers (~30 sites across `slice.rs`,
   `spec.rs`, `backlog.rs`, etc.) are untouched. Install's own **internal** `Assets::`
@@ -199,9 +229,15 @@ pub(crate) trait SourceAdapter {
 }
 pub(crate) struct EmbeddedAdapter;   // reads via asset_source::read_bytes (embed key only)
 
-/// Holds the admitted manifest + exactly one injected adapter this slice. NOT a
-/// multi-source registry — that arrives with the runtime-loaded adapter (OQ-4).
-pub(crate) struct Resolver { manifest: PublicationManifest, source: EmbeddedAdapter }
+/// Holds the admitted manifest + exactly one SUBSTITUTABLE adapter (generic, not a
+/// fixed concrete field — codex RV-287 F-1). NOT a multi-source registry: exactly one
+/// adapter, chosen at construction. Production wires `EmbeddedAdapter`; the
+/// storage-independence test wires an in-memory adapter through the SAME API. The
+/// runtime-loaded adapter (OQ-4) is a third `impl SourceAdapter`, not a registry.
+pub(crate) struct Resolver<A: SourceAdapter> { manifest: PublicationManifest, source: A }
+impl<A: SourceAdapter> Resolver<A> {
+    pub(crate) fn new(manifest: PublicationManifest, source: A) -> Self;
+    // resolve / emit below
 
 impl PublicationManifest {
     /// Source-AGNOSTIC admission — the sole-authority contract (REQ-373) is a
@@ -211,14 +247,21 @@ impl PublicationManifest {
     /// Embedded convenience: read the shipped manifest and admit it.
     pub(crate) fn load() -> Result<Self, AdmissionError>;  // = admit(publication_manifest_bytes()?)
 }
-impl Resolver {
+impl<A: SourceAdapter> Resolver<A> {
     pub(crate) fn resolve(&self, addr: &LogicalAddress)
         -> Result<std::borrow::Cow<'static, [u8]>, ResolveError>;
     /// The real consumer shape a later `library show` wraps: stream the resolved
     /// asset's bytes framing-free to any writer, propagating IO errors (D-A/F6).
+    /// `publication validate` calls this per entry into `io::sink()`.
     pub(crate) fn emit(&self, addr: &LogicalAddress, out: &mut dyn std::io::Write)
         -> Result<(), EmitError>;
 }
+
+// ── command tier: publication validate ───────────────────────────────────
+/// Production consumer (D-A). Admits the embedded manifest, resolves+emits every
+/// declared entry into a sink, returns a pass/fail report. The one non-test path
+/// that makes the seam reachable under deny(unused), and the release-artifact probe.
+pub(crate) fn run_publication_validate() -> anyhow::Result<ValidateReport>;
 ```
 
 Manifest on disk at the **new** root `publication/manifest.toml` (repo root, its own
@@ -279,9 +322,15 @@ Note the backing key references the `install/` embed (templates stay physically 
   and runs `admit` on those bytes — so a mis-classified or unlicensed shipped asset
   fails `just gate` / CI *regardless of embed staleness* (the rust-embed footgun
   cannot mask it). A companion test runs `load()` on the embedded bytes to prove the
-  shipped embed itself admits. `just nix-build` (host-only) confirms the
-  `publication/` graft landed in the release artifact (nix `doCheck = false` skips
-  tests, so the graft check is presence-of-asset).
+  shipped embed itself admits.
+- **`publication validate` command — production consumer + artifact probe.** The
+  same load→resolve→emit path, invoked from the CLI: `load()` the embedded manifest,
+  `emit` every entry into `io::sink()`, report pass/fail. This (1) makes the seam
+  reachable under `deny(unused)` (D-A / F-4), and (2) is the release-artifact check
+  F-3 requires — run against the nix-built binary it exits non-zero if the embedded
+  `publication/` root is missing or hollow, which `nix build` alone cannot detect
+  (`doCheck=false`, `.toml` survives `cleanCargoSource`). `just nix-build` (host-only)
+  invokes the built binary, not a bare build.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -318,25 +367,27 @@ carried for the manifest schema's future.
   construction; but only the **embedded** source is wired this slice. A working
   runtime-loaded manifest source is deferred (OQ-4). Coverage recorded as
   embedded-covered / runtime-loaded pending at reconcile.
-- **Author-facing `publication validate` verb** — deferred. The disk-source
-  admission gate covers CI; a real verb can land with the library slice if authors
-  need it.
 - **Runtime-loaded adapter (OQ-4)** — the `SourceAdapter` trait + source-agnostic
   `admit` exist (that is what makes the resolver and admission storage-independent),
   but only `EmbeddedAdapter` / the embedded manifest source are implemented.
 
 ## 7. Decisions, Rationale & Alternatives
 
-- **D-A — Verify at the engine layer via a command-free `emit` consumer path +
-  source-level admission gate; ship no `library` CLI verb.** `emit(addr, &mut dyn
-  Write)` streams framing-free bytes and propagates IO errors — the exact shape a
-  later `library show` wraps, minus CLI parsing — so the seam is proven against a
-  *real* consumer, not merely asserted-on by `resolve`. *Rationale:* resolves the
-  speculative-generality risk while honouring the route's decision to defer the
-  library UX. *Alternatives:* (a) test `resolve()->bytes` only — still an engine
-  assertion, proves no framing-free emission or output-failure handling (codex F6);
-  (c) ship a thin `show` verb — overlaps the library slice's boundary. (REQ-375
-  stays `pending`.)
+- **D-A (revised after codex RV-287 F-4) — Ship one `publication validate` command
+  as the production consumer; still ship no `library` read verb.** The original D-A
+  ("command-free, tested `emit` only") **cannot compile**: under `deny(unused)` a
+  `pub(crate)` seam a binary crate reaches only from `#[cfg(test)]` is dead code = a
+  hard error. So the seam needs a *production* caller. `publication validate` is that
+  caller: it `load()`s the embedded manifest and `emit`s every entry into
+  `io::sink()`, exercising `load`→`resolve`→`emit` and each error type on a non-test
+  path. It doubles as the observable licence/resolvability gate and the release-artifact
+  probe F-3 needs. *Why this and not a library verb:* it is a *publication*-tier
+  validation verb (validate the declaration), emitting to a sink — not
+  `library list|tree|show`, which surface asset bytes/metadata to the user and stay
+  deferred (REQ-375 `pending`). `emit` (RV-286 F6) is retained and now has its
+  production caller. *Alternatives:* (b) wire admission into an existing command
+  (`doctor`) — couples publication into an unrelated verb; (c) ship a thin `library
+  show` — crosses into the library slice's boundary. The user chose (a).
 - **D-B — Extract the neutral asset-source seam now (D3), minimally.** `asset_text`
   delegates to a new leaf `asset_source` owning the embed and a binary-safe byte
   read; **no physical file relocation** of published material. *Rationale:* keeps
@@ -362,12 +413,15 @@ carried for the manifest schema's future.
 - **D-E — Licence and customization are closed enums (STD-001), licence fails closed
   (D6).** No free-text, no runtime default. Provenance recorded per entry (field name
   unified as `provenance` across TOML + Rust, codex F7) for auditability.
-- **D-F — Address and backing are separate fields; the resolver is written against
-  `SourceAdapter` with exactly one injected `EmbeddedAdapter` this slice — not a
-  multi-source registry (codex F3).** Storage-independence is structural, proven by a
-  test resolving one address through a relocated backing / second (in-memory) adapter
-  (D2/REQ-374). The trait earns its keep as the REQ-374 storage-independence contract,
-  exercised by that second-adapter test; source-identity dispatch is deferred (OQ-4).
+- **D-F — Address and backing are separate fields; `Resolver<A: SourceAdapter>` holds
+  exactly one *substitutable* adapter — generic, not a fixed concrete field (codex
+  RV-286 F3, sharpened by RV-287 F-1).** The earlier `Resolver { source: EmbeddedAdapter }`
+  was concrete, so the D-F/§9 storage-independence test (same address, relocated
+  backing, second in-memory adapter) *could not compile against it*. Making `Resolver`
+  generic over `A` lets production wire `EmbeddedAdapter` and the test wire an in-memory
+  adapter through the **same** `new`/`resolve`/`emit` API — still exactly one adapter,
+  no registry. Storage-independence is thus structural and actually testable
+  (D2/REQ-374); source-identity dispatch is deferred (OQ-4).
 
 ## 8. Risks & Mitigations
 
@@ -375,9 +429,10 @@ carried for the manifest schema's future.
   preserved; delegation only; install's existing suites must stay green unchanged
   (behaviour-preservation gate). Add a binary round-trip test the old text-only path
   could not express.
-- **R2 — Seam with no CLI consumer builds the wrong abstraction.** *Mitigation:*
-  D-A's `emit(addr, writer)` is the real consumer path (framing-free stream + IO
-  error), driving the interface from a real shape, not speculation.
+- **R2 — Seam builds the wrong abstraction / can't compile with only test callers.**
+  *Mitigation:* `publication validate` (D-A) is a real production consumer driving the
+  `load`→`resolve`→`emit` interface from a real shape, and its existence is what
+  satisfies `deny(unused)` — a test-only seam would not compile (codex RV-287 F-4).
 - **R3 — Stale embed masks manifest/asset changes in tests.** *Mitigation:* the
   authoritative admission gate reads the manifest **from disk source**, not embedded
   bytes (§5.4), so staleness cannot hide a defect; `touch src/asset_source.rs` before
@@ -392,9 +447,13 @@ carried for the manifest schema's future.
   (relocated key) to prove the resolver is not bound to one layout.
 - **R6 — New `publication/` embed root ships hollow under nix (crane strip).**
   *Mitigation:* graft `publication/` into `srcWithDist`; `just nix-build` (host-only)
-  asserts the manifest asset is present in the release binary; the CI admission gate
-  (`just gate`, runs tests) is the authoritative licence check since nix
-  `doCheck = false`.
+  **runs `doctrine publication validate` on the built binary** — a hollow embed exits
+  non-zero (bare `nix build` cannot detect it, since `doCheck=false` and `.toml`
+  survives `cleanCargoSource` — codex RV-287 F-3). The CI admission gate (`just gate`,
+  runs tests) is the authoritative licence check.
+- **R7 — `publication/` omitted from Cargo `include` ships a hollow crate (codex
+  RV-287 F-2).** *Mitigation:* `/publication/**` added to `[package] include`; a
+  packaged-source check (§9) asserts the root is present in `cargo package --list`.
 
 ## 9. Quality Engineering & Validation
 
@@ -418,24 +477,43 @@ TDD red/green/refactor. Engine tests in `publication.rs`:
 - **no-write** — `load()` + `resolve` + `emit` over a clean temp repo leave every
   path byte-for-byte unchanged (REQ-381 seam foundation).
 
-Install-integration + build gate:
+Command + install-integration + build/packaging gate:
 
+- **`publication validate` (production path)** — over the shipped manifest returns a
+  pass report; with a fixture manifest whose entry points at an absent backing it
+  reports that address as failing and exits non-zero (exercises `load`→`resolve`→`emit`
+  + error types on the non-test path — D-A / codex RV-287 F-4);
 - **non-projection regression** — `install` into a clean temp repo leaves
   `.doctrine/publication/` **absent**; the projection and publication manifests are
   independent surfaces (REQ-380 / codex F1);
 - **source-level admission gate** — `admit` over the on-disk `publication/manifest.toml`
   passes (all template entries MIT / customizable / declared); staleness-proof (REQ-379);
 - **embedded admission** — `load()` over the shipped embed admits;
+- **packaged-source check** — `cargo package --list` includes `publication/manifest.toml`
+  (the `include` allow-list carries the new root — codex RV-287 F-2);
 - install's existing suites green **unchanged** (delegation is behaviour-preserving);
 - `just gate` clean (clippy zero warnings, tests pass), `cargo fmt`; `just nix-build`
-  host-only confirms the `publication/` graft.
+  host-only **runs `doctrine publication validate` on the built binary** (artifact
+  probe — codex RV-287 F-3).
 
-Requirement coverage recorded at reconcile: **met** — REQ-374, REQ-376, REQ-379,
-REQ-380 (and PRD invariants REQ-359, REQ-363, REQ-367, REQ-369); **partial** —
-REQ-373 (embedded source covered; runtime-loaded source pending, OQ-4), REQ-381
-(seam foundation + no-write proven; full library-surface guarantee pending the verbs).
-**Pending — later slices:** REQ-375 (library verbs), REQ-377/378 (federation),
-REQ-382/383 (federation NF).
+Requirement coverage recorded at reconcile (honest per codex RV-287 F-5 — a durable
+requirement is **met** only when its full acceptance criterion is exercised; the
+user-facing pieces need the deferred `library` verbs):
+- **Met (this slice's own mechanism requirements):** REQ-374 (resolver over adapter,
+  storage-independence test), REQ-376 (neutral byte seam), REQ-379 (fail-closed licence
+  gate), REQ-380 (manifest independence / non-projection).
+- **Partial / foundation (PRD invariants — mechanism landed, user-facing outcome
+  pends the library verbs):** REQ-359 (declaration + fail-closed admission built and
+  validated; the *inspectable* public-set outcome needs `list`/`show`); REQ-363
+  (`emit` proves byte-exact framing-free emission to a writer; stdout + distinct
+  unavailable-backing reporting is the `show` verb's); REQ-367 (the licence *gate* is
+  met and surfaced by `publication validate`; licence *visibility alongside assets in
+  list/tree/show* pends the verbs); REQ-369 (address stable across a relocated backing
+  via the second-adapter test; multi-storage *delivery* pends OQ-4); REQ-373 (embedded
+  source covered; runtime-loaded source pending, OQ-4); REQ-381 (seam foundation +
+  no-write proven; full library-surface guarantee pends the verbs).
+- **Pending — later slices:** REQ-375 (library verbs), REQ-377/378 (federation),
+  REQ-382/383 (federation NF).
 
 ## 10. Review Notes
 
@@ -464,4 +542,24 @@ integrated:**
    unknown/missing provenance rejection tested (§5.2, D-E, §9).
 
 REQ-381 exists (NF-002) — an earlier truncated `spec show` hid it; codex was right,
-the design was corrected. Decisions D-A…D-F stand as amended above.
+the design was corrected.
+
+**External codex review — RV-287 (second pass on the revised design), 5 findings, all
+adjudicated valid and integrated:**
+1. **(Major F-1) Concrete `Resolver { source: EmbeddedAdapter }` couldn't run the
+   second adapter its own test requires.** Fixed: `Resolver<A: SourceAdapter>` +
+   `new` — one substitutable adapter, no registry (§5.2, D-F).
+2. **(Blocker F-2) `publication/` absent from Cargo `[package] include`** → hollow
+   crate on publish. Fixed: added to `include` + packaged-source check (Cargo.toml,
+   §3, R7, §9).
+3. **(Major F-3) `just nix-build` only built, never observed the bytes.** Fixed: it
+   now runs `doctrine publication validate` on the built binary (§3, §5.4, R6, §9).
+4. **(Blocker F-4) Command-free seam is dead code under `deny(unused)` — won't
+   compile.** Fixed: ship `publication validate` as the production consumer (reverses
+   the original D-A "no CLI verb"; user chose this over folding into `doctor` or a
+   `library show`). §5.1, §5.2, D-A, §9.
+5. **(Major F-5) §9 over-credited PRD invariants as met.** Fixed: only this slice's
+   own mechanism requirements are met; REQ-359/363/367/369 reclassified partial/
+   foundation until the library verbs exercise their user-facing criteria (§9).
+
+Decisions D-A…D-F stand as amended above (D-A reversed on F-4; D-F sharpened on F-1).
