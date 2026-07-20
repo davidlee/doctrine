@@ -53,7 +53,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch-agent/SKILL.md",
-      "computedHash": "1e862a532cfeb02723cac5d9a14ab3fe68c42839fe7f80c938e3dd4d00eff4ea"
+      "computedHash": "814b2c3668b2f99a2481e9ebc68dd1cc4c150bb68ed4cb235c971d13695fe7b8"
     },
     "dispatch-subprocess": {
       "source": "davidlee/doctrine",

@@ -124,9 +124,12 @@ from the committed tip. In order:
    boundary row (UPSERT-by-phase, working-tree-free). The flip reaches BOTH the
    coord sheet (next-ready authority) and the PRIMARY sheet (the tree
    `prepare-review`'s completeness gate reads its completed-set from) — no manual
-   `slice phase --status completed -p <primary>` re-flip is needed at conclude
-   (IMP-272). Idempotent on retry; the only fault outcome is a flipped sheet with
-   no committed boundary, which a retry re-composes.
+   `slice phase --status completed -p <primary>` re-flip is needed. That
+   coord→primary mirror lives in the single writer `set_phase_status` (ISS-212),
+   so it is not conclude-specific: any `completed` flip in the coord tree under a
+   live `dispatch/<slice>` worktree mirrors down, whether it rode this tool or a
+   raw `slice phase --status`. Idempotent on retry; the only fault outcome is a
+   flipped sheet with no committed boundary, which a retry re-composes.
 6. **Reap.** `dispatch_reap{slice, name: <branch>}` — runs the patch-id
    landed-oracle (`git cherry`): it REFUSES a fork whose patch is not in coord
    history, then removes the landed fork's worktree + branch. Reap ONLY through
