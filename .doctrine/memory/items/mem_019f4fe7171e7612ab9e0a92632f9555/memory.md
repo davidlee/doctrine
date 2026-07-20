@@ -11,9 +11,16 @@ the primary tree's gitignored, per-worktree phase sheets
 `slice phase --status` flips all ran in the coord tree therefore fails the
 gate even though `dispatch status` (coord-side) shows every phase completed.
 
-Cure: re-flip the phases to `completed` from the PRIMARY tree. This is safe
-while the coordination worktree is live — the solo phase-binding capture
-self-skips when a live worktree holds `dispatch/<slice>`
+Status (IMP-272, 2026-07-20): the CLAUDE arm now cures this automatically —
+`dispatch_conclude_phase` mirrors each completed flip into the primary tree
+alongside the coord flip (`src/mcp_server/dispatch.rs`), so a normal claude-arm
+drive no longer hits the gate refusal and needs no hand-step. The manual cure
+below still applies to (a) hand-flipped phases and (b) the codex/pi arm, whose
+flip locus is unfixed (ISS-233).
+
+Cure (manual paths): re-flip the phases to `completed` from the PRIMARY tree.
+This is safe while the coordination worktree is live — the solo phase-binding
+capture self-skips when a live worktree holds `dispatch/<slice>`
 (`capture_phase_boundary` arm guard, src/state.rs:542), so the registry rows
 recorded by the funnel are never clobbered. Verify row count + oids after.
 
