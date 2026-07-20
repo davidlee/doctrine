@@ -5,10 +5,10 @@ id = 272
 slug = "dispatch-funnel-per-phase-completed-flip-must-reach-primary-tree-prepare-review-completeness-gate"
 title = "dispatch funnel: per-phase completed flip must reach primary tree — prepare-review completeness gate reads phase status there, not the coord tree"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-05"
-updated = "2026-07-05"
+updated = "2026-07-20"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
