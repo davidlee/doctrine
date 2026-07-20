@@ -8,15 +8,18 @@
 //! admission rules, the logical-address namespace, and the closed licence /
 //! provenance / customization vocabularies (STD-001). It is engine-tier
 //! (ADR-001): pure-first — the only IO is the leaf `asset_source` seam behind
-//! [`PublicationManifest::load`]. The storage-independent resolver + framing-free
-//! emit arrive in PHASE-03; this phase is admission only.
+//! [`PublicationManifest::load`] and the [`SourceAdapter`] read boundary. It also
+//! owns the storage-independent [`Resolver`] over the [`SourceAdapter`] interface
+//! and the framing-free [`Resolver::emit`] (REQ-374 / REQ-363).
 //!
 //! **Fail-closed** (D6): an entry whose licence is outside the allowed set, or
 //! any missing/unknown field, or a duplicate logical address, fails admission —
 //! nothing is silently defaulted.
 
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::io::Write;
 
 /// Closed licence set (D6, STD-001). A value outside the set fails admission —
 /// there is no runtime default and no guessed licence.
@@ -175,6 +178,12 @@ pub(crate) struct PublicationEntry {
 }
 
 impl PublicationEntry {
+    /// The stable logical address — the resolver's lookup key (read on the
+    /// production path by `run_publication_validate`, which emits each entry).
+    pub(crate) fn address(&self) -> &LogicalAddress {
+        &self.address
+    }
+
     /// A single human-readable validation line that reads EVERY field — the
     /// production reader that keeps each parsed field live under `deny(unused)`
     /// (dead-field discipline, F-4 corollary) and gives the report per-entry
@@ -193,8 +202,8 @@ impl PublicationEntry {
     }
 }
 
-/// The admitted manifest — the validated public set. Held immutable; the
-/// resolver (P03) borrows it.
+/// The admitted manifest — the validated public set. Held immutable; a
+/// [`Resolver`] binds it to one adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PublicationManifest {
     entries: Vec<PublicationEntry>,
@@ -346,6 +355,102 @@ fn admit_entry(raw: &RawEntry, index: usize) -> Result<PublicationEntry, Admissi
     })
 }
 
+/// Why resolution failed — one variant per reason so callers assert the REASON,
+/// never a silent empty result. Constructed only on production paths (each
+/// variant satisfies `deny(unused)` by its construction site, not by runtime
+/// reachability).
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub(crate) enum ResolveError {
+    /// No admitted entry declares this logical address.
+    #[error("no published entry for logical address '{0}'")]
+    UnknownAddress(String),
+    /// The entry's backing key has no bytes behind it (a hollow embed, or a
+    /// relocated key the bound adapter cannot serve).
+    #[error("backing source '{0}' is missing")]
+    BackingSourceMissing(String),
+}
+
+/// Why emit failed — a resolution failure or a writer IO failure. Wraps
+/// [`ResolveError`] (emit resolves before it writes) and [`std::io::Error`];
+/// the latter's lack of `PartialEq` is why this type is `matches!`-asserted.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum EmitError {
+    #[error(transparent)]
+    Resolve(#[from] ResolveError),
+    #[error("emit write failed: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Read-only by construction: the ONLY method is `read`; no write capability is
+/// reachable from the resolver (REQ-381 seam foundation, §5.3). A source
+/// reorganisation moves bytes behind `read`, never the logical addresses above.
+pub(crate) trait SourceAdapter {
+    fn read(&self, backing: &str) -> Result<Cow<'static, [u8]>, ResolveError>;
+}
+
+/// The one production adapter: reads immutable compiled bytes by embed key via
+/// the leaf `asset_source` seam. Holds no filesystem path and no write handle,
+/// so no mutation is reachable through it (structural read-only).
+pub(crate) struct EmbeddedAdapter;
+
+impl SourceAdapter for EmbeddedAdapter {
+    fn read(&self, backing: &str) -> Result<Cow<'static, [u8]>, ResolveError> {
+        crate::asset_source::read_bytes(backing)
+            .ok_or_else(|| ResolveError::BackingSourceMissing(backing.to_string()))
+    }
+}
+
+/// An admitted manifest bound to exactly one SUBSTITUTABLE adapter — generic over
+/// `A`, not a fixed concrete field (RV-287 F-1), so the storage-independence test
+/// wires an in-memory adapter through the SAME `new`/`resolve`/`emit` API that
+/// production wires `EmbeddedAdapter` into. NOT a multi-source registry: exactly
+/// one adapter, chosen at construction (source-identity dispatch is deferred, OQ-4).
+pub(crate) struct Resolver<A: SourceAdapter> {
+    manifest: PublicationManifest,
+    source: A,
+}
+
+impl<A: SourceAdapter> Resolver<A> {
+    /// Bind an admitted manifest to one adapter.
+    pub(crate) fn new(manifest: PublicationManifest, source: A) -> Self {
+        Self { manifest, source }
+    }
+
+    /// The admitted public set this resolver is bound to — the command iterates
+    /// it to emit every declared entry.
+    pub(crate) fn manifest(&self) -> &PublicationManifest {
+        &self.manifest
+    }
+
+    /// Resolve a logical address to its backing bytes through the bound adapter.
+    /// A lookup miss → [`ResolveError::UnknownAddress`] (never a silent empty
+    /// result); absent backing → [`ResolveError::BackingSourceMissing`] from the
+    /// adapter. Lookup is a linear scan: admission rejects duplicate addresses
+    /// (D9), so the match is unique — no stored index is warranted (D-P03-a).
+    pub(crate) fn resolve(
+        &self,
+        addr: &LogicalAddress,
+    ) -> Result<Cow<'static, [u8]>, ResolveError> {
+        let entry = self
+            .manifest
+            .entries()
+            .iter()
+            .find(|e| e.address == *addr)
+            .ok_or_else(|| ResolveError::UnknownAddress(addr.as_str().to_string()))?;
+        self.source.read(&entry.backing)
+    }
+
+    /// Stream the resolved asset's bytes **framing-free** to any writer — no
+    /// length prefix, no separator — propagating a resolution failure or a writer
+    /// IO error (D-A / RV-286 F6). The real consumer shape a later `library show`
+    /// wraps; `publication validate` calls it per entry into `io::sink()`.
+    pub(crate) fn emit(&self, addr: &LogicalAddress, out: &mut dyn Write) -> Result<(), EmitError> {
+        let bytes = self.resolve(addr)?;
+        out.write_all(&bytes)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -493,5 +598,194 @@ mod tests {
     fn load_admits_the_embedded_manifest() {
         let manifest = PublicationManifest::load().expect("embedded manifest admits");
         assert!(!manifest.entries().is_empty());
+    }
+
+    // ── PHASE-03: resolver + emit ────────────────────────────────────────────
+
+    use std::collections::BTreeMap;
+
+    /// An in-memory adapter keyed by backing — the SUBSTITUTABLE second adapter
+    /// that proves `Resolver<A>` is storage-independent (address decoupled from
+    /// physical layout). Owned bytes → `Cow::Owned` (`'static`), so it satisfies
+    /// the same `Cow<'static,[u8]>` contract as the embedded adapter with no
+    /// `from_utf8` in the path (binary-clean).
+    struct MapAdapter {
+        bytes: BTreeMap<String, Vec<u8>>,
+    }
+
+    impl SourceAdapter for MapAdapter {
+        fn read(&self, backing: &str) -> Result<Cow<'static, [u8]>, ResolveError> {
+            self.bytes
+                .get(backing)
+                .map(|v| Cow::Owned(v.clone()))
+                .ok_or_else(|| ResolveError::BackingSourceMissing(backing.to_string()))
+        }
+    }
+
+    /// A writer that always fails — drives emit's output-failure path (VT-2).
+    struct FailingWriter;
+
+    impl std::io::Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("writer boom"))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Admit a one-entry manifest with the given logical address + backing key
+    /// (MIT/template/declared/customizable), for adapter-substitution tests.
+    fn one_entry(address: &str, backing: &str) -> PublicationManifest {
+        let body = format!(
+            "[[entry]]\n\
+             address = \"{address}\"\n\
+             backing = \"{backing}\"\n\
+             kind = \"template\"\n\
+             title = \"Fixture\"\n\
+             licence = \"MIT\"\n\
+             provenance = \"declared\"\n\
+             customization = \"customizable\"\n"
+        );
+        PublicationManifest::admit(body.as_bytes()).expect("fixture admits")
+    }
+
+    fn shipped_resolver() -> Resolver<EmbeddedAdapter> {
+        Resolver::new(
+            PublicationManifest::load().expect("shipped manifest loads"),
+            EmbeddedAdapter,
+        )
+    }
+
+    // VT-1: declared address resolves to EXACT bytes through EmbeddedAdapter;
+    // undeclared -> UnknownAddress (not a silent empty).
+    #[test]
+    fn declared_address_resolves_to_exact_bytes() {
+        let resolver = shipped_resolver();
+        let addr = LogicalAddress::parse("templates/slice.toml").expect("addr");
+        let got = resolver.resolve(&addr).expect("declared address resolves");
+        let expected =
+            crate::asset_source::read_bytes("templates/slice.toml").expect("backing embed present");
+        assert_eq!(got, expected, "resolve returns the backing bytes verbatim");
+    }
+
+    #[test]
+    fn undeclared_address_is_unknown_not_empty() {
+        let resolver = shipped_resolver();
+        let addr = LogicalAddress::parse("templates/not-published.toml").expect("addr");
+        assert_eq!(
+            resolver.resolve(&addr).expect_err("undeclared address"),
+            ResolveError::UnknownAddress("templates/not-published.toml".to_string())
+        );
+    }
+
+    // VT-1 (adapter miss): a declared entry whose backing key is absent from the
+    // embed -> BackingSourceMissing (the production EmbeddedAdapter miss path).
+    #[test]
+    fn absent_backing_is_backing_source_missing() {
+        let manifest = one_entry("templates/ghost.toml", "templates/does-not-exist.toml");
+        let resolver = Resolver::new(manifest, EmbeddedAdapter);
+        let addr = LogicalAddress::parse("templates/ghost.toml").expect("addr");
+        assert_eq!(
+            resolver.resolve(&addr).expect_err("absent backing"),
+            ResolveError::BackingSourceMissing("templates/does-not-exist.toml".to_string())
+        );
+    }
+
+    // VT-2: emit streams framing-free bytes byte-for-byte; a failing writer
+    // surfaces EmitError::Io.
+    #[test]
+    fn emit_streams_framing_free_bytes() {
+        let resolver = shipped_resolver();
+        let addr = LogicalAddress::parse("templates/slice.toml").expect("addr");
+        let mut buf: Vec<u8> = Vec::new();
+        resolver.emit(&addr, &mut buf).expect("emits");
+        let expected =
+            crate::asset_source::read_bytes("templates/slice.toml").expect("backing embed present");
+        // Byte-for-byte, no framing: emitted == resolved == backing bytes.
+        assert_eq!(buf.as_slice(), expected.as_ref());
+    }
+
+    #[test]
+    fn emit_surfaces_writer_io_failure() {
+        let resolver = shipped_resolver();
+        let addr = LogicalAddress::parse("templates/slice.toml").expect("addr");
+        let err = resolver
+            .emit(&addr, &mut FailingWriter)
+            .expect_err("writer failure surfaces");
+        assert!(matches!(err, EmitError::Io(_)));
+    }
+
+    // VT-3: storage independence — same LogicalAddress, backing RELOCATED to a key
+    // only a second in-memory adapter owns, resolves identically through the SAME
+    // Resolver<A> API (proves the generic is substitutable, D2/REQ-374).
+    #[test]
+    fn storage_independent_resolve_through_relocated_backing() {
+        let manifest = one_entry("templates/slice.toml", "relocated/elsewhere.bin");
+        let mut bytes = BTreeMap::new();
+        bytes.insert("relocated/elsewhere.bin".to_string(), b"payload".to_vec());
+        let resolver = Resolver::new(manifest, MapAdapter { bytes });
+        let addr = LogicalAddress::parse("templates/slice.toml").expect("addr");
+        assert_eq!(
+            resolver
+                .resolve(&addr)
+                .expect("resolves via relocated backing"),
+            Cow::Borrowed(b"payload".as_slice())
+        );
+    }
+
+    // VT-4: binary round-trip — non-UTF-8 bytes emit byte-for-byte (no from_utf8
+    // in resolve/emit), without shipping a binary asset into any embed (REQ-376).
+    #[test]
+    fn emit_binary_bytes_round_trip() {
+        let raw = vec![0xff_u8, 0x00, 0xfe, 0x80, 0x01];
+        assert!(
+            std::str::from_utf8(&raw).is_err(),
+            "fixture must be genuinely non-UTF-8"
+        );
+        let manifest = one_entry("blobs/raw.bin", "blobs/raw.bin");
+        let mut bytes = BTreeMap::new();
+        bytes.insert("blobs/raw.bin".to_string(), raw.clone());
+        let resolver = Resolver::new(manifest, MapAdapter { bytes });
+        let addr = LogicalAddress::parse("blobs/raw.bin").expect("addr");
+        let mut buf: Vec<u8> = Vec::new();
+        resolver.emit(&addr, &mut buf).expect("emits binary");
+        assert_eq!(buf, raw, "binary bytes stream byte-for-byte");
+    }
+
+    // VT-5: a traversal-like address is rejected at LogicalAddress construction —
+    // the type boundary, ResolveError-free — so the resolver can never be handed
+    // one.
+    #[test]
+    fn traversal_address_rejected_before_resolve() {
+        for bad in ["../escape", "/abs/path", "a/../b", "a\\b", "", "./here"] {
+            assert!(
+                matches!(
+                    LogicalAddress::parse(bad),
+                    Err(AdmissionError::TraversalRejected(_))
+                ),
+                "{bad:?} must be rejected at construction, never reach resolve"
+            );
+        }
+    }
+
+    // VT-6: no-write — load() + resolve + emit over a clean temp repo leaves every
+    // path byte-for-byte unchanged (REQ-381 seam foundation; the path holds no
+    // write capability by construction).
+    #[test]
+    fn resolve_emit_writes_nothing_to_disk() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let resolver = shipped_resolver();
+        let mut sink = std::io::sink();
+        for entry in resolver.manifest().entries() {
+            resolver.emit(entry.address(), &mut sink).expect("emits");
+        }
+        assert!(
+            std::fs::read_dir(tmp.path())
+                .expect("read temp repo")
+                .next()
+                .is_none(),
+            "resolve/emit must not create any path in the temp repo"
+        );
     }
 }

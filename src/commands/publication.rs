@@ -19,24 +19,47 @@ pub(crate) enum PublicationCommand {
     Validate,
 }
 
-/// Admit the embedded publication manifest and print a per-entry pass line that
-/// reads EVERY parsed field (dead-field discipline). Admission is fail-closed, so
-/// a malformed / unlicensed / duplicate manifest surfaces as a non-zero exit via
-/// the propagated [`crate::publication::AdmissionError`]. Rides the `run_validate`
-/// output shape (`writeln!` to stdout — sidesteps the `print_stdout` deny — plus a
-/// non-zero error return).
+/// Admit the embedded publication manifest, then resolve + emit every declared
+/// entry through an [`EmbeddedAdapter`]-bound [`Resolver`] into a sink — the
+/// production consumer that makes `load`→`resolve`→`emit` and every error type
+/// reachable under `deny(unused)` (PHASE-03). Prints a per-entry line that reads
+/// every parsed field (dead-field discipline), collects any resolve/emit
+/// failures, and `bail!`s non-zero when the manifest is malformed / unlicensed /
+/// duplicate (admission) or an entry fails to resolve/emit. Rides the
+/// `run_validate` output shape (`writeln!` to stdout — sidesteps `print_stdout`).
 pub(crate) fn run_publication_validate() -> anyhow::Result<()> {
+    use crate::publication::{EmbeddedAdapter, PublicationManifest, Resolver};
     use std::io::Write;
-    let manifest = crate::publication::PublicationManifest::load()?;
-    let entries = manifest.entries();
+
+    let resolver = Resolver::new(PublicationManifest::load()?, EmbeddedAdapter);
+    let entries = resolver.manifest().entries();
+    let count = entries.len();
+    let plural = if count == 1 { "y" } else { "ies" };
+
+    let mut stdout = std::io::stdout();
     writeln!(
-        std::io::stdout(),
-        "publication validate: {} entr{} declared",
-        entries.len(),
-        if entries.len() == 1 { "y" } else { "ies" }
+        stdout,
+        "publication validate: {count} entr{plural} declared"
     )?;
+
+    let mut sink = std::io::sink();
+    let mut failures: Vec<String> = Vec::new();
     for entry in entries {
-        writeln!(std::io::stdout(), "  ok  {}", entry.report_line())?;
+        match resolver.emit(entry.address(), &mut sink) {
+            Ok(()) => writeln!(stdout, "  ok    {}", entry.report_line())?,
+            Err(err) => {
+                writeln!(stdout, "  FAIL  {} — {err}", entry.address().as_str())?;
+                failures.push(entry.address().as_str().to_string());
+            }
+        }
+    }
+
+    if !failures.is_empty() {
+        anyhow::bail!(
+            "publication validate: {} of {count} entr{plural} failed to resolve/emit: {}",
+            failures.len(),
+            failures.join(", ")
+        );
     }
     Ok(())
 }
