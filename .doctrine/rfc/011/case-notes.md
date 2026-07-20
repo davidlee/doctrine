@@ -40,3 +40,21 @@ a notice where nix is absent". Guarded it (`command -v direnv && … || true`)
 since this phase's VA-1 jail-skip story depends on it. Flags a broader pattern:
 recipes that document a graceful jail-skip should be exercised in the jail, or
 the claim silently rots.
+
+[close; SL-223-close-a] Close-gate "status-lag drift" discharge is heavyweight and
+non-obvious. Recording VA coverage at reconcile (the honest, design-mandated act)
+GUARANTEES a close refusal that then requires a multi-step manual dance:
+(1) a REV to advance authored requirement status (or not); (2) `revision apply`
+auto-mints `move=revise` RECs that record the status change but DO NOT discharge the
+drift; (3) hand-author one `move=accept` REC per requirement, each needing a
+manually-edited `[[status_delta]]` (to==authored) + `[[evidence_ref]]` (superset of
+every coverage key) table pasted into rec-NNN.toml — the CLI seeds only a skeleton.
+Four requirements → four hand-authored TOML files. The `rec new` verb has no flags to
+populate the delta/evidence tables, so the reconcile writer is doing raw TOML authoring
+against the storage-rule grain. A `doctrine rec discharge --slice SL-N --requirement REQ-N`
+(or `slice status done --discharge-drift`) that mints the accept REC with its
+evidence_ref auto-resolved from the coverage store would collapse ~all of this.
+The recipe only survives because a memory (mem.pattern.doctrine.close-drift-discharge-rec)
+documents the exact three-clause predicate; without it the refusal message alone is
+hard to action correctly (esp. clause (c): "superset of every coverage key incl. other
+slices' cells" is invisible without grepping coverage.toml).
