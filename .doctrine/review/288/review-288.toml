@@ -1,0 +1,43 @@
+id    = 288
+slug  = "audit-publication-seam-conformance"
+title = "Audit — Publication seam (conformance)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-223"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design-target selector registry stale w.r.t. the D-A reversal — command tier undeclared"
+detail = "Expected: every path SL-223 delivers is matched by a `design-target` selector, so `slice conformance` is clean. Observed: `slice conformance SL-223` reports 5 genuinely-delivered paths as **undeclared** — the command-tier surface the D-A reversal (RV-287 F-4) introduced when it added `doctrine publication validate` as the production consumer: `src/commands/publication.rs` (new consumer + VT-5 test), `src/commands/cli.rs` (dispatch + `Command::Publication` variant, cli.rs:853/1425), `src/commands/mod.rs` (module registration), `src/commands/guard.rs` (guard.rs:351 print_stdout allow), and `tests/e2e_publication.rs` (e2e). The selector registry (slice-223.toml) declares only the engine (`src/publication.rs`) + `src/main.rs`; it predates the D-A reversal and never grew to cover the command tier that reversal shipped. `src/publication*` does not glob `src/commands/publication.rs`. Not a code defect — the code is correct and gated green; the registry (and its design §6 mirror) is stale. Load-bearing change is the selector registry, which is what `slice conformance` reads; §6 prose is the human mirror."
+disposition = "verified"
+response = "Observation confirmed: the D-A reversal's command-tier surface is delivered but undeclared. Routed to the Reconciliation Brief (per-slice surface) — not a code fix and not an audit-scope write. Load-bearing change: `doctrine slice selector add` the 5 paths at intent=design-target (src/commands/publication.rs, src/commands/cli.rs, src/commands/mod.rs, src/commands/guard.rs, tests/e2e_publication.rs); mirror in design §6. /reconcile is the sole writer."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "remaining undeclared paths are non-deliverable release/workflow churn — correctly excluded"
+detail = "Expected: undeclared paths that are not slice deliverables carry no selector. Observed: the remaining 8 undeclared paths are all non-deliverable churn. The `just release` version-bump commit (fd0337eae chore: v0.25.3) landed inside the PHASE-04 conformance window (David cut the release before the phase completed-flip captured code_end_oid=HEAD), pulling `Cargo.lock`, `plugins/marketplace.json`, `.claude-plugin/marketplace.json`, and the three `plugins/*/.claude-plugin/plugin.json` into the phase delta; plus RFC-011 instrumentation (`.doctrine/rfc/011/case-notes.md`) and the slice's own authored metadata (`.doctrine/slice/223/slice-223.toml`). None are SL-223 deliverables; no `design-target` selector should claim them. The noise is inherent to cutting the release inside the phase window, not a scope-creep defect."
+disposition = "aligned"
+response = "Correctly undeclared — these are release-bump and workflow/instrumentation artifacts, not SL-223 deliverables; no selector should claim them. The churn is an artifact of cutting v0.25.3 inside the PHASE-04 window. No change needed; the conformance registry is right to leave them out. (Process note for the synthesis: cutting the release before the completed-flip widened the phase delta — cosmetic, no correctness impact.)"
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "requirement coverage not yet recorded — §9 met/partial classification pending at reconcile"
+detail = 'Expected: the requirements SL-223 touches carry a recorded coverage degree so the PRD-017 invariants are not read as fully delivered. Observed: design §9 (per codex RV-287 F-5) honestly classifies coverage — **met**: REQ-374 (resolver over adapter + storage-independence test), REQ-376 (neutral byte seam), REQ-379 (fail-closed licence gate), REQ-380 (manifest independence / non-projection); **partial/foundation** (mechanism landed, user-facing outcome pends the deferred `library list|tree|show` verbs): REQ-359, REQ-363, REQ-367, REQ-369, REQ-373 (embedded covered, runtime-loaded pending OQ-4), REQ-381 (seam foundation + no-write proven); **pending**: REQ-375, REQ-377/378, REQ-382/383. But no `doctrine coverage record` has been run — §9 itself says "Requirement coverage recorded at reconcile." This is the honest-coverage reconcile action, not a defect; it must land so partial requirements are not overclaimed as met.'
+disposition = "verified"
+response = "Observation confirmed: §9 carries the honest classification but no coverage row exists yet. Routed to the Reconciliation Brief (governance/spec surface) — `/reconcile` runs `doctrine coverage record` per REQ at its §9 degree: met (REQ-374/376/379/380), partial/foundation (REQ-359/363/367/369/373/381), pending (REQ-375/377/378/382/383). This is the reconcile-time honest-coverage action the design already names."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
