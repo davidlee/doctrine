@@ -56,7 +56,7 @@ value = "leaf"              # out=0: value facet types — pure
 regression = "leaf"         # out=0: SL-170 S1 pure failure-set diff — parse/diff/render, no IO
 vtgate = "leaf"             # out=0: SL-170 S3 pure VT existence/shape gate — check/render, no IO
 
-# ── engine (15) ──────────────────────────────────────────────────────────
+# ── engine (16) ──────────────────────────────────────────────────────────
 # Import engines + leaves; do NOT import command modules. Core domain model,
 # entity-kind handler scaffold, shared infrastructure.
 entity = "engine"           # → fsutil only; the hub — kind-agnostic directory-entity scaffold
@@ -75,6 +75,7 @@ coverage_view = "engine"    # → coverage, coverage_scan, listing, requirement,
 supersede = "engine"        # → entity, knowledge; supersession policy gate; knowledge→cmd baselined
 backlog_order = "engine"    # → backlog, projection; ordering engine; backlog→ upward baselined
 paths = "engine"            # PHASE-01/SL-139: shared entity-file-path projection; engine-tier, no clap/command imports
+publication = "engine"      # SL-223 PHASE-02: → asset_source (leaf); publication declaration + fail-closed admission (D1/D6/D9). Downward: publication(engine)→asset_source(leaf); commands(command)→publication(engine)
 relation_query = "command"  # SL-137: pure relation projection+filter engine over &Catalog; imports catalog and integrity (both cmd) — uniformly command
 
 # ── command (22) ─────────────────────────────────────────────────────────

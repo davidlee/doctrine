@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MIT
+#
+# Publication declaration (SL-223, ADR-019 / PRD-017 / SPEC-026). The single
+# authority for what framework-owned material is public, how it is addressed,
+# and under what licence. Lives in its OWN embed root (`publication/`) that
+# install's projection never walks — publication is not projection (REQ-380).
+#
+# Templates-only this slice (D-D, OQ-1 deferred): the unambiguous MIT copyable
+# case. `address` is the stable logical contract; `backing` is the physical
+# InstallAssets embed key (they may diverge — storage independence, D-F).
+
+[[entry]]
+address       = "templates/slice.toml"
+backing       = "templates/slice.toml"
+kind          = "template"
+title         = "Slice metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/adr.toml"
+backing       = "templates/adr.toml"
+kind          = "template"
+title         = "ADR metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"

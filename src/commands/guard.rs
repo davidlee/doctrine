@@ -346,6 +346,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         | Command::Search { .. }
         | Command::Relation { .. }
         | Command::Validate { .. }
+        // publication validate reads the embedded manifest + emits to a sink;
+        // never writes repo state (SL-223 D-A).
+        | Command::Publication { .. }
         | Command::Doctor { .. }
         | Command::Inspect { .. }
         | Command::Survey { .. }

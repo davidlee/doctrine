@@ -11,6 +11,7 @@ pub(crate) mod guard;
 pub(crate) mod inspect;
 pub(crate) mod map;
 pub(crate) mod prompt;
+pub(crate) mod publication;
 pub(crate) mod relation;
 pub(crate) mod reservation;
 pub(crate) mod serve;

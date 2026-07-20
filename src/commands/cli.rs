@@ -17,6 +17,7 @@ use crate::commands::facet::{
     EstimateClearArgs, EstimatePinArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs,
     ValueClearArgs, ValuePinArgs, ValueSetArgs,
 };
+use crate::commands::publication::PublicationCommand;
 use crate::listing::Format;
 use crate::search::SearchArgs;
 
@@ -637,6 +638,12 @@ pub(crate) enum Command {
         command: ConfigCommand,
     },
 
+    /// Validate the publication declaration (SL-223 — the public asset set).
+    Publication {
+        #[command(subcommand)]
+        command: PublicationCommand,
+    },
+
     /// Remove a tier-1 relation edge.
     ///
     /// Removes an edge authored by `link` (SL-048 §5.4). Symmetric on the same write
@@ -843,6 +850,7 @@ static FAMILIES: &[Family] = &[
             "serve",
             "config",
             "validate",
+            "publication",
             "doctor",
             "check",
             "reseat",
@@ -1412,6 +1420,11 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 ConfigCommand::Validate => crate::commands::config::run_config_validate(&root),
             }
         }
+        Command::Publication { command } => match command {
+            PublicationCommand::Validate => {
+                crate::commands::publication::run_publication_validate()
+            }
+        },
         Command::Unlink {
             source,
             label,
@@ -1533,8 +1546,9 @@ mod tests {
         }
 
         // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168)
-        // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01) + `compare` (SL-210 PHASE-02).
-        assert_eq!(visible.len(), 50, "expected 50 visible top-level commands");
+        // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01) + `compare` (SL-210 PHASE-02)
+        // + `publication` (SL-223 PHASE-02).
+        assert_eq!(visible.len(), 51, "expected 51 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the

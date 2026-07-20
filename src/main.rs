@@ -56,6 +56,7 @@ mod plan;
 mod policy;
 mod priority;
 mod projection;
+mod publication;
 mod rec;
 mod reconcile;
 mod registry;

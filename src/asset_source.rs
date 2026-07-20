@@ -21,6 +21,14 @@ use rust_embed::RustEmbed;
 #[folder = "install/"]
 struct InstallAssets;
 
+/// Embedded publication assets — everything under `publication/` (the manifest).
+/// A SEPARATE root from `InstallAssets` so install's projection (`build_plan`,
+/// which walks `InstallAssets` only) never touches it: publication is not
+/// projection (SL-223 D-C / REQ-380). Private — the embed type stays behind the seam.
+#[derive(RustEmbed)]
+#[folder = "publication/"]
+struct PublicationAssets;
+
 /// Read one `install/`-relative asset's bytes (`None` if absent). Binary-safe —
 /// the byte-level seam the whole extraction exists to provide (REQ-376).
 pub(crate) fn read_bytes(key: &str) -> Option<std::borrow::Cow<'static, [u8]>> {
@@ -41,6 +49,14 @@ pub(crate) fn read_text(key: &str) -> anyhow::Result<String> {
 /// Iterate every embedded `install/`-relative asset name.
 pub(crate) fn iter() -> impl Iterator<Item = std::borrow::Cow<'static, str>> {
     InstallAssets::iter()
+}
+
+/// Read the shipped publication manifest's bytes (`publication/manifest.toml`),
+/// `None` if the embed is hollow. The `publication` engine's `load()` admits
+/// these; the disk-source admission gate (VT-3) reads the same file from
+/// `CARGO_MANIFEST_DIR` so embed staleness cannot mask a defect.
+pub(crate) fn publication_manifest_bytes() -> Option<std::borrow::Cow<'static, [u8]>> {
+    PublicationAssets::get("manifest.toml").map(|f| f.data)
 }
 
 #[cfg(test)]
