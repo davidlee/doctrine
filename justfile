@@ -112,16 +112,20 @@ clean:
 # web/map/dist on disk; the ix sandbox builds the frontend hermetically). Slow
 # first run, crane-cached after. Host-real; a genuine failure exits non-zero, but
 # skipped with a notice where nix is absent (bubblewrap jails).
-# Validate the hermetic nix flake build.
+# Then RUNS the built binary — `publication validate` against the nix artifact —
+# because a hollow/missing embed root exits non-zero there but `nix build` alone
+# cannot detect it (doCheck=false, and .toml survives cleanCargoSource). SL-223.
+# Validate the hermetic nix flake build, then probe the artifact's embeds.
 nix-build:
   #!/usr/bin/env bash
   set -euo pipefail
   if command -v nix >/dev/null 2>&1; then
-    nix build .#doctrine --no-link --print-out-paths
+    out=$(nix build .#doctrine --no-link --print-out-paths)
+    "$out/bin/doctrine" publication validate
   else
     echo "nix-build: nix not on PATH (jail) — skipped" >&2
   fi
-  direnv reload
+  command -v direnv >/dev/null 2>&1 && direnv reload || true
 
 # Blanks the pin to fakeHash, lets nix report the real `got:`, writes it back.
 # Host-only (needs nix); the FOD hash is intrinsic to bun deps and must change
@@ -201,10 +205,23 @@ sync-plugin-versions:
   done
   echo "synced plugin manifest versions → v${version}"
 
+# Assert every compile-time embed root survives `cargo package`'s include
+# allow-list — an omitted root ships a hollow crate on `cargo publish`/`install`
+# with NO compile error (SL-223 R7 / RV-287 F-2). `--allow-dirty`: web/map/dist
+# is gitignored but force-included, so the VCS walk always reads dirty (see
+# `publish`). `--list` does no build, so this runs in the jail (unlike nix-build).
+# Assert force-included embed roots are present in the packaged crate source.
+pkg-check:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo package -p doctrine --list --allow-dirty | grep -qx 'publication/manifest.toml' \
+    || { echo "pkg-check: publication/manifest.toml absent from packaged source — check Cargo.toml [package] include" >&2; exit 1; }
+  echo "pkg-check: publication/manifest.toml present in packaged source"
+
 # Run before a version bump / tag — this is where flake breakage (a new embed
 # root absent from the crane source graft, a toolchain skew) actually bites.
-# Pre-release gate: full workspace gate + hermetic nix flake build.
-release-check: gate nix-build
+# Pre-release gate: full workspace gate + packaged-source check + hermetic nix flake build.
+release-check: gate pkg-check nix-build
 
 # Pass an explicit X.Y.Z or a level: `just release 0.6.0` / `just release minor`.
 # Refuses a dirty Cargo.toml/Cargo.lock so the commit is the bump alone. Tags

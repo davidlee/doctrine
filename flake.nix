@@ -253,12 +253,13 @@
         srcWithDist = pkgs.runCommandLocal "doctrine-src" {} ''
           cp -R ${cleanedSrc} $out
           chmod -R u+w $out
-          rm -rf $out/plugins $out/install $out/memory $out/templates
-          mkdir -p $out/plugins $out/install $out/memory $out/web/map/dist $out/templates
-          cp -R ${./plugins}/.   $out/plugins/
-          cp -R ${./install}/.   $out/install/
-          cp -R ${./memory}/.    $out/memory/
-          cp -R ${./templates}/. $out/templates/
+          rm -rf $out/plugins $out/install $out/memory $out/templates $out/publication
+          mkdir -p $out/plugins $out/install $out/memory $out/web/map/dist $out/templates $out/publication
+          cp -R ${./plugins}/.     $out/plugins/
+          cp -R ${./install}/.     $out/install/
+          cp -R ${./memory}/.      $out/memory/
+          cp -R ${./templates}/.   $out/templates/
+          cp -R ${./publication}/. $out/publication/
           cp -R ${webDist}/. $out/web/map/dist/
           chmod -R u+w $out
         '';
