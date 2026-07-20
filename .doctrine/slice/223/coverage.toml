@@ -1,0 +1,89 @@
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-374"
+contributing_change = "SL-223"
+mode = "VA"
+status = "verified"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-376"
+contributing_change = "SL-223"
+mode = "VA"
+status = "verified"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-379"
+contributing_change = "SL-223"
+mode = "VA"
+status = "verified"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-380"
+contributing_change = "SL-223"
+mode = "VA"
+status = "verified"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-359"
+contributing_change = "SL-223"
+mode = "VA"
+status = "in-progress"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-363"
+contributing_change = "SL-223"
+mode = "VA"
+status = "in-progress"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-367"
+contributing_change = "SL-223"
+mode = "VA"
+status = "in-progress"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-369"
+contributing_change = "SL-223"
+mode = "VA"
+status = "in-progress"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-373"
+contributing_change = "SL-223"
+mode = "VA"
+status = "in-progress"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"
+
+[[entry]]
+slice = "SL-223"
+requirement = "REQ-381"
+contributing_change = "SL-223"
+mode = "VA"
+status = "in-progress"
+git_anchor = "c2e1ea3114414b55e87137cdfd7f2d6033c35530"
+attested_date = "2026-07-20"

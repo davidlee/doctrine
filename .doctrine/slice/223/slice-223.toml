@@ -1,7 +1,7 @@
 id = 223
 slug = "publication-seam"
 title = "Publication seam"
-status = "audit"
+status = "reconcile"
 created = "2026-07-19"
 updated = "2026-07-20"
 tags = ["asset-source", "contract-b", "library", "licence", "publication", "rfc-021"]
@@ -57,6 +57,31 @@ intent = "design-target"
 [[selector]]
 selector = "justfile"
 intent = "design-target"
+
+[[selector]]
+selector = "src/commands/publication.rs"
+intent = "design-target"
+note = "command-tier + e2e surface from the D-A reversal (RV-287 F-4 / RV-288 F-1)"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "command-tier + e2e surface from the D-A reversal (RV-287 F-4 / RV-288 F-1)"
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+note = "command-tier + e2e surface from the D-A reversal (RV-287 F-4 / RV-288 F-1)"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "command-tier + e2e surface from the D-A reversal (RV-287 F-4 / RV-288 F-1)"
+
+[[selector]]
+selector = "tests/e2e_publication.rs"
+intent = "design-target"
+note = "command-tier + e2e surface from the D-A reversal (RV-287 F-4 / RV-288 F-1)"
 
 [[relation]]
 label = "governed_by"

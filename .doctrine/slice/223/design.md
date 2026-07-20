@@ -180,6 +180,11 @@ Components across three ADR-001 tiers (a thin command handler over engine + leaf
   it is the production consumer that makes the seam reachable (D-A). It exercises
   `load`→`resolve`→`emit` and every error type in a non-test path. It is **not** a
   `library` read verb: it emits to a sink for validation, not asset bytes to the user.
+  Concrete design-target surface (mirrors the selector registry, added at reconcile —
+  RV-288 F-1): the handler `src/commands/publication.rs`, its dispatch + `Command`
+  variant `src/commands/cli.rs`, module registration `src/commands/mod.rs`, the
+  `print_stdout` guard allow `src/commands/guard.rs`, and the e2e coverage
+  `tests/e2e_publication.rs`.
 - **`install.rs`** keeps `asset_text` / `embedded_asset` signatures (delegating to
   `asset_source`), so their **external** callers (~30 sites across `slice.rs`,
   `spec.rs`, `backlog.rs`, etc.) are untouched. Install's own **internal** `Assets::`

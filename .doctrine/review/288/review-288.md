@@ -95,3 +95,43 @@ coverage); the one `aligned` finding needs no change. Ledger `done · await=none
 _No plan-criterion (`EN-/EX-/VT-`, immutable-append) edits in this brief; no
 governance ADR/REV changes — the design's decisions (D-A…D-F) already integrated
 RV-286/RV-287 and stand._
+
+## Reconciliation Outcome
+
+### Direct edits applied (per-slice)
+- **F-1 — selector registry (load-bearing).** `slice selector add SL-223` at
+  intent=design-target for `src/commands/publication.rs`, `src/commands/cli.rs`,
+  `src/commands/mod.rs`, `src/commands/guard.rs`, `tests/e2e_publication.rs` (5
+  upserted). `slice conformance SL-223` re-run: conformant 9→14, all five moved
+  out of undeclared; the remaining 8 undeclared are exactly the F-2 release/workflow
+  noise (v0.25.3 bump JSONs + Cargo.lock, RFC-011 case-notes, the slice's own
+  metadata). Registry clean.
+- **F-1 mirror — design.md §5.1.** The `publication validate` command-handler bullet
+  now names the concrete design-target paths (handler / dispatch+variant /
+  registration / guard allow / e2e), mirroring the registry.
+
+### Coverage recorded (F-3)
+Per design §9 (RV-287 F-5 honest classification), VA attestations under SL-223,
+change SL-223:
+- **verified** (met — full acceptance exercised): REQ-374, REQ-376, REQ-379, REQ-380.
+- **in-progress** (foundation/partial — mechanism landed, user-facing outcome pends
+  the deferred `library` verbs / runtime adapter OQ-4): REQ-359, REQ-363, REQ-367,
+  REQ-369, REQ-373, REQ-381.
+- **not recorded** (SL-223 contributes nothing): REQ-375, REQ-377, REQ-378,
+  REQ-382, REQ-383 — later slices.
+
+_Coverage note:_ `coverage show` reports the met cells as `observed=stale /
+Indeterminate` against authored SPEC-026 status `pending`. This is by design, not a
+defect — observed coverage is decoupled from `ReqStatus` (NF-001 / ADR-009 §3); the
+substrate is correctly surfacing that the authored requirement statuses have not
+been moved. Moving them is a governance call deliberately out of the audit brief
+(the PRD invariants stay pending until the library slice closes their user-facing
+outcome). VA attestations drift `stale` as the tree advances — re-attest or wire VT
+recipes when the library slice lands.
+
+### Withdrawn / tolerated
+- **F-2 (aligned)** — no write. The remaining undeclared paths are correctly
+  unclaimed release/workflow churn.
+
+Reconcile pass complete — every brief item resolved, no REV needed (both surfaces
+were slice-side: selector registry + coverage substrate). Handoff to /close.
