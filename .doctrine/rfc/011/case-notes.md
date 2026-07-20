@@ -23,3 +23,20 @@ Consolidations from pass 1 analysis:
 - IMP-256 after IMP-162 (over-broad lint before completeness check)
 - IMP-178/179/180 kept separate (different problems in TOML/error space, all thin)
 - Vestigial non-area tags cleaned from IMP-267, IMP-298
+
+[phase-plan+execute; SL-223-P04-a] Could not read the PHASE-04 plan entry via
+the CLI: `doctrine slice plan SL-223`, `slice show SL-223 --plan`, and a
+`slice plan` sed all returned empty/usage errors, so I fell back to grepping
+`.doctrine/slice/223/plan.toml` raw — against the "read via show, not raw
+files" guardrail, but the CLI surfaced no per-phase plan view. A
+`slice plan <id> --phase PHASE-NN` (or `slice phase show`) that prints one
+phase's objective/EN/EX/VT would remove the raw-TOML fallback. ~2 wasted
+tool round-trips locating the block by line number.
+
+[execute; SL-223-P04-b] Pre-existing wart surfaced, not caused by this phase:
+`just nix-build`'s trailing `direnv reload` runs unconditionally, so in a jail
+(no direnv) the recipe exits 127 despite its comment claiming it "skipped with
+a notice where nix is absent". Guarded it (`command -v direnv && … || true`)
+since this phase's VA-1 jail-skip story depends on it. Flags a broader pattern:
+recipes that document a graceful jail-skip should be exercised in the jail, or
+the claim silently rots.
