@@ -1,0 +1,79 @@
+id    = 286
+slug  = "external-hostile-design-review-sl-223-publication-seam"
+title = "External hostile design review: SL-223 publication seam"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-223"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected a non-projected publication manifest; observed install blanket-projects every embedded file except the root manifest"
+detail = """SL-223 design §2 lines 35-42, D-C lines 286-292, and R4 lines 317-320 assert that install projects selectively and that install/publication/manifest.toml cannot land in a client repo. The implementation confesses the opposite: src/install.rs:1395-1409 loops over embedded_filenames() and creates an Install step under .doctrine for every name; src/install.rs:1431-1438 defines that set as Assets::iter() filtered only by n != "manifest.toml". Therefore the proposed asset will be written as .doctrine/publication/manifest.toml. This violates ADR-019 publication != projection, PRD-017 non-projection, SL-223's non-goal, and the claimed REQ-373/REQ-359 boundary. Penance: either use a dedicated publication embed root and graft it into flake.nix, or explicitly change projection policy to exclude this path; whichever route is chosen must include a real install test asserting the publication manifest is absent from a fresh client tree."""
+disposition = "design-wrong"
+response = "Design-wrong. D-C and every dependent non-projection claim must be rewritten before SL-223 can be approved; implementation must include an explicit non-projection proof."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Expected fail-closed licence admission at build/validate time; observed an optional stale-byte unit test"
+detail = "Design §5.4 lines 231-234 and §9 lines 342-348 call a #[test] over PublicationManifest::load a build-time gate for REQ-379. It is not: cargo build does not run tests, and flake.nix:265-276 sets doCheck = false for the package build. Worse, design §3 lines 67-71 and R3 lines 314-316 admit that a manifest-only edit does not trigger rust-embed recompilation and prescribe a human touch of src/asset_source.rs; the test can therefore bless old embedded bytes while the source manifest has become malformed or unlicensed. Penance: add an automatic dependency edge (for example build.rs rerun-if-changed for the publication manifest/assets) and a mandatory source-level or compile-time admission gate that cannot read stale bytes, plus an artifact-level smoke assertion for release packaging. Verify missing licence, out-of-set licence, missing/invalid provenance, and absence of any default."
+disposition = "design-wrong"
+response = "Design-wrong. REQ-379 cannot be credited to a manually refreshed unit test; the design must specify an automatic, release-relevant admission gate over current source bytes."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected an adapter registry to select a backing source; observed no source identity in the manifest or resolver contract"
+detail = "Design §5.2 defines PublicationEntry with only backing: String (lines 154-162), then claims Resolver contains an adapter registry (line 177) and D-F/§9 prove resolution through a second adapter (lines 301-303, 334-335). No source or adapter discriminator exists in an entry, so a registry cannot choose an adapter for that backing. A test can only swap the entire resolver's one adapter, which does not prove the declared multi-source shape. Penance: either make the slice honestly single-adapter by parameterising Resolver over one injected SourceAdapter and defer the registry, or add a typed SourceId/source field and specified unknown-source dispatch semantics. The verification must exercise two entries backed by different adapters in one admitted manifest if registry routing remains claimed."
+disposition = "design-wrong"
+response = "Design-wrong. The resolver and manifest contracts are internally incomplete; choose and specify either honest single-adapter injection or source-keyed registry dispatch."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Expected structural read-only confinement; observed an open trait over an unvalidated raw backing string"
+detail = "Design §4 lines 85-86, §5.3 lines 212-214, and invariant (1) at lines 238-241 claim no reachable write over protected roots. Yet SourceAdapter::read(&self, backing: &str) accepts an unconstrained String from the manifest, and arbitrary trait implementations may perform filesystem writes or interpret ../ segments; only LogicalAddress is traversal-checked. No protected-root capability type, backing confinement contract, or §9 verification establishes the stated structural guarantee. Penance: narrow the claim to the concrete EmbeddedAdapter in this slice and leave REQ-381 pending, or introduce an opaque adapter-validated BackingRef plus an explicit read-only/confinement contract and adversarial tests for backing traversal and side effects."
+disposition = "design-wrong"
+response = "Design-wrong. The slice may prove the concrete embedded reader is non-mutating, but the current open trait/raw backing design cannot support the stated structural guarantee."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected claimed REQ-373 coverage to be storage-independent; observed an embedded-only production manifest loader"
+detail = "SPEC-026 REQ-373 requires the sole-authority contract to hold equally for a runtime-loaded manifest. SL-223 claims REQ-373 in design §1 lines 16-18 and promises to record coverage at §9 lines 350-352, but the only production loader specified is PublicationManifest::load() over the embedded manifest; admit(&str) is explicitly a test seam, and §6 defers runtime-loaded support. This may implement the embedded default, but it does not satisfy the requirement's third acceptance criterion. Penance: either add a manifest-source injection seam usable by production code and test the same declaration through embedded and runtime-loaded sources, or record only partial coverage and keep REQ-373 pending until that acceptance criterion is implemented."
+disposition = "design-wrong"
+response = "Design-wrong. The design must either provide the runtime-manifest seam required by REQ-373 or explicitly record partial coverage and leave the requirement pending."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Expected D-A to prove the future byte-emitting consumer shape; observed only direct tests of the resolver abstraction itself"
+detail = "D-A lines 270-277 says resolve(addr)->bytes is the exact function library show will wrap and contrasts this with engine-tests-only, while R2 lines 311-313 claims a real consumer shape mitigates abstraction risk. But §9 specifies only publication.rs engine tests calling resolve; no consumer writes bytes, handles stdout/write failure, or demonstrates framing-free emission. Naming the producer API after its hoped-for caller does not make a consumer exist. Penance: either add a command-free emit(addr, Write) use-case function and test non-UTF-8 bytes plus write errors through it, or remove the 'real consumer' claim and explicitly accept that the interface remains provisional until the library slice."
+disposition = "design-wrong"
+response = "Design-wrong. Direct resolver tests are not a consumer proof; add a command-free emission use case or remove the claim and defer consumer validation."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Expected one manifest field contract; observed licence_provenance in Rust and provenance in TOML"
+detail = 'The proposed Rust schema names PublicationEntry.licence_provenance (design lines 154-162), while the canonical manifest example uses provenance = "declared" (lines 194-204), with no serde rename or alias specified. Implemented literally, the example fails as a missing field; implemented ad hoc, the design is not the source of truth. Penance: choose one canonical field name and show the serde mapping explicitly, then test the shipped example plus rejection of missing and unknown provenance values.'
+disposition = "design-wrong"
+response = "Design-wrong. The schema and example must name the same provenance field and test its closed admission behaviour."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
