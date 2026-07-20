@@ -16,11 +16,6 @@ use serde::Deserialize;
 
 use crate::memory::MemoryType;
 
-/// Embedded install assets — everything under `install/`.
-#[derive(RustEmbed)]
-#[folder = "install/"]
-struct Assets;
-
 /// Embedded skill plugins — everything under `plugins/`.
 #[derive(RustEmbed)]
 #[folder = "plugins/"]
@@ -58,7 +53,7 @@ pub(crate) const WORKER_RESOLVE_MARKER: &str = "{{ prompt resolve --role worker 
 /// single accessor over the embed for callers outside this module (the agents
 /// leg of `claude install`, src/skills.rs) — no parallel embed.
 pub(crate) fn embedded_asset(rel: &str) -> Option<std::borrow::Cow<'static, [u8]>> {
-    Assets::get(rel).map(|f| f.data)
+    crate::asset_source::read_bytes(rel)
 }
 
 /// The `install/manifest.toml` schema.
@@ -859,10 +854,7 @@ fn refresh_failure_is_fatal(action: &MarketplaceAction) -> bool {
 /// Fetch an embedded asset (relative to `install/`) as UTF-8 text.
 /// Shared with `slice` for template scaffolding.
 pub(crate) fn asset_text(name: &str) -> anyhow::Result<String> {
-    let file = Assets::get(name).with_context(|| format!("Embedded asset '{name}' is missing"))?;
-    let text = std::str::from_utf8(&file.data)
-        .with_context(|| format!("Embedded asset '{name}' is not valid UTF-8"))?;
-    Ok(text.to_string())
+    crate::asset_source::read_text(name)
 }
 
 /// Build a `SealSet` from the `[hymns] seal` entries in the embedded manifest.
@@ -896,11 +888,15 @@ pub(crate) fn embedded_expose_set() -> anyhow::Result<crate::hymns::SealSet> {
 /// stripped so callers work with slot-relative paths.
 pub(crate) fn embedded_hymns() -> Vec<(String, Vec<u8>)> {
     let prefix = "hymns/";
-    Assets::iter()
+    crate::asset_source::iter()
         .filter_map(|name| {
             let name = name.as_ref();
-            name.strip_prefix(prefix)
-                .map(|rel| (rel.to_string(), Assets::get(name).map(|f| f.data.to_vec())))
+            name.strip_prefix(prefix).map(|rel| {
+                (
+                    rel.to_string(),
+                    crate::asset_source::read_bytes(name).map(|c| c.to_vec()),
+                )
+            })
         })
         .filter_map(|(rel, opt)| opt.map(|bytes| (rel, bytes)))
         .collect()
@@ -911,11 +907,15 @@ pub(crate) fn embedded_hymns() -> Vec<(String, Vec<u8>)> {
 /// def-marker integrity (SL-186 PHASE-04 / T6).
 pub(crate) fn embedded_agent_defs() -> Vec<(String, Vec<u8>)> {
     let prefix = "agents/";
-    Assets::iter()
+    crate::asset_source::iter()
         .filter_map(|name| {
             let name = name.as_ref();
-            name.strip_prefix(prefix)
-                .map(|rel| (rel.to_string(), Assets::get(name).map(|f| f.data.to_vec())))
+            name.strip_prefix(prefix).map(|rel| {
+                (
+                    rel.to_string(),
+                    crate::asset_source::read_bytes(name).map(|c| c.to_vec()),
+                )
+            })
         })
         .filter_map(|(rel, opt)| opt.map(|bytes| (rel, bytes)))
         .collect()
@@ -1360,10 +1360,9 @@ fn parse_seal_slot(s: &str) -> anyhow::Result<crate::hymns::Slot> {
 }
 
 fn load_manifest() -> anyhow::Result<Manifest> {
-    let file = Assets::get("manifest.toml")
+    let data = crate::asset_source::read_bytes("manifest.toml")
         .context("install/manifest.toml is missing from embedded assets")?;
-    let text =
-        std::str::from_utf8(&file.data).context("install/manifest.toml is not valid UTF-8")?;
+    let text = std::str::from_utf8(&data).context("install/manifest.toml is not valid UTF-8")?;
     let manifest: Manifest =
         toml::from_str(text).context("Failed to parse install/manifest.toml")?;
     Ok(manifest)
@@ -1430,7 +1429,7 @@ fn build_plan(manifest: &Manifest, project_root: &Path) -> Plan {
 
 /// Sorted list of embedded asset names, excluding `manifest.toml`.
 fn embedded_filenames() -> Vec<String> {
-    let mut names: Vec<String> = Assets::iter()
+    let mut names: Vec<String> = crate::asset_source::iter()
         .map(|f| f.to_string())
         .filter(|n| n != "manifest.toml")
         .collect();
@@ -1577,7 +1576,7 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
                     .with_context(|| format!("Failed to create directory {}", path.display()))?;
             }
             Step::Install { source, dest } => {
-                let file = Assets::get(source)
+                let data = crate::asset_source::read_bytes(source)
                     .with_context(|| format!("Embedded file '{source}' not found"))?;
                 if let Some(parent) = dest.parent() {
                     fs::create_dir_all(parent).with_context(|| {
@@ -1585,7 +1584,7 @@ fn execute_plan(plan: &Plan) -> anyhow::Result<()> {
                     })?;
                 }
                 #[expect(clippy::disallowed_methods, reason = "derived asset unpack")]
-                fs::write(dest, &file.data)
+                fs::write(dest, &data)
                     .with_context(|| format!("Failed to write {}", dest.display()))?;
             }
             Step::Skip { .. } => {
@@ -2188,11 +2187,15 @@ fn workflow_canonical_dir(root: &Path, global: bool) -> anyhow::Result<PathBuf> 
 /// `/drive-slice` payload since SL-206 PHASE-14.
 pub(crate) fn embedded_workflow_defs() -> Vec<(String, Vec<u8>)> {
     let prefix = "workflows/";
-    Assets::iter()
+    crate::asset_source::iter()
         .filter_map(|name| {
             let name = name.as_ref();
-            name.strip_prefix(prefix)
-                .map(|rel| (rel.to_string(), Assets::get(name).map(|f| f.data.to_vec())))
+            name.strip_prefix(prefix).map(|rel| {
+                (
+                    rel.to_string(),
+                    crate::asset_source::read_bytes(name).map(|c| c.to_vec()),
+                )
+            })
         })
         .filter_map(|(rel, opt)| opt.map(|bytes| (rel, bytes)))
         .collect()
@@ -2949,6 +2952,18 @@ mod tests_skills {
 mod tests {
     use super::*;
     use std::fs;
+
+    /// VT-2 (SL-223 PHASE-01): `asset_text` keeps its signature but now delegates
+    /// to `asset_source::read_text`. A known embedded asset still resolves to Ok
+    /// text through the seam — the extraction is behaviour-preserving.
+    #[test]
+    fn asset_text_delegates_to_asset_source() {
+        let text = asset_text("manifest.toml").expect("manifest.toml embedded via asset_source");
+        assert!(
+            !text.is_empty(),
+            "delegated asset_text should return content"
+        );
+    }
 
     // ---------------------------------------------------------------
     // Marketplace source selection + exact presence (SL-195 PHASE-02)

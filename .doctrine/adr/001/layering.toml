@@ -16,8 +16,9 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (30) ────────────────────────────────────────────────────────────
+# ── leaf (31) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
+asset_source = "leaf"       # out=0: neutral embedded-asset byte-read seam — owns install/ embed (SL-223 PHASE-01, D3/REQ-376)
 boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
 clock = "leaf"              # out=0: std-only time helpers
 comparison = "leaf"         # → kinds: comparison-session wire model + admissibility — pure serde (SL-210 PHASE-01)
