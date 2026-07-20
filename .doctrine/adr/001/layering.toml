@@ -175,7 +175,7 @@ command = 99
 
 [[accepted_violation]]
 from = "state"; to = "install"
-reason = "ADR-001 install-as-utility wart (pre-existing): state uses install::asset_text for scaffolding"
+reason = "ADR-001 install-as-utility wart (pre-existing): state uses install::asset_text for scaffolding. SL-223 extracted the byte-read into the leaf `asset_source`; `install::asset_text` is now a delegating shim, so this edge can retire by pointing `state` at `asset_source` (engine→leaf, downward). SL-223 kept the shim deliberately (minimal blast radius); the redirect is this follow-up's to make."
 follow_up = "SL-112"
 
 [[accepted_violation]]
