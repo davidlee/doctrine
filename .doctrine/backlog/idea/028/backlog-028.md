@@ -34,3 +34,24 @@ writer to reuse), and after RFC-005 settles the Record beat. Cheap once both hol
 - SL-190 — ships the manual `reconcile-phases`; this automates the push.
 - IDE-027 — the timing gate (funnel-beat wrapping deferred).
 - RFC-005 — topology churn that gates touching the Record beat.
+- **ISS-212** — the general bug tracker for the same root cause (coord flip not
+  reaching primary); this idea is its "keep primary status continuously honest"
+  enhancement flavour.
+- **IMP-272** — delivered this idea's **claude-arm half** ahead of the gate:
+  `dispatch_conclude_phase` now flips the primary sheet at conclude. The RFC-005
+  deferral no longer applies to the claude conclude beat.
+
+## Status (2026-07-20)
+
+Partially overtaken. IMP-272 realised the claude-arm mechanism. What remains of
+this idea:
+
+- the **codex/pi `record-delta`** Record-beat half (primary sheet still stale on
+  that arm), and
+- the fuller "mirror *every* transition (not just `completed`) so primary
+  `slice status`/`slice list` are continuously honest mid-drive" enhancement.
+
+Both are cleanest as the general `set_phase_status` completion-mirror described in
+ISS-212 candidate (a) — which subsumes the funnel-Record-beat framing here (the
+mirror rides the shared writer, not a per-arm Record-beat wrap, so IDE-027 /
+RFC-005 topology churn no longer gates it).

@@ -5,8 +5,8 @@ id = 233
 slug = "codexpi-dispatch-arm-verify-per-phase-completed-flip-reaches-primary-tree-for-prepare-review-gate"
 title = "codex/pi dispatch arm: verify per-phase completed flip reaches primary tree for prepare-review gate"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "duplicate"
 created = "2026-07-20"
 updated = "2026-07-20"
 tags = []
@@ -25,3 +25,7 @@ triggers = []                   # watched source globs: { globs, note? }
 label = "references"
 role = "originates_from"
 target = "IMP-272"
+
+[[relation]]
+label = "related"
+target = "ISS-212"

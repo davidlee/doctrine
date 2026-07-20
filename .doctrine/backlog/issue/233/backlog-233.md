@@ -31,3 +31,8 @@ apply the same primary-mirror cure at that arm's flip locus. If it already write
 primary, close as `wont-do` / `obsolete` with the evidence noted.
 
 Origin: IMP-272 fix (fork D-D, subprocess-arm scope deferral).
+
+**Closed as duplicate → ISS-212** (2026-07-20). The codex/pi remainder is a subset
+of ISS-212's general "coord flip does not reach primary" root cause; tracked there
+alongside the orchestrator-author path. This item was filed before ISS-212/IDE-028
+were spotted.

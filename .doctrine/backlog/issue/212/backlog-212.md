@@ -38,3 +38,30 @@ phase, replaying the completion onto the primary tree. Then prepare-review passe
 
 Surfaced during SL-191 close (orchestrator-author, 2026-07-04); also captured in
 `.doctrine/rfc/011/case-notes.md`.
+
+## Cluster consolidation (2026-07-20)
+
+This is the general tracker for one root cause with several trigger paths — a
+coord-tree completion flip that never reaches the primary tree the gate reads:
+
+- **IMP-272** (claude arm worker conclude, `dispatch_conclude_phase`) — **FIXED**:
+  the tool now mirrors the completed flip into the primary tree. That closes the
+  `dispatch_conclude_phase` sub-path ONLY.
+- **This issue's orchestrator-author path** — driving inline and flipping via raw
+  `slice phase --status completed` from a coord cwd — is **still open**:
+  `dispatch_conclude_phase` is not on that path.
+- **IDE-028** — the codex/pi Record-beat (`record-delta`) half plus the
+  "keep primary `slice status` continuously honest" enhancement. Also open.
+- **ISS-233** (closed duplicate of this) — the codex/pi remainder.
+
+**General cure = candidate (a), located precisely.** Both `dispatch_conclude_phase`
+and raw `slice phase --status` funnel through ONE writer, `set_phase_status`
+(`src/state.rs`; `run_phase` at `src/slice.rs:890`). A completion mirror inside
+that writer — when `primary != project_root` (a coord/primary split), re-flip the
+primary sheet to `completed` — dissolves every trigger path at once and makes the
+narrow IMP-272 patch in `dispatch_conclude_phase` redundant. Safe by the same arm
+guard IMP-272 relies on: `capture_phase_boundary` self-skips while a live coord
+worktree holds `dispatch/<slice>`, so the primary write never clobbers the funnel
+registry rows. Candidate (b) — reading the completed-set from the `dispatch/<slice>`
+tip — remains the alternative but collapses the gate's registry-vs-completion
+cross-check into a tautology, so (a) is preferred.
