@@ -11,14 +11,20 @@ the primary tree's gitignored, per-worktree phase sheets
 `slice phase --status` flips all ran in the coord tree therefore fails the
 gate even though `dispatch status` (coord-side) shows every phase completed.
 
-Status (IMP-272, 2026-07-20): the CLAUDE arm now cures this automatically —
-`dispatch_conclude_phase` mirrors each completed flip into the primary tree
-alongside the coord flip (`src/mcp_server/dispatch.rs`), so a normal claude-arm
-drive no longer hits the gate refusal and needs no hand-step. The manual cure
-below still applies to (a) hand-flipped phases and (b) the codex/pi arm, whose
-flip locus is unfixed (ISS-233).
+Status (ISS-212, 2026-07-20): now cured GENERALLY. The completion mirror lives
+in the single writer `set_phase_status` (`src/state.rs`), not per call site — so
+EVERY path that flips a phase `completed` in a coord tree (claude-arm
+`dispatch_conclude_phase`, orchestrator-author raw `slice phase --status`, and
+the codex/pi `record-delta` remainder) auto-mirrors into the primary sheet. The
+mirror fires only on the dispatch split: `primary != project_root` AND a live
+`dispatch/<slice>` coordination worktree exists (a solo `/worktree` fork is
+narrowed out so it never records a bogus primary row). Degrading — a mirror fault
+warns, never fails the flip. No hand-step is needed on any arm anymore. (The
+earlier IMP-272 patch mirrored only in `dispatch_conclude_phase`; ISS-212
+relocated it down into the writer and removed that inline block.)
 
-Cure (manual paths): re-flip the phases to `completed` from the PRIMARY tree.
+Cure (fallback only — needed just for a stale sheet from a pre-ISS-212 drive or
+a mirror that degraded): re-flip the phases to `completed` from the PRIMARY tree.
 This is safe while the coordination worktree is live — the solo phase-binding
 capture self-skips when a live worktree holds `dispatch/<slice>`
 (`capture_phase_boundary` arm guard, src/state.rs:542), so the registry rows
