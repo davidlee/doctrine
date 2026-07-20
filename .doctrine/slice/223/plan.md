@@ -73,6 +73,23 @@ read-only classification (a new command absent from the guard's read/mutate spli
 can trip its completeness check). Riding `run_validate`'s `writeln!(std::io::stdout())`
 + `anyhow::bail!` shape keeps us clear of the `print_stdout` clippy deny.
 
+**ADR-001 layering registration (PHASE-01/02).** The `architecture_layering` gate
+(`tests/architecture_layering.rs`, run by `just gate`) fails with
+`Violation::Unclassified` for any import-graph module absent from
+`.doctrine/adr/001/layering.toml [tiers]`. So each module-introducing phase must add
+its row: `asset_source = "leaf"` (PHASE-01), `publication = "engine"` (PHASE-02).
+`commands::publication` needs none — `commands = "command"` is classified wholesale.
+All new edges are downward (install/publication → asset_source; commands →
+publication → asset_source), so no new tangle-baseline is needed.
+
+**Opportunity surfaced, out of scope.** `install = "command"`, and layering.toml
+line ~178 baselines a pre-existing ADR-001 wart: engine/leaf callers reach *up* into
+`install::asset_text`. Extracting the read into `asset_source` (leaf) makes it
+*possible* to retire that wart later by redirecting those ~30 external callers to the
+leaf (a downward edge). This slice deliberately keeps `install::asset_text` a
+delegating shim and does NOT touch external callers (minimal blast radius,
+behaviour-preservation). The cleanup is a separate backlog candidate, not SL-223 work.
+
 **Verification-mode choices.** PHASE-01..03 are VT-heavy (engine + command are
 jail-testable under `just gate`). PHASE-04 is VA — `just nix-build` and
 `cargo package --list` are host/release-check gates, not per-commit tests (nix is
