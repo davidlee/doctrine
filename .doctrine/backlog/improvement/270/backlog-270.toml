@@ -5,11 +5,11 @@ id = 270
 slug = "gate-should-run-the-workspace-built-doctrine-not-the-stale-installed-binary"
 title = "Gate should run the workspace-built doctrine, not the stale installed binary"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "duplicate"
 created = "2026-07-05"
-updated = "2026-07-05"
-tags = []
+updated = "2026-07-20"
+tags = ["area:dispatch", "area:gate", "cluster:worker-gate"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are

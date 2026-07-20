@@ -7,3 +7,19 @@ in-phase — the rows are NOT yet in layering.toml. Correct sequencing, but the
 "already added" framing cost a verification cycle chasing rows that don't exist
 yet + a git-show to disambiguate criteria-vs-applied. Handover prompts describing
 governance state should distinguish "mandated by criteria" from "applied to disk."
+[backlog; pass-1-tag-sweep]
+Pass 1 tag sweep: tagged all ~200 open backlog items. 
+- 55 previously untagged items now carry area: tags
+- 102 items carry cluster: tags across 13 clusters
+- 2 items (IMP-267, IMP-298) had non-area tags but no area: prefix — now dual-tagged
+- Tag taxonomy used: area:dispatch, area:gate, area:close, area:selector, area:backlog, area:memory, area:spec, area:review, area:cli, area:testing, area:entity, area:priority, area:web, area:worktree, area:governance, area:skills, area:relations, area:coverage, area:config, area:boot, area:quality, area:onboarding, area:install, area:security, area:docs, area:ci, area:mcp, area:ux, area:audit, area:architecture, area:conformance, area:concept-map, area:graph, area:cleanup, area:requirements, area:lifecycle
+- Cluster tags: dispatch-funnel, worker-gate, close-lineage, selector-scope, backlog-tooling, memory-system, web-map, priority-scoring, spec-requirements, review-system, entity-engine, testing-goldens, cli-ux
+Now filterable: `doctrine backlog list --tag area:dispatch`, `doctrine backlog list --tag cluster:worker-gate`
+[backlog; pass-2-dedup]
+Consolidations from pass 1 analysis:
+- ISS-218 enriched with IMP-270 content (SL-199 F-1 evidence, workspace-build alternatives), IMP-270 closed as duplicate
+- IMP-243 merged into IMP-109 (dep/seq folding is third parse to eliminate), IMP-243 closed as duplicate
+- IMP-127/IMP-201/IMP-174 NOT merged (genuinely different tiers: CLI verb / code-tier process / authored-tier guidance); wired: IMP-201 after IMP-174, IMP-127 after IMP-201
+- IMP-256 after IMP-162 (over-broad lint before completeness check)
+- IMP-178/179/180 kept separate (different problems in TOML/error space, all thin)
+- Vestigial non-area tags cleaned from IMP-267, IMP-298

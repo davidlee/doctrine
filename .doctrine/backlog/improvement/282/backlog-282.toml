@@ -8,8 +8,8 @@ kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
 created = "2026-07-12"
-updated = "2026-07-12"
-tags = []
+updated = "2026-07-20"
+tags = ["area:conformance", "area:dispatch", "cluster:selector-scope"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
