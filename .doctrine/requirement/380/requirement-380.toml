@@ -4,7 +4,7 @@ version = 1
 id = 380
 slug = "publication-and-projection-manifests-are-independent-surfaces"
 title = "Publication and projection manifests are independent surfaces"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The publication manifest and install's projection manifest are independent surfaces: a change to one does not alter the other's policy."

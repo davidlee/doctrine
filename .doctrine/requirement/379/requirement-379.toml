@@ -4,7 +4,7 @@ version = 1
 id = 379
 slug = "licence-derived-by-a-build-asserted-classification-rule"
 title = "Licence is an explicit declared field validated against an allowed policy"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Each published asset's licence is an explicit field on its manifest entry, validated at build/validate time against a fixed allowed licence policy — the set is {MIT, GPL} (MIT for copyable authoring material, GPL for owned internal content, per RFC-021). Rule-based classification may assist authoring but is not the source of truth — the declared field is."

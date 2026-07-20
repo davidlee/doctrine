@@ -4,7 +4,7 @@ version = 1
 id = 376
 slug = "byte-level-asset-read-seam-for-published-assets"
 title = "Neutral byte-level asset-read seam for published assets"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A byte-level asset-read seam serves both text and binary published assets faithfully to stdout, generalising install's text-only `asset_text` read. The seam is a neutral asset-source capability shared by publication and projection — it is not owned by install's projection path."
