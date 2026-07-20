@@ -259,9 +259,11 @@ impl<A: SourceAdapter> Resolver<A> {
 
 // ── command tier: publication validate ───────────────────────────────────
 /// Production consumer (D-A). Admits the embedded manifest, resolves+emits every
-/// declared entry into a sink, returns a pass/fail report. The one non-test path
-/// that makes the seam reachable under deny(unused), and the release-artifact probe.
-pub(crate) fn run_publication_validate() -> anyhow::Result<ValidateReport>;
+/// declared entry into a sink, prints a per-entry pass line, and `bail!`s non-zero
+/// on any failure. Rides the `run_validate` shape (writeln! to stdout — sidesteps
+/// the `print_stdout` deny — + `anyhow::bail!`). The one non-test path that makes
+/// the seam reachable under deny(unused), and the release-artifact probe.
+pub(crate) fn run_publication_validate() -> anyhow::Result<()>;
 ```
 
 Manifest on disk at the **new** root `publication/manifest.toml` (repo root, its own

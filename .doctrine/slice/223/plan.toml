@@ -1,0 +1,133 @@
+# Implementation plan for SL-223 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-223"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-01"
+name      = "Neutral asset-source seam"
+objective = """
+Extract install's text-only asset read into a neutral leaf `src/asset_source.rs`
+owning the `install/` embed and a binary-safe byte accessor (D-B / D3, REQ-376).
+Behaviour-preserving: install delegates, its existing suites stay green unchanged.
+No publication concept yet — this de-risks the extraction the rest of the slice
+rides on."""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-223 design locked (status=plan); install asset accessors identified: asset_text (install.rs:861), embedded_asset (install.rs:60), Assets #[folder=\"install/\"] (install.rs:21), internal Assets:: sites (install.rs:862,899,903,914,918,1363,1433,1580,2191,2195)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/asset_source.rs exists (leaf), owns a private InstallAssets #[folder=\"install/\"] moved from install.rs, and exposes read_bytes(key)->Option<Cow<[u8]>>, read_text(key)->Result<String> (from_utf8, preserving current error text), iter()->impl Iterator. Wired via `mod asset_source;` in main.rs." },
+  { id = "EX-2", text = "install.rs::asset_text and embedded_asset keep their signatures and delegate to asset_source; the internal Assets:: get/iter sites are rewired to the asset_source accessors; the embed type does not leak across the seam." },
+  { id = "EX-3", text = "`doctrine check gate` clean (clippy zero warnings incl. deny(unused)/unreachable_pub); cargo fmt." },
+]
+verification = [
+  { id = "VT-1", expects = "binary round-trip: read_bytes returns exact bytes for a known text asset and read_text agrees on the same asset (proves the seam is Cow<[u8]>-clean, not from_utf8-bound).", test_file = "src/asset_source.rs", keywords = ["read_bytes", "read_text", "InstallAssets"], waived = false },
+  { id = "VT-2", expects = "delegation preserved: install::asset_text still returns Ok for a known embedded asset through the asset_source path.", test_file = "src/install.rs", keywords = ["asset_text", "asset_source"], waived = false },
+  { id = "VA-1", expects = "behaviour-preservation gate: install's pre-existing asset/hymn suites pass WITHOUT modification (delegation only) — agent confirms no test-body edits in install.rs tests_hymns and green run." },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-02"
+name      = "Publication declaration + admission + validate command"
+objective = """
+Build the publication declaration and its fail-closed admission (D1/D6/D9/D-E),
+plus the `publication/` embed root and shipped templates-only manifest, and the
+`doctrine publication validate` command that admits it (D-A production consumer).
+Ends green because the command reads the whole admission API and every parsed
+field — under deny(unused) a test-only pub(crate) API would not compile (F-4)."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: asset_source seam exists and install delegates." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/publication.rs (engine) defines PublicationManifest, PublicationEntry{address,backing,kind,title,licence,provenance,customization}, LogicalAddress (rejects absolute/empty/./../backslash at construction), and closed enums Licence{Mit,Gpl}/LicenceProvenance{Declared,RuleSuggestedConfirmed}/CustomizationStatus{Customizable,Fixed} + ContentKind (STD-001). Wired via `mod publication;` in main.rs." },
+  { id = "EX-2", text = "admit(bytes)->Result<Self,AdmissionError> is source-agnostic and fail-closed: parses TOML, validates every field present (title non-empty, backing non-empty, licence in {MIT,GPL}, known provenance/customization, well-formed LogicalAddress), rejects duplicate logical addresses (D9), builds the address->entry index. load() is the embedded convenience over admit(publication_manifest_bytes()). Every parsed field is READ by an admit validation or the command report (no dead field under deny(unused))." },
+  { id = "EX-3", text = "asset_source gains a private PublicationAssets #[folder=\"publication/\"] and publication_manifest_bytes()->Option<Cow<[u8]>>; build_plan/embedded_filenames still walk ONLY InstallAssets (publication is structurally outside projection). Shipped publication/manifest.toml at repo root — templates-only, every entry MIT/customizable/declared." },
+  { id = "EX-4", text = "`doctrine publication validate` command: src/commands/publication.rs::run_publication_validate load()s the embedded manifest and reports per-entry pass, `bail!`ing non-zero on failure (rides the run_validate shape — writeln!(stdout)+bail!). Wired: mod.rs `mod publication;`, cli.rs Command::Publication{subcommand}+dispatch arm+PublicationCommand::Validate, guard.rs read-only classification." },
+  { id = "EX-5", text = "`doctrine check gate` clean; cargo fmt." },
+]
+verification = [
+  { id = "VT-1", expects = "admission fail-closed: out-of-set licence, missing field, malformed TOML, unknown provenance each -> typed AdmissionError; nothing defaulted.", test_file = "src/publication.rs", keywords = ["fn admit", "AdmissionError", "Licence"], waived = false },
+  { id = "VT-2", expects = "duplicate logical address rejected at admission (D9), not resolved by precedence.", test_file = "src/publication.rs", keywords = ["DuplicateAddress", "LogicalAddress", "fn admit"], waived = false },
+  { id = "VT-3", expects = "source-level admission gate (staleness-proof): admit over the on-disk publication/manifest.toml read via CARGO_MANIFEST_DIR passes — all template entries MIT/customizable/declared.", test_file = "src/publication.rs", keywords = ["CARGO_MANIFEST_DIR", "admit", "manifest.toml"], waived = false },
+  { id = "VT-4", expects = "embedded admission: load() over the shipped embed admits (proves publication_manifest_bytes wired).", test_file = "src/publication.rs", keywords = ["fn load", "publication_manifest_bytes"], waived = false },
+  { id = "VT-5", expects = "command runs green over the shipped manifest: run_publication_validate returns Ok.", test_file = "src/commands/publication.rs", keywords = ["run_publication_validate"], waived = false },
+  { id = "VT-6", expects = "non-projection regression: install into a clean temp repo leaves .doctrine/publication/ ABSENT — projection and publication manifests are independent surfaces (REQ-380 / codex F1).", test_file = "tests/e2e_publication.rs", keywords = ["publication", "install", "assert"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-03"
+name      = "Storage-independent resolver + emit"
+objective = """
+Add the logical-address resolver over the source-adapter interface (D2/D-F,
+REQ-374) and the framing-free byte emit (REQ-363 seam shape, RV-286 F6), then
+extend `publication validate` to emit every entry into a sink — the production
+consumer for resolve/emit. Resolver is generic over one substitutable adapter
+(RV-287 F-1) so the storage-independence test actually compiles."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete: the manifest admits and the validate command loads it." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/publication.rs adds the read-only SourceAdapter trait (only method: read(&self,backing)->Result<Cow<[u8]>,ResolveError>), EmbeddedAdapter (reads via asset_source::read_bytes, embed key only — no fs path, no write handle), and Resolver<A: SourceAdapter>{manifest,source:A} with new(manifest,source), resolve(addr)->Result<Cow<[u8]>,ResolveError> and emit(addr,&mut dyn Write)->Result<(),EmitError>." },
+  { id = "EX-2", text = "run_publication_validate builds Resolver::new(manifest, EmbeddedAdapter) and emit()s every entry into std::io::sink(), collecting failures — resolve+emit are now consumed on the production path (deny(unused) satisfied)." },
+  { id = "EX-3", text = "`doctrine check gate` clean; cargo fmt." },
+]
+verification = [
+  { id = "VT-1", expects = "declared address resolves to exact bytes through EmbeddedAdapter; undeclared address -> ResolveError::UnknownAddress (not silent empty).", test_file = "src/publication.rs", keywords = ["fn resolve", "UnknownAddress", "EmbeddedAdapter"], waived = false },
+  { id = "VT-2", expects = "emit streams framing-free bytes byte-for-byte; a failing writer surfaces EmitError::Io (the real consumer path + output-failure handling).", test_file = "src/publication.rs", keywords = ["fn emit", "EmitError"], waived = false },
+  { id = "VT-3", expects = "storage independence: same LogicalAddress, relocated backing, a second in-memory adapter -> resolves identically through the SAME Resolver<A> API (D2/REQ-374, proves the generic is substitutable).", test_file = "src/publication.rs", keywords = ["SourceAdapter", "Resolver", "backing"], waived = false },
+  { id = "VT-4", expects = "binary round-trip: an in-memory adapter holding non-UTF-8 bytes emits byte-for-byte (no from_utf8 in the resolve/emit path), without shipping a binary asset into any embed (REQ-376).", test_file = "src/publication.rs", keywords = ["fn emit", "Cow"], waived = false },
+  { id = "VT-5", expects = "traversal-like address rejected at LogicalAddress construction (ResolveError-free, typed at the type boundary).", test_file = "src/publication.rs", keywords = ["TraversalRejected", "LogicalAddress"], waived = false },
+  { id = "VT-6", expects = "no-write: load()+resolve+emit over a clean temp repo leaves every path byte-for-byte unchanged (REQ-381 seam foundation).", test_file = "src/publication.rs", keywords = ["sink", "resolve", "emit"], waived = false },
+]
+specs        = []
+requirements = []
+
+# ─────────────────────────────────────────────────────────────────────────────
+[[phase]]
+id        = "PHASE-04"
+name      = "Release-path & artifact-integrity hardening"
+objective = """
+Close the release-artifact gaps (crane strip, Cargo packaging, Nix probe) so the
+publication embed ships intact and is observably verified, not merely built
+(RV-287 F-2/F-3). Host/release-gated — nix is absent in the jail, so these are
+VA/VH, verified on the host via release-check."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: `doctrine publication validate` emits every entry (the artifact probe exists)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "flake.nix srcWithDist grafts the publication/ root: mkdir -p $out/publication + cp -R ${./publication}/. $out/publication/ alongside the existing install/plugins/memory/templates grafts (else crane cleanCargoSource strips it — .toml survival is NOT sufficient)." },
+  { id = "EX-2", text = "justfile nix-build RUNS the built binary — `doctrine publication validate` against the nix artifact — not a bare `nix build`; a hollow/missing publication embed exits non-zero (bare build cannot detect it: doCheck=false, .toml survives cleanCargoSource)." },
+  { id = "EX-3", text = "/publication/** is present in Cargo.toml [package] include (landed with RV-287 F-2); a packaged-source check asserts `cargo package --list` contains publication/manifest.toml." },
+]
+verification = [
+  { id = "VA-1", expects = "host release-check: `just nix-build` builds the nix artifact AND `doctrine publication validate` on it exits 0 (embed present); removing the graft makes it exit non-zero. Nix absent in jail -> agent/human verifies on host.", waived = false },
+  { id = "VA-2", expects = "packaged-source: `cargo package --list` includes publication/manifest.toml (the include allow-list carries the new root). Verified on host as part of release-check.", waived = false },
+]
+specs        = []
+requirements = []
