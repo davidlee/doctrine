@@ -103,35 +103,28 @@ later slices.
 
 ## Follow-Ups
 
-Open questions and design forks (to assess in `/design`, not silently answered):
+The four scoping forks are **resolved** in `design.md` (decisions D-A…D-F); the
+durable, cross-slice items are recorded as knowledge records:
 
-- **OQ-1 (PRD-017) — initial published collection set.** Is the shipped **memory
-  corpus** published-for-copy, or only templates/hymns/reference/scripts? This
-  bounds which collections the shipped declaration enumerates. The seam
-  *mechanism* does not depend on the answer, but a *shippable declaration* does.
-  Design fork: ship the mechanism plus a minimal provisional declaration (e.g.
-  templates only) and defer memory-corpus classification, or settle OQ-1 now.
-- **OQ-5 (PRD-017) — customization-status vocabulary.** The field is required on
-  every entry (REQ-359) but its value set is bound to the C2 supported-
-  customization model, which C1 does not deliver. Assumption to carry: the field
-  ships with a minimal provisional meaning (whether an asset is intended to be
-  customized); its stable vocabulary is C2's.
-- **D3 seam-extraction fork.** SPEC-026 commits to extracting `asset_text`
-  (`src/install.rs:861`, text-only) into a neutral byte-level asset-source layer
-  owned by neither projection nor publication. Does *this* slice perform that
-  extraction, or ride the existing SPEC-009 helper provisionally? The SPEC-026 →
-  SPEC-009 interactions edge records the present dependency as truthful-but-
-  provisional; the extraction is the intended end state. Real design fork —
-  weigh binary-safety need (D3 requires binary-faithful reads) against slice size.
-- **Verification without a read surface.** With `list | tree | show` deferred,
-  the seam has no user-facing verb to exercise end-to-end. Design must decide
-  whether engine-layer integration tests plus the validate/build-time licence
-  gate are sufficient evidence, or whether the thinnest read affordance belongs
-  in this slice to keep it end-to-end verifiable. (Route deferred the library
-  verbs; this records the resulting tension rather than overriding it.)
-- **Tooling gaps (context, not blockers).** IMP-298 (no `requirement edit` verb)
-  and IMP-299 (no spec-tier drift check) are open; neither blocks this slice.
+- **OQ-1 (PRD-017) → deferred.** The shipped declaration is **templates-only**
+  this slice; whether the memory corpus is published-for-copy waits for the
+  library slice that consumes it. Recorded as [[QUE-172]] (`references(concerns)`).
+- **OQ-5 (PRD-017) → provisional.** Customization-status ships as the closed enum
+  `{customizable, fixed}`, C2-owned. Recorded as [[ASM-003]].
+- **D3 seam-extraction → extract now (D-B).** This slice extracts `asset_text`
+  into a neutral leaf `asset_source` seam (binary-safe), no physical file
+  relocation. REQ-376's neutral-ownership criterion is met here.
+- **Verification without a read surface → engine layer + build-time gate (D-A).**
+  No `doctrine library` CLI verb this slice; the byte-emit consumer path is built
+  and tested, and the shipped manifest's build-time admission is the observable
+  licence gate.
 
-Design must also honour `mem.pattern.doctrine.spec-prose-requirement-drift`:
-mechanism nouns (manifest, resolver, adapter) live in the tech tier — keep the
-product-observable framing distinct from the SPEC-026 how.
+Deferred to later slices: `library list|tree|show` and search federation;
+physical relocation of published material into semantically-owned source roots
+(ADR-019 downstream); a working runtime-loaded adapter (OQ-4); an author-facing
+`publication validate` CLI verb. Tooling gaps IMP-298 / IMP-299 are open context,
+not blockers.
+
+Honoured `mem.pattern.doctrine.spec-prose-requirement-drift`: mechanism nouns
+(manifest, resolver, adapter) live in `design.md` (per-slice tech tier), kept out
+of the product-observable scope framing above.

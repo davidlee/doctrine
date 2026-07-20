@@ -24,7 +24,27 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/asset_source.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/publication.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/publication/manifest.toml"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
@@ -39,6 +59,18 @@ target = "SPEC-026"
 label = "references"
 role = "implements"
 target = "PRD-017"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "OQ-1 deferred: collection set is templates-only this slice"
+target = "QUE-172"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "OQ-5: customization-status ships provisional enum"
+target = "ASM-003"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
