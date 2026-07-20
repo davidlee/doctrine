@@ -34,6 +34,7 @@ use crate::ledger::Boundaries;
 use crate::worktree::{Apply, classify_import, run_gc};
 use anyhow::Context;
 use serde::Serialize;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 // --- resolve_coord: coord-by-slice ----------------------------------------------------
@@ -371,6 +372,37 @@ pub(crate) fn dispatch_conclude_phase(
         note,
         &now,
     )?;
+    // (a') MIRROR the flip into the PRIMARY tree (IMP-272). The coord flip above keeps
+    // coord-side `dispatch status`/`dispatch_next_ready` accurate mid-drive (they read
+    // the coord phase sheet), but `prepare-review`'s completeness gate reads the
+    // completed-phase SET from the PRIMARY tree (`registry_completeness(&primary,
+    // &primary, …)`). Without this mirror the landed boundary row has no completed
+    // phase behind it in primary and the gate refuses it — the SL-205 symptom, cured
+    // by hand with `slice phase --status completed -p <primary>`. Skipped when
+    // primary == coord (solo / no split). The mirror is SAFE: `set_phase_status`'s
+    // boundary capture self-skips while a live coord worktree holds `dispatch/<slice>`
+    // (arm guard), so it never clobbers the funnel registry rows. DEGRADES on a missing
+    // primary sheet (named stderr warning, never the MCP stdout channel) — the boundary
+    // row is durable and the gate still guards a genuine gap; failing the per-phase
+    // conclude over an abnormal state would halt the drive.
+    if let Ok(primary) = crate::git::primary_worktree(&coord.root)
+        && primary != coord.root
+        && let Err(e) = crate::state::set_phase_status(
+            &primary,
+            slice,
+            phase,
+            crate::state::PhaseStatus::Completed,
+            note,
+            &now,
+        )
+    {
+        let _ignored = writeln!(
+            std::io::stderr(),
+            "warning: dispatch conclude could not mirror {phase} completion into the \
+             primary tree ({e}): prepare-review may refuse it — re-flip with \
+             `slice phase --status completed -p <primary>` (IMP-272)"
+        );
+    }
     // (b) the working-tree-free boundary commit — the durable, committed tier.
     conclude_boundary_commit(&coord.root, &coord.tip, slice, phase, code_start, code_end)
 }
@@ -1129,6 +1161,39 @@ mod tests {
                 .lines()
                 .any(|l| l.starts_with(".doctrine/state/")),
             "the phase sheet never enters committed history"
+        );
+    }
+
+    #[test]
+    fn dispatch_conclude_phase_mirrors_the_completed_flip_into_the_primary_tree() {
+        // IMP-272: prepare-review's completeness gate reads the completed-phase set
+        // from the PRIMARY tree, but the claude-arm orchestrator drives from the coord
+        // tree — so the flip must reach BOTH trees or the gate refuses a landed row as
+        // "not a completed phase". The coord flip stays (load-bearing for next-ready).
+        let (_tmp, primary, coord, base, _bt) = primary_with_coord(199);
+        // Sheets materialised in BOTH trees: plan materialises the primary; dispatch
+        // setup materialises the coord.
+        for root in [&coord, &primary] {
+            let dir = crate::state::phases_dir(root, 199);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("phase-01.toml"), "status = \"in_progress\"\n").unwrap();
+        }
+        // Drive from the PRIMARY root, as the MCP tool is invoked; the coord is resolved
+        // server-side. An empty (B, B) range is a real row (upsert test proves it).
+        dispatch_conclude_phase(&primary, 199, "PHASE-01", &base, &base, Some("done")).unwrap();
+        // BOTH trees read completed — coord (next-ready authority) AND primary (the
+        // completeness gate's completed-set source).
+        assert_eq!(
+            crate::state::read_phase_status(&crate::state::phases_dir(&coord, 199), "phase-01")
+                .unwrap(),
+            Some("completed".to_string()),
+            "coord sheet flipped",
+        );
+        assert_eq!(
+            crate::state::read_phase_status(&crate::state::phases_dir(&primary, 199), "phase-01")
+                .unwrap(),
+            Some("completed".to_string()),
+            "primary sheet mirrored (IMP-272)",
         );
     }
 

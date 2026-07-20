@@ -121,9 +121,12 @@ from the committed tip. In order:
 5. **Conclude.** `dispatch_conclude_phase{slice, phase, code_start: <B>,
    code_end: <coord_tip from step 4>}` — one call, two tiers: flips the
    gitignored phase sheet to `completed` AND lands the committed `(B, coord_tip)`
-   boundary row (UPSERT-by-phase, working-tree-free). Idempotent on retry; the
-   only fault outcome is a flipped sheet with no committed boundary, which a
-   retry re-composes.
+   boundary row (UPSERT-by-phase, working-tree-free). The flip reaches BOTH the
+   coord sheet (next-ready authority) and the PRIMARY sheet (the tree
+   `prepare-review`'s completeness gate reads its completed-set from) — no manual
+   `slice phase --status completed -p <primary>` re-flip is needed at conclude
+   (IMP-272). Idempotent on retry; the only fault outcome is a flipped sheet with
+   no committed boundary, which a retry re-composes.
 6. **Reap.** `dispatch_reap{slice, name: <branch>}` — runs the patch-id
    landed-oracle (`git cherry`): it REFUSES a fork whose patch is not in coord
    history, then removes the landed fork's worktree + branch. Reap ONLY through
