@@ -10,6 +10,30 @@ tags = []
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/ledger.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_dispatch_candidate.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
@@ -34,6 +58,14 @@ target = "RFC-006"
 [[relation]]
 label = "related"
 target = "REV-030"
+
+[[relation]]
+label = "related"
+target = "IMP-303"
+
+[[relation]]
+label = "related"
+target = "IMP-305"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
