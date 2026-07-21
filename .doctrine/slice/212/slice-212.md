@@ -5,15 +5,15 @@ Delivers **IMP-127**: a sanctioned path — the "it's complicated" path, *not* a
 candidate's Doctrine merge, so `admit` has a real `merge_oid` to validate when the
 internal all-or-nothing auto-merge conflicts.
 
-> **GOVERNANCE-GATED — not ready for `/design` until RFC-006 resolves.**
-> IMP-127 is RFC-006's `Conflict → hand-resolve` branch. RFC-006 (open) deliberates
-> whether integrate may land a **non-FF merge onto trunk** — which **reverses
-> ADR-012 D2/D4 FF-only** ("trunk projection is fast-forward-only … never auto
-> non-ff") and the D6 legitimacy claim ("unreviewed code never touches trunk").
-> That reversal requires an **ADR-012 Revision** after external review. This slice
-> **cannot proceed to design or plan** until RFC-006 lands a direction and (if it
-> keeps the reversal) an ADR-012 Revision exists. Split out of SL-211 (2026-07-10)
-> so the ungoverned row/refusal work there ships without waiting on this gate.
+> **UNGATED (2026-07-21) — REV-030 dissolved the gate.** RFC-006 resolved
+> **without** reversing ADR-012 D2/D4: the `IMP-127 → non-FF-integrate` dependency
+> was false. When a candidate `base` is the current trunk tip, an operator-ingested
+> `merge_oid` fast-forwards trunk exactly like a Doctrine-produced clean merge — no
+> non-FF trunk mutation, no D2/D4 reversal. This slice is a **D4 candidate-merge
+> extension** (REV-030 amended D4: `merge_oid` is validated by *provenance*, not
+> *authorship*), with FF-only publication intact. See REV-030 for the rationale +
+> adjudicated codex review. Split out of SL-211 (2026-07-10) as the row/refusal
+> half shipped first.
 
 ## Context
 
@@ -67,20 +67,33 @@ sanctioned candidate → admit → integrate flow, **without** `--force` and
   **SL-211** (IMP-236/169), ungoverned, shipping first.
 - Any bypass of the 3-way validity check or the admit OID CAS.
 
-## Affected surface (coarse — /design refines, post-RFC-006)
+## Affected surface (coarse — /design refines)
 
-- `src/dispatch.rs` — `plan_trunk_row` non-FF branch; candidate create/admit
-  seam; ephemeral private-worktree hand-resolve plumbing.
-- ADR-012 (via Revision) — the FF-only posture, if RFC-006 keeps the reversal.
+- `src/dispatch.rs` — the candidate create/admit seam: an **ingest verb** that
+  flips a `Conflicted` row (`merge_oid=""`) to `Created` by recording the
+  operator's resolved commit, gated by the provenance + content check. **Not**
+  `plan_trunk_row`: integrate stays FF-only, untouched (REV-030).
+- ADR-012 D4 — **already amended by REV-030** (provenance-not-authorship). No
+  further governance change; this slice implements under it.
+- On reconcile: SPEC-022 REQ-316 (FR-006) + candidate-layer prose — the tracked
+  cascade (see Follow-Ups).
 
 ## Risks / Assumptions / Open Questions
 
-- **BLOCKER** RFC-006 must resolve first, and if it keeps the reversal, an
-  ADR-012 Revision must exist. Tracked via `related RFC-006`.
-- **R1** Adopting a hand-made merge OID must not weaken CAS provenance — validate
-  it is a true 3-way of recorded (base, source).
-- **OQ-1** Ephemeral private worktree vs the parked candidate worktree for the
-  hand-resolve surface (RFC-006 says ephemeral private). Resolve post-RFC-006.
+- **R1** (design-load-bearing) Adopting a hand-made merge OID must not weaken CAS
+  provenance. The contract is **not** parent-binding alone (codex F-1): a *true*
+  3-way binds the resolved tree to the mechanical `merge-tree` on non-conflicting
+  paths, admits operator freedom only at conflict loci (never an arbitrary tree),
+  and requires ordered parents (first parent == `base_oid`). Exact predicate is a
+  `/design` decision.
+- **R2** (from codex F-2, IMP-303) Inspectable ≠ inspected: admit doesn't bind the
+  admitted OID to an audit RV. Pre-existing (affects clean merges too); IMP-303
+  should land before/with this slice's close path. `/design` decides whether to
+  absorb it here or depend on it.
+- **OQ-1** Parked candidate worktree vs a fresh ephemeral one for the hand-resolve
+  surface. Leaning **reuse the parked worktree** (it already holds the conflicted
+  state; a new ephemeral tree adds lifecycle machinery without added isolation or
+  provenance). Confirm in `/design`.
 
 ## Follow-Ups
 

@@ -4,9 +4,9 @@ version = 1
 id = 6
 slug = "non-ff-trunk-automerge"
 title = "Auto-merge non-FF trunk at integrate: reversing the FF-only posture"
-status = "open"
+status = "resolved"
 created = "2026-06-26"
-updated = "2026-07-02"
+updated = "2026-07-21"
 tags = []
 
 [relationships]
