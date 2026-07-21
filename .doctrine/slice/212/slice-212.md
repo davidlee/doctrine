@@ -86,3 +86,17 @@ sanctioned candidate → admit → integrate flow, **without** `--force` and
 
 - Depends on RFC-006 direction; may spawn an ADR-012 Revision.
 - Complements SL-211 (the already-landed row/recognition half).
+- **REV-030 supersedes the gate** (2026-07-21): RFC-006 resolves *without*
+  reversing D2/D4 — this slice is a D4 candidate-merge extension, FF-only intact.
+  See REV-030 for the governance rationale + adjudicated codex review.
+- **On reconcile — SPEC-022 cascade**: revise REQ-316 (FR-006) + the SPEC-022
+  responsibilities line + candidate-layer prose to replace "Doctrine no-ff 3-way
+  `merge_oid`" with the provenance-not-authorship framing, via a sibling REV once
+  the ingest verb ships (SPEC-022 is retrospective — reconcile at ship, not ahead).
+- **Design must resolve** (from codex review of REV-030): the "true 3-way" content
+  bound (non-conflict paths match the mechanical merge; conflict loci free) + the
+  ordered-parents check (parent-1 == base). R1's validation contract is *not*
+  parent-binding alone.
+- **IMP-303** (bind admitted OID → audit RV; should land before/with this close)
+  and **IMP-304** (supersede clears a `Failed` trunk row) — pre-existing gaps
+  surfaced by the REV-030 review.

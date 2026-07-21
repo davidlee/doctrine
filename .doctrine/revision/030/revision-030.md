@@ -28,11 +28,17 @@ RFC-006 deliberated.
 SL-212's scope (and the `research.local.md` §1) carried a gate:
 `IMP-127 → non-FF trunk at integrate → RFC-006 (reverse ADR-012 D2/D4 FF-only)`,
 requiring an ADR-012 *reversal* before SL-212 could be designed. That arrow is
-**false**, and the code proves it. A hand-resolved merge whose parents are the
-recorded `(base_oid, source_oid)` is a descendant of `base_oid`; if the
-candidate `base` is the **current trunk tip**, the resulting `merge_oid`
+**false**: the mechanism already *permits* an FF-only route the dependency
+claimed was impossible. A hand-resolved merge whose parents are the recorded
+`(base_oid, source_oid)` is a descendant of `base_oid`; when the candidate `base`
+is chosen as the **current trunk tip**, the resulting `merge_oid`
 **fast-forwards trunk** exactly like a Doctrine-produced clean candidate merge.
-No non-FF trunk mutation is required, so no reversal of D2/D4 is required.
+This is a graph fact, conditional on base selection — the code does not *enforce*
+`base == the eventual --trunk tip` (base is resolved once at create; trunk
+independently at integrate, `dispatch.rs:1338`/`:2617`). If they diverge,
+integrate safely **refuses** (FF-check), never force-lands. So the reversal of
+D2/D4 is not *required*: the FF-only route is available, and the non-FF case
+degrades to a refusal, not a corruption.
 
 Two problems were conflated into one decision and must be separated:
 
@@ -63,11 +69,31 @@ Verified against `src/dispatch.rs` (v0.25.4):
 
 The only thing standing between the current code and SL-212 is a **verb** to
 record an operator's resolved commit as the `merge_oid` of a `Conflicted` row
-(`:1409`, `merge_oid=""`), gated by re-running admit's existing parent-set check.
-The validation contract is parent-binding + descends-from — **no** content /
-tree-diff validation, because a conflict resolution has no unique "correct" tree
-(legitimacy is parent binding + explicit operator action + preserved candidate
-branch + admit + CAS).
+(`:1409`, `merge_oid=""`).
+
+**Validation is NOT parent-binding alone.** Admit today checks only
+`parents == {base_oid, source_oid}` (an order-independent set) and ancestry
+(`:1620-1634`) — it never inspects the *tree*. That is sufficient for a
+Doctrine-produced merge (Doctrine authored the tree) but **not** for an
+operator-produced one: a commit with the right two parents but an arbitrary tree
+(unrelated source deleted or rewritten) passes admit and, on a clean FF, reaches
+trunk. This directly contradicts SL-212's own safety objective ("a true 3-way
+merge … **not an arbitrary tree**"). This REV therefore does **not** claim
+parent-binding is a sufficient contract for ingest. It governs the **boundary**
+and defers the **mechanism** to SL-212 design:
+
+- **"True 3-way" ≙ non-conflict paths are determinate, conflict loci are not.**
+  A conflict resolution has no unique correct tree *at the conflict hunks* — but
+  every non-conflicting path has the deterministic `merge-tree` result. The ingest
+  check must hold the resolved tree to the mechanical merge on non-conflict paths
+  and admit operator freedom only at conflict loci (exact predicate = SL-212
+  design).
+- **Parent order.** The set-comparison in admit is lax; `merge_oid`'s *first*
+  parent should be `base_oid` (the trunk-side lineage). SL-212's ingest check
+  should require ordered parents, not just the set.
+
+Legitimacy = this content-bounded provenance + explicit operator action +
+preserved candidate branch + admit + expected-tip CAS.
 
 ### The amendment (D4, SL-068 candidate-admission clause)
 
@@ -77,8 +103,12 @@ branch + admit + CAS).
 > **the Doctrine-created `merge_oid`** has the recorded base/source parents, and
 > `merge_oid` is an ancestor of the admitted tip."
 
-The single load-bearing word is **"Doctrine-created"** — the only clause in
-governance excluding an operator-produced merge.
+The load-bearing word here is **"Doctrine-created."** It is *not*, however, the
+only place governance encodes Doctrine authorship — see the **Downstream cascade**
+below; SPEC-022 and the SL-068 design carry the same assumption. This REV amends
+the *decision* (ADR-012) now and **tracks** the *model* (SPEC-022) for
+reconciliation at SL-212 ship-time. The amendment is narrow in *substance* (one
+provenance clause), not in *surface*.
 
 **After** (amended intent):
 
@@ -92,30 +122,52 @@ governance excluding an operator-produced merge.
 Everything else in D4 stands. In particular the FF-only publication posture is
 **reaffirmed verbatim**: "if the admitted OID does not fast-forward the target,
 close refuses and requires a superseding candidate; it never creates, updates,
-rebases, merges, or repairs a candidate at close time." The trunk-honesty claim
-(§Consequences, "unreviewed code never touches trunk") is **preserved** — the
-operator-ingested combination lands on an inspectable, admittable candidate
-surface *before* trunk mutation, meeting the same bar today's clean candidate
-merge meets. RFC-006's rejected capability would have composed the merge at
-integrate, *after* admit — never on an inspectable surface; that is the boundary
-this REV declines to cross.
+rebases, merges, or repairs a candidate at close time."
+
+**Trunk honesty — the honest, bounded claim.** The operator-ingest path holds to
+**exactly the same** inspect-before-trunk bar as today's clean Doctrine
+close_target merge — it is provably **no weaker**. It does *not*, on its own,
+*guarantee* that the exact admitted combination was reviewed: `integrate` requires
+only that a `close_target` admission exists, and admit stores `--review` as
+optional metadata without binding it to the admitted OID (`dispatch.rs:2172-2189`,
+`:1653`). But that gap is **pre-existing** — it affects the clean merge equally —
+not introduced here; it is filed as **IMP-303** (bind admitted OID → audit RV at
+the close gate), which should land before/with SL-212's close path.
+
+The genuine distinction from RFC-006 is therefore **enablement, not a bright
+line**: the candidate path *materialises an admittable, re-auditable ref* that a
+close gate can check; RFC-006's `plan_trunk_row` manufactures the merge at
+integrate *after* admit with **no such surface at all**. This REV keeps composition
+on the inspectable candidate; closing the inspected-vs-inspectable gap for *both*
+authorship modes is IMP-303's job.
 
 ### Residual (consciously accepted)
 
 This does **not** self-heal a concurrent trunk land: another slice landing
 between candidate-create and integrate costs a supersede cycle (re-create on the
-new base, possibly re-resolve, re-admit, re-integrate). Accepted because:
+new base, possibly re-resolve, re-admit, re-integrate). Two honest bounds:
 
-- The **edge/main split** already insures against routine concurrency —
-  integration lands on `main` while working trunk is `edge`; a non-FF `main` is
-  usually only an agent promoting `edge → main` as dispatch phase hygiene, not
-  organic churn.
-- A cheap future hardening (out of scope here): an **advisory close-lock file**
-  during an active close that orchestrators honour before touching `main` — at
-  worst slightly more code merged later.
-- The ergonomic tail routes to **RFC-016** (make supersede a prescribed,
-  mechanical `dispatch next` action) and Path C (discrete-clone topology), neither
-  of which reverses a publication boundary to remove retry friction.
+- **The supersede cycle is complete only for the *plan-time* refusal** — trunk
+  moved *before* a trunk row is journaled (the common case; caught at the
+  candidate-trunk FF check). It does **not** cover the *post-journal CAS race* —
+  trunk moving between the journal commit and the ref mutation persists a `Failed`
+  row (`dispatch.rs:2263-2264`), and replanning is `fresh`-gated / status-blind
+  (`:2183`), so a superseding candidate's new admitted OID is never replayed. That
+  case dead-ends into `record-integration` or manual journal surgery today. This is
+  **pre-existing**, filed as **IMP-304** (let a supersede replace a `Failed`/
+  `Pending` trunk row). Correctness is never at risk — CAS refuses; only recovery
+  ergonomics degrade.
+- **Concurrency is *reduced*, not eliminated** (not a correctness boundary; the
+  CAS is). The **edge/main split** keeps most work off the integration ref — a
+  non-FF `main` is usually an agent promoting `edge → main` as dispatch hygiene,
+  not organic churn — and a future **advisory close-lock** (orchestrators honour it
+  before touching `main` during an active close) would lower the frequency further,
+  at worst slightly more code merged later. Both shrink the odds of hitting the
+  supersede path; neither is insurance against it.
+
+The ergonomic tail routes to **RFC-016** (make supersede a prescribed, mechanical
+`dispatch next` action) and Path C (discrete-clone topology) — neither reverses a
+publication boundary to remove retry friction.
 
 ### RFC-006 disposition
 
@@ -128,9 +180,43 @@ the residual mechanical. RFC-006 is transitioned to `resolved` with this outcome
 
 ### Change payload
 
-- **`modify ADR-012`** (primary) — the D4 amendment above (surfaced-for-manual at
-  `revision apply`).
+- **`modify ADR-012`** (primary) — the D4 amendment above, **plus** a new
+  operator-ingest case in ADR-012's §Verification (the current items cover only
+  create/admit ancestry): assert the ingest verb rejects (a) an arbitrary tree on
+  non-conflict paths and (b) reversed parent order, and accepts a genuine
+  hand-resolved 3-way. Surfaced-for-manual at `revision apply`.
 
-Not in this REV (deliberately): the SL-212 scope un-gate is a per-slice authored
-direct edit, not a `[[change]]` row; RFC-006's status move is a `rfc status`
-transition referencing this REV as its enacted outcome.
+### Downstream cascade (tracked, not applied here)
+
+SPEC-022 (Git interaction model) mirrors the amended clause and must be reconciled
+**at SL-212 ship-time**, not now — SPEC-022 is *retrospective* ("describes shipped
+behaviour; coverage reconciled, never inferred"), so amending it ahead of the code
+would violate its own charter. Tracked targets:
+
+- **REQ-316 (FR-006)** "Candidate admission by immutable OID" — the durable
+  requirement encoding Doctrine-authored admission.
+- SPEC-022 responsibilities line (`spec-022.toml:19`) and candidate-layer prose
+  (`spec-022.md:180`) — "Doctrine no-ff 3-way `merge_oid`".
+
+Recorded as an SL-212 follow-up; reconciled via a sibling REV when the ingest verb
+lands. (SL-068's `design.md:195` also carries it, but a closed-slice design is a
+point-in-time artifact — noted, not amended.)
+
+### Not in this REV (deliberately)
+
+- The SL-212 scope un-gate is a per-slice authored direct edit, not a `[[change]]`
+  row.
+- RFC-006's status move is a `rfc status` transition referencing this REV as its
+  enacted outcome.
+- **IMP-303** (audit-OID binding) and **IMP-304** (supersede clears a `Failed`
+  trunk row) are pre-existing gaps this decision surfaced but does not introduce;
+  filed for separate scheduling (IMP-303 should land before/with SL-212's close).
+
+### Review provenance
+
+Reasoning cross-checked by an external adversarial pass (codex, GPT-5.5) against
+the code. Six findings; the core insight (SL-212 does not require RFC-006's
+reversal) held. Two blockers (content-validation sufficiency; inspectable≠inspected)
+and two majors (amendment surface breadth; post-journal recovery completeness) are
+integrated above; the decision was unaffected. Adjudication logged to the SL-212
+session.
