@@ -101,7 +101,7 @@ simple as possible, but no simpler.
  CAS branch @ base_oid                      in the worktree,      recompute merge-tree(base,source) → T_c, C
  write Conflicted row (atomic, durable)     `git commit`          D = changed_paths(R^tree, T_c)  [--no-renames]
  MATERIALISE T_c into the worktree:           → R, 2-parent       validate: (i) parents==[base,source]
-   read-tree T_c → checkout-index              [base, source]                (ii) D ⊆ C  (byte-wise)
+   read-tree --reset -u T_c (exact)            [base, source]                (ii) D ⊆ C  (byte-wise)
    rewrite C entries to stages 1/2/3                                         (iii) markers at C  (advisory)
    set MERGE_HEAD=source                                          write-once fill: merge_oid=R, status=Created,
  (no `git merge` — config cannot perturb)                          ingested_at, merge_provenance=OperatorIngest
@@ -194,11 +194,16 @@ in the exhaustive match (`guard.rs:315`) + write-class golden (`src/main.rs`).
 Candidate writes are **orchestrator-sole-writer** (worker-mode refused), so no
 concurrent-writer protocol beyond atomic-store + the pre-state gate.
 
-**Coordination-root identity (F10).** Ingest **refuses a candidate-worktree
-cwd** — detected by `git rev-parse --git-common-dir != --git-dir` (a linked
-worktree) *and/or* a resolved root under `.doctrine/state/dispatch/candidate/` —
-with a message directing the operator to the coordination tree, and resolves the
-ledger at the coordination root (never the candidate checkout's stale tree).
+**Coordination-root identity (F10, refined RV-289 F-1).** Ingest **refuses a
+candidate-worktree cwd** — detected by a resolved worktree root under
+`.doctrine/state/dispatch/candidate/` (the candidate-nesting path is the sole
+discriminator). The linked-worktree test (`--git-common-dir != --git-dir`) is
+**not** usable: the *coordination* tree is itself a linked worktree
+(`.dispatch/SL-N` → git-dir `.git/worktrees/SL-N`), so that inequality holds in
+the *valid* cwd too and would reject it (repo-probe confirmed). On refusal, a
+message directs the operator to the coordination tree; the ledger resolves at the
+coordination root (never the candidate checkout's stale tree). A positive test
+asserts a coordination-linked-worktree cwd is **accepted** (§9).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -213,12 +218,18 @@ ledger at the coordination root (never the candidate checkout's stale tree).
    the worktree (§3 / R-4).
 4. `add_candidate_worktree` + `run_provision`.
 5. **Materialise merge-tree's output into the worktree — no `git merge`** (D2):
-   `git read-tree <T_c>` → `git checkout-index -af` (working files = `T_c`:
-   markers at conflicts, merged elsewhere); for each path ∈ C rewrite its index
-   entry to unmerged stages 1/2/3 via `git update-index --index-info` fed the
-   stage lines (remove stage-0 first); write `MERGE_HEAD=source_oid`
+   `git read-tree --reset -u <T_c>` — an **exact** projection: index *and*
+   working tree become `T_c` (markers at conflicts, merged elsewhere), including
+   **removal of paths `T_c` deletes** (F-new/RV-289 F-2: plain `read-tree` +
+   `checkout-index -af` leaves a mechanically-deleted path behind → the
+   operator's `git add` re-adds it → `D ⊄ C` → spurious ingest refusal;
+   `--reset -u` yields `write-tree == T_c`). Then for each path ∈ C rewrite its
+   index entry to unmerged stages 1/2/3 via `git update-index --index-info` fed
+   the stage lines (remove stage-0 first); write `MERGE_HEAD=source_oid`
    (+ `MERGE_MODE`/`MERGE_MSG`) so `git commit` yields a 2-parent
-   `[base_oid, source_oid]` merge. Exact plumbing = `/plan` (OQ-1).
+   `[base_oid, source_oid]` merge (parent 1 = HEAD @ `base_oid`, parent 2 =
+   `MERGE_HEAD`). Exact plumbing (worktree-private `GIT_INDEX_FILE` /
+   `git rev-parse --git-path` metadata locations) = `/plan` (OQ-1).
 6. On any failure in 4/5: **roll back — remove worktree, delete row, delete ref
    (CAS `base_oid`, valid — nothing moved it)** — bail as an operational error.
 7. stderr: "resolve the conflicts and `git commit`, then `candidate ingest` from
@@ -349,6 +360,15 @@ marker present → reject (advisory); happy → accept.
   perturbed merge) → ingest consistent. *This is the regression test for D2.*
 - **rename-fold soundness:** operator deletes a non-conflict path folded as a
   rename → ingest **rejects** (proves `--no-renames`).
+- **exact-projection (RV-289 F-2):** a merge that *conflicts* on one path and
+  *cleanly deletes* another → create's `read-tree --reset -u T_c` removes the
+  deleted path (worktree == `T_c`, `write-tree == T_c`); resolve conflict +
+  `git add` + commit → ingest **accepts** (`D ⊆ C`). Regression against
+  `checkout-index` leaving the deletion behind. Mirror for a clean rename.
+- **coordination-cwd acceptance (RV-289 F-1):** ingest run from a *coordination*
+  linked worktree (git-dir ≠ common-dir, root **not** under `…/candidate/`) is
+  **accepted** — proves the guard keys on the candidate path, not linked-worktree
+  status (paired with the candidate-worktree-cwd refusal below).
 - refuse: reversed/single parent; arbitrary-tree (mutate a non-conflict path);
   surviving markers; non-`Conflicted`/ambiguous row; `R==base`; multiple merge
   bases; custom driver; candidate-worktree cwd.
@@ -372,8 +392,8 @@ rejected; genuine 3-way accepted; FF-integrate by the same contract.
 
 ## 10. Review Notes
 
-**Two adversarial passes — codex (GPT-5.5), workspace-read** — dispositioned on
-evidence (§7, §8):
+**Three adversarial passes — codex (GPT-5.5)** — dispositioned on evidence
+(§7, §8):
 
 - **Pass 1 (7 blockers):** accepted F10/F11/F12/F5/F7/F8/F13/F14/F15/F16/F17/F18;
   refuted F1 (path-vs-hunk = governance), F2-example (git-2.54 probe), F3 (no
@@ -383,6 +403,14 @@ evidence (§7, §8):
   paths; F10 concretised; crash/atomicity → atomic-store (D7) + IMP-305
   follow-up; custom-driver → refuse (D8); write-once enforcement made explicit.
 
-**Pending — third pass (fresh agent):** targeted at the projection mechanism
-(§5.4 step 5), the `--no-renames`/byte-path fixes, and the atomic-store, before
-lock. See the handover.
+- **Pass 3 (RV-289, workspace-write — projection stress-test):** confirmed D2,
+  `--no-renames`, byte paths, bounded D7/IMP-305 durability, custom-driver
+  refusal, and write-once pre-state are closed. Two NEW findings, both
+  reproduced by repo/git probe and folded: **F-1 (blocker)** — the F10 guard's
+  linked-worktree test also rejects the valid coordination tree (itself a linked
+  worktree) → guard now keys on the candidate path alone (§5.3); **F-2 (major)**
+  — `read-tree`+`checkout-index` is not an exact `T_c` projection (leaves
+  mechanically-deleted paths → spurious refusal) → create now uses
+  `read-tree --reset -u T_c` (§5.4 step 5). Projection otherwise sound: unmerged
+  entries correctly require `git add`, then commit yields ordered parents
+  `[base, source]`, non-conflict tree equality, worktree-private metadata paths.

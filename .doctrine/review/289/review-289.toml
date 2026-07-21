@@ -1,0 +1,34 @@
+id    = 289
+slug  = "final-adversarial-review-candidate-ingest-projection"
+title = "Final adversarial review: candidate ingest projection"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "codex-third"
+responder = "designer"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-212"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "Candidate-only cwd refusal expected; generic linked-worktree test also rejects the coordination worktree"
+detail = "Design SL-212 lines 197-201 permits git-common-dir != git-dir as the candidate-worktree detector. But dispatch setup creates the intended coordination root as a linked worktree (src/dispatch.rs:577-625; dispatch skill lines 13-19), while candidate create nests its linked worktree under .doctrine/state/dispatch/candidate (src/dispatch.rs:1493-1505). Actual repo probe: in .dispatch/SL-198, --git-common-dir=/workspace/doctrine/.git and --git-dir=/workspace/doctrine/.git/worktrees/SL-198, so the proposed inequality is true in the valid coordination cwd; the same inequality is true in the candidate linked worktree. Concrete outcome: candidate ingest invoked from the coordination tree fails step 1 before it can read that tree’s candidates.toml. The guard must classify the candidate path (or otherwise distinguish worktree roles), not linked-worktree status alone; remove the ambiguous and/or formulation and add a positive coordination-linked-worktree acceptance test."
+disposition = "design-revised"
+response = "Accepted — confirmed by repo probe. git worktree list: coordination trees (.dispatch/SL-198) AND candidate trees (.doctrine/state/dispatch/candidate/cand-*) are both linked worktrees (git-dir != common-dir), so the linked-worktree test cannot discriminate and would reject the valid coordination cwd. Design §5.3 revised: guard keys on the candidate path (resolved root under .doctrine/state/dispatch/candidate/) as the sole discriminator; the ambiguous 'and/or' linked-worktree clause is removed. §9 gains a positive coordination-linked-worktree acceptance test."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "Exact T_c worktree projection expected; checkout-index leaves mechanically deleted paths behind"
+detail = "Design SL-212 lines 99-108 and 214-221 claims read-tree T_c followed by checkout-index -af makes working files equal T_c before conflict stages are restored. Git 2.54.0 linked-worktree probe disproves that for clean deletions: source deleted stable.txt while the same merge conflicted on conflict.txt; T_c had no stable.txt, but after read-tree T_c plus checkout-index -af the candidate worktree still had stable.txt and status reported both staged deletion and ?? stable.txt. Resolving only conflict.txt and running the routine git add -A then commit produced changed_paths(R.tree,T_c)={conflict.txt,stable.txt} while C={conflict.txt}; ingest therefore rejects even though the operator did not edit the non-conflict file. checkout-index is not an exact tree projection because it never removes worktree paths absent from the index. The plan needs a byte-safe exact projection primitive (for example, verify git read-tree --reset -u T_c on the clean freshly-created candidate worktree) and a regression fixture combining a content conflict with a clean deletion/rename."
+disposition = "design-revised"
+response = "Accepted — reproduced in a clean git 2.54.0 probe. Plain 'read-tree T_c' then 'checkout-index -af' leaves a mechanically-deleted path (del.txt) in the worktree (checkout-index never removes paths absent from the tree); the operator's git add -A re-adds it, so D gains a path not in C and ingest wrongly rejects. 'git read-tree --reset -u T_c' removes the deletion and yields index == T_c exactly (write-tree == T_c). Design §5.4 create step 5 revised to 'git read-tree --reset -u <T_c>' as the exact byte-safe projection (superseding read-tree + checkout-index); §9 gains a conflict+clean-deletion/rename regression fixture."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
