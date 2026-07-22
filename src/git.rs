@@ -896,8 +896,9 @@ fn parse_merge_tree_z(stdout: &[u8]) -> Result<(String, Vec<ConflictStage>), Cap
         })?;
         let (meta, rest) = field.split_at(tab);
         let path = rest.get(1..).unwrap_or(&[]).to_vec(); // drop the leading TAB
-        let meta = std::str::from_utf8(meta)
-            .map_err(|_ignored| CaptureError::Git("merge-tree -z: non-utf8 entry meta".to_owned()))?;
+        let meta = std::str::from_utf8(meta).map_err(|_ignored| {
+            CaptureError::Git("merge-tree -z: non-utf8 entry meta".to_owned())
+        })?;
         let mut parts = meta.split_whitespace();
         let mode = parts.next().unwrap_or_default().to_owned();
         let oid = parts.next().unwrap_or_default().to_owned();
@@ -1127,6 +1128,36 @@ pub(crate) fn merge_base(root: &Path, a: &str, b: &str) -> Result<Option<String>
     }
 }
 
+/// All merge bases of `a` and `b` (`git merge-base --all`). More than one ⇒ a
+/// criss-cross history; SL-212's create/ingest guards REFUSE that — a single
+/// mechanical merge base is a precondition of the `merge-tree` projection the
+/// operator's resolution is validated against. Exit 0 ⇒ the (≥1) base oids in
+/// git's order; exit 1 ⇒ unrelated histories, no base (empty Vec); any other exit
+/// errors (fail-closed, never masked as "no base"). Refusal on >1 is the caller's.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-03/04 guards refuse a criss-cross (>1 base)"
+    )
+)]
+pub(crate) fn merge_base_all(root: &Path, a: &str, b: &str) -> Result<Vec<String>, CaptureError> {
+    let output = run_git(root, &["merge-base", "--all", a, b])?;
+    match output.status.code() {
+        Some(0) => {
+            let text = String::from_utf8(output.stdout).map_err(|_ignored| {
+                CaptureError::Git("merge-base --all: non-utf8 oid".to_owned())
+            })?;
+            Ok(text.lines().map(str::to_owned).collect())
+        }
+        Some(1) => Ok(Vec::new()),
+        _ => Err(CaptureError::Git(format!(
+            "merge-base --all {a} {b}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
 /// Run a git diff-family command that emits `-z` NUL-delimited `--name-only`
 /// output and collect the changed paths as raw bytes in git's own order (D9). The
 /// caller supplies the full arg vector (`diff` vs `diff-tree`, pathspec,
@@ -1144,7 +1175,7 @@ fn diff_names_z(root: &Path, args: &[&str]) -> Result<Vec<Vec<u8>>, CaptureError
             .stdout
             .split(|b| *b == 0u8)
             .filter(|f| !f.is_empty())
-            .map(|f| f.to_vec())
+            .map(<[u8]>::to_vec)
             .collect()),
         _ => Err(CaptureError::Git(format!(
             "git {}: {}",
@@ -1202,14 +1233,119 @@ pub(crate) fn diff_doctrine_paths(
     cur: &str,
     pathspec: &str,
 ) -> Result<Vec<String>, CaptureError> {
-    diff_names_z(root, &["diff", "--name-only", "-z", base, cur, "--", pathspec])?
-        .into_iter()
-        .map(|p| {
-            String::from_utf8(p).map_err(|_ignored| {
-                CaptureError::Git(format!("diff --name-only {base} {cur}: non-utf8 output"))
-            })
+    diff_names_z(
+        root,
+        &["diff", "--name-only", "-z", base, cur, "--", pathspec],
+    )?
+    .into_iter()
+    .map(|p| {
+        String::from_utf8(p).map_err(|_ignored| {
+            CaptureError::Git(format!("diff --name-only {base} {cur}: non-utf8 output"))
         })
-        .collect()
+    })
+    .collect()
+}
+
+/// Run `git check-attr merge -z --stdin`, streaming the NUL-joined `paths` on
+/// stdin and returning raw stdout (`<path>NUL merge NUL <value>NUL` triples).
+/// Byte-safe both ways — paths may not be valid UTF-8 (D9), so neither the input
+/// nor the output is decoded here. Mirrors [`hash_object_stdin`]'s spawn/pipe.
+fn check_attr_merge_z(root: &Path, stdin_bytes: &[u8]) -> Result<Vec<u8>, CaptureError> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(NORMATIVE_FLAGS)
+        .args(["check-attr", "merge", "-z", "--stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| CaptureError::Git(format!("spawn git check-attr: {e}")))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| CaptureError::Git("git check-attr: no stdin pipe".to_owned()))?
+        .write_all(stdin_bytes)
+        .map_err(|e| CaptureError::Git(format!("git check-attr: write stdin: {e}")))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| CaptureError::Git(format!("git check-attr: wait: {e}")))?;
+    if output.status.success() {
+        Ok(output.stdout)
+    } else {
+        Err(CaptureError::Git(format!(
+            "check-attr merge: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// The tree paths carrying a **custom** (non-built-in) `merge` gitattributes
+/// driver — SL-212's create/ingest guards REFUSE these. A custom driver means
+/// `git merge-tree`'s mechanical projection is not reproducible, so an operator's
+/// resolution cannot be bound to it (OQ-2, fail-closed). Enumerates the tree
+/// (`ls-tree -r -z`) and batches one `git check-attr merge -z --stdin`; a merge
+/// value OUTSIDE the built-in allow-list
+/// (`unspecified`/`set`/`unset`/`text`/`union`/`binary`) is treated as custom
+/// (SUPERSET — an unknown value refuses rather than slips through). Byte-safe (D9).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "PHASE-03/04 guards refuse a custom merge driver")
+)]
+pub(crate) fn custom_merge_driver_paths(
+    root: &Path,
+    tree: &str,
+) -> Result<Vec<Vec<u8>>, CaptureError> {
+    // The built-in `merge` attribute values — anything else is a custom driver.
+    const BUILT_IN: [&[u8]; 6] = [
+        b"unspecified",
+        b"set",
+        b"unset",
+        b"text",
+        b"union",
+        b"binary",
+    ];
+    // 1. Enumerate the tree's paths (byte-safe).
+    let listing = run_git(root, &["ls-tree", "-r", "-z", "--name-only", tree])?;
+    if !listing.status.success() {
+        return Err(CaptureError::Git(format!(
+            "ls-tree -r -z {tree}: {}",
+            String::from_utf8_lossy(&listing.stderr).trim()
+        )));
+    }
+    let paths: Vec<&[u8]> = listing
+        .stdout
+        .split(|b| *b == 0u8)
+        .filter(|f| !f.is_empty())
+        .collect();
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    // 2. One batched check-attr; stdin is the NUL-joined path list.
+    let mut stdin_bytes = Vec::new();
+    for (i, p) in paths.iter().enumerate() {
+        if i > 0 {
+            stdin_bytes.push(0u8);
+        }
+        stdin_bytes.extend_from_slice(p);
+    }
+    let out = check_attr_merge_z(root, &stdin_bytes)?;
+    // 3. Parse <path>NUL merge NUL <value>NUL triples; flag non-built-in values.
+    let mut fields = out.split(|b| *b == 0u8);
+    let mut custom = Vec::new();
+    while let (Some(path), Some(_attr), Some(value)) = (fields.next(), fields.next(), fields.next())
+    {
+        if path.is_empty() {
+            break; // trailing NUL residue
+        }
+        if !BUILT_IN.contains(&value) {
+            custom.push(path.to_vec());
+        }
+    }
+    Ok(custom)
 }
 
 /// The blob oid at `path` in tree-ish `treeish` (`git ls-tree <treeish> --
@@ -2783,6 +2919,64 @@ mod tests {
         );
     }
 
+    /// VT-5 (SL-212 PHASE-01): `merge_base_all` returns >1 base on a criss-cross
+    /// (the guard's refusal signal), and exactly one on a linear ancestor.
+    #[test]
+    fn merge_base_all_reports_multiple_bases_on_crisscross() {
+        let repo = ScratchRepo::new();
+        let o = repo.commit("o.txt", "o\n", "root");
+        repo.git(&["checkout", "-q", "-b", "p1", &o]);
+        let p1a = repo.commit("f1.txt", "1\n", "p1 edit");
+        repo.git(&["checkout", "-q", "-b", "p2", &o]);
+        let p2a = repo.commit("f2.txt", "2\n", "p2 edit");
+        // Cross-merge the fork-point COMMITS (not the branches, which advance) on
+        // distinct files → clean, genuinely criss-crossed ancestry.
+        repo.git(&["checkout", "-q", "p1"]); // at p1a
+        repo.git(&["merge", "--no-edit", &p2a]);
+        let m1 = repo.git(&["rev-parse", "HEAD"]);
+        repo.git(&["checkout", "-q", "p2"]); // still at p2a
+        repo.git(&["merge", "--no-edit", &p1a]);
+        let m2 = repo.git(&["rev-parse", "HEAD"]);
+
+        let bases: std::collections::BTreeSet<String> =
+            super::merge_base_all(repo.path(), &m1, &m2)
+                .expect("merge-base --all")
+                .into_iter()
+                .collect();
+        assert_eq!(
+            bases,
+            std::collections::BTreeSet::from([p1a.clone(), p2a]),
+            "criss-cross yields both fork points as merge bases"
+        );
+        assert_eq!(
+            super::merge_base_all(repo.path(), &p1a, &o).expect("merge-base --all"),
+            vec![o],
+            "a linear ancestor is the sole base"
+        );
+    }
+
+    /// VT-5 (SL-212 PHASE-01): `custom_merge_driver_paths` flags ONLY non-built-in
+    /// gitattributes merge drivers — a named driver is flagged; `union` and an
+    /// unspecified path are not (built-in allow-list, superset/fail-closed).
+    #[test]
+    fn custom_merge_driver_paths_flags_non_builtin_only() {
+        let repo = ScratchRepo::new();
+        repo.write("plain.txt", "p\n");
+        repo.write("merged.u", "u\n");
+        repo.write("driven.x", "d\n");
+        repo.write(".gitattributes", "*.u merge=union\n*.x merge=mydriver\n");
+        repo.git(&["add", "-A"]);
+        repo.git(&["commit", "-m", "attrs"]);
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+
+        let custom = super::custom_merge_driver_paths(repo.path(), &tree).expect("driver scan");
+        assert_eq!(
+            custom,
+            vec![b"driven.x".to_vec()],
+            "only the custom-named driver is flagged; union + unspecified are built-in"
+        );
+    }
+
     #[test]
     fn blob_oid_at_reads_present_absent_and_empty_tree() {
         let (repo, base, cur) = doctrine_fixture();
@@ -4133,7 +4327,9 @@ mod tests {
                 nums.sort_unstable();
                 assert_eq!(nums, vec![1, 2, 3], "base/ours/theirs stages");
                 assert!(
-                    stages.iter().all(|s| s.oid.len() == 40 && s.mode == "100644"),
+                    stages
+                        .iter()
+                        .all(|s| s.oid.len() == 40 && s.mode == "100644"),
                     "each stage carries a 40-char oid and file mode: {stages:?}"
                 );
             }
