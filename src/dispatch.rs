@@ -322,9 +322,10 @@ pub(crate) enum CandidateCommand {
 
     /// Admit (SL-068 PHASE-05): pin a recorded candidate's committed tip as the
     /// immutable OID a downstream verb (close/review) targets, after validating
-    /// provenance (the recorded merge is the Doctrine candidate merge and an
-    /// ancestor of the admitted tip) and re-reading the ref. Writes ONLY
-    /// `candidates.toml` — never an evidence/candidate ref. Orchestrator-classed.
+    /// provenance (the recorded merge is a genuine candidate merge — parents ==
+    /// base+source, provenance not authorship; REV-030 — and an ancestor of the
+    /// admitted tip) and re-reading the ref. Writes ONLY `candidates.toml` —
+    /// never an evidence/candidate ref. Orchestrator-classed.
     Admit {
         /// The slice id (bare number, e.g. `68`).
         #[arg(long, value_parser = parse_cli_id)]
