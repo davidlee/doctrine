@@ -58,3 +58,100 @@ The recipe only survives because a memory (mem.pattern.doctrine.close-drift-disc
 documents the exact three-clause predicate; without it the refusal message alone is
 hard to action correctly (esp. clause (c): "superset of every coverage key incl. other
 slices' cells" is invisible without grepping coverage.toml).
+
+[research; SL-212-research-8a3f]
+Research synthesis for SL-212 (IMP-127 hand-resolve ingest, gated on RFC-006)
+required reading 5+ memory retrievals, 8+ entity shows, RFC-005 post-RSK-014
+design note, and the full split-lineage close memory corpus — ~20 tool calls
+before the first line of the research doc was written. The gate itself (RFC-006
+blocking SL-212 design) means the architect who does the design will need to
+repeat much of this context-gathering unless a research artifact bridges the
+gap. The `research.local.md` pattern (gitignored runtime research in the slice
+folder) is lightweight and avoids authored-tier commitment, but the token cost
+of producing it (~12k words of reading across entities) is high per-session.
+A `doctrine research compile --slice SL-NNN` that materialises the entity
+closure (slice + related RFCs + ADRs + memories + backlog items) into one
+document would collapse ~15 of those 20 tool calls into one.
+
+Token cost breakdown (approximate): SL-212 scope show (3k), RFC-006 show (3.5k),
+ADR-012 show (9k), IMP-127 show (1.5k), 5 memory retrievals (~2.5k each =
+12.5k), SL-157/211/166/198/220/190/147 shows (~2k each = 14k), RFC-005 post-
+RSK-014 note (6k), RFC-005 show (3k), RFC-016 show (2k), IMP-201 show (1k),
+case notes read (0.5k), backlog list (1k), memory search (1k). Total entity
+reading: ~57k words before synthesis. The research doc itself is ~3.5k words.
+Net: ~17:1 reading-to-output ratio for governance-gated research.
+
+[design; SL-212-REV-030-a]
+Governance-heavy /design pre-work (gate dissolution → REV author/apply). Friction:
+- `doctrine revision list` returned EMPTY output despite 30 revisions existing;
+  had to fall back to `revision paths`/`ls` to enumerate. Cost a verification loop.
+- Entity creation mints BOTH `NNN/` (canonical dir) AND `NNN-slug` (symlink).
+  In `git status` this shows as two `??` entries per new entity — initially reads
+  as accidental duplication; had to `readlink`/`stat` to confirm one is a symlink.
+  (A concurrent agent added a "# Symlinks" note to governance.md the same session —
+  so this confusion is known/recurring.)
+- Harness shell is zsh, not bash: unquoted `$PATHS` in `git add $PATHS` / `git
+  commit $PATHS` did NOT word-split (zsh default), so a variable-pathspec commit
+  failed with a single-giant-path error. Had to pass literal args. Any skill/snippet
+  that builds a pathspec in a shell var and relies on bash word-splitting breaks here.
+
+[code-review; SL-212-final-projection-20260722]
+The code-review protocol required opening and priming a durable RV before a
+single-purpose design-lock probe. This added lifecycle writes and command-shape
+lookups even though the user explicitly requested only residual blocker/major
+prose. The durable subject made the ledger appropriate, but the generated RV
+starts in derived `done` state with zero findings before its mandatory Brief is
+filled, which is semantically surprising during an active clean review.
+
+[execute; SL-212-PHASE-02]
+Smooth pure-predicate phase. Two minor friction points, ~low token cost:
+1. `doctrine slice phase <id> <phase> <status>` — status is a *flag*
+   (`--status`), not positional. One failed invocation + re-read of usage.
+   The three-positional muscle-memory (id, phase, status) misfires.
+2. `code_end_oid` is NOT stamped into the phase sheet on `completed` (only
+   `code_start_oid` on `in_progress`); the closing binding lands in
+   `state/slice/NNN/boundaries.toml` (the arm-neutral registry). The execute
+   skill's "captures code_end_oid = HEAD" phrasing reads as if it writes the
+   sheet — momentary grep-for-nothing before checking conformance/boundaries.
+Both self-resolved in one probe each. The staged-ahead dead-code pattern
+(cfg_attr(not(test), expect(dead_code, reason=…))) was pre-captured as a
+memory and applied first try after the initial bare-#[expect] clippy bounce.
+
+[phase-plan; SL-212-pp-05] design.md §9 F18 cites concrete line anchors for the
+de-absolutisation targets (dispatch.rs:1815 status, admit :1551/:1610, ledger
+:144/:194). All had drifted after PHASE-01..04 added code — status is now :2159,
+admit doc :2018 / errors :2077/:2091, ledger docs :152/:209. Re-locating each via
+grep cost ~3 extra tool calls. Minor, but a recurring tax: authored design line
+anchors go stale the moment the phases they describe land. Function-name anchors
+(as AGENTS.md already prefers for memories) would survive.
+
+[execute; SL-212-PHASE-05]
+Two incidental-complexity items this phase:
+1. fmt-after-commit churn: committed T2/T3/T4 units, then `doctrine check gate`
+   ran `cargo fmt` and reformatted the just-committed test blocks (multiline arg
+   lists), dirtying the tree post-commit → an extra `style(SL-212)` fixup commit.
+   Cost: one avoidable commit + a confused "why is the tree dirty after I
+   committed?" beat. Fix: run `cargo fmt` (or `doctrine check quick`) before each
+   commit, not only at the phase-end gate. The execute skill says "lint as you
+   go" but the fmt step is easy to defer to the gate.
+2. VA-1 site under-enumeration: the phase sheet's T1 listed 5 de-absolutisation
+   sites (candidate_admit fn doc + 2 errors + 2 ledger docs). The VA-1 confirming
+   read surfaced TWO more admit-provenance docs asserting "Doctrine candidate
+   merge" as the basis — git.rs `parents()` helper doc and the `Admit` CLI enum
+   doc (dispatch.rs:325). A `grep -rn "Doctrine-created\|Doctrine merge\|Doctrine
+   candidate merge" src/` up front would have caught all 7 in one pass; the hand-
+   curated site list missed 2/7 (~29%). Lesson: for a "remove absolutism X"
+   sweep, drive it from a grep, not an enumerated site list — the VA read then
+   confirms a clean grep rather than re-discovering sites.
+
+[audit; SL-212-audit-recon-290]
+Stale installed binary during audit. The boot snapshot points `doctrine` at
+`~/.cargo/bin/doctrine`, but SL-212 *adds* a CLI verb (`dispatch candidate
+ingest`) and a `slice selector` surface the installed binary predates — so
+`doctrine dispatch candidate ingest --help` and `doctrine slice selector list`
+both failed with "unrecognized subcommand" mid-audit, costing a round-trip
+before switching to `./target/debug/doctrine`. General case: auditing a slice
+that ships a new CLI verb must drive that verb from the freshly-built dev binary;
+the installed one lags until reinstall. Cheap fix would be a one-line reminder in
+the audit skill's evidence step ("use ./target/debug/doctrine for verbs the slice
+under audit introduced").
