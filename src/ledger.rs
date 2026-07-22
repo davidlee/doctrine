@@ -157,6 +157,21 @@ pub(crate) enum CandidateStatus {
     Superseded,
 }
 
+/// How a candidate's `merge_oid` was produced — the provenance basis `admit`
+/// validates (REV-030: provenance, not authorship). `Doctrine` is the internal
+/// all-or-nothing 3-way; `OperatorIngest` is an operator's hand-resolved merge
+/// adopted via `candidate ingest` (SL-212), validated as a true 3-way of the
+/// recorded base + source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MergeProvenance {
+    /// Doctrine's internal 3-way merge produced the merge commit.
+    #[default]
+    Doctrine,
+    /// An operator hand-resolved the merge; ingest adopted it (SL-212).
+    OperatorIngest,
+}
+
 /// `candidates.toml` — the candidate ledger (design §5.3). Carries the
 /// recorded candidate rows plus the current role-keyed admission record.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -205,6 +220,14 @@ pub(crate) struct CandidateRow {
     pub created_by: String,
     /// Creation timestamp.
     pub created_at: String,
+    /// When an operator's resolution was ingested (empty until `candidate
+    /// ingest` adopts one). Backward-compatible: absent on legacy rows (SL-212).
+    #[serde(default)]
+    pub ingested_at: String,
+    /// How `merge_oid` was produced — Doctrine's 3-way vs an operator-ingested
+    /// resolution. Defaults to `Doctrine` on legacy rows (SL-212).
+    #[serde(default)]
+    pub merge_provenance: MergeProvenance,
 }
 
 /// The current admission record, keyed by role. The design shows only
@@ -729,7 +752,60 @@ mod tests {
             reason: String::new(),
             created_by: "dispatch candidate create".into(),
             created_at: "2026-06-15".into(),
+            ingested_at: String::new(),
+            merge_provenance: MergeProvenance::Doctrine,
         }
+    }
+
+    // VT-1 (SL-212 PHASE-01): provenance fields default on legacy rows, round-trip
+    // when set — the backward-compatible `#[serde(default)]` contract.
+    #[test]
+    fn candidate_row_provenance_fields_default_and_round_trip() {
+        // A legacy row TOML carrying neither ingested_at nor merge_provenance.
+        let legacy = r#"
+[[candidate]]
+id = "cand-212-x"
+label = "x"
+kind = "audit"
+role = "close_target"
+payload = "impl_bundle"
+target_ref = "r"
+source_ref = "s"
+source_oid = "so"
+base_ref = "b"
+base_oid = "bo"
+merge_oid = ""
+status = "conflicted"
+created_by = "dispatch candidate create"
+created_at = "2026-07-22"
+"#;
+        let parsed = Candidates::parse(legacy).expect("legacy row parses");
+        let row = &parsed.rows[0];
+        assert_eq!(row.ingested_at, "", "absent ingested_at defaults empty");
+        assert_eq!(
+            row.merge_provenance,
+            MergeProvenance::Doctrine,
+            "absent merge_provenance defaults Doctrine"
+        );
+
+        // A row carrying operator-ingest provenance round-trips byte-for-byte.
+        let mut ingested = sample_candidate("cand-212-y", "y", CandidateStatus::Created);
+        ingested.ingested_at = "2026-07-22".into();
+        ingested.merge_provenance = MergeProvenance::OperatorIngest;
+        let manifest = Candidates {
+            rows: vec![ingested.clone()],
+            current_admission: CurrentAdmission::default(),
+        };
+        let text = manifest.to_toml().expect("serialize");
+        assert!(
+            text.contains("merge_provenance = \"operator_ingest\""),
+            "on-disk vocab: {text}"
+        );
+        assert_eq!(
+            Candidates::parse(&text).expect("parse").rows[0],
+            ingested,
+            "operator-ingest row round-trips"
+        );
     }
 
     // VT-1: round-trip + on-disk vocab pinning.

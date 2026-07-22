@@ -1465,6 +1465,8 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
         reason: String::new(),
         created_by: "dispatch candidate create".to_owned(),
         created_at: req.created_at.clone(),
+        ingested_at: String::new(),
+        merge_provenance: crate::ledger::MergeProvenance::Doctrine,
     };
     ledger.rows.push(row);
     crate::ledger::write_candidates(root, req.slice, &ledger)?;
@@ -5580,6 +5582,8 @@ mod tests {
             reason: String::new(),
             created_by: "test".into(),
             created_at: "2026-01-01".into(),
+            ingested_at: String::new(),
+            merge_provenance: crate::ledger::MergeProvenance::Doctrine,
         }
     }
 
