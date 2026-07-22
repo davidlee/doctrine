@@ -7033,6 +7033,105 @@ mod tests {
         );
     }
 
+    /// Commit an operator merge on `target_ref` with the given ordered `parents`
+    /// and a tree that writes each `(path, content)` over a clean base checkout —
+    /// the governance-negative builder (reversed parents, an arbitrary-tree edit).
+    /// Returns the merge oid. Mirrors `operator_resolve`'s ref-advance + restore.
+    fn operator_merge(
+        root: &Path,
+        target_ref: &str,
+        parents: &[&str],
+        writes: &[(&str, &str)],
+    ) -> String {
+        git(root, &["checkout", "-q", "main"]);
+        for (path, content) in writes {
+            fs::write(root.join(path), content).unwrap();
+            git(root, &["add", path]);
+        }
+        let tree = git(root, &["write-tree"]);
+        let mut args = vec!["commit-tree", &tree];
+        for p in parents {
+            args.push("-p");
+            args.push(p);
+        }
+        args.push("-m");
+        args.push("operator merge");
+        let r = git(root, &args);
+        git(root, &["update-ref", target_ref, &r]);
+        git(root, &["reset", "-q", "--hard", "HEAD"]);
+        r
+    }
+
+    /// VT-1 (EX-2) — the operator-ingest governance set, realised through the
+    /// `candidate_ingest` VERB (not just the pure validator): (a) an arbitrary-tree
+    /// edit (`D ⊄ C`) is rejected, (b) reversed parents `[source, base]` are
+    /// rejected, (c) the genuine ordered 3-way is accepted and records
+    /// `OperatorIngest`. The FF-integrate-by-the-same-contract cell (d) is proven
+    /// end-to-end in `tests/e2e_dispatch_candidate.rs`.
+    #[test]
+    fn ingest_governance_arbitrary_and_reversed_reject_genuine_accepts() {
+        let req = |slice| IngestRequest {
+            slice,
+            label: "review-001".to_owned(),
+            ingested_at: "2026-02-02".to_owned(),
+        };
+
+        // (a) arbitrary tree: the operator merge edits a NON-conflict path — the
+        //     D ⊆ C subset gate refuses (never an arbitrary tree).
+        {
+            let repo = tempfile::tempdir().unwrap();
+            let root = repo.path();
+            let (base, source, target_ref) = seed_conflicted_candidate(root, 212, "review-001");
+            operator_merge(
+                root,
+                &target_ref,
+                &[&base, &source],
+                &[("trunk.txt", "RESOLVED\n"), ("arbitrary.txt", "sneaked\n")],
+            );
+            let err = candidate_ingest(root, &req(212))
+                .expect_err("an arbitrary-tree edit is rejected")
+                .to_string();
+            assert!(
+                err.contains("arbitrary.txt"),
+                "the refusal names the arbitrary path: {err}"
+            );
+        }
+
+        // (b) reversed parents [source, base]: the ordered-parent gate refuses.
+        {
+            let repo = tempfile::tempdir().unwrap();
+            let root = repo.path();
+            let (base, source, target_ref) = seed_conflicted_candidate(root, 212, "review-001");
+            operator_merge(
+                root,
+                &target_ref,
+                &[&source, &base],
+                &[("trunk.txt", "RESOLVED\n")],
+            );
+            assert!(
+                candidate_ingest(root, &req(212)).is_err(),
+                "reversed parents [source, base] are rejected"
+            );
+        }
+
+        // (c) genuine ordered 3-way: accepted, row flips Created + OperatorIngest.
+        {
+            let repo = tempfile::tempdir().unwrap();
+            let root = repo.path();
+            let (base, source, target_ref) = seed_conflicted_candidate(root, 212, "review-001");
+            let r = operator_resolve(root, &base, &source, &target_ref, "RESOLVED\n");
+            candidate_ingest(root, &req(212)).expect("the genuine 3-way is accepted");
+            let ledger = read_candidates(root, 212).unwrap();
+            let row = ledger.rows.iter().find(|r| r.label == "review-001").unwrap();
+            assert_eq!(row.status, CandidateStatus::Created);
+            assert_eq!(row.merge_oid, r);
+            assert_eq!(
+                row.merge_provenance,
+                crate::ledger::MergeProvenance::OperatorIngest
+            );
+        }
+    }
+
     /// VT-2 (RV-289 F-1): ingest from a candidate-worktree cwd (a root resolved
     /// UNDER `.doctrine/state/dispatch/candidate/`) is refused with a message
     /// directing to the coordination tree. The coord-root acceptance is proven by

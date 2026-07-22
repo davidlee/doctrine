@@ -868,6 +868,25 @@ fn e2e_dispatch_candidate_ingest_adopts_operator_resolution() {
         "admit pins the operator-ingested candidate: {}",
         stderr(&adm)
     );
+
+    // SL-212 PHASE-05 (VT-1 cell d): FF-integrate by the SAME contract as a
+    // Doctrine merge. The operator-ingested close_target publishes to trunk
+    // fast-forward-only — main advances to R EXACTLY (no close-time merge),
+    // because R descends from base == the trunk tip. This is the whole REV-030
+    // claim: a hand-resolved merge_oid FFs trunk identically to a Doctrine one.
+    let main_before = git(dir, &["rev-parse", "main"]);
+    let out = integrate(dir, &["--trunk", "refs/heads/main"]);
+    assert!(
+        out.status.success(),
+        "the operator-ingested candidate integrates FF like a Doctrine merge; stderr: {}",
+        stderr(&out)
+    );
+    let main_after = git(dir, &["rev-parse", "main"]);
+    assert_eq!(
+        main_after, r,
+        "trunk fast-forwards to the operator-ingested merge R, no close-time merge"
+    );
+    assert_ne!(main_after, main_before, "trunk actually advanced off its old tip");
 }
 
 // --- VT-2: review_surface requires --worktree --------------------------------
