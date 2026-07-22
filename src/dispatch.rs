@@ -1411,8 +1411,18 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
             // self-contained — returns without the shared clean-create tail below.
             MergeTree::Conflict { tree, stages } => {
                 return create_conflict_worktree(
-                    root, req, &slice3, &id, &target_ref, &base_oid, &source_oid,
-                    &source_ref, &tree, &stages, ledger, supersedes,
+                    root,
+                    req,
+                    &slice3,
+                    &id,
+                    &target_ref,
+                    &base_oid,
+                    &source_oid,
+                    &source_ref,
+                    &tree,
+                    &stages,
+                    ledger,
+                    supersedes,
                 );
             }
         };
@@ -1553,6 +1563,11 @@ fn rollback_ref(root: &Path, target_ref: &str, expected: &str) {
 ///    not know about. Rolls the ref back if the store fails.
 /// 4. **Provision the worktree ON the branch** + **materialise** merge-tree's `T_c`
 ///    (no `git merge`, D2). Any failure here rolls back worktree + row + ref (§6).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the resolved conflict-create inputs (req + computed slice3/id/target_ref/oids + \
+              ledger); a single-use params struct would only relocate the same fields"
+)]
 fn create_conflict_worktree(
     root: &Path,
     req: &CreateRequest,

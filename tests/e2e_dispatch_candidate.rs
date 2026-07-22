@@ -2155,3 +2155,288 @@ fn e2e_dispatch_candidate_create_provisions_gitignored_embed_assets() {
         "withheld .doctrine/state/ must not be provisioned"
     );
 }
+
+// --- SL-212 PHASE-03: conflict + --worktree materialises merge-tree's output ---
+//
+// The conflict arm no longer just parks the branch at base — it materialises
+// merge-tree's `T_c` (read-tree --reset -u), rewrites the conflict path to
+// unmerged stages 1/2/3, and writes MERGE_HEAD so the operator resolves + commits
+// a genuine 2-parent merge on the candidate branch (design §5.4/D2).
+
+/// The conflict candidate's linked worktree path (`cand-064-conflict-001`).
+fn conflict_worktree(dir: &Path) -> std::path::PathBuf {
+    dir.join(".doctrine/state/dispatch/candidate/cand-064-conflict-001")
+}
+
+/// Create the `close_target` conflict candidate with `--worktree` over the binary.
+fn create_conflict_worktree_candidate(dir: &Path) -> Output {
+    create(
+        dir,
+        None,
+        &[
+            "--role",
+            "close_target",
+            "--payload",
+            "code",
+            "--base",
+            "refs/heads/main",
+            "--label",
+            "conflict-001",
+            "--source",
+            "refs/heads/review/064",
+            "--worktree",
+        ],
+    )
+}
+
+/// VT-1 (EX-1/EX-2): conflict + `--worktree` materialises markers + unmerged stages
+/// + MERGE_HEAD; the operator resolves + commits a 2-parent [base, source] merge and
+/// the on-branch checkout advances `target_ref` (so ingest's `resolve_commit` reads R).
+#[test]
+fn e2e_dispatch_candidate_conflict_worktree_materialises_ordered_merge() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_conflict_fixture(dir);
+    prepare_review(dir);
+    let base_oid = git(dir, &["rev-parse", "main"]);
+    let source_oid = git(dir, &["rev-parse", "review/064"]);
+
+    let out = create_conflict_worktree_candidate(dir);
+    assert!(
+        out.status.success(),
+        "conflict create --worktree ok; stderr: {}",
+        stderr(&out)
+    );
+    let wt = conflict_worktree(dir);
+
+    // EX-1: read-tree --reset -u T_c + stage rewrite ⇒ unmerged index + markers.
+    let unmerged = git(&wt, &["ls-files", "-u"]);
+    assert_eq!(
+        unmerged.lines().count(),
+        3,
+        "trunk.txt at unmerged stages 1/2/3: {unmerged}"
+    );
+    assert!(
+        std::fs::read_to_string(wt.join("trunk.txt"))
+            .unwrap()
+            .contains("<<<<<<<"),
+        "conflict markers materialised at trunk.txt"
+    );
+    // EX-2: MERGE_HEAD carries the source oid.
+    assert_eq!(
+        git(&wt, &["rev-parse", "MERGE_HEAD"]),
+        source_oid,
+        "MERGE_HEAD == source"
+    );
+
+    // Operator resolves + commits → ordered 2-parent merge; the branch advances.
+    std::fs::write(wt.join("trunk.txt"), "RESOLVED\n").unwrap();
+    git(&wt, &["add", "trunk.txt"]);
+    git(&wt, &["commit", "-q", "--no-edit"]);
+    let r = git(&wt, &["rev-parse", "HEAD"]);
+    assert_eq!(
+        parents(dir, &r),
+        vec![base_oid, source_oid],
+        "resolved commit parents are ordered [base, source]"
+    );
+    assert_eq!(
+        git(dir, &["rev-parse", "candidate/064/conflict-001"]),
+        r,
+        "on-branch checkout advanced target_ref to R (ingest reads it)"
+    );
+}
+
+/// VT-2 (D2 regression): with `branch.main.mergeOptions=-Xours` — a config that would
+/// make `git merge` auto-resolve — create still materialises merge-tree's `T_c` (which
+/// ignores branch mergeOptions), so the markers remain. Proves no `git merge` is used.
+#[test]
+fn e2e_dispatch_candidate_conflict_worktree_immune_to_merge_config() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_conflict_fixture(dir);
+    prepare_review(dir);
+    git(dir, &["config", "branch.main.mergeOptions", "-X ours"]);
+
+    let out = create_conflict_worktree_candidate(dir);
+    assert!(out.status.success(), "create ok; stderr: {}", stderr(&out));
+    let wt = conflict_worktree(dir);
+    assert!(
+        std::fs::read_to_string(wt.join("trunk.txt"))
+            .unwrap()
+            .contains("<<<<<<<"),
+        "merge-tree ignored branch.main.mergeOptions=-Xours — markers remain (D2)"
+    );
+    assert_eq!(
+        git(&wt, &["ls-files", "-u"]).lines().count(),
+        3,
+        "still an unmerged index, not a config-perturbed auto-resolution"
+    );
+}
+
+/// Like [`build_conflict_fixture`] but the dispatch side ALSO cleanly deletes
+/// `gone.txt` (present at base, untouched on `main`) — so the merge conflicts on
+/// `trunk.txt` AND cleanly deletes `gone.txt` (RV-289 F-2 exact-projection surface).
+fn build_conflict_with_deletion_fixture(dir: &Path) {
+    std::fs::create_dir_all(dir).unwrap();
+    git(dir, &["init", "-q", "-b", "main"]);
+    git(dir, &["config", "user.email", "t@example.com"]);
+    git(dir, &["config", "user.name", "Test"]);
+    std::fs::write(dir.join(".gitignore"), ".doctrine/state/\n").unwrap();
+    git(dir, &["add", ".gitignore"]);
+    let base = commit(dir, "trunk.txt", "trunk\n", "base");
+    commit(dir, "gone.txt", "doomed\n", "add gone");
+
+    git(dir, &["checkout", "-q", "-b", "dispatch/064"]);
+    let code_end_1 = commit(
+        dir,
+        "trunk.txt",
+        "DISPATCH SIDE\n",
+        "phase1 conflicting edit",
+    );
+    git(dir, &["rm", "-q", "gone.txt"]);
+    git(dir, &["commit", "-q", "-m", "phase1 deletes gone.txt"]);
+    let code_end_2 = commit(dir, "src2.txt", "b", "phase2 code");
+    commit(
+        dir,
+        ".doctrine/slice/064/slice-064.md",
+        "scope",
+        "authored entity",
+    );
+
+    let boundaries = format!(
+        "[[boundary]]\nphase = \"PHASE-01\"\ncode_start_oid = \"{base}\"\ncode_end_oid = \"{code_end_1}\"\n\
+         [[boundary]]\nphase = \"PHASE-02\"\ncode_start_oid = \"{code_end_1}\"\ncode_end_oid = \"{code_end_2}\"\n"
+    );
+    std::fs::create_dir_all(dir.join(".doctrine/dispatch/064")).unwrap();
+    std::fs::write(
+        dir.join(".doctrine/dispatch/064/boundaries.toml"),
+        &boundaries,
+    )
+    .unwrap();
+    git(dir, &["add", ".doctrine/dispatch/064"]);
+    git(dir, &["commit", "-q", "-m", "ledger fixtures"]);
+
+    git(dir, &["checkout", "-q", "main"]);
+    commit(dir, "trunk.txt", "MAIN SIDE\n", "main conflicting edit"); // keeps gone.txt
+    seed_completed_phases(dir, 64, &["PHASE-01", "PHASE-02"]);
+}
+
+/// VT-3 (RV-289 F-2): a merge that conflicts on one path AND cleanly deletes another →
+/// `read-tree --reset -u T_c` REMOVES the deleted path from the worktree (unlike a
+/// plain checkout-index, which leaves it and makes the operator's `git add` re-add it
+/// → spurious `D ⊄ C` ingest refusal). The resolved commit's tree drops it too.
+#[test]
+fn e2e_dispatch_candidate_conflict_worktree_projects_clean_deletion() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_conflict_with_deletion_fixture(dir);
+    prepare_review(dir);
+
+    let out = create_conflict_worktree_candidate(dir);
+    assert!(out.status.success(), "create ok; stderr: {}", stderr(&out));
+    let wt = conflict_worktree(dir);
+
+    assert!(
+        !wt.join("gone.txt").exists(),
+        "the cleanly-deleted path is removed from the worktree (exact projection)"
+    );
+    // Resolve the conflict + commit; the deletion survives into R's tree.
+    std::fs::write(wt.join("trunk.txt"), "RESOLVED\n").unwrap();
+    git(&wt, &["add", "trunk.txt"]);
+    git(&wt, &["commit", "-q", "--no-edit"]);
+    let present = Command::new("git")
+        .arg("-C")
+        .arg(&wt)
+        .args(["cat-file", "-e", "HEAD:gone.txt"])
+        .output()
+        .expect("spawn git")
+        .status
+        .success();
+    assert!(
+        !present,
+        "gone.txt absent from the resolved commit tree (D ⊆ C)"
+    );
+}
+
+/// VT-4 (guard): a custom (non-built-in) merge driver on a merged path refuses the
+/// conflict arm before any durable state (design §5.4/D8) — the conflict set would be
+/// nondeterministic. (Criss-cross detection is proven at the primitive level by
+/// `git::tests::merge_base_all_reports_multiple_bases_on_crisscross`; the guard wiring
+/// is symmetric to this one, and a criss-cross fixture through the provenance-gated
+/// create flow is disproportionate.)
+#[test]
+fn e2e_dispatch_candidate_conflict_worktree_refuses_custom_merge_driver() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_conflict_fixture(dir);
+    std::fs::write(dir.join(".gitattributes"), "trunk.txt merge=bespoke\n").unwrap();
+    git(dir, &["add", ".gitattributes"]);
+    git(
+        dir,
+        &["commit", "-q", "-m", "custom merge driver on trunk.txt"],
+    );
+    prepare_review(dir);
+
+    let out = create_conflict_worktree_candidate(dir);
+    assert!(
+        !out.status.success(),
+        "custom merge driver refuses; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("custom"),
+        "refusal names the custom driver: {}",
+        stderr(&out)
+    );
+    assert!(
+        !ref_exists(dir, "candidate/064/conflict-001"),
+        "refused guard leaves no branch"
+    );
+    assert!(
+        !conflict_worktree(dir).exists(),
+        "refused guard leaves no worktree"
+    );
+    let cand = dir.join(".doctrine/dispatch/064/candidates.toml");
+    assert!(
+        !cand.exists()
+            || !std::fs::read_to_string(&cand)
+                .unwrap()
+                .contains("conflict-001"),
+        "refused guard records no row"
+    );
+}
+
+/// VT-4 (rollback): a failure after the durable row is written (here, `git worktree
+/// add` failing on an occupied path) rolls back worktree + row + ref (design §5.4
+/// step 6 / EX-4) — no partial state survives.
+#[test]
+fn e2e_dispatch_candidate_conflict_worktree_rolls_back_on_worktree_failure() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_conflict_fixture(dir);
+    prepare_review(dir);
+    // Occupy the worktree path so `git worktree add` fails AFTER the row is stored.
+    let wt = conflict_worktree(dir);
+    std::fs::create_dir_all(&wt).unwrap();
+    std::fs::write(wt.join("occupied"), "x").unwrap();
+
+    let out = create_conflict_worktree_candidate(dir);
+    assert!(
+        !out.status.success(),
+        "occupied worktree path fails create; stderr: {}",
+        stderr(&out)
+    );
+    assert!(
+        !ref_exists(dir, "candidate/064/conflict-001"),
+        "ref rolled back (CAS-deleted at base)"
+    );
+    let cand = dir.join(".doctrine/dispatch/064/candidates.toml");
+    let has_row = cand.exists()
+        && std::fs::read_to_string(&cand)
+            .unwrap()
+            .contains("conflict-001");
+    assert!(
+        !has_row,
+        "conflicted row rolled back — no partial durable state"
+    );
+}

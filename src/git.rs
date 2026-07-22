@@ -751,38 +751,10 @@ pub(crate) fn filter_tree(
 /// the db without touching any index or working tree. The journal-commit
 /// primitive's blob source ([`tree_with_file`]).
 fn hash_object_stdin(root: &Path, content: &str) -> Result<String, CaptureError> {
-    use std::io::Write as _;
-    use std::process::Stdio;
-
-    let mut child = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(NORMATIVE_FLAGS)
-        .args(["hash-object", "-w", "--stdin"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| CaptureError::Git(format!("spawn git hash-object: {e}")))?;
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| CaptureError::Git("git hash-object: no stdin pipe".to_owned()))?
-        .write_all(content.as_bytes())
-        .map_err(|e| CaptureError::Git(format!("git hash-object: write stdin: {e}")))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|e| CaptureError::Git(format!("git hash-object: wait: {e}")))?;
-    if output.status.success() {
-        let text = String::from_utf8(output.stdout)
-            .map_err(|_ignored| CaptureError::Git("hash-object: non-utf8 oid".to_owned()))?;
-        Ok(text.trim().to_string())
-    } else {
-        Err(CaptureError::Git(format!(
-            "hash-object: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )))
-    }
+    let stdout = git_stdin(root, &["hash-object", "-w", "--stdin"], content.as_bytes())?;
+    let text = String::from_utf8(stdout)
+        .map_err(|_ignored| CaptureError::Git("hash-object: non-utf8 oid".to_owned()))?;
+    Ok(text.trim().to_string())
 }
 
 /// Splice `content` into `base_tree` at `path`, returning the new tree oid. Stages
@@ -1022,8 +994,12 @@ fn git_stdin(root: &Path, args: &[&str], raw: &[u8]) -> Result<Vec<u8>, CaptureE
 fn write_worktree_git_path(worktree: &Path, name: &str, bytes: &[u8]) -> Result<(), CaptureError> {
     let loc = git_text(worktree, &["rev-parse", "--git-path", name])?;
     let path = worktree.join(loc);
-    std::fs::write(&path, bytes)
-        .map_err(|e| CaptureError::Git(format!("write {name}: {e}")))?;
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "MERGE_HEAD/MODE/MSG are per-worktree RUNTIME git-dir files git itself \
+                  reads/overwrites; not an authored entity, so no fsutil::write_atomic"
+    )]
+    std::fs::write(&path, bytes).map_err(|e| CaptureError::Git(format!("write {name}: {e}")))?;
     Ok(())
 }
 
@@ -1031,7 +1007,8 @@ fn write_worktree_git_path(worktree: &Path, name: &str, bytes: &[u8]) -> Result<
 /// table `C`) into `worktree`, so an operator resolves the markers and `git commit`s
 /// a genuine 2-parent merge (design §5.4 step 5, SL-212 PHASE-03, D2 — NO `git merge`).
 /// Every command runs with cwd = `worktree`; git resolves the worktree-private index
-/// and MERGE_HEAD/MODE/MSG automatically (OQ-1), so no explicit `GIT_INDEX_FILE`.
+/// and `MERGE_HEAD`/`MERGE_MODE`/`MERGE_MSG` automatically (OQ-1), so no explicit
+/// `GIT_INDEX_FILE`.
 ///
 /// Sequence: (1) `read-tree --reset -u <tc>` — index+tree become `T_c` EXACTLY,
 /// including removal of paths `T_c` deletes (RV-289 F-2); (2) rewrite each conflict
@@ -1357,36 +1334,7 @@ pub(crate) fn diff_doctrine_paths(
 /// Byte-safe both ways — paths may not be valid UTF-8 (D9), so neither the input
 /// nor the output is decoded here. Mirrors [`hash_object_stdin`]'s spawn/pipe.
 fn check_attr_merge_z(root: &Path, stdin_bytes: &[u8]) -> Result<Vec<u8>, CaptureError> {
-    use std::io::Write as _;
-    use std::process::Stdio;
-
-    let mut child = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(NORMATIVE_FLAGS)
-        .args(["check-attr", "merge", "-z", "--stdin"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| CaptureError::Git(format!("spawn git check-attr: {e}")))?;
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| CaptureError::Git("git check-attr: no stdin pipe".to_owned()))?
-        .write_all(stdin_bytes)
-        .map_err(|e| CaptureError::Git(format!("git check-attr: write stdin: {e}")))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|e| CaptureError::Git(format!("git check-attr: wait: {e}")))?;
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        Err(CaptureError::Git(format!(
-            "check-attr merge: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )))
-    }
+    git_stdin(root, &["check-attr", "merge", "-z", "--stdin"], stdin_bytes)
 }
 
 /// The tree paths carrying a **custom** (non-built-in) `merge` gitattributes
@@ -4516,8 +4464,15 @@ mod tests {
 
         // EX-1: three unmerged stages at f.txt; del.txt removed from the worktree.
         let unmerged = gitw(&["ls-files", "-u"]);
-        assert_eq!(unmerged.lines().count(), 3, "stages 1/2/3 at f.txt: {unmerged}");
-        assert!(!wt.join("del.txt").exists(), "cleanly-deleted path removed (RV-289 F-2)");
+        assert_eq!(
+            unmerged.lines().count(),
+            3,
+            "stages 1/2/3 at f.txt: {unmerged}"
+        );
+        assert!(
+            !wt.join("del.txt").exists(),
+            "cleanly-deleted path removed (RV-289 F-2)"
+        );
         assert!(
             std::fs::read_to_string(wt.join("f.txt"))
                 .unwrap()
@@ -4525,7 +4480,11 @@ mod tests {
             "conflict markers materialised at f.txt"
         );
         // EX-2: MERGE_HEAD carries the source oid.
-        assert_eq!(gitw(&["rev-parse", "MERGE_HEAD"]), source, "MERGE_HEAD == source");
+        assert_eq!(
+            gitw(&["rev-parse", "MERGE_HEAD"]),
+            source,
+            "MERGE_HEAD == source"
+        );
 
         // Operator resolves + commits → ordered 2-parent merge, branch advanced.
         std::fs::write(wt.join("f.txt"), "L1\nRESOLVED\nL3\n").unwrap();
@@ -4534,7 +4493,11 @@ mod tests {
         let r = gitw(&["rev-parse", "HEAD"]);
         assert_eq!(gitw(&["rev-parse", "HEAD^1"]), base, "parent 1 == base");
         assert_eq!(gitw(&["rev-parse", "HEAD^2"]), source, "parent 2 == source");
-        assert_eq!(gitw(&["rev-parse", "cand"]), r, "on-branch commit advanced the branch to R");
+        assert_eq!(
+            gitw(&["rev-parse", "cand"]),
+            r,
+            "on-branch commit advanced the branch to R"
+        );
     }
 
     /// RV-030 F-9: `read_path_at` reads a blob from a refish's committed tree
