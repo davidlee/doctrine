@@ -5,10 +5,10 @@ id = 127
 slug = "dispatch-candidate-ingest-a-hand-resolved-3-way-merge-conflict"
 title = "dispatch candidate: ingest a hand-resolved 3-way merge conflict"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-20"
-updated = "2026-07-20"
+updated = "2026-07-22"
 tags = ["area:cli", "area:dispatch", "cluster:close-lineage"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
