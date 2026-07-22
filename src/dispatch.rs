@@ -6893,13 +6893,67 @@ mod tests {
     /// `trunk.txt` (so `C == {trunk.txt}` and a base-tree-with-resolved-trunk is a
     /// faithful `R`), seed a Conflicted, un-ingested candidate row for `label`, and
     /// park the candidate branch at base. Returns `(base_oid, source_oid, target_ref)`.
-    fn seed_conflicted_candidate(root: &Path, slice: u32, label: &str) -> (String, String, String) {
+    /// Init a git repo on `main` with an identity and a `.doctrine/state/`
+    /// gitignore, then commit a first `root`. The common floor every taxonomy
+    /// fixture builds its conflict on top of.
+    fn init_test_repo(root: &Path) {
         git(root, &["init", "-q", "-b", "main"]);
         git(root, &["config", "user.email", "t@doctrine.invalid"]);
         git(root, &["config", "user.name", "Doctrine Test"]);
-        fs::write(root.join(".gitignore"), ".doctrine/state/\n").unwrap();
+        // Ignore ALL of `.doctrine/` (not just state/): the candidate ledger is
+        // runtime here, so a broad `git add -A` in a taxonomy fixture must not
+        // sweep candidates.toml into an operator merge tree (it would pollute D)
+        // nor let `reset --hard` delete it out from under `candidate_ingest`.
+        fs::write(root.join(".gitignore"), ".doctrine/\n").unwrap();
         git(root, &["add", ".gitignore"]);
         git(root, &["commit", "-q", "-m", "root"]);
+    }
+
+    /// Seed a Conflicted, un-ingested candidate row for `label` from the given
+    /// branch oids and park the candidate branch at `base_oid` (the conflicted-
+    /// create end-state). Factored out so taxonomy fixtures supply their own
+    /// conflict shapes (rename/modify/delete) while sharing the ledger seam.
+    /// Returns `target_ref`.
+    fn seed_conflicted_row(
+        root: &Path,
+        slice: u32,
+        label: &str,
+        base_oid: &str,
+        source_oid: &str,
+    ) -> String {
+        let slice3 = format!("{slice:03}");
+        let target_ref = format!("refs/heads/candidate/{slice3}/{label}");
+        git(
+            root,
+            &["branch", &format!("candidate/{slice3}/{label}"), base_oid],
+        );
+        let mut ledger = Candidates::default();
+        ledger.rows.push(CandidateRow {
+            id: format!("cand-{slice3}-{label}"),
+            label: label.to_owned(),
+            kind: CandidateKind::Audit,
+            role: CandidateRole::CloseTarget,
+            payload: CandidatePayload::Code,
+            target_ref: target_ref.clone(),
+            source_ref: "refs/heads/source".to_owned(),
+            source_oid: source_oid.to_owned(),
+            base_ref: "refs/heads/main".to_owned(),
+            base_oid: base_oid.to_owned(),
+            merge_oid: String::new(),
+            status: CandidateStatus::Conflicted,
+            supersedes: String::new(),
+            reason: String::new(),
+            created_by: "test".to_owned(),
+            created_at: "2026-01-01".to_owned(),
+            ingested_at: String::new(),
+            merge_provenance: crate::ledger::MergeProvenance::Doctrine,
+        });
+        crate::ledger::write_candidates(root, slice, &ledger).unwrap();
+        target_ref
+    }
+
+    fn seed_conflicted_candidate(root: &Path, slice: u32, label: &str) -> (String, String, String) {
+        init_test_repo(root);
         fs::write(root.join("trunk.txt"), "COMMON\n").unwrap();
         git(root, &["add", "trunk.txt"]);
         git(root, &["commit", "-q", "-m", "common trunk"]);
@@ -6915,36 +6969,30 @@ mod tests {
         git(root, &["add", "trunk.txt"]);
         git(root, &["commit", "-q", "-m", "base edit"]);
         let base_oid = git(root, &["rev-parse", "HEAD"]);
-        let slice3 = format!("{slice:03}");
-        let target_ref = format!("refs/heads/candidate/{slice3}/{label}");
-        // Park the candidate branch at base (the conflicted-create end-state).
-        git(
-            root,
-            &["branch", &format!("candidate/{slice3}/{label}"), &base_oid],
-        );
-        let mut ledger = Candidates::default();
-        ledger.rows.push(CandidateRow {
-            id: format!("cand-{slice3}-{label}"),
-            label: label.to_owned(),
-            kind: CandidateKind::Audit,
-            role: CandidateRole::CloseTarget,
-            payload: CandidatePayload::Code,
-            target_ref: target_ref.clone(),
-            source_ref: "refs/heads/source".to_owned(),
-            source_oid: source_oid.clone(),
-            base_ref: "refs/heads/main".to_owned(),
-            base_oid: base_oid.clone(),
-            merge_oid: String::new(),
-            status: CandidateStatus::Conflicted,
-            supersedes: String::new(),
-            reason: String::new(),
-            created_by: "test".to_owned(),
-            created_at: "2026-01-01".to_owned(),
-            ingested_at: String::new(),
-            merge_provenance: crate::ledger::MergeProvenance::Doctrine,
-        });
-        crate::ledger::write_candidates(root, slice, &ledger).unwrap();
+        let target_ref = seed_conflicted_row(root, slice, label, &base_oid, &source_oid);
         (base_oid, source_oid, target_ref)
+    }
+
+    /// Commit the CURRENT staged index tree as a genuine 2-parent `[base, source]`
+    /// operator merge on `target_ref` (advancing the ref, as an on-branch candidate
+    /// checkout would), then restore a clean tree. The caller stages the resolution
+    /// first (`git add`/`git rm`). Returns the resolved merge oid `R`.
+    fn commit_operator_merge(
+        root: &Path,
+        base_oid: &str,
+        source_oid: &str,
+        target_ref: &str,
+    ) -> String {
+        let tree = git(root, &["write-tree"]);
+        let r = git(
+            root,
+            &[
+                "commit-tree", &tree, "-p", base_oid, "-p", source_oid, "-m", "operator merge",
+            ],
+        );
+        git(root, &["update-ref", target_ref, &r]);
+        git(root, &["reset", "-q", "--hard", "HEAD"]);
+        r
     }
 
     /// The operator resolves the sole conflict path and commits a genuine 2-parent
@@ -6960,23 +7008,7 @@ mod tests {
         git(root, &["checkout", "-q", "main"]);
         fs::write(root.join("trunk.txt"), resolved).unwrap();
         git(root, &["add", "trunk.txt"]);
-        let tree = git(root, &["write-tree"]);
-        let r = git(
-            root,
-            &[
-                "commit-tree",
-                &tree,
-                "-p",
-                base_oid,
-                "-p",
-                source_oid,
-                "-m",
-                "operator merge",
-            ],
-        );
-        git(root, &["update-ref", target_ref, &r]);
-        git(root, &["reset", "-q", "--hard", "HEAD"]); // restore a clean base tree
-        r
+        commit_operator_merge(root, base_oid, source_oid, target_ref)
     }
 
     /// VT-1: a faithful operator merge is ingested — the row flips Created with
@@ -7130,6 +7162,198 @@ mod tests {
                 crate::ledger::MergeProvenance::OperatorIngest
             );
         }
+    }
+
+    /// The ingest request for slice 212 / `review-001` used across the taxonomy
+    /// cells. Distinct `ingested_at` values keep the goldens legible.
+    fn taxonomy_req() -> IngestRequest {
+        IngestRequest {
+            slice: 212,
+            label: "review-001".to_owned(),
+            ingested_at: "2026-02-02".to_owned(),
+        }
+    }
+
+    /// VT-3 (D9, EX-3) — taxonomy cell 1: a conflict on a path whose name carries
+    /// a **non-UTF-8 byte** (0xFF — deliberately NOT LF/TAB, which the index-info
+    /// rewrite cannot represent; the `-z` diff path here has no such limit) round-
+    /// trips byte-safe through create→resolve→ingest. C (merge-tree stages) and D
+    /// (`changed_paths`) are BOTH `BTreeSet<Vec<u8>>`, so the exact bytes survive
+    /// with no lossy UTF-8 compare and ingest ACCEPTS.
+    #[test]
+    fn ingest_taxonomy_non_utf8_path_round_trips_byte_safe() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        let name: &[u8] = b"payload\xff.txt"; // 0xFF: invalid UTF-8, not LF/TAB
+        let path = |root: &Path| root.join(OsStr::from_bytes(name));
+
+        let repo = tempfile::tempdir().unwrap();
+        let root = repo.path();
+        init_test_repo(root);
+        fs::write(path(root), "COMMON\n").unwrap();
+        git(root, &["add", "-A"]);
+        git(root, &["commit", "-q", "-m", "common"]);
+        git(root, &["checkout", "-q", "-b", "source"]);
+        fs::write(path(root), "SOURCE\n").unwrap();
+        git(root, &["add", "-A"]);
+        git(root, &["commit", "-q", "-m", "source"]);
+        let source = git(root, &["rev-parse", "HEAD"]);
+        git(root, &["checkout", "-q", "main"]);
+        fs::write(path(root), "MAIN\n").unwrap();
+        git(root, &["add", "-A"]);
+        git(root, &["commit", "-q", "-m", "base"]);
+        let base = git(root, &["rev-parse", "HEAD"]);
+        let target_ref = seed_conflicted_row(root, 212, "review-001", &base, &source);
+
+        // The mechanical merge conflicts and C carries the EXACT non-UTF-8 bytes.
+        let mb = git::merge_base(root, &base, &source).unwrap().unwrap();
+        let (tc, stages) = match git::merge_tree(root, &mb, &base, &source).unwrap() {
+            git::MergeTree::Conflict { tree, stages } => (tree, stages),
+            git::MergeTree::Clean { .. } => panic!("a non-UTF-8 modify/modify must conflict"),
+        };
+        let c: BTreeSet<Vec<u8>> = stages.iter().map(|s| s.path.clone()).collect();
+        assert!(
+            c.contains(&name.to_vec()),
+            "C carries the exact non-UTF-8 path bytes (no lossy compare)"
+        );
+
+        // Operator resolves that path only; R differs from T_c within C ⇒ D ⊆ C.
+        git(root, &["checkout", "-q", "main"]);
+        fs::write(path(root), "RESOLVED\n").unwrap();
+        git(root, &["add", "-A"]);
+        let r = commit_operator_merge(root, &base, &source, &target_ref);
+        let r_tree = tree_of(root, &r).unwrap();
+        let d: BTreeSet<Vec<u8>> = git::changed_paths(root, &r_tree, &tc).unwrap();
+        assert!(
+            !d.is_empty() && d.iter().all(|p| c.contains(p)),
+            "D ⊆ C over raw bytes (non-empty, no lossy compare): D={d:?} C={c:?}"
+        );
+
+        candidate_ingest(root, &taxonomy_req())
+            .expect("the non-UTF-8 path round-trips byte-safe and ingest accepts");
+        let ledger = read_candidates(root, 212).unwrap();
+        let row = ledger.rows.iter().find(|r| r.label == "review-001").unwrap();
+        assert_eq!(row.status, CandidateStatus::Created);
+        assert_eq!(row.merge_oid, r);
+    }
+
+    /// VT-3 — taxonomy cell 2: rename/rename to a THIRD name. base renames X→Y,
+    /// source renames X→Z; the operator resolves to a brand-new name W ∉ C. W
+    /// lands in D but not C ⇒ D ⊄ C ⇒ ingest REFUSES. This is the §5.5 documented
+    /// v1 limitation — no special code, the refusal teaches it (resolve to a
+    /// recorded path, or supersede).
+    #[test]
+    fn ingest_taxonomy_rename_rename_third_name_refuses() {
+        let repo = tempfile::tempdir().unwrap();
+        let root = repo.path();
+        init_test_repo(root);
+        fs::write(root.join("orig.txt"), "COMMON\n").unwrap();
+        git(root, &["add", "orig.txt"]);
+        git(root, &["commit", "-q", "-m", "common"]);
+        git(root, &["checkout", "-q", "-b", "source"]);
+        git(root, &["mv", "orig.txt", "z.txt"]);
+        git(root, &["commit", "-q", "-m", "source renames orig->z"]);
+        let source = git(root, &["rev-parse", "HEAD"]);
+        git(root, &["checkout", "-q", "main"]);
+        git(root, &["mv", "orig.txt", "y.txt"]);
+        git(root, &["commit", "-q", "-m", "base renames orig->y"]);
+        let base = git(root, &["rev-parse", "HEAD"]);
+        let target_ref = seed_conflicted_row(root, 212, "review-001", &base, &source);
+
+        // Operator resolves to a THIRD name w.txt (∉ C).
+        git(root, &["checkout", "-q", "main"]);
+        git(root, &["rm", "-q", "y.txt"]);
+        fs::write(root.join("w.txt"), "RESOLVED\n").unwrap();
+        git(root, &["add", "-A"]);
+        commit_operator_merge(root, &base, &source, &target_ref);
+
+        assert!(
+            candidate_ingest(root, &taxonomy_req()).is_err(),
+            "resolving a rename/rename to a third name ∉ C is refused (§5.5 limitation)"
+        );
+    }
+
+    /// VT-3 — taxonomy cell 3: modify/delete. base modifies X, source deletes X;
+    /// the operator resolves AT X (the conflict locus) and ingest ACCEPTS (D ⊆ C).
+    #[test]
+    fn ingest_taxonomy_modify_delete_accepts() {
+        let repo = tempfile::tempdir().unwrap();
+        let root = repo.path();
+        init_test_repo(root);
+        fs::write(root.join("keep.txt"), "COMMON\n").unwrap();
+        fs::write(root.join("clean.txt"), "CLEAN\n").unwrap();
+        git(root, &["add", "-A"]);
+        git(root, &["commit", "-q", "-m", "common"]);
+        git(root, &["checkout", "-q", "-b", "source"]);
+        git(root, &["rm", "-q", "keep.txt"]);
+        git(root, &["commit", "-q", "-m", "source deletes keep"]);
+        let source = git(root, &["rev-parse", "HEAD"]);
+        git(root, &["checkout", "-q", "main"]);
+        fs::write(root.join("keep.txt"), "MAIN\n").unwrap();
+        git(root, &["add", "keep.txt"]);
+        git(root, &["commit", "-q", "-m", "base modifies keep"]);
+        let base = git(root, &["rev-parse", "HEAD"]);
+        let target_ref = seed_conflicted_row(root, 212, "review-001", &base, &source);
+
+        // Operator keeps the modification at the conflict locus keep.txt.
+        git(root, &["checkout", "-q", "main"]);
+        fs::write(root.join("keep.txt"), "RESOLVED\n").unwrap();
+        git(root, &["add", "keep.txt"]);
+        let r = commit_operator_merge(root, &base, &source, &target_ref);
+
+        candidate_ingest(root, &taxonomy_req())
+            .expect("modify/delete resolved within C accepts");
+        let ledger = read_candidates(root, 212).unwrap();
+        let row = ledger.rows.iter().find(|r| r.label == "review-001").unwrap();
+        assert_eq!(row.status, CandidateStatus::Created);
+        assert_eq!(row.merge_oid, r);
+    }
+
+    /// VT-3 — taxonomy cell 4: rename/delete (a real close-time class — a sibling
+    /// slice deletes a file the base moved). base renames X→Y, source deletes X;
+    /// the operator resolves within C and ingest ACCEPTS.
+    #[test]
+    fn ingest_taxonomy_rename_delete_accepts() {
+        let repo = tempfile::tempdir().unwrap();
+        let root = repo.path();
+        init_test_repo(root);
+        fs::write(root.join("orig.txt"), "COMMON\n").unwrap();
+        fs::write(root.join("clean.txt"), "CLEAN\n").unwrap();
+        git(root, &["add", "-A"]);
+        git(root, &["commit", "-q", "-m", "common"]);
+        git(root, &["checkout", "-q", "-b", "source"]);
+        git(root, &["rm", "-q", "orig.txt"]);
+        git(root, &["commit", "-q", "-m", "source deletes orig"]);
+        let source = git(root, &["rev-parse", "HEAD"]);
+        git(root, &["checkout", "-q", "main"]);
+        git(root, &["mv", "orig.txt", "renamed.txt"]);
+        git(root, &["commit", "-q", "-m", "base renames orig->renamed"]);
+        let base = git(root, &["rev-parse", "HEAD"]);
+        let target_ref = seed_conflicted_row(root, 212, "review-001", &base, &source);
+
+        // Recompute the mechanical conflict and resolve strictly within C: start
+        // from T_c and overwrite only the conflict paths with resolved content.
+        let mb = git::merge_base(root, &base, &source).unwrap().unwrap();
+        let (tc, stages) = match git::merge_tree(root, &mb, &base, &source).unwrap() {
+            git::MergeTree::Conflict { tree, stages } => (tree, stages),
+            git::MergeTree::Clean { .. } => panic!("rename/delete must conflict"),
+        };
+        git(root, &["read-tree", "-u", "--reset", &tc]);
+        for stage in &stages {
+            let p = std::path::Path::new(std::ffi::OsStr::new(
+                std::str::from_utf8(&stage.path).expect("ascii conflict path in this fixture"),
+            ));
+            fs::write(root.join(p), "RESOLVED\n").unwrap();
+        }
+        git(root, &["add", "-A"]);
+        let r = commit_operator_merge(root, &base, &source, &target_ref);
+
+        candidate_ingest(root, &taxonomy_req())
+            .expect("rename/delete resolved within C accepts");
+        let ledger = read_candidates(root, 212).unwrap();
+        let row = ledger.rows.iter().find(|r| r.label == "review-001").unwrap();
+        assert_eq!(row.status, CandidateStatus::Created);
+        assert_eq!(row.merge_oid, r);
     }
 
     /// VT-2 (RV-289 F-1): ingest from a candidate-worktree cwd (a root resolved
