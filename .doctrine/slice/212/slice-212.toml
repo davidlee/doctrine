@@ -1,9 +1,9 @@
 id = 212
 slug = "ingest-hand-resolved-trunk-merge"
 title = "Ingest hand-resolved trunk merge"
-status = "proposed"
+status = "plan"
 created = "2026-07-10"
-updated = "2026-07-10"
+updated = "2026-07-22"
 tags = []
 
 [relationships]
