@@ -1,0 +1,34 @@
+id    = 290
+slug  = "sl-212-reconciliation-audit-operator-ingest-verb-vs-design-adr-012rev-030"
+title = "SL-212 reconciliation audit: operator-ingest verb vs design + ADR-012/REV-030"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-212"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Undeclared source touch: src/mcp_server/dispatch.rs not in any design-target selector"
+detail = "slice conformance reports src/mcp_server/dispatch.rs as undeclared. Root cause: PHASE-01 T3 (commit c6f6b598e) widened git::MergeTree::Conflict from a bare variant to Conflict { tree, stages } (byte-safe stage table, D9). Its downstream consumer import_compose (src/mcp_server/dispatch.rs:312) required a mechanical destructure update 'Conflict' -> 'Conflict { .. }' with no behaviour change. The edit is real and correct but falls outside the six design-target selectors (src/dispatch.rs, git.rs, ledger.rs, commands/guard.rs, main.rs, tests/e2e_dispatch_candidate.rs) — design §5.2 scoped the enum change to src/git.rs and did not foresee the MCP consumer ripple. Conformance stays red until the selector registry covers the path. Expected: every real source touch declared. Observed: one undeclared path (benign enum-ripple)."
+disposition = "verified"
+response = "Observation confirmed: src/mcp_server/dispatch.rs:312 carries a real, correct, behaviour-preserving destructure (Conflict { .. }) forced by the PHASE-01 enum widening — genuinely part of SL-212's change surface, just undeclared. Remediation is a per-slice selector-registry add, delegated to /reconcile (direct-edit surface): 'doctrine slice selector add SL-212 src/mcp_server/dispatch.rs --intent design-target'. That is the load-bearing change that clears conformance; see the Reconciliation Brief. Not a code defect (no fix-now), not scope creep, not governance."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "Undeclared authored-artefact churn: plan.toml + slice-212.toml flagged by conformance"
+detail = "slice conformance lists .doctrine/slice/212/plan.toml and slice-212.toml as undeclared. These are the slice's OWN authored plan + metadata, which necessarily change across a slice's life (plan edits, lifecycle status transitions). design-target selectors target the code under change, never the slice's own artefacts, so this cell is inherent noise, not scope creep. Recorded for a conscious disposition; no remediation. Expected: undeclared cell reflects code scope creep. Observed: two entries, both the slice's own authored TOML."
+disposition = "aligned"
+response = "Aligned — no change needed. plan.toml and slice-212.toml are the slice's own authored plan + metadata; conformance necessarily flags any path outside the design-target selectors, and selectors correctly target the code under change, never the slice's own artefacts. Inherent conformance noise, not drift. Recorded for a conscious disposition."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
