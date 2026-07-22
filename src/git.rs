@@ -1127,34 +1127,89 @@ pub(crate) fn merge_base(root: &Path, a: &str, b: &str) -> Result<Option<String>
     }
 }
 
+/// Run a git diff-family command that emits `-z` NUL-delimited `--name-only`
+/// output and collect the changed paths as raw bytes in git's own order (D9). The
+/// caller supplies the full arg vector (`diff` vs `diff-tree`, pathspec,
+/// `--no-renames`). Exit 0 ⇒ parse (a plain diff without `--exit-code` exits 0
+/// whether or not paths differ); any other exit is a usage/spawn failure and
+/// errors — NEVER masked as "no changes" (the fail-closed discipline shared by
+/// [`diff_doctrine_paths`] / [`last_corpus_commit`], so a bad tree-ish can't slip
+/// through as an empty diff). The single byte-safe seam under `changed_paths` and
+/// `diff_doctrine_paths` (DRY, ADR-001) — no `.lines()`, so newline/quoted paths
+/// survive.
+fn diff_names_z(root: &Path, args: &[&str]) -> Result<Vec<Vec<u8>>, CaptureError> {
+    let output = run_git(root, args)?;
+    match output.status.code() {
+        Some(0) => Ok(output
+            .stdout
+            .split(|b| *b == 0u8)
+            .filter(|f| !f.is_empty())
+            .map(|f| f.to_vec())
+            .collect()),
+        _ => Err(CaptureError::Git(format!(
+            "git {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
+/// The paths whose blobs differ between trees `tree_a` and `tree_b`
+/// (`git diff-tree --no-renames -r -z --name-only`), as a byte-safe set `D` (D9).
+/// **Rename detection is OFF**: a rename is reported as delete + add, never a
+/// single rename — SL-212 needs every touched path in `D` so the ingest predicate
+/// can bound `D ⊆ C` byte-for-byte against the mechanical conflict set. Tree-to-
+/// tree only (object db, no worktree).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-04 ingest verb computes D against the conflict set via this"
+    )
+)]
+pub(crate) fn changed_paths(
+    root: &Path,
+    tree_a: &str,
+    tree_b: &str,
+) -> Result<std::collections::BTreeSet<Vec<u8>>, CaptureError> {
+    Ok(diff_names_z(
+        root,
+        &[
+            "diff-tree",
+            "--no-renames",
+            "-r",
+            "-z",
+            "--name-only",
+            tree_a,
+            tree_b,
+        ],
+    )?
+    .into_iter()
+    .collect())
+}
+
 /// The `pathspec`-scoped paths that differ between tree-ishes `base` and `cur`
-/// (`git diff --name-only <base> <cur> -- <pathspec>`) — the g3 changed-set
+/// (`git diff --name-only -z <base> <cur> -- <pathspec>`) — the g3 changed-set
 /// (SL-166 design §5.2, EX-1). One batched diff bounds the catastrophe-path cost
-/// (R2): no per-blob reads here. Explicit exit-code handling — exit 0 ⇒ parse the
-/// NUL-free line list (plain `diff` without `--exit-code` exits 0 whether or not
-/// paths differ); any other exit is a usage/spawn failure and errors, NOT routed
-/// through [`git_opt`] (which would mask a bad tree-ish as "no changes" and let a
-/// corpus-shrinking advance through). An absent side is the caller's
-/// [`EMPTY_TREE_OID`] substitution (a None `merge-base`), a valid diff operand.
+/// (R2): no per-blob reads here. Routes through the shared byte-safe
+/// [`diff_names_z`] seam, preserving git's output order and its fail-closed
+/// exit-code discipline; UTF-8 is required of these `.doctrine/**` paths (a
+/// non-UTF-8 path errors rather than being lossily mangled). An absent side is the
+/// caller's [`EMPTY_TREE_OID`] substitution (a None `merge-base`), a valid operand.
 pub(crate) fn diff_doctrine_paths(
     root: &Path,
     base: &str,
     cur: &str,
     pathspec: &str,
 ) -> Result<Vec<String>, CaptureError> {
-    let output = run_git(root, &["diff", "--name-only", base, cur, "--", pathspec])?;
-    match output.status.code() {
-        Some(0) => {
-            let text = String::from_utf8(output.stdout).map_err(|_ignored| {
+    diff_names_z(root, &["diff", "--name-only", "-z", base, cur, "--", pathspec])?
+        .into_iter()
+        .map(|p| {
+            String::from_utf8(p).map_err(|_ignored| {
                 CaptureError::Git(format!("diff --name-only {base} {cur}: non-utf8 output"))
-            })?;
-            Ok(text.lines().map(str::to_owned).collect())
-        }
-        _ => Err(CaptureError::Git(format!(
-            "diff --name-only {base} {cur} -- {pathspec}: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ))),
-    }
+            })
+        })
+        .collect()
 }
 
 /// The blob oid at `path` in tree-ish `treeish` (`git ls-tree <treeish> --
@@ -2706,6 +2761,26 @@ mod tests {
         let (repo, _base, cur) = doctrine_fixture();
         // A bad operand must error, never be masked as "no changes" (fail-closed).
         assert!(diff_doctrine_paths(repo.path(), "deadbeef", &cur, ".doctrine").is_err());
+    }
+
+    /// VT-4 (SL-212 PHASE-01): `changed_paths` is byte-safe (`BTreeSet<Vec<u8>>`)
+    /// and rename-fold is OFF — a pure rename is reported as delete + add (two
+    /// paths), never a single rename, so `D` captures every touched path.
+    #[test]
+    fn changed_paths_is_byte_safe_and_rename_fold_off() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("old.txt", "identical contents\n", "base");
+        // Rename with unchanged content — the case git WOULD fold with detection on.
+        repo.git(&["mv", "old.txt", "new.txt"]);
+        repo.git(&["commit", "-am", "rename"]);
+        let cur = repo.git(&["rev-parse", "HEAD"]);
+
+        let changed = super::changed_paths(repo.path(), &base, &cur).expect("changed_paths");
+        assert_eq!(
+            changed,
+            std::collections::BTreeSet::from([b"new.txt".to_vec(), b"old.txt".to_vec()]),
+            "rename folds to delete+add (both paths), not a single rename"
+        );
     }
 
     #[test]
