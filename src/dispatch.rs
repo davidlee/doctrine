@@ -1547,6 +1547,91 @@ pub(crate) struct AdmitRequest {
     pub admitted_at: String,
 }
 
+/// A candidate-ingest request (SL-212 §5.2). `base`/`source` are read from the
+/// recorded row, never flags — this carries only what the CLI supplies. Consumed
+/// by `run_candidate_ingest` (PHASE-04).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by run_candidate_ingest (PHASE-04)")
+)]
+pub(crate) struct IngestRequest {
+    pub slice: u32,
+    pub label: String,
+    pub ingested_at: String,
+}
+
+/// A structured ingest-provenance rejection (SL-212 §5.2). Consumed by
+/// `run_candidate_ingest` (PHASE-04).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by run_candidate_ingest (PHASE-04)")
+)]
+pub(crate) struct IngestReject {
+    pub reason: String,
+}
+
+/// Pure ingest-provenance validator (SL-212 §5.2, D1/D9) — no git/clock/disk.
+///
+/// Given the resolved merge commit `R`'s ordered parents and the byte-path sets
+/// `D` (`= changed_paths(R^tree, T_c)`, `--no-renames`) and `C` (the conflict
+/// paths), decide whether `R` is a faithful adoption of the mechanical
+/// `(base, source)` 3-way — not an arbitrary tree the operator hand-built:
+///
+///   (i)   `parents == [base_oid, source_oid]`     — ordered; covers single/reversed/≠2
+///   (ii)  `diff_from_mechanical ⊆ conflict_paths` — "never an arbitrary tree" (byte-wise)
+///   (iii) `marker_paths.is_empty()`               — ADVISORY (caller fails open when it
+///                                                    cannot read blobs → passes `&[]`)
+///
+/// Path compares are byte-wise (F8, D9); a rejection renders the offending path
+/// lossily for the human message only — never for the comparison. Consumed by
+/// `run_candidate_ingest` (PHASE-04).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by run_candidate_ingest (PHASE-04)")
+)]
+pub(crate) fn validate_ingest_provenance(
+    parents: &[String],
+    base_oid: &str,
+    source_oid: &str,
+    diff_from_mechanical: &BTreeSet<Vec<u8>>,
+    conflict_paths: &BTreeSet<Vec<u8>>,
+    marker_paths: &[Vec<u8>],
+) -> Result<(), IngestReject> {
+    // (i) ordered parents — one match covers single / reversed / ≠2.
+    if !matches!(parents, [p0, p1] if p0.as_str() == base_oid && p1.as_str() == source_oid) {
+        return Err(IngestReject {
+            reason: format!(
+                "parents must be [base, source] = [{base_oid}, {source_oid}] in order, got {parents:?}"
+            ),
+        });
+    }
+
+    // (ii) D ⊆ C, byte-wise — an edit outside the conflict set is an arbitrary tree.
+    if let Some(stray) = diff_from_mechanical
+        .iter()
+        .find(|p| !conflict_paths.contains(*p))
+    {
+        return Err(IngestReject {
+            reason: format!(
+                "resolved tree edits a non-conflict path {} — not a faithful (base, source) merge",
+                String::from_utf8_lossy(stray)
+            ),
+        });
+    }
+
+    // (iii) surviving conflict markers — ADVISORY (caller passes &[] when unreadable).
+    if let Some(marked) = marker_paths.first() {
+        return Err(IngestReject {
+            reason: format!(
+                "conflict markers still present at {} — resolve before ingest",
+                String::from_utf8_lossy(marked)
+            ),
+        });
+    }
+
+    Ok(())
+}
+
 /// CLI entry — resolve the root and admit the candidate for `req`.
 pub(crate) fn run_candidate_admit(path: Option<PathBuf>, req: &AdmitRequest) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
@@ -6191,6 +6276,145 @@ mod tests {
         assert_eq!(
             main_rows[0].planned_new_oid, payload,
             "the earned row records the payload"
+        );
+    }
+
+    // ==================================================================================
+    // SL-212 PHASE-02 — pure ingest-provenance validator (no git, byte paths, D1/D9).
+    // ==================================================================================
+
+    /// Build a byte-path set from literal path bytes.
+    fn pset(paths: &[&[u8]]) -> BTreeSet<Vec<u8>> {
+        paths.iter().map(|p| p.to_vec()).collect()
+    }
+
+    /// VT-1 — the ordered-parent gate covers reversed / single / ≠2 in one check.
+    #[test]
+    fn ingest_validate_parent_gate() {
+        let base = "aaa".to_owned();
+        let source = "bbb".to_owned();
+        let d = pset(&[]); // D ⊆ C trivially — isolate the parent gate
+        let c = pset(&[b"x"]);
+
+        // Ordered [base, source] passes the parent gate.
+        let ordered = vec![base.clone(), source.clone()];
+        assert!(validate_ingest_provenance(&ordered, &base, &source, &d, &c, &[]).is_ok());
+
+        // Reversed rejects.
+        let reversed = vec![source.clone(), base.clone()];
+        assert!(validate_ingest_provenance(&reversed, &base, &source, &d, &c, &[]).is_err());
+
+        // Single parent rejects.
+        let single = vec![base.clone()];
+        assert!(validate_ingest_provenance(&single, &base, &source, &d, &c, &[]).is_err());
+
+        // Three parents reject.
+        let three = vec![base.clone(), source.clone(), "ccc".to_owned()];
+        assert!(validate_ingest_provenance(&three, &base, &source, &d, &c, &[]).is_err());
+    }
+
+    /// VT-1 — IngestRequest carries slice / label / ingested_at.
+    #[test]
+    fn ingest_request_carries_fields() {
+        let req = IngestRequest {
+            slice: 212,
+            label: "cand-x".to_owned(),
+            ingested_at: "2026-07-22T00:00:00Z".to_owned(),
+        };
+        assert_eq!(req.slice, 212);
+        assert_eq!(req.label, "cand-x");
+        assert!(!req.ingested_at.is_empty());
+    }
+
+    /// VT-2 — D ⊄ C (an arbitrary-tree edit) rejects and the reason names the
+    /// offending path; D ⊆ C passes.
+    #[test]
+    fn ingest_validate_subset_gate_names_offending_path() {
+        let base = "aaa".to_owned();
+        let source = "bbb".to_owned();
+        let parents = vec![base.clone(), source.clone()];
+        let conflict_paths = pset(&[b"conflict.rs"]);
+
+        // D touches a non-conflict path — "never an arbitrary tree".
+        let diff_from_mechanical = pset(&[b"conflict.rs", b"arbitrary.rs"]);
+        let rej = validate_ingest_provenance(
+            &parents,
+            &base,
+            &source,
+            &diff_from_mechanical,
+            &conflict_paths,
+            &[],
+        )
+        .unwrap_err();
+        assert!(
+            rej.reason.contains("arbitrary.rs"),
+            "reason names the offending path: {}",
+            rej.reason
+        );
+
+        // D ⊆ C accepts.
+        let ok = pset(&[b"conflict.rs"]);
+        assert!(
+            validate_ingest_provenance(&parents, &base, &source, &ok, &conflict_paths, &[]).is_ok()
+        );
+    }
+
+    /// VT-2 (F8/D9) — the subset compare is byte-wise; a non-UTF-8 offending path
+    /// still rejects, and the lossy render in the reason does not panic.
+    #[test]
+    fn ingest_validate_subset_gate_is_byte_wise() {
+        let base = "aaa".to_owned();
+        let source = "bbb".to_owned();
+        let parents = vec![base.clone(), source.clone()];
+        let conflict_paths = pset(&[b"\xff\xfe.bin"]);
+        // Same first byte, different tail — a lossy UTF-8 compare could conflate these.
+        let diff_from_mechanical = pset(&[b"\xff\xfe.bin", b"\xff\x01arb"]);
+        let rej = validate_ingest_provenance(
+            &parents,
+            &base,
+            &source,
+            &diff_from_mechanical,
+            &conflict_paths,
+            &[],
+        )
+        .unwrap_err();
+        assert!(!rej.reason.is_empty());
+    }
+
+    /// VT-3 — a surviving marker rejects (advisory); the fully-resolved happy case
+    /// accepts.
+    #[test]
+    fn ingest_validate_marker_gate_advisory() {
+        let base = "aaa".to_owned();
+        let source = "bbb".to_owned();
+        let parents = vec![base.clone(), source.clone()];
+        let conflict_paths = pset(&[b"conflict.rs"]);
+        let diff_from_mechanical = pset(&[b"conflict.rs"]);
+
+        // A marker still present at a conflict path rejects (advisory gate).
+        let marker_paths = vec![b"conflict.rs".to_vec()];
+        let rej = validate_ingest_provenance(
+            &parents,
+            &base,
+            &source,
+            &diff_from_mechanical,
+            &conflict_paths,
+            &marker_paths,
+        )
+        .unwrap_err();
+        assert!(!rej.reason.is_empty());
+
+        // No markers, ordered parents, D ⊆ C — the genuine 3-way accepts.
+        assert!(
+            validate_ingest_provenance(
+                &parents,
+                &base,
+                &source,
+                &diff_from_mechanical,
+                &conflict_paths,
+                &[]
+            )
+            .is_ok()
         );
     }
 }
