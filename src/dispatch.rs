@@ -1396,7 +1396,7 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
                 // Clean: the branch points at the merge commit.
                 (merge_oid.clone(), merge_oid, CandidateStatus::Created)
             }
-            MergeTree::Conflict if !req.worktree => {
+            MergeTree::Conflict { .. } if !req.worktree => {
                 // SL-127 EX-1 (§3.3): diagnostic-only base-divergence hint. The
                 // drift count is resolved here in the shell; the (pure) message
                 // builder appends a non-asserting hint when trunk has advanced past
@@ -1406,7 +1406,10 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
             }
             // Conflicted + --worktree: park the branch at the base so the user
             // resolves+commits in the worktree. No merge commit exists yet.
-            MergeTree::Conflict => (base_oid.clone(), String::new(), CandidateStatus::Conflicted),
+            // PHASE-03 rewrites this arm to materialise T_c + the unmerged stages.
+            MergeTree::Conflict { .. } => {
+                (base_oid.clone(), String::new(), CandidateStatus::Conflicted)
+            }
         };
 
     // --- EX-3: create the branch under zero-oid CAS (refuses an existing ref).

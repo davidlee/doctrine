@@ -310,7 +310,9 @@ fn import_compose(
     } else {
         match git::merge_tree(&coord.root, &base, &coord.tip, &fork_tip)? {
             git::MergeTree::Clean { tree } => tree,
-            git::MergeTree::Conflict => return Ok(funnel_refused(MERGE_CONFLICT, String::new())),
+            git::MergeTree::Conflict { .. } => {
+                return Ok(funnel_refused(MERGE_CONFLICT, String::new()));
+            }
         }
     };
 

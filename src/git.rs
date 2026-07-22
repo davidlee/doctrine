@@ -834,23 +834,100 @@ pub(crate) fn commit_tree(
     git_text(root, &["commit-tree", tree, "-p", parent, "-m", msg])
 }
 
+/// One unmerged index entry from a conflicted [`merge_tree`] — a single stage of a
+/// path git could not auto-resolve. The path is kept as raw bytes (git emits it
+/// verbatim under `-z`; it may not be valid UTF-8, D9). Feeds PHASE-03's
+/// `update-index --index-info` stage rewrite (mode/oid/stage/path is exactly the
+/// index-info line format).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "PHASE-03 create-arm reads these fields to rewrite the index"
+    )
+)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ConflictStage {
+    /// The blob mode, e.g. `100644`.
+    pub mode: String,
+    /// The blob oid at this stage.
+    pub oid: String,
+    /// The merge stage: 1 (base), 2 (ours), 3 (theirs).
+    pub stage: u8,
+    /// The conflicted path, raw bytes (byte-safe, D9).
+    pub path: Vec<u8>,
+}
+
 /// Outcome of an explicit 3-way merge ([`merge_tree`]).
 pub(crate) enum MergeTree {
     /// The merge applied cleanly; the union tree oid is carried.
     Clean { tree: String },
-    /// The merge hit a content conflict — no tree is emitted (PHASE-03 lifecycle).
-    Conflict,
+    /// The merge hit a content conflict. `git merge-tree --write-tree` **still
+    /// writes the tree** (markered blobs at conflict loci) and reports it on exit
+    /// 1 — the tree is `T_c`, the mechanical projection SL-212 materialises and
+    /// validates against. `stages` is the unmerged index table (the conflict loci).
+    Conflict {
+        /// The written tree oid `T_c` (yes, written on exit 1 — not absent).
+        tree: String,
+        /// The unmerged stage table — the conflict loci `C`.
+        stages: Vec<ConflictStage>,
+    },
+}
+
+/// Parse `git merge-tree --write-tree -z` stdout into the written tree oid and the
+/// unmerged stage table. Under `-z` the layout is: `<tree-oid>NUL`, then zero-or-
+/// more conflicted-file-info entries `<mode> <oid> <stage>\t<path>NUL`, an empty
+/// field (the double-NUL) terminating that section, then informational messages we
+/// do not need (stop at the empty field). Byte-safe: paths stay `Vec<u8>` (D9).
+fn parse_merge_tree_z(stdout: &[u8]) -> Result<(String, Vec<ConflictStage>), CaptureError> {
+    let mut fields = stdout.split(|b| *b == 0u8);
+    let tree = fields
+        .next()
+        .map(|f| String::from_utf8_lossy(f).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| CaptureError::Git("merge-tree -z: empty output".to_owned()))?;
+    let mut stages = Vec::new();
+    for field in fields {
+        if field.is_empty() {
+            break; // section terminator — informational messages follow, ignored
+        }
+        let tab = field.iter().position(|b| *b == b'\t').ok_or_else(|| {
+            CaptureError::Git("merge-tree -z: conflicted entry missing TAB".to_owned())
+        })?;
+        let (meta, rest) = field.split_at(tab);
+        let path = rest.get(1..).unwrap_or(&[]).to_vec(); // drop the leading TAB
+        let meta = std::str::from_utf8(meta)
+            .map_err(|_ignored| CaptureError::Git("merge-tree -z: non-utf8 entry meta".to_owned()))?;
+        let mut parts = meta.split_whitespace();
+        let mode = parts.next().unwrap_or_default().to_owned();
+        let oid = parts.next().unwrap_or_default().to_owned();
+        let stage = parts
+            .next()
+            .and_then(|s| s.parse::<u8>().ok())
+            .ok_or_else(|| CaptureError::Git("merge-tree -z: unparseable stage".to_owned()))?;
+        stages.push(ConflictStage {
+            mode,
+            oid,
+            stage,
+            path,
+        });
+    }
+    Ok((tree, stages))
 }
 
 /// Compute the 3-way union tree of `ours` and `theirs` against the common
-/// ancestor `merge_base` via `git merge-tree --write-tree --merge-base=<mb>`
+/// ancestor `merge_base` via `git merge-tree --write-tree -z --merge-base=<mb>`
 /// (git ≥ 2.38) — working-tree-free, object-db only. Exit 0 ⇒ a clean merge and
-/// stdout is the written tree oid ([`MergeTree::Clean`]); a non-zero exit ⇒ a
-/// content conflict ([`MergeTree::Conflict`]) with no tree written. A spawn /
+/// stdout is the written tree oid ([`MergeTree::Clean`]); **exit 1 ⇒ a content
+/// conflict but the tree IS STILL WRITTEN** (markered blobs at the conflict loci)
+/// and reported alongside the unmerged stage table ([`MergeTree::Conflict`]) — the
+/// mechanical projection `T_c`/`C` SL-212 materialises and validates. A spawn /
 /// usage failure still errors (a missing git is not "conflict"); a genuine
 /// conflict (exit 1) is distinguished from a usage error (anything else) by the
-/// exit code, mirroring [`is_ancestor`]. The candidate-create 3-way (design §5.3);
-/// the no-ff merge commit is composed separately with [`commit_tree_merge`].
+/// exit code, mirroring [`is_ancestor`]. `-z` makes both the oid and the conflict
+/// paths NUL-framed so non-UTF-8 paths survive byte-safe (D9). The candidate-create
+/// 3-way (design §5.3); the no-ff merge commit is composed separately with
+/// [`commit_tree_merge`].
 pub(crate) fn merge_tree(
     root: &Path,
     merge_base: &str,
@@ -860,17 +937,17 @@ pub(crate) fn merge_tree(
     let base_flag = format!("--merge-base={merge_base}");
     let output = run_git(
         root,
-        &["merge-tree", "--write-tree", &base_flag, ours, theirs],
+        &["merge-tree", "--write-tree", "-z", &base_flag, ours, theirs],
     )?;
     match output.status.code() {
         Some(0) => {
-            let tree = String::from_utf8(output.stdout)
-                .map_err(|_ignored| CaptureError::Git("merge-tree: non-utf8 oid".to_owned()))?;
-            Ok(MergeTree::Clean {
-                tree: tree.trim().to_string(),
-            })
+            let (tree, _stages) = parse_merge_tree_z(&output.stdout)?;
+            Ok(MergeTree::Clean { tree })
         }
-        Some(1) => Ok(MergeTree::Conflict),
+        Some(1) => {
+            let (tree, stages) = parse_merge_tree_z(&output.stdout)?;
+            Ok(MergeTree::Conflict { tree, stages })
+        }
         _ => Err(CaptureError::Git(format!(
             "merge-tree --merge-base={merge_base} {ours} {theirs}: {}",
             String::from_utf8_lossy(&output.stderr).trim()
@@ -3953,6 +4030,59 @@ mod tests {
             None,
             "unrelated histories share no merge-base"
         );
+    }
+
+    /// VT-3 (SL-212 PHASE-01): a conflicted 3-way STILL writes the tree `T_c` on
+    /// exit 1 and reports the unmerged stage table — correcting the old "no tree
+    /// written" doc. One content conflict yields stages 1/2/3 for that path.
+    #[test]
+    fn merge_tree_conflict_yields_written_tree_and_stages() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("conflict.txt", "base\n", "base");
+        repo.git(&["checkout", "-q", "-b", "ours", &base]);
+        let ours = repo.commit("conflict.txt", "ours\n", "ours edit");
+        repo.git(&["checkout", "-q", "-b", "theirs", &base]);
+        let theirs = repo.commit("conflict.txt", "theirs\n", "theirs edit");
+
+        match super::merge_tree(repo.path(), &base, &ours, &theirs).expect("merge-tree") {
+            super::MergeTree::Conflict { tree, stages } => {
+                assert_eq!(tree.len(), 40, "T_c IS written on exit 1: {tree:?}");
+                let paths: std::collections::BTreeSet<Vec<u8>> =
+                    stages.iter().map(|s| s.path.clone()).collect();
+                assert_eq!(
+                    paths,
+                    std::collections::BTreeSet::from([b"conflict.txt".to_vec()]),
+                    "the single conflicted path"
+                );
+                let mut nums: Vec<u8> = stages.iter().map(|s| s.stage).collect();
+                nums.sort_unstable();
+                assert_eq!(nums, vec![1, 2, 3], "base/ours/theirs stages");
+                assert!(
+                    stages.iter().all(|s| s.oid.len() == 40 && s.mode == "100644"),
+                    "each stage carries a 40-char oid and file mode: {stages:?}"
+                );
+            }
+            super::MergeTree::Clean { .. } => panic!("expected a content conflict"),
+        }
+    }
+
+    /// VT-3 companion: a clean 3-way parses the written tree and no stages (the
+    /// `-z` clean output is `<oid>NUL`, which must not leave a trailing NUL).
+    #[test]
+    fn merge_tree_clean_yields_tree_no_stages() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "base\n", "base");
+        repo.git(&["checkout", "-q", "-b", "ours", &base]);
+        let ours = repo.commit("b.txt", "b\n", "add b");
+        repo.git(&["checkout", "-q", "-b", "theirs", &base]);
+        let theirs = repo.commit("c.txt", "c\n", "add c");
+
+        match super::merge_tree(repo.path(), &base, &ours, &theirs).expect("merge-tree") {
+            super::MergeTree::Clean { tree } => {
+                assert_eq!(tree.len(), 40, "clean tree oid, no trailing NUL: {tree:?}");
+            }
+            super::MergeTree::Conflict { .. } => panic!("expected a clean merge"),
+        }
     }
 
     /// RV-030 F-9: `read_path_at` reads a blob from a refish's committed tree
