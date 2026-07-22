@@ -6847,9 +6847,11 @@ mod tests {
     #[test]
     fn candidate_status_prescribes_ingest_for_conflicted_row() {
         let mut ledger = Candidates::default();
-        ledger
-            .rows
-            .push(guidance_row("review-001", CandidateStatus::Created, "mergeoid"));
+        ledger.rows.push(guidance_row(
+            "review-001",
+            CandidateStatus::Created,
+            "mergeoid",
+        ));
         ledger
             .rows
             .push(guidance_row("close-002", CandidateStatus::Conflicted, ""));
@@ -6859,7 +6861,11 @@ mod tests {
             .iter()
             .filter(|l| l.contains("candidate ingest"))
             .collect();
-        assert_eq!(ingest.len(), 1, "one ingest line for the one conflicted row");
+        assert_eq!(
+            ingest.len(),
+            1,
+            "one ingest line for the one conflicted row"
+        );
         assert!(
             ingest[0].contains("--label close-002"),
             "prescription names the conflicted row's label: {}",
@@ -6877,9 +6883,11 @@ mod tests {
     #[test]
     fn candidate_status_omits_ingest_when_no_conflict() {
         let mut ledger = Candidates::default();
-        ledger
-            .rows
-            .push(guidance_row("review-001", CandidateStatus::Created, "mergeoid"));
+        ledger.rows.push(guidance_row(
+            "review-001",
+            CandidateStatus::Created,
+            "mergeoid",
+        ));
         let lines = next_command_lines("212", &ledger, false);
         assert!(
             !lines.iter().any(|l| l.contains("candidate ingest")),
@@ -6987,7 +6995,14 @@ mod tests {
         let r = git(
             root,
             &[
-                "commit-tree", &tree, "-p", base_oid, "-p", source_oid, "-m", "operator merge",
+                "commit-tree",
+                &tree,
+                "-p",
+                base_oid,
+                "-p",
+                source_oid,
+                "-m",
+                "operator merge",
             ],
         );
         git(root, &["update-ref", target_ref, &r]);
@@ -7154,7 +7169,11 @@ mod tests {
             let r = operator_resolve(root, &base, &source, &target_ref, "RESOLVED\n");
             candidate_ingest(root, &req(212)).expect("the genuine 3-way is accepted");
             let ledger = read_candidates(root, 212).unwrap();
-            let row = ledger.rows.iter().find(|r| r.label == "review-001").unwrap();
+            let row = ledger
+                .rows
+                .iter()
+                .find(|r| r.label == "review-001")
+                .unwrap();
             assert_eq!(row.status, CandidateStatus::Created);
             assert_eq!(row.merge_oid, r);
             assert_eq!(
@@ -7232,7 +7251,11 @@ mod tests {
         candidate_ingest(root, &taxonomy_req())
             .expect("the non-UTF-8 path round-trips byte-safe and ingest accepts");
         let ledger = read_candidates(root, 212).unwrap();
-        let row = ledger.rows.iter().find(|r| r.label == "review-001").unwrap();
+        let row = ledger
+            .rows
+            .iter()
+            .find(|r| r.label == "review-001")
+            .unwrap();
         assert_eq!(row.status, CandidateStatus::Created);
         assert_eq!(row.merge_oid, r);
     }
@@ -7301,10 +7324,13 @@ mod tests {
         git(root, &["add", "keep.txt"]);
         let r = commit_operator_merge(root, &base, &source, &target_ref);
 
-        candidate_ingest(root, &taxonomy_req())
-            .expect("modify/delete resolved within C accepts");
+        candidate_ingest(root, &taxonomy_req()).expect("modify/delete resolved within C accepts");
         let ledger = read_candidates(root, 212).unwrap();
-        let row = ledger.rows.iter().find(|r| r.label == "review-001").unwrap();
+        let row = ledger
+            .rows
+            .iter()
+            .find(|r| r.label == "review-001")
+            .unwrap();
         assert_eq!(row.status, CandidateStatus::Created);
         assert_eq!(row.merge_oid, r);
     }
@@ -7348,10 +7374,13 @@ mod tests {
         git(root, &["add", "-A"]);
         let r = commit_operator_merge(root, &base, &source, &target_ref);
 
-        candidate_ingest(root, &taxonomy_req())
-            .expect("rename/delete resolved within C accepts");
+        candidate_ingest(root, &taxonomy_req()).expect("rename/delete resolved within C accepts");
         let ledger = read_candidates(root, 212).unwrap();
-        let row = ledger.rows.iter().find(|r| r.label == "review-001").unwrap();
+        let row = ledger
+            .rows
+            .iter()
+            .find(|r| r.label == "review-001")
+            .unwrap();
         assert_eq!(row.status, CandidateStatus::Created);
         assert_eq!(row.merge_oid, r);
     }

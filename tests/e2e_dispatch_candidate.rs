@@ -886,7 +886,10 @@ fn e2e_dispatch_candidate_ingest_adopts_operator_resolution() {
         main_after, r,
         "trunk fast-forwards to the operator-ingested merge R, no close-time merge"
     );
-    assert_ne!(main_after, main_before, "trunk actually advanced off its old tip");
+    assert_ne!(
+        main_after, main_before,
+        "trunk actually advanced off its old tip"
+    );
 }
 
 // --- VT-2: review_surface requires --worktree --------------------------------
