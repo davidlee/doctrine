@@ -1,0 +1,182 @@
+# Implementation plan for SL-212 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-212"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Sequencing (design.md §5): 01 substrate (data + byte-safe git reads) → 02 the
+# pure predicate → 03 create-arm materialisation (staging) → 04 the ingest verb +
+# wiring → 05 behaviour surface + governance acceptance. 01/02 are file-disjoint
+# and independently testable; 03 depends on 01's git helpers; 04 depends on
+# 01+02+03; 05 depends on 04.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Ledger substrate + byte-safe git read primitives"
+objective = """
+Additive, behaviour-preserving substrate the ingest verb needs, all unit/fixture
+testable in isolation (design.md §5.2/§5.3, D7/D9). Two new backward-compatible
+`CandidateRow` fields (`ingested_at`, `merge_provenance`) + the `MergeProvenance`
+enum; atomic `ledger::store` (temp-file + rename); and the byte-safe git read
+helpers: `MergeTree::Conflict{tree,stages}` with a `-z` parse of merge-tree's
+conflicted output (the tree IS written on exit 1 — correct the stale git.rs:848
+doc), `ConflictStage`, `changed_paths` (`diff-tree --no-renames -r -z`, byte
+paths — generalise the `diff_doctrine_paths` seam onto one primitive),
+`merge_base_all` (>1 ⇒ caller refuses), and `custom_merge_driver_paths`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (proposed→plan); merge_tree (git.rs:854), store (ledger.rs:384), CandidateRow (ledger.rs:173), diff_doctrine_paths (git.rs:1062) seams present as cited." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "CandidateRow carries `ingested_at: String` and `merge_provenance: MergeProvenance` under #[serde(default)]; MergeProvenance defaults Doctrine; existing candidates.toml (no new fields) deserialize unchanged." },
+  { id = "EX-2", text = "ledger::store writes via a temp file + atomic rename on the same filesystem; final bytes are identical to the prior truncating write (readers unaffected)." },
+  { id = "EX-3", text = "MergeTree::Conflict carries { tree: String, stages: Vec<ConflictStage> }; merge_tree parses `merge-tree --write-tree -z --merge-base=<mb> ours theirs` on exit 1 into tree oid + stage table; Clean{tree} path unchanged." },
+  { id = "EX-4", text = "changed_paths(root, tree_a, tree_b) -> BTreeSet<Vec<u8>> via `diff-tree --no-renames -r -z --name-only`; diff_doctrine_paths is refactored onto the shared byte-safe primitive with no behaviour change to its callers." },
+  { id = "EX-5", text = "merge_base_all(root,a,b) -> Vec<String> and custom_merge_driver_paths(root,tree) -> Vec<Vec<u8>> exist as fail-closed inputs (refusal decided by callers)." },
+]
+verification = [
+  { id = "VT-1", expects = "serde round-trip: a CandidateRow with and without the new fields parses; absent fields default (Doctrine / \"\").", test_file = "src/ledger.rs", keywords = ["ingested_at", "merge_provenance", "MergeProvenance", "serde(default"], waived = false },
+  { id = "VT-2", expects = "atomic store: an interrupted/partial store leaves the prior candidates.toml intact; a completed store swaps atomically via rename.", test_file = "src/ledger.rs", keywords = ["fn store", "rename"], waived = false },
+  { id = "VT-3", expects = "merge-tree conflict parse: exit-1 output yields Conflict{ tree, stages } with distinct stage paths as C.", test_file = "src/git.rs", keywords = ["ConflictStage", "-z", "--write-tree"], patterns = ["Conflict\\s*\\{"], waived = false },
+  { id = "VT-4", expects = "changed_paths is byte-safe and rename-fold OFF: a tree diff returns BTreeSet<Vec<u8>> and a rename is reported as add+delete, not a single rename.", test_file = "src/git.rs", keywords = ["fn changed_paths", "--no-renames", "Vec<u8>"], waived = false },
+  { id = "VT-5", expects = "merge_base_all returns all bases (>1 on criss-cross); custom_merge_driver_paths flags a non-built-in gitattributes driver.", test_file = "src/git.rs", keywords = ["fn merge_base_all", "fn custom_merge_driver_paths"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Pure ingest-provenance validator"
+objective = """
+The pure predicate (design.md §5.2, D1/D9), no git, byte paths end-to-end:
+`validate_ingest_provenance(parents, base_oid, source_oid, D, C, marker_paths)
+-> Result<(), IngestReject>` enforcing (i) parents == [base,source] ordered,
+(ii) D ⊆ C byte-wise ("never an arbitrary tree"), (iii) marker_paths empty
+(ADVISORY — fails open). Plus `IngestRequest` and `IngestReject` types.
+Exhaustively unit-tested with no git dependency.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "Byte-path set type (BTreeSet<Vec<u8>>) settled in PHASE-01; C is guaranteed non-empty by the caller (empty-C bails upstream)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "validate_ingest_provenance is a pure fn (no clock/rng/git/disk) taking parents:&[String], base/source:&str, D/C:&BTreeSet<Vec<u8>>, marker_paths:&[Vec<u8>], returning Ok | IngestReject{reason}." },
+  { id = "EX-2", text = "Rejects: reversed parents; single/≠2 parents; D ⊄ C (reason names an offending path); surviving markers (advisory). Accepts the genuine 3-way (ordered parents, D ⊆ C, no markers)." },
+  { id = "EX-3", text = "IngestRequest{slice,label,ingested_at} and IngestReject{reason} defined; path comparisons are byte-wise (no lossy UTF-8)." },
+]
+verification = [
+  { id = "VT-1", expects = "reversed parents and single/≠2 parents reject; ordered [base,source] passes the parent gate.", test_file = "src/dispatch.rs", keywords = ["fn validate_ingest_provenance", "IngestReject", "IngestRequest"], waived = false },
+  { id = "VT-2", expects = "D ⊄ C (an arbitrary-tree edit at a non-conflict path) rejects and the reason names that path; D ⊆ C passes.", test_file = "src/dispatch.rs", keywords = ["validate_ingest_provenance", "conflict_paths", "diff_from_mechanical"], waived = false },
+  { id = "VT-3", expects = "a surviving marker rejects (advisory); the fully-resolved happy case accepts.", test_file = "src/dispatch.rs", keywords = ["marker_paths", "validate_ingest_provenance"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Create conflict+--worktree arm: materialise merge-tree output"
+objective = """
+Revise ONLY the conflict+--worktree create arm (design.md §5.4, D2) — other arms
+untouched. Guards first (single merge-base; no custom merge driver). Write the
+Conflicted row atomically and durably BEFORE the worktree (§3/R-4). Then
+MATERIALISE merge-tree's output — no `git merge`: `git read-tree --reset -u <T_c>`
+(the EXACT projection — removes mechanically-deleted paths, RV-289 F-2), rewrite
+each path ∈ C to unmerged stages 1/2/3 via `git update-index --index-info`
+(stage-0 removed first), and write MERGE_HEAD=source_oid (+ MERGE_MODE/MERGE_MSG)
+to the worktree-private git dir so the operator's `git commit` yields an ordered
+2-parent [base_oid, source_oid] merge. On any failure in provision/materialise:
+roll back — remove worktree, delete row, delete ref (CAS base_oid).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: MergeTree::Conflict{tree,stages}, merge_base_all, custom_merge_driver_paths, atomic store available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "conflict+--worktree materialises via `git read-tree --reset -u <T_c>` (index and worktree == T_c, including deletions), then each C path is set to unmerged stages 1/2/3; no `git merge` is invoked." },
+  { id = "EX-2", text = "MERGE_HEAD/MERGE_MODE/MERGE_MSG are written under the worktree's own git dir (git rev-parse --git-path), not the common dir; the operator's `git commit` yields parents == [base_oid (HEAD), source_oid (MERGE_HEAD)] in order." },
+  { id = "EX-3", text = "Guards refuse with a clear message when merge-base count ≠ 1 (criss-cross) or any merged path carries a custom (non-built-in) merge driver." },
+  { id = "EX-4", text = "The Conflicted row is written atomically and durably before add_candidate_worktree/run_provision; a failure in provision or materialisation rolls back worktree + row + ref (CAS base_oid)." },
+  { id = "EX-5", text = "Behaviour-preserving: the clean and non-worktree create arms and admit/integrate suites remain green unchanged; only the conflict+worktree worktree-state assertion changes." },
+]
+verification = [
+  { id = "VT-1", expects = "happy materialisation: after create, the worktree has conflict markers at C, an unmerged index (stages 1/2/3), and MERGE_HEAD == source_oid.", test_file = "src/dispatch.rs", keywords = ["--reset", "MERGE_HEAD", "update-index"], waived = false },
+  { id = "VT-2", expects = "engine immunity (D2 regression): with branch.<n>.mergeOptions=-Xours set, create still materialises merge-tree's T_c, not the config-perturbed merge.", test_file = "src/dispatch.rs", keywords = ["mergeOptions", "read-tree"], waived = false },
+  { id = "VT-3", expects = "exact-projection (RV-289 F-2): a merge that conflicts on one path and cleanly deletes another → the deleted path is removed from the worktree; resolve+commit → diff(R.tree,T_c) ⊆ C (ingest would accept).", test_file = "src/dispatch.rs", keywords = ["--reset", "changed_paths"], patterns = ["fn .*deletion"], waived = false },
+  { id = "VT-4", expects = "guards + rollback: >1 merge-base and a custom driver both refuse (no row/ref/worktree); a provision failure rolls back leaving no row, ref, or worktree.", test_file = "src/dispatch.rs", keywords = ["merge_base_all", "custom_merge_driver_paths"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "The candidate ingest verb + CLI/guard wiring"
+objective = """
+`run_candidate_ingest` (design.md §5.4 Ingest, §5.3): resolve the coordination
+root and REFUSE a candidate-worktree cwd — keyed on a resolved root under the
+candidate path (share the dispatch.rs:1497 `.doctrine/state/dispatch/candidate`
+constant, RV-289 F-1) — NOT the linked-worktree test (the coord tree is itself
+linked). Select the exactly-one row with status==Conflicted ∧ merge_oid=="" (the
+fail-closed write-once gate, D5). Resolve R=target_ref (refuse R==base); guards
+(single merge-base, no custom driver); recompute merge_tree → T_c/C; compute D via
+changed_paths; advisory marker scan; validate_ingest_provenance; best-effort
+re-read (D6); write-once atomic fill (merge_oid=R, status=Created, ingested_at,
+merge_provenance=OperatorIngest; stdout R). Add CandidateCommand::Ingest, the
+guard arm (Orchestrator), the main.rs write-class golden, and CLI help.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 validator and PHASE-01 git helpers landed; CandidateCommand match (dispatch.rs:259) and guard arm (guard.rs:316) present as cited." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`dispatch candidate ingest --slice <N> --label <L>` is wired via CandidateCommand::Ingest (base/source read from the row, not flags)." },
+  { id = "EX-2", text = "Coordination-root guard: a cwd resolved under .doctrine/state/dispatch/candidate/ is refused with a message directing to the coordination tree; a coordination linked-worktree cwd is ACCEPTED; the ledger resolves at the coordination root." },
+  { id = "EX-3", text = "Pre-state select refuses zero/many/wrong-status rows; once a row is Created it cannot be re-ingested (write-once enforced by the select)." },
+  { id = "EX-4", text = "On a valid R: recompute+validate then atomic write-once fill (merge_oid=R, status=Created, ingested_at, merge_provenance=OperatorIngest); stdout is R; admit→integrate then proceed by the existing FF-only contract." },
+  { id = "EX-5", text = "guard classifies Ingest as Orchestrator(\"dispatch-candidate-ingest\"); the main.rs write-class golden and worker-guard golden are updated." },
+]
+verification = [
+  { id = "VT-1", expects = "end-to-end happy: conflicted create → resolve+commit → ingest → row Created + merge_provenance=OperatorIngest → admit → integrate FF.", test_file = "src/dispatch.rs", keywords = ["fn run_candidate_ingest", "OperatorIngest", "Created"], waived = false },
+  { id = "VT-2", expects = "coordination-cwd acceptance (RV-289 F-1) + candidate-cwd refusal: ingest from the coord linked-worktree is accepted; from a candidate worktree it refuses.", test_file = "src/dispatch.rs", keywords = ["state/dispatch/candidate", "run_candidate_ingest"], waived = false },
+  { id = "VT-3", expects = "write-once pre-state: re-ingest of a Created row, an ambiguous label, and R==base all refuse.", test_file = "src/dispatch.rs", keywords = ["Conflicted", "run_candidate_ingest"], waived = false },
+  { id = "VT-4", expects = "guard arm: CandidateCommand::Ingest is Orchestrator-classed; worker-mode is refused.", test_file = "src/commands/guard.rs", keywords = ["CandidateCommand::Ingest", "dispatch-candidate-ingest"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Behaviour surface, doc de-absolutisation, governance acceptance"
+objective = """
+Close the behaviour surface (design.md §9 F18, §Governance verification): candidate
+status gains a conflicted→ingest prescription; admit provenance docs/errors and
+ledger field/status docs drop the "Doctrine-created" absolutism (provenance, not
+authorship); serialization goldens cover the new CandidateRow fields; the conflict
+taxonomy and crash/atomicity tests land; and the REV-030/ADR-012 §Verification
+operator-ingest cases are realised as executable checks (arbitrary tree rejected,
+reversed parents rejected, genuine 3-way accepted, FF-integrate by the same
+contract).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 ingest verb functional end-to-end." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "candidate status prints a conflicted→ingest prescription; admit/ledger docs + error strings no longer claim Doctrine-authorship as the provenance basis." },
+  { id = "EX-2", text = "Governance acceptance: arbitrary-tree reject, reversed-parents reject, genuine-3-way accept, and FF-integrate-by-same-contract are covered by tests realising ADR-012 §Verification." },
+  { id = "EX-3", text = "Conflict taxonomy tests (binary; rename/rename, rename/delete, modify/delete, add/add, file/dir; mode/symlink/gitlink; non-UTF-8 + newline path names round-trip) and crash/atomicity (interrupted store leaves prior manifest; rollback leaves no row/ref/tree) pass." },
+]
+verification = [
+  { id = "VT-1", expects = "governance cases: arbitrary tree rejected, reversed parents rejected, genuine 3-way accepted, integrate FF by the same contract.", test_file = "src/dispatch.rs", keywords = ["arbitrary", "OperatorIngest"], patterns = ["fn .*(reject|arbitrary|governance)"], waived = false },
+  { id = "VT-2", expects = "candidate status surfaces the conflicted→ingest prescription.", test_file = "src/dispatch.rs", keywords = ["fn run_candidate_status", "ingest"], waived = false },
+  { id = "VT-3", expects = "taxonomy: a non-UTF-8 / newline path name round-trips byte-safe through create→ingest without lossy compare.", test_file = "src/dispatch.rs", keywords = ["Vec<u8>", "ingest"], patterns = ["fn .*(non_utf8|byte|taxonomy)"], waived = false },
+]
+specs        = []
+requirements = []

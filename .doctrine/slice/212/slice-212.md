@@ -95,6 +95,14 @@ sanctioned candidate → admit → integrate flow, **without** `--force` and
   state; a new ephemeral tree adds lifecycle machinery without added isolation or
   provenance). Confirm in `/design`.
 
+> **DESIGN LOCKED (2026-07-22).** `design.md` is locked after three adversarial
+> codex passes (RV-289 findings folded + self-verified). It resolves the items
+> above: **R1** → predicate D1 (`parents==[base,source]` ordered ∧
+> `diff(R.tree,T_c) ⊆ C` byte-wise, `--no-renames`); **R2 / IMP-303** →
+> *related follow-up, not a gate* (D4 — ships at the clean-merge bar); **OQ-1** →
+> reuse the parked worktree, materialising merge-tree's output (D2). Follow-up
+> **IMP-305** (crash-resume/restage) filed. Plan authored (`plan.toml`).
+
 ## Follow-Ups
 
 - Depends on RFC-006 direction; may spawn an ADR-012 Revision.
