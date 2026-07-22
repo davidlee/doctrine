@@ -1,0 +1,42 @@
+memory_uid = "mem_019f89125fb275a2895bf58b5e29ed95"
+memory_key = "mem.pattern.vtgate.attribution-needs-completed-flip"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "verify-vt reads UNATTRIBUTABLE for a file new to the current phase until it flips completed"
+summary = "A VT whose test_file is first-touched in the current phase reads UNATTRIBUTABLE until the phase flips completed (which records the source-delta); not a defect."
+created = "2026-07-22"
+updated = "2026-07-22"
+
+[scope]
+paths = ["src/vtgate.rs", "src/slice.rs"]
+globs = ["src/**/*.rs"]
+commands = ["doctrine slice verify-vt", "doctrine slice phase"]
+tags = ["verify-vt", "vtgate", "source-delta", "conformance", "footgun", "sl-212"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "d214befaec16af93d2e536f1090a41a8fc51095d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "38fecbfd412eb009059a8c323b4ee9b0b88aeac024f12376f11e9b7b0aef5602"
+base_commit = "2aeec379e862c752c4be333921a3f1a466c4c039"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
