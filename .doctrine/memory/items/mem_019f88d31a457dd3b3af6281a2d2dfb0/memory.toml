@@ -1,0 +1,42 @@
+memory_uid = "mem_019f88d31a457dd3b3af6281a2d2dfb0"
+memory_key = "mem.pattern.git.materialise-conflict-into-linked-worktree"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Materialise a merge-tree conflict into a linked worktree: cwd=worktree, LF index-info, on-branch checkout"
+summary = "To hand a git merge-tree conflict to an operator in a linked worktree: run all plumbing with cwd=worktree, rewrite unmerged stages via LF (not -z) update-index --index-info, and check out ON the branch so the operator's commit advances the ref."
+created = "2026-07-22"
+updated = "2026-07-22"
+
+[scope]
+paths = ["src/git.rs", "src/dispatch.rs"]
+globs = []
+commands = []
+tags = ["git", "worktree", "merge-tree", "sl-212", "plumbing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7d7a2dd29b96c431806fc92fc09efb55e6687b30"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0ab7124a3cb8ffb296c3b3bffd0390c6a1d620731285f7cc06f148c473eafff4"
+base_commit = "d391ade587ffaff18ab42cbbe021ec6c50e8c4db"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
