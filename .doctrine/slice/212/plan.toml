@@ -48,7 +48,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "serde round-trip: a CandidateRow with and without the new fields parses; absent fields default (Doctrine / \"\").", test_file = "src/ledger.rs", keywords = ["ingested_at", "merge_provenance", "MergeProvenance", "serde(default"], waived = false },
-  { id = "VT-2", expects = "atomic store: an interrupted/partial store leaves the prior candidates.toml intact; a completed store swaps atomically via rename.", test_file = "src/ledger.rs", keywords = ["fn store", "rename"], waived = false },
+  { id = "VT-2", expects = "atomic store: routes through fsutil::write_atomic (sibling temp + rename) — a completed store swaps whole, leaving the prior candidates.toml intact and no temp litter.", test_file = "src/ledger.rs", keywords = ["fn store", "write_atomic"], waived = false },
   { id = "VT-3", expects = "merge-tree conflict parse: exit-1 output yields Conflict{ tree, stages } with distinct stage paths as C.", test_file = "src/git.rs", keywords = ["ConflictStage", "-z", "--write-tree"], patterns = ["Conflict\\s*\\{"], waived = false },
   { id = "VT-4", expects = "changed_paths is byte-safe and rename-fold OFF: a tree diff returns BTreeSet<Vec<u8>> and a rename is reported as add+delete, not a single rename.", test_file = "src/git.rs", keywords = ["fn changed_paths", "--no-renames", "Vec<u8>"], waived = false },
   { id = "VT-5", expects = "merge_base_all returns all bases (>1 on criss-cross); custom_merge_driver_paths flags a non-built-in gitattributes driver.", test_file = "src/git.rs", keywords = ["fn merge_base_all", "fn custom_merge_driver_paths"], waived = false },

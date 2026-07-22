@@ -403,14 +403,15 @@ fn load<T: DeserializeOwned + Default>(path: &Path) -> anyhow::Result<T> {
     }
 }
 
-/// Write a manifest to `path`, creating the coordination dir on first write.
+/// Write a manifest to `path` atomically, creating the coordination dir on first
+/// write. Routes through [`crate::fsutil::write_atomic`] (sibling temp + rename)
+/// so a crash mid-write leaves the prior manifest intact — a reader never sees a
+/// torn file (SL-212 D7). Final bytes are identical to a direct write.
 fn store<T: Serialize>(path: &Path, manifest: &T) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    #[expect(clippy::disallowed_methods, reason = "runtime coordination manifest")]
-    std::fs::write(path, toml::to_string(manifest)?)?;
-    Ok(())
+    crate::fsutil::write_atomic(path, toml::to_string(manifest)?.as_bytes())
 }
 
 /// Read `journal.toml` for `slice` (empty when absent).
@@ -755,6 +756,46 @@ mod tests {
             ingested_at: String::new(),
             merge_provenance: MergeProvenance::Doctrine,
         }
+    }
+
+    // VT-2 (SL-212 PHASE-01): store is atomic — routes through fsutil::write_atomic
+    // (sibling temp + rename), so a completed store overwrites cleanly and leaves
+    // no temp litter beside the manifest. `fn store` is the seam under proof.
+    #[test]
+    fn store_is_atomic_and_leaves_no_temp() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        let slice = 212;
+
+        let mut first = Candidates::default();
+        first
+            .rows
+            .push(sample_candidate("cand-212-a", "a", CandidateStatus::Conflicted));
+        write_candidates(root, slice, &first).expect("first store");
+
+        // Overwrite with a second, larger manifest — the atomic swap must land it
+        // whole, never a truncation of the first.
+        let mut second = first.clone();
+        second
+            .rows
+            .push(sample_candidate("cand-212-b", "b", CandidateStatus::Created));
+        write_candidates(root, slice, &second).expect("second store");
+
+        assert_eq!(
+            read_candidates(root, slice).expect("read back"),
+            second,
+            "last write wins, clean whole content"
+        );
+
+        // No `.tmp` litter survives beside the manifest.
+        let ddir = root.join(".doctrine").join("dispatch").join("212");
+        let litter: Vec<String> = std::fs::read_dir(&ddir)
+            .expect("read dispatch dir")
+            .filter_map(Result::ok)
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains(".tmp"))
+            .collect();
+        assert!(litter.is_empty(), "no temp files linger: {litter:?}");
     }
 
     // VT-1 (SL-212 PHASE-01): provenance fields default on legacy rows, round-trip
