@@ -1186,8 +1186,9 @@ pub(crate) fn is_ancestor(
 /// <commit>` (the first whitespace token is the commit itself — dropped; the rest
 /// are its parents). A root commit yields an empty vec; a 2-parent merge yields
 /// `[first, second]`. The candidate-admit provenance check (SL-068 PHASE-05, I3)
-/// compares this SET to `{base_oid, source_oid}` to prove `merge_oid` is the
-/// Doctrine-created candidate merge.
+/// compares this SET to `{base_oid, source_oid}` to prove `merge_oid` is a
+/// genuine candidate merge (provenance, not authorship — REV-030: Doctrine's
+/// 3-way OR an operator-ingested resolution).
 pub(crate) fn parents(root: &Path, commit: &str) -> Result<Vec<String>, CaptureError> {
     let line = git_text(root, &["rev-list", "--parents", "-n", "1", commit])?;
     Ok(line.split_whitespace().skip(1).map(str::to_owned).collect())

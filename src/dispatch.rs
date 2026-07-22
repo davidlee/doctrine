@@ -2014,9 +2014,10 @@ pub(crate) fn run_candidate_admit(path: Option<PathBuf>, req: &AdmitRequest) -> 
 
 /// Core `candidate admit` (design §5.2 + §5.5 invariants). Pins a recorded
 /// candidate's committed tip as the immutable `admitted_oid` a downstream verb
-/// targets, after validating provenance (I3, R7): the recorded `merge_oid` is the
-/// Doctrine-created candidate merge (its parents are exactly base+source) AND an
-/// ancestor of the admitted tip. Re-reads the candidate ref before recording so a
+/// targets, after validating provenance (I3, R7): the recorded `merge_oid` is a
+/// genuine candidate merge — its parents are exactly base+source (provenance, not
+/// authorship — REV-030: Doctrine's 3-way OR an operator-ingested resolution) AND
+/// an ancestor of the admitted tip. Re-reads the candidate ref before recording so a
 /// ref moved mid-admission is refused (EX-1). Writes ONLY `candidates.toml` — never
 /// trunk/edge/`review/*`/`phase/*`/the candidate ref (EX-4). Exactly one current
 /// admission per role afterward (the role slot is overwritten; supersession is
@@ -2071,15 +2072,17 @@ fn candidate_admit(root: &Path, req: &AdmitRequest) -> anyhow::Result<()> {
         role_token(req.role)
     );
 
-    // --- a conflicted/unresolved row has no Doctrine merge to validate ---------
+    // --- a conflicted/unresolved row has no merge commit to validate -----------
     anyhow::ensure!(
         !row.merge_oid.is_empty(),
-        "candidate admit: candidate {} has no Doctrine merge to validate \
-         (conflicted/unresolved) — resolve and re-create before admitting",
+        "candidate admit: candidate {} has no merge to validate \
+         (conflicted/unresolved) — resolve by hand and `dispatch candidate ingest` \
+         (or re-create) before admitting",
         row.id
     );
 
-    // --- provenance (EX-2, I3, R7): merge_oid is the Doctrine candidate merge --
+    // --- provenance (EX-2, I3, R7): merge_oid is a genuine candidate merge -----
+    //     (parents == base+source — provenance, not authorship; REV-030) --------
     let merge_parents: std::collections::BTreeSet<String> =
         git::parents(root, &row.merge_oid)?.into_iter().collect();
     let expected_parents: std::collections::BTreeSet<String> =
@@ -2088,8 +2091,8 @@ fn candidate_admit(root: &Path, req: &AdmitRequest) -> anyhow::Result<()> {
             .collect();
     anyhow::ensure!(
         merge_parents == expected_parents,
-        "candidate admit: merge_oid {} is not the Doctrine candidate merge \
-         (parents != base+source)",
+        "candidate admit: merge_oid {} is not a genuine candidate merge \
+         (parents are not {{base, source}})",
         row.merge_oid
     );
     anyhow::ensure!(

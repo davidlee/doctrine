@@ -149,7 +149,7 @@ pub(crate) enum CandidatePayload {
 pub(crate) enum CandidateStatus {
     /// The candidate ref + merge commit were created.
     Created,
-    /// The Doctrine-created merge hit a conflict.
+    /// The mechanical (internal 3-way) merge hit a conflict.
     Conflicted,
     /// The candidate was abandoned.
     Abandoned,
@@ -206,7 +206,8 @@ pub(crate) struct CandidateRow {
     pub base_ref: String,
     /// The base ref's oid at build time.
     pub base_oid: String,
-    /// The Doctrine-created no-ff merge commit.
+    /// The no-ff merge commit (Doctrine 3-way OR operator-ingested — see
+    /// `merge_provenance`).
     pub merge_oid: String,
     /// Lifecycle status — the only mutable field (EX-3).
     pub status: CandidateStatus,
