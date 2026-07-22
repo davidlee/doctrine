@@ -768,17 +768,21 @@ mod tests {
         let slice = 212;
 
         let mut first = Candidates::default();
-        first
-            .rows
-            .push(sample_candidate("cand-212-a", "a", CandidateStatus::Conflicted));
+        first.rows.push(sample_candidate(
+            "cand-212-a",
+            "a",
+            CandidateStatus::Conflicted,
+        ));
         write_candidates(root, slice, &first).expect("first store");
 
         // Overwrite with a second, larger manifest — the atomic swap must land it
         // whole, never a truncation of the first.
         let mut second = first.clone();
-        second
-            .rows
-            .push(sample_candidate("cand-212-b", "b", CandidateStatus::Created));
+        second.rows.push(sample_candidate(
+            "cand-212-b",
+            "b",
+            CandidateStatus::Created,
+        ));
         write_candidates(root, slice, &second).expect("second store");
 
         assert_eq!(
