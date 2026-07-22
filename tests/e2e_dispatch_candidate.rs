@@ -746,6 +746,130 @@ fn e2e_dispatch_candidate_conflict_records_or_aborts() {
     }
 }
 
+// --- SL-212: operator ingest — the full binary lifecycle ---------------------
+
+/// SL-212 PHASE-04 (VT-1 e2e): the whole operator path through the real binary —
+/// conflicted `--worktree` create → resolve the markers + `git commit` inside the
+/// candidate worktree (on-branch, so the ref advances) → `candidate ingest` from
+/// the COORDINATION tree fills the row Created with `operator_ingest` provenance →
+/// `admit` pins it by the existing contract. Also proves the RV-289 F-1 guard:
+/// ingest from the candidate-worktree cwd is refused.
+#[test]
+fn e2e_dispatch_candidate_ingest_adopts_operator_resolution() {
+    let repo = tempfile::tempdir().unwrap();
+    let dir = repo.path();
+    build_conflict_fixture(dir);
+    prepare_review(dir);
+
+    let out = create(
+        dir,
+        None,
+        &[
+            "--role",
+            "close_target",
+            "--payload",
+            "code",
+            "--base",
+            "refs/heads/main",
+            "--label",
+            "conflict-001",
+            "--source",
+            "refs/heads/review/064",
+            "--worktree",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "conflicted create records the worktree lifecycle: {}",
+        stderr(&out)
+    );
+
+    // The operator resolves the sole conflicted path in the candidate worktree and
+    // commits — an on-branch checkout, so the candidate ref advances to R.
+    let wt = dir.join(".doctrine/state/dispatch/candidate/cand-064-conflict-001");
+    std::fs::write(wt.join("trunk.txt"), "RESOLVED\n").unwrap();
+    git(&wt, &["add", "trunk.txt"]);
+    git(&wt, &["commit", "-q", "-m", "resolve trunk conflict"]);
+    let r = git(&wt, &["rev-parse", "HEAD"]);
+    assert_eq!(
+        git(dir, &["rev-parse", "candidate/064/conflict-001"]),
+        r,
+        "the on-branch operator commit advances the candidate ref (PHASE-03 guarantee)"
+    );
+
+    // RV-289 F-1: ingest from the candidate-worktree cwd is refused (row still
+    // Conflicted, so only the coordination-root guard explains the refusal).
+    let refused = run(
+        &wt,
+        None,
+        &[
+            "dispatch",
+            "candidate",
+            "ingest",
+            "--slice",
+            "64",
+            "--label",
+            "conflict-001",
+            "-p",
+            wt.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        !refused.status.success() && stderr(&refused).contains("coordination tree"),
+        "ingest from a candidate worktree is refused, directing to the coordination tree: {}",
+        stderr(&refused)
+    );
+
+    // Ingest from the coordination tree adopts the operator's merge.
+    let ing = run(
+        dir,
+        None,
+        &[
+            "dispatch",
+            "candidate",
+            "ingest",
+            "--slice",
+            "64",
+            "--label",
+            "conflict-001",
+            "-p",
+            dir.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        ing.status.success(),
+        "ingest accepts the faithful operator merge: {}",
+        stderr(&ing)
+    );
+    assert_eq!(stdout(&ing).trim(), r, "ingest prints the resolved merge R");
+    let toml = read_candidates(dir);
+    assert!(
+        toml.contains("status = \"created\""),
+        "the row flips Created: {toml}"
+    );
+    assert!(
+        toml.contains("merge_provenance = \"operator_ingest\""),
+        "the row records operator-ingest provenance: {toml}"
+    );
+
+    // admit pins the operator-ingested candidate by the existing FF contract.
+    let adm = admit(
+        dir,
+        None,
+        &[
+            "--role",
+            "close_target",
+            "--candidate",
+            "refs/heads/candidate/064/conflict-001",
+        ],
+    );
+    assert!(
+        adm.status.success(),
+        "admit pins the operator-ingested candidate: {}",
+        stderr(&adm)
+    );
+}
+
 // --- VT-2: review_surface requires --worktree --------------------------------
 
 #[test]

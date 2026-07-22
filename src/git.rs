@@ -1274,13 +1274,6 @@ fn diff_names_z(root: &Path, args: &[&str]) -> Result<Vec<Vec<u8>>, CaptureError
 /// single rename — SL-212 needs every touched path in `D` so the ingest predicate
 /// can bound `D ⊆ C` byte-for-byte against the mechanical conflict set. Tree-to-
 /// tree only (object db, no worktree).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-04 ingest verb computes D against the conflict set via this"
-    )
-)]
 pub(crate) fn changed_paths(
     root: &Path,
     tree_a: &str,
@@ -1496,10 +1489,6 @@ fn conflict_marker_size(root: &Path, path: &str) -> usize {
 /// unreadable/absent blob, or a NUL-detected binary. Attribute-aware: the marker
 /// length is the path's `conflict-marker-size`. Feeds `validate_ingest_provenance`'s
 /// `marker_paths`; an empty result is the fail-open floor, not a proof of cleanliness.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by run_candidate_ingest (PHASE-04)")
-)]
 pub(crate) fn surviving_marker_paths(
     root: &Path,
     tree: &str,
@@ -4473,7 +4462,10 @@ mod tests {
     fn surviving_marker_paths_flags_markered_and_skips_clean() {
         let repo = ScratchRepo::new();
         repo.commit("root.txt", "root\n", "root");
-        repo.write("marked.txt", "L1\n<<<<<<< ours\nA\n=======\nB\n>>>>>>> theirs\nL2\n");
+        repo.write(
+            "marked.txt",
+            "L1\n<<<<<<< ours\nA\n=======\nB\n>>>>>>> theirs\nL2\n",
+        );
         repo.write("clean.txt", "fully resolved\n");
         repo.git(&["add", "marked.txt", "clean.txt"]);
         repo.git(&["commit", "-m", "one markered, one clean"]);

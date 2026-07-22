@@ -748,6 +748,25 @@ mod write_class_tests {
         );
     }
 
+    // SL-212 PHASE-04 (EX-5): `dispatch candidate ingest` is Orchestrator-classed —
+    // a sole-writer ledger fill, refused under worker-mode like create/admit.
+    #[test]
+    fn dispatch_candidate_ingest_is_orchestrator() {
+        assert_eq!(
+            cls(&[
+                "doctrine",
+                "dispatch",
+                "candidate",
+                "ingest",
+                "--slice",
+                "212",
+                "--label",
+                "review-001"
+            ]),
+            Some("dispatch-candidate-ingest")
+        );
+    }
+
     #[test]
     fn inspect_is_read() {
         // SL-046: the cross-kind relation view reads only — never mints/derives.

@@ -346,6 +346,29 @@ pub(crate) enum CandidateCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Ingest (SL-212): adopt an operator's hand-resolved trunk merge into a
+    /// Conflicted candidate row. Run from the COORDINATION tree (refuses a
+    /// candidate-worktree cwd) after resolving the markers and `git commit`ting
+    /// inside the candidate worktree. Validates that the commit is a faithful
+    /// `(base, source)` 3-way — never an arbitrary tree — then write-once fills the
+    /// row (`merge_provenance=OperatorIngest`); `admit`/`integrate` follow the
+    /// existing FF-only contract. `base`/`source` come from the row, not flags.
+    /// Orchestrator-classed.
+    Ingest {
+        /// The slice id (bare number, e.g. `68`).
+        #[arg(long, value_parser = parse_cli_id)]
+        slice: u32,
+
+        /// The candidate label (e.g. `review-001`) — selects the exactly-one
+        /// Conflicted, un-ingested row to fill.
+        #[arg(long, visible_alias = "target")]
+        label: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()> {
@@ -439,6 +462,14 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
                     admitted_at: crate::clock::today(),
                 };
                 run_candidate_admit(path, &req)
+            }
+            CandidateCommand::Ingest { slice, label, path } => {
+                let req = IngestRequest {
+                    slice,
+                    label,
+                    ingested_at: crate::clock::today(),
+                };
+                run_candidate_ingest(path, &req)
             }
         },
         DispatchCommand::PlanNext { slice, json, path } => run_plan_next(path, slice, json),
@@ -1756,10 +1787,6 @@ pub(crate) struct AdmitRequest {
 /// A candidate-ingest request (SL-212 §5.2). `base`/`source` are read from the
 /// recorded row, never flags — this carries only what the CLI supplies. Consumed
 /// by `run_candidate_ingest` (PHASE-04).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by run_candidate_ingest (PHASE-04)")
-)]
 pub(crate) struct IngestRequest {
     pub slice: u32,
     pub label: String,
@@ -1768,10 +1795,6 @@ pub(crate) struct IngestRequest {
 
 /// A structured ingest-provenance rejection (SL-212 §5.2). Consumed by
 /// `run_candidate_ingest` (PHASE-04).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by run_candidate_ingest (PHASE-04)")
-)]
 pub(crate) struct IngestReject {
     pub reason: String,
 }
@@ -1791,10 +1814,6 @@ pub(crate) struct IngestReject {
 /// Path compares are byte-wise (F8, D9); a rejection renders the offending path
 /// lossily for the human message only — never for the comparison. Consumed by
 /// `run_candidate_ingest` (PHASE-04).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by run_candidate_ingest (PHASE-04)")
-)]
 pub(crate) fn validate_ingest_provenance(
     parents: &[String],
     base_oid: &str,
@@ -1835,6 +1854,155 @@ pub(crate) fn validate_ingest_provenance(
         });
     }
 
+    Ok(())
+}
+
+/// CLI entry — resolve the root and ingest the operator's hand-resolved merge.
+pub(crate) fn run_candidate_ingest(
+    path: Option<PathBuf>,
+    req: &IngestRequest,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    candidate_ingest(&root, req)
+}
+
+/// Core `candidate ingest` (design §5.4 Ingest, §5.3). Adopts the operator's
+/// hand-resolved merge `R` (committed on `target_ref` inside the candidate worktree)
+/// into the recorded Conflicted row after proving `R` is a FAITHFUL adoption of the
+/// mechanical `(base, source)` 3-way — never an arbitrary hand-built tree. The
+/// write-once fill is the sole durable effect; `admit → integrate` then proceed by
+/// the existing FF-only contract. Refuses (fail-closed) at every gate before the fill.
+fn candidate_ingest(root: &Path, req: &IngestRequest) -> anyhow::Result<()> {
+    // --- 1. Coordination-root guard (design §5.3, RV-289 F-1): refuse a
+    //     candidate-worktree cwd — a resolved root UNDER the candidate subpath. The
+    //     linked-worktree test is unusable (the coord tree is itself linked). ------
+    let resolved = std::fs::canonicalize(root).unwrap_or_else(|_ignored| root.to_path_buf());
+    if resolved
+        .to_string_lossy()
+        .contains(CANDIDATE_WORKTREE_SUBPATH)
+    {
+        bail!(
+            "candidate ingest: the current worktree is a candidate checkout ({}) — \
+             resolve the conflicts and `git commit` here, then run `dispatch candidate ingest` \
+             from the coordination tree (the ledger resolves at the coordination root, never \
+             this candidate checkout's stale tree)",
+            resolved.display()
+        );
+    }
+
+    let slice3 = format!("{:03}", req.slice);
+    let target_ref = format!("{CANDIDATE_REF_PREFIX}{slice3}/{}", req.label);
+
+    // --- 2. Select the exactly-one Conflicted ∧ merge_oid=="" row for `label` — the
+    //     fail-closed write-once gate (D5). Zero/many/Created all refuse; a Created
+    //     row (merge_oid filled) is not matched, so it cannot be re-ingested. -------
+    let mut ledger = read_candidates(root, req.slice)?;
+    let matched: Vec<usize> = ledger
+        .rows
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| {
+            r.label == req.label
+                && r.status == CandidateStatus::Conflicted
+                && r.merge_oid.is_empty()
+        })
+        .map(|(i, _)| i)
+        .collect();
+    let idx = match matched.as_slice() {
+        [only] => *only,
+        [] => bail!(
+            "candidate ingest: no un-ingested conflicted candidate for label {} — an already \
+             ingested (Created) row cannot be re-ingested (write-once)",
+            req.label
+        ),
+        many => bail!(
+            "candidate ingest: {} candidates match label {} in the conflicted pre-state — \
+             ambiguous; the write-once gate needs exactly one",
+            many.len(),
+            req.label
+        ),
+    };
+    let row = ledger
+        .rows
+        .get(idx)
+        .cloned()
+        .with_context(|| "candidate ingest: internal — selected row index out of range")?;
+    let base_oid = row.base_oid.clone();
+    let source_oid = row.source_oid.clone();
+
+    // --- 3. Resolve R = target_ref; refuse R == base (nothing committed yet). ------
+    let r = resolve_commit(root, &target_ref)?.with_context(|| {
+        format!("candidate ingest: {target_ref} does not resolve to a committed tip")
+    })?;
+    anyhow::ensure!(
+        r != base_oid,
+        "candidate ingest: {target_ref} still points at base {base_oid} — resolve the \
+         conflicts and `git commit` in the candidate worktree before ingesting"
+    );
+
+    // --- 4/5. Recompute the mechanical merge → T_c/C, then the shared guards (single
+    //     merge-base + no custom driver on T_c). A clean/empty-C result means the
+    //     recorded conflict no longer reproduces — corruption, bail (design §5.4). --
+    let mb = git::merge_base(root, &base_oid, &source_oid)?.with_context(|| {
+        format!("candidate ingest: base {base_oid} and source {source_oid} share no ancestor")
+    })?;
+    let (tc, stages) = match git::merge_tree(root, &mb, &base_oid, &source_oid)? {
+        git::MergeTree::Conflict { tree, stages } => (tree, stages),
+        git::MergeTree::Clean { .. } => bail!(
+            "candidate ingest: the recorded conflict no longer reproduces (merge is now clean) — \
+             the base/source refs moved under the row; refusing to ingest against a changed merge"
+        ),
+    };
+    anyhow::ensure!(
+        !stages.is_empty(),
+        "candidate ingest: merge-tree reported a conflict with an empty conflict set — corruption"
+    );
+    let _mb =
+        conflict_reproducibility_guards(root, &base_oid, &source_oid, &tc, "candidate ingest")?;
+    let conflict_paths: BTreeSet<Vec<u8>> = stages.iter().map(|s| s.path.clone()).collect();
+
+    // --- 6. D = changed_paths(R^tree, T_c); advisory marker scan of R's blobs at C. -
+    let r_tree = tree_of(root, &r)?;
+    let diff_from_mechanical = git::changed_paths(root, &r_tree, &tc)?;
+    let marker_paths = git::surviving_marker_paths(root, &r_tree, &conflict_paths);
+
+    // --- 7. Pure provenance validation (ordered parents; D ⊆ C; advisory markers). --
+    if let Err(reject) = validate_ingest_provenance(
+        &git::parents(root, &r)?,
+        &base_oid,
+        &source_oid,
+        &diff_from_mechanical,
+        &conflict_paths,
+        &marker_paths,
+    ) {
+        bail!("candidate ingest: {}", reject.reason);
+    }
+
+    // --- 8. Best-effort re-read — a ref moved mid-ingest is refused (D6, admit parity).
+    let r2 = resolve_commit(root, &target_ref)?;
+    anyhow::ensure!(
+        r2.as_deref() == Some(r.as_str()),
+        "candidate ingest: {target_ref} moved during ingest (was {r}, now {}) — re-run",
+        r2.as_deref().unwrap_or("absent")
+    );
+
+    // --- 9. Write-once atomic fill (rides the existing temp+rename `store`). --------
+    let filled = ledger
+        .rows
+        .get_mut(idx)
+        .with_context(|| "candidate ingest: internal — selected row index out of range")?;
+    filled.merge_oid.clone_from(&r);
+    filled.status = CandidateStatus::Created;
+    filled.ingested_at.clone_from(&req.ingested_at);
+    filled.merge_provenance = crate::ledger::MergeProvenance::OperatorIngest;
+    crate::ledger::write_candidates(root, req.slice, &ledger)?;
+
+    writeln!(io::stdout(), "{r}")?;
+    writeln!(
+        io::stderr(),
+        "candidate ingest: {} ingested at {r} (operator merge) — admit then integrate",
+        row.id
+    )?;
     Ok(())
 }
 
@@ -6622,5 +6790,236 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    // --- SL-212 PHASE-04: `run_candidate_ingest` verb (design §5.3/§5.4) ----------
+
+    /// Build a repo whose `main` (base) and `source` branches conflict ONLY on
+    /// `trunk.txt` (so `C == {trunk.txt}` and a base-tree-with-resolved-trunk is a
+    /// faithful `R`), seed a Conflicted, un-ingested candidate row for `label`, and
+    /// park the candidate branch at base. Returns `(base_oid, source_oid, target_ref)`.
+    fn seed_conflicted_candidate(root: &Path, slice: u32, label: &str) -> (String, String, String) {
+        git(root, &["init", "-q", "-b", "main"]);
+        git(root, &["config", "user.email", "t@doctrine.invalid"]);
+        git(root, &["config", "user.name", "Doctrine Test"]);
+        fs::write(root.join(".gitignore"), ".doctrine/state/\n").unwrap();
+        git(root, &["add", ".gitignore"]);
+        git(root, &["commit", "-q", "-m", "root"]);
+        fs::write(root.join("trunk.txt"), "COMMON\n").unwrap();
+        git(root, &["add", "trunk.txt"]);
+        git(root, &["commit", "-q", "-m", "common trunk"]);
+        // source: edit the conflicting path only.
+        git(root, &["checkout", "-q", "-b", "source"]);
+        fs::write(root.join("trunk.txt"), "SOURCE\n").unwrap();
+        git(root, &["add", "trunk.txt"]);
+        git(root, &["commit", "-q", "-m", "source edit"]);
+        let source_oid = git(root, &["rev-parse", "HEAD"]);
+        // base (main): diverging edit to the same path ⇒ conflict.
+        git(root, &["checkout", "-q", "main"]);
+        fs::write(root.join("trunk.txt"), "MAIN\n").unwrap();
+        git(root, &["add", "trunk.txt"]);
+        git(root, &["commit", "-q", "-m", "base edit"]);
+        let base_oid = git(root, &["rev-parse", "HEAD"]);
+        let slice3 = format!("{slice:03}");
+        let target_ref = format!("refs/heads/candidate/{slice3}/{label}");
+        // Park the candidate branch at base (the conflicted-create end-state).
+        git(
+            root,
+            &["branch", &format!("candidate/{slice3}/{label}"), &base_oid],
+        );
+        let mut ledger = Candidates::default();
+        ledger.rows.push(CandidateRow {
+            id: format!("cand-{slice3}-{label}"),
+            label: label.to_owned(),
+            kind: CandidateKind::Audit,
+            role: CandidateRole::CloseTarget,
+            payload: CandidatePayload::Code,
+            target_ref: target_ref.clone(),
+            source_ref: "refs/heads/source".to_owned(),
+            source_oid: source_oid.clone(),
+            base_ref: "refs/heads/main".to_owned(),
+            base_oid: base_oid.clone(),
+            merge_oid: String::new(),
+            status: CandidateStatus::Conflicted,
+            supersedes: String::new(),
+            reason: String::new(),
+            created_by: "test".to_owned(),
+            created_at: "2026-01-01".to_owned(),
+            ingested_at: String::new(),
+            merge_provenance: crate::ledger::MergeProvenance::Doctrine,
+        });
+        crate::ledger::write_candidates(root, slice, &ledger).unwrap();
+        (base_oid, source_oid, target_ref)
+    }
+
+    /// The operator resolves the sole conflict path and commits a genuine 2-parent
+    /// `[base, source]` merge on `target_ref` (advancing the ref, as an on-branch
+    /// candidate checkout would). Returns the resolved merge oid `R`.
+    fn operator_resolve(
+        root: &Path,
+        base_oid: &str,
+        source_oid: &str,
+        target_ref: &str,
+        resolved: &str,
+    ) -> String {
+        git(root, &["checkout", "-q", "main"]);
+        fs::write(root.join("trunk.txt"), resolved).unwrap();
+        git(root, &["add", "trunk.txt"]);
+        let tree = git(root, &["write-tree"]);
+        let r = git(
+            root,
+            &[
+                "commit-tree",
+                &tree,
+                "-p",
+                base_oid,
+                "-p",
+                source_oid,
+                "-m",
+                "operator merge",
+            ],
+        );
+        git(root, &["update-ref", target_ref, &r]);
+        git(root, &["reset", "-q", "--hard", "HEAD"]); // restore a clean base tree
+        r
+    }
+
+    /// VT-1: a faithful operator merge is ingested — the row flips Created with
+    /// `merge_provenance=OperatorIngest`, and `admit` then pins it by the existing
+    /// contract (the FF integrate is proven end-to-end in the binary e2e).
+    #[test]
+    fn run_candidate_ingest_fills_row_with_operator_provenance_and_admits() {
+        let repo = tempfile::tempdir().unwrap();
+        let root = repo.path();
+        let (base, source, target_ref) = seed_conflicted_candidate(root, 212, "review-001");
+        let r = operator_resolve(root, &base, &source, &target_ref, "RESOLVED\n");
+
+        let req = IngestRequest {
+            slice: 212,
+            label: "review-001".to_owned(),
+            ingested_at: "2026-02-02".to_owned(),
+        };
+        candidate_ingest(root, &req).expect("ingest accepts a faithful operator merge");
+
+        let ledger = read_candidates(root, 212).unwrap();
+        let row = ledger
+            .rows
+            .iter()
+            .find(|r| r.label == "review-001")
+            .expect("row present");
+        assert_eq!(row.status, CandidateStatus::Created, "row flips to Created");
+        assert_eq!(row.merge_oid, r, "merge_oid pinned to the resolved R");
+        assert_eq!(
+            row.merge_provenance,
+            crate::ledger::MergeProvenance::OperatorIngest,
+            "provenance records the operator ingest"
+        );
+        assert!(!row.ingested_at.is_empty(), "ingested_at stamped");
+
+        // admit pins the operator-ingested merge by the existing provenance contract.
+        let admit_req = AdmitRequest {
+            slice: 212,
+            role: CandidateRole::CloseTarget,
+            candidate: target_ref.clone(),
+            review: None,
+            admitted_at: "2026-02-03".to_owned(),
+        };
+        candidate_admit(root, &admit_req).expect("admit pins the operator-ingested candidate");
+        let admitted = read_candidates(root, 212).unwrap();
+        assert_eq!(
+            admitted
+                .current_admission
+                .close_target
+                .as_ref()
+                .expect("close-target admission")
+                .admitted_oid,
+            r,
+            "admit pins the resolved merge R"
+        );
+    }
+
+    /// VT-2 (RV-289 F-1): ingest from a candidate-worktree cwd (a root resolved
+    /// UNDER `.doctrine/state/dispatch/candidate/`) is refused with a message
+    /// directing to the coordination tree. The coord-root acceptance is proven by
+    /// the happy path above (which runs from the coordination root).
+    #[test]
+    fn run_candidate_ingest_refuses_a_candidate_worktree_cwd() {
+        let repo = tempfile::tempdir().unwrap();
+        let root = repo.path();
+        seed_conflicted_candidate(root, 212, "review-001");
+        let candidate_cwd = root
+            .join(CANDIDATE_WORKTREE_SUBPATH)
+            .join("cand-212-review-001");
+        fs::create_dir_all(&candidate_cwd).unwrap();
+        let req = IngestRequest {
+            slice: 212,
+            label: "review-001".to_owned(),
+            ingested_at: "2026-02-02".to_owned(),
+        };
+        let err = candidate_ingest(&candidate_cwd, &req)
+            .expect_err("a candidate-worktree cwd is refused")
+            .to_string();
+        assert!(
+            err.contains("candidate checkout") && err.contains("coordination tree"),
+            "refusal directs to the coordination tree: {err}"
+        );
+    }
+
+    /// VT-3: the write-once pre-state gate — an un-committed ref (`R==base`), an
+    /// already-ingested (Created) row, and an ambiguous label all refuse.
+    #[test]
+    fn run_candidate_ingest_write_once_pre_state_refuses() {
+        // (a) R == base: the operator has not committed — refuse.
+        {
+            let repo = tempfile::tempdir().unwrap();
+            let root = repo.path();
+            seed_conflicted_candidate(root, 212, "review-001");
+            let req = IngestRequest {
+                slice: 212,
+                label: "review-001".to_owned(),
+                ingested_at: "d".to_owned(),
+            };
+            let err = candidate_ingest(root, &req)
+                .expect_err("an un-committed ref refuses")
+                .to_string();
+            assert!(err.contains("still points at base"), "{err}");
+        }
+        // (b) already Created: write-once — a second ingest finds no conflicted row.
+        {
+            let repo = tempfile::tempdir().unwrap();
+            let root = repo.path();
+            let (base, source, target_ref) = seed_conflicted_candidate(root, 212, "review-001");
+            operator_resolve(root, &base, &source, &target_ref, "RESOLVED\n");
+            let req = IngestRequest {
+                slice: 212,
+                label: "review-001".to_owned(),
+                ingested_at: "d".to_owned(),
+            };
+            candidate_ingest(root, &req).expect("first ingest succeeds");
+            let err = candidate_ingest(root, &req)
+                .expect_err("a Created row cannot be re-ingested")
+                .to_string();
+            assert!(err.contains("no un-ingested conflicted"), "{err}");
+        }
+        // (c) ambiguous label: two Conflicted rows share the label — refuse.
+        {
+            let repo = tempfile::tempdir().unwrap();
+            let root = repo.path();
+            seed_conflicted_candidate(root, 212, "review-001");
+            let mut ledger = read_candidates(root, 212).unwrap();
+            let mut dup = ledger.rows.first().expect("seed row").clone();
+            dup.id = "cand-212-review-001-dup".to_owned();
+            ledger.rows.push(dup);
+            crate::ledger::write_candidates(root, 212, &ledger).unwrap();
+            let req = IngestRequest {
+                slice: 212,
+                label: "review-001".to_owned(),
+                ingested_at: "d".to_owned(),
+            };
+            let err = candidate_ingest(root, &req)
+                .expect_err("an ambiguous label refuses")
+                .to_string();
+            assert!(err.contains("ambiguous"), "{err}");
+        }
     }
 }

@@ -322,6 +322,10 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
                 // (SL-068 PHASE-05) — Orchestrator-classed like create; refused
                 // under worker-mode.
                 CandidateCommand::Admit { .. } => Orchestrator("dispatch-candidate-admit"),
+                // candidate ingest write-once fills a Conflicted row from an
+                // operator's hand-resolved merge (SL-212) — a sole-writer ledger
+                // write; Orchestrator-classed, refused under worker-mode.
+                CandidateCommand::Ingest { .. } => Orchestrator("dispatch-candidate-ingest"),
             },
             // plan-next / status — read plan + phase sheets; never mutates a
             // ref or ledger row — Read-classed so it works under worker-mode.
@@ -462,7 +466,28 @@ pub(crate) fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dispatch::{CandidateCommand, DispatchCommand};
     use crate::memory::MemoryCommand;
+
+    /// VT-4 (SL-212 PHASE-04): `dispatch candidate ingest` is Orchestrator-classed
+    /// (`dispatch-candidate-ingest`) — a sole-writer ledger fill, so the worker-mode
+    /// guard refuses it via the shared Orchestrator branch (like create/admit).
+    #[test]
+    fn candidate_ingest_classifies_as_orchestrator() {
+        let cmd = Command::Dispatch {
+            command: DispatchCommand::Candidate {
+                command: CandidateCommand::Ingest {
+                    slice: 212,
+                    label: "review-001".to_owned(),
+                    path: None,
+                },
+            },
+        };
+        assert!(matches!(
+            write_class(&cmd),
+            WriteClass::Orchestrator("dispatch-candidate-ingest")
+        ));
+    }
 
     /// VT-8 (SL-205): `memory surface` classifies as `Read`. It reads memories
     /// and writes only runtime-tier state (seen-set + tuning log under
