@@ -1429,6 +1429,102 @@ pub(crate) fn blob_oid_at(
     }
 }
 
+/// The conflict-marker chars git writes at an unresolved locus (`<<<<<<<` ours,
+/// `|||||||` diff3 base, `=======` separator, `>>>>>>>` theirs) — each a RUN of one
+/// char whose length is the path's `conflict-marker-size` (default 7).
+const CONFLICT_MARKER_CHARS: &[u8] = b"<|=>";
+
+/// The default `conflict-marker-size` when the attribute is unset (git's built-in).
+const DEFAULT_CONFLICT_MARKER_SIZE: usize = 7;
+
+/// Whether `blob` contains a line that OPENS a conflict marker of `marker_size`:
+/// a run of exactly `marker_size` identical marker chars, then end-of-line or a
+/// space (`<<<<<<< ours`, `=======`, `>>>>>>> theirs`). Exactly-`marker_size` so a
+/// longer run (`<<<<<<<<`) is not a false positive. Pure — the byte-level core of
+/// the advisory marker scan (SL-212 EX-6, design §5.4 step 6 / gate iii).
+fn blob_has_conflict_marker(blob: &[u8], marker_size: usize) -> bool {
+    if marker_size == 0 {
+        return false;
+    }
+    blob.split(|b| *b == b'\n').any(|line| {
+        CONFLICT_MARKER_CHARS.iter().any(|&c| {
+            line.len() >= marker_size
+                && line.iter().take(marker_size).all(|&b| b == c)
+                && (line.len() == marker_size || line.get(marker_size) == Some(&b' '))
+        })
+    })
+}
+
+/// Read the raw blob bytes at `path` in tree-ish `tree` (`git cat-file -p
+/// <tree>:<path>`), `None` on absence OR any git failure. Byte-preserving (returns
+/// the blob verbatim, no UTF-8 decode) so the marker scan can NUL-detect binaries.
+/// Fail-*soft* by design (advisory caller): a `None` is indistinguishable from an
+/// empty blob to the scan, which is correct — neither carries a marker.
+fn read_blob_bytes(root: &Path, tree: &str, path: &str) -> Option<Vec<u8>> {
+    let out = run_git(root, &["cat-file", "-p", &format!("{tree}:{path}")]).ok()?;
+    out.status.success().then_some(out.stdout)
+}
+
+/// The `conflict-marker-size` gitattribute value for `path`, or the built-in
+/// default (7) when unset / unparseable / on any git failure. `git check-attr
+/// conflict-marker-size -- <path>` prints `<path>: conflict-marker-size: <value>`;
+/// `unspecified` (or a non-numeric value) ⇒ default. Fail-soft: never errors.
+fn conflict_marker_size(root: &Path, path: &str) -> usize {
+    let Ok(out) = run_git(root, &["check-attr", "conflict-marker-size", "--", path]) else {
+        return DEFAULT_CONFLICT_MARKER_SIZE;
+    };
+    if !out.status.success() {
+        return DEFAULT_CONFLICT_MARKER_SIZE;
+    }
+    String::from_utf8(out.stdout)
+        .ok()
+        .and_then(|s| {
+            s.trim()
+                .rsplit(':')
+                .next()
+                .and_then(|v| v.trim().parse::<usize>().ok())
+        })
+        .filter(|n| *n > 0)
+        .unwrap_or(DEFAULT_CONFLICT_MARKER_SIZE)
+}
+
+/// The subset of `conflict_paths` whose blob in `tree` (the resolved merge `R`'s
+/// tree) still carries an unresolved conflict marker — the ADVISORY marker scan
+/// (SL-212 EX-6, design §5.4 step 6 / validator gate iii). It **never errors and
+/// never hard-fails ingest**: the return type carries no `Err`, and every per-path
+/// obstacle FAILS OPEN (skips the path, never flags it) — a non-UTF-8 path, an
+/// unreadable/absent blob, or a NUL-detected binary. Attribute-aware: the marker
+/// length is the path's `conflict-marker-size`. Feeds `validate_ingest_provenance`'s
+/// `marker_paths`; an empty result is the fail-open floor, not a proof of cleanliness.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by run_candidate_ingest (PHASE-04)")
+)]
+pub(crate) fn surviving_marker_paths(
+    root: &Path,
+    tree: &str,
+    conflict_paths: &std::collections::BTreeSet<Vec<u8>>,
+) -> Vec<Vec<u8>> {
+    let mut flagged = Vec::new();
+    for path in conflict_paths {
+        // Fail open on a non-UTF-8 path — the scan is advisory (gate iii).
+        let Ok(path_str) = std::str::from_utf8(path) else {
+            continue;
+        };
+        let Some(blob) = read_blob_bytes(root, tree, path_str) else {
+            continue; // absent/unreadable ⇒ fail open
+        };
+        // A binary blob carries no textual markers — NUL-detected, skip.
+        if blob.contains(&0u8) {
+            continue;
+        }
+        if blob_has_conflict_marker(&blob, conflict_marker_size(root, path_str)) {
+            flagged.push(path.clone());
+        }
+    }
+    flagged
+}
+
 /// Tri-state base-corpus resolver for g2 (SL-166 design §5.2, EX-1): the last
 /// commit on `refish` that touches `pathspec` (the authored corpus floor the fork
 /// base must carry). **Fail-closed, three outcomes:**
@@ -4348,6 +4444,104 @@ mod tests {
             super::merge_base(repo.path(), &island, &base).expect("merge-base unrelated"),
             None,
             "unrelated histories share no merge-base"
+        );
+    }
+
+    /// SL-212 PHASE-04 (EX-6): the pure marker predicate flags a run of EXACTLY
+    /// `marker_size` marker chars followed by EOL or a space; a longer run or a
+    /// zero size does not false-positive.
+    #[test]
+    fn blob_has_conflict_marker_matches_exact_run_only() {
+        assert!(super::blob_has_conflict_marker(b"a\n<<<<<<< ours\nb\n", 7));
+        assert!(super::blob_has_conflict_marker(b"=======\n", 7));
+        assert!(super::blob_has_conflict_marker(b">>>>>>> theirs", 7));
+        assert!(super::blob_has_conflict_marker(b"||||||| base\n", 7));
+        // A longer run than the marker size is NOT a marker (no space/EOL at n).
+        assert!(!super::blob_has_conflict_marker(b"<<<<<<<< eight\n", 7));
+        // No markers in ordinary text.
+        assert!(!super::blob_has_conflict_marker(b"resolved\ncontent\n", 7));
+        // A short run flags only at the matching size.
+        assert!(super::blob_has_conflict_marker(b"<<< small\n", 3));
+        assert!(!super::blob_has_conflict_marker(b"<<< small\n", 7));
+        // Zero size never matches (defensive).
+        assert!(!super::blob_has_conflict_marker(b"=======\n", 0));
+    }
+
+    /// SL-212 PHASE-04 (EX-6): the advisory scan flags a markered blob at `R`'s tree
+    /// and passes a cleanly-resolved one — over the conflict set only.
+    #[test]
+    fn surviving_marker_paths_flags_markered_and_skips_clean() {
+        let repo = ScratchRepo::new();
+        repo.commit("root.txt", "root\n", "root");
+        repo.write("marked.txt", "L1\n<<<<<<< ours\nA\n=======\nB\n>>>>>>> theirs\nL2\n");
+        repo.write("clean.txt", "fully resolved\n");
+        repo.git(&["add", "marked.txt", "clean.txt"]);
+        repo.git(&["commit", "-m", "one markered, one clean"]);
+        let r_tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+
+        let c: std::collections::BTreeSet<Vec<u8>> =
+            [b"marked.txt".to_vec(), b"clean.txt".to_vec()]
+                .into_iter()
+                .collect();
+        let flagged = super::surviving_marker_paths(repo.path(), &r_tree, &c);
+        assert_eq!(
+            flagged,
+            vec![b"marked.txt".to_vec()],
+            "only the still-markered path is flagged"
+        );
+    }
+
+    /// SL-212 PHASE-04 (EX-6): a binary blob (NUL-detected) is skipped even when its
+    /// bytes happen to contain a marker-looking run — the scan is text-only.
+    #[test]
+    fn surviving_marker_paths_skips_binary_via_nul() {
+        let repo = ScratchRepo::new();
+        repo.commit("root.txt", "root\n", "root");
+        repo.write("bin.dat", "\0\0<<<<<<< ours\n\0");
+        repo.git(&["add", "bin.dat"]);
+        repo.git(&["commit", "-m", "binary with marker-looking bytes"]);
+        let r_tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+
+        let c: std::collections::BTreeSet<Vec<u8>> = [b"bin.dat".to_vec()].into_iter().collect();
+        assert!(
+            super::surviving_marker_paths(repo.path(), &r_tree, &c).is_empty(),
+            "a NUL-containing blob is binary — skipped, never flagged"
+        );
+    }
+
+    /// SL-212 PHASE-04 (EX-6): fail open — a conflict path ABSENT from `R`'s tree
+    /// yields no flag and no error (an operator deletion at a conflict locus).
+    #[test]
+    fn surviving_marker_paths_fails_open_on_absent_blob() {
+        let repo = ScratchRepo::new();
+        repo.commit("root.txt", "root\n", "root");
+        let r_tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+
+        let c: std::collections::BTreeSet<Vec<u8>> = [b"gone.txt".to_vec()].into_iter().collect();
+        assert!(
+            super::surviving_marker_paths(repo.path(), &r_tree, &c).is_empty(),
+            "an absent conflict path fails open (deleted resolution), never errors"
+        );
+    }
+
+    /// SL-212 PHASE-04 (EX-6): attribute-aware — a `conflict-marker-size=3` path
+    /// flags a 3-char run that the default-7 scan would miss.
+    #[test]
+    fn surviving_marker_paths_honours_conflict_marker_size_attribute() {
+        let repo = ScratchRepo::new();
+        repo.commit("root.txt", "root\n", "root");
+        repo.write(".gitattributes", "small.txt conflict-marker-size=3\n");
+        // A 3-char separator: a marker at size 3, invisible at the default 7.
+        repo.write("small.txt", "a\n===\nb\n");
+        repo.git(&["add", ".gitattributes", "small.txt"]);
+        repo.git(&["commit", "-m", "custom marker size"]);
+        let r_tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+
+        let c: std::collections::BTreeSet<Vec<u8>> = [b"small.txt".to_vec()].into_iter().collect();
+        assert_eq!(
+            super::surviving_marker_paths(repo.path(), &r_tree, &c),
+            vec![b"small.txt".to_vec()],
+            "the size-3 attribute flags a 3-char run"
         );
     }
 
