@@ -109,9 +109,9 @@ exit_criteria = [
   { id = "EX-5", text = "Behaviour-preserving: the clean and non-worktree create arms and admit/integrate suites remain green unchanged; only the conflict+worktree worktree-state assertion changes." },
 ]
 verification = [
-  { id = "VT-1", expects = "happy materialisation: after create, the worktree has conflict markers at C, an unmerged index (stages 1/2/3), and MERGE_HEAD == source_oid.", test_file = "src/dispatch.rs", keywords = ["--reset", "MERGE_HEAD", "update-index"], waived = false },
-  { id = "VT-2", expects = "engine immunity (D2 regression): with branch.<n>.mergeOptions=-Xours set, create still materialises merge-tree's T_c, not the config-perturbed merge.", test_file = "src/dispatch.rs", keywords = ["mergeOptions", "read-tree"], waived = false },
-  { id = "VT-3", expects = "exact-projection (RV-289 F-2): a merge that conflicts on one path and cleanly deletes another → the deleted path is removed from the worktree; resolve+commit → diff(R.tree,T_c) ⊆ C (ingest would accept).", test_file = "src/dispatch.rs", keywords = ["--reset", "changed_paths"], patterns = ["fn .*deletion"], waived = false },
+  { id = "VT-1", expects = "happy materialisation: after create, the worktree has conflict markers at C, an unmerged index (stages 1/2/3), and MERGE_HEAD == source_oid.", test_file = "src/git.rs", keywords = ["--reset", "MERGE_HEAD", "update-index"], waived = false },
+  { id = "VT-2", expects = "engine immunity (D2 regression): with branch.<n>.mergeOptions=-Xours set, create still materialises merge-tree's T_c, not the config-perturbed merge.", test_file = "tests/e2e_dispatch_candidate.rs", keywords = ["mergeOptions"], waived = false },
+  { id = "VT-3", expects = "exact-projection (RV-289 F-2): a merge that conflicts on one path and cleanly deletes another → the deleted path is removed from the worktree; resolve+commit → diff(R.tree,T_c) ⊆ C (ingest would accept).", test_file = "src/git.rs", keywords = ["--reset"], patterns = ["fn .*deletion"], waived = false },
   { id = "VT-4", expects = "guards + rollback: >1 merge-base and a custom driver both refuse (no row/ref/worktree); a provision failure rolls back leaving no row, ref, or worktree.", test_file = "src/dispatch.rs", keywords = ["merge_base_all", "custom_merge_driver_paths"], waived = false },
 ]
 specs        = []
