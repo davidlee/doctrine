@@ -1404,11 +1404,16 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
                 let ahead = trunk_drift(root, &source_oid)?.map_or(0, |d| d.ahead);
                 bail!(candidate_conflict_message(&source_ref, &req.base, ahead))
             }
-            // Conflicted + --worktree: park the branch at the base so the user
-            // resolves+commits in the worktree. No merge commit exists yet.
-            // PHASE-03 rewrites this arm to materialise T_c + the unmerged stages.
-            MergeTree::Conflict { .. } => {
-                (base_oid.clone(), String::new(), CandidateStatus::Conflicted)
+            // Conflicted + --worktree (SL-212 PHASE-03, design §5.4/D2): guards, an
+            // atomic Conflicted row written BEFORE the worktree, an ON-BRANCH checkout,
+            // then materialise merge-tree's `T_c` + unmerged stages so the operator
+            // resolves the markers and `git commit`s a genuine 2-parent merge. Fully
+            // self-contained — returns without the shared clean-create tail below.
+            MergeTree::Conflict { tree, stages } => {
+                return create_conflict_worktree(
+                    root, req, &slice3, &id, &target_ref, &base_oid, &source_oid,
+                    &source_ref, &tree, &stages, ledger, supersedes,
+                );
             }
         };
 
@@ -1428,7 +1433,9 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
     //     not know about. The conflicted lifecycle ALWAYS materialises (so the
     //     user can resolve); a clean create only on the opt-in --worktree. -----
     let worktree_path = if req.worktree {
-        match add_candidate_worktree(root, &id, &target_ref) {
+        // Clean --worktree: detached checkout (unchanged; the conflict arm returns
+        // earlier with an on-branch checkout so the operator's commit advances the ref).
+        match add_candidate_worktree(root, &id, &target_ref, false) {
             Ok(path) => {
                 // CHR-030: provision gitignored embed assets (web/map/dist/)
                 // so the candidate compiles out of the box. run_provision
@@ -1498,7 +1505,18 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
 /// Add a linked worktree for candidate `id` at `target_ref` under
 /// `.doctrine/state/dispatch/candidate/<id>` (the gitignored runtime tier).
 /// Returns the worktree path on success. Impure shell.
-fn add_candidate_worktree(root: &Path, id: &str, target_ref: &str) -> anyhow::Result<PathBuf> {
+///
+/// `on_branch` picks the checkout mode. `false` passes the FULL refname → git
+/// detaches HEAD (the clean-arm behaviour). `true` passes the branch SHORTNAME
+/// (`refs/heads/` stripped) → git checks out ON the branch, so an operator commit
+/// **advances** `target_ref` — required by SL-212 so the ingest verb's
+/// `resolve_commit(target_ref)` reads the resolved merge `R` (OQ-1 probe; design §5.4).
+fn add_candidate_worktree(
+    root: &Path,
+    id: &str,
+    target_ref: &str,
+    on_branch: bool,
+) -> anyhow::Result<PathBuf> {
     let wt_path = root.join(".doctrine/state/dispatch/candidate").join(id);
     if let Some(parent) = wt_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -1506,7 +1524,12 @@ fn add_candidate_worktree(root: &Path, id: &str, target_ref: &str) -> anyhow::Re
     let wt_str = wt_path
         .to_str()
         .context("candidate create: worktree path is not valid UTF-8")?;
-    git::git_text(root, &["worktree", "add", "--quiet", wt_str, target_ref])?;
+    let checkout = if on_branch {
+        target_ref.strip_prefix("refs/heads/").unwrap_or(target_ref)
+    } else {
+        target_ref
+    };
+    git::git_text(root, &["worktree", "add", "--quiet", wt_str, checkout])?;
     Ok(wt_path)
 }
 
@@ -1515,6 +1538,142 @@ fn add_candidate_worktree(root: &Path, id: &str, target_ref: &str) -> anyhow::Re
 /// failed delete is swallowed: the caller is already returning the primary error.
 fn rollback_ref(root: &Path, target_ref: &str, expected: &str) {
     let _ignored = git::git_opt(root, &["update-ref", "-d", target_ref, expected]);
+}
+
+/// The conflict + `--worktree` create arm (SL-212 PHASE-03, design §5.4/D2). Runs
+/// only when `merge-tree` reported a conflict AND `--worktree` was requested; every
+/// other arm keeps the shared clean-create path (EX-5). Steps, in order:
+///
+/// 1. **Guards** (before any durable write): a single merge base (else criss-cross,
+///    refuse) and no custom (non-built-in) merge driver on any merged path (else the
+///    conflict set is not reproducible, refuse — D8). `T_c` is the superset checked.
+/// 2. **CAS the branch** at `base_oid` (zero-oid create — refuses an existing ref).
+/// 3. **Write the Conflicted row atomically & durably** (`merge_oid=""`) — BEFORE the
+///    worktree (§3 / R-4 / EX-4), so a crash never leaves a worktree the ledger does
+///    not know about. Rolls the ref back if the store fails.
+/// 4. **Provision the worktree ON the branch** + **materialise** merge-tree's `T_c`
+///    (no `git merge`, D2). Any failure here rolls back worktree + row + ref (§6).
+fn create_conflict_worktree(
+    root: &Path,
+    req: &CreateRequest,
+    slice3: &str,
+    id: &str,
+    target_ref: &str,
+    base_oid: &str,
+    source_oid: &str,
+    source_ref: &str,
+    tc: &str,
+    stages: &[git::ConflictStage],
+    mut ledger: Candidates,
+    supersedes: String,
+) -> anyhow::Result<()> {
+    // --- 1. Guards — refuse before any durable state (design §5.4 step 1). --------
+    let bases = git::merge_base_all(root, base_oid, source_oid)?;
+    anyhow::ensure!(
+        bases.len() == 1,
+        "candidate create: base {base_oid} and source {source_oid} have {} merge bases \
+         (criss-cross) — a hand-resolved ingest needs a single 3-way base; the conflict \
+         set would be ambiguous. Resolve via a different route.",
+        bases.len()
+    );
+    let custom = git::custom_merge_driver_paths(root, tc)?;
+    if let Some(path) = custom.first() {
+        bail!(
+            "candidate create: path {} carries a custom (non-built-in) merge driver — the \
+             conflict set is not reproducible, so a hand-resolved ingest cannot be validated \
+             (design §5.4/D8). Only built-in drivers (union/binary/…) are allowed.",
+            String::from_utf8_lossy(path)
+        );
+    }
+
+    // --- 2. CAS-create the branch at base_oid (precedes the row write). -----------
+    match git::update_ref_cas(root, target_ref, base_oid, ZERO_OID)? {
+        RefCas::Updated => {}
+        RefCas::Moved { actual } => bail!(
+            "candidate create: {target_ref} already exists (at {}) — \
+             supersede creates a fresh label, never rewrites a branch",
+            actual.as_deref().unwrap_or("?")
+        ),
+    }
+
+    // --- 3. Conflicted row (empty merge_oid) — atomic & durable BEFORE the worktree.
+    let row = CandidateRow {
+        id: id.to_owned(),
+        label: req.label.clone(),
+        kind: req.kind,
+        role: req.role,
+        payload: req.payload,
+        target_ref: target_ref.to_owned(),
+        source_ref: source_ref.to_owned(),
+        source_oid: source_oid.to_owned(),
+        base_ref: req.base.clone(),
+        base_oid: base_oid.to_owned(),
+        merge_oid: String::new(),
+        status: CandidateStatus::Conflicted,
+        supersedes,
+        reason: String::new(),
+        created_by: "dispatch candidate create".to_owned(),
+        created_at: req.created_at.clone(),
+        ingested_at: String::new(),
+        merge_provenance: crate::ledger::MergeProvenance::Doctrine,
+    };
+    ledger.rows.push(row);
+    if let Err(e) = crate::ledger::write_candidates(root, req.slice, &ledger) {
+        rollback_ref(root, target_ref, base_oid);
+        return Err(e.context("candidate create: record conflicted candidate row"));
+    }
+
+    // --- 4. Provision the worktree ON the branch, then materialise T_c. On any
+    //        failure, roll back worktree + row + ref (design §5.4 step 6). ---------
+    let merge_msg = format!("candidate({slice3}/{}): merge {source_ref}\n", req.label);
+    let provision_and_materialise = || -> anyhow::Result<PathBuf> {
+        let path = add_candidate_worktree(root, id, target_ref, true)?;
+        // CHR-030 parity with the clean arm: provision gitignored embed assets so
+        // the candidate compiles out of the box.
+        run_provision(Some(root.to_path_buf()), &path).context("provision candidate worktree")?;
+        git::materialise_conflict_worktree(&path, tc, stages, source_oid, &merge_msg)?;
+        Ok(path)
+    };
+    let worktree_path = match provision_and_materialise() {
+        Ok(path) => path,
+        Err(e) => {
+            rollback_conflict_worktree(root, id, req.slice, target_ref, base_oid, &ledger);
+            return Err(e);
+        }
+    };
+
+    writeln!(io::stdout(), "{target_ref}")?;
+    writeln!(io::stdout(), "{}", worktree_path.display())?;
+    writeln!(
+        io::stderr(),
+        "candidate create: {id} conflicted — resolve the markers and `git commit` in {}, \
+         then `dispatch candidate ingest` from the coordination tree",
+        worktree_path.display()
+    )?;
+    Ok(())
+}
+
+/// Roll back a partly-built conflict candidate (design §5.4 step 6): remove the
+/// worktree, drop its row from the ledger (re-store atomically), then CAS-delete the
+/// ref at `base_oid` (valid — nothing moved it). Best-effort; the caller returns the
+/// primary error. `ledger` still holds the just-pushed row, so filtering by `id`
+/// yields the pre-row manifest.
+fn rollback_conflict_worktree(
+    root: &Path,
+    id: &str,
+    slice: u32,
+    target_ref: &str,
+    base_oid: &str,
+    ledger: &Candidates,
+) {
+    let wt_path = root.join(".doctrine/state/dispatch/candidate").join(id);
+    if let Some(wt) = wt_path.to_str() {
+        let _ignored = git::git_opt(root, &["worktree", "remove", "--force", wt]);
+    }
+    let mut without_row = ledger.clone();
+    without_row.rows.retain(|r| r.id != id);
+    let _ignored = crate::ledger::write_candidates(root, slice, &without_row);
+    rollback_ref(root, target_ref, base_oid);
 }
 
 /// The branch the worktree at `root` is checked out on, short form (e.g.

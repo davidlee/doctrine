@@ -839,13 +839,6 @@ pub(crate) fn commit_tree(
 /// verbatim under `-z`; it may not be valid UTF-8, D9). Feeds PHASE-03's
 /// `update-index --index-info` stage rewrite (mode/oid/stage/path is exactly the
 /// index-info line format).
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-03 create-arm reads these fields to rewrite the index"
-    )
-)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ConflictStage {
     /// The blob mode, e.g. `100644`.
@@ -980,6 +973,126 @@ pub(crate) fn commit_tree_merge(
             msg,
         ],
     )
+}
+
+/// Run `git <args>` with `raw` streamed on stdin, returning raw stdout bytes; errors
+/// on non-zero exit. The byte-safe piped-stdin seam (D9) shared by the plumbing that
+/// must feed git records it cannot pass as argv — e.g. `update-index --index-info`
+/// stage rewrites whose paths are raw bytes. Mirrors [`hash_object_stdin`]'s spawn/pipe.
+fn git_stdin(root: &Path, args: &[&str], raw: &[u8]) -> Result<Vec<u8>, CaptureError> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(NORMATIVE_FLAGS)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| CaptureError::Git(format!("spawn git {}: {e}", args.join(" "))))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| CaptureError::Git(format!("git {}: no stdin pipe", args.join(" "))))?
+        .write_all(raw)
+        .map_err(|e| CaptureError::Git(format!("git {}: write stdin: {e}", args.join(" "))))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| CaptureError::Git(format!("git {}: wait: {e}", args.join(" "))))?;
+    if output.status.success() {
+        Ok(output.stdout)
+    } else {
+        Err(CaptureError::Git(format!(
+            "{}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )))
+    }
+}
+
+/// Write `bytes` to the worktree-private git-dir file `name` (e.g. `MERGE_HEAD`),
+/// resolved via `git rev-parse --git-path <name>` with cwd = `worktree`. In a linked
+/// worktree that path is the PER-WORKTREE git dir (`…/.git/worktrees/<n>/<name>`),
+/// not the common dir (OQ-1 probe) — so the operator's `git commit` in that worktree
+/// reads it. `--git-path` may return an absolute or a cwd-relative path; joining onto
+/// `worktree` is correct for both (an absolute join replaces).
+fn write_worktree_git_path(worktree: &Path, name: &str, bytes: &[u8]) -> Result<(), CaptureError> {
+    let loc = git_text(worktree, &["rev-parse", "--git-path", name])?;
+    let path = worktree.join(loc);
+    std::fs::write(&path, bytes)
+        .map_err(|e| CaptureError::Git(format!("write {name}: {e}")))?;
+    Ok(())
+}
+
+/// Materialise merge-tree's `Conflict` output (`tc` = `T_c`, `stages` = the unmerged
+/// table `C`) into `worktree`, so an operator resolves the markers and `git commit`s
+/// a genuine 2-parent merge (design §5.4 step 5, SL-212 PHASE-03, D2 — NO `git merge`).
+/// Every command runs with cwd = `worktree`; git resolves the worktree-private index
+/// and MERGE_HEAD/MODE/MSG automatically (OQ-1), so no explicit `GIT_INDEX_FILE`.
+///
+/// Sequence: (1) `read-tree --reset -u <tc>` — index+tree become `T_c` EXACTLY,
+/// including removal of paths `T_c` deletes (RV-289 F-2); (2) rewrite each conflict
+/// path to unmerged stages 1/2/3 via ONE `update-index --index-info` (LF records:
+/// remove stage-0 then feed the stage lines — `-z` is NOT usable, it drops the stage
+/// field); (3) write `MERGE_HEAD=source_oid`, an empty `MERGE_MODE`, and `MERGE_MSG`,
+/// so `git commit` yields ordered parents `[HEAD(base), MERGE_HEAD(source)]`.
+///
+/// A conflict path carrying a raw newline or tab byte cannot be represented in an LF
+/// index-info record → **defensive refuse** (§5.5); end-to-end byte-path safety (D9)
+/// is an ingest concern (`changed_paths -z`), not this create-side rewrite.
+pub(crate) fn materialise_conflict_worktree(
+    worktree: &Path,
+    tc: &str,
+    stages: &[ConflictStage],
+    source_oid: &str,
+    merge_msg: &str,
+) -> Result<(), CaptureError> {
+    // 1. Exact projection: index + working tree become T_c (deletions applied).
+    git_text(worktree, &["read-tree", "--reset", "-u", tc])?;
+
+    // 2. Unmerged stage rewrite. Refuse a path the LF record cannot carry, then
+    //    remove stage-0 for each conflict path before feeding its 1/2/3 stages.
+    let mut input: Vec<u8> = Vec::new();
+    let mut paths: Vec<&[u8]> = Vec::new();
+    for s in stages {
+        if s.path.iter().any(|&b| b == b'\n' || b == b'\t') {
+            return Err(CaptureError::Git(format!(
+                "materialise: conflict path {} contains a raw newline/tab byte — cannot \
+                 represent in an index-info record",
+                String::from_utf8_lossy(&s.path)
+            )));
+        }
+        if !paths.contains(&s.path.as_slice()) {
+            paths.push(&s.path);
+        }
+    }
+    for p in &paths {
+        input.extend_from_slice(b"0 ");
+        input.extend_from_slice(ZERO_OID.as_bytes());
+        input.push(b'\t');
+        input.extend_from_slice(p);
+        input.push(b'\n');
+    }
+    for s in stages {
+        input.extend_from_slice(s.mode.as_bytes());
+        input.push(b' ');
+        input.extend_from_slice(s.oid.as_bytes());
+        input.push(b' ');
+        input.extend_from_slice(s.stage.to_string().as_bytes());
+        input.push(b'\t');
+        input.extend_from_slice(&s.path);
+        input.push(b'\n');
+    }
+    git_stdin(worktree, &["update-index", "--index-info"], &input)?;
+
+    // 3. Merge metadata → the worktree-private git dir (ordered 2-parent commit).
+    write_worktree_git_path(worktree, "MERGE_HEAD", format!("{source_oid}\n").as_bytes())?;
+    write_worktree_git_path(worktree, "MERGE_MODE", b"")?;
+    write_worktree_git_path(worktree, "MERGE_MSG", merge_msg.as_bytes())?;
+    Ok(())
 }
 
 /// Outcome of a compare-and-swap ref update ([`update_ref_cas`]).
@@ -1134,13 +1247,6 @@ pub(crate) fn merge_base(root: &Path, a: &str, b: &str) -> Result<Option<String>
 /// operator's resolution is validated against. Exit 0 ⇒ the (≥1) base oids in
 /// git's order; exit 1 ⇒ unrelated histories, no base (empty Vec); any other exit
 /// errors (fail-closed, never masked as "no base"). Refusal on >1 is the caller's.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "PHASE-03/04 guards refuse a criss-cross (>1 base)"
-    )
-)]
 pub(crate) fn merge_base_all(root: &Path, a: &str, b: &str) -> Result<Vec<String>, CaptureError> {
     let output = run_git(root, &["merge-base", "--all", a, b])?;
     match output.status.code() {
@@ -1291,10 +1397,6 @@ fn check_attr_merge_z(root: &Path, stdin_bytes: &[u8]) -> Result<Vec<u8>, Captur
 /// value OUTSIDE the built-in allow-list
 /// (`unspecified`/`set`/`unset`/`text`/`union`/`binary`) is treated as custom
 /// (SUPERSET — an unknown value refuses rather than slips through). Byte-safe (D9).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "PHASE-03/04 guards refuse a custom merge driver")
-)]
 pub(crate) fn custom_merge_driver_paths(
     root: &Path,
     tree: &str,
@@ -4354,6 +4456,85 @@ mod tests {
             }
             super::MergeTree::Conflict { .. } => panic!("expected a clean merge"),
         }
+    }
+
+    /// SL-212 PHASE-03 (VT-1/VT-3 seam): materialise merge-tree's `Conflict` output
+    /// into a linked worktree. `read-tree --reset -u T_c` is the EXACT projection
+    /// (a cleanly-deleted path is removed — RV-289 F-2), each conflict path carries
+    /// unmerged stages 1/2/3, and MERGE_HEAD=source so the operator's `git commit`
+    /// yields an ordered 2-parent [base(HEAD), source(MERGE_HEAD)] merge. Runs every
+    /// command with cwd = the worktree (OQ-1: git resolves the worktree-private
+    /// index + MERGE_HEAD automatically).
+    #[test]
+    fn materialise_conflict_worktree_projects_stages_deletion_and_merge_head() {
+        let repo = ScratchRepo::new();
+        repo.commit("f.txt", "L1\nL2\nL3\n", "root f");
+        repo.commit("del.txt", "keep\n", "add del");
+        // source: conflicting edit to f.txt + a CLEAN deletion of del.txt.
+        repo.git(&["checkout", "-q", "-b", "source"]);
+        repo.write("f.txt", "L1\nSRC\nL3\n");
+        repo.git(&["add", "f.txt"]);
+        repo.git(&["rm", "-q", "del.txt"]);
+        repo.git(&["commit", "-m", "source edit + del"]);
+        let source = repo.git(&["rev-parse", "HEAD"]);
+        // base: diverging conflicting edit to f.txt, keeps del.txt.
+        repo.git(&["checkout", "-q", "main"]);
+        repo.commit("f.txt", "L1\nBASE\nL3\n", "base edit");
+        let base = repo.git(&["rev-parse", "HEAD"]);
+        let mb = super::merge_base(repo.path(), &base, &source)
+            .expect("merge-base")
+            .expect("shared ancestor");
+        let (tc, stages) = match super::merge_tree(repo.path(), &mb, &base, &source).expect("mt") {
+            super::MergeTree::Conflict { tree, stages } => (tree, stages),
+            super::MergeTree::Clean { .. } => panic!("expected a content conflict"),
+        };
+
+        // A linked worktree checked out ON the candidate branch at base.
+        repo.git(&["branch", "cand", &base]);
+        let wt = repo.path().join("cand-wt");
+        repo.git(&["worktree", "add", "--quiet", wt.to_str().unwrap(), "cand"]);
+
+        super::materialise_conflict_worktree(&wt, &tc, &stages, &source, "merge msg\n")
+            .expect("materialise");
+
+        let gitw = |args: &[&str]| -> String {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(&wt)
+                .args(args)
+                .env("GIT_AUTHOR_DATE", FIXED_DATE)
+                .env("GIT_COMMITTER_DATE", FIXED_DATE)
+                .output()
+                .expect("spawn git");
+            assert!(
+                out.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+
+        // EX-1: three unmerged stages at f.txt; del.txt removed from the worktree.
+        let unmerged = gitw(&["ls-files", "-u"]);
+        assert_eq!(unmerged.lines().count(), 3, "stages 1/2/3 at f.txt: {unmerged}");
+        assert!(!wt.join("del.txt").exists(), "cleanly-deleted path removed (RV-289 F-2)");
+        assert!(
+            std::fs::read_to_string(wt.join("f.txt"))
+                .unwrap()
+                .contains("<<<<<<<"),
+            "conflict markers materialised at f.txt"
+        );
+        // EX-2: MERGE_HEAD carries the source oid.
+        assert_eq!(gitw(&["rev-parse", "MERGE_HEAD"]), source, "MERGE_HEAD == source");
+
+        // Operator resolves + commits → ordered 2-parent merge, branch advanced.
+        std::fs::write(wt.join("f.txt"), "L1\nRESOLVED\nL3\n").unwrap();
+        gitw(&["add", "f.txt"]);
+        gitw(&["commit", "-q", "--no-edit"]);
+        let r = gitw(&["rev-parse", "HEAD"]);
+        assert_eq!(gitw(&["rev-parse", "HEAD^1"]), base, "parent 1 == base");
+        assert_eq!(gitw(&["rev-parse", "HEAD^2"]), source, "parent 2 == source");
+        assert_eq!(gitw(&["rev-parse", "cand"]), r, "on-branch commit advanced the branch to R");
     }
 
     /// RV-030 F-9: `read_path_at` reads a blob from a refish's committed tree
