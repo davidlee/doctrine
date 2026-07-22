@@ -1089,6 +1089,13 @@ fn is_journaled_evidence_ref(source_ref: &str, slice3: &str) -> bool {
 /// Named constant per STD-001 — never a literal at the call site.
 const CANDIDATE_PROVENANCE_DEPTH_BUDGET: u32 = 16;
 
+/// The gitignored runtime subpath (relative to the coordination root) that parents
+/// every candidate linked worktree: `<root>/.doctrine/state/dispatch/candidate/<id>`.
+/// Named constant per STD-001 — the single source for the two `add`/`rollback`
+/// worktree-path joins AND the ingest coordination-root guard (design §5.3, RV-289
+/// F-1: a cwd resolved *under* this subpath is a candidate checkout, refused).
+const CANDIDATE_WORKTREE_SUBPATH: &str = ".doctrine/state/dispatch/candidate";
+
 /// Single classifier for a candidate ref: `refs/heads/candidate/<N>/<label>`.
 fn is_candidate_ref(source_ref: &str) -> bool {
     source_ref.starts_with(CANDIDATE_REF_PREFIX)
@@ -1527,7 +1534,7 @@ fn add_candidate_worktree(
     target_ref: &str,
     on_branch: bool,
 ) -> anyhow::Result<PathBuf> {
-    let wt_path = root.join(".doctrine/state/dispatch/candidate").join(id);
+    let wt_path = root.join(CANDIDATE_WORKTREE_SUBPATH).join(id);
     if let Some(parent) = wt_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -1548,6 +1555,44 @@ fn add_candidate_worktree(
 /// failed delete is swallowed: the caller is already returning the primary error.
 fn rollback_ref(root: &Path, target_ref: &str, expected: &str) {
     let _ignored = git::git_opt(root, &["update-ref", "-d", target_ref, expected]);
+}
+
+/// The two conflict-reproducibility guards SL-212 runs before trusting a mechanical
+/// `merge-tree` conflict set — shared by create's conflict arm and the ingest verb
+/// (design §5.4 step 1/4, D8). Refuses (a) more than one merge base (criss-cross —
+/// an ambiguous 3-way a hand-resolution cannot be bound to) and (b) any custom
+/// (non-built-in) `merge` driver on a path in `tc` (nondeterministic `C` — the
+/// conflict set is not reproducible). Returns the single merge-base oid on success;
+/// `verb` names the caller for the refusal ("candidate create" | "candidate
+/// ingest"). Impure shell (git). One home for the guard pair — no third inline copy.
+fn conflict_reproducibility_guards(
+    root: &Path,
+    base_oid: &str,
+    source_oid: &str,
+    tc: &str,
+    verb: &str,
+) -> anyhow::Result<String> {
+    let bases = git::merge_base_all(root, base_oid, source_oid)?;
+    anyhow::ensure!(
+        bases.len() == 1,
+        "{verb}: base {base_oid} and source {source_oid} have {} merge bases \
+         (criss-cross) — a hand-resolved ingest needs a single 3-way base; the conflict \
+         set would be ambiguous. Resolve via a different route.",
+        bases.len()
+    );
+    let custom = git::custom_merge_driver_paths(root, tc)?;
+    if let Some(path) = custom.first() {
+        bail!(
+            "{verb}: path {} carries a custom (non-built-in) merge driver — the \
+             conflict set is not reproducible, so a hand-resolved ingest cannot be validated \
+             (design §5.4/D8). Only built-in drivers (union/binary/…) are allowed.",
+            String::from_utf8_lossy(path)
+        );
+    }
+    // `len() == 1` ensured above ⇒ exactly one element; `next()` cannot be None.
+    bases.into_iter().next().ok_or_else(|| {
+        anyhow::anyhow!("{verb}: merge-base --all returned no base after a len==1 check")
+    })
 }
 
 /// The conflict + `--worktree` create arm (SL-212 PHASE-03, design §5.4/D2). Runs
@@ -1582,24 +1627,11 @@ fn create_conflict_worktree(
     mut ledger: Candidates,
     supersedes: String,
 ) -> anyhow::Result<()> {
-    // --- 1. Guards — refuse before any durable state (design §5.4 step 1). --------
-    let bases = git::merge_base_all(root, base_oid, source_oid)?;
-    anyhow::ensure!(
-        bases.len() == 1,
-        "candidate create: base {base_oid} and source {source_oid} have {} merge bases \
-         (criss-cross) — a hand-resolved ingest needs a single 3-way base; the conflict \
-         set would be ambiguous. Resolve via a different route.",
-        bases.len()
-    );
-    let custom = git::custom_merge_driver_paths(root, tc)?;
-    if let Some(path) = custom.first() {
-        bail!(
-            "candidate create: path {} carries a custom (non-built-in) merge driver — the \
-             conflict set is not reproducible, so a hand-resolved ingest cannot be validated \
-             (design §5.4/D8). Only built-in drivers (union/binary/…) are allowed.",
-            String::from_utf8_lossy(path)
-        );
-    }
+    // --- 1. Guards — refuse before any durable state (design §5.4 step 1). The
+    //        returned single base is unused here (the caller already merged with it
+    //        to produce `tc`); ingest uses it to feed its own `merge_tree`. --------
+    let _base =
+        conflict_reproducibility_guards(root, base_oid, source_oid, tc, "candidate create")?;
 
     // --- 2. CAS-create the branch at base_oid (precedes the row write). -----------
     match git::update_ref_cas(root, target_ref, base_oid, ZERO_OID)? {
@@ -1681,7 +1713,7 @@ fn rollback_conflict_worktree(
     base_oid: &str,
     ledger: &Candidates,
 ) {
-    let wt_path = root.join(".doctrine/state/dispatch/candidate").join(id);
+    let wt_path = root.join(CANDIDATE_WORKTREE_SUBPATH).join(id);
     if let Some(wt) = wt_path.to_str() {
         let _ignored = git::git_opt(root, &["worktree", "remove", "--force", wt]);
     }
