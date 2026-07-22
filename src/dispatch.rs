@@ -2361,37 +2361,57 @@ fn cells(values: &[&str]) -> Vec<String> {
     values.iter().map(|s| (*s).to_string()).collect()
 }
 
-/// EX-3: print the safe NEXT command(s) — concrete verbs the user runs, not
-/// "inspect the raw refs". Guidance branches on ledger state: no candidates ⇒
-/// create; candidates present ⇒ admit/close guidance; any drift ⇒ a re-admit
-/// note (the admitted oid is immutable; a moved tip needs a fresh candidate).
-fn write_next_commands(slice3: &str, ledger: &Candidates, any_drift: bool) -> anyhow::Result<()> {
+/// EX-3: the safe NEXT command lines — concrete verbs the user runs, not "inspect
+/// the raw refs". Pure so it is unit-testable (the impure shell just prints them).
+/// Guidance branches on ledger state: no candidates ⇒ create; candidates present ⇒
+/// admit/close guidance; a conflicted (parked, empty-`merge_oid`) row ⇒ the
+/// sanctioned hand-resolve path `candidate ingest` (SL-212 — adopt a hand-resolved
+/// merge, not just re-create); any drift ⇒ a re-admit note (the admitted oid is
+/// immutable; a moved tip needs a fresh candidate).
+fn next_command_lines(slice3: &str, ledger: &Candidates, any_drift: bool) -> Vec<String> {
     let slice = slice3.trim_start_matches('0');
     let slice = if slice.is_empty() { "0" } else { slice };
-    writeln!(io::stdout(), "\nnext:")?;
     if ledger.rows.is_empty() {
-        writeln!(
-            io::stdout(),
-            "  dispatch candidate create --slice {slice} --role review_surface \
+        return vec![format!(
+            "dispatch candidate create --slice {slice} --role review_surface \
              --payload impl_bundle --base refs/heads/main --label review-001 --worktree"
-        )?;
-        return Ok(());
+        )];
     }
-    writeln!(
-        io::stdout(),
-        "  dispatch candidate create --slice {slice} ...   # publish a fresh candidate"
-    )?;
-    writeln!(
-        io::stdout(),
-        "  dispatch candidate admit --slice {slice} --id <candidate-id> --review RV-NNN   \
-         # pin a candidate for review/close"
-    )?;
+    let mut lines = vec![
+        format!("dispatch candidate create --slice {slice} ...   # publish a fresh candidate"),
+        format!(
+            "dispatch candidate admit --slice {slice} --id <candidate-id> --review RV-NNN   \
+             # pin a candidate for review/close"
+        ),
+    ];
+    // SL-212: a conflicted row is parked at base with an empty merge_oid — the
+    // sanctioned recovery is a hand-resolve adopted via `candidate ingest`, not a
+    // re-create (which recomputes the same conflict). One line per conflicted row.
+    for row in &ledger.rows {
+        if row.status == CandidateStatus::Conflicted && row.merge_oid.is_empty() {
+            lines.push(format!(
+                "dispatch candidate ingest --slice {slice} --label {}   \
+                 # adopt a hand-resolved merge for this conflicted candidate",
+                row.label
+            ));
+        }
+    }
     if any_drift {
-        writeln!(
-            io::stdout(),
-            "  note: a DRIFTED candidate's live tip moved off its recorded/admitted oid \
+        lines.push(
+            "note: a DRIFTED candidate's live tip moved off its recorded/admitted oid \
              (immutable) — supersede with a fresh candidate rather than editing in place"
-        )?;
+                .to_owned(),
+        );
+    }
+    lines
+}
+
+/// Print the EX-3 next-command block ([`next_command_lines`]) under a `next:`
+/// header, two-space indented. Impure shell.
+fn write_next_commands(slice3: &str, ledger: &Candidates, any_drift: bool) -> anyhow::Result<()> {
+    writeln!(io::stdout(), "\nnext:")?;
+    for line in next_command_lines(slice3, ledger, any_drift) {
+        writeln!(io::stdout(), "  {line}")?;
     }
     Ok(())
 }
@@ -6792,6 +6812,78 @@ mod tests {
                 &[]
             )
             .is_ok()
+        );
+    }
+
+    /// A minimal in-memory candidate row for the pure status-surface tests —
+    /// only the fields the next-command guidance reads (`label`, `status`,
+    /// `merge_oid`) are meaningful; the rest are inert placeholders.
+    fn guidance_row(label: &str, status: CandidateStatus, merge_oid: &str) -> CandidateRow {
+        CandidateRow {
+            id: format!("cand-212-{label}"),
+            label: label.to_owned(),
+            kind: CandidateKind::Audit,
+            role: CandidateRole::CloseTarget,
+            payload: CandidatePayload::Code,
+            target_ref: format!("refs/heads/candidate/212/{label}"),
+            source_ref: "refs/heads/source".to_owned(),
+            source_oid: "src".to_owned(),
+            base_ref: "refs/heads/main".to_owned(),
+            base_oid: "base".to_owned(),
+            merge_oid: merge_oid.to_owned(),
+            status,
+            supersedes: String::new(),
+            reason: String::new(),
+            created_by: "test".to_owned(),
+            created_at: "2026-01-01".to_owned(),
+            ingested_at: String::new(),
+            merge_provenance: crate::ledger::MergeProvenance::Doctrine,
+        }
+    }
+
+    /// VT-2 — the status surface prescribes `candidate ingest` for a conflicted,
+    /// un-ingested row (parked at base, empty `merge_oid`), naming that row's
+    /// label, and does NOT prescribe it for a cleanly-created row.
+    #[test]
+    fn candidate_status_prescribes_ingest_for_conflicted_row() {
+        let mut ledger = Candidates::default();
+        ledger
+            .rows
+            .push(guidance_row("review-001", CandidateStatus::Created, "mergeoid"));
+        ledger
+            .rows
+            .push(guidance_row("close-002", CandidateStatus::Conflicted, ""));
+
+        let lines = next_command_lines("212", &ledger, false);
+        let ingest: Vec<&String> = lines
+            .iter()
+            .filter(|l| l.contains("candidate ingest"))
+            .collect();
+        assert_eq!(ingest.len(), 1, "one ingest line for the one conflicted row");
+        assert!(
+            ingest[0].contains("--label close-002"),
+            "prescription names the conflicted row's label: {}",
+            ingest[0]
+        );
+        assert!(
+            ingest[0].contains("--slice 212"),
+            "prescription carries the slice: {}",
+            ingest[0]
+        );
+    }
+
+    /// VT-2 — a Created row alone yields no ingest prescription (the guidance is
+    /// specific to a conflicted parked row, not blanket noise).
+    #[test]
+    fn candidate_status_omits_ingest_when_no_conflict() {
+        let mut ledger = Candidates::default();
+        ledger
+            .rows
+            .push(guidance_row("review-001", CandidateStatus::Created, "mergeoid"));
+        let lines = next_command_lines("212", &ledger, false);
+        assert!(
+            !lines.iter().any(|l| l.contains("candidate ingest")),
+            "no ingest line without a conflicted row"
         );
     }
 
