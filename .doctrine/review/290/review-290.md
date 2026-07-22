@@ -139,3 +139,22 @@ The audit surfaced **one** non-aligned finding touching a per-slice surface, and
 
 - **None.** REV-030 already amended ADR-012 D4 and is applied; ADR-012
   §Verification's operator-ingest cases are realised as VTs. No REV owed.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **RV-290 F-1** — selector registry: `doctrine slice selector add SL-212
+  src/mcp_server/dispatch.rs --intent design-target`. `slice conformance` re-run
+  confirms the path is now **conformant** (7 conformant, 0 undelivered). The
+  undeclared cell now holds only the slice's own `plan.toml` / `slice-212.toml`
+  (F-2, aligned — inherent, expected to persist).
+
+### REVs completed
+- **None.** The brief's Governance/spec section was empty — REV-030 already
+  amended ADR-012 D4 and is applied; no governance/spec write was owed.
+
+### Withdrawn / tolerated
+- **RV-290 F-2** — aligned (no write): the slice's own authored TOML is inherent
+  conformance noise, not drift; rationale in the finding disposition.
+
+Reconcile pass complete — every brief item resolved. Handoff to /close.

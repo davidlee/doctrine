@@ -34,6 +34,10 @@ intent = "design-target"
 selector = "tests/e2e_dispatch_candidate.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/mcp_server/dispatch.rs"
+intent = "design-target"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-012"
