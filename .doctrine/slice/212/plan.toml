@@ -44,7 +44,7 @@ exit_criteria = [
   { id = "EX-2", text = "ledger::store writes via a temp file + atomic rename on the same filesystem; final bytes are identical to the prior truncating write (readers unaffected)." },
   { id = "EX-3", text = "MergeTree::Conflict carries { tree: String, stages: Vec<ConflictStage> }; merge_tree parses `merge-tree --write-tree -z --merge-base=<mb> ours theirs` on exit 1 into tree oid + stage table; Clean{tree} path unchanged." },
   { id = "EX-4", text = "changed_paths(root, tree_a, tree_b) -> BTreeSet<Vec<u8>> via `diff-tree --no-renames -r -z --name-only`; diff_doctrine_paths is refactored onto the shared byte-safe primitive with no behaviour change to its callers." },
-  { id = "EX-5", text = "merge_base_all(root,a,b) -> Vec<String> and custom_merge_driver_paths(root,tree) -> Vec<Vec<u8>> exist as fail-closed inputs (refusal decided by callers)." },
+  { id = "EX-5", text = "merge_base_all(root,a,b) -> Vec<String> and custom_merge_driver_paths(root,tree) -> Vec<Vec<u8>> exist as fail-closed inputs (refusal decided by callers). Driver detection queries gitattributes via `git check-attr merge` per merged path (OQ-2 lean: superset, fail-closed) and treats only non-built-in drivers as custom (built-in union/binary allowed)." },
 ]
 verification = [
   { id = "VT-1", expects = "serde round-trip: a CandidateRow with and without the new fields parses; absent fields default (Doctrine / \"\").", test_file = "src/ledger.rs", keywords = ["ingested_at", "merge_provenance", "MergeProvenance", "serde(default"], waived = false },
@@ -142,6 +142,7 @@ exit_criteria = [
   { id = "EX-3", text = "Pre-state select refuses zero/many/wrong-status rows; once a row is Created it cannot be re-ingested (write-once enforced by the select)." },
   { id = "EX-4", text = "On a valid R: recompute+validate then atomic write-once fill (merge_oid=R, status=Created, ingested_at, merge_provenance=OperatorIngest); stdout is R; admit→integrate then proceed by the existing FF-only contract." },
   { id = "EX-5", text = "guard classifies Ingest as Orchestrator(\"dispatch-candidate-ingest\"); the main.rs write-class golden and worker-guard golden are updated." },
+  { id = "EX-6", text = "The advisory marker scan reads R's blobs at C (attribute-aware conflict-marker-size, text-only via NUL detection) and FAILS OPEN on an unreadable blob — it never hard-fails ingest; it only feeds marker_paths into the pure validator's advisory gate (iii)." },
 ]
 verification = [
   { id = "VT-1", expects = "end-to-end happy: conflicted create → resolve+commit → ingest → row Created + merge_provenance=OperatorIngest → admit → integrate FF.", test_file = "src/dispatch.rs", keywords = ["fn run_candidate_ingest", "OperatorIngest", "Created"], waived = false },
@@ -177,6 +178,7 @@ verification = [
   { id = "VT-1", expects = "governance cases: arbitrary tree rejected, reversed parents rejected, genuine 3-way accepted, integrate FF by the same contract.", test_file = "src/dispatch.rs", keywords = ["arbitrary", "OperatorIngest"], patterns = ["fn .*(reject|arbitrary|governance)"], waived = false },
   { id = "VT-2", expects = "candidate status surfaces the conflicted→ingest prescription.", test_file = "src/dispatch.rs", keywords = ["fn run_candidate_status", "ingest"], waived = false },
   { id = "VT-3", expects = "taxonomy: a non-UTF-8 / newline path name round-trips byte-safe through create→ingest without lossy compare.", test_file = "src/dispatch.rs", keywords = ["Vec<u8>", "ingest"], patterns = ["fn .*(non_utf8|byte|taxonomy)"], waived = false },
+  { id = "VA-1", expects = "an agent confirms admit provenance docs/errors and ledger field/status docs no longer assert Doctrine-authorship as the provenance basis (provenance-not-authorship, REV-030) — a prose claim that no test can judge.", waived = false },
 ]
 specs        = []
 requirements = []
