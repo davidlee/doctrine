@@ -29,17 +29,20 @@ which an interim auto-sync in this slice would only pre-empt then get retired.
 
 ## Scope & Objectives
 
-1. **Gate resolves a fork-consistent `doctrine`, not stale `$PATH`.** This repo's
-   `just validate` (reached by the `check commit` gate → `DEFAULT_COMMIT`) resolves
-   the `doctrine` it shells in layered, **self-locating** order — `${DOCTRINE_BIN}`
-   (optional override) → the fork's own `./target/debug/doctrine` → the
-   **git-derived coord build** (`--git-common-dir` parent → coord `target/debug`) →
-   PATH — so `doctrine doctor` matches the fork's actual rules, not edge/main's
-   (ISS-218; IMP-270 dup-closed here). The gate self-locates the coord build **at
-   run time** (no launch-frozen `DOCTRINE_BIN` precondition — RV-291 F-1), with a
-   fork-gated refusal when the coord build is absent. **Zero-engine** — the fix is
-   the `justfile` recipe (plus a *softened*, optional `DOCTRINE_BIN` note in
-   governance/CLAUDE.md); `worker_commit`/the engine are untouched (DEC-003).
+1. **The worker gate does not re-run coord's governance self-checks.** `just
+   validate` (reached by the `check commit` gate → `DEFAULT_COMMIT`) is the only
+   `check` leg that shells the installed `doctrine` (`doctrine prompt check` +
+   `doctrine doctor`). Those validate authored `.doctrine/` state — which a worker
+   **cannot write** — so in a fork they carry no worker-delta signal and can only
+   stale-binary false-red (ISS-218; IMP-270 dup-closed here). `validate` therefore
+   **skips** them in a worker context (`DOCTRINE_DISPATCH_GATE` set by `worker_commit`
+   | `DOCTRINE_WORKER` | marker), running them unchanged on a generic host. Engine
+   surface is **one neutral signal line** in `worker_commit` (`.env(
+   "DOCTRINE_DISPATCH_GATE","1")` on the gate spawn); no binary resolution, no cargo
+   layout, no gate-logic change (DEC-003). Rejected across three passes: engine-publish,
+   the launch-frozen `DOCTRINE_BIN` precondition (RV-291), and the git self-locating
+   recipe (RV-292). The obsolete `DOCTRINE_BIN` rule is **deleted** from
+   governance/CLAUDE.md, not softened.
 2. **Marker-aware skip for authored-write e2e goldens.** The e2e goldens that drive
    authored writes skip when the worker marker is present, so the worker agent's
    own suite run reflects delta health. This composes with the existing gate
@@ -69,24 +72,28 @@ red, no recalled "this red is a rig artifact" idiom.
 
 ## Affected surface (see design.md code-impact for the locked touch-set)
 
-- `justfile` — `validate` recipe self-locating resolution + fork-gated refusal (#1).
-- `.doctrine/governance.md` + `CLAUDE.md` — soften the `DOCTRINE_BIN` note to an
-  optional override (gate self-locates) (#1, authored/prose tier).
+- `justfile` — `validate` skips the governance legs under the worker-context signal (#1).
+- `src/mcp_server/worker_commit.rs` — one neutral `.env("DOCTRINE_DISPATCH_GATE","1")`
+  on the gate spawn (#1; the slice's only engine line).
+- `.doctrine/governance.md` + `CLAUDE.md` — **delete** the obsolete `DOCTRINE_BIN`→
+  coord-build precondition (#1, authored/prose tier).
 - `src/test_support.rs` + `tests/common/mod.rs` — `under_worker_marker()` helper (#2).
 - `tests/e2e_*.rs` authored-write goldens (`e2e_worker_guard.rs`,
   `e2e_dispatch_sync.rs`, `e2e_doctor_golden.rs`, and the ~30 marker-poisoned
   suites) — marker-aware skip (#2).
-- **Engine (`src/mcp_server/**`) untouched** — the zero-engine reversal (DEC-003).
+- **Engine touch is one signal line** — no gate-logic, staging, or guard change (DEC-003).
 
 ## Risks / Assumptions / Open questions
 
-- **A [RESOLVED in /design]:** the *recipe* (not the server) resolves the coord
-  binary — the gate runs with CWD = the worker fork (a linked git worktree), so
-  `dirname $(git rev-parse --git-common-dir)` yields the coord root at run time.
-  Jail-safe: pure git plumbing + cargo layout in the project justfile, no engine.
-- **OQ [RESOLVED — DEC-003]:** #1 — neither `current_exe()` (redundant-or-harmful)
-  nor a launch-frozen `DOCTRINE_BIN` precondition (F-1: not temporally achievable).
-  The recipe self-locates the coord build from git at gate-run time.
+- **A [RESOLVED — DEC-003]:** #1 needs **no** binary resolution at all. The gate's
+  governance legs (`doctrine doctor`/`prompt check`) read authored `.doctrine/` state
+  a worker cannot write, so they are inert in a fork and are *skipped* — dissolving
+  the need to locate/build a fork-consistent binary (which RV-292 proved impossible
+  via git and unbuilt by dispatch).
+- **OQ [RESOLVED — DEC-003]:** #1 — reject all three binary-resolution designs
+  (`current_exe()` publish; launch-frozen `DOCTRINE_BIN` precondition, RV-291 F-1;
+  git self-locating recipe, RV-292 F-1/2/3). Skip the checks instead; the engine's
+  only role is a neutral `DOCTRINE_DISPATCH_GATE` context signal.
 - **OQ:** #2 — skip the goldens under marker (test-side), or route worker_commit's
   gate to exclude authored-write goldens inside a marked fork (gate-side)? The
   test-side skip composes with the existing gate marker-clear for free; confirm.
@@ -95,11 +102,13 @@ red, no recalled "this red is a rig artifact" idiom.
 
 ## Verification / closure intent
 
-VT per fix: a gate test showing green on a conformance-rule-changing fork under the
-workspace binary (where the stale PATH binary would red); a marked-fork run of an
-authored-write golden that skips under the marker yet still runs (green) once the
-marker is cleared. Closes when both land green and the stale-PATH false-red is
-demonstrably gone.
+VT per fix: a real-seam `worker_commit` gate test that goes **green** on a fork
+whose authored state would `doctrine doctor`-red under the stale binary — because
+`validate` skips the governance legs under `DOCTRINE_DISPATCH_GATE` — paired with a
+generic-host negative where the same broken state still reds (no-mask); a marked-fork
+run of an authored-write golden that skips under the marker yet still runs (green)
+once the marker is cleared. Closes when both land green and the stale-PATH false-red
+is demonstrably gone.
 
 ## Follow-Ups
 
