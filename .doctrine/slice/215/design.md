@@ -1,6 +1,6 @@
 # SL-215 — Unified harvest surface: design
 
-Status: drafted 2026-07-24; pending adversarial pass + lock.
+Status: locked 2026-07-24 (adversarial F1..F5 folded into body; no ledgered design RV — permitted).
 Origin: IMP-059 (harvest unification) + IMP-042 (code-review corpus integration),
 ordered per the IMP-042 → IMP-059 `after` edge. RFC-011 L2' carry-forward half.
 

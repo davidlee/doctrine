@@ -110,3 +110,29 @@ edge `notes.md` — let integration carry the dogfood version.
 - **F-1** (aligned): PHASE-05 VT-1 UNATTRIBUTABLE — tool attribution, no edit.
 - **F-2** (aligned): design §6 residuals are intended boundaries — no edit.
 - **F-3** (tolerated, VH-1): harvest.md template filler — no edit.
+
+## Reconciliation Outcome
+
+Reconcile pass complete. RV-293 findings all terminal; brief carried one write, no REV.
+
+### Direct edits applied
+- design.md line 3 header: `Status: drafted 2026-07-24; pending adversarial pass
+  + lock.` → `Status: locked 2026-07-24 (adversarial F1..F5 folded into body; no
+  ledgered design RV — permitted).` Reflects the locked design (slice at audit);
+  drove by F-4.
+
+### REVs completed
+- None. No ADR / policy / standard / spec / requirement is contradicted by the
+  implementation (DEC-004..006 record the decisions; POL-002 + ADR-005 honoured).
+  Nothing routed to a REV.
+
+### Withdrawn / tolerated / aligned (recorded, no action)
+- F-1 (verified · aligned): PHASE-05 VT-1 UNATTRIBUTABLE — tool-attribution
+  artifact, dogfood ## Harvest substance passes. No edit.
+- F-2 (verified · aligned): design §6 residuals (qualitative adherence bar;
+  honour-model freshness) are intended scope boundaries per the slice non-goals.
+  No edit.
+- F-3 (verified · tolerated, VH-1): harvest.md §3 template-filler ids inside a
+  fenced example — accepted drift, rationale in the finding disposition. No edit.
+
+Reconcile pass complete — handoff to /close.
