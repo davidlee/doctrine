@@ -35,10 +35,12 @@ PATH `~/.cargo/bin/doctrine`):
   other leg is visible in that window. No change to gate logic, staging, or the guard.
 - **Close the residual project-side, at the orchestrator (ii).** Off the fork path,
   `validate` resolves the **fresh coord build** (`${DOCTRINE_BIN:-./target/debug/doctrine}`,
-  PATH fallback) instead of bare `doctrine`, so `close`'s `doctrine check gate`
-  validates the landed corpus with the source-consistent binary; the project close
-  ritual gains a build-before-gate beat. Entirely project-tier (`justfile` /
-  governance / ritual) — **zero engine surface, inert for clients**.
+  PATH fallback), and `check`/`gate` **reorder `build` before `validate`** so
+  `doctrine check gate` validates the landed corpus with a this-invocation-fresh binary
+  — freshness **belt-enforced**, not a skippable prose beat (the belt's own
+  validate-before-build order was RV-292 F-2's ghost surviving at close; the reorder
+  kills it). Entirely project-tier (`justfile` / governance / ritual) — **zero engine
+  surface, inert for clients**.
 - **Retain and reframe the `DOCTRINE_BIN` precondition** in `.doctrine/governance.md`
   and `CLAUDE.md` — it now governs (ii)'s coord-side *close-time* build, not a
   fork-side *launch-time* env contract (RV-291 F-1). Reframed, **not deleted**.
@@ -96,22 +98,25 @@ classify belt (prefix + scope), the pi-arm import runs only `prove` (`fmt-check 
 
 So the residual is **closed**, not conceded — project-side, at the orchestrator's
 **close** (ii above): the orchestrator *is* coord (source landed, tree owned, build
-tractable — none of the fork-side blockers apply), so `close`'s gate validates the
-landed corpus with the freshly-built source-consistent binary. Backstopped by the
-phase's own unit tests. The earlier draft's claim that "coord's gate/audit on landing"
-already covered it was **false** — that gate is itself stale-PATH (codex external read,
-2026-07-24).
+tractable — the fork-side *location/existence* blockers do not apply), and the belt's
+own validate-before-build order — the one blocker that *does* reach close — is killed by
+reordering `build` before `validate` in `check`/`gate`, so `close`'s gate validates the
+landed corpus with a this-invocation-fresh binary (belt-enforced, not a prose beat).
+Backstopped by the phase's own unit tests. The earlier draft's claim that "coord's
+gate/audit on landing" already covered it was **false** — that gate is itself stale-PATH
+(codex external read; belt-order hole caught by the Opus review, 2026-07-24).
 
 ## Preconditions / carried assumptions
 
 - **The fork-skip needs no coord-build precondition and no launch-time env contract.**
   It depends only on the worker-context signal, established by `worker_commit` (gate)
   or the existing marker/`DOCTRINE_WORKER` (worker's own run) — all already present.
-- **(ii) needs a coord-side *close-time* build.** The fresh-binary corpus gate assumes
-  the orchestrator builds the coord/landing tree before `close`'s `check gate`
-  (the reframed `DOCTRINE_BIN` precondition + close-ritual beat). This is tractable —
-  coord is a full tree the orchestrator owns — unlike the fork-side launch-time
-  contract RV-291 F-1 killed.
+- **(ii)'s coord-side close-time build is belt-enforced.** `check`/`gate` run `build`
+  before `validate`, so `doctrine check gate` on the coord/landing tree yields a
+  this-invocation-fresh binary before the corpus check — **no separate operator step to
+  forget**. Tractable because coord is a full tree the orchestrator owns (unlike the
+  fork-side launch-time contract RV-291 F-1 killed). The reframed `DOCTRINE_BIN` rule is
+  now documentation/override, not the load-bearing guarantee.
 - **Guard invariant relied upon:** a worker cannot write authored `.doctrine/` state
   (worker-mode guard). If that ever changed, the inertness argument would need
   revisiting.

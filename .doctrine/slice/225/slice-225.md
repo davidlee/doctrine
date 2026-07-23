@@ -44,11 +44,12 @@ which an interim auto-sync in this slice would only pre-empt then get retired.
    recipe (RV-292). The fork-skip's one residual — a phase changing `doctor`/`prompt
    check`'s *own logic* — is closed **project-side** at the orchestrator's **close**
    (ii): off the fork path `validate` resolves the fresh coord build
-   (`${DOCTRINE_BIN:-./target/debug/doctrine}`), so `close`'s gate validates the landed
-   corpus with the source-consistent binary. Entirely project-tier (`justfile` /
-   governance / close ritual) — zero engine surface, inert for clients. The
-   `DOCTRINE_BIN` rule is therefore **retained and reframed** (coord-side close-time
-   build), **not deleted** (codex external read, 2026-07-24).
+   (`${DOCTRINE_BIN:-./target/debug/doctrine}`), and `check`/`gate` reorder `build`
+   before `validate`, so `close`'s gate validates the landed corpus with a
+   this-invocation-fresh binary — **belt-enforced**, not a skippable prose beat.
+   Entirely project-tier (`justfile` / governance / close ritual) — zero engine surface,
+   inert for clients. The `DOCTRINE_BIN` rule is therefore **retained and reframed**
+   (coord-side close-time build), **not deleted** (codex + Opus external reads, 2026-07-24).
 2. **Marker-aware skip for authored-write e2e goldens.** The e2e goldens that drive
    authored writes skip when the worker marker is present, so the worker agent's
    own suite run reflects delta health. This composes with the existing gate
@@ -79,7 +80,8 @@ red, no recalled "this red is a rig artifact" idiom.
 ## Affected surface (see design.md code-impact for the locked touch-set)
 
 - `justfile` — `validate`: skips the governance legs under the worker-context signal
-  (fork, #1); off the fork path resolves the fresh coord build for `close`'s gate (ii).
+  (fork, #1); off the fork path resolves the fresh coord build for `close`'s gate (ii);
+  and `check`/`gate` reorder `build` before `validate` to belt-enforce that freshness (ii).
 - `src/mcp_server/worker_commit.rs` — one neutral `.env("DOCTRINE_DISPATCH_GATE","1")`
   on the gate spawn (#1; the slice's only engine line).
 - `.doctrine/governance.md` + `CLAUDE.md` — **retain + reframe** the `DOCTRINE_BIN`→

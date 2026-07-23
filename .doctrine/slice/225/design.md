@@ -160,18 +160,24 @@ binary, not the landed one. So a landed governance-logic delta is exercised fres
 against the corpus *nowhere* until the installed binary is rebuilt.
 
 **The fix (project-tier, zero engine).** The orchestrator *is* coord: it runs on the
-coord/landing tree, the slice source has **landed** there, and it can build and run a
-**source-consistent** binary — none of the fork-side blockers (flat git topology,
-coord-never-built, validate-before-build) apply. So the residual is closed at the
-orchestrator's **close**, in this repo's own operating procedure:
+coord/landing tree, the slice source has **landed** there, so a build there yields a
+**source-consistent** binary — the fork-side blockers (flat git topology,
+coord-never-built) do not apply. The one blocker that *does* reach close — the belt's
+own **validate-before-build** ordering (RV-292 F-2's ghost: `gate` runs `validate` 4th,
+`build` 6th, so a plain `check gate` validates against a *prior* build) — is neutralised
+by reordering the belt, so freshness is **enforced by the gate itself, not by prose**:
 
 1. `validate` resolves the **fresh coord build** (`${DOCTRINE_BIN:-./target/debug/doctrine}`,
-   PATH fallback) instead of bare `doctrine`, so `close`'s existing `doctrine check
-   gate` validates the **landed** corpus with the **landed** binary — riding the
-   existing seam, no new gate.
-2. The project **close ritual** (`.doctrine/governance.md`) gains a build-before-`check
-   gate` beat so the coord tree's `./target/debug/doctrine` reflects the landed rules
-   before it runs. This *owns* the freshness lifecycle F-3 demanded.
+   PATH fallback) instead of bare `doctrine`.
+2. **Reorder the belt so `build` precedes `validate`** in `check`/`gate`
+   (`fmt lint lint-js build validate test[-all]`). Then `doctrine check gate` *alone*
+   guarantees a this-invocation-fresh `./target/debug/doctrine` before `validate` reads
+   the landed corpus — single-source, enforced, harmless in-fork (validate still skips),
+   and it also fixes the dev inner-loop's stale-binary `validate`. This is what *owns*
+   the freshness lifecycle F-3 demanded — **in the belt, not a checklist step an agent
+   can skip**. The `.doctrine/governance.md`/close-ritual build note is thereby
+   downgraded to belt-and-suspenders documentation. (`quick` is left fast — it may
+   validate against a prior build; a documented low-severity bound, not the close path.)
 
 **POL-002 — why this must be, and is, project-only.** The residual exists *only*
 because doctrine develops doctrine — a slice can mutate the governing binary's own
@@ -224,7 +230,7 @@ untouched.
 
 | Path | Change | Fix |
 |---|---|---|
-| `justfile` | `validate` recipe: (a) **skip** `doctrine prompt check`/`doctor` under the worker-context signal (fork); (b) off the fork path, resolve the **fresh coord build** (`${DOCTRINE_BIN:-./target/debug/doctrine}`, PATH fallback) instead of bare `doctrine`, so `close`'s gate validates the landed corpus with the source-consistent binary | #1 |
+| `justfile` | `validate` recipe: (a) **skip** `doctrine prompt check`/`doctor` under the worker-context signal (fork); (b) off the fork path, resolve the **fresh coord build** (`${DOCTRINE_BIN:-./target/debug/doctrine}`, PATH fallback) instead of bare `doctrine`. Plus (c) **reorder `check`/`gate` so `build` precedes `validate`** — belt-enforces close-gate freshness (kills the validate-before-build order) | #1 (ii) |
 | `src/mcp_server/worker_commit.rs` | `run_commit_gate` spawns the gate with `.env("DOCTRINE_DISPATCH_GATE","1")` — the one neutral signal line; the slice's **only** engine touch | #1 |
 | `.doctrine/governance.md` | § orchestration — **retain + reframe** the `DOCTRINE_BIN`→coord-build precondition (now a coord-side *close-time* build governing the fresh-binary corpus gate, not a fork-side launch contract); add the build-before-`check gate` beat to the close ritual | #1 (ii) |
 | `CLAUDE.md` | § "Dispatch precondition" — **retain + reframe** the same rule (coord-side close-time build) | #1 (ii) |
@@ -261,13 +267,17 @@ ritual beat), not worker code-deltas, so they are not `design-target` selectors.
   narrow unit over the predicate. Includes the **exact-match negative**:
   `DOCTRINE_WORKER=0` (or any non-`1`) does **not** skip, matching `env_worker_set()`
   (marker.rs:127) rather than a lax `-n` test.
-- **VT-1d (#1 (ii), fresh-binary corpus gate — closes the residual).** Off the fork
-  path (no worker signal), `validate` resolves its binary from
-  `${DOCTRINE_BIN:-./target/debug/doctrine}` with a PATH fallback: with `DOCTRINE_BIN`
-  pointed at a stub that **reds** the authored corpus the gate **reds**, and at a stub
-  that **greens** it the gate **greens** — proving `close`'s gate exercises the
-  *source-consistent* binary, not bare stale PATH. The build-before-`check gate` close
-  beat is a governance/ritual change, verified **VA** (close-checklist), not a VT.
+- **VT-1d (#1 (ii), close-gate freshness — *enforced* closure).** Two legs:
+  **(1) resolution** — off the fork path, `validate` resolves
+  `${DOCTRINE_BIN:-./target/debug/doctrine}` (PATH fallback): `DOCTRINE_BIN` → a stub
+  that **reds** the corpus ⇒ gate reds; → a stub that **greens** ⇒ gate greens.
+  **(2) belt-order (discriminating)** — a fixture whose *landed* source changes a
+  `doctor` rule such that a **fresh** binary reds the authored corpus while a **stale
+  prior-build** binary greens it: `just gate` (now `build`→`validate`) **reds**, where
+  the old validate-before-build order would **false-green**. The green→red pivot is the
+  reorder — the proof (ii) *enforces* closure, not merely resolves a binary. Standalone
+  `just validate`/`just quick` without a prior build is a documented low-severity bound
+  (not the close path).
 - **VT-2 (#2):** an authored-write golden returns early (skips) when
   `DOCTRINE_WORKER` is set or the marker file is present, and runs normally when
   neither is — proving marker-gated, never masking a real regression on the main arm.
@@ -299,6 +309,11 @@ asserts the gate spawn carries `DOCTRINE_DISPATCH_GATE`.
   is closed by the orchestrator's fresh-binary corpus gate at **close** (project-tier),
   backstopped by the phase's own unit tests; it is **not** left to the stale `close`
   gate (which shells bare PATH `doctrine`) as an earlier draft wrongly claimed.
+- **Close-gate freshness is belt-enforced, not prose.** `check`/`gate` run `build`
+  before `validate`, so `doctrine check gate` validates the landed corpus with a
+  this-invocation-fresh binary — the residual closure does **not** depend on an operator
+  remembering a build-first step (the earlier draft's VA/prose beat, which `gate`'s own
+  validate-before-build order silently defeated — Opus review, 2026-07-24).
 - **Signal predicate matches the engine contract.** The skip tests `DOCTRINE_WORKER` by
   **exact** `= "1"` (== `env_worker_set()`, marker.rs:127), never `-n` — a stray
   non-`1` value cannot false-skip. `DOCTRINE_DISPATCH_GATE` is engine-set to `1`; the
