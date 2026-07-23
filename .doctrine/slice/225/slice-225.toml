@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/mcp_server/worker_commit.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/marker.rs"
@@ -24,11 +24,27 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "tests/e2e_worker_guard.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "tests/common/mod.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "justfile"
+intent = "design-target"
+
+[[selector]]
+selector = "src/test_support.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_dispatch_sync.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_doctor_golden.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"
