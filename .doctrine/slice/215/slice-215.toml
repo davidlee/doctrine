@@ -1,9 +1,9 @@
 id = 215
 slug = "unified-harvest-surface"
 title = "Unified harvest surface"
-status = "design"
+status = "ready"
 created = "2026-07-11"
-updated = "2026-07-11"
+updated = "2026-07-23"
 tags = []
 
 [relationships]
