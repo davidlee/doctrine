@@ -5,7 +5,12 @@ non-trivial in which case it should be sliced.
 
 ## Where things live
 
-Research in approximate order: specs, ADRs, memories, backlog, slices, ...
+Research in approximate order: specs, ADRs, policies, standards, memories, backlog, slices, ...
+
+# Symlinks
+
+`doctrine` entity creation commands mint a symlink with the title slug as a convenience. 
+Commit these with the entity itself.
 
 ## Project-local rules of the road
 
@@ -47,4 +52,18 @@ linked worktrees) → orchestrator imports the working-tree diff. Worthwhile tra
 generic mechanics in the shipped `dispatch-mechanics.md`.)
 
 cargo --bin doctrine memory # focused tests; don't use --lib
+
+## Dispatch precondition: DOCTRINE_BIN → the coord build
+
+Set `DOCTRINE_BIN` to the **coord tree's** `./target/debug/doctrine` for any
+dispatch session (the jail forwards it — `flake.nix` `try-fwd-env`; `.mcp.json`
+launches the server via `${DOCTRINE_BIN:-doctrine}`). This binary is built from
+`dispatch/<slice>` source, so it carries earlier phases' not-yet-promoted
+binary-level rule changes (new role / allowlist / check). Without it the server —
+and the `worker_commit` commit gate's `just validate` → `doctrine doctor` — run
+the stale installed/PATH binary and **false-red a correct fork** (ISS-218; the
+`just` recipes resolve `${DOCTRINE_BIN:-./target/debug/doctrine:-doctrine}`, but
+the first rung must be set or a non-Rust phase falls through to a stale PATH).
+This is a **project** rule (doctrine dogfooding itself), not platform behaviour —
+POL-002 keeps cargo/`./target` layout out of the engine (SL-225, DEC-003).
 

@@ -3,7 +3,7 @@ version = 1
 
 id = 3
 slug = "worker-commit-gate-binary-layered-recipe-engine-publishes-doctrine-bin"
-title = "worker_commit gate binary: layered recipe + engine publishes DOCTRINE_BIN"
+title = "worker_commit gate binary: zero-engine layered recipe + DOCTRINE_BIN precondition"
 record_kind = "decision"
 status = "proposed"
 created = "2026-07-23"

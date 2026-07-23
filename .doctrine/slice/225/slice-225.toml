@@ -11,18 +11,6 @@ needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
-selector = "src/mcp_server/worker_commit.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/worktree/marker.rs"
-intent = "scope-relevant"
-
-[[selector]]
-selector = "src/commands/guard.rs"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "tests/e2e_worker_guard.rs"
 intent = "design-target"
 

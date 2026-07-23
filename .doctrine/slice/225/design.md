@@ -2,8 +2,9 @@
 
 > Cluster 1 / move B of RFC-016. Two false-reds — a green worker delta reported
 > as a failure it cannot distinguish from its own damage. Both are **project-tier**
-> dogfooding artifacts (POL-002): the engine ships one thin generic affordance and
-> is otherwise untouched. See DEC-003.
+> dogfooding artifacts (POL-002): the fixes live in the `justfile`, governance, and
+> this repo's test suite — **the engine (`src/mcp_server/**`) is untouched**. See
+> DEC-003.
 
 ## Problem
 
@@ -25,18 +26,23 @@ before `worker_commit`. Two recurring reds are **not** the worker's delta:
 
 Neither is a real regression; both burn tokens on diagnosis of noise.
 
-## Fix #1 — gate resolves a fork-consistent `doctrine`
+## Fix #1 — gate resolves a fork-consistent `doctrine` (zero-engine)
+
+The commit gate is `check commit` → `DEFAULT_COMMIT = ["just","check"]`
+(verify.rs:149) → the `check` recipe runs `validate`, which shells `doctrine`. So
+`validate` is the seam. The fix is **project-tier only — the engine is untouched**
+(DEC-003; the engine-publish first considered here was rejected, see below).
 
 ### Current vs target
 
 Current (`justfile:28`):
 ```
 validate:
-  doctrine prompt check      # → PATH ~/.cargo/bin/doctrine (stale)
+  doctrine prompt check      # → PATH doctrine (stale in a dispatch fork)
   doctrine doctor
 ```
 
-Target — **layered** resolution, project-tier, PATH kept as the generic-host tail:
+Target — **layered** resolution, PATH kept as the generic-host tail:
 ```
 validate:
   #!/usr/bin/env bash
@@ -51,37 +57,26 @@ Resolution order: **`$DOCTRINE_BIN` → local `./target/debug/doctrine` → PATH
 The PATH tail is *correct* for a generic host (their installed binary is not stale);
 the earlier rungs are the dogfooding override.
 
-### Why `$DOCTRINE_BIN` must be the first rung (not just the local build)
+### Why the engine-publish was rejected (adversarial reversal)
 
-`validate` runs **before** the gate's `build` leg (`check: … validate test build`),
-so on a **non-Rust phase** the fork has no freshly-built `./target/debug/doctrine`
-and the existence-check alone silently falls back to the stale PATH binary —
-re-masking the very P14 repro. `$DOCTRINE_BIN` points at the coord/orchestrator
-build (on `dispatch/<slice>`, carries the earlier phase's rules, guaranteed present)
-and needs no fork build. See DEC-003 "why not the alternatives".
+`.mcp.json` launches the server via `${DOCTRINE_BIN:-doctrine}`, and the gate is a
+child of the server process, so it **already inherits** the server's `DOCTRINE_BIN`.
+Publishing `DOCTRINE_BIN=current_exe()` from `worker_commit` is therefore redundant
+when the var is set, and **harmful when it is unset** — `current_exe()` is then the
+stale server binary and pinning it pre-empts the fall-through to the fork's fresh
+local build. So no engine change; `worker_commit` is not in this slice's surface.
+Full reasoning: DEC-003.
 
-### Engine affordance (the one platform change)
+### The precondition (governance, not code)
 
-`worker_commit`'s gate spawn (`run_commit_gate`, `worker_commit.rs:151`) exports
-the running server's own binary path so the recipe's first rung is reliably set:
-
-```rust
-// current_exe() = the doctrine binary serving this MCP session. In dogfooding the
-// operator serves MCP from the coord-built binary (AGENTS.md), so this carries the
-// in-flight rules. A generic host's gate simply ignores $DOCTRINE_BIN. POL-002:
-// we publish "the doctrine I am", never a cargo path.
-let self_bin = std::env::current_exe().ok();
-// …
-let mut cmd = std::process::Command::new(program);
-cmd.args(rest).current_dir(dir).env_remove("DOCTRINE_WORKER");
-if let Some(bin) = &self_bin {
-    cmd.env("DOCTRINE_BIN", bin);
-}
-```
-
-This is the sole `.rs` edit for #1 — an env publish, no resolution *policy* in the
-engine. `current_exe()` correctness rides the coord-served-MCP convention → ASM
-(DEC-003).
+`$DOCTRINE_BIN` must point at the **coord build** for a dispatch session — it is on
+`dispatch/<slice>`, so it carries earlier phases' rules and is the canonical
+correct binary. The forwarding path already exists (`flake.nix try-fwd-env` +
+`.mcp.json`). This is recorded in **`.doctrine/governance.md` (§ orchestration)**,
+per the User's direction that the precondition live outside any skill. The residual
+corner — a non-Rust phase with `DOCTRINE_BIN` unset (fork unbuilt → PATH fallback,
+the SL-206-P14 repro) — is closed by that governance rule, **not** by mechanism
+(resolving the coord path in the engine would re-bake cargo layout → POL-002).
 
 ## Fix #2 — marker-aware skip in the authored-write goldens
 
@@ -122,26 +117,33 @@ untouched.
 | Path | Change | Fix |
 |---|---|---|
 | `justfile` | `validate` recipe → layered `$DOCTRINE_BIN`→local→PATH resolution | #1 |
-| `src/mcp_server/worker_commit.rs` | publish `DOCTRINE_BIN=current_exe()` into the gate env (env only) | #1 |
+| `.doctrine/governance.md` | § orchestration — the `DOCTRINE_BIN`→coord-build precondition | #1 |
 | `src/test_support.rs` | `under_worker_marker()` + `WORKER_MARKER_REL` const | #2 |
 | `tests/common/mod.rs` | re-export `under_worker_marker` | #2 |
 | `tests/e2e_worker_guard.rs`, `tests/e2e_dispatch_sync.rs`, `tests/e2e_doctor_golden.rs`, … | marker-guard early-return in authored-write goldens | #2 |
 
+**The engine (`src/mcp_server/**`) is untouched.** `.doctrine/governance.md` is an
+authored-tier orchestrator edit (already partly landed for this slice), not a
+worker code-delta, so it is not a `design-target` selector.
+
 ## Verification alignment
 
-- **VT-1 (#1, engine):** a `run_commit_gate` unit/e2e test asserts the spawned gate
-  child sees `DOCTRINE_BIN == current_exe()` in its environment.
-- **VT-2 (#1, recipe):** with `DOCTRINE_BIN` set to a fork/coord binary that knows a
-  rule the PATH binary doesn't, `just validate` is green where bare `doctrine` reds.
-  (Behavioural: the layered recipe honours `$DOCTRINE_BIN` over PATH.)
-- **VT-3 (#2):** an authored-write golden returns early (skips) when
+- **VT-1 (#1, recipe resolution):** `just validate` invokes the binary named by
+  `$DOCTRINE_BIN` when set (over PATH), the local `./target/debug/doctrine` when
+  `$DOCTRINE_BIN` is unset but the local build exists, and bare `doctrine`
+  otherwise. Exercised by pointing `$DOCTRINE_BIN` at a stub that records its argv.
+- **VT-2 (#2):** an authored-write golden returns early (skips) when
   `DOCTRINE_WORKER` is set or the marker file is present, and runs normally when
   neither is — proving marker-gated, never masking a real regression on the main arm.
 
+No engine VT: `src/` is unchanged, so the existing suites must stay green
+untouched (the behaviour-preservation gate).
+
 ## Invariants & boundary conditions
 
-- **POL-002.** No cargo/`./target` layout enters engine code. The engine publishes a
-  value (`current_exe()`); the *recipe* (project) owns resolution. (DEC-003.)
+- **POL-002.** No cargo/`./target` layout — nor any resolution policy — enters
+  engine code. The engine is untouched; the *recipe* (project) owns resolution and
+  the *governance rule* (project) owns the precondition. (DEC-003.)
 - **Coverage preserved.** #2 skips only when marked; the gate clears the marker, so
   the goldens still run in the gate. The skip is strictly marker-gated — the main
   (unmarked) arm always runs them, so a real authored-write regression cannot hide.
@@ -152,8 +154,10 @@ untouched.
 
 ## Design decisions & residual open questions
 
-- **DEC-003** — layered recipe + engine publishes `DOCTRINE_BIN`; rejected the
-  engine-baked path and the zero-engine existence-check (non-Rust-phase hole).
+- **DEC-003** — zero-engine layered recipe + `DOCTRINE_BIN`→coord-build governance
+  precondition; rejected the engine-baked path *and* the engine-publish
+  (`current_exe()` redundant-or-harmful) *and* the bare existence-check
+  (non-Rust-phase hole).
 - **OQ-1 (STD-001 single-sourcing).** `WORKER_MARKER_REL` (`.doctrine/state/dispatch/worker`)
   duplicates `marker.rs:114`'s `marker_path`. The dual-compilation seam (CHR-014)
   blocks a shared `crate::` const from `test_support.rs` (included into both the lib
