@@ -28,13 +28,17 @@ good condition.
 Handover for a phase:
 
 - [ ] Read the just-completed `state/.../phases/phase-NN.md` (findings,
-      hand-forward) and the slice `notes.md` for durable decisions.
+      hand-forward) and the slice `notes.md` `## Harvest` section for the
+      produced / learned / open ids.
 - [ ] Confirm the next phase's scope from `plan.toml` (EX/VT are authoritative).
 - [ ] **At a dispatch conclude (SL-170 S6):** embed the `slice verify-vt <id>` VT
       summary block **and** a one-line S1 regression status (from the verify
       beat's `check regression diff`) in the packet — surfacing any
       `UNCHECKABLE` / `WAIVED` / `Fail` gap at handover, not at audit.
-- [ ] record any information worth durably persisting in `notes.md`, or as appropriate.
+- [ ] Confirm the slice's `## Harvest` is fresh — its `fresh-as-of` stamp
+      matches the current lifecycle position; if stale, run `/notes` first to
+      bring it current, then cite its ids in the packet. Do not re-survey what
+      the harvest already swept.
 - [ ] Emit the sections below into `handover.md`
 - [ ] Print instructions (with path to `handover.md`) addressed to the next agent
 

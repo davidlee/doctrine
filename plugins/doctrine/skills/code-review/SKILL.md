@@ -53,6 +53,39 @@ pre-release audit warrants the full process below. The ledger-vs-prose trigger
 (`review-ledger.md` §1) decides where findings *land*; this dial decides how
 hard you *dig*.
 
+## Cadence
+
+Code review fires at two lifecycle moments, and where a finding lands follows
+from which moment fired it.
+
+- **Per-phase** — during phase execution, while the worktree (or working tree)
+  is still hot. Default **on** when the executing model sits **below the
+  adherence bar**: the qualitative confidence that a model reliably honours
+  design, plan, and convention without a second pass (orchestrator judgment —
+  no registry encodes it). Above the bar it is discretionary. This gate keys on
+  the **model**, never the transport — it is arm-agnostic: a worker is a worker
+  whether it ran in-process, as a subprocess, or in an isolated worktree, and
+  any arm can carry any model.
+- **Pre-close** — the reconciliation pass before a slice closes, over the whole
+  accumulated delta. Always warranted; it is the audit's own review lens.
+
+**Tripwires — mandatory regardless of tier.** Any one of the tripwires below
+escalates per-phase review to required even for an above-the-bar model:
+
+- deleted or disabled tests in the phase diff;
+- **Deviations: NONE** asserted beside a divergence the design actually cares
+  about (a too-clean self-report);
+- a waived or uncheckable verification criterion;
+- edits outside the phase's declared scope.
+
+**Where findings land, by moment:**
+
+- **per-phase** → an RV on the slice under review; fix while the worktree is
+  hot, before the phase concludes.
+- **pre-close** → the audit's reconciliation RV.
+- **ad-hoc** (a review with no active phase) → up the target ladder to the
+  nearest durable subject (`review-ledger.md` §1).
+
 ## This review runs on the ledger
 
 A flaying nobody can find later was a waste of breath. Closure-grade critique
@@ -164,7 +197,5 @@ synthesis ties them together.
   raise).
 - **Haiku**: …
 
-Then **harvest** (judgment-gated) per `review-ledger.md` §5 — durable
-facts/patterns/gotchas → `/record-memory`; durable follow-up **work** → `backlog
-new`; notes that belong with the subject → its `notes.md`. A clean review harvests
+Then **harvest** (judgment-gated) per `harvest.md`. A clean review harvests
 nothing, and that is a valid outcome.
