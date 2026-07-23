@@ -165,3 +165,12 @@ raiser)" and does not list the closed vocabulary. One failed invocation plus
 retry; cheap help improvement: print `raiser | responder` as possible values and
 clarify that `--raiser` labels the participant while `--as` selects its fixed
 ledger role.
+
+[feedback; SL-225-RV291-disposition]
+Verifying inquisition findings against the artifact needed the raw finding
+toml: `doctrine review show RV-291` renders the prose companion + finding
+titles, but not each finding's disposition/response fields, and `--findings`
+is not a flag. Had to `Read` .doctrine/review/291/review-291.toml directly —
+a mild "read via show, not raw files" tension, since the structured
+disposition tier has no `show` surface. A `review show --findings` (or the
+dispositions inlined into `show`) would have saved one raw-file read.

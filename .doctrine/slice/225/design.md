@@ -42,20 +42,43 @@ validate:
   doctrine doctor
 ```
 
-Target — **layered** resolution, PATH kept as the generic-host tail:
+Target — **layered** resolution that **self-locates the fork-consistent binary at
+gate-run time**, PATH kept as the generic-host tail:
 ```
 validate:
   #!/usr/bin/env bash
   set -euo pipefail
-  bin="${DOCTRINE_BIN:-}"
-  [ -z "$bin" ] && [ -x ./target/debug/doctrine ] && bin=./target/debug/doctrine
-  [ -z "$bin" ] && bin=doctrine
+  bin="${DOCTRINE_BIN:-}"                                            # 1. explicit override (optional)
+  [ -z "$bin" ] && [ -x ./target/debug/doctrine ] && bin=./target/debug/doctrine   # 2. fork's own build (Rust phase)
+  if [ -z "$bin" ]; then                                            # 3. coord build — git-derived, fork-consistent
+    coord="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+    [ -x "$coord/target/debug/doctrine" ] && bin="$coord/target/debug/doctrine"
+  fi
+  if [ -z "$bin" ] && [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+    echo "coord build missing: run 'cargo build' in the coord tree" >&2; exit 1   # 3a. refuse in a fork, don't fall to stale PATH
+  fi
+  [ -z "$bin" ] && bin=doctrine                                     # 4. PATH tail (correct for a generic host)
   "$bin" prompt check
   "$bin" doctor
 ```
-Resolution order: **`$DOCTRINE_BIN` → local `./target/debug/doctrine` → PATH**.
-The PATH tail is *correct* for a generic host (their installed binary is not stale);
-the earlier rungs are the dogfooding override.
+Resolution order: **`$DOCTRINE_BIN` → fork's own `./target/debug/doctrine` →
+git-derived coord build → PATH**, with a fork-gated refusal before the PATH tail.
+
+- **Rung 3 is the load-bearing fix.** The gate runs with CWD = the **worker fork**,
+  always a linked git worktree under the coord tree. `dirname $(git rev-parse
+  --path-format=absolute --git-common-dir)` resolves the **coord root** from any
+  linked fork (and the repo root from a main worktree — where rung 3 coincides with
+  rung 2). So the gate finds the coord build — which is on `dispatch/<slice>` and
+  carries *every* prior phase's rules — **without** any launch-time env, state file,
+  or restart. This is what makes F-1's precondition temporally achievable (below).
+- **Rung 2 before rung 3** so a Rust phase that rebuilt the fork validates against
+  its *own* freshest binary (which knows the in-flight delta's rule change); a
+  non-Rust phase (fork unbuilt) falls to the coord build — closing the
+  SL-206-P14 residual the earlier draft *accepted* rather than solved.
+- **Refusal (3a)** fires only inside a linked worktree (`--git-dir ≠
+  --git-common-dir`) with no resolvable coord build — a diagnostic beats a silent
+  stale-PATH false-red. A generic host (main worktree, dirs equal) never refuses;
+  its PATH tail is correct.
 
 ### Why the engine-publish was rejected (adversarial reversal)
 
@@ -67,16 +90,33 @@ stale server binary and pinning it pre-empts the fall-through to the fork's fres
 local build. So no engine change; `worker_commit` is not in this slice's surface.
 Full reasoning: DEC-003.
 
-### The precondition (governance, not code)
+### The precondition — temporally achievable, run-time-verified (F-1)
 
-`$DOCTRINE_BIN` must point at the **coord build** for a dispatch session — it is on
-`dispatch/<slice>`, so it carries earlier phases' rules and is the canonical
-correct binary. The forwarding path already exists (`flake.nix try-fwd-env` +
-`.mcp.json`). This is recorded in **`.doctrine/governance.md` (§ orchestration)**,
-per the User's direction that the precondition live outside any skill. The residual
-corner — a non-Rust phase with `DOCTRINE_BIN` unset (fork unbuilt → PATH fallback,
-the SL-206-P14 repro) — is closed by that governance rule, **not** by mechanism
-(resolving the coord path in the engine would re-bake cargo layout → POL-002).
+An earlier draft demanded `$DOCTRINE_BIN` point at the coord build for a dispatch
+session. That precondition is **not achievable**: `.mcp.json` launches the server
+via `${DOCTRINE_BIN:-doctrine}` (boot.rs:549) and the client resolves that
+expansion **at server launch** (boot.rs:544-549), *freezing* the server env — but
+the coord worktree/build is created by `dispatch setup` (dispatch SKILL.md:13)
+**after** the session is already running. A later operator `export` cannot reach
+the running server, and the `worker_commit` gate is that server's child. So no
+env-set-before-launch contract can name a binary that does not yet exist
+(RV-291 F-1).
+
+The self-locating rung 3 dissolves the cycle: the gate resolves the coord build
+from **git at run time**, not from a launch-frozen variable. The only surviving
+precondition is that **the coord tree is built** (`cargo build` in coord) — a
+natural, already-expected part of dispatch setup, established *after* setup and
+*before* phases run, and **verified at gate time** by rung 3's `-x` test with an
+explicit refusal (3a) when absent. No restart, no rebind, no env-forwarding
+dependency.
+
+`$DOCTRINE_BIN` survives only as an **optional override** (rung 1) for an operator
+who wants to force a specific binary; it is no longer required for correctness. The
+governance note (`.doctrine/governance.md` § orchestration + the CLAUDE.md dispatch
+precondition) softens accordingly: "set `DOCTRINE_BIN` or false-red" → "the gate
+self-locates the coord build; `DOCTRINE_BIN` is an optional override." Resolving the
+coord path stays **out of the engine** (that would re-bake cargo layout → POL-002);
+`target/debug` lives in the project recipe, coord-location uses generic git plumbing.
 
 ## Fix #2 — marker-aware skip in the authored-write goldens
 
@@ -116,22 +156,35 @@ untouched.
 
 | Path | Change | Fix |
 |---|---|---|
-| `justfile` | `validate` recipe → layered `$DOCTRINE_BIN`→local→PATH resolution | #1 |
-| `.doctrine/governance.md` | § orchestration — the `DOCTRINE_BIN`→coord-build precondition | #1 |
+| `justfile` | `validate` recipe → self-locating `$DOCTRINE_BIN`→fork-build→git-derived-coord→PATH resolution + fork-gated refusal | #1 |
+| `.doctrine/governance.md` | § orchestration — soften the `DOCTRINE_BIN` note: gate self-locates; env var is now an optional override | #1 |
+| `CLAUDE.md` | § "Dispatch precondition" — same softening (self-locating gate; `DOCTRINE_BIN` optional) | #1 |
 | `src/test_support.rs` | `under_worker_marker()` + `WORKER_MARKER_REL` const | #2 |
 | `tests/common/mod.rs` | re-export `under_worker_marker` | #2 |
 | `tests/e2e_worker_guard.rs`, `tests/e2e_dispatch_sync.rs`, `tests/e2e_doctor_golden.rs`, … | marker-guard early-return in authored-write goldens | #2 |
+| `tests/e2e_*` (new) | VT-1 discriminating gate fixture + VT-1b refusal + VT-1c precedence unit | #1 |
 
-**The engine (`src/mcp_server/**`) is untouched.** `.doctrine/governance.md` is an
-authored-tier orchestrator edit (already partly landed for this slice), not a
-worker code-delta, so it is not a `design-target` selector.
+**The engine (`src/mcp_server/**`) is untouched.** `.doctrine/governance.md` and
+`CLAUDE.md` are authored-tier orchestrator/prose edits, not worker code-deltas, so
+they are not `design-target` selectors.
 
 ## Verification alignment
 
-- **VT-1 (#1, recipe resolution):** `just validate` invokes the binary named by
-  `$DOCTRINE_BIN` when set (over PATH), the local `./target/debug/doctrine` when
-  `$DOCTRINE_BIN` is unset but the local build exists, and bare `doctrine`
-  otherwise. Exercised by pointing `$DOCTRINE_BIN` at a stub that records its argv.
+- **VT-1 (#1, discriminating end-to-end — the scope's promised proof).** A fixture
+  builds a coord tree whose binary knows a rule the **stale PATH `doctrine` does
+  not** (e.g. a role/allowlist/check the coord build carries), forks a worker off it
+  (non-Rust delta, so the fork itself is *not* rebuilt), and drives the **real
+  `worker_commit` gate seam**. The gate must go **green** — proving `just validate`
+  resolved the git-derived coord build (rung 3) and `doctrine doctor` saw the rule —
+  where the same gate run against a stale PATH binary would `commit-gate-red`. This
+  proves *binary identity and lifecycle reachability*, not argv shape (RV-291 F-3).
+- **VT-1b (#1, refusal / precondition negative).** Inside a linked fork with **no
+  resolvable coord build**, `just validate` exits non-zero with the coord-build
+  diagnostic (rung 3a) rather than silently falling through to the stale PATH binary.
+- **VT-1c (#1, recipe precedence unit — the narrow stub).** The former argv-stub
+  test is retained *only* as a unit proof of rung order: `$DOCTRINE_BIN` (set) wins
+  over the fork build, which wins over PATH. It backstops precedence; it does **not**
+  stand in for VT-1's end-to-end elimination of ISS-218.
 - **VT-2 (#2):** an authored-write golden returns early (skips) when
   `DOCTRINE_WORKER` is set or the marker file is present, and runs normally when
   neither is — proving marker-gated, never masking a real regression on the main arm.
@@ -141,23 +194,38 @@ untouched (the behaviour-preservation gate).
 
 ## Invariants & boundary conditions
 
-- **POL-002.** No cargo/`./target` layout — nor any resolution policy — enters
-  engine code. The engine is untouched; the *recipe* (project) owns resolution and
-  the *governance rule* (project) owns the precondition. (DEC-003.)
+- **POL-002.** No cargo/`./target` layout — nor any binary-resolution policy —
+  enters engine code. The engine is untouched; the *recipe* (project) owns
+  resolution: `target/debug` is project (cargo) knowledge in the project justfile,
+  and coord-location uses **generic git plumbing** (`--git-common-dir`), never the
+  dispatch `.worktrees` layout. (DEC-003.)
+- **Gate resolution is run-time, not launch-time.** `worker_commit` publishes and
+  mutates **no** environment; the gate child inherits only the server env fixed at
+  launch, and the recipe self-locates the binary at gate-run time (rungs 2–3). No
+  `current_exe()` publish, no `DOCTRINE_BIN` write — the rejected engine-publish
+  leaves no live invariant here (RV-291 F-2).
+- **Own-`target/` assumption.** Rung 3 names `$coord/target/debug/doctrine` because
+  each worktree builds into its **own in-tree `target/`** (AGENTS.md — no shared
+  `CARGO_TARGET_DIR`). Were that ever redirected to a shared target, rung 3 would
+  coincide with rung 2 (the fork's build) — degraded but not incorrect.
 - **Coverage preserved.** #2 skips only when marked; the gate clears the marker, so
   the goldens still run in the gate. The skip is strictly marker-gated — the main
   (unmarked) arm always runs them, so a real authored-write regression cannot hide.
-- **Generic-host no-op.** A non-dogfooding host ignores `$DOCTRINE_BIN` (PATH tail is
-  correct) and never sets the marker (its tests don't spawn doctrine authored writes).
-- **Idempotent env.** `DOCTRINE_BIN` is published unconditionally when `current_exe()`
-  resolves; on failure the recipe degrades to local→PATH (no hard dependency).
+- **Generic-host no-op.** A non-dogfooding host is a main worktree (`--git-dir =
+  --git-common-dir`), so rung 3a never refuses and the PATH tail (rung 4) — correct
+  there — is reached; it never sets the #2 marker either.
 
 ## Design decisions & residual open questions
 
-- **DEC-003** — zero-engine layered recipe + `DOCTRINE_BIN`→coord-build governance
-  precondition; rejected the engine-baked path *and* the engine-publish
-  (`current_exe()` redundant-or-harmful) *and* the bare existence-check
-  (non-Rust-phase hole).
+- **DEC-003** — zero-engine **self-locating** recipe: the gate resolves the
+  fork-consistent binary from git at run time (`$DOCTRINE_BIN` override → fork build
+  → git-derived coord build → PATH), with a fork-gated refusal. Rejected the
+  engine-baked path, the engine-publish (`current_exe()` redundant-or-harmful), the
+  bare existence-check (non-Rust-phase hole), **and** the launch-frozen
+  `DOCTRINE_BIN`→coord-build *precondition* (RV-291 F-1: not temporally achievable —
+  server env freezes at launch, coord build is created after). `DOCTRINE_BIN` demotes
+  to an optional override; the only precondition is a built coord tree, verified at
+  gate time.
 - **OQ-1 (STD-001 single-sourcing).** `WORKER_MARKER_REL` (`.doctrine/state/dispatch/worker`)
   duplicates `marker.rs:114`'s `marker_path`. The dual-compilation seam (CHR-014)
   blocks a shared `crate::` const from `test_support.rs` (included into both the lib
