@@ -1,0 +1,52 @@
+id    = 293
+slug  = "sl-215-reconciliation-audit-unified-harvest-surface"
+title = "SL-215 reconciliation audit — unified harvest surface"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-215"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "PHASE-05 VT-1 UNATTRIBUTABLE: dogfood notes.md verifies by keyword but is outside the code-delta registry"
+detail = "Expected: PHASE-05 VT-1 (test_file .doctrine/slice/215/notes.md; keywords ## Harvest, fresh-as-of, DEC-004) verifies as a slice deliverable. Observed (verify-vt against review/215 @ 2046c23e8): 18/19 PASS; VT-1 = UNATTRIBUTABLE — 'keyword present but notes.md not modified by this slice'. Root cause: notes.md is a /notes (knowledge-record) commit (fe56e82f2), not a code phase-cut, so record-delta never registered it. Substance IS confirmed — the ## Harvest section is present, well-formed, cites DEC-004..006, and the file is genuinely new this slice (no inert-pass risk). This is a tool-attribution artifact of tracking only code deltas, not a substance failure."
+disposition = "aligned"
+response = "Aligned — no change needed. The dogfood ## Harvest is present, well-formed, cites DEC-004..006, and is new this slice (no inert-pass risk); VT-1's keyword substance passes. UNATTRIBUTABLE is the honest tool signal that a /notes knowledge-record commit sits outside the code-delta registry (record-delta tracks code phase-cuts only) — an attribution limitation, not a substance gap. The VA-3 dogfood deliverable is satisfied."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Design §6 residuals: adherence bar is a qualitative heuristic (no model-tier registry); ## Harvest staleness is honour-model (no enforcing verb)"
+detail = "Expected (audit charge 2): confirm the two residuals named in design §6 are intended scope boundaries, not gaps. Observed: both are explicitly named in design.md §6 and are direct consequences of the slice Non-Goal 'New engine/CLI verbs — /consult before widening scope'. (a) The code-review adherence bar is qualitative orchestrator judgment; minting a model-tier registry was consciously scoped out. (b) The ## Harvest freshness contract is honour-model — no verb enforces the consumer check; design §4 keeps the check inline in each consumer skill instead. Both are conscious design boundaries consistent with the slice's non-goals."
+disposition = "aligned"
+response = "Aligned — intended scope boundaries, not gaps. Both residuals are named in design §6 and follow directly from the slice Non-Goal against new engine/CLI verbs. (a) adherence bar = qualitative orchestrator judgment by design; (b) ## Harvest freshness is enforced inline in each consumer skill (design §4) rather than by a verb. Design and implementation agree. The adherence-bar registry is conditional future work ('follow-up IF it needs firming') — not owed now; no backlog item minted (the firming trigger has not fired)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "nit"
+title = "POL-002: harvest.md §3 output example cites real repo ids (IMP-241, ISS-102) as template filler"
+detail = "Expected (POL-002): shipped install/** artifacts carry no repo-local couplings. Observed: install/harvest.md:54 example line reads '- minted: IMP-241 — <one clause>; ISS-102 — <one clause>' inside the fenced ## Harvest output example. IMP-241 resolves to a real repo id. Mitigant: the ids sit beside angle-bracket <one clause> placeholders inside an illustrative code fence — self-evidently template filler, not a live citation a reader could mistake for a coupling. Already human-accepted at PHASE-05 VH-1 (plan VA-2 explicitly scopes the cadence-incident framing, and pre-existing citation convention out of scope)."
+disposition = "tolerated"
+response = "Tolerated — conscious accepted trade, human-ratified at PHASE-05 VH-1. The real ids (IMP-241/ISS-102) sit inside a fenced ## Harvest output example beside <one clause> angle-bracket placeholders; they read self-evidently as illustrative filler, not live couplings. Rewriting to fabricated ids (e.g. IMP-NNN) would marginally harden POL-002 but the VH-1 acceptance judged the example clear as-is. Left as accepted drift with rationale; not re-raised."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "design.md header status is stale: 'pending adversarial pass + lock' though slice is at audit (design locked, adversarial F1..F5 folded)"
+detail = "Expected: design.md status line reflects the locked design (the slice progressed design->plan->ready->started->audit, and the design body incorporates adversarial findings F1..F5). Observed: design.md line 3 still reads 'Status: drafted 2026-07-24; pending adversarial pass + lock.' The adversarial pass happened informally (F-points folded into the prose; no ledgered SL-215 design RV — permitted by project governance), but the header prose was never updated. Cosmetic doc-staleness; a per-slice direct-edit reconcile item."
+disposition = "verified"
+response = "Verified — remediation delegated to /reconcile as a per-slice direct edit. design.md line 3 header ('pending adversarial pass + lock') is stale prose; the design is locked (slice reached audit; adversarial F1..F5 folded into the body). Reconcile updates the header to reflect the locked state. Confirmed observation; the edit is reconcile's, not audit's (never a code fix-now)."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
