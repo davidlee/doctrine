@@ -1,0 +1,122 @@
+# Implementation plan for SL-215 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-215"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Code-review cadence (IMP-042 leg)"
+objective = "Give the code-review skill lifecycle awareness: a ## Cadence section (two moments, model-tier-gated default, tripwires, finding-landing per lifecycle position — design D3) plus one-line touchpoints in the dispatch funnel (between import and conclude) and the execute wrap-up."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md locked at D3 (tier-gated, arm-agnostic cadence); no engine/CLI change in scope" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "code-review/SKILL.md carries ## Cadence: per-phase vs pre-close moments, adherence-bar default, the four tripwires, and where findings land per position" },
+  { id = "EX-2", text = "dispatch/SKILL.md and execute/SKILL.md each carry a one-line touchpoint routing to the Cadence section" },
+]
+verification = [
+  { id = "VT-1", expects = "Cadence section with tripwires present in code-review skill", test_file = "plugins/doctrine/skills/code-review/SKILL.md", keywords = ["## Cadence", "tripwire", "Deviations: NONE"], waived = false },
+  { id = "VT-2", expects = "dispatch funnel touchpoint names the cadence", test_file = "plugins/doctrine/skills/dispatch/SKILL.md", keywords = ["Cadence"], waived = false },
+  { id = "VT-3", expects = "execute wrap-up touchpoint names the cadence", test_file = "plugins/doctrine/skills/execute/SKILL.md", keywords = ["Cadence"], waived = false },
+  { id = "VA-1", expects = "The cadence gate is arm-agnostic: no pi/claude/subprocess coupling in the gate text (D3; POL-002 spirit)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Harvest owner doc + seams"
+objective = "Author install/harvest.md (the ADR-005 PULL-tier owner: moments, three legs, sink table, canonical ## Harvest output, consumer contract, no-slice case — design section 3); seed the ## Harvest stub in install/templates/notes.md; make review-ledger.md section 5 defer to it."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed (code-review body stable before its tail is shrunk in PHASE-04)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "install/harvest.md exists with sections 1-5 per design; boundary and discriminators cited (using-doctrine.md, /knowledge), never restated (D4)" },
+  { id = "EX-2", text = "install/templates/notes.md carries the ## Harvest stub: stamp line + Produced/Learned/Open headings" },
+  { id = "EX-3", text = "review-ledger.md section 5 harvest paragraph replaced by a defer to harvest.md; synthesis ownership and the skill-specific-tails sentence survive" },
+]
+verification = [
+  { id = "VT-1", expects = "owner doc carries the output spec and consumer contract", test_file = "install/harvest.md", keywords = ["fresh-as-of", "### Produced", "### Learned", "### Open", "never re-survey"], waived = false },
+  { id = "VT-2", expects = "notes template seeds the section", test_file = "install/templates/notes.md", keywords = ["## Harvest", "fresh-as-of"], waived = false },
+  { id = "VT-3", expects = "ledger section 5 defers to the owner doc", test_file = "install/review-ledger.md", keywords = ["harvest.md"], waived = false },
+  { id = "VA-1", expects = "No duplicated home-arbitration or kind-selection text: harvest.md cites using-doctrine.md and /knowledge rather than restating their tables (D4)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Entry point + projections"
+objective = "Rewrite notes/SKILL.md as the harvest entry point (trigger-form description, three-leg body, ## Harvest maintenance, the open leg via /knowledge); convert handover and next into consumers (inline freshness check; cite ids; no re-survey)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed: harvest.md and the template stub exist to cite" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "notes/SKILL.md: description names the harvest entry role; body structured around produced/learned/open; maintains ## Harvest per harvest.md section 3; storage-rule paragraph and scaffold pointer kept" },
+  { id = "EX-2", text = "handover/SKILL.md: durable-persist TODO replaced by the freshness check + id citation; SL-170 S6 VT-embed beat untouched" },
+  { id = "EX-3", text = "next/SKILL.md: durable-state confirmation is the mechanical fresh-as-of check; continuation prompt cites open DEC/QUE/ASM ids" },
+]
+verification = [
+  { id = "VT-1", expects = "notes skill owns the manifest and the open leg", test_file = "plugins/doctrine/skills/notes/SKILL.md", keywords = ["harvest.md", "## Harvest", "/knowledge"], waived = false },
+  { id = "VT-2", expects = "handover carries the inline freshness check", test_file = "plugins/doctrine/skills/handover/SKILL.md", keywords = ["## Harvest", "fresh"], waived = false },
+  { id = "VT-3", expects = "next checks the stamp and cites open ids", test_file = "plugins/doctrine/skills/next/SKILL.md", keywords = ["fresh-as-of"], waived = false },
+  { id = "VA-1", expects = "No independent re-survey prompt remains in handover or next; each carries the check inline (F1/F4; VA-1 of the design)" },
+  { id = "VA-2", expects = "notes description is trigger-form (mem.pattern.skill.description-is-the-trigger) and does not compete with any other skill's moment" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Citation shrinks across all harvest tails"
+objective = "Shrink every remaining harvest tail to a one-line harvest.md citation plus its skill-specific lens: audit step 6 (phase-sheet sweep kept), close step 1 (consciously-rejected gate wording kept), code-review tail, inquisition tail, walkthrough harvest note, feedback step 7 (design D5)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 landed: the entry point and owner doc are stable to cite" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "All six tails cite harvest.md; no tail restates the three-sink routing; each skill's lens survives" },
+]
+verification = [
+  { id = "VT-1", expects = "audit tail cites owner, keeps sweep lens", test_file = "plugins/doctrine/skills/audit/SKILL.md", keywords = ["harvest.md", "phase sheets"], waived = false },
+  { id = "VT-2", expects = "close pre-check cites owner, keeps gate wording", test_file = "plugins/doctrine/skills/close/SKILL.md", keywords = ["harvest.md", "consciously rejected"], waived = false },
+  { id = "VT-3", expects = "code-review tail cites owner", test_file = "plugins/doctrine/skills/code-review/SKILL.md", keywords = ["harvest.md"], waived = false },
+  { id = "VT-4", expects = "inquisition tail cites owner", test_file = "plugins/doctrine/skills/inquisition/SKILL.md", keywords = ["harvest.md"], waived = false },
+  { id = "VT-5", expects = "walkthrough harvest note cites owner", test_file = "plugins/doctrine/skills/walkthrough/SKILL.md", keywords = ["harvest.md"], waived = false },
+  { id = "VT-6", expects = "feedback step 7 cites owner", test_file = "plugins/doctrine/skills/feedback/SKILL.md", keywords = ["harvest.md"], waived = false },
+  { id = "VA-1", expects = "The three-sink routing paragraph (facts->memory, work->backlog, notes->notes.md) appears exactly once in the corpus, in harvest.md (design VA-1)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Delivery, POL-002 verify, dogfood"
+objective = "Re-embed and install (touch embedding crate, cargo build, doctrine install); verify every edited skill and the new doc resolve in a fresh client with no repo-local couplings (POL-002 VH); run the corpus grep assertions; dogfood the harvest on SL-215 itself (## Harvest in its notes.md, DEC-004..006 already minted)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01..04 landed; tree green (doctrine check gate)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Fresh-client install carries harvest.md, the template stub, and all edited skills; no repo-local paths or couplings in any shipped artifact" },
+  { id = "EX-2", text = "SL-215 notes.md carries a live, fresh-stamped ## Harvest section citing DEC-004..006 (VA-3 dogfood)" },
+]
+verification = [
+  { id = "VT-1", expects = "dogfood manifest exists on this slice, pointer-only, stamped", test_file = ".doctrine/slice/215/notes.md", keywords = ["## Harvest", "fresh-as-of", "DEC-004"], waived = false },
+  { id = "VA-1", expects = "Fresh-client resolve: doctrine install into a clean target; every edited skill + harvest.md present and internally resolvable (POL-002)" },
+  { id = "VA-2", expects = "grep the install diff for repo-local couplings (absolute paths, this-repo entity ids in shipped text outside examples)" },
+  { id = "VH-1", expects = "Human confirms the POL-002 reflex check and the cadence defaults read acceptably in a fresh client" },
+]
+specs        = []
+requirements = []
