@@ -2,55 +2,61 @@
 
 ## Context
 
-Descends from RFC-016 (zero-rescue dispatch), **Cluster 1 / move B** —
-absorb mechanically-decidable recovery into the verbs and stop the funnel
-showing the worker or orchestrator *environmental* red. Three of the RFC-011
-case-notes' top burners share the theme "the funnel's gates and tree-state lie":
+Descends from RFC-016 (zero-rescue dispatch), **Cluster 1 / move B** — stop the
+funnel showing the worker a *false red*: a green delta reported as a failure the
+worker cannot distinguish from its own damage. Two of the RFC-011 case-notes' top
+burners are exactly this class, and both are reds that **survive Cluster 2** —
+read-verbs / no-shell-git do not touch how the gate resolves its binary or how the
+worker's own test run trips the marker:
 
-- **worker_commit gate false-red (6+ repros, ISS-218).** The gate shells
-  `doctrine` from `$PATH` (stale nix-store binary), so any phase that changes
-  conformance rules / allowlists / roles — even a *pure-JS* delta — gets a
-  false-red the worker cannot distinguish from its own damage.
+- **worker_commit gate false-red (6+ repros, ISS-218).** The gate belt's
+  `just validate` → `doctrine doctor` runs the stale PATH `~/.cargo/bin/doctrine`
+  (built from edge/main, RO in the jail), which lags `dispatch/<slice>` content.
+  A phase that adds a role / allowlist / check false-reds `commit-gate-red` — even
+  a *pure-JS* delta — against a correct fork.
 - **e2e authored-write goldens fail under the worker marker (7+ repros,
-  CHR-044).** ~30+ e2e binaries spawn the CLI for authored writes, which the
-  worker-mode guard correctly refuses under the marker; the worker reads it as
-  own-delta red and burns tokens diagnosing.
-- **coord worktree stale post-import (6 repros, GAP).** `dispatch_import` /
-  `dispatch_conclude_phase` advance the coord branch ref via object-db only; the
-  working tree and index stay at B, so every landed file shows as a staged
-  deletion (reverse-diff). A pathless `git commit` here would commit mass
-  reversions — the orchestrator must `git restore` after every funnel write.
+  CHR-044).** ~30 e2e binaries spawn the CLI for authored writes, which the
+  worker-mode guard correctly refuses under the marker. The server-side gate
+  already clears the marker for its own run (SL-199 F2, `worker_commit.rs:147`),
+  so the residual burn is the **worker agent's own** `cargo test` / `just check`
+  (run to check its work), which hits the marker and reads the refusal as
+  own-delta red.
 
-Each burns tokens as diagnosis of noise, and #3 fixing the coord-tree footgun
-**retires the checkout-import recovery memories** — the first move-E / OQ-6
-memory-retirement, and the baseline the Cluster 2 memory-blind benchmark is
-measured against.
+Both burn tokens as diagnosis of noise. The coord-worktree reverse-diff footgun
+(case-note #2, a *different* seam and not a false-red) was considered here and
+**routed to Cluster 2 as ISS-234** — its durable fix is read-verbs + no-shell-git,
+which an interim auto-sync in this slice would only pre-empt then get retired.
 
 ## Scope & Objectives
 
-1. **Gate runs the in-process / workspace binary, not `$PATH`.** worker_commit's
-   `check commit` belt resolves doctrine to the server's own binary so gate
-   truth matches the fork's actual rules (ISS-218; IMP-270 dup-closed here).
-2. **Marker-aware skip for authored-write e2e goldens.** The e2e goldens that
-   drive authored writes skip (or route around the guard) under the worker
-   marker / `DOCTRINE_WORKER`, so a marked fork's suite reflects delta health,
-   not environmental refusals (CHR-044).
-3. **Funnel writes leave the coord tree honest.** `dispatch_import` /
-   `dispatch_conclude_phase` refresh the checked-out coord tree + index to the
-   advanced ref (auto-sync, precondition: belt-verified clean pre-import), so
-   `git status` reads forward-diff and the reverse-diff footgun is gone.
+1. **Gate runs the workspace binary, not `$PATH`.** worker_commit's `check commit`
+   belt resolves the `doctrine` it shells (in `just validate` → `doctrine doctor`,
+   and any other belt corpus verb) to the **workspace build** — the coord tree's
+   `./target/debug/doctrine`, or the binary the running MCP server was built from —
+   so gate truth matches the fork's actual rules, not edge/main's (ISS-218; IMP-270
+   dup-closed here).
+2. **Marker-aware skip for authored-write e2e goldens.** The e2e goldens that drive
+   authored writes skip when the worker marker is present, so the worker agent's
+   own suite run reflects delta health. This composes with the existing gate
+   marker-clear: marker present (worker's manual run) → skip; the gate clears the
+   marker → the goldens still run → **coverage preserved in the gate** (CHR-044).
 
-Closure intent: a worker in a marked fork, and the orchestrator after a funnel
-write, both see a suite/tree that reflects real delta health with **no
-environmental red and no reverse-diff** — no `git restore` ritual, no recalled
-recovery idiom.
+Closure intent: a worker in a marked fork sees its own `cargo test` and the
+server-side `worker_commit` gate both green on a correct delta — no environmental
+red, no recalled "this red is a rig artifact" idiom.
 
 ## Non-Goals
 
+- **Coord-worktree reverse-diff (case-note #2 → ISS-234).** Re-homed to RFC-016
+  Cluster 2: the funnel is deliberately working-tree-free (ADR-012 / design §B) and
+  the durable fix is read-verbs + no-shell-git-in-funnel, not an interim auto-sync.
 - Refusal legibility / plan-time selector lint (move C) — that is **SL-224**.
-- The `dispatch next` state machine, no-shell-git-in-funnel prohibition, and the
-  memory-blind benchmark — RFC-016 Cluster 2 / move A (this slice makes #3's
-  memories *retirable*; formal retirement + benchmark is the later slice).
+- The `dispatch next` state machine, no-shell-git prohibition, and the memory-blind
+  benchmark — RFC-016 Cluster 2 / move A.
+- The `CARGO_MANIFEST_DIR`-baked stale-test-binary flake
+  ([[mem_019f376e2f6b7571af71290f8ea994c2]]) — a *separate* false-red class
+  (env!-baked absolute path from a reaped fork), SL-206-deferred to its PHASE-13.
+  Distinct from the stale-PATH-binary mechanism this slice fixes.
 - Reworking the worker-mode guard's semantics — the guard is correct; we stop
   *conflating* its refusal with delta damage.
 - ISS-219 (295k-char transcript in the refusal) and the architecture-layering
@@ -58,38 +64,37 @@ recovery idiom.
 
 ## Affected surface (coarse — `/design` refines)
 
-- `src/mcp_server/worker_commit.rs` — gate binary resolution (#1).
-- `src/mcp_server/dispatch.rs`, `src/worktree/import.rs`, `src/worktree/mod.rs`
-  — funnel ref advance + coord-tree sync (#3).
-- `src/worktree/marker.rs`, `src/commands/guard.rs` — worker-mode guard / marker.
+- `src/mcp_server/worker_commit.rs` — gate corpus-verb binary resolution (#1).
+- `src/worktree/marker.rs`, `src/commands/guard.rs` — worker-mode guard / marker
+  detection the goldens key off (#2).
 - `tests/e2e_*.rs` authored-write goldens (`e2e_worker_guard.rs`,
   `e2e_dispatch_sync.rs`, `e2e_doctor_golden.rs`, and the ~30 marker-poisoned
-  suites) — marker-aware skip (#2).
+  suites) + `tests/common/mod.rs` (`doctrine_bin` resolver) — marker-aware skip (#2).
 
 ## Risks / Assumptions / Open questions
 
-- **A:** the server knows its own binary path (or can build/locate the coord
-  binary) for #1 — confirm the resolution seam in `/design`.
-- **A:** the coord tree is guaranteed belt-clean pre-import, so auto-sync is a
-  safe fast-forward of the checkout — verify the precondition.
-- **OQ:** #2 — skip the goldens under marker, or route worker_commit's gate to
-  *exclude* authored-write goldens inside a marked fork? (Two places to cut.)
-- **OQ:** #3 auto-sync default-on for all funnel writes, or an opt-in flag?
-  (case-note recommendation: auto-refresh, safe under the clean precondition.)
-- **Risk:** #2 marker-skips must not mask a *real* authored-write regression on
-  the main arm — the skip must be strictly marker-gated.
+- **A:** the server can resolve the workspace / coord binary for #1 — the coord
+  tree's `./target/debug/doctrine`, `current_exe()` of the MCP server, or a config
+  path. Confirm the resolution seam and its jail-safety in `/design`.
+- **OQ:** #1 — resolve the coord tree's `./target/debug/doctrine`, or reuse the
+  MCP server's own binary (`current_exe`)? The two differ when the server predates
+  an in-flight binary change; the coord build is the more current.
+- **OQ:** #2 — skip the goldens under marker (test-side), or route worker_commit's
+  gate to exclude authored-write goldens inside a marked fork (gate-side)? The
+  test-side skip composes with the existing gate marker-clear for free; confirm.
+- **Risk:** #2 marker-skips must be strictly marker-gated — never mask a *real*
+  authored-write regression on the main (unmarked) arm.
 
 ## Verification / closure intent
 
-VT per fix: a gate test showing green on a conformance-rule-changing fork under
-the in-process binary; a marked-fork e2e run that skips the authored-write
-goldens and goes green on a clean delta; a post-import `git status` golden
-reading forward-diff. Closes when all three land green and the checkout-import
-recovery memories are marked retirable.
+VT per fix: a gate test showing green on a conformance-rule-changing fork under the
+workspace binary (where the stale PATH binary would red); a marked-fork run of an
+authored-write golden that skips under the marker yet still runs (green) once the
+marker is cleared. Closes when both land green and the stale-PATH false-red is
+demonstrably gone.
 
 ## Follow-Ups
 
-- Move-E / OQ-6: mark the checkout-import recovery memories retirable once #3
-  lands (formal retirement rides the Cluster 2 benchmark slice).
-- Adjacent, not in scope: ISS-219 (refusal transcript cap), IMP-293
-  (ratchet-red handoff signal), IDE-028 (phase-status push).
+- ISS-234 (coord-worktree reverse-diff) rides RFC-016 Cluster 2.
+- Adjacent, not in scope: ISS-219 (refusal transcript cap), IMP-293 (ratchet-red
+  handoff signal), IDE-028 (phase-status push), and the `CARGO_MANIFEST_DIR` flake.
