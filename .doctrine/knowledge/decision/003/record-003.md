@@ -7,7 +7,10 @@
 > fork cannot locate its coord tree via git, the coord binary is never built, and
 > `validate` precedes `build`). This decision changes frame: stop trying to give the
 > gate a fork-consistent `doctrine`, and instead stop running the checks that need
-> one — because they carry no worker-delta signal in a fork.
+> one — because they carry no worker-delta signal in a fork. The one residual (a delta
+> to the checks' *own logic*) is closed **project-side** by a fresh-binary corpus gate
+> at the orchestrator's close (ii), so the `DOCTRINE_BIN`/coord-build rule is retained
+> and reframed, not deleted (revised again 2026-07-24 after a codex external read).
 
 ## Decision
 
@@ -20,17 +23,25 @@ PATH `~/.cargo/bin/doctrine`):
   (`doctrine prompt check` + `doctrine doctor`) shells the installed binary; the rest
   use cargo/node or build a fresh binary.
 - **Skip the governance legs in a worker context.** `validate` runs `doctrine prompt
-  check` / `doctrine doctor` only on a generic host; in a worker fork it exits 0
+  check` / `doctrine doctor` only off the fork path; in a worker fork it exits 0
   early. The signal is three legs (the same predicate as fix #2's
   `under_worker_marker`): `DOCTRINE_DISPATCH_GATE` (set by `worker_commit` on the gate
-  spawn) **or** `DOCTRINE_WORKER` (subprocess arm) **or** the marker file
+  spawn) **or** `DOCTRINE_WORKER = "1"` (subprocess arm — **exact** match, ==
+  `env_worker_set()` / marker.rs:127, never a lax `-n`) **or** the marker file
   (`.doctrine/state/dispatch/worker`, claude-arm manual run).
 - **One neutral engine line.** `worker_commit::run_commit_gate` spawns the gate with
   `.env("DOCTRINE_DISPATCH_GATE", "1")` — needed because the gate clears the marker
   and removes `DOCTRINE_WORKER` for its own run (SL-199 F2 / fix #2), so neither
   other leg is visible in that window. No change to gate logic, staging, or the guard.
-- **Delete the obsolete `DOCTRINE_BIN` precondition** from `.doctrine/governance.md`
-  and `CLAUDE.md`; it governs nothing now.
+- **Close the residual project-side, at the orchestrator (ii).** Off the fork path,
+  `validate` resolves the **fresh coord build** (`${DOCTRINE_BIN:-./target/debug/doctrine}`,
+  PATH fallback) instead of bare `doctrine`, so `close`'s `doctrine check gate`
+  validates the landed corpus with the source-consistent binary; the project close
+  ritual gains a build-before-gate beat. Entirely project-tier (`justfile` /
+  governance / ritual) — **zero engine surface, inert for clients**.
+- **Retain and reframe the `DOCTRINE_BIN` precondition** in `.doctrine/governance.md`
+  and `CLAUDE.md` — it now governs (ii)'s coord-side *close-time* build, not a
+  fork-side *launch-time* env contract (RV-291 F-1). Reframed, **not deleted**.
 
 ## Why the governance legs are inert in a fork (the load-bearing claim)
 
@@ -72,20 +83,35 @@ engine announces *where*; the **project recipe** decides *what* to skip. A gener
 host's justfile never reads it. This is the clean inversion of the rejected designs,
 which pushed cargo/binary-resolution knowledge toward the platform.
 
-## The one concession
+## Closing the residual (not conceding it)
 
-A phase that changes `doctrine doctor` / `prompt check`'s **own logic** (a Rust
-change to what governance-consistency means) will not have that new rule exercised
-against coord's authored state *in the fork gate*. It is covered by the phase's own
-unit tests and by coord's gate/audit when the delta lands — which is where a
-governance-rule change belongs (the fork gate validates the worker's delta, not
-coord's pre-existing authored state). This is the sole behaviour the skip removes.
+The fork-skip leaves **one** coverage question: a phase that changes `doctrine doctor`
+/ `prompt check`'s **own logic** (a Rust change to what governance-consistency means)
+is not exercised against the real authored corpus *by a fresh binary in the fork* —
+and never was (the fork gate always ran the *stale PATH* binary; that is ISS-218).
+Traced, no orchestrator beat catches it either: `dispatch_import` runs only the pure
+classify belt (prefix + scope), the pi-arm import runs only `prove` (`fmt-check lint`),
+`dispatch_conclude_phase` flips the sheet + boundary commit, and `close`'s
+`doctrine check gate` → `validate` shells **bare PATH** `doctrine`.
+
+So the residual is **closed**, not conceded — project-side, at the orchestrator's
+**close** (ii above): the orchestrator *is* coord (source landed, tree owned, build
+tractable — none of the fork-side blockers apply), so `close`'s gate validates the
+landed corpus with the freshly-built source-consistent binary. Backstopped by the
+phase's own unit tests. The earlier draft's claim that "coord's gate/audit on landing"
+already covered it was **false** — that gate is itself stale-PATH (codex external read,
+2026-07-24).
 
 ## Preconditions / carried assumptions
 
-- **No coord-build precondition, no launch-time env contract.** The fix depends only
-  on the worker-context signal, which is established by `worker_commit` (gate) or the
-  existing marker/`DOCTRINE_WORKER` (worker's own run) — all already present.
+- **The fork-skip needs no coord-build precondition and no launch-time env contract.**
+  It depends only on the worker-context signal, established by `worker_commit` (gate)
+  or the existing marker/`DOCTRINE_WORKER` (worker's own run) — all already present.
+- **(ii) needs a coord-side *close-time* build.** The fresh-binary corpus gate assumes
+  the orchestrator builds the coord/landing tree before `close`'s `check gate`
+  (the reframed `DOCTRINE_BIN` precondition + close-ritual beat). This is tractable —
+  coord is a full tree the orchestrator owns — unlike the fork-side launch-time
+  contract RV-291 F-1 killed.
 - **Guard invariant relied upon:** a worker cannot write authored `.doctrine/` state
   (worker-mode guard). If that ever changed, the inertness argument would need
   revisiting.
@@ -95,8 +121,10 @@ coord's pre-existing authored state). This is the sole behaviour the skip remove
 - Governs SL-225 #1; fulfils ISS-218 (IMP-270 dup-closed).
 - POL-002 (platform independence) forced the neutral-signal framing and killed the
   three binary-resolution designs.
-- The obsolete `DOCTRINE_BIN`→coord-build rule is **deleted** from
-  `.doctrine/governance.md` (§ orchestration) and CLAUDE.md (§ Dispatch precondition).
+- The `DOCTRINE_BIN`→coord-build rule is **retained and reframed** in
+  `.doctrine/governance.md` (§ orchestration) and CLAUDE.md (§ Dispatch precondition) —
+  a coord-side close-time build governing (ii)'s fresh-binary corpus gate, no longer a
+  fork-side launch contract.
 - Sibling #2 (marker-aware e2e skip, CHR-044) is the same principle — governance-
   coupled checks don't belong in the worker's run — and shares the env-or-marker
   predicate; the engine already provides the gate marker-clear (SL-199 F2).

@@ -41,8 +41,14 @@ which an interim auto-sync in this slice would only pre-empt then get retired.
    "DOCTRINE_DISPATCH_GATE","1")` on the gate spawn); no binary resolution, no cargo
    layout, no gate-logic change (DEC-003). Rejected across three passes: engine-publish,
    the launch-frozen `DOCTRINE_BIN` precondition (RV-291), and the git self-locating
-   recipe (RV-292). The obsolete `DOCTRINE_BIN` rule is **deleted** from
-   governance/CLAUDE.md, not softened.
+   recipe (RV-292). The fork-skip's one residual — a phase changing `doctor`/`prompt
+   check`'s *own logic* — is closed **project-side** at the orchestrator's **close**
+   (ii): off the fork path `validate` resolves the fresh coord build
+   (`${DOCTRINE_BIN:-./target/debug/doctrine}`), so `close`'s gate validates the landed
+   corpus with the source-consistent binary. Entirely project-tier (`justfile` /
+   governance / close ritual) — zero engine surface, inert for clients. The
+   `DOCTRINE_BIN` rule is therefore **retained and reframed** (coord-side close-time
+   build), **not deleted** (codex external read, 2026-07-24).
 2. **Marker-aware skip for authored-write e2e goldens.** The e2e goldens that drive
    authored writes skip when the worker marker is present, so the worker agent's
    own suite run reflects delta health. This composes with the existing gate
@@ -72,11 +78,13 @@ red, no recalled "this red is a rig artifact" idiom.
 
 ## Affected surface (see design.md code-impact for the locked touch-set)
 
-- `justfile` — `validate` skips the governance legs under the worker-context signal (#1).
+- `justfile` — `validate`: skips the governance legs under the worker-context signal
+  (fork, #1); off the fork path resolves the fresh coord build for `close`'s gate (ii).
 - `src/mcp_server/worker_commit.rs` — one neutral `.env("DOCTRINE_DISPATCH_GATE","1")`
   on the gate spawn (#1; the slice's only engine line).
-- `.doctrine/governance.md` + `CLAUDE.md` — **delete** the obsolete `DOCTRINE_BIN`→
-  coord-build precondition (#1, authored/prose tier).
+- `.doctrine/governance.md` + `CLAUDE.md` — **retain + reframe** the `DOCTRINE_BIN`→
+  coord-build precondition (coord-side close-time build governing ii's fresh-binary
+  corpus gate) + add the build-before-`check gate` close beat (#1 (ii), authored/prose tier).
 - `src/test_support.rs` + `tests/common/mod.rs` — `under_worker_marker()` helper (#2).
 - `tests/e2e_*.rs` authored-write goldens (`e2e_worker_guard.rs`,
   `e2e_dispatch_sync.rs`, `e2e_doctor_golden.rs`, and the ~30 marker-poisoned

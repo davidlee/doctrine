@@ -5,7 +5,10 @@
 > dogfooding artifacts (POL-002): the fixes live in the `justfile`, governance, and
 > this repo's test suite. The engine is touched only by a **single neutral signal
 > line** in `worker_commit` (a `DOCTRINE_DISPATCH_GATE` marker on the gate spawn) —
-> no cargo layout, no resolution policy, no governance logic. See DEC-003.
+> no cargo layout, no resolution policy, no governance logic. The one coverage
+> residual the fork-skip leaves is closed **project-side** — a fresh-binary corpus
+> gate at the orchestrator's close, entirely in this repo's `justfile` / governance /
+> close ritual, zero engine surface, inert for client repos. See DEC-003.
 
 ## Problem
 
@@ -71,13 +74,20 @@ validate:
   # In a dispatch worker fork the authored .doctrine/ state is coord's (the worker
   # cannot write it), so these governance self-checks add no worker-delta signal —
   # they can only false-red on a stale binary. Coord owns them. (SL-225 #1, DEC-003.)
-  if [ -n "${DOCTRINE_DISPATCH_GATE:-}" ] || [ -n "${DOCTRINE_WORKER:-}" ] \
+  if [ -n "${DOCTRINE_DISPATCH_GATE:-}" ] || [ "${DOCTRINE_WORKER:-}" = "1" ] \
        || [ -f .doctrine/state/dispatch/worker ]; then
     echo "validate: skipping governance self-checks in a worker fork (coord owns them)"
     exit 0
   fi
-  doctrine prompt check      # generic host / CI: unchanged
-  doctrine doctor
+  # Off the fork path (dev / CI / the orchestrator's close gate): validate the AUTHORED
+  # corpus with the SOURCE-CONSISTENT binary — the fresh coord build when present, else
+  # PATH. This is what closes the fork-skip's residual, at close, where coord IS built
+  # (SL-225 #1 (ii)). Exact `= "1"` on DOCTRINE_WORKER matches env_worker_set()
+  # (marker.rs:127) — a stray non-`1` value must not false-skip.
+  doc="${DOCTRINE_BIN:-./target/debug/doctrine}"
+  command -v "$doc" >/dev/null 2>&1 || doc=doctrine
+  "$doc" prompt check
+  "$doc" doctor
 ```
 
 **The worker-context signal — three legs, the same predicate as fix #2's
@@ -94,9 +104,11 @@ validate:
 3. **the marker file** (`.doctrine/state/dispatch/worker`) — the claude arm's
    worker doing a manual `just check` to inspect its work.
 
-A generic host / CI sets none → `validate` runs `doctor` / `prompt check` exactly
-as today. This is the *same* env-or-marker predicate fix #2 uses, applied to the
-recipe instead of the test helper — one concept for both fixes.
+A generic host / CI sets none → `validate` runs `doctor` / `prompt check` (resolving
+the fresh coord build when present, else PATH — a true generic host with neither
+`DOCTRINE_BIN` nor `./target/debug/doctrine` falls to PATH `doctrine`, exactly as
+today). This is the *same* env-or-marker predicate fix #2 uses, applied to the recipe
+instead of the test helper — one concept for both fixes.
 
 ### What the one engine line is, and why it is POL-002-clean
 
@@ -115,21 +127,64 @@ engine or a git inference resolve *which binary* — a project/cargo concern).
 - **F-2 (existence ≠ freshness; validate before build)** — gone. No `doctor` runs
   in the fork, so no fork-consistent-binary requirement exists.
 - **F-4 (undeclared Git 2.31+ floor)** — gone. No git plumbing in the recipe.
-- **F-3 (coord never built; governance still mandates the frozen rule)** — the
-  coord-build lifecycle is no longer needed. What remains is a real edit, performed
-  by this slice: **delete** the obsolete `DOCTRINE_BIN`→coord-build precondition
-  from `.doctrine/governance.md` and `CLAUDE.md` (it now governs nothing) rather
-  than soften it.
+- **F-3 (coord never built; governance still mandates the frozen rule)** —
+  **retained and repurposed, not deleted.** The coord-build lifecycle *is* needed —
+  not for the fork gate (which skips), but to close the fork-skip's one residual: the
+  orchestrator's fresh-binary corpus gate at **close** (§ "Closing the residual"). So
+  this slice keeps the `DOCTRINE_BIN`→coord-build precondition in
+  `.doctrine/governance.md` and `CLAUDE.md` and **reframes** it — it is no longer a
+  fork-side *launch-time* env contract (RV-291 F-1 killed that), but a coord-side
+  *close-time* build the orchestrator performs on the tree it already owns.
+  Establishing the coord build at close is the direct answer to F-3's "promised but
+  never established" — established where it is finally tractable (coord *is* built
+  there; no flat-worktree topology to defeat it).
 
-### The residual coverage change (the one honest concession)
+### Closing the residual — the orchestrator's fresh-binary corpus gate (project-tier)
 
-A phase that changes `doctrine doctor` / `prompt check`'s *own logic* (a Rust change
-to what governance-consistency means) will not have that new rule exercised against
-coord's authored state *in the fork gate*. It is covered instead by the phase's own
-unit tests and by coord's gate/audit when the delta lands — which is where a
-governance-rule change belongs, since the fork gate exists to validate the worker's
-delta, not coord's pre-existing authored state. This is the sole behaviour the skip
-removes; everything else it removes is noise.
+The fork-skip removes only false-reds, but it leaves **one** coverage question: a
+phase that changes `doctrine doctor` / `prompt check`'s *own logic* (a Rust change to
+what governance-consistency *means*) will not have that new rule exercised against the
+real authored corpus *by a fresh binary in the fork* — and never was (the fork gate
+always ran the *stale PATH* binary; that is ISS-218). The honest question RV-292's
+spirit demands: **is that fresh-binary corpus check performed anywhere before the
+slice closes?**
+
+Traced, today the answer is *no*. The orchestrator funnel runs **no** corpus gate:
+the claude-arm `dispatch_import` (dispatch.rs:293) runs only the pure classify belt
+(`.doctrine/`/`.claude/` prefix-reject + scope leg — not consistency), composes the
+tree, and lands one commit; the pi-arm import gate is `run_prove_on` = the `prove`
+cadence = `fmt-check lint` only (import.rs, justfile:20); `dispatch_conclude_phase`
+just flips the gitignored sheet + boundary commit. And `close`'s `doctrine check
+gate` → `validate` shells **bare PATH** `doctrine` (justfile) — the stale installed
+binary, not the landed one. So a landed governance-logic delta is exercised fresh
+against the corpus *nowhere* until the installed binary is rebuilt.
+
+**The fix (project-tier, zero engine).** The orchestrator *is* coord: it runs on the
+coord/landing tree, the slice source has **landed** there, and it can build and run a
+**source-consistent** binary — none of the fork-side blockers (flat git topology,
+coord-never-built, validate-before-build) apply. So the residual is closed at the
+orchestrator's **close**, in this repo's own operating procedure:
+
+1. `validate` resolves the **fresh coord build** (`${DOCTRINE_BIN:-./target/debug/doctrine}`,
+   PATH fallback) instead of bare `doctrine`, so `close`'s existing `doctrine check
+   gate` validates the **landed** corpus with the **landed** binary — riding the
+   existing seam, no new gate.
+2. The project **close ritual** (`.doctrine/governance.md`) gains a build-before-`check
+   gate` beat so the coord tree's `./target/debug/doctrine` reflects the landed rules
+   before it runs. This *owns* the freshness lifecycle F-3 demanded.
+
+**POL-002 — why this must be, and is, project-only.** The residual exists *only*
+because doctrine develops doctrine — a slice can mutate the governing binary's own
+rules. A client repo governed *by* doctrine never rebuilds the doctrine binary, so its
+installed `doctrine` is always current for its corpus and **the residual cannot occur
+there**. A mechanism to close it therefore must not ship and must not assume
+cargo/`target`. It doesn't: (ii) lives entirely in this repo's `justfile`,
+`.doctrine/governance.md`, `CLAUDE.md`, and close ritual — **zero engine surface, zero
+shipped-skill surface, inert for clients**. The retained `DOCTRINE_BIN`/coord-build
+knowledge is *project operator* knowledge, which is exactly where cargo/`target`
+awareness belongs under POL-002 (contrast the three rejected designs, which pushed it
+into the engine or a git inference). The slice's whole engine touch remains the single
+`DOCTRINE_DISPATCH_GATE` neutral-signal line for the fork skip.
 
 ## Fix #2 — marker-aware skip in the authored-write goldens
 
@@ -169,10 +224,10 @@ untouched.
 
 | Path | Change | Fix |
 |---|---|---|
-| `justfile` | `validate` recipe → skip `doctrine prompt check`/`doctor` under the worker-context signal; unchanged on a generic host | #1 |
-| `src/mcp_server/worker_commit.rs` | `run_commit_gate` spawns the gate with `.env("DOCTRINE_DISPATCH_GATE","1")` — one neutral signal line | #1 |
-| `.doctrine/governance.md` | § orchestration — **delete** the obsolete `DOCTRINE_BIN`→coord-build precondition (governs nothing now) | #1 |
-| `CLAUDE.md` | § "Dispatch precondition" — **delete** the same obsolete rule | #1 |
+| `justfile` | `validate` recipe: (a) **skip** `doctrine prompt check`/`doctor` under the worker-context signal (fork); (b) off the fork path, resolve the **fresh coord build** (`${DOCTRINE_BIN:-./target/debug/doctrine}`, PATH fallback) instead of bare `doctrine`, so `close`'s gate validates the landed corpus with the source-consistent binary | #1 |
+| `src/mcp_server/worker_commit.rs` | `run_commit_gate` spawns the gate with `.env("DOCTRINE_DISPATCH_GATE","1")` — the one neutral signal line; the slice's **only** engine touch | #1 |
+| `.doctrine/governance.md` | § orchestration — **retain + reframe** the `DOCTRINE_BIN`→coord-build precondition (now a coord-side *close-time* build governing the fresh-binary corpus gate, not a fork-side launch contract); add the build-before-`check gate` beat to the close ritual | #1 (ii) |
+| `CLAUDE.md` | § "Dispatch precondition" — **retain + reframe** the same rule (coord-side close-time build) | #1 (ii) |
 | `src/test_support.rs` | `under_worker_marker()` + `WORKER_MARKER_REL` const | #2 |
 | `tests/common/mod.rs` | re-export `under_worker_marker` | #2 |
 | `tests/e2e_worker_guard.rs`, `tests/e2e_dispatch_sync.rs`, `tests/e2e_doctor_golden.rs`, … | marker-guard early-return in authored-write goldens | #2 |
@@ -180,9 +235,11 @@ untouched.
 
 **Engine surface is one line** — `worker_commit.rs` gains a neutral env signal on
 the gate spawn (a `design-target` selector for #1), with **no** change to gate
-logic, staging, or the guard. `.doctrine/governance.md` and `CLAUDE.md` are
-authored/prose edits (dead-rule deletions), not worker code-deltas, so they are not
-`design-target` selectors.
+logic, staging, or the guard. The `justfile` `validate` edit (both the fork skip and
+the fresh-binary resolution) is a project recipe `design-target`. `.doctrine/governance.md`
+and `CLAUDE.md` are authored/prose edits (rule **retentions/reframes** + the close
+ritual beat), not worker code-deltas, so they are not `design-target` selectors.
+**(ii) adds nothing to the engine or to any shipped skill** — it is entirely project-tier.
 
 ## Verification alignment
 
@@ -200,8 +257,17 @@ authored/prose edits (dead-rule deletions), not worker code-deltas, so they are 
   **reds**. Proves the skip is strictly worker-gated and never masks a real
   governance regression on the main arm (the mirror of #2's no-mask property).
 - **VT-1c (#1, signal-legs unit).** `validate` skips under each leg independently
-  (`DOCTRINE_DISPATCH_GATE`, `DOCTRINE_WORKER`, marker file) and runs under none — a
-  narrow unit over the predicate.
+  (`DOCTRINE_DISPATCH_GATE`, `DOCTRINE_WORKER=1`, marker file) and runs under none — a
+  narrow unit over the predicate. Includes the **exact-match negative**:
+  `DOCTRINE_WORKER=0` (or any non-`1`) does **not** skip, matching `env_worker_set()`
+  (marker.rs:127) rather than a lax `-n` test.
+- **VT-1d (#1 (ii), fresh-binary corpus gate — closes the residual).** Off the fork
+  path (no worker signal), `validate` resolves its binary from
+  `${DOCTRINE_BIN:-./target/debug/doctrine}` with a PATH fallback: with `DOCTRINE_BIN`
+  pointed at a stub that **reds** the authored corpus the gate **reds**, and at a stub
+  that **greens** it the gate **greens** — proving `close`'s gate exercises the
+  *source-consistent* binary, not bare stale PATH. The build-before-`check gate` close
+  beat is a governance/ritual change, verified **VA** (close-checklist), not a VT.
 - **VT-2 (#2):** an authored-write golden returns early (skips) when
   `DOCTRINE_WORKER` is set or the marker file is present, and runs normally when
   neither is — proving marker-gated, never masking a real regression on the main arm.
@@ -214,16 +280,34 @@ asserts the gate spawn carries `DOCTRINE_DISPATCH_GATE`.
 ## Invariants & boundary conditions
 
 - **POL-002.** No cargo/`./target` layout, path, or binary-resolution policy enters
-  engine code. The engine's only touch is a **neutral context signal**
+  **engine** code. The engine's only touch is a **neutral context signal**
   (`DOCTRINE_DISPATCH_GATE`) — it announces *that* a gate run is underway; the
   **project recipe** decides *what* to skip. A generic host never reads the variable.
   The rejected designs violated this by making the engine (or a git inference)
   resolve *which binary* — a project/cargo concern. (DEC-003.)
-- **The skip carries no worker-delta signal, so it loses none.** `doctrine doctor` /
-  `prompt check` read authored `.doctrine/` state, which a worker cannot write; in a
-  fork their verdict equals coord's already-green verdict up to the binary version.
-  Skipping them removes only the stale-binary false-red — except a phase that changes
-  doctor's *own logic*, covered by its unit tests and coord's gate/audit on landing.
+- **(ii) is entirely project-tier.** The fresh-binary corpus gate lives in this repo's
+  `justfile`, `.doctrine/governance.md`, `CLAUDE.md`, and close ritual — it ships to no
+  client and is **inert** for them (a client never rebuilds the doctrine binary, so the
+  residual cannot occur). The retained `DOCTRINE_BIN`/`./target` knowledge is *project
+  operator* knowledge, which is exactly where cargo/`target` awareness belongs under
+  POL-002. Zero engine surface; zero shipped-skill surface.
+- **The skip carries no worker-delta signal, so it loses none — and its one residual is
+  closed, not conceded.** `doctrine doctor` / `prompt check` read authored `.doctrine/`
+  state, which a worker cannot write; in a fork their verdict equals coord's
+  already-green verdict up to the binary version. Skipping them removes only the
+  stale-binary false-red. The sole residual — a phase changing doctor's *own logic* —
+  is closed by the orchestrator's fresh-binary corpus gate at **close** (project-tier),
+  backstopped by the phase's own unit tests; it is **not** left to the stale `close`
+  gate (which shells bare PATH `doctrine`) as an earlier draft wrongly claimed.
+- **Signal predicate matches the engine contract.** The skip tests `DOCTRINE_WORKER` by
+  **exact** `= "1"` (== `env_worker_set()`, marker.rs:127), never `-n` — a stray
+  non-`1` value cannot false-skip. `DOCTRINE_DISPATCH_GATE` is engine-set to `1`; the
+  marker leg is presence-only.
+- **Stale-marker bound (low).** A leftover `.doctrine/state/dispatch/worker` from a
+  crashed dispatch would skip the governance legs on a later *manual* `just validate` in
+  that tree. Bounded: the marker is gitignored runtime state, the skip **echoes** a
+  visible line (not silent), and the property is shared with fix #2's existing
+  `under_worker_marker()` predicate — this slice adds no new persistence risk.
 - **Gate behaviour otherwise unchanged.** `worker_commit` still clears/restores the
   marker, removes `DOCTRINE_WORKER`, stages by path, and lands one commit; the added
   env var changes none of that. No `current_exe()` publish, no `DOCTRINE_BIN` write.
@@ -245,8 +329,12 @@ asserts the gate spawn carries `DOCTRINE_DISPATCH_GATE`.
   launch-frozen `DOCTRINE_BIN` precondition (not temporally achievable, RV-291 F-1),
   and the git-derived self-locating recipe (git's flat worktree model can't find the
   coord tree; coord binary never built; validate-before-build, RV-292 F-1/2/3). The
-  engine surface is one neutral signal line; the obsolete `DOCTRINE_BIN` governance
-  rule is deleted, not softened.
+  engine surface is one neutral signal line. The fork-skip's one residual (a delta to
+  `doctor`/`prompt check`'s *own logic*) is closed **project-side** by the
+  orchestrator's fresh-binary corpus gate at **close** (§ "Closing the residual"), so
+  the `DOCTRINE_BIN` governance rule is **retained and reframed** — a coord-side
+  close-time build — not deleted (flips the earlier F-3 disposition, RV-292; codex
+  external read, 2026-07-24).
 - **OQ-1 (STD-001 single-sourcing).** `WORKER_MARKER_REL` (`.doctrine/state/dispatch/worker`)
   duplicates `marker.rs:114`'s `marker_path`. The dual-compilation seam (CHR-014)
   blocks a shared `crate::` const from `test_support.rs` (included into both the lib

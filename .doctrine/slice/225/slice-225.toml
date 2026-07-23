@@ -34,6 +34,10 @@ intent = "design-target"
 selector = "tests/e2e_doctor_golden.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/mcp_server/worker_commit.rs"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "ISS-218"
