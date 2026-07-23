@@ -35,14 +35,21 @@ awareness (a `## Cadence` section) — the IMP-042 leg.
   ("end of a coherent unit") is already `/notes`' — two skills competing for one
   moment is a routing defect (ADR-009 F14 pressure). Matches ADR-005 (skills
   route, reference docs explain) and the `review-ledger.md` precedent exactly.
-  → DEC record minted at design lock.
+  Precision (adversarial F1): "one entry point" means one **owner**
+  (`harvest.md`) and one **output** (`## Harvest`); `/notes` is the routed entry
+  for the bare end-of-unit moment, while review skills execute the same
+  procedure through their cited tails against the same manifest — they do not
+  route to `/notes`. → DEC record minted at design lock.
 - **D2 — Canonical output: single maintained `## Harvest` section, pointer-only,
   freshness-stamped.** Satisfies the RFC-011 L2' properties (single-copy,
   freshness-marked, progressively accreted, scoped to the next stage) in one
   shape. Append-only per-event blocks relocate the staleness problem;
   no-manifest fails "consumed, not re-derived" outright. Drift is bounded by
   pointer-only discipline (ids + one clause, never restated content) and swept
-  at each harvest pass. → DEC record.
+  at each harvest pass. Entries carry **no status field** (adversarial F2): a
+  status is queried data, and queried data in authored prose violates the
+  storage rule — consumers query status via the CLI when they need it.
+  → DEC record.
 - **D3 — Code-review cadence gate keys on worker model tier + tripwires,
   arm-agnostic.** The dispatch arm is a transport property, not an adherence
   property; the pi arm can run any model. Default per-phase review **on** when
@@ -86,24 +93,28 @@ tier; edit the source under `install/`; installed copy inert).
 
   ### Produced
   - PHASE-03 done — <one line> (commits a1b2c3d..d4e5f6a)
-  - minted: IMP-241, ISS-102
+  - minted: IMP-241 — <one clause>; ISS-102 — <one clause>
 
   ### Learned
   - mem.pattern.dispatch.import-tripwires
-  - EVD-014
+  - EVD-014 — <one clause>
 
   ### Open
-  - DEC-011 (active) — <one clause>
-  - QUE-023 (open) — <one clause>
+  - DEC-011 — <one clause>
+  - QUE-023 — <one clause>
   ```
 
-  Rules: stamp = date + phase + head commit at harvest time; entries are ids +
-  one clause; settled/superseded entries drop at the next pass (git holds
-  history).
+  Rules: stamp = date · lifecycle position (PHASE-NN **or** stage, for
+  non-phase moments — F5) · head commit at harvest time; entries are ids + one
+  clause, **never a status** (F2 — query the CLI); settled/superseded entries
+  drop at the next pass (git holds history). The section stub seeds from the
+  notes template (F3).
 - **§4 Consumer contract** (the load-bearing sentence): a consumer checks
   `fresh-as-of` against actual lifecycle position — **fresh → cite ids, never
   re-survey; stale → the harvest is owed, route to `/notes` first**, never
-  silently re-derive.
+  silently re-derive. ADR-005 conformance rule (F4): this check rides **inline
+  in each consumer skill's body** — the doc explains, the skill carries the
+  behavioural rule; demoting it to a pulled pointer is the C4 error class.
 - **§5 No governing slice.** No manifest — legs route to sinks; for reviews the
   synthesis carries the story; consumers fall back to entity queries.
 
@@ -114,6 +125,7 @@ All skill edits under `plugins/doctrine/skills/`; docs under `install/`.
 | Path | Change |
 |---|---|
 | `install/harvest.md` | **new** — §3 above |
+| `install/templates/notes.md` | `## Harvest` section stub with the stamp line + three leg headings (F3) |
 | `install/review-ledger.md` | §5 harvest paragraph → two-line defer to `harvest.md`; synthesis ownership stays; "skill-specific tails stay in the owning skill" survives |
 | `notes/SKILL.md` | entry-point rewrite: trigger-form description names the harvest role; body restructured around three legs (existing checklist = *produced* detail; sink paragraphs → citation; adds `## Harvest` maintenance + the *open* leg). Keeps storage-rule paragraph + scaffold pointer |
 | `handover/SKILL.md` | TODO "record any information worth durably persisting" → "confirm `## Harvest` fresh (else `/notes` first); cite its ids". Reading list points at the Harvest section. SL-170 S6 VT-embed beat untouched |
@@ -134,9 +146,10 @@ route correctly), engine/CLI, ADR-007 ledger mechanics, `knowledge/SKILL.md`
 ## 5. Verification alignment
 
 - **VA-1** (projections consume, not re-derive) — grep-assertable: no re-survey
-  prompt remains in `handover`/`next`/review-synthesis bodies; each cites
-  `harvest.md`; the three-sink routing paragraph appears exactly once in the
-  corpus (in `harvest.md`).
+  prompt remains in `handover`/`next` bodies and review tails run the shared
+  procedure via citation (F1 — review skills don't route to `/notes`); each
+  consumer carries the inline freshness check (F4); the three-sink routing
+  paragraph appears exactly once in the corpus (in `harvest.md`).
 - **VA-2** (code-review routing) — Cadence section states finding-landing per
   lifecycle position; persistent→backlog / session→ledger holds from IMP-023,
   verified by reading.

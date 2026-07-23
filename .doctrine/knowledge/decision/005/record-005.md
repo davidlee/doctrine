@@ -6,3 +6,7 @@ head commit), pointer-only (ids + one clause, never restated content), swept at
 each pass. Chosen over append-only per-event blocks (relocates staleness) and
 no-manifest (fails "consumed, not re-derived"). Satisfies RFC-011 L2'
 properties. Rationale: SL-215 `design.md` D2.
+
+Amended at adversarial pass: entries carry no status field — a status is
+queried data, forbidden in authored prose by the storage rule; consumers query
+the CLI. Stamp = date · lifecycle position (PHASE-NN or stage) · head commit.
