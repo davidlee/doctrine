@@ -102,6 +102,10 @@ After workers return, in exact order:
      this arm; `/dispatch-subprocess`).
    Neither is a "remember to also record" hand-step any more: the Conclude beat's
    completeness gate halts if a landed phase is missing its row (below).
+9. Review — between import and conclude, weigh a **per-phase review** of the
+   landed delta per the code-review skill's `## Cadence`: default on below the
+   adherence bar, mandatory on any tripwire (deleted tests, `Deviations: NONE`,
+   waived/uncheckable VT, out-of-scope touch).
 **Report-and-halt** on conflict, moved HEAD, or authored-tree touch — never auto-resolve.
 
 ## Handover cadence

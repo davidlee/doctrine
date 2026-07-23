@@ -60,10 +60,10 @@ Set by the user, else inferred, else defaults:
 6. **Check understanding** — *only when learning is a goal* (see below).
 7. **Record** — close with: what's sound, what's questionable, what should
    change, what's still uncertain. Then route what must outlive the session:
-   changes worth making → the change process (below); durable gotchas and
-   patterns → project memory; follow-up work → the backlog. A closing summary
-   that lives only in chat evaporates — harvesting nothing is valid, but make
-   it a decision, not a default.
+   changes worth making re-enter the change loop (below); everything else
+   harvests per `harvest.md`. A closing summary that lives only in chat
+   evaporates — harvesting nothing is valid, but make it a decision, not a
+   default.
 
 ## Challenge
 
@@ -103,6 +103,5 @@ Portable; ignore elsewhere. Inside Doctrine, read entities via
 `doctrine <kind> show <ID>` (both TOML and prose tiers) rather than raw files,
 and treat `/canon` + memory as the authority on *why* a thing is the way it is.
 Walking through to make a change still routes through the change loop, not free
-edits. Harvest targets: durable gotchas → `/record-memory`; follow-up work →
-`backlog new`; closure-grade findings on a reviewable artifact → `/code-review`
-and its RV ledger.
+edits. Harvest per `harvest.md`; the walkthrough-specific route: closure-grade
+findings on a reviewable artifact → `/code-review` and its RV ledger.

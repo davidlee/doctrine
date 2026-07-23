@@ -76,10 +76,10 @@ not hold on unverified recollection.
    integrated (and how), contested (and on what evidence), clarification
    sought, parked (and why). Silence on a point reads as acceptance and hides
    the drop.
-7. **Harvest.** Artifact corrections die with the task. Corrections to your
-   *process or the source's preferences* are durable — record them wherever
-   knowledge outlives the session (project memory, working agreements), with
-   the why, or the same correction will be made again next session.
+7. **Harvest.** Artifact corrections die with the task; corrections to your
+   *process or the source's preferences* are the durable leg — harvest them per
+   `harvest.md`, always with the *why*, or the same correction recurs next
+   session.
 
 ## With structured review ledgers
 

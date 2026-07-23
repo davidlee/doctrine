@@ -119,11 +119,9 @@ valid relics and need no migration.
    live structured in the ledger as raises; the synthesis is where the verdict
    thunders.
 
-4. **Harvest — judgment-gated.** When durable findings exist, promote them per the
-   work/knowledge/decision boundary (`using-doctrine.md`): durable facts, patterns
-   and gotchas → `/record-memory`; durable follow-up **work** → `backlog new`;
-   notes that belong with the subject → its `notes.md`. A clean trial harvests
-   nothing — a valid outcome, not a dereliction.
+4. **Harvest — judgment-gated.** When durable findings exist, harvest them per
+   `harvest.md`. A clean trial harvests nothing — a valid outcome, not a
+   dereliction.
 
 The Inquisition is **done** when every charge is terminal — verified or withdrawn;
 an unresolved `blocker` will be refused at the target's close seam

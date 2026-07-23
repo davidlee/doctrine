@@ -171,11 +171,10 @@ When the findings are resolved, append a `## Synthesis` section to
 the **standing risks**, the **tradeoffs consciously accepted**. The ledger holds
 the structured findings; the synthesis holds the prose that ties them together.
 
-Then **harvest — judgment-gated, not mandatory**. *When durable findings exist*,
-promote them per the work/knowledge/decision boundary (`using-doctrine.md`):
-durable facts/patterns/gotchas → `/record-memory`; durable follow-up **work** →
-`backlog new`; notes that belong with the subject → its `notes.md`. A clean review
-harvests nothing — that is a valid outcome, not a skipped step.
+Then **harvest** — the shared harvest procedure (the moment, the three legs
+and their sinks, the canonical `## Harvest` output, and the consumer contract)
+is owned once by `harvest.md`; drive it from there. A clean review harvests
+nothing — a valid outcome, not a skipped step.
 
 Generic review-harvest is thin by design; **skill-specific harvest tails stay in
 the owning skill** (e.g. an audit's phase-sheet harvest).
