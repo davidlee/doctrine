@@ -29,8 +29,8 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "Cadence section with tripwires present in code-review skill", test_file = "plugins/doctrine/skills/code-review/SKILL.md", keywords = ["## Cadence", "tripwire", "Deviations: NONE"], waived = false },
-  { id = "VT-2", expects = "dispatch funnel touchpoint names the cadence", test_file = "plugins/doctrine/skills/dispatch/SKILL.md", keywords = ["Cadence"], waived = false },
-  { id = "VT-3", expects = "execute wrap-up touchpoint names the cadence", test_file = "plugins/doctrine/skills/execute/SKILL.md", keywords = ["Cadence"], waived = false },
+  { id = "VT-2", expects = "dispatch funnel touchpoint names the cadence", test_file = "plugins/doctrine/skills/dispatch/SKILL.md", keywords = ["per-phase review"], waived = false },
+  { id = "VT-3", expects = "execute wrap-up touchpoint names the cadence", test_file = "plugins/doctrine/skills/execute/SKILL.md", keywords = ["per-phase review"], waived = false },
   { id = "VA-1", expects = "The cadence gate is arm-agnostic: no pi/claude/subprocess coupling in the gate text (D3; POL-002 spirit)" },
 ]
 specs        = []
@@ -71,7 +71,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "notes skill owns the manifest and the open leg", test_file = "plugins/doctrine/skills/notes/SKILL.md", keywords = ["harvest.md", "## Harvest", "/knowledge"], waived = false },
-  { id = "VT-2", expects = "handover carries the inline freshness check", test_file = "plugins/doctrine/skills/handover/SKILL.md", keywords = ["## Harvest", "fresh"], waived = false },
+  { id = "VT-2", expects = "handover carries the inline freshness check", test_file = "plugins/doctrine/skills/handover/SKILL.md", keywords = ["## Harvest", "fresh-as-of"], waived = false },
   { id = "VT-3", expects = "next checks the stamp and cites open ids", test_file = "plugins/doctrine/skills/next/SKILL.md", keywords = ["fresh-as-of"], waived = false },
   { id = "VA-1", expects = "No independent re-survey prompt remains in handover or next; each carries the check inline (F1/F4; VA-1 of the design)" },
   { id = "VA-2", expects = "notes description is trigger-form (mem.pattern.skill.description-is-the-trigger) and does not compete with any other skill's moment" },
@@ -115,7 +115,7 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "dogfood manifest exists on this slice, pointer-only, stamped", test_file = ".doctrine/slice/215/notes.md", keywords = ["## Harvest", "fresh-as-of", "DEC-004"], waived = false },
   { id = "VA-1", expects = "Fresh-client resolve: doctrine install into a clean target; every edited skill + harvest.md present and internally resolvable (POL-002)" },
-  { id = "VA-2", expects = "grep the install diff for repo-local couplings (absolute paths, this-repo entity ids in shipped text outside examples)" },
+  { id = "VA-2", expects = "grep the install diff for NEW repo-local couplings: absolute paths, or this-repo entity ids introduced by this slice (the cadence incident framing stays generic — no SL-222 citation in shipped text); pre-existing citation convention is not in scope" },
   { id = "VH-1", expects = "Human confirms the POL-002 reflex check and the cadence defaults read acceptably in a fresh client" },
 ]
 specs        = []
