@@ -29,12 +29,13 @@ which an interim auto-sync in this slice would only pre-empt then get retired.
 
 ## Scope & Objectives
 
-1. **Gate runs the workspace binary, not `$PATH`.** worker_commit's `check commit`
-   belt resolves the `doctrine` it shells (in `just validate` → `doctrine doctor`,
-   and any other belt corpus verb) to the **workspace build** — the coord tree's
-   `./target/debug/doctrine`, or the binary the running MCP server was built from —
-   so gate truth matches the fork's actual rules, not edge/main's (ISS-218; IMP-270
-   dup-closed here).
+1. **Gate resolves a fork-consistent `doctrine`, not stale `$PATH`.** This repo's
+   `just validate` (reached by the `check commit` gate → `DEFAULT_COMMIT`) resolves
+   the `doctrine` it shells in layered order — `${DOCTRINE_BIN}` → local
+   `./target/debug/doctrine` → PATH — so `doctrine doctor` matches the fork's actual
+   rules, not edge/main's (ISS-218; IMP-270 dup-closed here). **Zero-engine** — the
+   fix is the `justfile` recipe plus a `DOCTRINE_BIN`→coord-build precondition in
+   `.doctrine/governance.md`; `worker_commit`/the engine are untouched (DEC-003).
 2. **Marker-aware skip for authored-write e2e goldens.** The e2e goldens that drive
    authored writes skip when the worker marker is present, so the worker agent's
    own suite run reflects delta health. This composes with the existing gate
@@ -62,14 +63,15 @@ red, no recalled "this red is a rig artifact" idiom.
 - ISS-219 (295k-char transcript in the refusal) and the architecture-layering
   ratchet-red handoff (IMP-293) — adjacent false-red ergonomics, not in this cut.
 
-## Affected surface (coarse — `/design` refines)
+## Affected surface (see design.md code-impact for the locked touch-set)
 
-- `src/mcp_server/worker_commit.rs` — gate corpus-verb binary resolution (#1).
-- `src/worktree/marker.rs`, `src/commands/guard.rs` — worker-mode guard / marker
-  detection the goldens key off (#2).
+- `justfile` — `validate` recipe layered resolution (#1).
+- `.doctrine/governance.md` — § orchestration `DOCTRINE_BIN` precondition (#1, authored tier).
+- `src/test_support.rs` + `tests/common/mod.rs` — `under_worker_marker()` helper (#2).
 - `tests/e2e_*.rs` authored-write goldens (`e2e_worker_guard.rs`,
   `e2e_dispatch_sync.rs`, `e2e_doctor_golden.rs`, and the ~30 marker-poisoned
-  suites) + `tests/common/mod.rs` (`doctrine_bin` resolver) — marker-aware skip (#2).
+  suites) — marker-aware skip (#2).
+- **Engine (`src/mcp_server/**`) untouched** — the zero-engine reversal (DEC-003).
 
 ## Risks / Assumptions / Open questions
 
