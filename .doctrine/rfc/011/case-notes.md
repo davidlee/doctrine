@@ -155,3 +155,13 @@ that ships a new CLI verb must drive that verb from the freshly-built dev binary
 the installed one lags until reinstall. Cheap fix would be a one-line reminder in
 the audit skill's evidence step ("use ./target/debug/doctrine for verbs the slice
 under audit introduced").
+
+[inquisition; SL-225-RV-291-gpt5]
+`review new --raiser inquisitor` stamps a free-form posture label, but the
+subsequent `review raise --as` flag accepts only the fixed cooperative role
+`raiser`, not that label. Reading `review raise --help` did not prevent the
+misstep because the help says only "cooperative role assertion (default:
+raiser)" and does not list the closed vocabulary. One failed invocation plus
+retry; cheap help improvement: print `raiser | responder` as possible values and
+clarify that `--raiser` labels the participant while `--as` selects its fixed
+ledger role.

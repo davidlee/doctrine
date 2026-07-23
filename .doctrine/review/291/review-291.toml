@@ -1,0 +1,43 @@
+id    = 291
+slug  = "inquisition-sl-225-dec-003-zero-engine-reversal"
+title = "Inquisition: SL-225 DEC-003 zero-engine reversal"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-225"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected an achievable coord-binary precondition; observed a startup-order cycle with no rebinding step"
+detail = "DEC-003 §Decision/§Preconditions requires DOCTRINE_BIN to name the coordination tree build while changing no engine mechanism. But .mcp.json:8 uses that same variable to launch the MCP server; src/boot.rs:544-549 states the expansion is resolved by the client at load; and .agents/skills/dispatch/SKILL.md:13 creates/resumes the coordination worktree only after the dispatch session is already running. A new coord build therefore does not exist when the server environment is fixed, and the running server cannot inherit a later operator export. The rule is achievable only for an already-built/resumed coord tree plus an unstated MCP/session restart, or through a distinct stable project-local indirection/channel. As written, the accepted non-Rust-phase residual in DEC-003 remains live, so the design cannot truthfully claim ISS-218 eliminated."
+disposition = "design-wrong"
+response = "DEC-003 and SL-225 design must make the precondition temporally executable before /plan. Choose and specify one project-tier contract: (a) an explicit setup → coord build → MCP/session restart/rebind sequence with failure checks, or (b) a stable project-local indirection/distinct gate-binary channel that can select the coord build after setup without teaching the platform cargo layout. State fresh-create and resume behavior, and refuse dispatch when the contract is absent; prose that merely says set DOCTRINE_BIN is insufficient."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected zero-engine invariants to agree with DEC-003; observed the rejected current_exe publication still asserted"
+detail = "SL-225 design.md:60-68 and DEC-003 reject worker_commit publishing DOCTRINE_BIN=current_exe() as redundant-or-harmful, and design.md:125/139-146 repeatedly promises src/mcp_server/** is untouched. Yet design.md:152-153 states DOCTRINE_BIN is published unconditionally when current_exe() resolves and describes fallback on failure. This is the superseded engine design preserved as a live invariant. A planner cannot know which contract is authoritative; the relic must be excised or DEC-003 reversed explicitly."
+disposition = "design-wrong"
+response = "Delete design.md:152-153 or rewrite it to the actual DEC-003 invariant: worker_commit does not publish or mutate DOCTRINE_BIN; the child inherits only the server environment fixed at launch, and recipe fallback is DOCTRINE_BIN → local executable → PATH. Then sweep DEC-003, the design, scope, and governance prose for any remaining engine-publish/current_exe relic before locking the design."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected verification to prove ISS-218 eliminated; observed only a stub argv-order test"
+detail = "The SL-225 scope promises a gate test where a conformance-rule-changing fork is green under the workspace/coord binary while the stale PATH binary would red. Design.md:131-134 reduces VT-1 to pointing DOCTRINE_BIN at a stub and recording argv. That proves recipe precedence only: it does not prove the selected artifact is the coord build, that the precondition can be established after dispatch setup, that stale PATH would fail while the chosen binary passes, or that worker_commit reaches the recipe with the intended inherited environment. The design needs an end-to-end discriminating fixture through the actual commit-gate seam, plus a negative/precondition case, before closure of ISS-218 can be claimed."
+disposition = "design-wrong"
+response = "Restore the scope-level discriminating proof in the design: an actual worker_commit/commit-gate fixture where a stale PATH doctrine rejects a rule known only to the coord build, the selected coord binary passes, and the invocation is observed through the recipe. Add a fresh-dispatch precondition/refusal case and retain the stub test only as the narrow three-rung recipe unit test. This must prove binary identity/content and lifecycle reachability, not argv shape alone."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
