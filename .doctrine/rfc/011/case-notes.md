@@ -174,3 +174,13 @@ is not a flag. Had to `Read` .doctrine/review/291/review-291.toml directly —
 a mild "read via show, not raw files" tension, since the structured
 disposition tier has no `show` surface. A `review show --findings` (or the
 dispositions inlined into `show`) would have saved one raw-file read.
+
+[inquisition; SL-225-RV-292-memory-dedup]
+Before recording the reusable `git-common-dir` topology fact, two scoped
+`memory find` queries failed to surface the already-existing near-exact memory
+`mem.fact.dispatch.coord-root-not-git-common-dir`. Only the post-write
+suggested-relations pass revealed it. The new record is broader and was related
+instead of discarded, but the authoring path still paid a duplicate discovery
+cycle despite following the prescribed pre-record search. A title/body semantic
+duplicate hint before minting would make the record-memory discipline cheaper
+and prevent needless corpus growth.

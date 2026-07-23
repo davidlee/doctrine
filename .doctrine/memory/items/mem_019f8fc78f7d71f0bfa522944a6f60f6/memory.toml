@@ -1,0 +1,50 @@
+memory_uid = "mem_019f8fc78f7d71f0bfa522944a6f60f6"
+memory_key = "mem.fact.git.common-dir-not-coord-root"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "git-common-dir identifies repository membership, not a coordination worktree root"
+summary = "All linked worktrees share the primary repository's git-common-dir; parent(--git-common-dir) resolves the primary worktree only in ordinary layouts and cannot identify which coordination worktree spawned a worker."
+created = "2026-07-23"
+updated = "2026-07-23"
+
+[scope]
+paths = ["src/git.rs", "src/worktree/coordinate.rs", "src/worktree/fork.rs", ".agents/skills/dispatch/SKILL.md"]
+globs = []
+commands = ["git rev-parse --git-common-dir"]
+tags = ["git", "worktree", "dispatch"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "34b117402e971953473472679692c472b6a34e69"
+ref_name = "refs/heads/edge"
+checkout_state_id = "b62e69949ad37fde79078ff28bff67aa2b05787e5378cb1ab07f9cae950a890f"
+base_commit = "4a8b30fa11a19bb386f56e99a47c45ab12f4d628"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-292"
+
+[[relation]]
+label = "related"
+target = "mem_019f1bc1ce967f53b167148c631808d1"

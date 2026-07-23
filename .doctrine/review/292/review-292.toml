@@ -1,0 +1,52 @@
+id    = 292
+slug  = "inquisition-ii-sl-225-dec-003-self-locating-gate-recipe"
+title = "Inquisition II: SL-225 DEC-003 self-locating gate recipe"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "inquisitor"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-225"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "The git-common-dir rung resolves the primary worktree, not the coordination worktree"
+detail = "DEC-003 and the SL-225 scope/design make rung 3 load-bearing on the claim that, from a worker fork, dirname(git rev-parse --path-format=absolute --git-common-dir) is the coordination root (DEC-003:20-26; design.md:67-73; slice-225.md:83-86). Git topology contradicts it. Both coordination and worker forks are ordinary git worktree add children of the same repository (src/worktree/coordinate.rs:207-227; src/worktree/fork.rs:133-145; src/worktree/create.rs:354-371), so every linked worktree shares the PRIMARY repository .git. The codebase already names the correct distinction: src/git.rs:552-560 says primary_worktree via the first worktree-list entry is correct 'unlike parent(--git-common-dir)'. A live linked worktree proves it: in .worktrees/fable-loop, --git-dir is .git/worktrees/doctrine-fable-loop, --git-common-dir is /home/david/dev/doctrine/.git, and dirname is /home/david/dev/doctrine, not any coord tree. Thus rung 3 selects edge's primary target/debug/doctrine if executable (restoring ISS-218's stale-binary false-red/possible false-green) or reaches 3a and refuses. On the claude arm worker_commit does run current_dir(worker) (worker_commit.rs:126-160), but that cannot alter common-dir semantics. On codex/pi there is no worker_commit self-commit gate at all (dispatch-agent SKILL: fallback says live import is the subprocess arm's only mode; dispatch-subprocess SKILL), though any worker-side just validate has the same wrong locator. PENANCE: replace the nonexistent git-derived coord inference with an actually bound coord identity/lifecycle; re-prove both arm claims without assuming worktree parentage changes Git's shared common directory."
+disposition = "design-wrong"
+response = "Sustained. The load-bearing topology premise is false in both source and a live linked worktree. The proposed coord rung cannot identify the coord tree and DEC-003's replacement mechanism therefore does not resolve RV-291 F-1."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "The recipe can validate with a stale binary before its own build leg"
+detail = "The design says rung 2 lets a Rust phase validate against its 'own freshest binary' (design.md:74-77), but freshness is not established. worker_commit resolves DEFAULT_COMMIT to just check (verify.rs:145-153); just check orders fmt, lint, lint-js, validate, test, build (justfile:12-14). cargo clippy is not a contract that refreshes ./target/debug/doctrine. At validate time an executable left by an earlier build may therefore pre-empt rung 3 while lacking the current delta's rule; if rung 2 is absent, the coord binary necessarily lacks a rule introduced by the current unlanded worker delta. A phase that changes a validation rule together with governed input can false-green or false-red before test/build ever refreshes the executable. Neither DEC-003's preconditions nor the locked touch-set establishes build-before-validate or forbids such phase composition. PENANCE: give validation an explicit build-current/source-consistent lifecycle (or constrain phase boundaries with an enforceable invariant) and add a same-phase rule-changing proof; mere executable existence is not freshness."
+disposition = "design-wrong"
+response = "Sustained. Executable presence is not source freshness, and the stated check order validates before the binary build. The design lacks a same-phase rule-change invariant or lifecycle."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "The required coordination build has no dispatch lifecycle and the live governance still mandates the rejected frozen environment"
+detail = "DEC-003 calls a built coord tree the sole surviving precondition and says it is 'established after setup, before phases run' (record-003.md:55-58,84-89); design.md:105-111 calls cargo build a natural, already-expected part of dispatch setup. The authoritative dispatch router's setup sequence is coordinate setup then plan-next/spawn; its explicit pre-spawn work is doctrine check prove and regression capture, with no coord cargo build. coordinate.rs:207-237 creates/provisions the worktree and phase sheets, also without building. The SL-225 affected surface does not add a dispatch setup/build step. So even with a correct locator, a fresh coordination tree can reach the first non-Rust worker gate with no coord executable and hard-refuse: ISS-218 has been relocated, not dissolved. Further, DEC-003:100-102 asserts the softened optional-override note 'lives in' .doctrine/governance.md and CLAUDE.md, while the live governance.md:56-68 still commands setting DOCTRINE_BIN to the coord build for every dispatch session—the exact launch-frozen precondition RV-291 rejected—and CLAUDE.md contains no such softened section. PENANCE: specify and own the fresh-create/resume/rebuild lifecycle at a reachable dispatch beat, and distinguish planned prose edits from already-live invariants."
+disposition = "design-wrong"
+response = "Sustained. No current dispatch/setup beat establishes the claimed coord build, while DEC-003 describes governance softening as live although the operative governance retains the rejected mandatory DOCTRINE_BIN rule."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "The generic-host tail silently assumes an undeclared Git 2.31 floor"
+detail = "Rung 3 unconditionally invokes git rev-parse --path-format=absolute before the main-worktree PATH tail (design.md:53-60), but --path-format was introduced in Git 2.31 and no supported Git minimum was found in repository setup, Cargo metadata, flake, install, or governance. Under set -euo pipefail an older Git rejects the assignment and exits validate immediately; it neither reaches the claimed generic-host PATH fallback nor emits the rung-3a coord-build diagnostic. The current jail's Git 2.54.0 proves only the local environment. PENANCE: either declare/enforce the Git floor at setup/doctor or use plumbing compatible with the supported host floor and specify clean failure/fallback."
+disposition = "design-wrong"
+response = "Sustained. Local Git is new enough, but the design's generic-host claim rests on an undeclared version floor and fails before its advertised fallback on older Git."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
