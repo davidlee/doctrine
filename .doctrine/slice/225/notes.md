@@ -50,5 +50,5 @@ All four RV-292 findings are terminal `design-wrong` (F-1 blocker, F-2/F-3
 major, F-4 minor). The reusable Git invariant is recorded as
 `mem.fact.git.common-dir-not-coord-root`, related to the earlier
 `mem.fact.dispatch.coord-root-not-git-common-dir`. `just gate` passed after the
-review (existing doctor warnings only); review artifacts and this note await
-their dedicated commit.
+review (existing doctor warnings only). RV-292, the memory, this note, and the
+RFC-011 case note landed together in `379d64c7`.
