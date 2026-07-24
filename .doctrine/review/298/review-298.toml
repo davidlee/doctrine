@@ -14,7 +14,7 @@ ref   = "SL-226"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "D6 error split is impossible from the declared Subgraph"
 detail = "Sections 5.2 and 5.5 require neighbourhood to distinguish an unknown focus from a node removed by kind or memory filtering, yet Subgraph stores only the surviving nodes, edges, and units. After retain_kinds or exclude_memory consumes the view, the original key universe and the reason for exclusion are gone, so neighbourhood(focus, depth) cannot produce the promised FocusError split. The design must retain provenance/exclusion state or resolve and classify focus against CatalogGraph before destructive filtering, and specify that flow before it can close."
@@ -23,7 +23,7 @@ response = "Correct — the borrowed Subgraph destroyed the universe needed for 
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Memory focus resolution has no specified data seam"
 detail = "Section 5.2 accepts a memory ref as FOCUS, but CatalogGraph keys memory nodes only by mem_ UID and discards the key-to-UID alias map built during hydration. The existing source reality in src/commands/map.rs resolves keys across items and shipped memories with collect_all plus resolve_memory_from_all before building the graph; the proposed command flow names no equivalent step and Subgraph::neighbourhood accepts only NodeKey. Specify accepted memory-ref forms, the cross-tier resolver, and whether this causes a second corpus read, otherwise shipped memory keys can satisfy parsing but fail focus resolution."
@@ -32,7 +32,7 @@ response = "Design now specifies FOCUS memory-ref forms mem_<uid> and mem.<key>,
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "D4 whole-mode label induction is not representable by the API"
 detail = "Sections 5.2 and 5.5 give retain_label one mode-independent signature, but require it to remove orphan nodes only in whole-corpus mode while ego mode must retain an isolated focus. If retain_label edge-induces nodes, ego resolution and depth-0 semantics break; if it only filters edges, whole-mode output violates D4, and the listed API has no terminal edge-induced operation. The result is also order-sensitive when kind or memory filters run after label induction, so the design must prescribe a mode-explicit operation and a single filter order."
@@ -41,7 +41,7 @@ response = "Pipeline made explicit and mode-explicit: node filters (kinds, memor
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "R3 verification does not prove JSON contract parity"
 detail = "Sections 5.2, 5.3, and R3 promise the CatalogGraph contract through a hand-written Subgraph Serialize mirror, but VT-D checks only the three top-level keys plus one role case. CatalogEdge currently also serializes externally tagged label and target variants, descriptor, and origin, with omission rules on optional fields; a mirror can drift in any of these while the proposed VT remains green. Add an exact whole-view equivalence assertion between serialized CatalogGraph and serialized graph.whole(), plus projected fixtures that exercise every edge variant and optional payload, or narrow the claim to mere top-level shape compatibility."
@@ -50,7 +50,7 @@ response = "Dissolved structurally: the Subgraph Serialize mirror is gone — pr
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "BFS dedup key silently collapses distinct contract edges"
 detail = "Section 5.4 deduplicates by source, label, role, and target, but CatalogEdge also carries descriptor and origin and hydration intentionally preserves authored TOML edge multiplicity. Two references(concerns) edges with the same endpoints and role but different descriptors, or duplicate memory relations from different origins, therefore become one edge in ego JSON with no specified survivor. The frontend currently coalesces a similarly lossy display identity, but that does not justify silently changing the semantic JSON projection; either preserve multiedges, include all contract-significant fields in identity, or explicitly declare and deterministically test the lossy policy."
@@ -59,7 +59,7 @@ response = "Dedup key replaced: BFS collects edges by their index in the edge li
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Dangling-edge collection contradicts the ported BFS boundary"
 detail = "Section 5.4 says dangling targets are collected when their source is visited, but web/map/src/model.ts::bfsCore does not expand or inspect any node whose distance equals maxDepth. Thus at depth 1 a neighbour is visited, yet its outgoing dangling edge is not collected by the source algorithm; implementing the prose literally produces a different edge set from the claimed port. Define collection in terms of expanded nodes versus all visited nodes and add a boundary-node dangling-edge test."
@@ -68,7 +68,7 @@ response = "Boundary rule now stated in bfsCore's own terms: edges are collected
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "DOT edge-label semantics omit reference roles"
 detail = "Sections 5.3 through 5.5 never state how CatalogEdgeLabel and role become the emitted DOT label or what --label matches. Source reality first converts a references edge with a role to references(role) in model.ts::normalizeGraph, then dot.ts emits that composed value; using CatalogEdgeLabel::name alone would erase implements, concerns, and other intent from the CLI diagram. Specify bare-label filter semantics separately from display-label composition and verify at least one roled references edge in DOT, not only in JSON."
@@ -77,7 +77,7 @@ response = "Split specified: display label composes references(role) per model.t
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Deterministic edge ordering is not a total contract"
 detail = "Section 5.4 claims byte determinism while sorting edges only by source, label, role, and target, a tuple that is non-unique for edges differing in descriptor or origin and whose component normalization is unspecified for validated versus raw labels and resolved versus dangling targets. Ghost nodes are absent from the BTreeMap and their ordering relative to real nodes or each other is also unstated. Define canonical scalar sort keys and complete tie-breakers, then test deterministic JSON as well as DOT on deliberately colliding edges and multiple ghosts."
@@ -86,7 +86,7 @@ response = "Total order defined on canonical scalars: nodes by canonical() key (
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Code-impact surface omits mandatory command and module wiring"
 detail = "Section 5.1 names only commands/graph.rs, catalog/graph.rs, and catalog/dot.rs, but a new top-level verb also requires registration and dispatch in src/commands/cli.rs, module export in src/commands/mod.rs, read/write classification in src/commands/guard.rs, and catalog/dot.rs registration in src/catalog/mod.rs. ADR-001 additionally requires the new catalog::dot mixed-umbrella submodule to be classified in .doctrine/adr/001/layering.toml. Because the design code-impact summary is the conformance touch-set, these omissions would make a correct implementation appear undeclared and leave critical wiring unplanned."
@@ -95,7 +95,7 @@ response = "guard.rs Read-classification and adr/001/layering.toml registration 
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Literal style port carries an invalid Graphviz shape"
 detail = "Sections 5.3 and R2 require a literal port of dot.ts NODE_STYLES, where several entries use shape value box,rounded and graphToDot writes it as shape rather than splitting rounded into style. Graphviz reports warning: using box for unknown shape box,rounded, so the promised rounded styling is not applied and a normal doctrine graph pipe produces diagnostic chatter from dot. The Rust design should correct the source defect by modelling shape and style separately, and VT-C or VA-1 must assert no unknown-shape warning rather than merely a successful exit."
@@ -104,7 +104,7 @@ response = "Confirmed upstream defect: shape='box,rounded' is invalid Graphviz (
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Borrowed view still owns and rebuilds projection indexes"
 detail = "Section 5.3 says Subgraph has no cloning and no new ownership, but whole() necessarily allocates and owns a new BTreeMap of references and Vec of edge references, and consuming filter stages may rebuild or retain those containers. Borrowed payloads make the lifetime and serde approach feasible, but they do not make the projection allocation-free. State the actual O(V+E) container cost and whether filtering mutates in place or rematerializes, especially because whole-corpus emission is the default."
@@ -113,7 +113,7 @@ response = "Moot with the owned-CatalogGraph redesign, and the honesty point is 
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Repeatable kind-filter semantics and validation are unspecified"
 detail = "Sections 5.2 and 5.5 call filters conjunctive while retain_kinds accepts a list of prefixes, leaving it unstated whether repeated --kind values form a union or an impossible per-node intersection. Uppercasing fixes lowercase input but does not say whether an unknown prefix is rejected or silently yields the valid empty projection, so a typo remains indistinguishable from a genuinely empty kind. Define OR semantics within the kind dimension, cross-dimension conjunction, accepted prefixes including MEM, and unknown-prefix behavior."
@@ -122,7 +122,7 @@ response = "Specified: repeated --kind values are OR within the kind dimension; 
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "DOT tooltip contract is undefined for absent status"
 detail = "Section 5.4 fixes tooltip text as id, title, kind, status, but CatalogNode.status is Option<String> while the TypeScript path treats status as directly printable. The design does not say whether None renders as an empty field, an omitted segment, null, or a word such as unknown, so byte-level output and user meaning vary by implementation. Specify the fallback and cover a status-less node in VT-C."
@@ -131,7 +131,7 @@ response = "Specified: a None status omits the trailing ' · status' segment ent
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Resolved edge set at the BFS boundary is ambiguous"
 detail = "Section 5.4 specifies the visited node set but not whether the final resolved edges are traversal-collected or the subgraph induced by all visited nodes. In a depth-1 triangle focused at A, model.ts::neighbourhood returns A-B and A-C but not the B-C edge because boundary nodes are never expanded; filtering all original edges by visited endpoints would include B-C and instead match the concept-map post-processing path. State the entity-graph rule explicitly and add a boundary cross-edge fixture, because both implementations are natural readings of the current design."
