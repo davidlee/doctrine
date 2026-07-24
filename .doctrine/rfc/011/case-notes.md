@@ -399,3 +399,24 @@ tool returns them empty.
   but a HARD import refusal, so a cosmetic out-of-scope touch costs a full
   re-land/fixup cycle. Design §5's selector list also under-enumerated lazyspec.rs
   as an ADR-identity consumer.
+
+[dispatch; SL204-a15d-P02-scope-fix]
+Resolving the PHASE-02 undeclared-scope refusal (src/lazyspec.rs) surfaced a
+non-obvious mechanic worth a token cost: a mid-dispatch design-target selector
+correction CANNOT be made on the session-root/edge tree (where the skill says
+authored writes go). dispatch_import reads selectors from the COORD tree's
+working copy (crate::slice::selectors(&coord.root, ...)), and the funnel's
+post-import `git reset --hard` re-syncs the coord tree to the phase commit — so a
+merely-uncommitted coord-tree edit is wiped, and audit-time `slice conformance`
+(VA-2) re-reads coord-tree selectors and would re-flag the path. Net: the
+correction must be a committed orchestrator authored commit ON dispatch/<slice>.
+That advances coord HEAD off the captured B, forcing the 3-way import path
+(merge-tree(B, B', fork)) instead of the trivial coord.tip==B fold, and requires
+conclude_phase code_start=B' (the selector commit) rather than the original B, so
+the authored .doctrine edit stays outside the phase's recorded conformance range
+(conformance folds only recorded per-phase [start,end] source ranges). None of
+this — coord-tree-is-the-selector-source, reset-wipes-uncommitted, code_start
+must exclude the authored commit — is stated in the dispatch skill; it took source
+reading (dispatch.rs import_compose + conformance.rs) to derive. A one-line
+"mid-dispatch selector/authored corrections: commit on the coord branch, set the
+next phase's code_start past them" note in the funnel section would save it.
