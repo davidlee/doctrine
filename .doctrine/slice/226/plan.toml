@@ -1,0 +1,122 @@
+# Implementation plan for SL-226 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-226"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Projection filters on an owned CatalogGraph"
+objective = "Add the D11 owned-subset filter pipeline to CatalogGraph: filter_kinds (OR-within-dimension, pre-validated uppercase prefixes), filter_label (edges only, bare snake_case label match incl. roled references), exclude_memory, drop_isolated (terminal, whole-mode --label), and contains. Retain-in-place semantics; an unfiltered projection serializes byte-identically to the source graph (R3 net)."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md D4/D11/D12/D13 read; src/catalog/graph.rs and hydrate.rs edge model (label/target variants, role, descriptor, origin) understood" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "filter_kinds, filter_label, exclude_memory, drop_isolated, contains implemented on CatalogGraph, pure, retain-in-place, no new types" },
+  { id = "EX-2", text = "filter_label drops no nodes (D4); drop_isolated is the only orphan-dropping op; filters compose conjunctively in the fixed pipeline order" },
+  { id = "EX-3", text = "existing catalog/graph.rs suite green unchanged (behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1",
+    expects = "serde exact-equality: to_value of an unfiltered projection == to_value of the source CatalogGraph on a fixture exercising Resolved/UnresolvedRef/UnvalidatedText targets, role, descriptor, and origin",
+    test_file = "src/catalog/graph.rs",
+    keywords = ["unfiltered_projection_serializes_identically", "UnvalidatedText"],
+    waived = false },
+  { id = "VT-2",
+    expects = "filter semantics: kind OR-union, label filter keeps nodes and drops only non-matching edges, exclude_memory removes MEM nodes and incident edges, drop_isolated drops only edgeless nodes, duplicate authored edges both survive every filter (D13)",
+    test_file = "src/catalog/graph.rs",
+    keywords = ["filter_kinds", "filter_label", "exclude_memory", "drop_isolated"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Ego-view BFS: neighbourhood(focus, depth)"
+objective = "Add CatalogGraph::neighbourhood — undirected breadth-bounded BFS (bfsCore port, no clamp): adjacency maps built once over the filtered edge set, edge identity by list index (D13), edges collected only from expanded nodes (D9), dangling targets collected-not-enqueued, depth 0 = focus alone. Precondition: focus present (D6 classification is the command layer's job)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 filters landed and green; design.md D9/D13 and web/map/src/model.ts::bfsCore semantics read" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "neighbourhood implemented on CatalogGraph, pure, consuming self, returning the bounded owned subgraph; outgoing/incoming helpers and their expect(dead_code) markers untouched" },
+  { id = "EX-2", text = "traversal-collected semantics exactly per D9: no boundary-node edge collection, no induced cross-edges" },
+]
+verification = [
+  { id = "VT-1",
+    expects = "depth-1 triangle at A emits A-B and A-C but not B-C; depth 0 = focus only, zero edges; depth 2 reaches transitively; undirected reach via incoming edges",
+    test_file = "src/catalog/graph.rs",
+    keywords = ["neighbourhood", "triangle_boundary_edge_excluded"],
+    waived = false },
+  { id = "VT-2",
+    expects = "boundary rules: a boundary node's dangling edge is NOT collected; an expanded node's dangling edge IS collected but not enqueued; duplicate same-tuple edges both collected (index identity)",
+    test_file = "src/catalog/graph.rs",
+    keywords = ["dangling", "expanded"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "DOT emitter: catalog/dot.rs"
+objective = "New pure module src/catalog/dot.rs registered in catalog/mod.rs and classified in adr/001/layering.toml: render(graph, focus) emitting deterministic styled DOT — ported style tables with the D10 shape/style split, references(role) display labels (D14), ghost nodes ?:<raw> (D5), focus penwidth, tooltip with D15 status omission, total emission order (R4). Lift dot_escape from concept_map.rs (D8) with concept_map re-importing."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed; design.md D5/D8/D10/D14/D15 and web/map/src/dot.ts tables read; concept_map.rs dot_escape + its test coverage located" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "catalog/dot.rs pure (no disk/clock/rng); style tables named constants (STD-001); shape and style separate fields (D10)" },
+  { id = "EX-2", text = "dot_escape lifted, concept_map.rs re-imports it; concept-map suite green unchanged (VT-E gate)" },
+  { id = "EX-3", text = "emission byte-deterministic under the R4 total order (ghosts after real nodes; edge-index tie-breaker)" },
+]
+verification = [
+  { id = "VT-1",
+    expects = "structural DOT assertions on a seeded fixture: digraph shell, per-kind node attrs match NODE_STYLES constants, per-label edge colours match EDGE_COLORS, style=filled,rounded with shape=box (never shape=box,rounded), roled edge labelled references(implements), ghost node with ?: id and dashed style, focus penwidth=3.0, None-status tooltip omits segment",
+    test_file = "src/catalog/dot.rs",
+    keywords = ["NODE_STYLES", "EDGE_COLORS", "render"],
+    waived = false },
+  { id = "VT-2",
+    expects = "determinism: two renders of a fixture with colliding edge sort keys and multiple ghosts are byte-identical",
+    test_file = "src/catalog/dot.rs",
+    keywords = ["deterministic", "ghost"],
+    waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "CLI verb: doctrine graph"
+objective = "Thin command src/commands/graph.rs wired via commands/mod.rs + cli.rs, Read-classified in guard.rs: parse args (FOCUS, --depth, --kind, --label, --include-memory, --format, --path), validate kinds against the static registry (D12), classify focus full-then-filtered with the D6 error split (memory refs via collect_all + resolve_memory_from_all), run the fixed pipeline, emit DOT or contract JSON via writeln!(stdout())."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 landed; design.md 5.1/5.2 and src/commands/map.rs:59-68 memory-resolution seam read; guard.rs classification pattern read" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doctrine graph registered and dispatching; guard.rs classifies it Read; adr/001/layering.toml carries the new modules; command layer holds no projection logic (ADR-001)" },
+  { id = "EX-2", text = "D6 split live: unknown focus vs filter-excluded focus produce distinct nonzero errors, the latter naming the excluding filter; unknown --kind is a hard error listing legal prefixes" },
+  { id = "EX-3", text = "just gate zero warnings; cargo fmt clean" },
+]
+verification = [
+  { id = "VT-1",
+    expects = "command-level tests: bare invocation emits whole-corpus DOT; FOCUS + --depth bounds; --format json equals the projected graph's serde output; empty projection emits valid empty digraph/JSON with exit 0; mem.<key> and mem_<uid> focus resolve; MEM focus without --include-memory errors naming the flag; focus excluded by --kind errors naming the filter; unknown focus and unknown kind exit nonzero",
+    test_file = "src/commands/graph.rs",
+    keywords = ["include_memory", "unknown", "excluded"],
+    waived = false },
+  { id = "VA-1",
+    expects = "real corpus: ./target/debug/doctrine graph SL-226 --depth 2 --format dot | dot -Tsvg renders with EMPTY stderr (no unknown-shape warnings, D10) on a host with graphviz; agent captures the command output as evidence",
+    waived = false },
+]
+specs        = []
+requirements = []
