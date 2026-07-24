@@ -34,6 +34,18 @@ Per RFC-016's routing, this is **Revision first (SPEC-021/022 prose), then a sli
    OQ-5's *prioritisation* is already done (RFC-011 case-notes mined 2026-07-23);
    what remains is the harness + measurement, against the Cluster-1-cleaned baseline.
 
+## Progress
+
+- **Step 1 (Revision) — DONE (2026-07-24).** Landed as **REV-032** (approved +
+  applied, `done`), reshaped introduce-only per adversarial review **RV-300**. It
+  introduced 6 `pending` forward-intent requirements: SPEC-021 FR-008/009/010/011
+  (REQ-384/385/386/387), SPEC-022 FR-010/011 (REQ-388/389). The 4
+  active-requirement modifies (REQ-287/293/294/318) were deferred to a **ship-time
+  sibling REV** at slice close (RV-300 F-1/F-3, retrospective-charter constraint).
+- **Step 2 (Slice) — NEXT.** The descending slice builds the funnel state machine +
+  `dispatch next` + git read verbs and the OQ-5 memory-blind benchmark, reconciling
+  the 6 FRs `pending → active`. Item stays open until that slice lands.
+
 ## Open questions carried from RFC-016
 
 OQ-1 (`next` prescribes + verbs refuse — lean both), OQ-2 (run-state home; one
