@@ -40,7 +40,7 @@ action = "introduce"
 primary = false
 new_label = "FR-008"
 member_of = "SPEC-021"
-new_statement = "Dispatch funnel position is persisted per-phase as authoritative run-state, advancing through explicit transitions that include verification as an authoritative, evidence-carrying step faithful to REQ-287 ordering (spawned, worker-committed, imported, verified, concluded, reaped); the record names a single persistence home, a single-writer authority, and crash-safe idempotent recovery."
+new_statement = "Dispatch funnel position is persisted per-phase as authoritative run-state, advancing through explicit transitions that include verification as an authoritative, evidence-carrying step faithful to REQ-287 ordering (spawned, worker-committed, imported, verified, concluded, reaped); the record has a single-writer authority and crash-safe idempotent recovery (its concrete home and CAS/concurrency contract are slice design)."
 
 [[change]]
 action = "introduce"

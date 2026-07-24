@@ -12,8 +12,10 @@ for prose-body section edits.
 > Dispatch funnel **position** becomes persisted, per-phase, authoritative state;
 > every funnel verb is **legality-gated on that position** — it refuses out-of-order
 > execution and names the expected next verb. A `dispatch next` verb emits the
-> single prescribed action from the current position (the orchestrator prompt
-> collapses to "run `next`, do what it says, report-and-halt on refusal"). Every
+> single prescribed action for the **per-phase import→verify→conclude→reap
+> sub-funnel** (the orchestrator's phase-loop prompt collapses to "run `next`, do
+> what it says, report-and-halt on refusal"); candidate/close/audit sourcing stays
+> out of the oracle's scope until a sibling revision. Every
 > funnel git **read** is a first-class read verb over the object-db/ref primitives;
 > **no funnel read shells raw git**, and a no-pathless-commit / safe-commit guard
 > bounds every coord-tree write — so the ISS-234 reverse-diff can no longer commit
@@ -69,9 +71,11 @@ The code scope confirms move A is genuinely new, built on strong existing seams:
   step faithful to REQ-287's ordering (spawned → worker-committed → imported →
   **verified** → concluded → reaped). A sequence without a `verified` state cannot
   let `next` choose verify-vs-conclude, nor let the gate refuse conclude-after-
-  unverified (RV-300 F-2). FR-008 also **names the run-state home, single-writer
-  authority, and crash-safe idempotent recovery** — the durable half of OQ-2 that
-  is spec-altitude, not slice discretion (RV-300 F-5).
+  unverified (RV-300 F-2). FR-008 also requires the run-state record to be a
+  **single-writer authority with crash-safe idempotent recovery** — the durable,
+  spec-altitude half of OQ-2. It does **not** pick the concrete home (extend
+  `boundaries`/`journal` vs a new record) or the CAS/concurrency contract; those
+  are slice design (RV-300 F-5).
 - **Legality gates are new.** `dispatch_import` / `dispatch_conclude_phase` /
   `dispatch_reap` each check only *local* invariants (scope belt, CAS, landed-
   oracle) — none reads a position and refuses "illegal here, run X next."
@@ -141,11 +145,11 @@ category, and handled by FR-011's guard below.
 
 Settled at spec altitude by this REV: **OQ-1** (`next` prescribes + verbs refuse —
 both), **OQ-7** (read-verb coverage — the enumeration above is the spine). **OQ-2 is
-framed, not fully settled** (RV-300 F-5): FR-008 names the run-state *home*,
-authority, and recovery as spec-altitude obligations, and FR-011 names the
-one-authority/per-transport-projection semantics — but the concrete record layout
-(extend `boundaries`/`journal` vs a new record) and the CAS/concurrency contract are
-left to slice design. Deferred to the descending slice as implementation/
+framed, not fully settled** (RV-300 F-5): FR-008 requires a single-writer
+authoritative run-state record with crash-safe idempotent recovery, and FR-011 names
+the one-authority/per-transport-projection semantics — but the concrete record
+*home* (extend `boundaries`/`journal` vs a new record) and the CAS/concurrency
+contract are left to slice design. Deferred to the descending slice as implementation/
 measurement: **OQ-3** (bundle export/ingest metadata), **OQ-5** (memory-blind
 benchmark harness — measured against the Cluster-1 baseline), **OQ-6** (which
 dispatch memories retire vs remain as rationale).
