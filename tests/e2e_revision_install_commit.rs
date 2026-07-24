@@ -4,8 +4,9 @@
 //! (`mem.pattern.install.authored-entity-wiring`): the manifest must scaffold its
 //! tree, and — under THIS repo's blanket `.doctrine/*` + per-tree negation model —
 //! the tree must be negated or a scaffolded entity is `git add`-rejected, invisibly
-//! uncommittable. These pin both: a fresh install creates `.doctrine/revision`, and
-//! a scaffolded `revision-NNN.toml` is committable under the negation (and provably
+//! uncommittable. These pin both: the first `revision new` lazily scaffolds
+//! `.doctrine/revision` (SL-227 FR-008 — bare install no longer eagerly creates it),
+//! and a scaffolded `revision-NNN.toml` is committable under the negation (provably
 //! NOT without it). Plus the dogfood sentinel: this repo's own `.gitignore` carries
 //! the negation.
 
@@ -61,13 +62,15 @@ fn is_ignored(root: &Path, rel: &str) -> bool {
 // --- Surface 1: the manifest scaffolds the authored tree -----------------
 
 #[test]
-fn fresh_install_scaffolds_the_revision_tree() {
+fn first_scaffold_creates_the_revision_tree() {
     if common::under_worker_marker() {
         return;
     } // SL-225 #2: skip in a worker fork
     let repo = git_repo();
     let root = repo.path();
 
+    // SL-227 FR-008: bare install no longer eagerly scaffolds entity roots —
+    // it projects only the three-file base. The revision root must be ABSENT here.
     let out = doctrine(root, &["install", "-y"]);
     assert!(
         out.status.success(),
@@ -75,8 +78,20 @@ fn fresh_install_scaffolds_the_revision_tree() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
+        !root.join(".doctrine/revision").exists(),
+        "bare install must NOT eagerly scaffold .doctrine/revision after the minimal-projection flip"
+    );
+
+    // First `revision new` materialises the tree lazily (materialise_fresh_prebuilt).
+    let out = doctrine(root, &["revision", "new", "revise ADR-006"]);
+    assert!(
+        out.status.success(),
+        "revision new failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
         root.join(".doctrine/revision").is_dir(),
-        "fresh install must scaffold .doctrine/revision (manifest [dirs].create)"
+        "first `revision new` must lazily scaffold .doctrine/revision"
     );
 }
 

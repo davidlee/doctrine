@@ -35,6 +35,13 @@ pub(crate) fn read_bytes(key: &str) -> Option<std::borrow::Cow<'static, [u8]>> {
     InstallAssets::get(key).map(|f| f.data)
 }
 
+/// Existence of an `install/`-relative asset WITHOUT materializing its bytes —
+/// probes the embed's name enumeration, so no `Cow` payload is read (the
+/// availability probe a library veneer needs, distinct from `read_bytes`).
+pub(crate) fn exists(key: &str) -> bool {
+    iter().any(|name| name == key)
+}
+
 /// Read one `install/`-relative asset as UTF-8 text. Error text preserved from
 /// install's prior `asset_text` so its behaviour gate stays green unchanged.
 pub(crate) fn read_text(key: &str) -> anyhow::Result<String> {
@@ -76,6 +83,17 @@ mod tests {
             text.as_bytes(),
             bytes.as_ref(),
             "read_text must reproduce read_bytes byte-for-byte on a UTF-8 asset"
+        );
+    }
+
+    /// PHASE-01 (SL-227): `exists` probes availability by name without
+    /// materializing bytes — true for an embedded asset, false for an absent key.
+    #[test]
+    fn exists_true_for_embedded_asset_false_for_absent() {
+        assert!(exists("manifest.toml"), "embedded install asset exists");
+        assert!(
+            !exists("no/such/asset.xyz"),
+            "absent asset key does not exist"
         );
     }
 
