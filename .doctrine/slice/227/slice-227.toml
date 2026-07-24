@@ -12,11 +12,11 @@ after = [{ to = "SL-223", rank = 0 }]                      # slice→work soft s
 
 [[selector]]
 selector = "src/install.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/asset_source.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/search.rs"
@@ -28,11 +28,31 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/publication.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/library.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/manifest.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/doctrine.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "install/project-orientation.md"
+intent = "design-target"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
