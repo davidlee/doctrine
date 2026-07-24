@@ -1,0 +1,82 @@
+# Implementation plan for SL-229 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-229"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Engine leaf + slice research verb"
+objective = "New src/research.rs leaf (mint/check/restamp over ContentSet, baseline.toml serde) wired as SliceCommand::Research with guard write-class; contentset dead_code suppression resolved (consumed or fn removed)."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md D1/D2/D5/D6 locked; research.md ✓ rows verify the contentset surface and coverage-verb wiring pattern" },
+  { id = "EN-2", text = "no Research variant exists on SliceCommand (src/slice.rs) — clean collision check" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "doctrine slice research <id>: dir absent → mint .doctrine/slice/NNN/research/ + stamp baseline.toml (slice, date, [hashes] over slice-NNN.md/design.md/plan.md, absence-is-defined); present → per-path drift advisory; --restamp → re-baseline; exit 0 in every advisory outcome (D6)" },
+  { id = "EX-2", text = "contentset.rs carries no dead_code suppression: is_stale_against consumed or removed (design § engine)" },
+  { id = "EX-3", text = "existing suites green unchanged (behaviour-preservation gate); doctrine check gate clean" },
+]
+verification = [
+  { id = "VT-1", expects = "engine unit tests: baseline round-trip, absence semantics (no design.md at mint → added drift later), changed/removed drift classes, restamp overwrite", test_file = "src/research.rs", keywords = ["fn mint", "fn check", "RESEARCH_DIR", "BASELINE_FILE", "SetDrift"], waived = false },
+  { id = "VT-2", expects = "clap surface: Research variant with restamp flag parses and dispatches", test_file = "src/slice.rs", keywords = ["Research", "restamp"], waived = false },
+  { id = "VT-3", expects = "guard write-classes the verb (bare invocation may create)", test_file = "src/commands/guard.rs", keywords = ["slice research"], waived = false },
+  { id = "VA-1", expects = "agent confirms src/contentset.rs no longer contains a dead_code suppression (absence cannot be a keyword mandate)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "/research skill + install reference docs"
+objective = "Author the conventions contract (plugins/doctrine/skills/research/SKILL.md: artefact skeleton, citation forms, ✓ verification discipline, runner deferral + graceful degradation, prompt duties, raw/ capture) and the install-side sockets (governance § Research agents stub, glossary layout line)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed: the verb the skill names exists" },
+  { id = "EN-2", text = "design § artefact contract locked (five owned things, D3/D5)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "SKILL.md frontmatter name equals dir name (SPEC-010); description written as the real trigger; unrouted — no routing-table or boot change" },
+  { id = "EX-2", text = "body owns the five contract items and stays inside the ADR-005 restate line (names the verb, no flag syntax or baseline format prose)" },
+  { id = "EX-3", text = "install/governance.md gains § Research agents socket; install/glossary.md slice-dir layout notes research/ (research.md, raw/, baseline.toml); both project-neutral (POL-002)" },
+]
+verification = [
+  { id = "VT-1", expects = "skill file exists with mandated skeleton anchors", test_file = "plugins/doctrine/skills/research/SKILL.md", keywords = ["name: research", "Thread 1", "Thread 2", "Cross-thread", "raw/", "verification legend"], waived = false },
+  { id = "VT-2", expects = "governance template carries the research-agents socket", test_file = "install/governance.md", keywords = ["Research agents"], waived = false },
+  { id = "VT-3", expects = "glossary documents the research dir contents", test_file = "install/glossary.md", keywords = ["baseline.toml"], waived = false },
+  { id = "VA-1", expects = "agent reviews the skill body against design § artefact contract: five items present, restate line respected, no project-local references (POL-002)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Consumption hooks + embed ritual"
+objective = "Advisory hooks in /slice /design /plan /phase-plan (D6 phrasing, project-neutral), then the embed ritual (touch src/install.rs, cargo build, install -s per skill) and VA of the installed copies."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 landed: /research exists for the hooks to point at" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "each hook is 1–3 lines, advisory phrasing, pointer + skill-specific consumption note per design § consumption hooks; inverse pointers live in /research only (single-sourced)" },
+  { id = "EX-2", text = "embed ritual run; installed copies (.doctrine/skills/, agent symlink dirs) match plugins/ masters for research + the four hooked skills" },
+]
+verification = [
+  { id = "VT-1", expects = "/slice Next section points at the pre-design round", test_file = "plugins/doctrine/skills/slice/SKILL.md", keywords = ["/research"], waived = false },
+  { id = "VT-2", expects = "/design Explore-context hook names the verb and the ✓ load-bearing rule", test_file = "plugins/doctrine/skills/design/SKILL.md", keywords = ["slice research"], waived = false },
+  { id = "VT-3", expects = "/plan hook: staleness advisory + selectors drafted from the hotspot map", test_file = "plugins/doctrine/skills/plan/SKILL.md", keywords = ["slice research"], waived = false },
+  { id = "VT-4", expects = "/phase-plan hook: advisory check, refresh drifted sections, re-stamp", test_file = "plugins/doctrine/skills/phase-plan/SKILL.md", keywords = ["slice research"], waived = false },
+  { id = "VA-1", expects = "post-ritual: installed copies exist and match masters (not via deprecated skills list — SL-088); hook text project-neutral (no SL-180 or repo-local references)" },
+]
+specs        = []
+requirements = []
