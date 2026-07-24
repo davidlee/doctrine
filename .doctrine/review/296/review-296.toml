@@ -1,0 +1,61 @@
+id    = 296
+slug  = "sl-224-reconciliation-honest-dispatch-refusals-impl-vs-design5255"
+title = "SL-224 reconciliation: honest dispatch refusals — impl vs design/§5.2/§5.5"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-224"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "CLI slice-id threaded as Option<u32> with honest None fallback, not design §5.2/F4's unwrapped u32"
+detail = """Design §5.2 (F4) prescribes threading the resolved `slice: u32` down the CLI import chain, arguing "the scope belt is reached ONLY when --slice was supplied, so the id is always present on this arm — pass the unwrapped u32, no None hazard." Impl (review/224 `src/worktree/import.rs`) instead threads `Option<u32>` through `run_import → run_import_fork/run_import_from_worktree → classify_or_report → report_undeclared_scope`, with a dedicated `undeclared_scope_report(slice: Option<u32>, ..)` whose `None` arm falls back to an honest id-less path list ("invents no fake id, never unwraps"). Expected: unwrapped u32 per design. Observed: Option<u32> + documented practically-unreachable None fallback. Assessment: a CORRECT refinement — `run_import` IS type-reachable with no `--slice` (empty selectors → belt no-op), so the design's "no None hazard" reasoning was optimistic; the impl degrades gracefully (Some(id) IS the shared `undeclared_detail`, so EX-2's runnable id-bearing line still holds on the real arm). Design §5.2/F4 prose is superseded."""
+disposition = "verified"
+response = """Observation confirmed. The Option<u32> threading is the correct implementation — run_import is genuinely reachable with no --slice (empty selectors → belt no-op), so the design's "no None hazard" was optimistic; the None fallback is honest (no unwrap, no fake id) and Some(id) preserves EX-2's runnable id-bearing remediation on the real refusal arm. No code change. Remediation is per-slice design-prose reconciliation (design.md §5.2/F4): update the F4 text to reflect Option<u32> + the practically-unreachable honest None fallback. → Reconciliation Brief, Per-slice (direct edit)."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "MCP UndeclaredScope detail routes through a Refusal::scope_detail engine value-method, not design §5.2's inline `match Err(Refusal::UndeclaredScope)` in the shell"
+detail = 'Design §5.2 sketches the MCP arm splitting the refusal inline in `import_compose`: `Err(Refusal::UndeclaredScope) => { let undeclared = undeclared_paths(..); funnel_refused(Refusal::UndeclaredScope.token(), undeclared_detail(slice, &undeclared)) }`. Impl instead adds a `Refusal::scope_detail(self, slice, selectors, delta_paths) -> String` inherent method (engine, `import.rs:98`) that internally matches `UndeclaredScope` and calls the leaf `undeclared_detail`; `import_compose` (`dispatch.rs:307`) calls `refusal.scope_detail(slice, selectors, &delta_paths)` on the refusal VALUE. Rationale (documented at dispatch.rs:304): `Refusal` is a `#[cfg(test)]`-only re-export in the mcp module, so naming the variant in prod would force an out-of-scope un-gate of the re-export. Expected: inline variant-match in the shell. Observed: value-method on the engine enum. Assessment: cleaner and strictly in-scope, net effect identical (same token via `reason`, same detail), layering respected (engine→leaf). Design §5.2 code block is illustrative, not contractual; EX-3 ("passes undeclared_detail(slice,..) into funnel_refused; every other refusal keeps String::new()") is satisfied — `scope_detail` returns `String::new()` for every non-scope variant.'
+disposition = "verified"
+response = "Observation confirmed. The Refusal::scope_detail engine value-method is cleaner and strictly in-scope (avoids un-gating the #[cfg(test)] Refusal re-export in prod), net-identical result, layering respected. EX-3 satisfied. No code change. Light per-slice design-prose reconciliation: mark design.md §5.2's MCP code block illustrative and note the impl routes through Refusal::scope_detail. Group with F-1 as one §5.2 edit. → Reconciliation Brief, Per-slice (direct edit)."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "src/worktree/mod.rs added as a design-target selector mid-dispatch (approved) — §5.5/A2 understated the CLI-threading touch-set; edge copy stale until integrate"
+detail = """§5.5/A2 asserts "VT `test_file` is the only structured plan touch-target" and §5.2/F4 scoped the CLI change to `run_import → … → report_undeclared_scope`. In practice EX-2's slice-id threading had to reach `mod.rs` (the sole non-test caller of `run_import`, mod.rs:494), so mid-dispatch the selector set was widened: `dispatch/224` tip declares `src/worktree/mod.rs` intent=design-target with note "EX-2 CLI-arm threading: sole non-test caller of run_import … slice id must thread through it to reach report_undeclared_scope" (user-approved). This is the exact under-declaration class PHASE-02's own lint targets — dogfooded. Expected (design prose): touch-set = the §5.2 chain + the two obj files. Observed: +`mod.rs` design-target. Assessment: correct and canonically recorded. CONFORMANCE CONSEQUENCE: the canonical registry (dispatch/224) is correct; the edge `slice-224.toml` lags by design until stage-2 integrate, so edge `slice conformance` over-reports `mod.rs` as undeclared. The registry change is ALREADY made on the canonical tier — integration delivers it. No pre-integrate `slice selector` edit on the primary/edge (would fork the file and conflict at landing — [[mem.pattern.dispatch...]])."""
+disposition = "verified"
+response = "Observation confirmed. The mod.rs design-target selector is correct, user-approved, and ALREADY recorded on the canonical registry (dispatch/224 tip, with an EX-2 rationale note) — a dogfood of PHASE-02's own lint. The registry change needs NO reconcile write: it is already made on the canonical tier and stage-2 integrate delivers it to edge/main, at which point edge `slice conformance` goes clean for mod.rs. Guardrail for /reconcile + /close: do NOT `slice selector add/rm` mod.rs on the primary/edge pre-integrate — it forks slice-224.toml and conflicts at landing. Optional per-slice mirror: design.md §5.5/A2 could note the CLI-threading touch-set includes mod.rs. → Reconciliation Brief, Per-slice (integration note; NO edge registry edit)."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "nit"
+title = "PHASE-02 extracted a pure plan_check_report(root,id)->(String,bool) seam (not on main) — discretionary ADR-001 refinement, consistent with design"
+detail = "PHASE-02 split `run_check_plan` into a pure `plan_check_report(root, id) -> (String, bool)` (report string + fail bool) and a thin impure shell that prints + `process::exit` (`check.rs:167,190`). Absent on `main` (`run_check_plan` was monolithic there). The design §5.2 restructure shows the read-selectors-above-short-circuit logic but does not mandate extracting a named seam. Assessment: aligned — a discretionary ADR-001 pure-core/impure-shell refinement that makes obj-2's exit decision unit-testable without a subprocess (the obj-2 VT-2 wiring tests at check.rs:394/405 call `plan_check_report` directly and assert on the (report, fail) tuple). No design-vs-impl gap requiring reconciliation; noted for provenance."
+disposition = "aligned"
+response = "Aligned — no change needed. The plan_check_report pure seam is a discretionary ADR-001 pure-core/impure-shell refinement fully consistent with design §5.2's restructure; it enables the obj-2 exit-decision tests without a subprocess. Recorded for provenance only."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "verify-vt reports all 4 VTs FAIL from the edge tree — coord-topology attribution false-negative (IMP-228), not missing tests"
+detail = '`doctrine slice verify-vt SL-224` run from the primary edge tree reports all four VTs FAIL ("keyword absent"): PHASE-01 VT-1 `fn undeclared_detail` in conformance.rs, VT-2 `undeclared_detail` in dispatch.rs; PHASE-02 VT-1 `fn undeclared_test_files` in plan.rs, VT-2 `undeclared_test_files` in check.rs. Root cause: the SL-224 code lives on `review/224`, NOT yet integrated to edge — verify-vt greps the working tree, which lacks the code pre-integration. On the `review/224` impl bundle every keyword IS present (conformance.rs:149, dispatch.rs, plan.rs:302, check.rs) and all four VT tests pass green in the audit worktree. Expected: VTs verified against the delivered code. Observed: false-negative because the algebra tree ≠ the code tree in coord topology. This is the known IMP-228 attribution false-negative (a `imp-228-vtgate-unattributable` worktree already tracks it). Not a missing-test gap; a topology artifact that resolves at integration.'
+disposition = "aligned"
+response = "Aligned — no artefact change needed. The verify-vt FAILs are a coord-topology attribution false-negative (IMP-228): the code lives on review/224 and is not yet on edge, so the edge-tree grep can't see it. Independently confirmed the keywords are present and all four VT tests pass green on the review/224 impl bundle. Resolves automatically at integration. Guardrail for /close: do NOT read the edge verify-vt FAIL as a delivery gap — the VTs are satisfied on the delivered surface. Root cause already tracked as IMP-228."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

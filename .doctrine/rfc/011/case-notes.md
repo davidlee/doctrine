@@ -597,3 +597,40 @@ fixed but evidently untested against the dispatch-coord conclude path. Candidate
 follow-up: verify-vt attribution should consume the conformance boundary registry
 (code_start..code_end per phase) it already has, rather than recomputing a
 source-delta that misfires under the coord topology.
+
+[dispatch; SL204-a15d-P04-vt9-resolution]
+Resolution of the vt9 gate false-red above: fixed the test's hermeticity (option 4)
+rather than routing around the commit-gate-red (skill forbids the fallback detour)
+or deferring. The fix is 3 lines (rootless tempdir cwd so discovery never reaches
+the ambient CLAUDE_PROJECT_DIR fallback); the COST was the dispatch plumbing to land
+a memory.rs touch through the belts — mint ISS-235, declare src/memory.rs as a
+collateral design-target selector (worker_commit's SOFT scope tier is non-blocking
+for src, but dispatch_import's HARD tier requires declaration), append PHASE-04 EX-6,
+then SendMessage the SAME worker to fold the fix into its existing delta (reusing its
+context + worktree with the canonical_id change already staged). worker_commit's gate
+then ran the FIXED vt9 → green → landed. Signal: a one-line test fix, when it lives
+in a file outside the active phase's selectors, incurs full selector/plan/backlog
+ceremony to pass the import belt — the belt is right to be strict, but the friction
+of an in-flight collateral fix is real. Reusing the blocked worker via SendMessage
+(vs a fresh spawn) was the token-saver: the canonical_id delta persisted in its
+worktree, so only the vt9 edit + re-commit were needed.
+
+[audit; RV-296 / SL-224 audit 2026-07-24]
+Minor friction during a dispatched-slice audit (coord tree removed):
+- `doctrine slice design SL-224` intending to READ the design refuses with
+  "Refusing to overwrite existing design.md" — `design` is the authoring verb,
+  no read affordance; fell back to the Read tool on the raw path. A reader
+  reasonably expects `slice design <id>` with no body to surface it (like other
+  `show`-ish verbs). One wasted round-trip.
+- `doctrine reports next` → "unrecognized subcommand 'reports'" despite the boot
+  snapshot Commands index listing `reports status next blockers survey explain
+  findings`. Doc-vs-CLI shape mismatch — guessed the wrong invocation; had to
+  drop it. (Used `dispatch status --slice` instead, which worked.)
+- ToolSearch `select:review_new,...` (bare names, as one might read them in prose)
+  returned "No matching deferred tools"; the MCP tools only resolve under their
+  full `mcp__doctrine__review_new` names. Cost one empty search round-trip before
+  re-querying with the prefix.
+- Dispatched-slice audit surface split cost the usual setup tax but was smooth
+  once oriented: canonical selectors from `dispatch/224` tip (edge copy stale by
+  design), code leg on a detached `review/224` worktree with `web/map/dist`
+  seeded first (RustEmbed). Both already covered by memories — no new discovery.
