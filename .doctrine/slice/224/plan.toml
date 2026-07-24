@@ -1,0 +1,92 @@
+# Implementation plan for SL-224 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-224"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Two ordered, file-disjoint phases (design §5.1). PHASE-01 (obj 1) touches
+# conformance.rs + worktree/import.rs + mcp_server/dispatch.rs; PHASE-02 (obj 2)
+# touches plan.rs + commands/check.rs. Disjoint touch-sets — dispatchable serial
+# (default) or parallel. Ordered obj1-then-obj2 only for narrative coherence; no
+# code dependency between them (both read the shared, pre-existing
+# conformance::undeclared_paths predicate, which neither edits).
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Honest undeclared-scope refusal detail"
+objective = """
+Give the MCP dispatch_import undeclared-scope refusal a non-empty, runnable \
+Refused.detail naming the offending paths, via a new pure leaf formatter \
+conformance::undeclared_detail(slice, undeclared) shared with the CLI import \
+arm. The formatter emits each undeclared path + a RUNNABLE `doctrine slice \
+selector add <ID> <path> --intent design-target` remediation (F1: the id is a \
+required leading positional; the current CLI hint at import.rs:161 omits it and \
+would misparse). It does NOT embed the `undeclared-scope` token (F2: the MCP \
+`reason` field carries it; a leaf->engine reference to Refusal::token() would \
+cycle). Refactor import.rs::report_undeclared_scope through the formatter (same \
+rendered stdout, latent id-bug fixed); wire import_compose's UndeclaredScope \
+refusal arm to recompute undeclared_paths and pass undeclared_detail(slice, ..) \
+into funnel_refused. Refusal stays a fieldless Copy enum — no payload added.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "conformance::undeclared_paths exists and is pub(crate) (conformance.rs:131); import_compose refuses UndeclaredScope with String::new() detail (dispatch.rs:301,335)." },
+  { id = "EN-2", text = "The CLI arm's report_undeclared_scope (import.rs:146) already computes the undeclared set — the refactor target." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "conformance::undeclared_detail(slice: u32, undeclared: &[String]) -> String exists (pure; no fs/git/clock)." },
+  { id = "EX-2", text = "import.rs::report_undeclared_scope renders via undeclared_detail; the emitted remediation includes the slice id and is runnable." },
+  { id = "EX-3", text = "import_compose's UndeclaredScope arm passes undeclared_detail(slice, ..) into funnel_refused; every other refusal keeps String::new()." },
+  { id = "EX-4", text = "classify_import / Refusal suite green UNCHANGED (behaviour-preservation); Refusal remains fieldless + Copy." },
+]
+verification = [
+  { id = "VT-1", expects = "pure golden: undeclared_detail over a 2-path set renders the count line + one runnable `selector add <ID> <path> --intent design-target` line per path (id present).", test_file = "src/conformance.rs", keywords = ["fn undeclared_detail", "selector add", "design-target"], patterns = ["fn undeclared_detail\\("], waived = false },
+  { id = "VT-2", expects = "wiring (integration, existing VT-1 git-fixture harness): an UndeclaredScope dispatch_import refusal yields FunnelOutcome::Refused whose detail NAMES the offending path (non-empty).", test_file = "src/mcp_server/dispatch.rs", keywords = ["undeclared_detail", "UndeclaredScope"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Plan-time selector-completeness lint"
+objective = """
+Catch selector under-declaration at plan time. Add a sibling pure fn \
+plan::undeclared_test_files(plan, selectors) -> Vec<VtSelectorFinding> that \
+flags every non-waived VT whose test_file is covered by no design-target \
+selector — reusing conformance::undeclared_paths so a flagged plan is EXACTLY \
+one the import belt would later refuse `undeclared-scope`. EMPTY selectors => \
+EMPTY result (A3: guard before undeclared_paths, which flags all paths on empty \
+input; mirrors the belt's VA-3 no-op). Waived VTs and VTs with no test_file are \
+skipped. Wire run_check_plan (check.rs) to read the slice's design-target \
+selectors via slice::selectors(root, id, DesignTarget), render the coverage \
+findings alongside the existing shape findings, and exit non-zero iff \
+bare_count > 0 OR the coverage set is non-empty (D1: hard). check_vt_shape and \
+its plan-only tests are untouched (D3 cohesion + behaviour-preservation).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "check_vt_shape / VtShapeFinding / VtShapeProblem exist (plan.rs:213,239); run_check_plan renders them + exits non-zero on bare VTs (check.rs:166)." },
+  { id = "EN-2", text = "slice::selectors(root, id, Some(SelectorIntent::DesignTarget)) reads design-target selectors (used at dispatch.rs:246)." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "plan::VtSelectorFinding { phase_id, vt_id, path } and plan::undeclared_test_files(plan, selectors) exist (pure)." },
+  { id = "EX-2", text = "undeclared_test_files returns empty for empty selectors (A3), skips waived + no-test_file VTs, and honours glob selectors (via undeclared_paths)." },
+  { id = "EX-3", text = "run_check_plan reads design-target selectors, renders UndeclaredTestFile lines + a `selector add --intent design-target` footer, and exits non-zero when the coverage set is non-empty." },
+  { id = "EX-4", text = "check_vt_shape and its vt_shape_tests are byte-for-byte unchanged (behaviour-preservation)." },
+]
+verification = [
+  { id = "VT-1", expects = "pure unit: a VT test_file not in the passed selectors => one VtSelectorFinding; covered => none; empty selectors => none (A3); a glob-covered test_file => none.", test_file = "src/plan.rs", keywords = ["fn undeclared_test_files", "VtSelectorFinding", "undeclared_paths"], patterns = ["fn undeclared_test_files\\("], waived = false },
+  { id = "VT-2", expects = "check plan wiring: run_check_plan reads design-target selectors and folds the coverage set into the non-zero-exit decision; render names the undeclared test_file path.", test_file = "src/commands/check.rs", keywords = ["undeclared_test_files", "SelectorIntent"], waived = false },
+]
+specs        = []
+requirements = []
