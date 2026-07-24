@@ -755,3 +755,134 @@ throughout to avoid laundering it.
   one full re-run. `grep -r --include=` sidesteps it (and dedupes slug symlinks
   for free since `-r` won't follow symlinked dirs). Worth a note in any harness
   doc that assumes bash splitting.
+
+[dispatch+phase-plan; fable-sl226-a]
+- Handover's literal `doctrine dispatch setup --slice 226` omits the required
+  `--dir` flag — cost a `--help` round-trip. Handover templates should carry
+  the full invocation incl. `--dir .dispatch/SL-<n>`.
+- edge→main promote blocked by a stale prunable worktree registration
+  (/workspace/sl204-close, dir already deleted) — cost a worktree-list +
+  inspect + prune detour. A `worktree prune` beat in the pre-dispatch ritual
+  (or in `dispatch setup` itself) would absorb this.
+- Boot snapshot's SPINE lists command names only; dispatch router says check
+  `doctrine.toml → [dispatch]` but the file lives at `.doctrine/doctrine.toml`
+  — first grep at repo root missed it.
+
+[close; SL-204-close-recovery]
+- RV-297's reconcile brief AND the handover both prescribed the bare
+  `dispatch sync --integrate --trunk main` for landing — omitting the
+  close_target create/admit step that /close skill 3a (and mem_019ec912)
+  require. Following the underspecified brief projected the code-class
+  `phase/*` chain onto main, stripping the ENTIRE authored `.doctrine/` corpus
+  (7246 files, -400674). Lineage-blind status still reaches `done`. A high-cost
+  multi-reset recovery. The slice-local playbook (RV brief/handover) should not
+  restate the integrate command in a form that diverges from the skill; or the
+  skill's 3a should be the single source and the brief should point to it.
+- A candidate-less integrate bakes a **verified** journal trunk row at the
+  phase-04 code tip. That row is STICKY: admitting a close_target afterward does
+  NOT re-target it — integrate idempotently REPLAYS the baked row (main went
+  code-only twice, no CAS refusal). Recovery: `git branch -D review/204
+  phase/204-*` + `sync --prepare-review` regenerates the journal with ZERO trunk
+  rows; THEN create+admit close_target BEFORE the single integrate. Cost: ~1hr,
+  many careful read-only probes to avoid a third misfire. A guard — integrate
+  refusing `--trunk` when no close_target is admitted, or warning that it will
+  project the raw phase chain — would have prevented the whole incident.
+- `--payload code` (close skill 3a template) vs `--payload impl_bundle`
+  (mem_019ec912): only impl_bundle carries authored `.doctrine/` onto trunk.
+  The skill template shows `code`, which strips authored state. Skill/memory
+  disagree on the load-bearing flag.
+- prepare-review CAS-refuses stale review/phase refs with no force flag → a
+  `git branch -D` dance on every re-cut (2× this session).
+- Fresh landed worktree shows `phases: —` (phase status is per-tree runtime, held
+  on the primary tree); `slice conformance` complains, though the `done` gate did
+  not actually require it — a false alarm that cost an investigation detour.
+
+[dispatch; SL-227-drive-scope]
+PHASE-02 stalled at the funnel on an `undeclared-scope` import refusal. Root
+cause: the slice selector (authored scope) AND design §5.2 both predicted a
+top-level `src/library.rs` wired via `main.rs`; the real codebase houses command
+modules under `src/commands/` (wired in `commands/cli.rs`), and ADR-001 layering
+forbids an unclassified top-level module. The worker correctly discovered this and
+placed the veneer at `src/commands/library.rs`, but `worker_commit` (advisory on
+undeclared non-forbidden files) LANDED the fork while `dispatch_import`
+(HARD undeclared-scope gate) REFUSED it — an asymmetry that costs a full
+review+consult+selector-correction+recommit+re-import cycle at the funnel, after
+the worker already succeeded. Two design-affecting observations: (1) the two
+scope gates (worker_commit vs classify_import) should agree, or the worker should
+learn the hard boundary before it commits, not after; (2) a design that names
+concrete file paths (§5.2 "main.rs") seeds a stale selector that only surfaces at
+import — a layout-agnostic selector (`src/commands/**`) or a design that defers
+file placement to the worker would avoid it. Net: ~1 extra orchestrator turn +
+worker's correct-but-blocked delta held pending human adjudication.
+
+[route→revision-apply; 7a1771cd REV-032 apply]
+- `revision apply` surfaces `introduce` rows "for manual handling" but gives no
+  copy-paste command — the operator must discover that (a) the requirement's full
+  normative statement is stored as the requirement `title`/.md-H1 (not a
+  `--statement` flag; `spec req add` takes only a positional TITLE), and (b) `add`
+  does not set `pending`, so a follow-up `spec req status … --to pending` is
+  needed per row. Learned only by inspecting an existing pending req (REQ-335).
+  A `revision apply --emit-commands` (or apply auto-running `spec req add` for
+  introduce rows) would remove a multi-probe archaeology loop (~several calls).
+- Path-limited `git commit $PATHS` with a shell variable holding space-separated
+  globs did NOT word-split under the hook-wrapped shell — git received the whole
+  string as one pathspec and failed. Direct inline globs on `git add`/`git commit`
+  worked. Cost one wasted round-trip. (Not doctrine's fault, but it interacts with
+  the mandatory path-limit-the-commit rule — the safe idiom is inline pathspecs,
+  never a variable.)
+
+[dispatch pi-arm; fable-sl226-a]
+- PHASE-01 funnel clean: fork → worker (single-file graph.rs delta, agent_end) →
+  `worktree import --from-worktree --slice 226` (scope belt passed, post-import
+  prove green in-process) → `check regression diff` green → 1 commit → record-delta
+  → gc. No round-trips. Pre-distilled single-file-scope constraint + hand-construct
+  fixtures held (worker touched ONLY graph.rs; import belt would've caught a stray).
+- FOOTGUN: `git commit -- <pathspec> -F -` fails — everything after `--` is a
+  pathspec, so `-F -` is swallowed. Options MUST precede `--`:
+  `git commit -F - -- <pathspec>`. AGENTS.md's path-limit-commit rule shows
+  `git commit <paths> -F -` which is itself the wrong order; worth correcting.
+- `.pi-session/` lands untracked-and-unignored in the worker fork; `import
+  --from-worktree` would stage it. Had to `rm -rf .pi-session` pre-import. A
+  `.gitignore` entry (or import-side skip of `.pi-session/`) would remove the
+  hand-step every pi phase.
+
+[dispatch pi-arm; fable-sl226-a]
+- PHASE-03 (new module) two-actor split worked cleanly: worker did source
+  (dot.rs new + mod.rs reg + concept_map.rs dot_escape lift), orchestrator did
+  the worker-forbidden `.doctrine/adr/001/layering.toml` MixedUmbrella entry
+  (catalog::dot=engine) post-import. import --from-worktree staged the NEW
+  untracked dot.rs correctly (regular file, not symlink).
+- The high-trust memory mem.pattern.lint.module-split-needs-layering-entry
+  fired via the Read/Edit hook exactly when editing layering.toml — corrected my
+  earlier static-read belief that the umbrella-roll made the entry optional. It
+  is gate-CRITICAL. Good example of the hook memory surfacing precisely at the
+  decision point. (My static read of assertion-3's `sub_classified_modules`
+  skip was wrong; empirically MixedUmbrella still reds without the row.)
+- Sequenced as two coord commits: worker source (record-delta'd) + orchestrator
+  governance (layering). Kept the phase source boundary clean of .doctrine/.
+- DEVIATION worth a token-note: pi worker rendered the design's named-slice-const
+  style tables (`NODE_STYLES: &[...]`) as match-lookup fns instead. Correct
+  values, idiomatic, but the VT keyword literals then live only in comments.
+  Prompts that inline a table SHAPE should say whether the shape is mandated or
+  illustrative — the worker optimized structure and drifted from §5.3 wording.
+
+[slice/research dogfood; db8e41f5]
+SL-229 pre-design research round, first dogfood of the research stage
+(pi-scout flash + pi-research pro, parallel, stdin->stdout).
+- Cheap-model accuracy better than feared THIS round: 8/8 spot-checked
+  path:line citations correct (gitignore:48, allowlist Tier::Research,
+  doctor_checks:334, ADR-005:69, ADR-006:153, SPEC-010:55, SPEC-013:29,
+  state.rs phases_dir/refresh_symlink). One wrong line number
+  (contentset is_stale_against "99", actually 114-118) — harmless class.
+- Both models emitted a preamble line despite explicit "no preamble".
+- Verification asymmetry works: ~1 grep per load-bearing claim; unverified
+  rows carry no ✓ in the artefact so design can't silently load-bear them.
+  This is the cheap hallucination mitigation (vs running 2 of everything).
+- Research round caught 2 things the (careful, expensive) shaping convo
+  missed: pre-existing slice-folder research convention (SL-055 gitignore,
+  SL-116 Tier::Research, doctor skip) that inverts the storage lean; and
+  bare-NNN state-path naming (orchestrator had minted SL-229-named dir —
+  exactly the class of error a mint verb prevents). Strong evidence for
+  the IDE-044 thesis.
+- Friction: none from doctrine tooling this round; scratchpad prompt files
+  + background bash was smooth.
