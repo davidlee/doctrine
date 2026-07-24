@@ -38,6 +38,11 @@ intent = "design-target"
 selector = "src/commands/check.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+note = "EX-2 CLI-arm threading: sole non-test caller of run_import (mod.rs:494); slice id must thread through it to reach report_undeclared_scope"
+
 [[relation]]
 label = "fulfils"
 target = "IMP-256"

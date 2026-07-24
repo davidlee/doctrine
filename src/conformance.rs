@@ -137,6 +137,30 @@ pub(crate) fn undeclared_paths(selectors: &[String], paths: &[&str]) -> Vec<Stri
         .collect()
 }
 
+/// The human-facing refusal detail for an `undeclared-scope` verdict: a count
+/// header plus one RUNNABLE remediation line per undeclared path. Pure (no fs /
+/// git / clock) so both the MCP funnel (`dispatch_import`) and the CLI import arm
+/// share ONE prescription (SL-224 PHASE-01). Each line is exactly the command that
+/// declares the path — `doctrine slice selector add SL-NNN <path> --intent
+/// design-target` — with the slice id as the REQUIRED leading positional (the CLI
+/// misparses without it). Deliberately TOKEN-FREE: the `undeclared-scope` reason
+/// token is carried separately (the MCP `reason` field / the CLI bail), and a
+/// leaf→engine reference to `Refusal::token()` would invert the ADR-001 layering.
+pub(crate) fn undeclared_detail(slice: u32, undeclared: &[String]) -> String {
+    // House style: build via Vec<String> + join, never push_str(&format!) (the
+    // `format_push_string` deny).
+    let mut lines = vec![format!(
+        "{} path(s) declared by no design-target selector:",
+        undeclared.len()
+    )];
+    lines.extend(undeclared.iter().map(|path| {
+        format!("  doctrine slice selector add SL-{slice:03} {path} --intent design-target")
+    }));
+    let mut out = lines.join("\n");
+    out.push('\n');
+    out
+}
+
 /// Compile the selector strings to `(selector, Option<Pattern>)` pairs once. A
 /// selector that fails to compile as a glob carries `None` and matches nothing
 /// (never panics). Shared by [`compute`] and [`undeclared_paths`].
@@ -520,6 +544,38 @@ mod tests {
         assert_eq!(
             undeclared_paths(&sel, &paths),
             vec!["src/state_helper.rs".to_string()]
+        );
+    }
+
+    #[test]
+    fn undeclared_detail_renders_a_runnable_selector_add_per_path() {
+        let undeclared = vec!["docs/readme.md".to_string(), "src/f.rs".to_string()];
+        let detail = undeclared_detail(224, &undeclared);
+        // Count header names how many paths and is TOKEN-FREE (no reason token).
+        assert!(
+            detail.starts_with("2 path(s) declared by no design-target selector:"),
+            "count header: {detail}"
+        );
+        assert!(
+            !detail.contains("undeclared-scope"),
+            "detail must not embed the reason token: {detail}"
+        );
+        // One RUNNABLE remediation per path, id present as SL-NNN (3-digit zero-pad).
+        assert!(
+            detail.contains(
+                "doctrine slice selector add SL-224 docs/readme.md --intent design-target"
+            )
+        );
+        assert!(
+            detail.contains("doctrine slice selector add SL-224 src/f.rs --intent design-target")
+        );
+        // Exactly one remediation line per undeclared path (plus the header).
+        assert_eq!(
+            detail
+                .lines()
+                .filter(|l| l.contains("selector add"))
+                .count(),
+            2
         );
     }
 }

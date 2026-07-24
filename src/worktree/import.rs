@@ -86,6 +86,30 @@ impl Refusal {
             Refusal::UndeclaredScope => "undeclared-scope",
         }
     }
+
+    /// The human-facing `Refused.detail` for this refusal (SL-224 PHASE-01). Only
+    /// [`Refusal::UndeclaredScope`] carries a detail: it recomputes the undeclared set
+    /// from the SAME pure predicate the belt used ([`crate::conformance::undeclared_paths`])
+    /// and renders the shared runnable remediation ([`crate::conformance::undeclared_detail`])
+    /// naming the slice id. Every other refusal returns an EMPTY detail — the bare token
+    /// already fully describes it. Called on the refusal VALUE at the `dispatch_import`
+    /// funnel arm so `Refusal` need not be named in prod (it is a `#[cfg(test)]` re-export).
+    /// `Refusal` stays a fieldless `Copy` enum — the detail is computed here, never stored.
+    pub(crate) fn scope_detail(
+        self,
+        slice: u32,
+        selectors: &[String],
+        delta_paths: &[String],
+    ) -> String {
+        match self {
+            Refusal::UndeclaredScope => {
+                let paths: Vec<&str> = delta_paths.iter().map(String::as_str).collect();
+                let undeclared = crate::conformance::undeclared_paths(selectors, &paths);
+                crate::conformance::undeclared_detail(slice, &undeclared)
+            }
+            _ => String::new(),
+        }
+    }
 }
 
 /// PURE import classifier (no git / disk / env — ADR-001 leaf, CLAUDE.md
@@ -139,29 +163,49 @@ pub(crate) fn classify_import(
     Ok(Apply::Ok)
 }
 
-/// On an `UndeclaredScope` refusal, print the offending paths and the per-path
-/// remediation hint to stdout before the caller bails (EX-3). Re-derives the
-/// undeclared set from the SAME pure predicate the belt used (single source),
-/// and hands it back so the caller can name the paths in its error too.
+/// On an `UndeclaredScope` refusal, print the id-bearing remediation to stdout
+/// before the caller bails (EX-3). Re-derives the undeclared set from the SAME
+/// pure predicate the belt used (single source), and hands it back so the caller
+/// can name the paths in its error too. Renders via the SAME
+/// [`crate::conformance::undeclared_detail`] formatter the MCP arm emits (SL-224
+/// PHASE-01 EX-2) — one runnable `doctrine slice selector add SL-NNN <path>
+/// --intent design-target` per path, id-bearing so it parses.
 fn report_undeclared_scope(
+    slice: Option<u32>,
     selectors: &[String],
     delta_paths: &[String],
 ) -> anyhow::Result<Vec<String>> {
     let paths: Vec<&str> = delta_paths.iter().map(String::as_str).collect();
     let undeclared = crate::conformance::undeclared_paths(selectors, &paths);
-    let mut out = io::stdout();
-    writeln!(
-        out,
-        "import-refused: undeclared-scope — the worker delta touches {} path(s) no design-target selector declares:",
-        undeclared.len()
+    write!(
+        io::stdout(),
+        "{}",
+        undeclared_scope_report(slice, &undeclared)
     )?;
-    for path in &undeclared {
-        writeln!(
-            out,
-            "  {path}\n    remediation: doctrine slice selector add {path} --intent design-target --note <why>"
-        )?;
-    }
     Ok(undeclared)
+}
+
+/// The PURE rendering of the undeclared-scope report block (impurity — the stdout
+/// write — stays in [`report_undeclared_scope`]). On `Some(id)` it IS the MCP
+/// arm's [`crate::conformance::undeclared_detail`] — ONE id-bearing formatter,
+/// so each line is a runnable `doctrine slice selector add SL-NNN <path> --intent
+/// design-target` (SL-224 PHASE-01 EX-2). The `None` arm is type-reachable but
+/// practically unreachable (the `UndeclaredScope` refusal fires only with
+/// non-empty selectors, which in practice means `--slice` was given); it falls
+/// back to an honest id-less path list — invents no fake id, never `unwrap`s.
+fn undeclared_scope_report(slice: Option<u32>, undeclared: &[String]) -> String {
+    if let Some(id) = slice {
+        crate::conformance::undeclared_detail(id, undeclared)
+    } else {
+        let mut lines = vec![format!(
+            "{} path(s) declared by no design-target selector:",
+            undeclared.len()
+        )];
+        lines.extend(undeclared.iter().map(|path| format!("  {path}")));
+        let mut out = lines.join("\n");
+        out.push('\n');
+        out
+    }
 }
 
 /// Run the pure classifier and, on `UndeclaredScope`, print the diagnostic +
@@ -169,6 +213,7 @@ fn report_undeclared_scope(
 /// with the bare token (the pre-PHASE-02 shape). Shared by both import arms so
 /// the scope reporting has ONE implementation.
 fn classify_or_report(
+    slice: Option<u32>,
     head_at_base: bool,
     tree_clean: bool,
     single_commit: bool,
@@ -183,7 +228,7 @@ fn classify_or_report(
         selectors,
     ) {
         Err(Refusal::UndeclaredScope) => {
-            let undeclared = report_undeclared_scope(selectors, delta_paths)?;
+            let undeclared = report_undeclared_scope(slice, selectors, delta_paths)?;
             bail!(
                 "import-refused: {} ({})",
                 Refusal::UndeclaredScope.token(),
@@ -266,13 +311,14 @@ pub(crate) fn run_import(
     base: &str,
     fork: Option<&str>,
     from_worktree: Option<&Path>,
+    slice: Option<u32>,
     selectors: &[String],
 ) -> anyhow::Result<()> {
     // Exactly one source. clap `conflicts_with` already rejects both-given at parse;
     // this rejects neither-given and dispatches to the arm's body.
     match (fork, from_worktree) {
-        (Some(fork), None) => run_import_fork(path, base, fork, selectors),
-        (None, Some(dir)) => run_import_from_worktree(path, base, dir, selectors),
+        (Some(fork), None) => run_import_fork(path, base, fork, slice, selectors),
+        (None, Some(dir)) => run_import_from_worktree(path, base, dir, slice, selectors),
         (Some(_), Some(_)) => bail!("import: --fork and --from-worktree are mutually exclusive"),
         (None, None) => bail!("import: exactly one of --fork / --from-worktree is required"),
     }
@@ -286,6 +332,7 @@ fn run_import_fork(
     path: Option<PathBuf>,
     base: &str,
     fork: &str,
+    slice: Option<u32>,
     selectors: &[String],
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
@@ -335,6 +382,7 @@ fn run_import_fork(
 
     // --- pure classify (+ scope reporting on UndeclaredScope) ---
     classify_or_report(
+        slice,
         head_at_base,
         tree_clean,
         single_commit,
@@ -382,6 +430,7 @@ fn run_import_from_worktree(
     path: Option<PathBuf>,
     base: &str,
     dir: &Path,
+    slice: Option<u32>,
     selectors: &[String],
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
@@ -414,6 +463,7 @@ fn run_import_from_worktree(
 
     // --- pure classify (belt lives in the pure core; scope leg reported here) ---
     classify_or_report(
+        slice,
         head_at_base,
         tree_clean,
         single_commit,
@@ -681,7 +731,7 @@ mod tests {
         let (_tmp, primary, wt) = worker_tree_touching_seed();
         // No design-target selector declares `seed`.
         let selectors = vec!["docs/**".to_string()];
-        let err = run_import_from_worktree(Some(primary), "HEAD", &wt, &selectors)
+        let err = run_import_from_worktree(Some(primary), "HEAD", &wt, Some(224), &selectors)
             .expect_err("an undeclared worker path must be refused");
         let msg = err.to_string();
         assert!(
@@ -691,12 +741,49 @@ mod tests {
         assert!(msg.contains("seed"), "names the offending path: {msg}");
     }
 
+    // The id-bearing remediation the CLI arm emits goes to STDOUT (via
+    // `undeclared_detail`), not the bail message above; assert the CLI arm's PURE
+    // renderer routes through the SAME `undeclared_detail` the MCP arm uses so the
+    // hint carries the `SL-NNN` id and is runnable (SL-224 PHASE-01 EX-2).
+    #[test]
+    fn cli_undeclared_scope_report_is_the_id_bearing_shared_formatter() {
+        let undeclared = vec!["src/leaked.rs".to_string()];
+        let rendered = undeclared_scope_report(Some(224), &undeclared);
+        assert_eq!(
+            rendered,
+            crate::conformance::undeclared_detail(224, &undeclared),
+            "the CLI arm renders via the shared id-bearing formatter"
+        );
+        assert!(
+            rendered.contains(
+                "doctrine slice selector add SL-224 src/leaked.rs --intent design-target"
+            ),
+            "the emitted remediation is id-bearing and runnable: {rendered}"
+        );
+    }
+
+    // The type-reachable `None` arm (non-empty selectors, no `--slice`) is honest:
+    // it names the paths without inventing a fake `SL-NNN` id.
+    #[test]
+    fn cli_undeclared_scope_report_none_arm_omits_the_id() {
+        let undeclared = vec!["src/leaked.rs".to_string()];
+        let rendered = undeclared_scope_report(None, &undeclared);
+        assert!(
+            rendered.contains("src/leaked.rs"),
+            "names the path: {rendered}"
+        );
+        assert!(
+            !rendered.contains("SL-"),
+            "no fabricated id on the None arm: {rendered}"
+        );
+    }
+
     #[test]
     fn run_import_from_worktree_stages_a_declared_worker_delta() {
         let (_tmp, primary, wt) = worker_tree_touching_seed();
         // The literal selector declares `seed` ⇒ conformant ⇒ the delta stages.
         let selectors = vec!["seed".to_string()];
-        run_import_from_worktree(Some(primary.clone()), "HEAD", &wt, &selectors)
+        run_import_from_worktree(Some(primary.clone()), "HEAD", &wt, Some(224), &selectors)
             .expect("a fully-declared worker delta must import");
         // The delta landed in the coord index, NON-committing.
         let staged = std::process::Command::new("git")

@@ -496,6 +496,7 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
                 &base,
                 fork.as_deref(),
                 from_worktree.as_deref(),
+                slice,
                 &selectors,
             )
         }
