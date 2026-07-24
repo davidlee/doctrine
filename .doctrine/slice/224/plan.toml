@@ -70,13 +70,18 @@ objective = """
 Catch selector under-declaration at plan time. Add a sibling pure fn \
 plan::undeclared_test_files(plan, selectors) -> Vec<VtSelectorFinding> that \
 flags every non-waived VT whose test_file is covered by no design-target \
-selector — reusing conformance::undeclared_paths so a flagged plan is EXACTLY \
-one the import belt would later refuse `undeclared-scope`. EMPTY selectors => \
-EMPTY result (A3: guard before undeclared_paths, which flags all paths on empty \
-input; mirrors the belt's VA-3 no-op). Waived VTs and VTs with no test_file are \
-skipped. Wire run_check_plan (check.rs) to read the slice's design-target \
-selectors via slice::selectors(root, id, DesignTarget), render the coverage \
-findings alongside the existing shape findings, and exit non-zero iff \
+selector — reusing conformance::undeclared_paths so a flagged plan's DECLARED \
+test_file is one the import belt would refuse (F6: same predicate, authored vs \
+git inputs). EMPTY selectors => EMPTY result (A3: guard before undeclared_paths, \
+which flags all paths on empty input; mirrors the belt's VA-3 no-op). Waived VTs \
+and VTs with no test_file are skipped. Wire run_check_plan (check.rs): read \
+design-target selectors via slice::selectors(root, id, DesignTarget) and compute \
+coverage ABOVE the clean short-circuit (F1 must-fix: today's early-return at \
+check.rs:173 fires when check_vt_shape is empty — obj-2's primary case — and \
+would silently no-op; the short-circuit now fires only when BOTH shape and \
+coverage sets are empty). Render coverage findings alongside shape findings; the \
+remediation footer routes through conformance::undeclared_detail(id, paths) — the \
+SAME id-bearing formatter, not a re-inlined hint (F2/F5). Exit non-zero iff \
 bare_count > 0 OR the coverage set is non-empty (D1: hard). check_vt_shape and \
 its plan-only tests are untouched (D3 cohesion + behaviour-preservation).
 """
@@ -87,8 +92,9 @@ entrance_criteria = [
 exit_criteria = [
   { id = "EX-1", text = "plan::VtSelectorFinding { phase_id, vt_id, path } and plan::undeclared_test_files(plan, selectors) exist (pure)." },
   { id = "EX-2", text = "undeclared_test_files returns empty for empty selectors (A3), skips waived + no-test_file VTs, and honours glob selectors (via undeclared_paths)." },
-  { id = "EX-3", text = "run_check_plan reads design-target selectors, renders UndeclaredTestFile lines + a `selector add --intent design-target` footer, and exits non-zero when the coverage set is non-empty." },
+  { id = "EX-3", text = "run_check_plan computes coverage ABOVE the clean short-circuit — which now fires only when BOTH shape and coverage are empty (F1); renders UndeclaredTestFile lines + a footer via undeclared_detail(id, paths) (F2); exits non-zero when the coverage set is non-empty." },
   { id = "EX-4", text = "check_vt_shape and its vt_shape_tests are byte-for-byte unchanged (behaviour-preservation)." },
+  { id = "EX-5", text = "The check-plan wiring test fixture scaffolds a COMPLETE slice-NNN.toml (selectors present), since run_check_plan now reads the slice doc via slice::selectors (PLAUSIBLE — bare plan.toml would error at setup, not logic)." },
 ]
 verification = [
   { id = "VT-1", expects = "pure unit: a VT test_file not in the passed selectors => one VtSelectorFinding; covered => none; empty selectors => none (A3); a glob-covered test_file => none.", test_file = "src/plan.rs", keywords = ["fn undeclared_test_files", "VtSelectorFinding", "undeclared_paths"], patterns = ["fn undeclared_test_files\\("], waived = false },
