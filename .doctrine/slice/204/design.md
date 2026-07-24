@@ -109,7 +109,8 @@ src/kinds/
 │               + KindRef + KINDS + the membership pin-test
 └── resolve.rs  probes: kind_by_prefix, parse_canonical_ref,
                 parse_resolvable_ref, ensure_ref_resolves, scanned_kinds
-                (imports kinds data + fsutil + listing — all leaf)
+                + canonical_id (the format authority; see as-built note)
+                (imports kinds data + fsutil — all leaf)
 ```
 
 - All-leaf umbrella: no `layering.toml` sub-classification rows needed
@@ -117,11 +118,18 @@ src/kinds/
   `mem.pattern.lint.module-split-needs-layering-entry`).
 - `kinds/mod.rs` does `pub(crate) use resolve::*` — one retarget target for
   consumers.
-- fsutil/listing are leaf; leaf-tier impure seams are established precedent
+- fsutil is leaf; leaf-tier impure seams are established precedent
   (`root`, `git`, `tty`). The purity split is visible at file level.
 - Rejected: separate sibling leaf for the resolvers (two retarget targets,
   splits kind-identity cohesion); brand-new module for everything (leaves
   `kinds` a stub vocabulary; `registry` name taken by the spec registry).
+
+> **As-built (SL-204 PHASE-04, RV-297 F-3).** The sketched `kinds → listing` route
+> for id-formatting was cycle-infeasible: `listing → tag` and `tag → kinds`, so
+> `kinds → listing` closes a leaf 3-cycle. Resolved by relocating the `canonical_id`
+> format authority *into* `kinds` (below `tag`, beside its inverse
+> `parse_canonical_ref`); `listing::canonical_id` now delegates *up* to it, caller
+> seam preserved, zero retarget.
 
 ### D3 — Scaffold seam: explicit parameter on `materialise`
 
@@ -206,14 +214,17 @@ for scaffolds/labels beyond identity).
 | path | change |
 |---|---|
 | `src/kinds.rs` → `src/kinds/mod.rs` | +Kind struct, 27 statics, *_DIR consts, KindRef, KINDS, pin-test |
-| `src/kinds/resolve.rs` | new — the 5 ref helpers |
+| `src/kinds/resolve.rs` | new — the 5 ref helpers + `canonical_id` format authority (D2 as-built; `listing::canonical_id` delegates up) |
 | `src/entity.rs` | Kind def out / re-export in; `Scaffold` type; materialise param; test kinds |
 | `src/integrity.rs` | −13 kind imports, −table, −helpers; keeps validate/reseat |
 | `src/adr.rs` `src/backlog.rs` `src/concept_map.rs` `src/knowledge.rs` `src/policy.rs` `src/rec.rs` `src/requirement.rs` `src/review.rs` `src/revision.rs` `src/rfc.rs` `src/slice.rs` `src/spec.rs` `src/standard.rs` | plain statics → re-exports; adr/policy/standard/rfc `GovKind` descriptors rewire to leaf identity + own scaffold (D4); materialise call sites +arg; 3 stubs die |
 | `src/governance.rs` | GovKind → `{ kind: &'static Kind, scaffold, statuses, hidden }`; `run_new` passes `g.scaffold` |
-| `src/catalog/hydrate.rs` `src/catalog/scan.rs` `src/commands/cli.rs` `src/commands/dep_seq.rs` `src/commands/doctor.rs` `src/commands/facet.rs` `src/commands/map.rs` `src/commands/relation.rs` `src/commands/supersede.rs` `src/commands/tag.rs` `src/commands/validate.rs` `src/doctor_checks.rs` `src/map_server/markdown.rs` `src/map_server/routes.rs` `src/priority/graph.rs` `src/priority/surface.rs` `src/reconcile.rs` `src/relation.rs` `src/relation_graph.rs` `src/relation_query.rs` `src/search.rs` `src/supersede.rs` | retarget `integrity::` → `kinds::` |
+| `src/catalog/hydrate.rs` `src/catalog/scan.rs` `src/commands/compare.rs` `src/commands/dep_seq.rs` `src/commands/facet.rs` `src/commands/map.rs` `src/commands/relation.rs` `src/commands/supersede.rs` `src/commands/tag.rs` `src/commands/validate.rs` `src/doctor_checks.rs` `src/map_server/markdown.rs` `src/map_server/routes.rs` `src/priority/graph.rs` `src/priority/surface.rs` `src/reconcile.rs` `src/relation.rs` `src/relation_graph.rs` `src/relation_query.rs` `src/search.rs` `src/supersede.rs` | retarget `integrity::` → `kinds::` |
+| `src/listing.rs` | `canonical_id` delegates up to `kinds::canonical_id` (D2 as-built; caller seam preserved) |
+| `src/lazyspec.rs` | GovKind `.kind` deref (borrows `&'static Kind`) |
+| `src/memory.rs` | vt9 test made hermetic — collateral gate-blocker fix (EX-6, RV-297 F-5), not design surface |
 | `.doctrine/adr/001/layering.toml` | `integrity = "engine"`; measured `command` ratchet |
-| `tests/architecture_layering.rs` | expectation updates if any hard-code integrity's tier |
+| `tests/architecture_layering.rs` | *(untouched — test is data-driven over `layering.toml`; no source edit needed. cli.rs / doctor.rs likewise untouched: they import only integrity-proper items, not the relocated table/parsers — RV-297 F-2)* |
 
 ## 6. Verification Alignment
 

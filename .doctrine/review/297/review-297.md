@@ -132,3 +132,40 @@ No blocker; every finding terminal-verified. Cleared to reconcile.
   either side; the **D2 edit (F-3)** likewise. Recommended order: reconcile the
   `design.md` prose (F-3, F-4) now → close lands the bundle on main → apply the
   selector rm on the landed tree → `doctrine check gate`.
+
+## Reconciliation Outcome
+
+### Direct edits applied (edge `design.md`)
+- **design.md D2 (RV-297 F-3):** corrected the `resolve.rs` dependency sketch
+  (`imports kinds data + fsutil` — dropped the stale `+ listing`; added
+  `+ canonical_id`), rewrote the `fsutil/listing` leaf-precedent bullet to `fsutil`,
+  and appended an **As-built** note recording the cycle-infeasibility of the
+  sketched `kinds → listing` route and the relocation of the `canonical_id`
+  authority into `kinds` (`listing` delegates up). design prose now matches the
+  bundle.
+- **design.md §5 table (RV-297 F-4):** `resolve.rs` row now names the `canonical_id`
+  authority; **removed** `src/commands/cli.rs` + `src/commands/doctor.rs` from the
+  retarget row and **added** `src/commands/compare.rs`; **added** rows for
+  `src/listing.rs`, `src/lazyspec.rs`, `src/memory.rs`; annotated the
+  `tests/architecture_layering.rs` row as untouched/data-driven (with the cli/doctor
+  rationale). §5 now mirrors the as-built selector set.
+
+### REVs completed
+- **None.** Brief carried no governance/spec item (ADR-001 layering is data, landed
+  in the bundle and validated by `architecture_layering`).
+
+### Deferred to /close (recorded, not a reconcile write-surface)
+- **Selector-registry rm (F-2):** `doctrine slice selector rm SL-204` ×3 (cli.rs,
+  doctor.rs, tests/architecture_layering.rs) — the load-bearing conformance fix.
+  Deferred per the sequencing caveat: it edits `slice-204.toml`, which the bundle
+  also modified, so it lands **after** integration on the landed tree. `design.md`
+  §5 (the mirror) is already reconciled above; the registry follows at close.
+- **Integration/landing (F-6):** promote edge→main, `dispatch refresh-base --slice
+  204`, re-prepare, integrate; ISS-235 collision already dissolved (edge → ISS-236,
+  c20b56bc). Then apply the selector rm and re-run `doctrine check gate` (fresh
+  binary).
+
+### Withdrawn / tolerated
+- None withdrawn. F-1 and F-5 disposed `aligned` (no write needed).
+
+Reconcile pass complete — handoff to /close.
