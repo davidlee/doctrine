@@ -26,6 +26,58 @@ intent = "scope-relevant"
 selector = "install/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "plugins/doctrine/skills/research/**"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/slice/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/design/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/plan/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "plugins/doctrine/skills/phase-plan/SKILL.md"
+intent = "design-target"
+
+[[selector]]
+selector = "src/research.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/contentset.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "install/governance.md"
+intent = "design-target"
+
+[[selector]]
+selector = "install/glossary.md"
+intent = "design-target"
+
 [[relation]]
 label = "references"
 role = "originates_from"

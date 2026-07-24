@@ -26,12 +26,14 @@ The kernel: **research artefact + pre-design round**, four deliverables.
    skills say "use a research agent", the *project* defines what that means
    (CLAUDE.md / governance § research: scripts, `claude -p`, or harness
    subagents). Doctrine holds no executable runner seam (POL-002).
-2. **Storage**: runtime tier — `.doctrine/state/research/SL-NNN/`, with a
-   convenience symlink from the slice folder (the `phases` precedent).
-   Per-worktree by construction, so no dispatch split-brain; end-of-slice
-   harvest is explicit.
+2. **Storage**: `.doctrine/slice/NNN/research/` directly — gitignored in
+   place, riding the pre-existing SL-055 convention (`.gitignore:48`,
+   `Tier::Research`, doctor prose-cite skip). Gitignored ⇒ per-worktree, so
+   no dispatch split-brain; end-of-slice harvest is explicit. *(Corrected at
+   design from the original state-tier+symlink wording — the pre-design
+   research round surfaced the existing convention; design.md D1.)*
 3. **Mint verb + staleness stamp**: a small CLI verb that creates the research
-   dir + symlink and stamps a staleness baseline — slice id, date, and a
+   dir and stamps a staleness baseline — slice id, date, and a
    `path → content-hash` map of the design/scope docs researched against,
    reusing the SL-040 `ContentSet` primitive (`src/contentset.rs`, the
    `review prime` warm-cache mechanism). Staleness is advisory (`diff` →

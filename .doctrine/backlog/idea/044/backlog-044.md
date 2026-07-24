@@ -56,10 +56,14 @@ sketch is a consumer of that artefact or a refinement trigger on it.
 
 Settled in shaping conversation:
 
-- **Storage**: runtime tier — `.doctrine/state/research/SL-NNN/` with a
-  convenience symlink from the slice folder (the `phases` precedent).
-  Dissolves dispatch split-brain by construction (runtime state is
-  per-worktree, never merged); makes end-of-slice harvest explicit.
+- **Storage**: ~~runtime tier — `.doctrine/state/research/SL-NNN/` with a
+  convenience symlink from the slice folder (the `phases` precedent)~~
+  **Corrected at SL-229 design (D1):** `.doctrine/slice/NNN/research/`
+  directly — the SL-229 pre-design research round surfaced a pre-existing
+  convention (SL-055 gitignore line, SL-116 `Tier::Research`, doctor skip)
+  and showed the symlink route needs extra machinery. Gitignored-in-place
+  still dissolves dispatch split-brain (never merged); harvest stays
+  explicit.
 - **Artefact form**: free markdown under a conventions contract (mandated
   sections, durable-id + `file:line` citation forms) — no schema. Nothing
   queries it and it isn't durable, so structure doesn't earn its cost.
