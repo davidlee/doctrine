@@ -886,3 +886,36 @@ SL-229 pre-design research round, first dogfood of the research stage
   the IDE-044 thesis.
 - Friction: none from doctrine tooling this round; scratchpad prompt files
   + background bash was smooth.
+
+[dispatch-agent (conclude); SL-227-phase03-conclude-2026-07-25]
+Conclude-cadence friction on the claude arm — four token sinks, all in the funnel tail, not the worker:
+
+1. verify-vt FAIL from a stale plan.toml test_file pointer. PHASE-02's veneer landed
+   in src/commands/library.rs (ADR-001 forbids the top-level src/library.rs design §5.2
+   predicted); the selector was corrected mid-drive but the plan.toml VT test_file fields
+   were NOT, so the conclude-time VT gate hard-FAILed (exit 1, halts handover) on 5 VTs.
+   Cost: a full /consult round + diagnosis + a corrective commit. Root cause: the
+   selector-correction and the plan-VT-correction are two surfaces for one fact; correcting
+   one leaves the other to detonate at conclude. Candidate fix: when `slice selector` rewrites
+   a design-target path, offer to re-point any VT test_file naming the old path (or have
+   verify-vt fall back to selector-resolved paths).
+
+2. verify-vt reports EVERY VT (all 3 phases, incl. prior-session PHASE-01/02) as
+   UNATTRIBUTABLE ("keyword present but <file> not modified by this slice"). The source-delta
+   attribution (IMP-228) mis-computes its base for a dispatch-concluded slice after an
+   8-commit refresh-base merge moved the fork-point — so it credits NOTHING to the slice.
+   Non-halting (exit 0), but it renders the whole gate signal useless at exactly the moment
+   it matters, and cost tokens to distinguish "buggy attribution" from "real missing test".
+   This is open ISS-226; adding a reproduction datum (universal, post-refresh-base).
+
+3. Working-tree-free MCP funnel tools (conclude_phase, prepare-review) leave the coord tree's
+   LIVE index stale: the staged boundaries.toml was the pre-conclude 2-phase registry, whose
+   naive commit/inspection *regresses* PHASE-03's row. Cost: several commands to prove the
+   committed graph (refs) was complete+correct while the working index was stale-and-wrong,
+   before daring `git worktree remove --force`. A one-line "coord index is stale-by-design;
+   truth is in refs; --force is expected at teardown" note in the conclude cadence would
+   have saved the whole investigation.
+
+4. slice lifecycle stuck at `ready` after a full dispatch drive (never advanced to `started`
+   on either edge or dispatch/227). ready→audit is a [skip]; benign but had to verify across
+   trees that `started` was genuinely never recorded (not a divergence) before transitioning.
