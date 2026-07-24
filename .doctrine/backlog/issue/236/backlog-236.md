@@ -1,4 +1,4 @@
-# ISS-235: link error message duplicates role-bearing labels
+# ISS-236: link error message duplicates role-bearing labels
 
 <!-- Backlog item body — context, detail, links. The structured, queried fields
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
