@@ -46,6 +46,14 @@ intent = "design-target"
 selector = "src/commands/cli.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 target = "IDE-043"
@@ -71,6 +79,10 @@ target = "DEC-008"
 [[relation]]
 label = "related"
 target = "DEC-009"
+
+[[relation]]
+label = "related"
+target = "ISS-237"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
