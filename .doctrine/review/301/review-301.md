@@ -100,3 +100,30 @@ before the slice tells the truth.
 ### Off-surface (no reconcile write — recorded for provenance)
 - plan.toml PHASE-03 VT-1 keywords (F-2): immutable-append, not a reconcile
   surface. No action; tolerated per the ledger.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- design.md §5.3 (RV-301 F-1): style-tables prose reconciled from the authored
+  `NODE_STYLES`/`EDGE_COLORS` slice-const prescription to the as-built
+  `node_style()`/`edge_color()` match-lookup fns + `DEFAULT_*` consts. STD-001 /
+  DEC-008 / D10 justification preserved; values unchanged.
+
+### REVs completed
+- REV-033 (`reconcile-sl-226`): done — `modify` PRD-016 §2 out-of-scope bullet,
+  appending a carve-out so the static-file-interchange demotion no longer reads
+  as excluding `doctrine graph`'s in-workflow DOT/JSON stdout surface (RFC-001,
+  SL-226). Covers RV-301 F-4. Manual-landed; rationale + before/after in
+  revision-033.md.
+
+### Withdrawn / tolerated (no write)
+- F-2: tolerated — VT-1 keyword-provenance comment residual; no POL-002-compliant
+  fix; behavioural assertions strong. Rationale in the finding disposition.
+- F-3: tolerated — conformance `undelivered` layering.toml is a pi-arm topology
+  artifact; the row is delivered in the impl bundle and integrates to main. Not a
+  reconcile write — carried to /close as a gate check (confirm `catalog::dot =
+  engine` on main post-integrate; self-protecting via close's `doctrine check
+  gate` clippy layering leg).
+
+Reconcile pass complete — every brief item resolved, no half-applied REVs.
+Handoff to /close.

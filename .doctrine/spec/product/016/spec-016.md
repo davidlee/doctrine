@@ -64,7 +64,10 @@ Out of scope:
 - Static graph file interchange (GraphML/Cypher/DOT-file export) for
   external tools — demoted to on-demand by RFC-002; this capability's
   interchange surface is the navigable JSON/SVG contract, not a file
-  export pipeline.
+  export pipeline. This demotion covers *static file interchange for
+  external tools* only; it does not reach `doctrine graph`'s on-demand,
+  pipe-composable DOT/JSON stdout emission (RFC-001, delivered by SL-226),
+  an in-workflow consumption surface rather than a static export channel.
 
 Boundary: this capability owns the **outward, explorable presentation** of
 doctrine's graph — what the three views show, who reads them, and how they

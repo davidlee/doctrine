@@ -143,13 +143,14 @@ pub(crate) fn render(graph: &CatalogGraph, focus: Option<&NodeKey>) -> String;
   retains in place; no borrowed-view type, no mirror `Serialize` impl, no
   lifetime plumbing. JSON drift from the `catalog graph` contract is
   impossible by construction.
-- Style tables in `catalog/dot.rs`: `NODE_STYLES: &[(&str, NodeStyle)]`,
-  `EDGE_COLORS: &[(&str, EdgeColor)]` — named constants (STD-001), values
-  ported from `dot.ts` (both tables, DEC-008) **except** shape/style are
-  modelled as separate fields (D10): `shape: "box"`,
-  `style: "filled,rounded"` where dot.ts wrongly writes
-  `shape: "box,rounded"`. Unknown kind/label falls back to the ported
-  defaults.
+- Style lookup in `catalog/dot.rs`: `node_style(prefix) -> NodeStyle` and
+  `edge_color(label_lower) -> EdgeColor` — match-lookup fns single-sourcing
+  the styles (STD-001), with `DEFAULT_NODE_STYLE` / `DEFAULT_EDGE_COLOR`
+  consts for the unknown-kind/label fallback. Values ported from `dot.ts`
+  (both tables, DEC-008) **except** shape/style are modelled as separate
+  fields (D10): `shape: "box"`, `style: "filled,rounded"` where dot.ts
+  wrongly writes `shape: "box,rounded"`. (As-built — reconciled from the
+  authored `NODE_STYLES`/`EDGE_COLORS` slice-const form, RV-301 F-1.)
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
