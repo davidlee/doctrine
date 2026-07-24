@@ -45,13 +45,19 @@ same results than throw-away research.
 - **No split-brain**: research documents must not cause main-vs-worktree
   split-brain even if updated during dispatch. Research is harvested at end of
   slice if there's potential value.
+- **Findings become globbed memories**: important research findings are
+  captured as memories with appropriate path globs, so they auto-reveal via
+  the file-inspection hook when an agent later touches the relevant files.
 
 ## Neighbors
 
 - `/preflight` skill — bounded up-front research posture; this proposes a
   durable, persisted, lifecycle-integrated stage rather than a conduct step.
-- IMP-104 — general pi subagent spawn pattern for scout roles (spawn
-  mechanics this would defer to).
+- IMP-104 — general pi subagent spawn pattern for scout roles. Project-local
+  only: addressed here via `scripts/pi-scout` + `scripts/pi-research` and a
+  CLAUDE.md directive preferring them over built-in subagents. Those scripts
+  do not (yet) have access to memory tools — relevant to the read-only vs
+  memory-MCP tension above.
 - IMP-310 — selector-conformance tech spec; IMP-162, IMP-256 (resolved),
   SL-180 — selector-correctness cluster this would feed from the front.
 - IDE-016 — agent UX research on efficient read surfaces.
