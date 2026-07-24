@@ -1,0 +1,88 @@
+# Implementation plan for SL-225 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-225"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Two ordered phases. PHASE-01 folds fix #1 + (ii): both edit the ONE `validate`
+# bash body, so a split would put a mid-recipe seam across phases. PHASE-02 (fix
+# #2) is file-disjoint from PHASE-01 (test_support.rs + tests/* vs justfile +
+# worker_commit.rs + governance prose) — parallel-dispatchable. No hard ordering
+# dependency; PHASE-01 leads as the headline ISS-218 fix.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Worker gate skips governance self-checks; close-gate freshness (fix #1 + ii)"
+objective = """
+`just validate` skips `doctrine prompt check` / `doctrine doctor` in a worker fork \
+(under the three-leg worker-context signal — DOCTRINE_DISPATCH_GATE | DOCTRINE_WORKER=1 \
+| the marker file), dissolving the ISS-218 stale-binary false-red. Off the fork path it \
+resolves the fresh coord build (${DOCTRINE_BIN:-./target/debug/doctrine}, PATH fallback) \
+rather than bare `doctrine`, and `check`/`gate` reorder `build` before `validate` so \
+`doctrine check gate` (close) validates the landed corpus with a this-invocation-fresh \
+binary — freshness belt-enforced, closing the residual (ii). The sole engine touch is one \
+neutral signal line: `worker_commit::run_commit_gate` spawns the gate with \
+`DOCTRINE_DISPATCH_GATE=1` (needed because the gate clears the marker + removes \
+DOCTRINE_WORKER in that window). The obsolete fork-side `DOCTRINE_BIN` precondition is \
+retained + reframed (coord-side close-time build) in governance.md / CLAUDE.md. DEC-003."""
+entrance_criteria = [
+  { id = "EN-1", text = "DEC-003 accepted; SL-225 in plan. Design's grep-able premises re-verified current: justfile belt order, verify.rs:149/151 (just check|gate), worker_commit.rs marker-clear + env_remove, marker.rs:114/127." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`just validate` exits 0 (skips doctor/prompt check) under EACH signal leg independently — DOCTRINE_DISPATCH_GATE set, DOCTRINE_WORKER=1 (exact, not any non-empty), the marker file present — and runs both legs when none is present." },
+  { id = "EX-2", text = "Off the signal, `validate` resolves `${DOCTRINE_BIN:-./target/debug/doctrine}` with a `command -v` PATH fallback, not bare `doctrine`; a true generic host with neither falls to PATH." },
+  { id = "EX-3", text = "`check` and `gate` run `build` before `validate` (e.g. `fmt lint lint-js build validate test[-all]`); `quick` left unchanged (fast, documented bound)." },
+  { id = "EX-4", text = "`worker_commit::run_commit_gate` spawns the gate with `.env(\"DOCTRINE_DISPATCH_GATE\",\"1\")` and NOTHING else changed — marker clear/restore, env_remove, staging, guard untouched; the existing worker_commit suites stay green unchanged (behaviour-preservation)." },
+  { id = "EX-5", text = "`.doctrine/governance.md` (§ orchestration) + `CLAUDE.md` (§ Dispatch precondition): the `DOCTRINE_BIN`→coord-build rule is retained + reframed as a coord-side close-time build governing (ii)'s gate, plus a build-before-`check gate` close note. Not deleted." },
+]
+verification = [
+  { id = "VT-1", expects = "Discriminating end-to-end: a fork whose authored governance would `doctrine doctor`-RED under the stale/installed binary drives the real worker_commit gate GREEN because validate skips the governance legs under DOCTRINE_DISPATCH_GATE — the green-vs-red pivot is the skip.", test_file = "tests/e2e_worker_gate_skip.rs", keywords = ["DOCTRINE_DISPATCH_GATE"], waived = false },
+  { id = "VT-1b", expects = "Generic-host no-mask (safety negative): with NO worker signal, `just validate` runs doctor/prompt check normally and a genuinely broken authored state still REDS — the skip never masks a real governance regression on the main arm.", test_file = "tests/e2e_worker_gate_skip.rs", keywords = ["prompt check"], waived = false },
+  { id = "VT-1c", expects = "Signal-legs unit: validate skips under each leg independently (DOCTRINE_DISPATCH_GATE, DOCTRINE_WORKER=1, marker file) and runs under none; includes the exact-match negative — DOCTRINE_WORKER=0 does NOT skip (matches env_worker_set, marker.rs:127).", test_file = "tests/e2e_worker_gate_skip.rs", keywords = ["DOCTRINE_WORKER"], waived = false },
+  { id = "VT-1d", expects = "Close-gate freshness (enforced closure): off the fork path, DOCTRINE_BIN→a stub that REDS the corpus ⇒ gate reds, →a stub that GREENS ⇒ gate greens; and a landed doctor-rule delta reds under a fresh binary where the old validate-before-build order would false-green — the green→red pivot is the belt reorder.", test_file = "tests/e2e_worker_gate_skip.rs", keywords = ["DOCTRINE_BIN"], waived = false },
+  { id = "VT-1e", expects = "Engine behaviour-preservation: `run_commit_gate` spawns the gate carrying DOCTRINE_DISPATCH_GATE=1; the existing worker_commit gate/staging/guard tests stay green unchanged.", test_file = "src/mcp_server/worker_commit.rs", keywords = ["DOCTRINE_DISPATCH_GATE"], waived = false },
+  { id = "VA-1", expects = "Agent confirms `.doctrine/governance.md` + `CLAUDE.md` reframe the DOCTRINE_BIN rule (coord-side close-time build) and add the build-before-gate close note — prose, not test-judgeable." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Marker-aware skip in authored-write e2e goldens (fix #2)"
+objective = """
+The authored-write e2e goldens (those the worker-mode guard refuses under the marker) \
+early-return when running inside a worker fork, so a worker agent's own `cargo test` / \
+`just check` reflects delta health, not the guard's correct refusals. Add \
+`under_worker_marker()` + `WORKER_MARKER_REL` to `src/test_support.rs` (OQ-1 resolved: a \
+documented carve-out cross-pointing marker.rs:114 as canonical — single-sourcing is \
+untractable across the external test-crate boundary without a `pub` leak; the same \
+CHR-014 dual-compilation class already tolerated), re-export via `tests/common/mod.rs`, \
+and add the marker-guard early-return to the enumerated authored-write goldens. Coverage \
+is preserved: the server-side commit gate CLEARS the marker (SL-199 F2), so the goldens \
+still run there; only the worker's manual run skips. DEC-003 sibling."""
+entrance_criteria = [
+  { id = "EN-1", text = "DEC-003 accepted; SL-225 in plan. `src/test_support.rs` (repo_root/doctrine_bin) and the target goldens (e2e_worker_guard.rs, e2e_dispatch_sync.rs, e2e_doctor_golden.rs) present in the tree." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`under_worker_marker()` (env leg DOCTRINE_WORKER=1 OR marker file) + `WORKER_MARKER_REL` (\".doctrine/state/dispatch/worker\", carve-out comment cross-pointing marker.rs:114) live in `src/test_support.rs`; re-exported through `tests/common/mod.rs`." },
+  { id = "EX-2", text = "Each authored-write golden (the ~30 marker-poisoned suites enumerated from the CHR-044 case-note list) gains a `if common::under_worker_marker() { return; }` early-return; read-only goldens are untouched." },
+  { id = "EX-3", text = "Strictly marker-gated: with neither DOCTRINE_WORKER=1 nor the marker file, every golden runs normally — a real authored-write regression on the main (unmarked) arm cannot hide; the gate (marker cleared) still runs them." },
+]
+verification = [
+  { id = "VT-2", expects = "`under_worker_marker()` returns true under DOCTRINE_WORKER=1 OR the marker file at repo_root, and false under neither — the predicate that gates the golden early-return, proving it is marker-gated and never masks the unmarked arm.", test_file = "src/test_support.rs", keywords = ["under_worker_marker", "WORKER_MARKER_REL"], waived = false },
+  { id = "VA-1", expects = "Agent enumerates the authored-write goldens against the CHR-044 case-note list and confirms each spawner carries the marker-guard early-return while read-only goldens do not — a set membership a single VT cannot cover." },
+]
+specs        = []
+requirements = []
