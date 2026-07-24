@@ -66,3 +66,16 @@ as part of (or before) the fix.
 
 Surfaced during the SL-164 design inquisition (RV-173) while diagnosing a
 reservation-remote error.
+
+## Resolution (fixed, 2026-06-27)
+
+Fixed directly (small-item path, no governing slice) in
+`374507fd195788de9b9282e13460b71032a64b27` —
+*fix(ISS-055): unify config path to single .doctrine/doctrine.toml constant*.
+
+All five scope points landed: the `dtoml` seam const `DOCTRINE_TOML` now reads
+`.doctrine/doctrine.toml` (`src/dtoml.rs:80`); both stragglers
+(`catalog/hydrate.rs`, `coverage_store.rs`) and every test write-site route
+through that one const (magic-string literal count in `src/` is now 0); and the
+lying docs (`install/doctrine.toml.example` header, `src/dtoml.rs` comment) were
+inverted. `[dispatch]` and `[reservation]` keys live in `.doctrine/doctrine.toml`.
