@@ -314,3 +314,88 @@ visible only in the rendered skill list. No authoring-time lint; each variant
 was discovered downstream (test failure / skill-list inspection). A frontmatter
 lint in `install::tests_skills` (or `doctrine check`) rejecting `: `, `"`, and
 ' #' in description values would have saved both cycles.
+
+[dispatch; SL-208 sess-a]
+PHASE-01 import refused `undeclared-scope` 3× before landing. Root causes, in order:
+1. Selector authored at plan time omitted Cargo.toml/Cargo.lock, but EX-1 mandates
+   the textwrap dep in Cargo.toml (→ Cargo.lock resolver churn). The worker delta
+   legitimately touched both. worker_commit itself only *warns* `undeclared:[...]`
+   (soft tier) and commits; dispatch_import *hard*-rejects — so the gap surfaces
+   only at the funnel, one full worker round in.
+2. classify_import's scope leg honours **design-target** intent ONLY. First fix
+   declared Cargo.lock as `scope-relevant` (semantically "artifact, not target") →
+   still undeclared → second refusal. Had to re-declare as design-target.
+3. The belt reads the **committed** selector on the coord branch, not the working
+   tree — writing the selector via CLI wasn't enough; needed a coord commit
+   (then amend) before each retry.
+Cost: ~4 import probes + 2 selector commits + source spelunking into import.rs /
+conformance.rs to discover the design-target-only rule. A pre-spawn selector-vs-EX
+reconciliation (does every mandated file appear as a design-target selector?) would
+have caught this before the worker ran. The empty `detail:""` on the Refused
+payload also forced manual `git diff --name-only` + source reading to identify the
+offending paths — the CLI arm prints them (report_undeclared_scope) but the MCP
+tool returns them empty.
+
+[dispatch-agent; SL204-a15d-P01]
+- dispatch_import is object-db-only: it advances the coord branch ref to S but
+  leaves the coord WORKING TREE at B (grep confirmed old `Kind.scaffold` field
+  still in src/entity.rs post-import, git status showed all 15 files as staged
+  S→B reversions). The funnel's verify beat (`check regression diff`) runs the
+  suite in the coord working dir, so it would build/test STALE B content and
+  false-green unless the operator first syncs the tree to HEAD. Neither the
+  /dispatch router nor /dispatch-agent SKILL documents an explicit "sync worktree
+  to HEAD after import" step; I had to infer `git reset --hard HEAD` (safe here —
+  all delta committed at S). This is a load-bearing, undocumented funnel step.
+- Stale LSP `new-diagnostics` fired against the worker's MID-EDIT worktree
+  snapshot (E0560 "Kind has no field scaffold" / E0061 arg-count) and directly
+  contradicted the worker's committed-green hand-back. Cost a full investigation
+  round (inspect flagged lines AT the fork tip via `git show <fork>:<file>`) to
+  establish the diagnostics were stale and the committed fork was consistent.
+  The funnel's own regression-diff later confirmed green — but the false alarm
+  forced early disambiguation of "broken fork vs stale diagnostic".
+
+[audit; SL-225-RV294]
+- Conformance registry was polluted (55 undeclared, mostly foreign IMP-306/chore)
+  because PHASE-01's solo auto-binding recorded a HEAD-before→HEAD-after range that
+  swallowed 8 sibling commits interleaved on shared `edge` (PHASE-01 landed as two
+  non-contiguous commits). The mechanical audit signal (`slice conformance`) was thus
+  unusable as-is; recovering the true verdict cost a manual per-commit `--against`
+  reconstruction across three ranges + inspecting `boundaries.toml`. Known hazard
+  (IMP-175/IMP-292) but it recurred and taxed this audit directly. A per-commit solo
+  binding (the safe `--commit` mode already exists) would have avoided the whole detour.
+
+[dispatch-agent; SL204-a15d-P02-falsehalt]
+- PHASE-02 worker HALLUCINATED a base-guard failure and bailed (0 files, no
+  commit) on a FALSE premise. It forked correctly at B=4d3936e9 (verified: its
+  worktree's src/entity.rs has the Kind.scaffold field ABSENT, rec.rs has 0
+  scaffold_unused — PHASE-01 code fully present). Root cause: the worker ran
+  `git show 4d3936e9 --stat`, saw the conclude/boundary commit touches ONLY
+  .doctrine/dispatch/204/boundaries.toml, and (wrongly) concluded "zero changes
+  to src/entity.rs → PHASE-01 not landed" — confusing a commit's own diff with
+  its inherited tree. It then FABRICATED matching file contents (claimed the
+  field, the initializers, the stubs were all still present) to justify the
+  halt. Cost: a full re-dispatch round.
+- Contributing factor: my base-guard check #4 embedded an EDITORIALIZING semantic
+  claim ("proves PHASE-01 landed; the Kind struct is already pure identity") on
+  top of the literal greps. The greps PASSED; the prose invited the worker to
+  re-derive landing from commit history, where it tripped. Lesson: base-guard
+  seams must be PURELY literal/positive grep assertions — no "this proves prior
+  phase X" narration for the worker to re-litigate. The funnel's two-commit
+  cadence (code commit + separate boundary-row commit inheriting the code) is a
+  predictable confusion surface for a worker reasoning from `--stat`.
+
+[dispatch-agent; SL204-a15d-P02-undeclared]
+- PHASE-02 worker committed a clean, green delta but included ONE undeclared-scope
+  path (src/lazyspec.rs) → dispatch_import refused `undeclared-scope` (landed
+  nothing; coord tip unchanged — the belt worked as designed). The change is a
+  1-line cosmetic deref (`&crate::adr::ADR_KIND.kind` → `crate::adr::ADR_KIND.kind`)
+  forced/encouraged by the sanctioned Step-5 `GovKind.kind: &'static Kind` retype.
+  The pre-existing `&…` would still auto-deref (`&&Kind` → field access works), so
+  the edit was NOT strictly required — an optional cleanup that breached the
+  declared selector set. worker_commit only WARNED on undeclared (it blocks on
+  forbidden-zone, not undeclared), so the worker landed it on its fork; the harder
+  gate is the import belt. Net: workers should be told NOT to make optional edits
+  outside the declared selector set — "undeclared" at worker_commit is a soft warn
+  but a HARD import refusal, so a cosmetic out-of-scope touch costs a full
+  re-land/fixup cycle. Design §5's selector list also under-enumerated lazyspec.rs
+  as an ADR-identity consumer.
