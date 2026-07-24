@@ -98,7 +98,9 @@ and baseline format belong to `--help` and code. The artefact skeleton is
 **Baseline** (`research/baseline.toml`): `slice`, `date`, `[hashes]` — the
 serialize→recompute→diff pattern from the review warm-cache
 (`review.rs:2500`, `2540-2542`). Fixed path set: `slice-NNN.md`, `design.md`,
-`plan.md` under `.doctrine/slice/NNN/` (repo-relative keys).
+`plan.md`, `plan.toml` under `.doctrine/slice/NNN/` (repo-relative keys;
+plan.toml added at plan time — criterion edits are frequently TOML-only and
+phase-plan refresh is exactly the consumer that cares).
 Absence-is-defined does the lifecycle work: pre-design mint records only the
 scope doc; design.md appearing later = `added` drift.
 
