@@ -12,5 +12,59 @@ responder = "responder"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-204"
 
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "nit"
+title = "Behaviour-preservation gate: expected suites-green-unchanged → observed all green on the bundle"
+detail = "Design §1 / VT-B / EX-4 demand pure structural inversion with zero validation-behaviour delta, proven by the existing suites. Verified on the review/204 bundle in a detached worktree (web/map/dist seeded): full `cargo test` — every suite `ok`, 0 failed; `cargo clippy --workspace` — zero warnings; `cargo test --test architecture_layering` — 17 passed/0 failed, asserting integrity=engine, the 13 kind up-reaches gone, the 4 back-cycles (backlog/rec/review/revision) broken, and the command tangle ratcheted (baseline command=76, measured empirically per design D6). Central invariant holds."
+disposition = "aligned"
+response = "Observation confirmed — behaviour-preservation holds. Full suite green (0 failed), clippy zero warnings, architecture_layering 17/0. No change needed; this is the slice's central success criterion met."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "Conformance undelivered(3): cli.rs, doctor.rs, tests/architecture_layering.rs declared but untouched"
+detail = """The bundle's selector registry declares src/commands/cli.rs, src/commands/doctor.rs, and tests/architecture_layering.rs as design-target selectors (from design §5), but the impl bundle edits none of them — `slice conformance` reports them undelivered. Benign over-declaration: design §5 hedged architecture_layering ("expectation updates IF any hard-code integrity's tier" — it is data-driven over layering.toml, needed no source edit), and cli.rs/doctor.rs were listed as integrity::→kinds:: retarget candidates but import only integrity-proper items (run_validate/doctor helpers), not the relocated table/parsers. No drift, but VA-2/VA-A ("conformance clean") is not fully satisfied while the three spurious selectors remain."""
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile (per-slice surface). Load-bearing fix is the selector registry: `doctrine slice selector rm SL-204 src/commands/cli.rs`, `… src/commands/doctor.rs`, `… tests/architecture_layering.rs` (that is what conformance reads), mirrored by trimming those rows from design.md §5. Not an audit-scope code fix. See Reconciliation Brief."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "design.md D2 stale: prescribed listing::canonical_id route was cycle-infeasible; as-built relocates authority into kinds"
+detail = 'design.md D2 (and the EX-5 mention) mandate that kinds/resolve.rs route id-formatting through listing::canonical_id. That is infeasible: listing→tag (listing.rs:222) and tag→kinds (tag.rs re-exports kinds::TAGGABLE), so kinds→listing would close a leaf 3-cycle. PHASE-04 resolved it (user-authorized, notes.md "Learned") by relocating the canonical_id format authority DOWN into kinds (kinds::canonical_id, the inverse of parse_canonical_ref, below tag) and having listing::canonical_id delegate up — caller seam preserved, zero retarget. Sound and verified in code (listing.rs forwards to crate::kinds::canonical_id; resolve.rs owns fn canonical_id). The design prose no longer describes the as-built and must be reconciled.'
+disposition = "verified"
+response = 'Observation confirmed; the deviation is sound (cycle-infeasible D2 route) and already implemented. Remediation is a design.md D2 prose rewrite delegated to /reconcile (per-slice direct edit): replace the "route through listing::canonical_id" mechanism with the as-built "canonical_id authority relocated into kinds (below tag); listing::canonical_id delegates up". Update the EX-5 cross-reference likewise. See Reconciliation Brief.'
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "design.md §5 code-impact table stale vs as-built selector set"
+detail = "The §5 design-target table omits four files the slice legitimately touched and delivered: src/listing.rs (canonical_id delegation, EX-5), src/memory.rs (vt9 hermeticity collateral, EX-6), src/commands/compare.rs and src/lazyspec.rs (integrity::→kinds:: retargets / GovKind .kind deref). All four are declared selectors on the bundle and conformant — verified benign. Conversely §5 lists cli.rs/doctor.rs/architecture_layering.rs which were not touched (see F-2). The §5 prose is the human mirror of the selector registry; both should be reconciled so the design tells the truth about what was built."
+disposition = "verified"
+response = "Observation confirmed; remediation delegated to /reconcile (per-slice direct edit to design.md §5). Add rows for src/listing.rs, src/memory.rs, src/commands/compare.rs, src/lazyspec.rs with their as-built change notes; remove/annotate cli.rs, doctor.rs, architecture_layering.rs consistent with F-2's selector rm. See Reconciliation Brief."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "Off-design collateral: src/memory.rs vt9 test made hermetic (EX-6) — authorized, recorded, no product-behaviour delta"
+detail = "PHASE-04 folded a collateral fix into the worker delta: memory::…::vt9_no_discoverable_root_emits_nothing was non-hermetic on ambient CLAUDE_PROJECT_DIR + the live corpus, false-redding worker_commit's full-suite gate on the orthogonal canonical_id delta. Made hermetic (rootless tempdir cwd); src/memory.rs declared a collateral selector. This is outside SL-204's design surface (a test-hermeticity fix, not the validation-contract extraction) but was consciously plan-authorized (EX-6), recorded in notes.md and RFC-011 case-notes. Zero product-behaviour change; the behaviour-preservation gate still holds. Flagged so the scope addition is a conscious ledger record, not silent creep."
+disposition = "aligned"
+response = "No drift to reconcile beyond the §5 mirror (F-4 covers the memory.rs selector row). The collateral was plan-authorized (EX-6), recorded in notes + case-notes, is a test-hermeticity fix with zero product-behaviour delta, and the gate proves it. Conscious, documented scope — accepted as-is."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Slice unintegrated: impl on review/204 only; trunk moved 22 commits; refresh-base + land remain for reconcile/close"
+detail = """The implementation lives only on the immutable evidence ref review/204 (tip 256f34bbf); it is NOT on edge/main. dispatch status reports "trunk advanced past the prepared base" — since the fork-point (30f2b82) edge is 26 commits ahead and main lags edge by 4. Integration is clean where it counts: ZERO src/ file overlap between the bundle and the 71 files landed on trunk since the fork, and NO new callers of the relocated integrity::{KINDS,parse_canonical_ref,…} symbols appeared on trunk. The one collision — edge's ISS-235 vs the bundle's ISS-235 — was resolved PRE-AUDIT by reseating edge's item to ISS-236 (commit c20b56bc), so the bundle's .doctrine/ can land verbatim. Remaining landing work is reconcile/close's, not a code defect: promote edge→main, dispatch refresh-base --slice 204, re-prepare, then integrate onto main. Not raised as blocker (must not gate the audit→reconcile transition — it is the handoff)."""
+disposition = "verified"
+response = "Observation confirmed; landing is /reconcile→/close work, not an audit code fix. Integration is clean (zero src/ overlap, no new callers) and the ISS-235 collision is already dissolved (edge reseated to ISS-236, c20b56bc). Brief records the landing sequence: promote edge→main, `dispatch refresh-base --slice 204`, re-prepare, integrate onto main. See Reconciliation Brief."
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
