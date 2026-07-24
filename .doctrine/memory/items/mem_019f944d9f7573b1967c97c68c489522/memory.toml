@@ -1,0 +1,42 @@
+memory_uid = "mem_019f944d9f7573b1967c97c68c489522"
+memory_key = "mem.pattern.rust.sweep-reexports-before-missing"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Sweep pub(crate) re-exports before declaring a primitive missing"
+summary = 'Before declaring a primitive "missing" and building it fresh, sweep pub(crate)/pub-use re-exports — the target may already exist under another module path (is_linked_worktree, RV-300 F-7 parallel-impl trap).'
+created = "2026-07-24"
+updated = "2026-07-24"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["rust", "parallel-implementation", "dry", "re-exports"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "cc86fa667814d5aed9e9518d80a4b3d475b0f035"
+ref_name = "refs/heads/edge"
+checkout_state_id = "60aa0a8a22d21adea679b6d8664dddc3003bdf88b64cfe7c7c2b099e2a1b97a8"
+base_commit = "77d863bfbe29723e2fe866f2afcc362ef4394c87"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
