@@ -32,7 +32,7 @@ verification = [
   { id = "VT-1",
     expects = "serde exact-equality: to_value of an unfiltered projection == to_value of the source CatalogGraph on a fixture exercising Resolved/UnresolvedRef/UnvalidatedText targets, role, descriptor, and origin",
     test_file = "src/catalog/graph.rs",
-    keywords = ["unfiltered_projection_serializes_identically", "UnvalidatedText"],
+    keywords = ["unfiltered_projection_serializes_identically", "descriptor"],
     waived = false },
   { id = "VT-2",
     expects = "filter semantics: kind OR-union, label filter keeps nodes and drops only non-matching edges, exclude_memory removes MEM nodes and incident edges, drop_isolated drops only edgeless nodes, duplicate authored edges both survive every filter (D13)",
@@ -63,7 +63,7 @@ verification = [
   { id = "VT-2",
     expects = "boundary rules: a boundary node's dangling edge is NOT collected; an expanded node's dangling edge IS collected but not enqueued; duplicate same-tuple edges both collected (index identity)",
     test_file = "src/catalog/graph.rs",
-    keywords = ["dangling", "expanded"],
+    keywords = ["boundary_dangling_edge_not_collected", "expanded"],
     waived = false },
 ]
 specs        = []
@@ -99,7 +99,7 @@ requirements = []
 [[phase]]
 id        = "PHASE-04"
 name      = "CLI verb: doctrine graph"
-objective = "Thin command src/commands/graph.rs wired via commands/mod.rs + cli.rs, Read-classified in guard.rs: parse args (FOCUS, --depth, --kind, --label, --include-memory, --format, --path), validate kinds against the static registry (D12), classify focus full-then-filtered with the D6 error split (memory refs via collect_all + resolve_memory_from_all), run the fixed pipeline, emit DOT or contract JSON via writeln!(stdout())."
+objective = "Thin command src/commands/graph.rs wired via commands/mod.rs + cli.rs, Read-classified in guard.rs: parse args (FOCUS, --depth, --kind, --label, --include-memory, --format, --path), validate kinds against kinds::ALL_KINDS (D12 — never a parallel prefix list), classify focus full-then-filtered with the D6 error split (memory refs via collect_all + resolve_memory_from_all), run the fixed pipeline, emit DOT or contract JSON via writeln!(stdout())."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 landed; design.md 5.1/5.2 and src/commands/map.rs:59-68 memory-resolution seam read; guard.rs classification pattern read" },
 ]
@@ -112,7 +112,7 @@ verification = [
   { id = "VT-1",
     expects = "command-level tests: bare invocation emits whole-corpus DOT; FOCUS + --depth bounds; --format json equals the projected graph's serde output; empty projection emits valid empty digraph/JSON with exit 0; mem.<key> and mem_<uid> focus resolve; MEM focus without --include-memory errors naming the flag; focus excluded by --kind errors naming the filter; unknown focus and unknown kind exit nonzero",
     test_file = "src/commands/graph.rs",
-    keywords = ["include_memory", "unknown", "excluded"],
+    keywords = ["include_memory", "ALL_KINDS", "excluded"],
     waived = false },
   { id = "VA-1",
     expects = "real corpus: ./target/debug/doctrine graph SL-226 --depth 2 --format dot | dot -Tsvg renders with EMPTY stderr (no unknown-shape warnings, D10) on a host with graphviz; agent captures the command output as evidence",
