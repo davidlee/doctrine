@@ -18,6 +18,7 @@ use anyhow::Context;
 use clap::Subcommand;
 use serde::Serialize;
 
+use crate::catalog::dot::dot_escape;
 use crate::entity::{self, Artifact, Fileset, Inputs, MaterialiseRequest, ScaffoldCtx};
 use crate::listing::{self, Format, ListArgs};
 use crate::meta::{self, Meta};
@@ -764,20 +765,6 @@ pub(crate) enum ExportFormat {
 // ---------------------------------------------------------------------------
 // Pure: DOT escape / render
 // ---------------------------------------------------------------------------
-
-/// Escape `"`, `\`, and newlines for DOT string literals.
-fn dot_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
 
 /// Render a [`ParsedConceptMap`] as a valid Graphviz digraph.
 ///
