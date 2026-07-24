@@ -1,9 +1,9 @@
 id = 215
 slug = "unified-harvest-surface"
 title = "Unified harvest surface"
-status = "reconcile"
+status = "done"
 created = "2026-07-11"
-updated = "2026-07-23"
+updated = "2026-07-24"
 tags = []
 
 [relationships]
