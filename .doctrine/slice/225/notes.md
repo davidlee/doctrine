@@ -52,3 +52,43 @@ major, F-4 minor). The reusable Git invariant is recorded as
 `mem.fact.dispatch.coord-root-not-git-common-dir`. `just gate` passed after the
 review (existing doctor warnings only). RV-292, the memory, this note, and the
 RFC-011 case note landed together in `379d64c7`.
+
+## 2026-07-24 — Post-implementation audit (RV-294)
+
+Both phases implemented and verified; ledger `done`, **no blockers**. Landed:
+`ad1fff949` + `575757955` (PHASE-01, fix #1 + ii), `613af9c51` (PHASE-02, fix #2),
+`837801a5` (lifecycle → audit).
+
+**Evidence (all green).** `doctrine check gate` → exit 0 (fresh binary via
+`build`→`validate`, full `test-all`); `e2e_worker_gate_skip` 7/7 (VT-1/1b/1c/1d);
+`worker_marker_at` unit (VT-2); worker_commit suites green unchanged (VT-1e /
+behaviour-preservation). Implementation matches design verbatim (validate body,
+belt reorder, the one engine env line, governance.md reframe, helper + 27 guarded
+goldens with `e2e_worker_guard` correctly unguarded). The IMP-306 handover-SKILL
+foreign redness the phase-01 sheet flagged as blocking is **resolved** (IMP-306
+closed) — gate is clean.
+
+**Five findings, all verified terminal (2 minor, 3 nit; none blocking):**
+- **F-1 (minor).** PHASE-01 drift: EX-5/design name CLAUDE.md as a second edit
+  target, but the DOCTRINE_BIN rule is single-source in `.doctrine/governance.md`
+  (zero hits in CLAUDE.md) and reaches the agent surface via the boot inline —
+  editing CLAUDE.md directly would violate STD-001. EX-5 intent met. → reconcile
+  design prose.
+- **F-2 (minor).** PHASE-02 drift: §"Which goldens"/§"Code impact" name three
+  illustrative goldens that are not the empirical target set (worker_guard exercises
+  the guard → stays unguarded; dispatch_sync + doctor_golden don't false-red). Plan's
+  "enumerated at implementation" is authoritative; delivered set correct. → reconcile
+  design prose **+ `slice selector rm`** the three undelivered selectors.
+- **F-3 (nit, tolerated).** Boundary registry polluted — PHASE-01 solo auto-binding
+  `[886153a5f..30f2b82a8]` swallowed 8 interleaved IMP-306/chore commits (55 undeclared).
+  Verified manually via per-commit `--against`. Runtime/disposable; non-contiguous
+  two-commit landing admits no clean re-record. **Already tracked by IMP-175 (identical
+  mechanism) + IMP-292 (audit-time signal degradation)** — fresh repro, no new mint.
+- **F-4 (nit, aligned).** `e2e_check_regression` guard is in-charter (a false-red born
+  of PHASE-01's own validate-skip fingerprint shift; marker-gated, no coverage lost).
+- **F-5 (nit, tolerated).** ~95 explicit early-returns kept over a macro — greppability
+  (VA-1's set-membership audit) + no hidden control-flow > cosmetic LOC.
+
+Reconciliation brief written to `review-294.md` (§Per-slice: design prose; §Selector
+registry: `slice selector rm` the 3; no REV — governance touch was authored in-phase
+and is correct). Handed to `/reconcile`.
