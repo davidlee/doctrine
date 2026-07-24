@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# pi-research — shell-invocable researcher for claude code agents.
+# Uses the project's researcher agent profile (deepseek-v4-pro).
+# Parses .pi/agents/researcher.md for model, tools, and system prompt.
+#
+# Usage:
+#   ./scripts/pi-research "What's new in Rust 2025?"
+#   ./scripts/pi-research --think off "quick fact check"
+#   echo "Compare Bun vs Node 2025" | ./scripts/pi-research
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+AGENT_FILE="$PROJECT_ROOT/.pi/agents/researcher.md"
+
+if [[ ! -f "$AGENT_FILE" ]]; then
+  echo "ERROR: agent file not found: $AGENT_FILE" >&2
+  exit 1
+fi
+
+# --- extract fields from agent frontmatter ---
+model=$(sed -n '/^model: /{s/^model: //;s/ *$//;p;q}' "$AGENT_FILE")
+tools=$(sed -n '/^tools: /{s/^tools: //;s/ *$//;p;q}' "$AGENT_FILE")
+
+# --- extract system prompt body (after second ---) ---
+sysprompt=$(awk 'BEGIN{c=0} /^---$/{c++; next} c>=2' "$AGENT_FILE")
+
+# --- parse --think flag ---
+thinking="low"  # default for researcher
+if [[ "${1:-}" == "--think" ]]; then
+  thinking="$2"
+  shift 2
+fi
+
+# --- collect query ---
+if [[ $# -gt 0 ]]; then
+  query="$*"
+elif [[ ! -t 0 ]]; then
+  query=$(cat)
+else
+  echo "Usage: pi-research [--think off|minimal|low|medium|high|xhigh|max] <query>" >&2
+  echo "       echo <query> | pi-research [--think ...]" >&2
+  exit 1
+fi
+
+exec pi --print \
+  --model "$model" \
+  --system-prompt "$sysprompt" \
+  --tools "$tools" \
+  --thinking "$thinking" \
+  --no-skills \
+  --no-context-files \
+  "$query"
