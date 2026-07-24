@@ -66,6 +66,7 @@ mod relation;
 mod relation_graph;
 mod relation_query;
 mod requirement;
+mod research;
 mod reserve;
 mod retrieve;
 mod review;

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Content-set staleness leaf (SL-040 D3, IMP-025 candidate) — a pure,
 //! consumer-agnostic primitive: an ordered `root-relative path → content-hash`
-//! map plus the pure `diff` / `is_stale_against` comparison, and one thin impure
-//! shell (`compute`) that reads bytes off disk and hashes them.
+//! map plus the pure `diff` comparison (and its `SetDrift::is_empty` shortcut),
+//! and one thin impure shell (`compute`) that reads bytes off disk and hashes them.
 //!
 //! ADR-001 leaf tier: the comparison core takes maps as inputs — no disk, git,
 //! clock, or rng. `compute` is the lone impure seam (a directory read + a
@@ -16,9 +16,10 @@
 //! errors (a permission failure, say) propagate; only `NotFound` is treated as
 //! omission.
 //!
-//! Built ahead of its consumers (SL-040 PHASE-01): the first non-test caller is
-//! the warm-cache in PHASE-05 (`prime`/`review status`), now landed — the
-//! `dead_code` suppression that guarded the pre-consumer interval is gone.
+//! Consumers (SL-040 PHASE-01, built ahead): the review warm-cache
+//! (`prime`/`review status`) and the research staleness advisory (SL-229) both
+//! take `diff` for the drifted-path list; the fresh-vs-drift boolean is
+//! `SetDrift::is_empty`. The pre-consumer `dead_code` suppression is gone.
 
 use std::collections::BTreeMap;
 use std::io;
@@ -46,7 +47,10 @@ pub(crate) struct SetDrift {
 }
 
 impl SetDrift {
-    fn is_empty(&self) -> bool {
+    /// Whether the baseline and current sets are identical (all three classes
+    /// empty). The fresh-vs-drift shortcut over the class vectors — consumed by
+    /// the research staleness advisory (SL-229) and the leaf's own tests.
+    pub(crate) fn is_empty(&self) -> bool {
         self.changed.is_empty() && self.added.is_empty() && self.removed.is_empty()
     }
 }
@@ -101,23 +105,6 @@ impl ContentSet {
         }
         drift
     }
-
-    /// Whether this baseline is stale against `current` — i.e. any path
-    /// changed, was added, or was removed. Absence of a recorded path in
-    /// `current` (a `removed`) counts as stale (R1). The boolean shortcut over
-    /// [`diff`](Self::diff); the warm-cache consumer takes `diff` directly (it
-    /// lists the drifted paths), so this is the IMP-025 primitive's API surface,
-    /// exercised by the leaf's tests.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "leaf API boolean shortcut; warm-cache consumer uses diff for the path list — IMP-025 primitive surface"
-        )
-    )]
-    pub(crate) fn is_stale_against(&self, current: &ContentSet) -> bool {
-        !self.diff(current).is_empty()
-    }
 }
 
 /// Impure shell: read each of `paths` (root-relative) under `root`, hash its
@@ -159,7 +146,7 @@ mod tests {
     #[test]
     fn diff_identical_sets_is_empty() {
         let a = set(&[("a", "1"), ("b", "2")]);
-        assert!(!a.is_stale_against(&a));
+        assert!(a.diff(&a).is_empty());
         assert_eq!(a.diff(&a), SetDrift::default());
     }
 
@@ -171,7 +158,7 @@ mod tests {
         assert_eq!(drift.changed, vec!["mutate".to_owned()]);
         assert_eq!(drift.added, vec!["fresh".to_owned()]);
         assert_eq!(drift.removed, vec!["gone".to_owned()]);
-        assert!(base.is_stale_against(&current));
+        assert!(!base.diff(&current).is_empty());
     }
 
     #[test]
@@ -182,7 +169,7 @@ mod tests {
         let drift = base.diff(&current);
         assert_eq!(drift.removed, vec!["absent".to_owned()]);
         assert!(drift.changed.is_empty() && drift.added.is_empty());
-        assert!(base.is_stale_against(&current));
+        assert!(!base.diff(&current).is_empty());
     }
 
     #[test]
@@ -216,7 +203,7 @@ mod tests {
             s.insert("missing.txt".to_owned(), "deadbeef".to_owned());
             ContentSet(s)
         };
-        assert!(baseline_with_extra.is_stale_against(&current));
+        assert!(!baseline_with_extra.diff(&current).is_empty());
         assert_eq!(
             baseline_with_extra.diff(&current).removed,
             vec!["missing.txt".to_owned()]

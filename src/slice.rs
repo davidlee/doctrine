@@ -423,6 +423,24 @@ pub(crate) enum SliceCommand {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+
+    /// Baseline (or check) the pre-design research artefact against the slice's
+    /// intent docs (SL-229). Dir absent → mint `research/` + stamp `baseline.toml`;
+    /// present → print a per-path staleness advisory (changed/added/removed);
+    /// `--restamp` → re-baseline. Advisory only — always exits 0 (ADR-003).
+    Research {
+        /// Slice id whose research artefact to baseline/check, e.g. 229.
+        #[arg(value_parser = parse_cli_id)]
+        id: u32,
+
+        /// Re-baseline against the current intent docs, overwriting the baseline.
+        #[arg(long)]
+        restamp: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
@@ -506,6 +524,7 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
             path,
         } => run_record_delta(path, id, &phase, commit, start, end),
         SliceCommand::VerifyVt { id, path } => run_verify_vt(path, id),
+        SliceCommand::Research { id, restamp, path } => run_research(path, id, restamp),
     }
 }
 
@@ -872,6 +891,53 @@ pub(crate) fn run_notes(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
         "Created notes: {}",
         out.dir.join("notes.md").display()
     )?;
+    Ok(())
+}
+
+/// `doctrine slice research <id> [--restamp]` — baseline or check the pre-design
+/// research artefact against the slice's intent docs (SL-229 D2/D6). Absent →
+/// mint + stamp; present → print a per-path staleness advisory; `--restamp` →
+/// re-baseline. Advisory only: every outcome returns `Ok(())` (exit 0, ADR-003).
+pub(crate) fn run_research(path: Option<PathBuf>, id: u32, restamp: bool) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    let slice_root = root.join(SLICE_DIR);
+    // Confirm the parent slice exists before minting under it.
+    meta::read_meta(&slice_root, "slice", id, "SL")?;
+
+    let baseline_path =
+        crate::research::research_dir(&root, id).join(crate::research::BASELINE_FILE);
+    let out = io::stdout();
+
+    if restamp {
+        let p = crate::research::mint(&root, id, &crate::clock::today())?;
+        writeln!(&out, "Re-stamped research baseline: {}", p.display())?;
+    } else if !baseline_path.exists() {
+        let p = crate::research::mint(&root, id, &crate::clock::today())?;
+        writeln!(&out, "Minted research artefact + baseline: {}", p.display())?;
+    } else {
+        let drift = crate::research::check(&root, id)?;
+        if drift.is_empty() {
+            writeln!(&out, "Research baseline for SL-{id:03} is current.")?;
+        } else {
+            writeln!(
+                &out,
+                "Research baseline for SL-{id:03} has drifted — the artefact may be stale:"
+            )?;
+            for p in &drift.changed {
+                writeln!(&out, "  changed  {p}")?;
+            }
+            for p in &drift.added {
+                writeln!(&out, "  added    {p}")?;
+            }
+            for p in &drift.removed {
+                writeln!(&out, "  removed  {p}")?;
+            }
+            writeln!(
+                &out,
+                "Refresh the affected research.md sections, then: doctrine slice research {id} --restamp"
+            )?;
+        }
+    }
     Ok(())
 }
 
@@ -3152,6 +3218,33 @@ mod tests {
     use crate::lifecycle::is_transition_terminal;
     use crate::meta::Meta;
     use crate::test_support::SCHEMA_PLAN_OVERVIEW;
+
+    /// VT-2 (SL-229): the `slice research <id>` clap surface parses and lowers to
+    /// `SliceCommand::Research`, and `--restamp` flips the flag. Named with the
+    /// `slice_research` keyword (verify-vt structured-mandate floor).
+    #[test]
+    fn slice_research_parses_with_and_without_restamp() {
+        use clap::Parser;
+        let cli = crate::Cli::try_parse_from(["doctrine", "slice", "research", "229"]).unwrap();
+        let crate::commands::cli::Command::Slice {
+            command: SliceCommand::Research { id, restamp, .. },
+        } = cli.command
+        else {
+            panic!("expected `slice research` to parse as SliceCommand::Research");
+        };
+        assert_eq!(id, 229);
+        assert!(!restamp);
+
+        let cli = crate::Cli::try_parse_from(["doctrine", "slice", "research", "229", "--restamp"])
+            .unwrap();
+        let crate::commands::cli::Command::Slice {
+            command: SliceCommand::Research { restamp, .. },
+        } = cli.command
+        else {
+            panic!("expected `slice research --restamp` to parse as SliceCommand::Research");
+        };
+        assert!(restamp);
+    }
 
     fn meta(id: u32, status: &str, slug: &str, title: &str) -> Meta {
         Meta {

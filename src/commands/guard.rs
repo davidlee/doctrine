@@ -83,6 +83,8 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             crate::slice::SliceCommand::ReconcilePhases { .. } => {
                 Write("slice reconcile-phases")
             }
+            // Bare invocation may mint the research dir + baseline (SL-229 D2).
+            crate::slice::SliceCommand::Research { .. } => Write("slice research"),
             crate::slice::SliceCommand::List { .. }
             | crate::slice::SliceCommand::Show { .. }
             | crate::slice::SliceCommand::Conformance { .. }
@@ -486,6 +488,24 @@ mod tests {
         assert!(matches!(
             write_class(&cmd),
             WriteClass::Orchestrator("dispatch-candidate-ingest")
+        ));
+    }
+
+    /// VT-3 (SL-229): `slice research` is a write-class verb — a bare invocation
+    /// may mint the research dir + baseline, so the worker-mode guard refuses it
+    /// via the shared `Write` branch.
+    #[test]
+    fn slice_research_is_write() {
+        let cmd = Command::Slice {
+            command: crate::slice::SliceCommand::Research {
+                id: 229,
+                restamp: false,
+                path: None,
+            },
+        };
+        assert!(matches!(
+            write_class(&cmd),
+            WriteClass::Write("slice research")
         ));
     }
 

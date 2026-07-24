@@ -16,7 +16,7 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (31) ────────────────────────────────────────────────────────────
+# ── leaf (32) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
 asset_source = "leaf"       # out=0: neutral embedded-asset byte-read seam — owns install/ embed (SL-223 PHASE-01, D3/REQ-376)
 boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
@@ -47,6 +47,7 @@ listing = "leaf"            # out=0: listing/render primitives — pure presenta
 plan = "leaf"               # out=0: plan phase types — pure
 projection = "leaf"         # out=0: priority projection enum — pure
 registry = "leaf"           # out=0: spec registry index — pure
+research = "leaf"           # → contentset, kinds, fsutil: pre-design research staleness engine — pure+seam, no domain (SL-229 PHASE-01)
 risk = "leaf"               # out=0: risk facet types + exposure — pure (SL-133 PHASE-02 extraction from backlog)
 root = "leaf"               # out=0: project-root resolution — impure seam
 tag = "leaf"                # out=0: tag normalization — pure
