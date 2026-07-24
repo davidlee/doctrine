@@ -7,6 +7,7 @@ pub(crate) mod coverage;
 pub(crate) mod dep_seq;
 pub(crate) mod doctor;
 pub(crate) mod facet;
+pub(crate) mod graph;
 pub(crate) mod guard;
 pub(crate) mod inspect;
 pub(crate) mod map;

@@ -17,6 +17,7 @@ use crate::commands::facet::{
     EstimateClearArgs, EstimatePinArgs, EstimateSetArgs, RiskClearArgs, RiskSetArgs,
     ValueClearArgs, ValuePinArgs, ValueSetArgs,
 };
+use crate::commands::graph::GraphFormat;
 use crate::commands::publication::PublicationCommand;
 use crate::listing::Format;
 use crate::search::SearchArgs;
@@ -401,6 +402,36 @@ pub(crate) enum Command {
         /// Shorthand for `--format json`.
         #[arg(long)]
         json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Read-only entity graph projection — filters, neighbourhood, and render (SL-226).
+    Graph {
+        /// Optional focus entity (canonical ref like `SL-226`, or memory ref `mem_<uid>` / `mem.<key>`).
+        focus: Option<String>,
+
+        /// Maximum undirected hop distance from the focus.  Default: 1.  0 = focus alone.
+        #[arg(long, default_value_t = 1)]
+        depth: u32,
+
+        /// Restrict to these entity kinds (repeatable).  Prefixes: e.g. `SL`, `ADR`, `MEM`.
+        #[arg(long = "kind", value_name = "K")]
+        kind: Vec<String>,
+
+        /// Filter edges to exactly this label (e.g. `requirements`).
+        #[arg(long)]
+        label: Option<String>,
+
+        /// Include memory-source entities and edges (excluded by default).
+        #[arg(long)]
+        include_memory: bool,
+
+        /// Output format: `dot` (Graphviz) or `json`.
+        #[arg(long, default_value_t = GraphFormat::Dot, value_parser = GraphFormat::from_str)]
+        format: super::graph::GraphFormat,
 
         /// Explicit project root (default: auto-detect).
         #[arg(short = 'p', long)]
@@ -837,6 +868,7 @@ static FAMILIES: &[Family] = &[
             "inspect",
             "relation",
             "concept-map",
+            "graph",
             "map",
             "onboard",
         ],
@@ -1581,6 +1613,23 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 term_width: crate::tty::stdout_terminal_width(),
             },
         ),
+        Command::Graph {
+            focus,
+            depth,
+            kind,
+            label,
+            include_memory,
+            format,
+            path,
+        } => crate::commands::graph::run_graph(
+            path,
+            focus,
+            depth,
+            kind,
+            label,
+            include_memory,
+            format,
+        ),
         Command::Adr { command } => crate::adr::dispatch(command, color),
         Command::Policy { command } => crate::policy::dispatch(command, color),
         Command::Standard { command } => crate::standard::dispatch(command, color),
@@ -1828,8 +1877,8 @@ mod tests {
 
         // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168)
         // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01) + `compare` (SL-210 PHASE-02)
-        // + `publication` (SL-223 PHASE-02).
-        assert_eq!(visible.len(), 51, "expected 51 visible top-level commands");
+        // + `publication` (SL-223 PHASE-02) + `graph` (SL-226 PHASE-04).
+        assert_eq!(visible.len(), 52, "expected 52 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the
