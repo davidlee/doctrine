@@ -25,14 +25,17 @@ intent = "scope-relevant"
 [[selector]]
 selector = "Cargo.toml"
 intent = "design-target"
+note = "textwrap direct dep (PHASE-01 EX-1)"
 
 [[selector]]
 selector = "Cargo.lock"
 intent = "design-target"
+note = "textwrap resolver artifact (touched by PHASE-01)"
 
 [[selector]]
 selector = "tests/e2e_subcommand_help.rs"
 intent = "design-target"
+note = "PHASE-02 black-box e2e (6 VTs)"
 
 [[relation]]
 label = "related"
