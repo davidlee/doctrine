@@ -156,11 +156,9 @@ not mutate a finding to `fixed`/`remediated`.
      conformance` reads (`slice-NNN.toml`). `design.md §6` is only the human
      mirror — a prose-only brief item leaves conformance red. Name the `slice
      selector` verb as the load-bearing change; cite the §6 edit as its mirror.
-6. **Harvest (audit tail).** Harvest durable risks, decisions, and gotchas from the
-   disposable runtime phase sheets into `notes.md`; promote reusable facts via
-   `/record-memory`; capture durable follow-up **work** the audit surfaced — risks,
-   issues, chores — as backlog items with `backlog new` (the work / knowledge /
-   decision boundary: `using-doctrine.md`).
+6. **Harvest (audit tail).** Sweep durable risks, decisions, and gotchas from the
+   disposable runtime **phase sheets** into `notes.md` — the audit-specific lens —
+   then drive the rest of the harvest (legs and sinks) per `harvest.md`.
 7. **Hand off to reconcile.** Once the reconciliation brief is written, the ledger
    is resolved, and every finding is terminal, hand off to `/reconcile`. Do NOT
    hand off directly to `/close` — reconcile is the sole writer of reconciled

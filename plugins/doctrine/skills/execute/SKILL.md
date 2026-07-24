@@ -50,7 +50,9 @@ Inputs:
 12. Before declaring the phase ready, run the verification gate — `doctrine
     check gate` (lint + test + format) — and review the touched subsystems and
     notes once
-    more for missed memory-capture candidates.
+    more for missed memory-capture candidates. At phase wrap, weigh a
+    **per-phase review** per the code-review skill's `## Cadence` — default on
+    below the adherence bar, mandatory on any tripwire.
 13. When exit criteria (`EX-`) and verification (`VT-`, plus any agent/human
     `VA-`/`VH-` modes) are satisfied, flip the
     phase to `completed` with `doctrine slice phase`. **This closes the conformance

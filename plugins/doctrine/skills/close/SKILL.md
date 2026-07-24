@@ -24,12 +24,9 @@ Inputs:
      every governance/spec finding is dispositioned, and the RV carries a
      `## Reconciliation Outcome` section. If the reconciliation brief was empty
      (no-op), the outcome confirms that explicitly.
-   - Durable facts, patterns, or gotchas from the slice are harvested into
-     `notes.md`, and reusable ones captured via `/record-memory`,
-     before closure — or consciously rejected. Durable follow-up **work** the
-     slice leaves behind (risks / issues / chores) is captured as backlog items
-     with `backlog new` (the work / knowledge / decision boundary:
-     `using-doctrine.md`), or consciously rejected.
+   - Durable findings from the slice are harvested per `harvest.md` before
+     closure — or **consciously rejected**. A clean slice may harvest nothing;
+     the conscious-rejection gate is what closure checks.
    - `doctrine check gate` is green.
 2. **Spec-coherence gate — confirm reconciliation is complete before `done`:**
    Before the terminal transition, verify every item from the audit's
