@@ -86,7 +86,34 @@ no single VT can cover.
 - Immutable ids: `PHASE-NN` and criterion ids never renumber — edits append.
 - The `justfile` bash reorder and the `validate` rewrite are code-impact executed
   at `/execute`; this plan authors the target, not the edit.
-- Low-severity documented bounds (not blockers): a leftover marker from a crashed
-  dispatch would skip governance legs on a later manual `just validate` (gitignored
-  runtime state, and the skip echoes a visible line); `quick` may validate against
-  a prior build (it is the fast inner loop, not the close path).
+
+### Execution guidance (from the plan-critique pass)
+
+- **VT-1 / VT-1b need no second binary.** The skip is binary-agnostic, so the
+  discriminating proof uses a **broken-authored-state fixture** (a repo whose
+  `.doctrine/` state the *current* binary's `doctrine doctor` reds) and pivots on
+  the signal: present ⇒ `validate` skips ⇒ green (VT-1); absent ⇒ `validate` runs
+  ⇒ red (VT-1b). Do NOT build a separate "stale" binary in-test — a broken-state
+  proxy faithfully exercises the mechanism that dissolves ISS-218.
+- **VT-1d — resolution leg is the tractable core.** `DOCTRINE_BIN` → a stub that
+  reds/greens the corpus proves `validate` runs the *resolved* binary. The
+  belt-order proof (fresh-beats-stale) should stay light — a stub whose
+  freshly-`build`-produced variant differs from a pre-placed `./target/debug/doctrine`,
+  or a recipe-order assertion — not a full in-test `cargo` rebuild. Settle the exact
+  discriminator at `/phase-plan`.
+- **PHASE-02 golden set is discovered, not guessed.** Enumerate the authored-write
+  goldens by grepping for CLI spawners of writes the worker-mode guard refuses
+  (`backlog new`, `install`, doctor-golden writers, …), cross-checked against the
+  CHR-044 case-note list; read-only goldens stay untouched. This is VA-1's method.
+- **PHASE-01 is the heavier phase** (real-`worker_commit`-seam e2e fixtures);
+  `/phase-plan` owns its task decomposition. Keeping fix #1 + (ii) unified is
+  deliberate — a split would make both halves edit the `justfile` and forfeit the
+  file-disjoint, parallel-dispatchable boundary with PHASE-02.
+
+### Low-severity documented bounds (not blockers)
+
+- A leftover marker from a crashed dispatch would skip governance legs on a later
+  manual `just validate` (gitignored runtime state, and the skip echoes a visible
+  line).
+- `quick` may validate against a prior build (it is the fast inner loop, not the
+  close path).
