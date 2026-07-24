@@ -49,6 +49,53 @@ same results than throw-away research.
   captured as memories with appropriate path globs, so they auto-reveal via
   the file-inspection hook when an agent later touches the relevant files.
 
+## First-slice shape (shaped 2026-07-25)
+
+Kernel: **research artefact + pre-design round**. Everything else in the
+sketch is a consumer of that artefact or a refinement trigger on it.
+
+Settled in shaping conversation:
+
+- **Storage**: runtime tier — `.doctrine/state/research/SL-NNN/` with a
+  convenience symlink from the slice folder (the `phases` precedent).
+  Dissolves dispatch split-brain by construction (runtime state is
+  per-worktree, never merged); makes end-of-slice harvest explicit.
+- **Artefact form**: free markdown under a conventions contract (mandated
+  sections, durable-id + `file:line` citation forms) — no schema. Nothing
+  queries it and it isn't durable, so structure doesn't earn its cost.
+  Possible exception: a stamped staleness header (slice id, design revision
+  researched against, date) — the one field a checker might read. Decide at
+  design.
+- **Runner seam**: no executable config seam in slice 1. Skills say "use a
+  research agent"; the *project* defines what that means (CLAUDE.md /
+  `.doctrine/governance.md` § research) — scripts (`pi-scout`/`pi-research`),
+  `claude -p`, or harness-native subagents. POL-002-clean; "defer, don't
+  manage" preserved. A command-naming config seam is viable later if
+  subprocess (`claude -p`) turns out to be the common mechanism across arms.
+- **Skill wiring**: `/slice`, `/design`, `/plan`, `/phase-plan` all point at
+  one common research-conventions surface, plus a skill-specific note on how
+  each consumes the results.
+- **`/research`**: new skill, **not routed** — invoked from within the
+  lifecycle skills, not a routing-table stage. Likely candidate to *be* the
+  common conventions surface.
+- **Memory capture**: researchers stay read-only; the orchestrating agent
+  distills the research doc into globbed memories at harvest. (Deferred to a
+  later slice; resolves the read-only vs memory-MCP tension with no new
+  access surface.)
+- **CLI surface**: a minimal mint verb (create dir + symlink + stamp
+  staleness header) probably worth it, particularly if `claude -p` becomes
+  the mechanism. Shape decided at design.
+- **Selectors**: no new machinery in slice 1 — hotspot map existing before
+  `/plan` means selectors are drafted from evidence; SL-180's design-time
+  dry-run already provides checking.
+
+Deferred to later slices: spec-coverage trigger heuristics; findings→globbed
+memories; incremental refresh + review/phase-plan triggered passes;
+reconciliation prose additions.
+
+Open (design-time, ideally eval-informed): one research doc vs two (per
+thread); staleness header structured vs prose; mint-verb shape.
+
 ## Neighbors
 
 - `/preflight` skill — bounded up-front research posture; this proposes a
