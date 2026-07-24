@@ -1103,6 +1103,287 @@ pub(crate) fn render_commands_table(color: bool, term_width: Option<u16>) -> Str
     out
 }
 
+/// One argument's clap invocation string — the left ("name") column of the
+/// focused-help options section (SL-208 PHASE-01). Composed from clap's own
+/// per-arg getters so the short/long/value-name contract is preserved rather than
+/// re-invented: `-p, --path <PATH>` for a value option, `--worker` for a flag,
+/// `<FORK>` / `[FORK]` for a required / optional positional. The value placeholder
+/// uses the arg's explicit value name when set, else its upcased id.
+fn arg_invocation(arg: &clap::Arg) -> String {
+    use std::fmt::Write as _;
+
+    let mut inv = String::new();
+    if let Some(short) = arg.get_short() {
+        _ = write!(inv, "-{short}");
+    }
+    if let Some(long) = arg.get_long() {
+        if !inv.is_empty() {
+            inv.push_str(", ");
+        }
+        _ = write!(inv, "--{long}");
+    }
+
+    let takes_value = arg
+        .get_num_args()
+        .map_or_else(|| arg.is_positional(), |range| range.takes_values());
+    if takes_value {
+        let value = arg.get_value_names().and_then(<[_]>::first).map_or_else(
+            || arg.get_id().to_string().to_uppercase(),
+            ToString::to_string,
+        );
+        let optional_positional = arg.is_positional() && !arg.is_required_set();
+        let (open, close) = if optional_positional {
+            ('[', ']')
+        } else {
+            ('<', '>')
+        };
+        if inv.is_empty() {
+            _ = write!(inv, "{open}{value}{close}");
+        } else {
+            _ = write!(inv, " {open}{value}{close}");
+        }
+    }
+    inv
+}
+
+/// The clap-format info annotations appended to an arg's help column (SL-208
+/// PHASE-02, G3) — the RIGHT-column suffix clap's own help emits after the help
+/// text, in clap's exact order and spacing: `[env: NAME]`, then `[default: v …]`,
+/// then `[possible values: a, b, …]`. Each group is gated by clap's per-arg hide
+/// flags, mirroring the default help template so a cloned subcommand's options
+/// carry the same info contract as clap's built-in render (verified byte-for-byte
+/// against `--color`). Returns an empty string when the arg has no annotations;
+/// the leading space is included so the caller appends verbatim.
+fn arg_annotations(arg: &clap::Arg) -> String {
+    use std::fmt::Write as _;
+
+    let mut out = String::new();
+
+    // `[env: NAME]` — the bound environment variable, unless hidden.
+    if let Some(env) = arg.get_env()
+        && !arg.is_hide_env_set()
+    {
+        _ = write!(out, " [env: {}]", env.to_string_lossy());
+    }
+
+    // `[default: v1 v2]` — space-joined default values, unless hidden. Gated on
+    // the arg taking a value: clap suppresses defaults for valueless flags (a
+    // `SetTrue` flag carries an internal `"false"` default clap never prints).
+    let takes_value = arg
+        .get_num_args()
+        .map_or_else(|| arg.is_positional(), |range| range.takes_values());
+    if takes_value && !arg.is_hide_default_value_set() {
+        let defaults = arg.get_default_values();
+        if !defaults.is_empty() {
+            let joined = defaults
+                .iter()
+                .map(|v| v.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ");
+            _ = write!(out, " [default: {joined}]");
+        }
+    }
+
+    // `[possible values: a, b, c]` — comma-space-joined names, skipping hidden
+    // variants, unless the whole set is hidden.
+    if !arg.is_hide_possible_values_set() {
+        let names: Vec<String> = arg
+            .get_possible_values()
+            .iter()
+            .filter(|p| !p.is_hide_set())
+            .map(|p| p.get_name().to_string())
+            .collect();
+        if !names.is_empty() {
+            _ = write!(out, " [possible values: {}]", names.join(", "));
+        }
+    }
+
+    out
+}
+
+/// Render the borderless two-column `Options:` section for a focused subcommand
+/// help (SL-208 PHASE-01). The left column is each visible argument's clap
+/// invocation ([`arg_invocation`]), right-padded to the widest name plus a
+/// two-space gutter; the right column is clap's per-arg help plus its info
+/// annotations ([`arg_annotations`] — G3: `[env:]`/`[default:]`/`[possible
+/// values:]`, matching clap's order and spacing). With `term_width: Some(w)` the
+/// help wraps via [`textwrap::fill`] to the residual width, continuation lines
+/// indented under the help column; `None` emits help verbatim (no line breaks).
+/// This is thin key/value padding — NO box-drawing, deliberately distinct from
+/// the `│`-separated [`crate::listing::render_table`] grid, so it does not reuse
+/// (nor modify) that machinery. Colour is resolved upstream (the caller sets
+/// `ColorChoice::Never` on the root before rendering, so clap emits no ANSI); the
+/// `_color` slot is retained for signature symmetry with the other help
+/// renderers, and the per-arg help is unstyled derive text.
+pub(crate) fn render_options_section(
+    cmd: &clap::Command,
+    _color: bool,
+    term_width: Option<u16>,
+) -> String {
+    use std::fmt::Write as _;
+
+    let args: Vec<&clap::Arg> = cmd.get_arguments().filter(|a| !a.is_hide_set()).collect();
+    if args.is_empty() {
+        return String::new();
+    }
+
+    let names: Vec<String> = args.iter().map(|a| arg_invocation(a)).collect();
+    let widest = names.iter().map(|n| n.chars().count()).max().unwrap_or(0);
+    let name_col = widest + 2;
+    let indent = " ".repeat(name_col + 2);
+
+    let mut out = String::from("Options:\n");
+    for (arg, name) in args.iter().zip(&names) {
+        let mut help = arg
+            .get_help()
+            .or_else(|| arg.get_long_help())
+            .map_or_else(String::new, ToString::to_string);
+        // G3 — append clap's `[env:]`/`[default:]`/`[possible values:]` info
+        // annotations to the help STRING before wrapping, so they flow with the
+        // help column rather than being dropped.
+        help.push_str(&arg_annotations(arg));
+        let pad = " ".repeat(name_col.saturating_sub(name.chars().count()));
+
+        match term_width {
+            Some(w) => {
+                let residual = usize::from(w).saturating_sub(name_col + 2).max(1);
+                let wrapped = textwrap::fill(&help, residual);
+                let mut lines = wrapped.split('\n');
+                let first = lines.next().unwrap_or("");
+                _ = writeln!(out, "  {name}{pad}{first}");
+                for line in lines {
+                    _ = writeln!(out, "{indent}{line}");
+                }
+            }
+            None => {
+                _ = writeln!(out, "  {name}{pad}{help}");
+            }
+        }
+    }
+    out
+}
+
+/// Render focused `--help` for a subcommand `path` (SL-208 PHASE-01) — the
+/// replacement for clap's built-in per-subcommand help, matching the top-level
+/// help's cozy-table style ([`render_top_level_help`]). Walks the clap tree from
+/// the [`crate::Cli`] root via [`clap::Command::find_subcommand_mut`] for each
+/// path segment (intermediate `help` tokens stripped, so
+/// `["worktree","help","provision"]` resolves worktree → provision); an
+/// unresolved segment yields an `unknown command: <seg>` line. Emits, in order:
+/// the target's about (first paragraph), its `Usage:` line (ANSI-stripped under
+/// `color: false` — F-2/VT-7), a `Commands:` cozy-table IFF it has visible
+/// sub-subcommands, and always the borderless `Options:` section for its visible
+/// args. PURE: a function of the compiled clap tree + inputs only.
+///
+/// SL-208 PHASE-02 restores clap's full info contract that the naive clone drops:
+/// G1 — the `Usage:` line carries the full invocation path (`doctrine slice
+/// selector add`) via a pinned `bin_name`; G2 — ancestor global options (e.g.
+/// `--color`) are re-attached to the cloned target; G3 — per-arg annotations flow
+/// through [`arg_annotations`].
+pub(crate) fn render_subcommand_help(
+    path: &[&str],
+    color: bool,
+    term_width: Option<u16>,
+) -> String {
+    let root = <crate::Cli as CommandFactory>::command();
+
+    // Strip intermediate `help` tokens so a `help`-flavoured path still walks the
+    // real command chain. Walk the UNBUILT tree (derive attaches subcommands before
+    // build) via `find_subcommand` — a full `root.build()` would recurse the whole
+    // tree and trip clap's deep debug-asserts on unrelated commands.
+    let segments: Vec<&str> = path.iter().copied().filter(|&seg| seg != "help").collect();
+
+    // Walk to the target, accumulating every global arg from the root and each
+    // intermediate ancestor (G2 — cloning the unbuilt target drops ancestor
+    // globals like `--color`; we re-attach them below).
+    let mut globals: Vec<clap::Arg> = Vec::new();
+    let mut resolved: &clap::Command = &root;
+    for seg in &segments {
+        for arg in resolved.get_arguments() {
+            if arg.is_global_set() {
+                globals.push(arg.clone());
+            }
+        }
+        match resolved.find_subcommand(seg) {
+            Some(next) => resolved = next,
+            None => return format!("unknown command: {seg}\n"),
+        }
+    }
+
+    // Own the target so we can pin bin_name / ColorChoice / re-attach globals and
+    // call the `&mut` `render_usage`, whose shallow `_build_self` stays local to
+    // this command (no deep recursion, no debug-assert panic).
+    let mut cmd = resolved.clone();
+
+    // G1 — the `Usage:` line carries the full invocation path, not the bare leaf.
+    // `_build_self` honours an already-set bin_name, so `render_usage` prints it.
+    if !segments.is_empty() {
+        cmd = cmd.bin_name(format!("doctrine {}", segments.join(" ")));
+    }
+
+    // G2 — re-attach ancestor globals the clone dropped, skipping any the target
+    // already defines (dedup by id or long).
+    for global in &globals {
+        let dup = cmd.get_arguments().any(|a| {
+            a.get_id() == global.get_id()
+                || (global.get_long().is_some() && a.get_long() == global.get_long())
+        });
+        if !dup {
+            cmd = cmd.arg(global.clone());
+        }
+    }
+
+    // Pin `ColorChoice::Never` (ANSI-free under `!color`, VT-3/VT-7).
+    if !color {
+        cmd = cmd.color(clap::ColorChoice::Never);
+    }
+    let cmd = &mut cmd;
+
+    let mut out = String::new();
+
+    // About — first paragraph only. (Clap emits no ANSI here because the root was
+    // built with `ColorChoice::Never` under `!color` — VT-3.)
+    if let Some(about) = cmd.get_about() {
+        let about = about.to_string();
+        let first = about.split("\n\n").next().unwrap_or(&about).trim_end();
+        if !first.is_empty() {
+            out.push_str(first);
+            out.push_str("\n\n");
+        }
+    }
+
+    // Usage — clap-generated; ANSI-free under `!color` via the root ColorChoice (VT-7).
+    let usage = cmd.render_usage().to_string();
+    out.push_str(usage.trim_end());
+    out.push('\n');
+
+    // Commands table — only when the command has visible sub-subcommands.
+    let visible = |sub: &&clap::Command| !sub.is_hide_set() && sub.get_name() != "help";
+    if cmd.get_subcommands().any(|s| visible(&s)) {
+        let rows: Vec<Vec<String>> = cmd
+            .get_subcommands()
+            .filter(visible)
+            .map(|s| {
+                vec![
+                    s.get_name().to_string(),
+                    s.get_about().map_or_else(String::new, ToString::to_string),
+                ]
+            })
+            .collect();
+        out.push_str("\nCommands:\n");
+        out.push_str(&crate::listing::render_table(&rows, term_width));
+    }
+
+    // Options section — always, when the command has visible args.
+    let options = render_options_section(cmd, color, term_width);
+    if !options.is_empty() {
+        out.push('\n');
+        out.push_str(&options);
+    }
+
+    out
+}
+
 // ── ExportCommand ───────────────────────────────────────────────────────────
 
 #[derive(Subcommand)]
