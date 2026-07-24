@@ -6,25 +6,34 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-24 · audit · review/224 e414a7ef28a6
+fresh-as-of: 2026-07-24 · reconcile-complete (pre-close) · edge 141e5481
 
 ### Produced
 - RV-296 — reconciliation ledger (5 findings, all verified terminal; no blocker).
-  Synthesis + Reconciliation Brief carry the durable audit record.
-- Impl on review/224 (impl bundle) / dispatch/224 (canonical authored state).
+  Synthesis + Reconciliation Brief + Reconciliation Outcome carry the durable record.
+- Impl on review/224 (impl bundle, tip e414a7ef28a6) / dispatch/224 (canonical
+  authored state, tip 444de78441f1).
+- design.md reconciled to impl (§5.2/F4, §5.2 MCP, §5.5/A2 — RV-296 F-1/F-2/F-3),
+  commit 141e5481. Audit ledger commit 84d31d86.
 
 ### Learned
 - Impl faithful to design §5.1–§5.5; both behaviour-preservation gates
   (`check_vt_shape`, `classify_import` verdict) byte-for-byte identical to main.
 - Five design-vs-impl gaps, all benign (F-1..F-5 on RV-296): three are correct
-  refinements the design prose trails; one discretionary seam; one topology
-  reporting artifact (IMP-228).
+  refinements the design prose trailed (now reconciled); one discretionary seam
+  (`plan_check_report`); one topology reporting artifact (IMP-228).
 - Phase sheets (funnel arm) carry no durable Risks/Decisions/Findings — nothing to
   lift beyond the ledger.
 
-### Open
-- Reconciliation (→ /reconcile): design.md §5.2/§5.5 prose edits (F-1/F-2/F-3).
-- Integration: mod.rs design-target selector already on dispatch/224 — delivered
-  by stage-2 integrate; NO pre-integrate edge edit.
-- /close guardrail: edge `verify-vt` FAIL ×4 + edge `conformance` mod.rs undeclared
-  are pre-integration staleness artifacts, not delivery gaps.
+### Open (→ /close)
+- **Integrate the code onto trunk.** review/224 impl bundle + dispatch/224 authored
+  selector state (incl. the `mod.rs` design-target selector) must land on main.
+  Follow `dispatch status --slice SL-224` / `dispatch candidate status --slice
+  SL-224` guidance — trunk moved ahead of the prepared base (refresh-base + re-prepare
+  likely needed). NO pre-integrate `slice selector` edit on edge (forks slice-224.toml).
+- **Close-gate freshness.** Run `doctrine check gate` at close on the landing tree
+  (build-before-validate → fresh binary); DOCTRINE_BIN → coord build if a non-Rust
+  fall-through.
+- **Do NOT read as delivery gaps** (RV-296 close guardrails): edge `verify-vt` FAIL ×4
+  and edge `conformance` `mod.rs` undeclared — pre-integration coord-topology
+  staleness (IMP-228); tests green + selector declared on the delivered surface.
