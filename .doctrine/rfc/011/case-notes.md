@@ -700,3 +700,10 @@ merge-tree previews, 4 memory retrievals) to ground a plan before touching a ref
 Signal: a pre-close check that diffs the admitted close_target's tree against edge and
 flags reconcile/authored divergence would collapse this to one command (the memory
 itself calls for it). The status machine being lineage-blind is the root token sink.
+
+[preflight; IMP-308-scope]
+Minor: `doctrine backlog show RFC-016` rejected (`unknown backlog prefix RFC`) —
+RFC is its own kind (`doctrine rfc show`), not a backlog prefix, but the search
+listing renders RFC-016 in the same column as IMP/ISS rows, inviting the wrong
+verb. One failed call. Cross-kind `search` results don't hint which `show` verb
+each id needs.
