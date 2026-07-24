@@ -202,6 +202,14 @@ New direct dependency: `textwrap` (for options help-text wrapping). Currently no
 a direct dep — must be added explicitly. `owo_colors` is already a direct dep
 (for ANSI stripping in the usage line when `color == false`).
 
+### Selector manifest (design-target)
+
+The `design-target` selector set is `src/main.rs`, `src/commands/cli.rs`,
+`Cargo.toml`, `Cargo.lock` (the `textwrap` lockfile consequence), and
+`tests/e2e_subcommand_help.rs` (the §6 black-box suite); `src/listing.rs` is
+`scope-relevant` (reused unchanged). Recorded post-audit (RV-295 F-1) so
+`slice conformance` matches the delivered touch set.
+
 ## 6. Verification Impact
 
 ### Updated unit tests (in `src/main.rs` test module)
@@ -268,7 +276,8 @@ Test: assert no ANSI in usage line under `color: false`.
 Specify `textwrap::fill` for options help-text wrapping. Pattern:
 `textwrap::fill(&help, width).split('\n').enumerate()` — first line gets the arg
 name as prefix, continuation lines get a same-width blank indent. `textwrap` is
-already in the dependency tree (transitive via other crates). When `term_width` is
+added as an explicit **direct** dependency in `Cargo.toml` — it is NOT assumed
+transitive (see D2 and §5 Code Impact). When `term_width` is
 `None` (no wrapping), the arg-name column still pads to the shared width but help
 text is emitted verbatim without line breaks.
 

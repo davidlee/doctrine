@@ -100,3 +100,27 @@ empty).
 - **F-3 (aligned)** — the `related` SL-150 edge is correct; do **not** "fix" it to
   `supersedes`.
 - **F-4 (aligned)** — D2 fidelity confirmed; no change.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **Selector registry (F-1, load-bearing):** `doctrine slice selector add SL-208
+  Cargo.toml Cargo.lock tests/e2e_subcommand_help.rs --intent design-target`.
+  `slice conformance SL-208` now reports undelivered=0, conformant=5, and the only
+  undeclared residual is `slice-208.toml` — the slice's own authored file, which is
+  self-referentially churned by recording the selectors and therefore can never be
+  conformant (the expected benign residual F-1 identified).
+- **design.md §5 (F-1 mirror):** added a "Selector manifest (design-target)"
+  subsection recording the selector set so the prose mirrors the registry.
+- **design.md §7 F-3 (F-2):** corrected the contradictory parenthetical —
+  `textwrap` is now stated as an explicit **direct** dependency (not "already
+  transitive"), matching D2/§5 and the delivered `Cargo.toml`.
+
+### REVs completed
+None — no governance/spec items in the brief.
+
+### Withdrawn / tolerated
+None. F-3 and F-4 were `aligned` (no-action, recorded above); F-1 and F-2 were
+`verified` and are now reconciled by the direct edits above.
+
+Reconcile pass complete — handoff to /close.

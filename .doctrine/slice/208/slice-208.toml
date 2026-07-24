@@ -22,6 +22,18 @@ intent = "design-target"
 selector = "src/listing.rs"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "Cargo.toml"
+intent = "design-target"
+
+[[selector]]
+selector = "Cargo.lock"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_subcommand_help.rs"
+intent = "design-target"
+
 [[relation]]
 label = "related"
 target = "SL-150"
