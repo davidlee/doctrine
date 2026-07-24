@@ -66,61 +66,12 @@ pub(crate) enum RecordKind {
     Concept,
 }
 
-/// The assumption kind: a working belief held until validated. Own tree +
-/// reservation namespace.
-pub(crate) const ASSUMPTION_KIND: Kind = Kind {
-    dir: ".doctrine/knowledge/assumption",
-    prefix: crate::kinds::ASM,
-    stem: "record",
-    scaffold: |c| record_scaffold(RecordKind::Assumption, c),
-};
-
-/// The decision kind: a recorded choice and its rationale.
-pub(crate) const DECISION_KIND: Kind = Kind {
-    dir: ".doctrine/knowledge/decision",
-    prefix: crate::kinds::DEC,
-    stem: "record",
-    scaffold: |c| record_scaffold(RecordKind::Decision, c),
-};
-
-/// The question kind: an open question whose answer shapes the work.
-pub(crate) const QUESTION_KIND: Kind = Kind {
-    dir: ".doctrine/knowledge/question",
-    prefix: crate::kinds::QUE,
-    stem: "record",
-    scaffold: |c| record_scaffold(RecordKind::Question, c),
-};
-
-/// The constraint kind: a standing limit on the solution space.
-pub(crate) const CONSTRAINT_KIND: Kind = Kind {
-    dir: ".doctrine/knowledge/constraint",
-    prefix: crate::kinds::CON,
-    stem: "record",
-    scaffold: |c| record_scaffold(RecordKind::Constraint, c),
-};
-
-/// The evidence kind: an observed datum with provenance and confidence.
-pub(crate) const EVIDENCE_KIND: Kind = Kind {
-    dir: ".doctrine/knowledge/evidence",
-    prefix: crate::kinds::EVD,
-    stem: "record",
-    scaffold: |c| record_scaffold(RecordKind::Evidence, c),
-};
-
-/// The hypothesis kind: a testable proposition that predicts an outcome.
-pub(crate) const HYPOTHESIS_KIND: Kind = Kind {
-    dir: ".doctrine/knowledge/hypothesis",
-    prefix: crate::kinds::HYP,
-    stem: "record",
-    scaffold: |c| record_scaffold(RecordKind::Hypothesis, c),
-};
-
-/// The concept kind: a durable concept definition in the knowledge corpus.
-pub(crate) const CONCEPT_KIND: Kind = Kind {
-    dir: ".doctrine/knowledge/concept",
-    prefix: crate::kinds::CPT,
-    stem: "record",
-    scaffold: |c| record_scaffold(RecordKind::Concept, c),
+/// The seven knowledge-record identity kinds — each its own tree + reservation
+/// namespace. The identity values live in the leaf `kinds` module (SL-204
+/// PHASE-02); re-exported here so `RecordKind::kind` and every call site stay put.
+pub(crate) use crate::kinds::{
+    ASSUMPTION_KIND, CONCEPT_KIND, CONSTRAINT_KIND, DECISION_KIND, EVIDENCE_KIND, HYPOTHESIS_KIND,
+    QUESTION_KIND,
 };
 
 impl RecordKind {
@@ -135,6 +86,21 @@ impl RecordKind {
             RecordKind::Evidence => &EVIDENCE_KIND,
             RecordKind::Hypothesis => &HYPOTHESIS_KIND,
             RecordKind::Concept => &CONCEPT_KIND,
+        }
+    }
+
+    /// The fileset renderer for this record kind, passed to `materialise` alongside
+    /// [`kind`](Self::kind) (the scaffold fn was evicted from `Kind`, SL-204). The
+    /// non-capturing closures coerce to `entity::Scaffold` fn pointers.
+    pub(crate) const fn scaffold(self) -> entity::Scaffold {
+        match self {
+            RecordKind::Assumption => |c| record_scaffold(RecordKind::Assumption, c),
+            RecordKind::Decision => |c| record_scaffold(RecordKind::Decision, c),
+            RecordKind::Question => |c| record_scaffold(RecordKind::Question, c),
+            RecordKind::Constraint => |c| record_scaffold(RecordKind::Constraint, c),
+            RecordKind::Evidence => |c| record_scaffold(RecordKind::Evidence, c),
+            RecordKind::Hypothesis => |c| record_scaffold(RecordKind::Hypothesis, c),
+            RecordKind::Concept => |c| record_scaffold(RecordKind::Concept, c),
         }
     }
 
@@ -1126,6 +1092,7 @@ pub(crate) fn run_new(
     let date = crate::clock::today();
     let out = entity::materialise(
         record_kind.kind(),
+        record_kind.scaffold(),
         &*backend,
         &root,
         &MaterialiseRequest::Fresh,

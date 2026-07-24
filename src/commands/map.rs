@@ -38,7 +38,7 @@ fn validate_focus(s: &str) -> Result<String, String> {
     }
     // Accept both prefixed (SL-001) and bare (1) forms.
     if s.contains('-') {
-        crate::integrity::parse_canonical_ref(s)
+        crate::kinds::parse_canonical_ref(s)
             .map(|_| s.to_owned())
             .map_err(|e| {
                 format!("focus must be a canonical entity id (e.g. SL-001), got '{s}': {e}")

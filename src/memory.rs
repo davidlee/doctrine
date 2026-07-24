@@ -10185,18 +10185,16 @@ mod ambient_surface_tests {
         );
     }
 
-    /// VT-9: no discoverable doctrine root (a `cwd` that cannot resolve, no
-    /// `CLAUDE_PROJECT_DIR`) ⇒ emit nothing + exit 0, no panic, no propagated
-    /// `Err` — the second EX-6 fail-open path (INV-2), distinct from VT-4's
-    /// unparseable-stdin path.
+    /// VT-9: no discoverable doctrine root (a resolvable cwd with no root marker
+    /// above it) ⇒ emit nothing + exit 0, no panic, no propagated `Err` — the
+    /// second EX-6 fail-open path (INV-2), distinct from VT-4's unparseable-stdin
+    /// path. Uses a rootless `tempdir` (not a fake path) so discovery resolves the
+    /// cwd and finds no root WITHOUT falling back to ambient `CLAUDE_PROJECT_DIR`
+    /// — hermetic regardless of the caller's environment (ISS-235).
     #[test]
     fn vt9_no_discoverable_root_emits_nothing() {
-        let raw = stdin_read(
-            Path::new("/doctrine-surface-no-such-dir/deep/nope"),
-            Some("s9"),
-            None,
-            "src/x.rs",
-        );
+        let rootless = tempfile::tempdir().unwrap();
+        let raw = stdin_read(rootless.path(), Some("s9"), None, "src/x.rs");
         let mut out: Vec<u8> = Vec::new();
         assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
         assert!(out.is_empty(), "no discoverable root ⇒ emit nothing");

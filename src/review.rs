@@ -1092,31 +1092,20 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::contentset::{self, ContentSet};
-use crate::entity::{self, Kind, Materialised};
+use crate::entity::{self, Materialised};
 use crate::listing::{self, Column, Format, ListArgs};
 
 /// Relative dir of the review tree inside the project root. A distinct top-level
 /// authored tree (design §4), parallel to `.doctrine/slice`.
-pub(crate) const REVIEW_DIR: &str = ".doctrine/review";
+pub(crate) use crate::kinds::REVIEW_DIR;
 
 /// The review kind: `review-NNN.toml` + `review-NNN.md` + `NNN-slug` symlink,
-/// riding the kind-blind engine (design D1, the slice shape). The scaffold is
-/// inert — review renders its fileset eagerly (facet/target exceed `ScaffoldCtx`,
-/// the `materialise_named` rationale) via [`materialise_fresh_prebuilt`], so the
-/// `Kind.scaffold` fn is never called for review; it exists only to satisfy the
-/// `Kind` descriptor `integrity::KINDS` references.
-pub(crate) const REVIEW_KIND: Kind = Kind {
-    dir: REVIEW_DIR,
-    prefix: crate::kinds::RV,
-    stem: "review",
-    scaffold: review_scaffold_unused,
-};
-
-/// Inert scaffold — see [`REVIEW_KIND`]. Review never rides `Kind.scaffold`
-/// (its fileset is built eagerly in [`run_new`]); this is the descriptor stub.
-fn review_scaffold_unused(_ctx: &entity::ScaffoldCtx<'_>) -> anyhow::Result<entity::Fileset> {
-    anyhow::bail!("review materialises eagerly, not via Kind.scaffold")
-}
+/// riding the kind-blind engine (design D1, the slice shape). Review renders its
+/// fileset eagerly (facet/target exceed `ScaffoldCtx`, the `materialise_named`
+/// rationale) via [`materialise_fresh_prebuilt`], so it never rides a scaffold fn
+/// and carries none. The identity value lives in the leaf `kinds` module (SL-204
+/// PHASE-02).
+pub(crate) use crate::kinds::REVIEW_KIND;
 
 impl Facet {
     /// Parse a `--facet` token against the closed 7-set (the `memory.rs`
@@ -1241,10 +1230,10 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<R
     let root = crate::root::find(path, &crate::root::default_markers())?;
 
     // Forward-edge validation (design §7): refuse a dangling / unknown target
-    // BEFORE claiming an id. Reuses the corpus id table (integrity::KINDS).
+    // BEFORE claiming an id. Reuses the corpus id table (crate::kinds::KINDS).
     // Structured as `DanglingRef` (IMP-107) so the MCP transport maps it to
     // `DANGLING_REF` carrying the target, not a generic Internal.
-    crate::integrity::ensure_ref_resolves(&root, &args.target).map_err(|_unresolved| {
+    crate::kinds::ensure_ref_resolves(&root, &args.target).map_err(|_unresolved| {
         ReviewError::DanglingRef {
             target: args.target.clone(),
         }

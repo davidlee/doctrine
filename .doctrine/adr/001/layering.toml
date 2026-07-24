@@ -56,7 +56,7 @@ value = "leaf"              # out=0: value facet types — pure
 regression = "leaf"         # out=0: SL-170 S1 pure failure-set diff — parse/diff/render, no IO
 vtgate = "leaf"             # out=0: SL-170 S3 pure VT existence/shape gate — check/render, no IO
 
-# ── engine (16) ──────────────────────────────────────────────────────────
+# ── engine (17) ──────────────────────────────────────────────────────────
 # Import engines + leaves; do NOT import command modules. Core domain model,
 # entity-kind handler scaffold, shared infrastructure.
 entity = "engine"           # → fsutil only; the hub — kind-agnostic directory-entity scaffold
@@ -76,9 +76,10 @@ supersede = "engine"        # → entity, knowledge; supersession policy gate; k
 backlog_order = "engine"    # → backlog, projection; ordering engine; backlog→ upward baselined
 paths = "engine"            # PHASE-01/SL-139: shared entity-file-path projection; engine-tier, no clap/command imports
 publication = "engine"      # SL-223 PHASE-02: → asset_source (leaf); publication declaration + fail-closed admission (D1/D6/D9). Downward: publication(engine)→asset_source(leaf); commands(command)→publication(engine)
-relation_query = "command"  # SL-137: pure relation projection+filter engine over &Catalog; imports catalog and integrity (both cmd) — uniformly command
+integrity = "engine"        # SL-204: → entity, meta (engine) + kinds, listing, fsutil, git, root (leaf); cross-kind integrity validator. PHASE-01→03 evicted the 13 kind-module up-reaches (Kind identity + KINDS table + ref resolvers relocated to leaf kinds/), breaking the 4 command back-cycles (backlog/rec/review/revision) → integrity drops to engine.
+relation_query = "command"  # SL-137: pure relation projection+filter engine over &Catalog; imports catalog (cmd) + integrity (now engine, SL-204) — uniformly command via catalog
 
-# ── command (22) ─────────────────────────────────────────────────────────
+# ── command (21) ─────────────────────────────────────────────────────────
 # Import commands + engines + leaves. CLI layer, run_* functions, user-facing verbs.
 adr = "command"             # → engine/leaf + install; ADR entity-kind handler
 backlog = "command"         # → engine/leaf; backlog entity-kind handler + CLI
@@ -91,7 +92,6 @@ dispatch = "command"        # → git, ledger, listing, root, slice, state, work
 doctor_checks = "command"   # → engine/leaf + catalog::scan, integrity; native doctor checks (SL-168 PHASE-03/04)
 governance = "command"      # → engine/leaf; doc: "Command-tier governance spine"
 install = "command"         # → boot, corpus, root, skills; install/bootstrap verb
-integrity = "command"       # → engine/leaf + adr, backlog, concept_map, knowledge, policy, rec, requirement, review, revision, slice, spec, standard; cross-kind integrity
 knowledge = "command"       # → engine/leaf; knowledge entity-kind handler
 lazyspec = "command"        # → engine/leaf + adr, backlog, requirement, slice, spec; spec projection
 main = "command"            # → commands, engine/leaf; binary entrypoint
@@ -167,9 +167,17 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 # +3 from spec/memory/lazyspec/retrieve completing EX-3. Design-mandated
 # coupling, adjudicated at the dispatch funnel (worker halted commit-gate-red;
 # baseline bump is an orchestrator-owned governance edit).
+# SL-204 PHASE-04: 99→76. Re-tiered integrity command→engine after PHASE-01→03
+# evicted its 13 kind-module up-reaches (Kind identity + KINDS table + ref
+# resolvers relocated to leaf kinds/), breaking the 4 command back-cycles
+# (backlog/rec/review/revision → integrity). Measured empirically at execute
+# time (−23, not a predicted count): integrity was entangled WITH the core SCC,
+# so ejecting it drops more than the 4 nominal 2-cycles (the RSK-227/SL-203
+# precedent — a back edge entangles a module with the core, so measure, never
+# predict). Orchestrator-owned governance edit (.doctrine/ is worker-forbidden).
 leaf = 0
 engine = 0
-command = 99
+command = 76
 
 # ── Accepted violations ──────────────────────────────────────────────────
 # Every genuine upward edge (from lower tier to higher tier). Frozen —

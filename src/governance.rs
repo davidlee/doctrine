@@ -25,7 +25,7 @@ use anyhow::Context;
 use serde::Serialize;
 
 use crate::dtoml;
-use crate::entity::{self, Inputs, Kind, MaterialiseRequest};
+use crate::entity::{self, Inputs, Kind, MaterialiseRequest, Scaffold};
 use crate::listing::{self, Format, ListArgs};
 use crate::meta::{self, Meta};
 
@@ -35,8 +35,11 @@ use crate::meta::{self, Meta};
 /// envelope/object key, so a kind can never name its files and its JSON
 /// incoherently (Codex MINOR-7 — `json_label` dropped).
 pub(crate) struct GovKind {
-    /// The entity-engine kind: dir, canonical-id prefix, scaffold fn.
-    pub kind: Kind,
+    /// The entity-engine kind — dir, canonical-id prefix, file stem. Borrowed
+    /// from the leaf `kinds` module (SL-204 PHASE-02): one `Kind` value per kind.
+    pub kind: &'static Kind,
+    /// The fileset renderer, passed to `materialise` (evicted from `Kind`).
+    pub scaffold: Scaffold,
     /// Known-set — the authority `validate_statuses` checks `--status` against.
     pub statuses: &'static [&'static str],
     /// The default-list hide-set predicate.
@@ -230,7 +233,7 @@ fn parse_ref(g: &GovKind, reference: &str) -> anyhow::Result<u32> {
 /// rows can be read by `relation::read_block` — SL-048 PHASE-04), and the prose body.
 fn read_doc(g: &GovKind, root: &Path, id: u32) -> anyhow::Result<(Doc, String, String)> {
     let name = format!("{id:03}");
-    let toml_path = entity::id_path(root, &g.kind, id, entity::Ext::Toml);
+    let toml_path = entity::id_path(root, g.kind, id, entity::Ext::Toml);
     let text = fs::read_to_string(&toml_path).with_context(|| {
         format!(
             "{} {name} not found at {}",
@@ -240,7 +243,7 @@ fn read_doc(g: &GovKind, root: &Path, id: u32) -> anyhow::Result<(Doc, String, S
     })?;
     let doc: Doc = dtoml::parse_entity_toml(&text, g.kind.prefix, id)
         .with_context(|| format!("Failed to parse {}", toml_path.display()))?;
-    let md_path = entity::id_path(root, &g.kind, id, entity::Ext::Md);
+    let md_path = entity::id_path(root, g.kind, id, entity::Ext::Md);
     let body = fs::read_to_string(&md_path)
         .with_context(|| format!("Failed to read {}", md_path.display()))?;
     Ok((doc, text, body))
@@ -288,7 +291,7 @@ pub(crate) fn relation_edges(
 ) -> anyhow::Result<Vec<crate::relation::RelationEdge>> {
     use crate::relation::tier1_edges;
     let (_doc, toml_text, _body) = read_doc(g, root, id)?;
-    tier1_edges(&g.kind, &toml_text)
+    tier1_edges(g.kind, &toml_text)
 }
 
 /// Render the readable whole for `Table` mode: an identity header, the flat
@@ -420,7 +423,7 @@ pub(crate) fn set_status(
     today: &str,
 ) -> anyhow::Result<()> {
     let name = format!("{id:03}");
-    let path = entity::id_path(root, &g.kind, id, entity::Ext::Toml);
+    let path = entity::id_path(root, g.kind, id, entity::Ext::Toml);
     // Delegate the write-core (no-op guard + F-1 refuse + edit-preserving insert) to
     // the shared authored-TOML seam; this flat kind carries no gate of its own. The
     // F-1 hint is non-destructive (EX-4): restore the seeded keys, never regenerate.
@@ -438,7 +441,7 @@ pub(crate) fn set_status(
 
 /// `doctrine <kind> new` — allocate the next id and scaffold a new entity. Touches
 /// disk via the shared `Fresh` engine path — the monotonic id and race-retry are
-/// inherited. The kind's scaffold fn (on `g.kind`) lays out the fileset.
+/// inherited. The kind's scaffold fn (`g.scaffold`) lays out the fileset.
 pub(crate) fn run_new(
     g: &GovKind,
     path: Option<PathBuf>,
@@ -453,7 +456,8 @@ pub(crate) fn run_new(
     let slug = crate::input::resolve_slug(&title, slug)?;
     let date = crate::clock::today();
     let out = entity::materialise(
-        &g.kind,
+        g.kind,
+        g.scaffold,
         &*backend,
         &root,
         &MaterialiseRequest::Fresh,
@@ -504,7 +508,7 @@ pub(crate) fn run_show(
     let (doc, toml_text, body) = read_doc(g, &root, id)?;
 
     // ADR-010 Amendment: supersedes stays typed; related comes from [[relation]].
-    let edges = crate::relation::tier1_edges(&g.kind, &toml_text)?;
+    let edges = crate::relation::tier1_edges(g.kind, &toml_text)?;
     let related: Vec<String> = edges
         .iter()
         .filter(|e| e.label == RelationLabel::Related)

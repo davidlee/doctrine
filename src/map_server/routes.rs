@@ -230,7 +230,7 @@ async fn entity_markdown(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, MapServerError> {
     // Path 1: canonical ref (numbered entities — SL-001, ADR-010, etc.)
-    if let Ok((kind_ref, num)) = crate::integrity::parse_canonical_ref(&id) {
+    if let Ok((kind_ref, num)) = crate::kinds::parse_canonical_ref(&id) {
         let key = crate::catalog::scan::EntityKey {
             prefix: kind_ref.kind.prefix,
             id: num,

@@ -4,7 +4,7 @@
 //! by both `relation_graph` (via re-exports) and the richer `catalog` types.
 //!
 //! Six items moved here:
-//! - `outbound_for` — the outbound relation dispatch over `integrity::KINDS`
+//! - `outbound_for` — the outbound relation dispatch over `crate::kinds::KINDS`
 //! - `EntityKey` — the corpus-wide identity type
 //! - `ScannedEntity` — the reusable scan record
 //! - `scan_entities` — the KINDS-walk entry point
@@ -15,7 +15,6 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::entity::{self};
-use crate::integrity;
 use crate::listing;
 use crate::relation::RelationEdge;
 use crate::risk::{self, RiskFacet};
@@ -25,13 +24,13 @@ use super::hydrate::CatalogKey;
 
 /// Every authored outbound relation of one entity, dispatched to the owning kind's
 /// `relation_edges` accessor by canonical prefix (design §5.2 — one data-driven match
-/// over all 14 `integrity::KINDS` rows; the design's "11" counts overlay LABELS, not
+/// over all 14 `crate::kinds::KINDS` rows; the design's "11" counts overlay LABELS, not
 /// kinds). Each accessor reads only its own private relations via that kind's existing
 /// show-path reader — the adapter never re-parses TOML (cohesion, §5.3). Kinds that
 /// author no outbound edges (`REQUIREMENT` — an edge *target* only) return `Ok(vec![])`.
 ///
 /// Grouping by `kind.prefix` (the corpus-wide discriminant used everywhere, e.g.
-/// `integrity::kind_by_prefix`): SLICE→slice; ADR/POL/STD→governance (parameterised
+/// `crate::kinds::kind_by_prefix`): SLICE→slice; ADR/POL/STD→governance (parameterised
 /// by the kind's `GovKind`); PRD/SPEC→spec (by subtype); ISS/IMP/CHR/RSK/IDE→backlog
 /// (by `ItemKind`); RV→review; REC→rec; REV→revision (SL-066 G3, empty stub this
 /// phase — PHASE-03 reads the `[[change]]` rows).
@@ -152,7 +151,7 @@ impl ScanMode {
 }
 
 /// The all-kind raw scan (design §5.2 — the reusable seam factored out of
-/// `build_relation_graph`). Walk `integrity::KINDS` in TABLE order; per kind
+/// `build_relation_graph`). Walk `crate::kinds::KINDS` in TABLE order; per kind
 /// `scan_ids` (already skips the `NNN-slug` symlink + non-dirs — VT-5 free), **sort
 /// ids ascending** (C5 — `scan_ids` is unsorted `read_dir` order; the sort makes the
 /// scan order — and thus every consumer's mint/render — permutation-invariant,
@@ -171,7 +170,7 @@ pub(crate) fn scan_entities(
     mode: ScanMode,
 ) -> anyhow::Result<Vec<ScannedEntity>> {
     let mut out = Vec::new();
-    for kref in integrity::KINDS {
+    for kref in crate::kinds::KINDS {
         let prefix = kref.kind.prefix;
         let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
         ids.sort_unstable();
@@ -236,7 +235,7 @@ pub(crate) fn scan_entities(
 /// than re-report.
 fn read_facets(
     root: &Path,
-    kref: &integrity::KindRef,
+    kref: &crate::kinds::KindRef,
     id: u32,
     diagnostics: &mut Vec<CatalogDiagnostic>,
 ) -> (Option<RiskFacet>, Vec<String>) {
@@ -282,7 +281,7 @@ fn read_facets(
 /// is caught the same way).
 fn check_facet_residue(
     root: &Path,
-    kref: &integrity::KindRef,
+    kref: &crate::kinds::KindRef,
     id: u32,
     diagnostics: &mut Vec<CatalogDiagnostic>,
 ) {
@@ -358,7 +357,7 @@ fn parse_facet<F, T>(
     raw: Option<&toml::Value>,
     parse: F,
     root: &Path,
-    kref: &integrity::KindRef,
+    kref: &crate::kinds::KindRef,
     id: u32,
     diagnostics: &mut Vec<CatalogDiagnostic>,
 ) -> Option<T>
@@ -410,7 +409,7 @@ where
 /// The `kref` carries both the tree dir and the toml `stem`.
 fn status_and_title_for(
     root: &Path,
-    kref: &integrity::KindRef,
+    kref: &crate::kinds::KindRef,
     id: u32,
 ) -> anyhow::Result<(Option<String>, String)> {
     match kref.kind.prefix {
@@ -436,7 +435,7 @@ fn status_and_title_for(
 /// strict [`crate::meta::read_meta`] also demands `status`, which RV/REC do NOT
 /// author top-level. So a `title`-only deserialize (ignoring every other key) is the
 /// one reader that works across ALL kinds. The `kref` carries the tree dir + stem.
-fn title_for(root: &Path, kref: &integrity::KindRef, id: u32) -> anyhow::Result<String> {
+fn title_for(root: &Path, kref: &crate::kinds::KindRef, id: u32) -> anyhow::Result<String> {
     #[derive(serde::Deserialize)]
     struct TitleOnly {
         title: String,

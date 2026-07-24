@@ -20,7 +20,7 @@ pub(crate) fn run_validate(path: Option<std::path::PathBuf>) -> anyhow::Result<(
     writeln!(
         std::io::stdout(),
         "validate: scanned {}",
-        crate::integrity::scanned_kinds()
+        crate::kinds::scanned_kinds()
     )?;
     if findings.is_empty() {
         writeln!(std::io::stdout(), "validate: corpus clean")?;

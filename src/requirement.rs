@@ -28,22 +28,18 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{self, Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{self, Artifact, Fileset, ScaffoldCtx};
 use crate::tomlfmt::toml_string;
 
 /// Relative dir of the requirement tree inside the project root — one global tree,
 /// one reservation namespace (§5.1). Distinct top-level tree, like ADR.
-const REQUIREMENT_DIR: &str = ".doctrine/requirement";
+pub(crate) use crate::kinds::REQUIREMENT_DIR;
 
 /// The top-level reserved requirement kind: `requirement-NNN.toml` +
 /// `requirement-NNN.md` + slug symlink. `prefix` is the canonical-id stem
-/// (`REQ-007`); the file stem is `"requirement"`.
-pub(crate) const REQUIREMENT_KIND: Kind = Kind {
-    dir: REQUIREMENT_DIR,
-    prefix: crate::kinds::REQ,
-    stem: "requirement",
-    scaffold: requirement_scaffold,
-};
+/// (`REQ-007`); the file stem is `"requirement"`. The identity value lives in
+/// the leaf `kinds` module (SL-204 PHASE-02).
+pub(crate) use crate::kinds::REQUIREMENT_KIND;
 
 /// A requirement's nature: a functional behaviour or a quality attribute. Closed
 /// set, kebab serde + `clap::ValueEnum` (the `spec req add --kind` selector).
@@ -254,6 +250,7 @@ pub(crate) fn reserve(
     )?;
     entity::materialise(
         &REQUIREMENT_KIND,
+        requirement_scaffold,
         &*backend,
         root,
         &entity::MaterialiseRequest::Fresh,
@@ -280,7 +277,8 @@ pub(crate) fn canonicalize_fk(fk: &str) -> String {
 }
 
 /// The requirement tree root under a project `root` — the dir `entity::scan_ids`
-/// enumerates for the `spec validate` corpus scan. Keeps `REQUIREMENT_DIR` private.
+/// enumerates for the `spec validate` corpus scan. The one path-join site for
+/// `REQUIREMENT_DIR`, so callers scan via `tree_root`, not the raw dir const.
 pub(crate) fn tree_root(root: &Path) -> PathBuf {
     root.join(REQUIREMENT_DIR)
 }
@@ -566,6 +564,7 @@ mod tests {
         let mk = |slug: &str, title: &str| {
             entity::materialise(
                 &REQUIREMENT_KIND,
+                requirement_scaffold,
                 &LocalFs,
                 root,
                 &MaterialiseRequest::Fresh,

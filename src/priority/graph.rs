@@ -47,7 +47,7 @@ use crate::priority::partition::{self, StatusClass};
 use crate::projection::Projection;
 use crate::relation::RelationLabel;
 use crate::relation_graph::{self, EntityKey};
-use crate::{dep_seq, entity, integrity};
+use crate::{dep_seq, entity};
 
 /// One node's authored attributes (design §5.2). `kind` is the `&'static entity::Kind`
 /// descriptor (data, not `Ord` — carries a fn-ptr `scaffold`; stored by reference like
@@ -537,7 +537,7 @@ fn comparison_status_map(scanned: &[relation_graph::ScannedEntity]) -> StatusMap
     for entity in scanned {
         for edge in &entity.outbound {
             if edge.label == RelationLabel::Supersedes
-                && let Ok((kref, id)) = integrity::parse_canonical_ref(&edge.target)
+                && let Ok((kref, id)) = crate::kinds::parse_canonical_ref(&edge.target)
             {
                 let target_key = EntityKey {
                     prefix: kref.kind.prefix,
@@ -1054,7 +1054,7 @@ fn consequence_post_pass(
 /// that fails to parse as a canonical ref (free-text), or parses to an id never
 /// minted (no entity dir), is `None` → a dangler. NEVER interns.
 fn resolve(projection: &Projection<EntityKey>, reference: &str) -> Option<cordage::NodeId> {
-    let (kref, id) = integrity::parse_canonical_ref(reference).ok()?;
+    let (kref, id) = crate::kinds::parse_canonical_ref(reference).ok()?;
     projection.resolve(EntityKey {
         prefix: kref.kind.prefix,
         id,
@@ -1810,17 +1810,17 @@ mod tests {
             tags: vec![],
         };
         // Find ASM and REV kinds from the integrity table.
-        let asm_kind = crate::integrity::KINDS
+        let asm_kind = crate::kinds::KINDS
             .iter()
             .find(|k| k.kind.prefix == "ASM")
             .map(|k| k.kind)
             .expect("ASM in KINDS");
-        let rev_kind = crate::integrity::KINDS
+        let rev_kind = crate::kinds::KINDS
             .iter()
             .find(|k| k.kind.prefix == "REV")
             .map(|k| k.kind)
             .expect("REV in KINDS");
-        let iss_kind = crate::integrity::KINDS
+        let iss_kind = crate::kinds::KINDS
             .iter()
             .find(|k| k.kind.prefix == "ISS")
             .map(|k| k.kind)
@@ -1943,7 +1943,7 @@ mod tests {
     /// allowlisted surface).
     #[test]
     fn effective_raw_value_provenance_chain_authored_over_projected_over_gauge_over_default() {
-        let iss_kind = crate::integrity::KINDS
+        let iss_kind = crate::kinds::KINDS
             .iter()
             .find(|k| k.kind.prefix == "ISS")
             .map(|k| k.kind)
@@ -2959,17 +2959,17 @@ mod tests {
             risk: None,
             tags: vec![],
         };
-        let rev_kind = crate::integrity::KINDS
+        let rev_kind = crate::kinds::KINDS
             .iter()
             .find(|k| k.kind.prefix == "REV")
             .map(|k| k.kind)
             .expect("REV in KINDS");
-        let asm_kind = crate::integrity::KINDS
+        let asm_kind = crate::kinds::KINDS
             .iter()
             .find(|k| k.kind.prefix == "ASM")
             .map(|k| k.kind)
             .expect("ASM in KINDS");
-        let iss_kind = crate::integrity::KINDS
+        let iss_kind = crate::kinds::KINDS
             .iter()
             .find(|k| k.kind.prefix == "ISS")
             .map(|k| k.kind)
@@ -3722,12 +3722,12 @@ mod tests {
         // Every kind: an anchored claim resolves (kind-blind) and `est_cost`
         // consumes it at rung 1 — the ladder is kind-blind.
         for prefix in crate::kinds::ALL_KINDS {
-            let Some(_kind) = crate::integrity::KINDS
+            let Some(_kind) = crate::kinds::KINDS
                 .iter()
                 .find(|k| k.kind.prefix == *prefix)
                 .map(|k| k.kind)
             else {
-                panic!("{prefix} missing from integrity::KINDS");
+                panic!("{prefix} missing from crate::kinds::KINDS");
             };
             let key = EntityKey { prefix, id: 1 };
             let canonical = key.canonical();
@@ -3959,7 +3959,7 @@ mod tests {
     #[test]
     fn value_ladder_rungs_and_adjacent_dominance() {
         use comparison::RaterKind;
-        let iss_kind = crate::integrity::KINDS
+        let iss_kind = crate::kinds::KINDS
             .iter()
             .find(|k| k.kind.prefix == "ISS")
             .map(|k| k.kind)
@@ -4164,12 +4164,12 @@ mod tests {
         };
         let no_projection = ValueProjection::new();
         for prefix in crate::kinds::ALL_KINDS {
-            let Some(kind) = crate::integrity::KINDS
+            let Some(kind) = crate::kinds::KINDS
                 .iter()
                 .find(|k| k.kind.prefix == *prefix)
                 .map(|k| k.kind)
             else {
-                panic!("{prefix} missing from integrity::KINDS");
+                panic!("{prefix} missing from crate::kinds::KINDS");
             };
             let subject = format!("{prefix}-001");
             let claims = claims_of(&[claim_anchor(

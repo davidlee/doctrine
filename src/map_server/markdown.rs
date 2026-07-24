@@ -2,7 +2,7 @@
 //! Entity markdown lookup — path derivation + async read (SL-072 PHASE-03).
 //!
 //! The map server's markdown surface: resolve an [`EntityKey`] to its `.md`
-//! body on disk via the same `integrity::KINDS` table that drives the catalog
+//! body on disk via the same `crate::kinds::KINDS` table that drives the catalog
 //! scan.  Memory kinds (ASM/DEC/QUE/CON) use the same `kind.dir`/`stem`
 //! convention — their stem is `"record"`, so the path is
 //! `{kind.dir}/{id:03}/record-{id:03}.md`.
@@ -11,7 +11,6 @@ use std::path::{Path, PathBuf};
 
 use crate::entity;
 use crate::fsutil::safe_join;
-use crate::integrity;
 use crate::map_server::error::MapServerError;
 use crate::memory::{MEMORY_ITEMS_DIR, MEMORY_SHIPPED_DIR};
 
@@ -97,7 +96,7 @@ fn entity_md_path(
     if key.prefix == "REQ" {
         return Err(MapServerError::MarkdownNotImplemented("REQ"));
     }
-    let kind_ref = integrity::kind_by_prefix(key.prefix)
+    let kind_ref = crate::kinds::kind_by_prefix(key.prefix)
         .ok_or_else(|| MapServerError::BadEntityId(key.canonical()))?;
     Ok(entity::id_path(
         root,

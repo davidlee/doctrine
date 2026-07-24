@@ -247,7 +247,7 @@ pub(crate) fn run_compare(args: CompareArgs) -> anyhow::Result<()> {
 /// there is no parallel corpus scan.
 fn resolve_participant(root: &Path, raw: &str) -> anyhow::Result<(String, &'static str)> {
     // D4: full `SL-123` form only — rejects a bare `123`.
-    let (kref, _id) = crate::integrity::parse_canonical_ref(raw)?;
+    let (kref, _id) = crate::kinds::parse_canonical_ref(raw)?;
     // Existence — a well-formed but absent ref is refused here.
     let (_path, canonical) = crate::commands::facet::resolve_entity_path_and_canonical(root, raw)?;
     Ok((canonical, kref.kind.prefix))
@@ -1427,11 +1427,11 @@ mod tests {
     }
 
     /// Seed a minimal resolvable entity of `prefix` with `status`, returning its
-    /// canonical id. Rides `entity::id_path` + `integrity::kind_by_prefix`, so it
+    /// canonical id. Rides `entity::id_path` + `crate::kinds::kind_by_prefix`, so it
     /// works for any numbered kind regardless of its tree/stem layout.
     fn seed_entity(root: &Path, prefix: &str, id: u32, status: &str) -> String {
         let padded = format!("{id:03}");
-        let kref = crate::integrity::kind_by_prefix(prefix).expect("valid prefix");
+        let kref = crate::kinds::kind_by_prefix(prefix).expect("valid prefix");
         let toml_path = crate::entity::id_path(root, kref.kind, id, crate::entity::Ext::Toml);
         std::fs::create_dir_all(toml_path.parent().unwrap()).unwrap();
         std::fs::write(

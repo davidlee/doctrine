@@ -48,7 +48,7 @@ fn record_kind_list_slash() -> String {
 /// Resolve a dep/seq source to its TOML path. Validates: canonical-ref parse,
 /// work-like kind (slice or backlog). Returns the resolved path.
 fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Result<PathBuf> {
-    let (skref, sid) = crate::integrity::parse_resolvable_ref(root, source)?;
+    let (skref, sid) = crate::kinds::parse_resolvable_ref(root, source)?;
     anyhow::ensure!(
         is_work_like(skref.kind),
         "`{source}` is a {} entity, which cannot author needs/after — only a slice or a backlog item (issue/improvement/chore/risk/idea) carries dep/seq",
@@ -64,7 +64,7 @@ fn resolve_dep_seq_src_path(root: &std::path::Path, source: &str) -> anyhow::Res
 
 /// Resolve a generic dep/seq `(SRC, TGT)` pair against the author-time gate (§5.4),
 /// returning SRC's `slice-NNN.toml`-shaped path ready for the leaf write. Rides the
-/// SAME cross-kind canonical-ref seam as `link` (`integrity::parse_canonical_ref` +
+/// SAME cross-kind canonical-ref seam as `link` (`crate::kinds::parse_canonical_ref` +
 /// the `KindRef` `(dir, stem)` path map) — no new resolver. The three refusals, each
 /// a clear, specific message:
 ///   1. SRC must resolve AND be a dep/seq-authoring (work-like) kind.
@@ -84,11 +84,11 @@ fn resolve_dep_seq_src(
     target: &str,
 ) -> anyhow::Result<(PathBuf, String, String)> {
     let toml_path = resolve_dep_seq_src_path(root, source)?;
-    let (skref, sid) = crate::integrity::parse_resolvable_ref(root, source)?;
+    let (skref, sid) = crate::kinds::parse_resolvable_ref(root, source)?;
     // TGT must resolve on disk — a free-text or dangling target is refused here
     // (never write an edge to a non-entity). The resolver first so a
     // free-text target surfaces the ref-shape error, then a dir probe.
-    let (tkref, tid) = crate::integrity::parse_resolvable_ref(root, target)?;
+    let (tkref, tid) = crate::kinds::parse_resolvable_ref(root, target)?;
     anyhow::ensure!(
         is_admissible_dep_target(tkref.kind),
         "`{target}` is a {} entity — needs/after may only target work (a slice or a backlog item) or a knowledge record ({}); governance docs are excluded",
@@ -194,7 +194,7 @@ pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Re
     let mut to_drop: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     for edge in &ds.after {
-        let is_dangling = match crate::integrity::parse_canonical_ref(&edge.to) {
+        let is_dangling = match crate::kinds::parse_canonical_ref(&edge.to) {
             Ok((kref, tid)) => {
                 let target_path =
                     crate::entity::id_path(&root, kref.kind, tid, crate::entity::Ext::Toml);
@@ -214,7 +214,7 @@ pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Re
         };
 
         if is_dangling {
-            let reason = match crate::integrity::parse_canonical_ref(&edge.to) {
+            let reason = match crate::kinds::parse_canonical_ref(&edge.to) {
                 Ok((kref2, tid2)) => {
                     let target_path =
                         crate::entity::id_path(&root, kref2.kind, tid2, crate::entity::Ext::Toml);
@@ -267,7 +267,6 @@ pub(crate) fn run_after_prune(path: Option<PathBuf>, source: &str) -> anyhow::Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::integrity;
     use crate::slice;
 
     /// P4 canary: the dep_seq error message lists record kinds from the RecordKind
@@ -292,7 +291,7 @@ mod tests {
     /// false negatives (a prefix in RECORD but not captured by the predicate).
     #[test]
     fn is_record_predicate_matches_kinds_record() {
-        let mut from_pred: Vec<&str> = crate::integrity::KINDS
+        let mut from_pred: Vec<&str> = crate::kinds::KINDS
             .iter()
             .filter(|k| is_record(k.kind))
             .map(|k| k.kind.prefix)
@@ -309,7 +308,7 @@ mod tests {
     fn is_admissible_dep_target_is_work_like_plus_records() {
         // work-like ∪ RECORD (kinds::ADMISSIBLE_DEP_TARGETS)
         let admissible: &[&str] = crate::kinds::ADMISSIBLE_DEP_TARGETS;
-        for k in integrity::KINDS
+        for k in crate::kinds::KINDS
             .iter()
             .filter(|k| admissible.contains(&k.kind.prefix))
         {
@@ -319,7 +318,7 @@ mod tests {
                 k.kind.prefix
             );
         }
-        for k in integrity::KINDS
+        for k in crate::kinds::KINDS
             .iter()
             .filter(|k| !admissible.contains(&k.kind.prefix))
         {
@@ -500,7 +499,7 @@ mod tests {
     fn is_work_like_is_exactly_slice_plus_backlog_plus_revision() {
         // The work-like set: slice + the five backlog kinds + revision.
         assert!(is_work_like(&slice::SLICE_KIND));
-        for k in integrity::KINDS
+        for k in crate::kinds::KINDS
             .iter()
             .filter(|k| matches!(k.kind.prefix, "ISS" | "IMP" | "CHR" | "RSK" | "IDE" | "REV"))
         {
@@ -508,7 +507,7 @@ mod tests {
         }
         // Every OTHER admitted kind in the corpus table is refused (gov / spec / req /
         // review / reconciliation / knowledge) — the closed allowlist.
-        for k in integrity::KINDS
+        for k in crate::kinds::KINDS
             .iter()
             .filter(|k| !crate::kinds::WORK_LIKE.contains(&k.kind.prefix))
         {

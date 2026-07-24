@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{self, Kind, Materialised};
+use crate::entity::{self, Materialised};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
@@ -158,25 +158,14 @@ where
 
 /// Relative dir of the REC tree inside the project root — a distinct top-level
 /// authored tree (design §5.1), parallel to `.doctrine/review`.
-pub(crate) const REC_DIR: &str = ".doctrine/rec";
+pub(crate) use crate::kinds::REC_DIR;
 
 /// The REC kind: `rec-NNN.toml` + `rec-NNN.md` + `NNN-slug` symlink, riding the
-/// kind-blind engine. The scaffold is inert — REC's `[rec]` fields exceed
-/// `ScaffoldCtx`, so it renders its fileset eagerly in [`run_new`] (the
-/// `review` rationale); this stub exists only to satisfy the `Kind` descriptor
-/// `integrity::KINDS` references.
-pub(crate) const REC_KIND: Kind = Kind {
-    dir: REC_DIR,
-    prefix: crate::kinds::REC,
-    stem: "rec",
-    scaffold: rec_scaffold_unused,
-};
-
-/// Inert scaffold — see [`REC_KIND`]. REC never rides `Kind.scaffold`; this is the
-/// descriptor stub.
-fn rec_scaffold_unused(_ctx: &entity::ScaffoldCtx<'_>) -> anyhow::Result<entity::Fileset> {
-    anyhow::bail!("rec materialises eagerly, not via Kind.scaffold")
-}
+/// kind-blind engine. REC's `[rec]` fields exceed `ScaffoldCtx`, so it renders its
+/// fileset eagerly in [`run_new`] via `materialise_fresh_prebuilt` (the `review`
+/// rationale) — it never rides a scaffold fn, and carries none. The identity
+/// value lives in the leaf `kinds` module (SL-204 PHASE-02).
+pub(crate) use crate::kinds::REC_KIND;
 
 /// Render `rec-NNN.toml` from the embedded template (design §5.1). Every
 /// user-supplied string (`slug`/`title`/`owning_slice`/`decision_ref`) and the
@@ -340,13 +329,13 @@ pub(crate) fn run_new(path: Option<PathBuf>, args: &NewArgs) -> anyhow::Result<(
     let root = crate::root::find(path, &crate::root::default_markers())?;
 
     // Forward-edge validation: refuse a dangling `owning_slice` BEFORE claiming an
-    // id (reusing the corpus id table, integrity::KINDS) — a slice is a numbered
+    // id (reusing the corpus id table, crate::kinds::KINDS) — a slice is a numbered
     // doctrine entity, so the edge must resolve. `decision_ref` is NOT validated:
     // a DEC is now a 2-part numbered kind, but `decision_ref` carries an *external*
     // 3-part decision cite (e.g. `DEC-005-C`), not a doctrine entity in `KINDS`,
     // so it carries as free-text (design §5.3).
     if let Some(owning) = &args.owning_slice {
-        crate::integrity::ensure_ref_resolves(&root, owning)?;
+        crate::kinds::ensure_ref_resolves(&root, owning)?;
     }
 
     let title = args

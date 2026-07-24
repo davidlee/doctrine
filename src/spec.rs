@@ -556,23 +556,10 @@ fn run_paths(
 /// from each `Kind.prefix` (`PRD`/`SPEC`) and from the tree dirs below.
 pub(crate) const SPEC_STEM: &str = "spec";
 
-/// The product subtype: light identity, `members.toml`, no interactions. Own tree
-/// + reservation namespace.
-pub(crate) const PRODUCT_SPEC_KIND: Kind = Kind {
-    dir: ".doctrine/spec/product",
-    prefix: crate::kinds::PRD,
-    stem: "spec",
-    scaffold: product_spec_scaffold,
-};
-
-/// The tech subtype: identity + flat fields, `members.toml` + `interactions.toml`.
-/// Own tree + reservation namespace (ids independent of product's).
-pub(crate) const TECH_SPEC_KIND: Kind = Kind {
-    dir: ".doctrine/spec/tech",
-    prefix: crate::kinds::SPEC,
-    stem: "spec",
-    scaffold: tech_spec_scaffold,
-};
+/// The two spec-subtype identity kinds — each its own tree + reservation
+/// namespace (ids independent). The identity values live in the leaf `kinds`
+/// module (SL-204 PHASE-02); re-exported here so call sites stay put.
+pub(crate) use crate::kinds::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
 
 // ---------------------------------------------------------------------------
 // Parse layer (entity-model tolerant-parse tier — §5.3)
@@ -594,6 +581,15 @@ impl SpecSubtype {
         match self {
             SpecSubtype::Product => &PRODUCT_SPEC_KIND,
             SpecSubtype::Tech => &TECH_SPEC_KIND,
+        }
+    }
+
+    /// The fileset renderer for this subtype, passed to `materialise` alongside
+    /// [`kind`](Self::kind) (the scaffold fn was evicted from `Kind`, SL-204).
+    const fn scaffold(self) -> entity::Scaffold {
+        match self {
+            SpecSubtype::Product => product_spec_scaffold,
+            SpecSubtype::Tech => tech_spec_scaffold,
         }
     }
 
@@ -1374,6 +1370,7 @@ pub(crate) fn run_new(
     let date = crate::clock::today();
     let out = entity::materialise(
         subtype.kind(),
+        subtype.scaffold(),
         &*backend,
         &root,
         &MaterialiseRequest::Fresh,
@@ -2408,6 +2405,7 @@ mod tests {
     fn fresh(root: &Path, subtype: SpecSubtype, slug: &str, title: &str) -> entity::Materialised {
         entity::materialise(
             subtype.kind(),
+            subtype.scaffold(),
             &LocalFs,
             root,
             &MaterialiseRequest::Fresh,
