@@ -35,20 +35,26 @@ selector add <ID> <path> --intent design-target` remediation (F1: the id is a \
 required leading positional; the current CLI hint at import.rs:161 omits it and \
 would misparse). It does NOT embed the `undeclared-scope` token (F2: the MCP \
 `reason` field carries it; a leaf->engine reference to Refusal::token() would \
-cycle). Refactor import.rs::report_undeclared_scope through the formatter (same \
-rendered stdout, latent id-bug fixed); wire import_compose's UndeclaredScope \
-refusal arm to recompute undeclared_paths and pass undeclared_detail(slice, ..) \
-into funnel_refused. Refusal stays a fieldless Copy enum — no payload added.
+cycle). Refactor import.rs::report_undeclared_scope through the formatter \
+(output deliberately CHANGES — id added, token header dropped; no golden pins it; \
+F7); wire import_compose's UndeclaredScope refusal arm to recompute \
+undeclared_paths and pass undeclared_detail(slice, ..) into funnel_refused. \
+Refusal stays a fieldless Copy enum — no payload added. The slice id must be \
+THREADED through the CLI import chain (run_import -> run_import_fork / \
+run_import_from_worktree -> classify_or_report -> report_undeclared_scope) — none \
+carry it today; the scope belt is reached only when --slice was supplied, so the \
+resolved u32 is always present on this arm (F4, ~4-signature change).
 """
 entrance_criteria = [
   { id = "EN-1", text = "conformance::undeclared_paths exists and is pub(crate) (conformance.rs:131); import_compose refuses UndeclaredScope with String::new() detail (dispatch.rs:301,335)." },
-  { id = "EN-2", text = "The CLI arm's report_undeclared_scope (import.rs:146) already computes the undeclared set — the refactor target." },
+  { id = "EN-2", text = "The CLI arm's report_undeclared_scope (import.rs:146) already computes the undeclared set — the refactor target; classify_or_report/run_import* do NOT carry the slice id yet (F4)." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "conformance::undeclared_detail(slice: u32, undeclared: &[String]) -> String exists (pure; no fs/git/clock)." },
-  { id = "EX-2", text = "import.rs::report_undeclared_scope renders via undeclared_detail; the emitted remediation includes the slice id and is runnable." },
+  { id = "EX-1", text = "conformance::undeclared_detail(slice: u32, undeclared: &[String]) -> String exists (pure; no fs/git/clock); token-free header (F2); each line a runnable `selector add <ID> <path> --intent design-target` (F1)." },
+  { id = "EX-2", text = "import.rs::report_undeclared_scope renders via undeclared_detail; slice: u32 is threaded through the CLI import chain to the call site (F4); the emitted remediation includes the id and is runnable." },
   { id = "EX-3", text = "import_compose's UndeclaredScope arm passes undeclared_detail(slice, ..) into funnel_refused; every other refusal keeps String::new()." },
-  { id = "EX-4", text = "classify_import / Refusal suite green UNCHANGED (behaviour-preservation); Refusal remains fieldless + Copy." },
+  { id = "EX-4", text = "The existing dispatch.rs:873 test (…refuses_before_compose_and_leaves_the_tip) is UPDATED to assert non-empty detail naming the path — the expected wiring-assertion flip, not a regression (F3)." },
+  { id = "EX-5", text = "classify_import / Refusal (pure verdict) suite green UNCHANGED (behaviour-preservation); Refusal remains fieldless + Copy." },
 ]
 verification = [
   { id = "VT-1", expects = "pure golden: undeclared_detail over a 2-path set renders the count line + one runnable `selector add <ID> <path> --intent design-target` line per path (id present).", test_file = "src/conformance.rs", keywords = ["fn undeclared_detail", "selector add", "design-target"], patterns = ["fn undeclared_detail\\("], waived = false },
