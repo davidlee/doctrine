@@ -5,10 +5,10 @@ id = 256
 slug = "plan-time-selector-completeness-check-flag-vt-test-file-paths-not-in-design-target-selectors"
 title = "Plan-time selector completeness check: flag VT test_file paths not in design-target selectors"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-04"
-updated = "2026-07-20"
+updated = "2026-07-24"
 tags = ["area:dispatch", "area:plan", "area:slice", "cluster:selector-scope"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
