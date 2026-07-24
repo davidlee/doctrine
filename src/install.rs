@@ -945,8 +945,8 @@ pub(crate) const KNOWN_STAGE_LABELS: &[&str] = &[
     "close",
     "consult",
     "walkthrough",
-    "notes",
-    "next",
+    "harvest",
+    "handover",
     "record-memory",
     "retrieve-memory",
 ];

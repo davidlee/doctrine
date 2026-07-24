@@ -84,8 +84,8 @@ The load-bearing part. A consumer of a `## Harvest` section checks its
 
 - **fresh** → cite the ids directly; **never re-survey** what the harvest already
   swept.
-- **stale** → the harvest is **owed**: route to `/notes` first to bring it current,
-  never silently re-derive the manifest by hand.
+- **stale** → the harvest is **owed**: route to `/harvest` first to bring it
+  current, never silently re-derive the manifest by hand.
 
 **ADR-005 conformance.** This freshness check rides **inline in each consumer
 skill's own body** — the doc explains the contract; the skill carries the

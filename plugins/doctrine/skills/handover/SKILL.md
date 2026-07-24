@@ -1,31 +1,71 @@
 ---
 name: handover
-description: Create a context packet and continuation prompt to continue with the next step in progressing a slice or other governing doctrine artifact. Use whenever the work is in good condition for onboarding and a fresh agent would more efficiently continue.
+description: Use when handing work to a fresh context — first bring the durable harvest current, then emit a continuation at one of two weights: a printed continuation prompt (light) or a handover.md context packet (full). Use whenever a fresh agent would more efficiently continue.
 ---
 
 # Handover
 
-Write `.doctrine/*/<nnn>/handover.md` — the disposable, gitignored "start
-here" for the agent picking up the next Phase or otherwise continuing the work.
-
-It is scaffolding for the next session, not a durable record: durable
-facts live in persisted artifacts, `notes.md` or the memory store
-(`doctrine memory`); the handover only points at them and frames the
-immediate work.
+First capture, then continue: ensure the durable harvest is current, then emit
+the transient continuation the next agent starts from.
 
 Guiding principle: existing durable artifacts should already provide suitable
 context for handover. This skill is to **improve token efficiency** with
-transient guidance those durable artifacts elide - and to confirm they are in
+transient guidance those durable artifacts elide — and to confirm they are in
 good condition.
 
-## When to use
+## Harvest first — always, both branches
 
-- Closing out a phase or other doctrine workflow activity, before the next agent starts.
-- The current `handover.md` (if it exists) targets a phase or activity that is now done.
+Before emitting anything, confirm the capture pass is current:
 
-## TODO
+- **Governing slice:** its `## Harvest` must be fresh — the `fresh-as-of` stamp
+  matches the current lifecycle position (phase / stage + head commit). If
+  stale, run `/harvest` first — do not re-survey what the harvest already swept.
+- **Another governing artifact (RFC, spec, review …):** the capture pass still
+  runs — route produced / learned / open to their sinks per `harvest.md` §5;
+  orientation falls back to entity queries.
 
-Handover for a phase:
+Phase status accurate and work committed (or its uncommitted state noted)
+remain adjacent truth checks.
+
+## The dial
+
+One skill, two weights:
+
+- **light** — print a continuation prompt; nothing written.
+- **full** — write the `handover.md` context packet and print instructions
+  pointing at it.
+
+Default by context: phase boundary, dispatch conclude, or complex in-flight
+state → full; a simple "continue this in a fresh context" → light. The user's
+explicit ask overrides.
+
+## Light: the continuation prompt
+
+Print:
+
+```
+/route
+(path to the governing artifact and the next obvious task)
+```
+
+If the next task is implementation-bound, include the specific artefacts to read
+(`design.md`, `plan.toml`, the active runtime phase sheet) and name any
+unresolved assumptions or design questions the next agent must assess before
+declaring readiness. Have the continuation prompt **cite the open ids** from the
+governing slice's `## Harvest` — the open DEC / QUE / ASM (decisions / questions
+/ assumptions) — so the next agent inherits the live open items, not a stale
+story.
+
+## Full: the context packet
+
+Write `.doctrine/*/<nnn>/handover.md` — the disposable, gitignored "start
+here" for the agent picking up the next Phase or otherwise continuing the work.
+
+It is scaffolding for the next session, not a durable record: durable facts
+live in persisted artifacts, `notes.md` or the memory store (`doctrine
+memory`); the handover only points at them and frames the immediate work.
+
+For a phase:
 
 - [ ] Read the just-completed `state/.../phases/phase-NN.md` (findings,
       hand-forward) and the slice `notes.md` `## Harvest` section for the
@@ -35,22 +75,18 @@ Handover for a phase:
       summary block **and** a one-line S1 regression status (from the verify
       beat's `check regression diff`) in the packet — surfacing any
       `UNCHECKABLE` / `WAIVED` / `Fail` gap at handover, not at audit.
-- [ ] Confirm the slice's `## Harvest` is fresh — its `fresh-as-of` stamp
-      matches the current lifecycle position; if stale, run `/notes` first to
-      bring it current, then cite its ids in the packet. Do not re-survey what
-      the harvest already swept.
 - [ ] Emit the sections below into `handover.md`
 - [ ] Print instructions (with path to `handover.md`) addressed to the next agent
 
-Handover for another artifact:
+For another artifact:
 
-- [ ] adapt as appropriate
+- [ ] adapt as appropriate — the harvest-first step above still applies
 - [ ] author or replace `handover.md` in the most relevant artifact's folder
 - [ ] Print instructions (with path to `handover.md`) addressed to the next agent
 
 Then: STOP
 
-## Shape (sections to emit) For Phase Handover
+### Shape (sections to emit) for a phase packet
 
 - **Where this is** — phase status ladder + commit refs; what is DONE, what is
   now.

@@ -1,28 +1,28 @@
 ---
-name: notes
-description: Use at the end of any coherent unit — a phase, task, or slice wrap — to harvest what the unit produced, learned, and left open into their durable sinks, and to maintain the governing slice's ## Harvest section.
+name: harvest
+description: Use at the end of any coherent unit — a phase, task, review close, or slice wrap — to sweep what the unit produced, learned, and left open into their durable sinks, and to maintain the governing slice's ## Harvest section.
 ---
 
-# Notes
+# Harvest
 
-Record implementation notes as you go.
+The routed entry point for the end-of-unit **harvest** — the sweep of what the
+unit produced, learned, and left open into their durable sinks. The procedure,
+the three legs, and the sink table are **owned by `harvest.md`**; consult it
+and follow it. Do not re-derive the routing here — point there.
 
-During execution, notes belong in the **active runtime phase sheet**
-(`state/.../phases/phase-NN.md`) — disposable working context. At phase or slice
-wrap-up, durable items are harvested into `notes.md`
-(`doctrine slice notes <ID>` scaffolds it on demand). Honour the
-storage rule: live progress lives in the state tree, never in authored files.
+During execution, working notes belong in the **active runtime phase sheet**
+(`state/.../phases/phase-NN.md`) — disposable working context. The harvest is
+the wrap-up sweep that moves what matters into durable homes; the slice's
+`notes.md` (`doctrine slice notes <ID>` scaffolds it on demand) carries the
+durable prose. Honour the storage rule: live progress lives in the state tree,
+never in authored files.
 
 If you don't know which slice owns the work, find it with `doctrine slice list`.
+**No governing slice** (an RFC, spec, or review close)? The harvest still
+happens — the legs route to their sinks per `harvest.md` §5; there is just no
+`## Harvest` manifest to maintain.
 
-## The harvest
-
-This skill is the routed entry point for the end-of-unit **harvest** — the sweep
-of what the unit produced, learned, and left open into their durable sinks. The
-procedure, the three legs, and the sink table are **owned by `harvest.md`**;
-consult it and follow it. Do not re-derive the routing here — point there.
-
-The harvest walks three legs:
+## The three legs
 
 - **produced** — the work delta. Be concise, but record:
   - what's done

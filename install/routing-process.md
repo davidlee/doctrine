@@ -41,7 +41,7 @@ Mid-flight, any stage: unanticipated obstacle / tradeoff / emergent complexity �
 Latent **work** intent (issue / improvement / chore / risk / idea) → `backlog
 new` instead of losing it; check `backlog list` at the start of substantive work
 (already captured?). Work vs knowledge vs decision boundary: `using-doctrine.md`.
-Finished a coherent unit → `/notes`. Handing off to fresh context → `/next`.
+Finished a coherent unit → `/harvest`. Handing off to fresh context → `/handover`.
 Agent confusion / stale memory corpus → `/reviewing-memory`.
 
 **Core process:** `slice new` (scope) → `slice design` (author + adversarial

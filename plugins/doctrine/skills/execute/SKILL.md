@@ -35,7 +35,7 @@ Inputs:
 5. Implement phase tasks in small coherent units, **TDD red/green/refactor**
    write a failing test, make it pass, then refactor. Test behaviour, not
    trivial implementation. Build and improve test helpers and fixtures as you go.
-6. After each meaningful unit, run `/notes`.
+6. After each meaningful unit, run `/harvest`.
 7. If that unit produced a durable gotcha, pattern, or subsystem fact worth
    future retrieval, run `/record-memory` before moving on.
 8. Lint as you go (`cargo clippy`, zero warnings) and keep the tree buildable.
