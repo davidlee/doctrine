@@ -100,7 +100,10 @@ pub(crate) trait SourceAdapter {
 impl<A: SourceAdapter> Resolver<A> {
     pub(crate) fn available(&self, e: &PublicationEntry) -> bool; // = self.source.exists(&e.backing)
 }
-enum ContentKind { Template, Reference }                        // widened additively (+ "reference")
+impl PublicationManifest {
+    pub(crate) fn declares_backing(&self, backing: &str) -> bool; // membership predicate —
+}                                        // the derived reachability gate (§9) checks this, keeping `backing` private
+enum ContentKind { Template, Reference, Guidance, Integration }  // widened additively (closed set)
 ```
 
 Leaf `asset_source` gains `exists(key) -> bool` (existence without materializing
@@ -319,7 +322,8 @@ proving each authored kind's root appears on first scaffold.
   first-scaffold; harness-survival with a detected harness.
 - **The crux — no-silent-unreachable gate (derived, D7):** a test computes
   `{embedded_filenames()} − {base backings}` and asserts every remaining backing
-  is declared by some publication entry (`delta ⊆ published backings`). A newly
+  is declared by some publication entry (`delta ⊆ published backings`), via
+  `PublicationManifest::declares_backing` (so `backing` stays private). A newly
   added install asset that is neither base nor published reddens it. The pairing
   invariant, executable and *derived* — not a hand-listed four (X-F4).
 - **Behaviour preservation:** install mechanism tests

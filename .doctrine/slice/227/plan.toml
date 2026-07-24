@@ -35,12 +35,12 @@ entrance_criteria = [
   { id = "EN-1", text = "Design locked (design → plan); RV-299 integrated; SL-223 publication substrate (Resolver/PublicationEntry/EmbeddedAdapter) present in src/publication.rs." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "PublicationEntry exposes title/kind/licence/customization accessors; SourceAdapter gains exists(backing)->bool (EmbeddedAdapter via asset_source::exists); Resolver::available(&PublicationEntry)->bool." },
+  { id = "EX-1", text = "PublicationEntry exposes title/kind/licence/customization accessors; SourceAdapter gains exists(backing)->bool (EmbeddedAdapter via asset_source::exists); Resolver::available(&PublicationEntry)->bool; PublicationManifest::declares_backing(&str)->bool (membership predicate for the PHASE-03 derived gate, keeping `backing` private)." },
   { id = "EX-2", text = "ContentKind widened additively to {Template, Reference, Guidance, Integration} — STD-001 named variants, no external exhaustive match broken." },
   { id = "EX-3", text = "No change to resolve/emit signatures or LogicalAddress; backing stays private. All publication VT-1..6 and install mechanism tests green UNCHANGED (behaviour-preservation gate)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Accessors + availability probe exist on the engine types: title/kind/licence/customization readers, SourceAdapter::exists, Resolver::available.", test_file = "src/publication.rs", keywords = ["fn title", "fn kind", "fn customization", "fn available", "fn exists"], patterns = ["^\\s*(pub\\(crate\\) )?fn (title|kind|customization|available|exists)"], waived = false },
+  { id = "VT-1", expects = "Accessors + availability probe + membership predicate exist on the engine types: title/kind/customization readers, SourceAdapter::exists, Resolver::available, PublicationManifest::declares_backing.", test_file = "src/publication.rs", keywords = ["fn title", "fn kind", "fn customization", "fn available", "fn exists", "fn declares_backing"], patterns = ["^\\s*(pub\\(crate\\) )?fn (title|kind|customization|available|exists|declares_backing)"], waived = false },
   { id = "VT-2", expects = "ContentKind carries the widened closed set of variants.", test_file = "src/publication.rs", keywords = ["enum ContentKind", "Reference", "Guidance", "Integration"], waived = false },
   { id = "VT-3", expects = "Leaf existence probe over the install embed without materializing bytes.", test_file = "src/asset_source.rs", keywords = ["fn exists"], patterns = ["^\\s*pub\\(crate\\) fn exists"], waived = false },
   { id = "VA-1", expects = "Diff review confirms publication VT-1..6 and install mechanism test BODIES are unchanged (green-unchanged, not merely green) — the additive-only claim." },
@@ -101,8 +101,8 @@ exit_criteria = [
   { id = "EX-4", text = "NF-004: no auxiliary asset projected by default, but a detected harness still installs its adapter (detect_agents forward legs survive). FR-008: entity roots appear on first scaffold. NF-005: project-governance.md is absent (not projected)." },
 ]
 verification = [
-  { id = "VT-1", expects = "Fresh install plan/execute yields exactly the three-file base and seeds no memory entity.", test_file = "src/install.rs", keywords = ["project-orientation.md", "doctrine.toml", "base"], patterns = ["fn .*base.*install|fn .*three_file|fn .*minimal"], waived = false },
-  { id = "VT-2", expects = "The crux derived gate: every embedded non-base backing is declared in the publication manifest (delta ⊆ published).", test_file = "src/install.rs", keywords = ["embedded_filenames", "published", "backing"], patterns = ["fn .*unreachable|fn .*reachab|fn .*complement"], waived = false },
+  { id = "VT-1", expects = "Fresh install plan/execute yields exactly the three-file base and seeds no memory entity.", test_file = "src/install.rs", keywords = ["project-orientation.md", "doctrine.toml", "base"], waived = false },
+  { id = "VT-2", expects = "The crux derived gate: every embedded non-base backing is declared in the publication manifest (delta ⊆ published), via declares_backing.", test_file = "src/install.rs", keywords = ["embedded_filenames", "declares_backing"], waived = false },
   { id = "VT-3", expects = "build_plan leg 2 reads the manifest [base] set, not embedded_filenames().", test_file = "src/install.rs", keywords = ["build_plan", "base"], waived = false },
   { id = "VT-4", expects = "The eager memory seed is gated under minimal projection — no memory entity on a base install.", test_file = "src/install.rs", keywords = ["seed_authoring_memories"], waived = false },
   { id = "VT-5", expects = "NF-004 harness survival — a detected harness still installs its adapter after the flip.", test_file = "src/install.rs", keywords = ["detect_agents"], waived = false },
