@@ -20,7 +20,31 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/concept_map.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/dot.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/catalog/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/graph.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"
@@ -35,6 +59,18 @@ target = "PRD-016"
 label = "references"
 role = "concerns"
 target = "RFC-001"
+
+[[relation]]
+label = "related"
+target = "DEC-007"
+
+[[relation]]
+label = "related"
+target = "DEC-008"
+
+[[relation]]
+label = "related"
+target = "DEC-009"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
