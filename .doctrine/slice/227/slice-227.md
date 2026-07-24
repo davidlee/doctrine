@@ -40,32 +40,43 @@ stops landing.
    - `doctrine library list [path]` / `tree [path]` — read manifest metadata at a
      logical path (**FR-003 / REQ-375**).
    - `doctrine library show <logical-path>` — resolve an address and stream exact
-     bytes to stdout; distinct reported error classes for missing source, malformed
-     policy, unsupported source type, metadata-without-bytes; traversal-like
-     addresses rejected; unavailable-source entries stay visible in list/tree
-     (marked) and only fail on `show` (**FR-003 acceptance**).
+     bytes to stdout. **Reachable error classes this slice:** invalid/traversal
+     address, unknown/unpublished address, missing backing source, malformed
+     policy. **Deferred (design D3, need >1 adapter):** *unsupported source type*
+     and *metadata-present-bytes-absent* — with the single embedded adapter the
+     latter is indistinct from missing-backing. Traversal-like addresses
+     rejected; unavailable-source entries stay visible in list/tree (marked) and
+     only fail on `show` (**FR-003 acceptance**, reachable subset).
    - Manifest as **sole authority** for the public set — embedded-but-undeclared
      asset is invisible; duplicate logical address rejected at admission
      (**FR-001 / REQ-373**).
    - No reachable write path over any protected root — read-only is structural
      (**NF-002 / REQ-381**).
-   - **Settle QUE-172** (is the shipped memory corpus published-for-copy) to fix
-     the manifest's real initial collection set, widening SL-223's templates-only
-     stub. Licence classification (FR-007, shipped all-MIT for templates) reaches
-     further as non-template collections are exposed; ASM-003's provisional
-     `{customizable, fixed}` customization-status stays as-is (C2 widens it).
+   - **Publish the full projection complement** (design D7, Option A): every
+     embedded `install/` asset the flip stops projecting gets a library address
+     (`{embedded_filenames()} − {base backings}`, ~70 entries), so reachability
+     is a **derived** invariant (`delta ⊆ published`), not a curated list. All
+     entries are **MIT** — everything under `install/` is MIT-licensed
+     (`install/LICENSE`); ASM-003's provisional `{customizable, fixed}`
+     customization-status stays as-is (C2 widens it). **QUE-172 answered *no*** —
+     the memory corpus is not published-for-copy, so the eager memory seed is
+     gated (design D8), not published.
 
 2. **Minimal-projection install flip** (SPEC-009, Contract A mechanism):
    - Project the **three-file base** (`.gitignore`, `doctrine.toml`,
-     `boot-project.md`) from the projection policy (**FR-007 / REQ-353**).
+     `project-orientation.md`) from the projection policy (**FR-007 / REQ-353**).
+     **Gate the eager memory seed** (`seed_authoring_memories`, design D8) so a
+     fresh install lands exactly those three files and no memory entity.
    - Entity roots materialize **on first use** of the kind (**FR-008 / REQ-354**).
    - **FR-009 (hymns on first customization) — deferred (design D6).** No
      customization verb exists; the only hymn path is the opt-in install-time
      prompt (default N), which already satisfies NF-004. FR-009's positive
      materialize-on-customization verb stays `pending`, a follow-up. The flip
      leaves the prompt as-is.
-   - Standing governance materializes on **explicit user definition**
-     (**FR-010 / REQ-356**).
+   - **FR-010 (standing governance materializes on explicit definition) —
+     deferred (design D4).** The flip stops *projecting* standing governance
+     (that is delivered); the positive materialize-on-definition command needs an
+     unbuilt define verb, symmetric with FR-009. FR-010 stays `pending`.
    - **No auxiliary framework asset projected by default** — the agent / workflow /
      skill / reference / memory legs are **re-gated, not deleted**; a selected
      harness still installs its own required adapter (**NF-004 / REQ-357**).
@@ -118,27 +129,33 @@ flip stops projecting is reachable through `doctrine library` before the flip la
 - **R4 — QUE-172 must settle** before the manifest's real collection set is fixed;
   it blocks the library's initial public set and how far licence classification
   reaches. Settle within phase 1.
-- **A1 — pairing by phase order is sufficient** to honour the RFC's "read path
-  before the cut" invariant; no cross-slice ordering needed.
+- **A1 — pairing enforced by the derived reachability gate, not phase order
+  alone** (external review X-F4). Phase order sequences the read path before the
+  cut; the executable `delta ⊆ published` gate (design §9) is what *proves* no
+  asset is dropped unreachable. No cross-slice ordering needed.
 - **OQ-1 — IDE-041 (search sequencing)** stays open and out of scope; this slice
   registers the library as a future search provider but does not build federation.
 
 ## Verification / Closure Intent
 
 - **Library:** `library list|tree|show` behaviour per FR-003 acceptance —
-  round-trip a published asset, byte-exact `show`, the four distinct error
-  classes, traversal rejection, unavailable-entry-visible-but-show-fails. Manifest
-  sole-authority (undeclared asset invisible; duplicate-address rejected). NF-002
-  no-write-path proven structural over every protected root.
-- **Install flip:** a fresh install lands exactly the three-file base (FR-007);
-  no auxiliary asset projected by default (NF-004); entity roots appear on first
-  use (FR-008); harness adapter still installs; governance distinct from
-  orientation (NF-005). **No-silent-unreachable gate:** every asset the flip stops
-  projecting resolves through `doctrine library show` first.
+  round-trip a published asset, byte-exact `show`, the **reachable** error
+  classes (traversal, unknown, missing-backing, malformed-policy), traversal
+  rejection, unavailable-entry-visible-but-show-fails. Manifest sole-authority
+  (undeclared asset invisible; duplicate-address rejected). NF-002 no-write-path
+  proven structural over every protected root.
+- **Install flip:** a fresh install lands exactly the three-file base and **no
+  memory entity** (FR-007, seed gated D8); no auxiliary asset projected by
+  default (NF-004); entity roots appear on first use (FR-008); harness adapter
+  still installs; governance distinct from orientation (NF-005).
+  **No-silent-unreachable gate (derived, D7):** `{embedded_filenames()} − {base
+  backings} ⊆ {published backings}` holds — every asset the flip stops projecting
+  is resolvable through `doctrine library show`.
 - Closure gates on SPEC-009 (FR-007, FR-008, NF-004/005) and SPEC-026 (FR-001,
-  FR-003, NF-002) coverage reconciled; QUE-172 settled. **FR-009 and FR-010 stay
-  `pending`** (design D6/D4 — no customization/definition verbs this slice), as
-  does the FR-003 unsupported-source-type bullet (D3).
+  FR-003 reachable subset, NF-002) coverage reconciled; QUE-172 answered.
+  **Explicitly pending:** SPEC-009 FR-009 (D6) and FR-010 (D4) — no
+  customization/definition verbs; SPEC-026 REQ-375's *unsupported-source-type*
+  and *metadata-without-bytes* classes (D3) — need >1 adapter.
 
 ## Follow-Ups
 

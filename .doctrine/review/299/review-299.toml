@@ -1,0 +1,88 @@
+id    = 299
+slug  = "external-adversarial-pass-library-read-surface-minimal-projection-flip"
+title = "External adversarial pass — library read surface + minimal-projection flip"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "codex"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-227"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Every removed asset should remain reachable; 66-plus current projections have no library address"
+detail = "Evidence: src/install.rs:1394-1408 plans every embedded install asset, and src/install.rs:1430-1437 excludes only manifest.toml. Command output from rg --files install reports 73 source assets, hence 72 currently projected assets. publication/manifest.toml:12-28 declares only two of 45 templates, while design.md:140-148 adds only four reference entries. Assets such as agents/**, hymns/**, workflows/drive-slice.js, mod.just, LICENSE, boot-footer.md, model-band.md, and most templates therefore stop landing without becoming resolvable. This violates the explicit no-loss objective at slice-227.md:75-76 and is a release-blocking reachability hole."
+disposition = "design-wrong"
+response = "Confirmed against install.rs:1394-1409 — leg 2 projects the entire embed; the reachability accounting was incomplete. Design reconciled to Option A (design D7, DEC-010 revised): the library publishes the full projection complement `{embedded_filenames()} − {base backings}` (~70 entries), and §9's no-silent-unreachable gate is now a derived set-containment `delta ⊆ published`. Scope objective + A1 updated to match."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "blocker"
+title = "Fresh install should land three files; unconditional memory seeding still materializes an auxiliary entity"
+detail = "Evidence: src/install.rs:201-203 calls seed_authoring_memories unconditionally after execute_plan; src/install.rs:225-257 writes each configured seed through memory::seed_by_key; install/manifest.toml:26-32 configures mem.signpost.project.orientation. The design limits its flip to build_plan leg 2 and eager dirs at design.md:176-178 and design.md:240-243, but never removes or gates this seed path. A real fresh doctrine install therefore cannot satisfy the exact three-file result promised by REQ-353 and slice-227.md:133-134 even if build_plan emits only the base trio."
+disposition = "design-wrong"
+response = "Confirmed — install.rs:202 seed_authoring_memories runs unconditionally, materializing a memory entity beyond the file plan, so FR-007's three-file result was unreachable as designed. Design adds D8: PHASE-02 gates the seed; a fresh install materializes no memory entity; orientation lives in the base project-orientation.md, corpus populated on demand. §5.3, scope in-scope + closure updated."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "blocker"
+title = "Published licence must match asset licence; two MIT install assets are declared GPL"
+detail = "Evidence: README.md:207-211 states that every file under install/ is MIT; install/LICENSE:1-13 grants the MIT licence for that tree. The proposed manifest instead marks install/review-ledger.md and install/governance.md GPL at design.md:143-148 and design.md:225-227, without relocating or relicensing either asset or updating the repository licence declaration. SPEC-026 REQ-379 requires an established, auditable declared licence and fails publication closed when it cannot be established. Shipping knowingly contradictory licence metadata must be reconciled before publication."
+disposition = "fix-now"
+response = "Confirmed — install/LICENSE grants MIT for the whole install/ tree; the speculative GPL calls on review-ledger/governance contradicted it (SPEC-026 REQ-379 fails closed). D5 rewritten: every published entry is MIT. Bonus — uniform MIT keeps publication VT-3 (every entry licence=MIT) green, reversing internal-F1's claimed VT-3 casualty."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "major"
+title = "Reachability gate should derive the projection delta; proposed test hard-codes four references"
+detail = "Evidence: slice-227.md:133-137 requires every asset the flip stops projecting to resolve through library show. design.md:252-253 and design.md:271-272 narrow the executable gate to each reference doc, a hand-maintained four-entry list, while build_plan currently derives its projected set from asset_source::iter at src/install.rs:1394-1408. Nothing compares old projection minus new base against the published or otherwise reachable set. Phase order proves temporal sequencing only; it cannot detect a newly removed, unpublished asset or current non-reference omissions."
+disposition = "design-wrong"
+response = """Accepted — phase order proves sequencing only, not reachability. Coupled to F-1's fix: under Option A (D7) the gate derives `{embedded_filenames()} − {base backings}` and asserts each remaining backing is published (`delta ⊆ published`). §9 crux + A1 rewritten from "each reference doc resolves" to the derived containment; a newly added asset that is neither base nor published reddens it."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Distinct missing-source and bytes-absent failures required; design collapses both into one error"
+detail = "Evidence: SPEC-026 REQ-375 requires distinct reported failures for a missing backing source and for metadata present but bytes absent. design.md:125-130 maps both conditions to ResolveError::BackingSourceMissing, and the actual resolver has only that availability variant at src/publication.rs:363-370. The proposed exists(backing) bool also cannot preserve the reason. The design nevertheless plans to record REQ-375 coverage at design.md:280-283, so its error contract is incomplete beyond the explicitly deferred unsupported-source-type class."
+disposition = "design-wrong"
+response = """Accepted — with a single EmbeddedAdapter, "declared backing not in the embed" IS missing-backing, so metadata-present-bytes-absent is indistinct and cannot be honestly claimed. D3 extended: defer BOTH unsupported-source-type and metadata-without-bytes (need >1 adapter, OQ-4); §5.2 error table + §9 coverage now record only the reachable classes as covered, REQ-375's two multi-source classes explicitly pending."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "In-scope FR-003 and FR-010 behavior should be delivered; closure leaves both pending and out of scope"
+detail = "Evidence: slice-227.md:39-46 scopes distinct missing-source, unsupported-source-type, and metadata-without-bytes behavior; slice-227.md:67-68 scopes standing-governance materialization on explicit definition. Yet slice-227.md:139-141 closes with REQ-356 and the unsupported-source bullet pending, while design.md:150-153 and design.md:218-224 move REQ-356 out of scope. Deferral is explicit for REQ-355 at slice-227.md:62-66 but not for these earlier in-scope promises. The scope, design, and closure contract therefore disagree about what SL-227 delivers."
+disposition = "fix-now"
+response = 'Accepted — scope/design/closure disagreed. slice-227.md reconciled: FR-010 now explicitly deferred (D4, symmetric with FR-009), and the FR-003 in-scope bullet annotates unsupported-source-type + metadata-without-bytes as deferred (D3). Closure-intent "explicitly pending" list matches design §9 exactly. One story across scope, design, closure.'
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Embed-preservation tests should stay green; design says to invert tests that publication still depends on"
+detail = "Evidence: design.md:262-266 classifies glossary_is_shipped, using_doctrine_is_shipped, and review_ledger_is_shipped as projection assertions that flip polarity. Their actual bodies at src/install.rs:3215-3259 assert only that embedded_filenames contains each backing asset and asset_text reads non-empty bytes. The proposed library reference entries still resolve through the same InstallAssets backing, so all three embed assertions must remain true unchanged under ADR-019 separation. Inverting them would either fail correct code or invite removal of bytes required by publication, violating the behavior-preservation gate."
+disposition = "fix-now"
+response = "Confirmed against install.rs:3215-3259 — glossary_is_shipped/using_doctrine_is_shipped/review_ledger_is_shipped assert embedded_filenames().contains(x) + non-empty bytes, i.e. embedding, which the flip preserves (ADR-019). §9 corrected: only the projection-result tests flip; the three embed tests stay green unchanged."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "Base orientation surface should have one governed identity and content contract; scope and design disagree and content is unspecified"
+detail = "Evidence: slice-227.md:58-60 still names boot-project.md, while design.md:134-139 and SPEC-009 REQ-353 name project-orientation.md; design.md:319 incorrectly says only RFC-021 retains the old name. Neither file exists today, and the design specifies its payload only as orientation content. ADR-019 requires every projected file to have an explicit owner, mutation policy, and project-level reason. Write-if-absent at design.md:194-195 supplies only mutation behavior, not the content boundary, owner, or acceptance basis for one third of the minimal base."
+disposition = "fix-now"
+response = "Accepted — slice-227.md base trio fixed boot-project.md → project-orientation.md (the last stale reference; RFC-021's body is now correctly the only place the old name survives). §5.3 specifies the base file's content contract: user-owned/agent-improvable orientation surface (purpose/architecture/conventions seed from seed-onboarding.md), never clobbered (ADR-019 mutation policy), reason = orientation discoverability; distinct from project-governance.md and the memory corpus."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

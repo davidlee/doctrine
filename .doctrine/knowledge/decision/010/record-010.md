@@ -1,36 +1,44 @@
-# DEC-010: Bounded reachability set for the minimal-projection flip
+# DEC-010: Published set = full projection complement
 
 <!-- Knowledge record body — context, detail, links. The structured, queried
      fields live in the sister `record-NNN.toml`; this prose is free-form and is
      never structurally parsed (the storage rule). -->
 
-**Decision (SL-227 design, 2026-07-24).** RFC-021's pairing invariant — minimal
-projection must not strip access, so the library republishes what the flip stops
-projecting — is satisfied by a **bounded** published set, not full corpus parity.
+**Decision (SL-227 design, 2026-07-24; revised after external review RV-299).**
+RFC-021's pairing invariant — minimal projection must not strip access, so the
+library republishes what the flip stops projecting — is satisfied by publishing
+the **full projection complement** (Option A), *not* a bounded subset.
 
 ## The set
 
-The library's reachability-parity obligation for SL-227 is **templates (already
-published, SL-223) + the reference docs** (`glossary.md`, `using-doctrine.md`,
-`review-ledger.md`, `governance.md`). Publishing the reference docs needs one
-**additive** `ContentKind::Reference` (publication.rs anticipates additive
-widening) plus a per-entry licence call.
+The library publishes **every embedded `install/` asset the flip stops
+projecting**: `{embedded_filenames()} − {base backings}` (~70 entries — all
+`templates/*`, the operator docs, `hymns/*`, `agents/*`, `workflows/*`,
+`mod.just`, `LICENSE`, `boot-footer.md`, `model-band.md`, …). All are **MIT**
+(everything under `install/` is MIT — `install/LICENSE`), so the licence surface
+is trivial. `ContentKind` widens additively to a small closed set
+(`{Template, Reference, Guidance, Integration}`).
 
-## What is NOT pulled in, and why it is not "silently unreachable"
+## Why full, not bounded (the reversal)
 
-- **Hymns** — C2-entangled (the supported-customization model owns their copy
-  semantics); deferred on the same reasoning as [[ASM-003]]. Behaviour prose,
-  not user-facing reference.
-- **Agents / workflows** — harness-adapter machinery, still installed on demand
-  per detected harness (NF-004, `install.rs` `detect_agents`→per-agent loop).
-  Not lost by the flip.
-- **Memory corpus** — never rode leg-2 projection; already reachable via its
-  native `memory find` / `retrieve` / `sync` surface. Answers [[QUE-172]] **no**
-  (not published-for-copy this slice).
+The original decision bounded the set to *templates + 4 reference docs* on the
+theory that hymns were C2-entangled, agents/workflows survived via the
+harness-gated install legs, and the memory corpus rode its own surface — so only
+the reference docs were "at risk." **External review RV-299 (X-F1) refuted the
+completeness of that accounting:** the flip stops projecting the *entire*
+`install/` embed (`install.rs:1394-1409`), and ~43 templates plus `mod.just`,
+`LICENSE`, `boot-footer.md`, `model-band.md` fell into neither bucket — a real
+reachability hole against the slice's own no-loss objective.
 
-## Consequence
+Publishing the full complement dissolves the hole *and* the judgement call: the
+no-silent-unreachable gate becomes a **derived** set-containment
+(`delta ⊆ published`, design D7/§9) that a future added asset cannot silently
+escape. The rejected alternative (classify each dropped asset into
+reachable-elsewhere buckets + an allowlist) mints a second governed surface and a
+curated check the gate cannot mechanically enforce.
 
-Keeps SL-227 whole and tractable as one slice (the user's "B unless
-intractable"): the licence-classification surface is bounded to ~4 reference
-docs, and QUE-172 does not gate the manifest beyond that. The published set may
-widen additively in a later slice without reworking this one.
+## QUE-172
+
+Answered **no** — the memory corpus is not published-for-copy this slice. It is
+not part of leg-2 projection, so the flip does not strip it; the eager install
+seed (`seed_authoring_memories`) is **gated** (design D8), not published.

@@ -56,8 +56,9 @@ any file stops landing (PHASE-02).
   engine changes only, no resolver redesign.
 - The flip changes **one leg's enumeration** (embed → declared base set), nothing
   more invasive.
-- Publish the **bounded** set (templates + reference docs, [[DEC-010]]); do not
-  grow the licence surface beyond what reachability parity requires.
+- Publish the **full projection complement** — every asset the flip stops
+  landing gets a library address (Option A, [[DEC-010]]) — so reachability is a
+  **derived** invariant (`delta ⊆ published`), not a curated list.
 - Name honest pending items rather than fake coverage.
 
 ## 5. Proposed Design
@@ -125,9 +126,10 @@ stderr + non-zero, never a silent empty:**
 |---|---|---|
 | invalid / traversal address | `AdmissionError::TraversalRejected` | `LogicalAddress::parse` |
 | unknown / unpublished address | `ResolveError::UnknownAddress` | `Resolver::resolve` |
-| missing backing / bytes-absent | `ResolveError::BackingSourceMissing` | `EmbeddedAdapter::read` |
+| missing backing (declared, not embedded) | `ResolveError::BackingSourceMissing` | `EmbeddedAdapter::read` |
 | malformed / unreadable policy | `AdmissionError::{MalformedManifest,ManifestAssetMissing,…}` | `load_resolver` |
-| *unsupported source type* | — **unreachable this slice** (D3) | needs >1 adapter (OQ-4) |
+| *metadata present, bytes absent* | — **deferred** (D3): with one adapter this is *indistinct* from missing-backing | needs >1 adapter (OQ-4) |
+| *unsupported source type* | — **deferred** (D3): unconstructable this slice | needs >1 adapter (OQ-4) |
 
 ### 5.3 Data, State & Ownership
 
@@ -136,16 +138,41 @@ stderr + non-zero, never a silent empty:**
   (FR-007: "not from embed contents"). Three entries → three `Step`s:
   `.gitignore` (`Gitignore`, merge, unchanged); `doctrine.toml` (`Install`,
   write-if-absent, NEW embed = commented example); `project-orientation.md`
-  (`Install`, write-if-absent, NEW embed = orientation content).
-- **Published set** — `publication/manifest.toml` gains four `reference/*`
-  entries (`ContentKind::Reference`), licence per [[DEC-010]]:
-
-  | asset | logical address | licence | provenance |
-  |---|---|---|---|
-  | glossary.md | `reference/glossary.md` | MIT | declared |
-  | using-doctrine.md | `reference/using-doctrine.md` | MIT | declared |
-  | review-ledger.md | `reference/review-ledger.md` | GPL | declared |
-  | governance.md | `reference/governance.md` | GPL | declared |
+  (`Install`, write-if-absent, NEW embed). **`project-orientation.md` content
+  contract (X-F8):** a user-owned, agent-improvable orientation surface —
+  project purpose / architecture / conventions seed (drawn from the existing
+  `seed-onboarding.md` template body); *owner* = the project (never clobbered on
+  re-install — ADR-019 mutation policy); *reason* = orientation discoverability
+  at a stable path. Distinct from `project-governance.md` (NF-005) and from the
+  doctrine memory corpus (D8).
+- **Published set (Option A — full complement)** — `publication/manifest.toml`
+  grows from the SL-223 templates-only stub to **every embedded `install/` asset
+  the flip stops projecting**, i.e. `{embedded_filenames()} − {base backings}`
+  (~70 entries: all `templates/*`, the operator docs, `hymns/*`, `agents/*`,
+  `workflows/*`, `mod.just`, `LICENSE`, `boot-footer.md`, `model-band.md`, …).
+  Publishing the whole complement is what makes reachability a *derived*
+  invariant rather than a curated list (D7, X-F1/X-F4). Logical address mirrors
+  the backing path under a category prefix (`reference/glossary.md`,
+  `templates/slice.toml`, `hymns/role/worker.md`, `integration/agents/claude/…`).
+  - **Licence — uniformly `MIT`.** All of `install/` is MIT (`install/LICENSE`,
+    README §licence); every entry declares `MIT`/`declared`. (Corrects the
+    earlier speculative GPL calls — X-F3; SPEC-026 REQ-379 fails closed on a
+    licence the tree contradicts.) VT-3 (every shipped entry `licence=MIT`) thus
+    stays **green**.
+  - **`ContentKind` widens** to the closed set covering the categories
+    (`{Template, Reference, Guidance, Integration}` — STD-001 named constants;
+    `/plan` pins the final set + per-file mapping). Purely additive; no external
+    exhaustive `match` on it exists to break (line-of-attack #8, verified).
+  - **`provenance`/`customization`** stay `declared`/`customizable` defaults
+    ([[ASM-003]]); C2 refines later.
+- **Memory seed (X-F2, D8)** — `install.rs:202` calls `seed_authoring_memories`
+  *unconditionally*, materializing `mem.signpost.project.orientation` beyond the
+  file plan. Minimal projection (SPEC-009 D8: materialize on first use) is
+  incompatible with an eager seed, so the FR-007 "exactly three files" result is
+  unreachable while it runs. PHASE-02 **gates it**: a fresh install materializes
+  **no** memory entity; project orientation lives in the base
+  `project-orientation.md`, and the corpus is populated on demand (`doctrine
+  memory sync`, already the hinted next step).
 
 - **Standing governance** — `project-governance.md`, a distinct user-owned
   surface (NF-005). The flip simply does not project it; its
@@ -215,25 +242,44 @@ proving each authored kind's root appears on first scaffold.
 - **D2 — availability on the adapter (`exists`), not trial-`read`.** Keeps
   list/tree cheap; avoids materializing bytes to mark a row. Seam reused by
   [[IMP-309]] (a future `doctor` availability check).
-- **D3 — drop *unsupported-source-type* to forward-intent.** Unconstructable with
-  one `EmbeddedAdapter`; implementing the reachable four and marking the fifth
-  pending (OQ-4) beats a dead stub variant. *Alt rejected:* `cfg_attr` dead stub.
+- **D3 — defer the two multi-source error classes.** Both *unsupported-source-type*
+  and *metadata-present-bytes-absent* are unconstructable with one
+  `EmbeddedAdapter` — with a single adapter "declared backing not in the embed"
+  *is* missing-backing, so the two are indistinct. Implement the reachable
+  classes (traversal, unknown, missing-backing, malformed-policy) and mark both
+  multi-source classes `pending` (OQ-4) rather than fake REQ-375 coverage
+  (X-F5). *Alt rejected:* `cfg_attr` dead stub; claiming REQ-375 fully covered.
 - **D4 — FR-010 projection-only.** The flip stops projecting standing governance;
   the materialize-on-definition command is a follow-up. The pairing invariant
   concerns the *reference* docs (published), not the user's authoring affordance.
   FR-010 stays `pending`. *Alt rejected:* build the define command now (scope creep).
-- **D5 — mixed MIT/GPL licence calls.** glossary/using-doctrine are copyable
-  reference (MIT); review-ledger/governance encode process (GPL). *Alt:*
-  all-GPL-conservative — a one-column change if preferred.
+- **D5 — every published entry is `MIT`.** All of `install/` is MIT-licensed
+  (`install/LICENSE`, README §licence); the manifest must not declare a licence
+  the tree contradicts (SPEC-026 REQ-379 fails closed on an unestablished
+  licence). The earlier speculative GPL calls on review-ledger/governance are
+  **withdrawn** (X-F3). Uniform MIT also keeps publication VT-3 green.
 - **D6 — FR-009 leave-prompt + defer verb (adversarial pass).** The install-time
   hymn prompt (default N) already satisfies NF-004; retiring it would open a
   customization gap with no replacement verb. So leave it, defer FR-009's
   materialize-on-customization verb (pending, symmetric with FR-010). *Alt
   rejected:* retire the prompt now (capability regression) or build the verb now
   (scope creep).
-- **DEC-010 — bounded published set** (templates + reference docs); [[QUE-172]]
-  answered *no*. **REV-031** — base orientation surface renamed
-  `boot-project.md` → `project-orientation.md` (SPEC-009 aligned).
+- **D7 — publish the full projection complement (Option A).** The published set
+  is `{embedded_filenames()} − {base backings}`, so the no-silent-unreachable
+  gate is a *derived* set-containment (`delta ⊆ published`) that a future added
+  asset cannot silently escape — it must be base, or published, or the gate
+  reddens (X-F1/X-F4). *Alts rejected:* (B) reachable-by-construction buckets +
+  allowlist — mints a second governed surface and a curated judgement the gate
+  cannot mechanically check; (C) narrow the flip — defeats the 80→3 objective.
+- **D8 — gate the eager memory seed.** `seed_authoring_memories` runs
+  unconditionally today; minimal projection makes corpus materialization
+  on-demand, so a fresh install lands exactly the three-file base and **no**
+  memory entity (X-F2).
+- **DEC-010 — published set = full projection complement** (Option A; supersedes
+  the earlier "templates + reference docs" bound); [[QUE-172]] answered *no*
+  (corpus not published-for-copy → the seed is gated (D8), not published).
+  **REV-031** — base orientation surface renamed `boot-project.md` →
+  `project-orientation.md` (SPEC-009 aligned).
 
 ## 8. Risks & Mitigations
 
@@ -259,40 +305,51 @@ proving each authored kind's root appears on first scaffold.
   **NF-002** byte-unchanged over a clean repo across every verb+failure path;
   **FR-001** undeclared-asset-invisible; reference entries admit with
   `ContentKind::Reference`.
-- **Install (changed):** the ~9 projection-set assertions flip polarity
-  (`glossary_is_shipped`, `using_doctrine_is_shipped`, `review_ledger_is_shipped`,
-  `execute_creates_dirs_and_files`, `execute_skips_existing_files`,
+- **Install (changed):** the projection-*result* assertions flip
+  (`execute_creates_dirs_and_files`, `execute_skips_existing_files`,
   `plan_skips_existing_files`, `seeds_governance_when_missing`, the `[dirs]` tree
-  assertions).
+  assertions) — they assert files land in `.doctrine/`, which the flip changes.
+  **Not** `glossary_is_shipped` / `using_doctrine_is_shipped` /
+  `review_ledger_is_shipped`: those assert `embedded_filenames().contains(x)` +
+  non-empty bytes — they test **embedding**, which the flip preserves (ADR-019),
+  so they stay green unchanged (X-F7 corrects the earlier misclassification).
 - **Install (added):** fresh install = exactly `{.gitignore, doctrine.toml,
   project-orientation.md}` (FR-007); no auxiliary asset (NF-004);
   `project-governance.md` absent (NF-005); write-if-absent non-clobber; FR-008
   first-scaffold; harness-survival with a detected harness.
-- **The crux — no-silent-unreachable gate:** each reference doc resolves via
-  `doctrine library show reference/<x>`. The pairing invariant, executable.
+- **The crux — no-silent-unreachable gate (derived, D7):** a test computes
+  `{embedded_filenames()} − {base backings}` and asserts every remaining backing
+  is declared by some publication entry (`delta ⊆ published backings`). A newly
+  added install asset that is neither base nor published reddens it. The pairing
+  invariant, executable and *derived* — not a hand-listed four (X-F4).
 - **Behaviour preservation:** install mechanism tests
   (`plan_creates_dirs_from_manifest`, `ensure_gitignored_*`, agent/workflow/
-  `detect_agents`) green unchanged; publication VT-1/2/4/5/6 unchanged.
-  **Exception (F1):** publication **VT-3** (`shipped_manifest_admits_from_disk_source`)
-  asserts *every* shipped entry is `licence=MIT` (templates-only) — adding
-  `reference`-kind, GPL, `fixed` entries **changes** VT-3 to admit the widened
-  vocabulary. A *changed* test, not preserved; called out so the gate is honest.
-- **Coverage recorded:** SPEC-026 FR-001/FR-003/NF-002; SPEC-009
-  FR-007/FR-008/NF-004/NF-005. **Left pending (honest):** SPEC-009 FR-010 (D4),
-  **FR-009 (D6 — no customization verb this slice)**, and the FR-003
-  unsupported-source-type bullet (D3).
+  `detect_agents`) green unchanged; publication **VT-1..6 all green** — VT-3
+  asserts every shipped entry is `licence=MIT`, and Option A keeps every new
+  entry MIT (D5), so the assertion holds (its "templates-only" *comment* is now
+  stale and gets refreshed — a comment, not a behaviour change). This *reverses*
+  the internal pass's F1: with uniform MIT there is no VT-3 casualty.
+- **Coverage recorded:** SPEC-026 FR-001 / FR-003 (reachable classes) / NF-002;
+  SPEC-009 FR-007 / FR-008 / NF-004 / NF-005. **Left pending (honest):** SPEC-009
+  FR-009 (D6) and FR-010 (D4) — no customization/definition verbs this slice;
+  SPEC-026 REQ-375's *unsupported-source-type* and *metadata-without-bytes*
+  classes (D3) — both need >1 adapter.
 
 ## 10. Review Notes
 
 Phases (library-first; pairing enforced by `PHASE-01 → PHASE-02` order):
 
-- **PHASE-01 — Library read surface + reference publication.** Additive
-  `publication.rs` + `asset_source::exists`; `library.rs` (`list`/`tree`/`show`)
-  + `main.rs` wiring + `--format/--json`; four reference entries into
-  `publication/manifest.toml`. Delivers the read path.
+- **PHASE-01 — Library read surface + full-complement publication.** Additive
+  `publication.rs` (accessors, `exists`/`available`, `ContentKind` widen) +
+  `asset_source::exists`; `library.rs` (`list`/`tree`/`show`) + `main.rs` wiring
+  + `--format/--json`; **populate `publication/manifest.toml` with the full
+  projection complement** (~70 entries, all MIT). Delivers the read path. May
+  split (engine additions / command veneer / manifest population) if it sizes
+  large.
 - **PHASE-02 — Minimal-projection flip.** `install/manifest.toml [base]`; new
   embeds `doctrine.toml` + `project-orientation.md`; `build_plan` leg 2 → base
-  set, trim leg 1; flip/add install tests; FR-008 verification; NF-004/005; the
+  set, trim leg 1; **gate `seed_authoring_memories` (D8)**; flip the
+  projection-result install tests; FR-008 verification; NF-004/005; the derived
   no-silent-unreachable gate. The cut, structurally after the read path.
 
 `/plan` authors the formal EN/EX/VT and may split PHASE-01 (engine additions vs
@@ -319,3 +376,28 @@ command veneer) if it sizes large.
 - **F7 (doctrinal).** RFC-021's body still names `boot-project.md` — a
   point-in-time discussion artifact, deliberately not retro-edited; the live
   contract is SPEC-009 (REV-031). Noted so the divergence is not read as a miss.
+
+### Adversarial pass (external — RV-299, codex/GPT, integrated)
+
+Eight findings (3 blocker, 5 major), each verified against source before
+disposition and integrated:
+
+- **X-F1 (blocker) → D7.** ~63 dropped assets had no library address — the
+  reachability contract was under-specified. Resolved by Option A (publish the
+  full complement) + a derived gate.
+- **X-F2 (blocker) → D8.** `seed_authoring_memories` (`install.rs:202`) breaks
+  the three-file result; PHASE-02 gates it.
+- **X-F3 (blocker) → D5.** GPL calls contradict `install/LICENSE` (all-MIT);
+  withdrawn to uniform MIT. *This reverses internal-F1* — VT-3 stays green.
+- **X-F4 (major) → D7/§9.** Gate now *derives* the projection delta, not a
+  hand-listed four.
+- **X-F5 (major) → D3.** Missing-source vs bytes-absent honestly deferred, not
+  collapsed-then-claimed as REQ-375 coverage.
+- **X-F6 (major).** Scope ↔ design ↔ closure reconciled — FR-010 and the two
+  multi-source error classes are now *explicitly* deferred, not silently
+  in-scope (slice-227.md).
+- **X-F7 (major) → §9.** The `*_is_shipped` tests exercise *embedding*, not
+  projection, and stay green; §9 corrected.
+- **X-F8 (major) → §5.3.** Scope's stale `boot-project.md` fixed to
+  `project-orientation.md`; the base file's content / owner / mutation contract
+  specified.

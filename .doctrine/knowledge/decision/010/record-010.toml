@@ -3,7 +3,7 @@ version = 1
 
 id = 10
 slug = "bounded-reachability-set"
-title = "Bounded reachability set for the minimal-projection flip"
+title = "Published set = full projection complement (Option A)"
 record_kind = "decision"
 status = "proposed"
 created = "2026-07-24"
