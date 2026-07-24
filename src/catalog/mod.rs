@@ -76,6 +76,7 @@ pub(crate) fn run_catalog_graph(root_arg: Option<PathBuf>) -> anyhow::Result<()>
 }
 
 pub(crate) mod diagnostic;
+pub(crate) mod dot;
 pub(crate) mod graph;
 pub(crate) mod hydrate;
 pub(crate) mod scan;

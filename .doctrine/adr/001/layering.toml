@@ -124,6 +124,7 @@ regression_run = "command"  # SL-170 S1 impure shell → coverage_store, git, re
 "catalog::hydrate" = "engine"     # pure entity hydration
 "catalog::graph" = "engine"       # pure graph projection
 "catalog::diagnostic" = "engine"  # pure diagnostic dump
+"catalog::dot" = "engine"         # SL-226: pure DOT emitter — imports super::{graph,hydrate}, relation (engine/leaf) only
 "priority::graph" = "engine"      # pure relation_graph consumer
 "priority::config" = "leaf"       # [priority] config load + clamp; imports std + serde + toml only (SL-133)
 "status::run_status" = "command"  # the run_* CLI entry — reaches backlog, boot, priority
