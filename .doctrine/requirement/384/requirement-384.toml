@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 384
+slug = "dispatch-funnel-position-is-persisted-per-phase-as-authoritative-run-state-advancing-through"
+title = "Dispatch funnel position is persisted per-phase as authoritative run-state, advancing through explicit transitions that include verification as an authoritative, evidence-carrying step faithful to REQ-287 ordering (spawned, worker-committed, imported, verified, concluded, reaped); the record has a single-writer authority and crash-safe idempotent recovery (its concrete home and CAS/concurrency contract are slice design)."
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

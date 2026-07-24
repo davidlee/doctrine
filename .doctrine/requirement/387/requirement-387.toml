@@ -1,0 +1,15 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 387
+slug = "one-funnel-state-machine-owns-the-shared-transition-semantics-each-dispatch-transport-main-thread"
+title = "One funnel state machine owns the shared transition semantics; each dispatch transport (main-thread, subprocess, confined-orchestrator) projects into that single authority, recording the same transitions whether committing directly or through mediation; per-transport altitude reconciles with REQ-291 and REQ-335."
+status = "pending"
+kind = "functional"
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = []
+acceptance_criteria = []

@@ -1,8 +1,8 @@
 id      = 32
 slug    = "zero-rescue-dispatch-funnel-state-machine-and-git-read-verbs"
 title   = "Zero-rescue dispatch funnel state machine and git read verbs"
-status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+status = "done"
+approval = "approved"
 updated = "2026-07-24"
 tags    = []
 
