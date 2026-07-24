@@ -1,9 +1,9 @@
 id = 225
 slug = "funnel-false-red-elimination"
 title = "Funnel false-red elimination"
-status = "plan"
+status = "ready"
 created = "2026-07-23"
-updated = "2026-07-23"
+updated = "2026-07-24"
 tags = []
 
 [relationships]
