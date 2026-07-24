@@ -151,6 +151,16 @@ stderr + non-zero, never a silent empty:**
   surface (NF-005). The flip simply does not project it; its
   materialize-on-definition command (FR-010) is **out of scope** (D4), FR-010
   stays `pending`.
+- **Hymns (FR-009, D6)** — the only hymn path today is the opt-in install-time
+  prompt "Project exposed hymn starters? [y/N/a]" (`install.rs:383`, default N)
+  over `project_starters`; there is **no** hymn-customization verb. So NF-004
+  ("no hymn projected *by default*") already holds — the prompt defaults to N —
+  and this slice **leaves the prompt as-is** (D6). FR-009's positive
+  "materialize on first customization" needs the unbuilt customization verb; it
+  stays `pending`, deferred symmetric with FR-010.
+- **Projection base declaration** — a new `[base]` section on the `Manifest`
+  struct (`install.rs:60-135`); its deserialization + a test are code-impact
+  (F4). `build_plan` leg 2 reads `manifest.base`, not `embedded_filenames()`.
 - `backing` remains encapsulated in `publication.rs`; the availability probe
   reaches it within-module via `Resolver::available`.
 
@@ -215,6 +225,12 @@ proving each authored kind's root appears on first scaffold.
 - **D5 — mixed MIT/GPL licence calls.** glossary/using-doctrine are copyable
   reference (MIT); review-ledger/governance encode process (GPL). *Alt:*
   all-GPL-conservative — a one-column change if preferred.
+- **D6 — FR-009 leave-prompt + defer verb (adversarial pass).** The install-time
+  hymn prompt (default N) already satisfies NF-004; retiring it would open a
+  customization gap with no replacement verb. So leave it, defer FR-009's
+  materialize-on-customization verb (pending, symmetric with FR-010). *Alt
+  rejected:* retire the prompt now (capability regression) or build the verb now
+  (scope creep).
 - **DEC-010 — bounded published set** (templates + reference docs); [[QUE-172]]
   answered *no*. **REV-031** — base orientation surface renamed
   `boot-project.md` → `project-orientation.md` (SPEC-009 aligned).
@@ -254,12 +270,17 @@ proving each authored kind's root appears on first scaffold.
   first-scaffold; harness-survival with a detected harness.
 - **The crux — no-silent-unreachable gate:** each reference doc resolves via
   `doctrine library show reference/<x>`. The pairing invariant, executable.
-- **Behaviour preservation:** publication VT-1..6 + install mechanism tests
+- **Behaviour preservation:** install mechanism tests
   (`plan_creates_dirs_from_manifest`, `ensure_gitignored_*`, agent/workflow/
-  `detect_agents`) green unchanged.
+  `detect_agents`) green unchanged; publication VT-1/2/4/5/6 unchanged.
+  **Exception (F1):** publication **VT-3** (`shipped_manifest_admits_from_disk_source`)
+  asserts *every* shipped entry is `licence=MIT` (templates-only) — adding
+  `reference`-kind, GPL, `fixed` entries **changes** VT-3 to admit the widened
+  vocabulary. A *changed* test, not preserved; called out so the gate is honest.
 - **Coverage recorded:** SPEC-026 FR-001/FR-003/NF-002; SPEC-009
-  FR-007/FR-008/NF-004/NF-005. **Left pending (honest):** SPEC-009 FR-010 (D4)
-  and the FR-003 unsupported-source-type bullet (D3).
+  FR-007/FR-008/NF-004/NF-005. **Left pending (honest):** SPEC-009 FR-010 (D4),
+  **FR-009 (D6 — no customization verb this slice)**, and the FR-003
+  unsupported-source-type bullet (D3).
 
 ## 10. Review Notes
 
@@ -275,4 +296,26 @@ Phases (library-first; pairing enforced by `PHASE-01 → PHASE-02` order):
   no-silent-unreachable gate. The cut, structurally after the read path.
 
 `/plan` authors the formal EN/EX/VT and may split PHASE-01 (engine additions vs
-command veneer) if it sizes large. Adversarial pass follows in §10 on review.
+command veneer) if it sizes large.
+
+### Adversarial pass (internal, integrated)
+
+- **F1 (correctness) — integrated.** §9 wrongly claimed publication VT-1..6 all
+  stay green; **VT-3** asserts every shipped entry is `licence=MIT` and *changes*
+  when reference/GPL/fixed entries land. §9 corrected.
+- **F2 (scope) — integrated as D6.** FR-009 was in slice scope but unrealizable
+  (no customization verb; only the opt-in install prompt). Left prompt as-is,
+  FR-009 deferred `pending`. Slice scope reconciled to match.
+- **F3 (dissolved).** Reference-doc backing keys resolve over the `InstallAssets`
+  (`install/`) root (`asset_source::read_bytes`); reference docs stay physically
+  in `install/`, no move — physical `reference/` root reorg is out of scope.
+- **F4 (precision) — integrated.** The `[base]` section is a `Manifest`-struct
+  schema change (`install.rs:60-135`) + deserialization test; named in §5.3.
+- **F5 (precision).** `OutputFormat` is indicative — PHASE-01 binds the exact
+  house flatten type (`main.rs:150-199`); no bespoke flag.
+- **F6 (verification).** The NF-002 byte-unchanged test covers all three
+  protected roots: client project + runtime state (disk-checkable over a temp
+  repo); source/backing is immutable-by-embedding (no write handle exists).
+- **F7 (doctrinal).** RFC-021's body still names `boot-project.md` — a
+  point-in-time discussion artifact, deliberately not retro-edited; the live
+  contract is SPEC-009 (REV-031). Noted so the divergence is not read as a miss.

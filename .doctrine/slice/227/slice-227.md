@@ -59,8 +59,11 @@ stops landing.
    - Project the **three-file base** (`.gitignore`, `doctrine.toml`,
      `boot-project.md`) from the projection policy (**FR-007 / REQ-353**).
    - Entity roots materialize **on first use** of the kind (**FR-008 / REQ-354**).
-   - Hymns materialize on **first customization** (**FR-009 / REQ-355**;
-     SL-193's `project_starters` seam is the anchor).
+   - **FR-009 (hymns on first customization) — deferred (design D6).** No
+     customization verb exists; the only hymn path is the opt-in install-time
+     prompt (default N), which already satisfies NF-004. FR-009's positive
+     materialize-on-customization verb stays `pending`, a follow-up. The flip
+     leaves the prompt as-is.
    - Standing governance materializes on **explicit user definition**
      (**FR-010 / REQ-356**).
    - **No auxiliary framework asset projected by default** — the agent / workflow /
@@ -132,9 +135,14 @@ flip stops projecting is reachable through `doctrine library` before the flip la
   use (FR-008); harness adapter still installs; governance distinct from
   orientation (NF-005). **No-silent-unreachable gate:** every asset the flip stops
   projecting resolves through `doctrine library show` first.
-- Closure gates on SPEC-009 (FR-007–010, NF-004/005) and SPEC-026 (FR-001, FR-003,
-  NF-002) coverage reconciled; QUE-172 settled.
+- Closure gates on SPEC-009 (FR-007, FR-008, NF-004/005) and SPEC-026 (FR-001,
+  FR-003, NF-002) coverage reconciled; QUE-172 settled. **FR-009 and FR-010 stay
+  `pending`** (design D6/D4 — no customization/definition verbs this slice), as
+  does the FR-003 unsupported-source-type bullet (D3).
 
 ## Follow-Ups
 
 - Federated search slice (SPEC-026 FR-005/006, NF-003/004) — resolves IDE-041.
+- **FR-010 define-command** for the `project-governance.md` standing surface (D4).
+- **FR-009 hymn-customization verb** — materialize-on-customization (D6).
+- **IMP-309** — `doctor` availability check over published entries (§1 D2 seam).
