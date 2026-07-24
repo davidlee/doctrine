@@ -21,10 +21,12 @@ A CLI consumption surface for the entity/relation graph, in the RFC-001 sense
 
 - `concept-map export --format dot|mermaid|json` already exists but only for
   authored concept-map entities — not the live relation graph.
-- The web explorer (PRD-016, SL-072/SL-073, `map serve`) already computes a
-  focus-and-depth-bounded semantic-graph projection and renders it via
-  Graphviz server-side (SL-094) — a CLI emitter is largely re-plumbing an
-  existing projection to stdout, not new graph modelling.
+- The web explorer (PRD-016, SL-072/SL-073, `map serve`) serves the
+  presentation-neutral `CatalogGraph` read model as JSON (`/api/graph`);
+  DOT serialization and focus/depth bounding live **client-side**
+  (`web/map/src/dot.ts`). A CLI emitter needs a Rust port of both — small,
+  since the read model exists — corrected from this body's first draft,
+  which wrongly claimed a server-side DOT builder. SL-226 slices the core.
 - PRD-016 §2 demotes *static graph file interchange for external tools*
   (GraphML/Cypher/DOT-file export) to on-demand per RFC-002. This idea is
   distinguishable: it is an in-workflow, agent/human-facing consumption

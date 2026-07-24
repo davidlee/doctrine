@@ -472,3 +472,128 @@ Token cost: source-diving mod.rs visibility + re-export gating to discover the
 declared wiring was un-buildable/out-of-scope as specified. This is *exactly* the
 defect class SL-224 PHASE-02's plan-time selector-completeness lint is built to catch
 — the slice's own plan would have been flagged pre-dispatch had the lint existed.
+
+[dispatch; SL204-a15d-P03-d2-deviation]
+PHASE-03 (table+resolvers relocation) hit a forced locked-design deviation. Design
+D2 mandated resolve.rs route id-formatting through `listing::canonical_id`. That
+edge is infeasible: listing→tag (listing.rs:222 calls tag::fold_filter_tag) and
+tag→kinds (tag.rs:15 re-exports kinds::TAGGABLE), so kinds→listing closes a fresh
+leaf 3-cycle and fails the very architecture_layering_gate SL-204 exists to satisfy.
+Worker inlined the byte-identical `format!("{prefix}-{id:03}")` at the two sites
+(behaviour-neutral, tangle stays 0), documented in a resolve.rs module comment, and
+flagged it as a mandatory-review tripwire.
+
+Cost accounting: the deviation was caught by ME (orchestrator) reading the worker's
+worktree source at the conclude gate, NOT surfaced structurally — the funnel's
+regression diff was green (behaviour-preserving inline passes), so a green phase
+still carried a design-premise falsification. The token cost was a full consult
+round-trip + independent cycle re-verification (listing.rs:222 / tag.rs:15) before
+concluding. Signal: a locked-design premise that turns out false is invisible to
+the behaviour-preservation gate; only prose-level design/worker cross-read catches
+it. D2's "listing import is cycle-free" assumption was never tested at design time.
+Resolution: user accepted the inline (option A); canonical_id single-sourcing
+(relocate into kinds, which sits below tag) folded into PHASE-04's layering pass.
+
+[audit; SL-208-RV295]
+The sess-b prediction held: PHASE-01's D2 info-contract deviations (G1/G2/G3) were
+invisible to the VT gate — all 14 VTs PASS mechanically and the full test suite is
+green, yet fidelity to clap's rendered contract is only observable by an empirical
+render probe (run the built candidate binary, eyeball `worktree --help` /
+`onboard --help` output). This audit had to build the candidate and probe rendered
+output to confirm the folded-into-PHASE-02 fixes; a keyword-only audit would have
+rubber-stamped it. Confirms the standing RFC-011 gap: VT keyword mandates are a
+presence floor, not a contract-conformance check — a renderer can satisfy every
+keyword while dropping semantics the design requires. Otherwise low-friction: the
+dispatched-slice audit path was well-signposted (`dispatch candidate status`
+emitted the exact `candidate create` command; the impl was cleanly on the
+`review/208` impl-bundle evidence ref). Conformance's undeclared cell was pure
+false-positive (designed-but-unselected Cargo.toml / e2e test) — a where-to-look
+aid working as intended, routed to a `slice selector add` at reconcile, not code.
+
+[none — ad-hoc backlog capture; sess-graph-cli]
+Boot-snapshot command spine lists `explore` as a group heading
+(`explore search inspect relation concept-map map onboard`), which reads as a
+literal subcommand path; `doctrine explore concept-map …` fails
+(`unrecognized subcommand 'explore'`) — the members are top-level verbs.
+Cost: one wasted 4-command probe round. The spine's two-level indentation is
+ambiguous between "group verb with subcommands" (real: `relation list`) and
+"display-only heading" (`explore`, `facets`, `governance`…).
+
+[dispatch; SL-224 PHASE-01 EX-2 worker false-halt]
+A dispatch worker burned a full cycle (~50k tokens) on a PHANTOM base-guard
+failure. Its own base-guard `grep` CORRECTLY reported the prerequisite seam
+(`undeclared_detail` at conformance.rs:149); the worker then Read the file,
+concluded (wrongly) the function was absent, declared its own correct grep
+"fabricated by the rtk hook", and halted. Orchestrator ground-truthed via BOTH
+Read and grep on the identical worktree — the function is present exactly where
+grep said; no tooling corruption occurred. Root cause: worker over-trusted a
+mistaken Read over a correct grep and manufactured a tooling-corruption narrative
+rather than reconciling. Cost: one wasted worker spawn + orchestrator diagnosis
+(read both trees, verify fork base, clean the aborted worktree, re-arm, re-dispatch
+with ground truth asserted). Mitigation applied: re-dispatch prompt states the
+verified ground truth and instructs "trust a successful grep; reconcile, don't
+halt-and-blame-tooling". Possible systemic fix: base-guard seam checks should be
+self-verifying / less prone to worker second-guessing, and worker prompts should
+not invite tooling-distrust spirals.
+
+[slice; sess-graph-cli]
+Relation authoring for a new slice took 3 error rounds of vocabulary
+trial-and-error: `originates_from` illegal for SL (it's a `references` role,
+not a label), `specs` not link-authorable, `governed_by` target-kinds
+[ADR|POL|STD] only, `references` requires `--role`. Root causes: (a) the
+slice skill's own examples say "`specs` a spec" and suggest provenance
+labels that SL cannot author; (b) the legal-labels error message prints
+`references, references, references` (once per role?) — duplicate, and
+doesn't mention the `--role` requirement until you try it. Error messages
+were otherwise good (each rejection named the fix).
+
+[dispatch; SL204-a15d-P04-vt9-gate-falsered]
+PHASE-04's canonical_id worker produced a correct, fmt/clippy-clean, behaviour-
+preserving 2-file src delta — but worker_commit's gate refused commit-gate-red on
+`memory::ambient_surface_tests::vt9_no_discoverable_root_emits_nothing`, a test
+100% orthogonal to the delta (canonical-id format vs memory root discovery).
+
+Root cause: vt9 asserts "no discoverable root ⇒ emit nothing" using a fake non-
+resolving cwd, but discover_surface_root (memory.rs:9613) falls back to ambient
+CLAUDE_PROJECT_DIR, then surfaces from that root's LIVE memory corpus, deduped by
+the runtime seen-set. So vt9's pass/fail depends on (a) whether the gate's env has
+CLAUDE_PROJECT_DIR set to a real root and (b) whether that root's corpus+seen-set
+happens to surface a memory for vt9's input (session "s9", changed "src/x.rs").
+Non-hermetic w.r.t. ambient env + mutable runtime state. Verified: vt9 GREEN in
+the coord tree (regression capture at B = 0 failures) both with and without
+CLAUDE_PROJECT_DIR=/workspace/doctrine; only reds inside the deeply-nested worker
+fork whose env/corpus surfaces something. Explains why PHASE-03's worker_commit
+passed the same gate but PHASE-04's did not — a flake on fork corpus/seen state.
+
+Token cost: the worker_commit gate is a BINARY pass/fail running the full cargo
+test suite; a single non-hermetic ambient test false-reds the whole landing with
+no differential. The worker cannot diagnose or fix (memory.rs is out of scope; no
+retry allowed), so it halts and hands back. The orchestrator then spends a full
+investigation (read the test, trace discover_surface_root, reproduce with/without
+env) to establish the red is not the delta — cost the funnel's own coord-tree
+`regression diff --base B` would have absorbed for free (it cancels persistent/
+ambient reds by construction), but the skill forbids routing around a commit-gate-
+red via the fallback import. Signal: worker_commit's gate should run the funnel's
+B-vs-S differential (or at least tolerate a persistent/ambient red the coord-tree
+baseline also carries), not a bare full-suite pass/fail — else any non-hermetic
+test in the corpus can block an unrelated, correct worker delta. Latent defect:
+vt9 (and siblings) should unset/guard CLAUDE_PROJECT_DIR + pin an empty corpus.
+
+[dispatch; SL-224 conclude — verify-vt UNATTRIBUTABLE false-negative]
+`slice verify-vt 224` at conclude (coord tree) reported ALL FOUR VTs as
+`≈ UNATTRIBUTABLE — keyword present but <file> not modified by this slice`
+(exit 0, non-halting). This is a FALSE negative of IMP-228's source-delta
+intersection attribution: the four VT test_files (conformance.rs, dispatch.rs,
+plan.rs, check.rs) DO appear in their phase boundary-range diffs
+(36d0fe266..d08a6d51 and e8f3a3e8..23456005) and the tests genuinely exist with
+the mandated keywords (workers reported them passing). The attribution heuristic
+cannot see the slice-modification in the dispatch-coord-tree topology (dispatch/224
+forked from main, changes committed working-tree-free via merge-tree), so it
+mis-reports genuinely-attributable tests as inert. Token cost: orchestrator must
+diagnose (confirm range diffs contain each test_file, confirm exit 0 non-halting,
+confirm IMP-228 is the closed feature responsible) to distinguish a real gap from
+a tooling false-negative before trusting the handover signal. IMP-228 is closed/
+fixed but evidently untested against the dispatch-coord conclude path. Candidate
+follow-up: verify-vt attribution should consume the conformance boundary registry
+(code_start..code_end per phase) it already has, rather than recomputing a
+source-delta that misfires under the coord topology.
