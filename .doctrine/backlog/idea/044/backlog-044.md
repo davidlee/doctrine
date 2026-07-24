@@ -63,9 +63,13 @@ Settled in shaping conversation:
 - **Artefact form**: free markdown under a conventions contract (mandated
   sections, durable-id + `file:line` citation forms) — no schema. Nothing
   queries it and it isn't durable, so structure doesn't earn its cost.
-  Possible exception: a stamped staleness header (slice id, design revision
-  researched against, date) — the one field a checker might read. Decide at
-  design.
+  Possible exception: a stamped staleness baseline (slice id, date, and a
+  `path → content-hash` map of the design/scope docs researched against) —
+  the one thing a checker might read. Not a version int and not a git OID:
+  reuse the SL-040 `ContentSet` primitive (`src/contentset.rs`), which
+  `review prime` already uses for warm-cache drift. Absence-is-defined means
+  the pre-design round (no design.md yet) and later refresh rounds use the
+  same `diff` mechanism; the check is advisory, not a gate. Decide at design.
 - **Runner seam**: no executable config seam in slice 1. Skills say "use a
   research agent"; the *project* defines what that means (CLAUDE.md /
   `.doctrine/governance.md` § research) — scripts (`pi-scout`/`pi-research`),
