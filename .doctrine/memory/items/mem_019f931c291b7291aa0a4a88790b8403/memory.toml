@@ -1,0 +1,42 @@
+memory_uid = "mem_019f931c291b7291aa0a4a88790b8403"
+memory_key = "mem.pattern.dispatch.stale-bundle-id-collision-reseat-trunk-side"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "A long-unintegrated dispatch bundle collides backlog ids with trunk; reseat the trunk-side item, not the bundle"
+summary = "When a dispatch bundle sits unintegrated while trunk keeps allocating ids, the same id gets minted twice; reseat the mutable trunk item since review/* is immutable evidence."
+created = "2026-07-24"
+updated = "2026-07-24"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch", "reseat", "backlog", "audit"]
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "efacb61d315667b1ea7409b08972cbd3f7371d1d"
+ref_name = "refs/heads/edge"
+checkout_state_id = "171b8fba61e0c0f1ad8d4242c9c7deec82268b44f993b0851964e00a532ee5da"
+base_commit = "1115ee4830ae7a7dfb94e53938f13d582e8783f8"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
