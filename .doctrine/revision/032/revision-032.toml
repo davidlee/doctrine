@@ -1,0 +1,78 @@
+id      = 32
+slug    = "zero-rescue-dispatch-funnel-state-machine-and-git-read-verbs"
+title   = "Zero-rescue dispatch funnel state machine and git read verbs"
+status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
+approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+updated = "2026-07-24"
+tags    = []
+
+# A Revision (REV, ADR-013) is a first-class change-axis entity: a pending
+# revise-intent against authored governance/spec truth plus a staged delta payload.
+# Lifecycle (proposed→started→done; abandoned from any non-terminal) is moved by
+# `revision status REV-N <state>`. `approval` is orthogonal — lifecycle transitions
+# are approval-blind; the apply checkpoint (PHASE-05) consults it. The prose
+# rationale + before/after excerpts live in the sister `revision-NNN.md`.
+
+# change rows — the typed `revises` payload (the touched-entity set; the rows ARE
+# the edges, members.toml precedent). Authored by `revision change add` (PHASE-03),
+# NOT by hand and NEVER by `doctrine link`. A fresh `revision new` writes none:
+#   [[change]]
+#   target  = "ADR-006"   # durable peer id (the FK / anchor)
+#   action  = "modify"    # modify | retire | move | status | introduce | create
+#   primary = true        # display/headline hint; at most one, optional
+
+[relationships]
+needs = []
+after = []
+
+[[relation]]
+label = "originates_from"
+target = "RFC-016"
+
+# Introduce-only payload. The 4 active-requirement modify rows (REQ-287/293/294/318)
+# were removed after RV-300 F-1/F-3: modifying an ACTIVE requirement to describe
+# unbuilt behaviour presents target behaviour as shipped (the retrospective-charter
+# violation REV-030 avoided). Those §-prose/requirement reconciliations defer to a
+# ship-time SIBLING revision at slice close, when evidence exists.
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-008"
+member_of = "SPEC-021"
+new_statement = "Dispatch funnel position is persisted per-phase as authoritative run-state, advancing through explicit transitions that include verification as an authoritative, evidence-carrying step faithful to REQ-287 ordering (spawned, worker-committed, imported, verified, concluded, reaped); the record names a single persistence home, a single-writer authority, and crash-safe idempotent recovery."
+
+[[change]]
+action = "introduce"
+primary = true
+new_label = "FR-009"
+member_of = "SPEC-021"
+new_statement = "Every funnel verb is legality-gated on funnel position: it refuses out-of-order execution and names the expected next verb (report-and-halt with prescription); conclude refuses after skipped or failed verification."
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-010"
+member_of = "SPEC-021"
+new_statement = "dispatch next emits the single prescribed next action for the per-phase import-verify-conclude-reap sub-funnel from the current position; candidate/close/audit sourcing (REQ-317, OQ-4) is outside the oracle scope until a sibling revision settles it."
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-011"
+member_of = "SPEC-021"
+new_statement = "One funnel state machine owns the shared transition semantics; each dispatch transport (main-thread, subprocess, confined-orchestrator) projects into that single authority, recording the same transitions whether committing directly or through mediation; per-transport altitude reconciles with REQ-291 and REQ-335."
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-010"
+member_of = "SPEC-022"
+new_statement = "Every funnel git read is a first-class read verb over the object-db and ref primitives; no funnel read shells raw git. Existing seams are reused or relocated rather than reimplemented (e.g. is_linked_worktree for isolation detection); only genuinely absent reads are newly built."
+
+[[change]]
+action = "introduce"
+primary = false
+new_label = "FR-011"
+member_of = "SPEC-022"
+new_statement = "The funnel is working-tree-free and every coord-tree operation is bounded by a no-pathless-commit / safe-commit guard, so the ISS-234 reverse-diff cannot commit mass reversions; read verbs keep funnel reads from observing the reverse-diff, the guard closes the write side, and ISS-234 is absorbed only when both hold."

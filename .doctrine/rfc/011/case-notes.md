@@ -707,3 +707,26 @@ RFC is its own kind (`doctrine rfc show`), not a backlog prefix, but the search
 listing renders RFC-016 in the same column as IMP/ISS rows, inviting the wrong
 verb. One failed call. Cross-kind `search` results don't hint which `show` verb
 each id needs.
+
+[preflight; RFC-016-cluster2-preflight-20260724]
+Read-only research subagents (Explore) spawned at repo root to read entities via
+`doctrine <kind> show` could not run the CLI at all: no `./target/debug/doctrine`
+build present, and `~/.cargo/bin/doctrine` unusable because the bash
+`worktree-jail: cwd-not-a-worktree` hook refuses commands from a cwd-pinned
+subagent that is not inside a worktree. Both spec/backlog readers fell back to
+reading raw `.toml`/`.md` facets directly — exactly the "read via show, not raw
+files" guardrail agents are told to avoid. Cost: subagents burned tool calls
+discovering the block before falling back; the guardrail-preferred read path was
+structurally unavailable to the delegated readers. Friction = preflight
+delegation to read-only subagents collides with the worktree-jail hook + absent
+prebuilt binary combination. Mitigation candidates: (a) ensure a debug build
+exists before spawning read-only research fan-out, or (b) relax the worktree-jail
+hook for read-only `doctrine ... show/paths` invocations.
+
+[spec-tech/revision; RFC-016-cluster2-preflight-20260724]
+`doctrine revision list` returns empty (exit 0, no rows) despite 31 revisions on
+disk under `.doctrine/revision/`. Had to fall back to `ls .doctrine/revision/`
+to enumerate and pick an exemplar (REV-030) — the guardrail-preferred `list`
+verb gave nothing, costing a debug round-trip. Either a default status filter is
+hiding done/approved revisions with no hint, or a genuine bug. Token cost: two
+extra bash calls + reasoning to notice the list was lying rather than truly empty.
