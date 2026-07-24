@@ -965,15 +965,27 @@ fn git_stdin(root: &Path, args: &[&str], raw: &[u8]) -> Result<Vec<u8>, CaptureE
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| CaptureError::Git(format!("spawn git {}: {e}", args.join(" "))))?;
-    child
+    let mut stdin = child
         .stdin
         .take()
-        .ok_or_else(|| CaptureError::Git(format!("git {}: no stdin pipe", args.join(" "))))?
-        .write_all(raw)
-        .map_err(|e| CaptureError::Git(format!("git {}: write stdin: {e}", args.join(" "))))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|e| CaptureError::Git(format!("git {}: wait: {e}", args.join(" "))))?;
+        .ok_or_else(|| CaptureError::Git(format!("git {}: no stdin pipe", args.join(" "))))?;
+    // ISS-238: feed stdin from a scoped thread while THIS thread drains stdout/stderr
+    // via `wait_with_output`. Writing the whole payload before reading any output
+    // deadlocks once git's stdout fills its pipe buffer (git stops reading stdin, so
+    // our `write_all` blocks too) — reproducible on large `check-attr`/`hash-object`
+    // batches. A broken pipe (git exited early on bad args) is not the real error:
+    // git's stderr, surfaced below, is. `stdin` drops at the thread's end → EOF.
+    let output = std::thread::scope(|scope| {
+        scope.spawn(move || {
+            // Best-effort: a broken pipe (git exited early, e.g. on bad args) is
+            // expected and non-fatal — git's stderr, surfaced below, is the real
+            // diagnostic. Bind-and-ignore rather than propagate.
+            let _write = stdin.write_all(raw);
+        });
+        child
+            .wait_with_output()
+            .map_err(|e| CaptureError::Git(format!("git {}: wait: {e}", args.join(" "))))
+    })?;
     if output.status.success() {
         Ok(output.stdout)
     } else {
@@ -3110,6 +3122,38 @@ mod tests {
             custom,
             vec![b"driven.x".to_vec()],
             "only the custom-named driver is flagged; union + unspecified are built-in"
+        );
+    }
+
+    /// ISS-238 regression: `custom_merge_driver_paths` batches the WHOLE tree's
+    /// path list through `git check-attr --stdin` (`git_stdin`). On a large tree
+    /// both the stdin path-list and git's stdout triples exceed the OS pipe buffer;
+    /// the pre-fix `git_stdin` wrote all stdin before reading any stdout and
+    /// deadlocked. This must COMPLETE (not hang) and still flag only the custom
+    /// driver — proving `git_stdin` drains stdout concurrently with the write.
+    #[test]
+    fn custom_merge_driver_paths_does_not_deadlock_on_large_tree() {
+        let repo = ScratchRepo::new();
+        // ~2000 files with long names → check-attr stdin (~90KB) and stdout (~130KB)
+        // both far exceed the 64KB pipe buffer, forcing the deadlock on unfixed code.
+        for i in 0..2000 {
+            repo.write(
+                &format!("a_reasonably_long_directory/some_long_file_name_number_{i:05}.txt"),
+                "x\n",
+            );
+        }
+        repo.write(".gitattributes", "*.x merge=mydriver\n");
+        repo.write("driven.x", "d\n");
+        repo.git(&["add", "-A"]);
+        repo.git(&["commit", "-m", "large tree"]);
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+
+        let custom =
+            super::custom_merge_driver_paths(repo.path(), &tree).expect("driver scan completes");
+        assert_eq!(
+            custom,
+            vec![b"driven.x".to_vec()],
+            "only the custom driver is flagged, across a large tree (no deadlock)"
         );
     }
 
