@@ -117,20 +117,30 @@ Belt (`undeclared_paths`) answers *which paths*. Formatter
 /// Human-facing remediation block for an undeclared-scope refusal — the offending
 /// paths each with the `selector add --intent design-target` fix. SINGLE SOURCE
 /// for the CLI stdout report AND the MCP `Refused.detail` (no divergence between
-/// arms). Pure: formats a pre-computed undeclared set, reads nothing.
-pub(crate) fn undeclared_detail(undeclared: &[String]) -> String
+/// arms). Pure: formats a pre-computed undeclared set, reads nothing. Takes the
+/// slice id so the emitted `selector add` command is RUNNABLE (F1) — the id is a
+/// required leading positional (`selector add <ID> [GLOBS]…`). Does NOT embed the
+/// `undeclared-scope` token (F2): the MCP `reason` field carries it, and the leaf
+/// cannot reference `Refusal::token()` (engine) without a layering cycle.
+pub(crate) fn undeclared_detail(slice: u32, undeclared: &[String]) -> String
 ```
 
 Output shape (a handful of paths — nowhere near the ~295k-char `worker_commit`
 transcript-bloat trap, case-note #24):
 
 ```
-undeclared-scope — 2 path(s) no design-target selector declares:
+2 path(s) no design-target selector declares:
   tests/e2e_foo.rs
-    remediation: doctrine slice selector add tests/e2e_foo.rs --intent design-target --note <why>
+    remediation: doctrine slice selector add SL-224 tests/e2e_foo.rs --intent design-target --note <why>
   src/view.rs
-    remediation: doctrine slice selector add src/view.rs --intent design-target --note <why>
+    remediation: doctrine slice selector add SL-224 src/view.rs --intent design-target --note <why>
 ```
+
+The CLI arm prepends its standalone header (`import-refused: undeclared-scope — `);
+the MCP arm uses the block raw as `detail` (the `reason` field already names the
+token). Refactoring `report_undeclared_scope` through this formatter also FIXES a
+latent bug in the current CLI hint (`import.rs:161` emits `selector add {path}` —
+missing the required id — which would misparse the path as the id; F1).
 
 Consumers:
 - **CLI** — `import.rs:report_undeclared_scope` (146-165) collapses to: compute
@@ -150,8 +160,8 @@ match classify_import(true, true, single_commit, &delta_paths, selectors) {
         let paths: Vec<&str> = delta_paths.iter().map(String::as_str).collect();
         let undeclared = crate::conformance::undeclared_paths(selectors, &paths);
         return Ok(funnel_refused(
-            Refusal::UndeclaredScope.token(),
-            crate::conformance::undeclared_detail(&undeclared),
+            Refusal::UndeclaredScope.token(),           // reason carries the token (F2)
+            crate::conformance::undeclared_detail(slice, &undeclared),
         ));
     }
     Err(refusal) => return Ok(funnel_refused(refusal.token(), String::new())),
@@ -289,11 +299,14 @@ None open. Both slice OQs are resolved:
 
 ## 9. Quality Engineering & Validation
 
-- **VT (obj 1)** — unit over `import_compose` (already factored to drive with
-  explicit selectors, `dispatch.rs:257`): an `UndeclaredScope` refusal yields
-  `FunnelOutcome::Refused { detail }` whose `detail` NAMES the offending path.
-- **VT (obj 1)** — unit over `undeclared_detail`: golden string for a 2-path set
-  (count header + per-path remediation).
+- **VT (obj 1, pure)** — unit over `undeclared_detail`: golden string for a
+  2-path set (count header + per-path remediation, id present in each command).
+  This is the load-bearing coverage of the detail format.
+- **VT (obj 1, wiring)** — integration over `import_compose` via the existing
+  VT-1 git-fixture harness (`dispatch.rs:838`) — NOT a pure unit: the git
+  rev-parse / merge-base gather precedes `classify_import`, so reaching the
+  `UndeclaredScope` refusal needs a real fork with a delta (F3). Asserts the
+  `FunnelOutcome::Refused { detail }` NAMES the offending path.
 - **VT (obj 2)** — unit over `undeclared_test_files`: a VT `test_file` not in the
   passed selectors ⇒ one finding; a covered `test_file` ⇒ none; empty selectors
   ⇒ none (A3); a glob-covered `test_file` ⇒ none.
@@ -309,4 +322,20 @@ demonstrable.
 
 ## 10. Review Notes
 
-_(adversarial pass appended after the internal review)_
+Internal adversarial pass (author), integrated above:
+
+- **F1 (correctness, integrated).** `slice selector add <ID> [GLOBS]…` takes the
+  slice id as a required leading positional. The existing CLI remediation hint
+  (`import.rs:161`) omits it — the emitted command would misparse the path as the
+  id and fail. `undeclared_detail` now takes `slice: u32` and emits a runnable
+  command; the refactor fixes the latent CLI bug as a bonus.
+- **F2 (STD-001 / layering, integrated).** The leaf formatter no longer embeds the
+  `undeclared-scope` token — the MCP `reason` field carries it, and a leaf
+  reference to `Refusal::token()` (engine) would be a layering cycle. Header is
+  the bare count line; the CLI arm prepends its own standalone header.
+- **F3 (verification precision, integrated).** The obj-1 wiring test is
+  integration over `import_compose` (needs the git fixture), not a pure unit; the
+  pure `undeclared_detail` golden is the load-bearing format coverage.
+- **A2 re-confirmed.** `Criterion` is `{ id, text }` (prose); `test_file` lives on
+  `VerificationCriterion` — so a VT `test_file` is the only structured touch-path a
+  plan declares. Obj 2's scope is exact.
