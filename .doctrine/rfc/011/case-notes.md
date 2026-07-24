@@ -420,3 +420,55 @@ must exclude the authored commit — is stated in the dispatch skill; it took so
 reading (dispatch.rs import_compose + conformance.rs) to derive. A one-line
 "mid-dispatch selector/authored corrections: commit on the coord branch, set the
 next phase's code_start past them" note in the funnel section would save it.
+
+[dispatch; SL-208 sess-b]
+Two token-costly friction points surfaced while distilling the PHASE-02 worker prompt (orchestrator side):
+
+1. VT keyword encoded as a raw control char. plan.toml VT-2/VT-3 encoded the
+   "no ANSI escapes" mandate as the TOML unicode escape for U+001B, which a TOML
+   parser decodes to a RAW ESC byte. verify-vt (vtgate) matches keywords as a raw
+   substring over host source (POL-002, no language-syntax interpretation). A raw
+   ESC byte cannot sanely live in Rust source (tests assert via the '\u{1b}' char
+   LITERAL — six ASCII bytes, not a raw ESC). Net effect: the mandate is either a
+   silent false-FAIL (once the source-delta registry attributes the file) or
+   toothless (UNATTRIBUTABLE, before attribution). Cost: had to hexdump plan.toml,
+   cross-check tomllib vs disk bytes, read vtgate.rs + the attribution memory to
+   confirm the failure mode, then byte-patch the plan (the Edit tool could not
+   match the control/escape bytes; had to fall back to a Python byte replace, and
+   the Bash inline heredoc tripped a control-char input guard twice). Root cause:
+   nothing validates that a VT keyword is expressible as a raw substring of
+   plausible source; a control-char keyword is accepted silently at plan-author
+   time and only bites at conclude/audit. Candidate: `slice plan` / plan validate
+   could warn on a keyword containing control chars (or normalize \uXXXX intent).
+
+2. Renderer design-conformance gaps invisible to the VT gate. PHASE-01's
+   render_subcommand_help/render_options_section shipped three deviations from
+   design D2's info-contract (usage drops the `doctrine <path>` prefix; the global
+   --color option vanishes entirely from every subcommand's Options because the
+   cloned unbuilt clap node loses ancestor globals; local args drop
+   [default:]/[possible values:] annotations). None are caught by any VT keyword —
+   the VTs assert structural tokens ("│", "Usage:", function names), not fidelity
+   to clap's rendered contract. Only an empirical render-probe (throwaway test)
+   surfaced them. Cost: a throwaway probe test + git restore cycle to see actual
+   output. Root cause: VT keyword mandates are a presence floor, not a
+   contract-conformance check; a renderer can satisfy every keyword while silently
+   dropping semantics the design requires. Folded the fixes into PHASE-02 rather
+   than shipping and reopening at audit.
+
+[dispatch; SL-224 PHASE-01 orchestrator]
+Plan-authored wiring un-satisfiable within declared scope — a self-referential
+selector-completeness miss. PHASE-01 EX-2 mandated threading `slice: u32` through
+`run_import`, but `run_import`'s sole non-test caller is `src/worktree/mod.rs:494`,
+which is NOT a design-target selector (selectors: import.rs, conformance.rs, plan.rs,
+dispatch.rs, check.rs + scope-relevant slice.rs/vtgate.rs; no glob over mod.rs).
+Threading forces editing mod.rs → the slice's own `dispatch_import` scope belt would
+refuse the delta as `undeclared-scope`. Worker correctly held scope and shipped
+EX-1/EX-3/EX-4/EX-5 (MCP refusal detail, the objective's primary target), deferring
+EX-2. Additionally, EX-3 as literally written ("match Refusal::UndeclaredScope in prod
+dispatch.rs") was un-buildable: `Refusal` is re-exported from `worktree` only under
+`#[cfg(test)]` (mod.rs:109-111); worker dissolved it via a value-method
+`refusal.scope_detail(..)` needing no type name — strictly in-scope, same result.
+Token cost: source-diving mod.rs visibility + re-export gating to discover the
+declared wiring was un-buildable/out-of-scope as specified. This is *exactly* the
+defect class SL-224 PHASE-02's plan-time selector-completeness lint is built to catch
+— the slice's own plan would have been flagged pre-dispatch had the lint existed.
