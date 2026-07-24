@@ -92,20 +92,20 @@ cluster.
 
 ## Follow-Ups
 
-Open questions carried into `/design`:
+Open questions carried into `/design` — **all settled there** (`design.md` §1,
+2026-07-25; kept here for provenance):
 
-- **OQ-2** — run-state record home (extend `boundaries`/`journal` vs. a new record)
-  and its CAS/concurrency + idempotent-recovery contract. The FR-008 durable
-  half is in scope; the concrete home is design.
-- **NEW-OQ-A** — governing home for the state machine: a **new tech SPEC** for the
-  funnel state machine, vs. inline in SPEC-021. Weigh altitude (is the machine
-  evergreen mechanism deserving its own spec?) against fragmenting the orchestrator
-  spec.
-- **NEW-OQ-B** — **derive-from-code vs. drift-resistance**: can the state machine be
-  derived from the code (single source of truth), or — if authored as a governing
-  spec — what keeps it from drifting? Doctrine's conventions (reconciled coverage,
-  requirement entities, `spec validate`) should make a governing spec fairly
-  drift-resilient; decide whether a derivation/check closes the residual gap.
+- **OQ-2** — run-state record home → **D1/D2**: new committed sibling
+  `funnel.toml` on `dispatch/<NNN>` (not a `boundaries` extension — consumer
+  blast radius; not journal/sheet); CAS/concurrency = `commit_on_behalf`
+  `update_ref_cas` + idempotent replay (design §3).
+- **NEW-OQ-A** — governing home → **D6**: inline SPEC-021 § at reconcile;
+  SPEC-022 FRs cross-reference; no new spec (REQ custody stays where REV-032
+  minted it).
+- **NEW-OQ-B** — drift-resistance → **D7**: code-derived golden artifact
+  (leaf's `const` table rendered to table+mermaid under
+  `.doctrine/spec/tech/021/`), pinned by a golden VT test; structure pinned
+  mechanically, semantics governed socially.
 
 Post-close: ship-time sibling REV (the 4 active-requirement modifies); subprocess-arm
 projection if deferred; move-D tail; OQ-4 sibling revision.

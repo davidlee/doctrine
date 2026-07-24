@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/mcp_server/**"
@@ -24,7 +24,59 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/git.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/funnel_machine.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/dispatch.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/worker_commit.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/shared.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/**"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dispatch_config.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "flake.nix"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/dispatch/**"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/dispatch-agent/**"
+intent = "design-target"
+
+[[selector]]
+selector = ".agents/skills/dispatch-subprocess/**"
+intent = "design-target"
+
+[[selector]]
+selector = "install/dispatch-mechanics.md"
+intent = "design-target"
+
+[[selector]]
+selector = ".doctrine/spec/tech/021/**"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
