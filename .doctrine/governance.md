@@ -53,17 +53,38 @@ generic mechanics in the shipped `dispatch-mechanics.md`.)
 
 cargo --bin doctrine memory # focused tests; don't use --lib
 
-## Dispatch precondition: DOCTRINE_BIN → the coord build
+## DOCTRINE_BIN → the coord build (a coord-side *close-time* build)
 
 Set `DOCTRINE_BIN` to the **coord tree's** `./target/debug/doctrine` for any
 dispatch session (the jail forwards it — `flake.nix` `try-fwd-env`; `.mcp.json`
 launches the server via `${DOCTRINE_BIN:-doctrine}`). This binary is built from
 `dispatch/<slice>` source, so it carries earlier phases' not-yet-promoted
-binary-level rule changes (new role / allowlist / check). Without it the server —
-and the `worker_commit` commit gate's `just validate` → `doctrine doctor` — run
-the stale installed/PATH binary and **false-red a correct fork** (ISS-218; the
-`just` recipes resolve `${DOCTRINE_BIN:-./target/debug/doctrine:-doctrine}`, but
-the first rung must be set or a non-Rust phase falls through to a stale PATH).
+binary-level rule changes (new role / allowlist / check).
+
+**What this is NOT for anymore (SL-225 #1, DEC-003).** The `worker_commit` commit
+gate's `just validate` no longer shells `doctrine doctor` / `prompt check` in a
+worker fork — it **skips** them: those legs validate coord's *authored* `.doctrine/`
+state, which a worker cannot write, so in a fork they carry no worker-delta signal
+and could only stale-binary false-red (ISS-218). The fork false-red is dissolved at
+the recipe, not by pre-setting the binary. So `DOCTRINE_BIN` is **not** a precondition
+for the fork gate to pass.
+
+**What it IS for.** The coord-side **close-time** build that closes the fork-skip's
+one residual: a phase that changes `doctor`/`prompt check`'s *own logic* must have
+that new rule exercised against the real authored corpus by a *fresh* binary. That
+happens at **close**, on the coord/landing tree where the slice source has landed
+(the fork-side blockers — flat git topology, coord-never-built — do not apply). Two
+belt facts make it fresh-by-construction, not a checklist beat an agent can skip:
+
+1. off the fork path, `just validate` resolves `${DOCTRINE_BIN:-./target/debug/doctrine}`
+   (PATH fallback), not bare `doctrine`; and
+2. `check`/`gate` run `build` **before** `validate`, so `doctrine check gate` (close)
+   builds a this-invocation-fresh `./target/debug/doctrine` before `validate` reads the
+   corpus. **Close ritual: run `doctrine check gate` at close** — the build-before-validate
+   order is what gives it a fresh binary; `DOCTRINE_BIN` is the documented override/first
+   rung (a non-Rust phase falling through to a stale PATH), belt-and-suspenders now, not
+   the load-bearing guarantee.
+
 This is a **project** rule (doctrine dogfooding itself), not platform behaviour —
 POL-002 keeps cargo/`./target` layout out of the engine (SL-225, DEC-003).
 

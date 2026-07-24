@@ -152,6 +152,11 @@ fn run_commit_gate(dir: &Path, cfg: &VerificationConfig) -> anyhow::Result<GateO
         .args(rest)
         .current_dir(dir)
         .env_remove("DOCTRINE_WORKER")
+        // SL-225 #1: mark the gate window so `just validate` skips its governance self-checks
+        // (which read coord's authored state, inert in a fork — ISS-218). This is the only
+        // visible worker-context signal here: the marker is cleared and DOCTRINE_WORKER unset
+        // above. Neutral context flag — no path/binary/cargo policy (POL-002, DEC-003).
+        .env("DOCTRINE_DISPATCH_GATE", "1")
         .output()
         .with_context(|| format!("spawning the worker commit gate: {}", argv.join(" ")));
     if had_marker {
@@ -528,6 +533,23 @@ mod tests {
             crate::worktree::marker_present(&wt),
             "the worker marker must be restored after the gate"
         );
+    }
+
+    #[test]
+    fn worker_commit_gate_carries_dispatch_gate_signal() {
+        // VT-1e (SL-225 #1): the gate spawn sets DOCTRINE_DISPATCH_GATE=1 so `just validate`
+        // knows it runs inside the worker_commit gate window — needed because the gate clears
+        // the marker AND unsets DOCTRINE_WORKER (SL-199 F2), leaving this the only visible
+        // worker-context signal. A gate that passes IFF the var == "1" commits only when the
+        // engine sets it.
+        let gate = r#"["sh", "-c", "test \"$DOCTRINE_DISPATCH_GATE\" = 1"]"#;
+        let (_tmp, primary, wt, agent, base) = worker_fixture(gate, &[]);
+        fs::write(wt.join("seed"), "worker change\n").unwrap();
+        let out = run_worker_commit(&primary, &agent, "msg").unwrap();
+        match out {
+            WorkerCommitOutput::Committed { base: out_base, .. } => assert_eq!(out_base, base),
+            other => panic!("gate must see DOCTRINE_DISPATCH_GATE=1 and pass; got {other:?}"),
+        }
     }
 
     #[test]
