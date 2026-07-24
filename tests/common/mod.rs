@@ -17,3 +17,29 @@ pub(crate) use test_support::{doctrine_bin, repo_root};
 /// Canonical config path — mirrors `src/dtoml::DOCTRINE_TOML` (which
 /// integration tests can't import from a binary-only crate).
 pub(crate) const DOCTRINE_TOML: &str = ".doctrine/doctrine.toml";
+
+/// A temp base whose ancestry to `/` carries no project marker
+/// (`.git`/`.jj`/`.project`/`Cargo.toml`), for tests exercising the **no-root**
+/// path: `root::find` (src/root.rs) walks CWD up to `/`, so a stray marker above
+/// the system tempdir (e.g. a leftover `/tmp/.git`) would resolve an incidental
+/// root and mis-fire the assertion. Panics loudly if no clean base exists — a
+/// missed assertion is worse than a failed test. (Tests needing a root instead
+/// plant one: `create_dir(dir/".git")`.)
+pub(crate) fn marker_free_base() -> std::path::PathBuf {
+    let markers = [".git", ".jj", ".project", "Cargo.toml"];
+    let candidates = [
+        std::path::PathBuf::from("/dev/shm"),
+        std::path::PathBuf::from("/var/tmp"),
+        std::env::temp_dir(),
+    ];
+    for base in candidates {
+        if base.is_dir()
+            && base
+                .ancestors()
+                .all(|a| markers.iter().all(|m| !a.join(m).exists()))
+        {
+            return base;
+        }
+    }
+    panic!("no marker-free temp base available to exercise the no-root path");
+}

@@ -296,3 +296,14 @@ concurrent/uncommitted unrelated change can't mask or mimic a real reverse-diff.
 Also: dispatched-close-on-main + concurrent edge authoring => edge/main diverge
 (2-and-2 here); the next `git fetch . edge:main` promotion is non-FF and needs a
 merge. Not a defect, but a recurring convergence cost worth a documented recipe.
+[preflight; imp306-consolidate-capture] Severity-gated footgun hook fired on
+`doctrine backlog show IMP-306` and `slice show SL-215` with dispatch-arm
+memories (worker markers, seatbelt write-floor, branch-prefix) — zero relevance
+to a skills-consolidation preflight. Hook keys on command shape, not task
+context; ~3 irrelevant memory summaries injected across 2 calls.
+
+[execute; SL-225-P01-a] `cargo clippy --tests` false-floods 8330 denials
+(unwrap/expect/print_stdout enabled only in the test profile — AGENTS.md warns
+this; use plain `cargo clippy` / `doctrine check`). Cost one detour before
+recalling the documented trap. Minor: `just -n` writes its dry-run trace to
+stderr, not stdout — cost one red-for-wrong-reason cycle in a belt-order e2e.

@@ -13,11 +13,13 @@ setup: web-build build
 
 quick: fmt lint validate
 
-# Fast inner-loop gate — root package only.
-check: fmt lint lint-js validate test build
+# Fast inner-loop gate — root package only. `build` precedes `validate` so a
+# plain `doctrine check gate` (close) validates the landed corpus with a
+# this-invocation-fresh binary (SL-225 #1 (ii)); `quick` stays fast, unreordered.
+check: fmt lint lint-js build validate test
 
 # Full gate for end-of-phase / CI — includes the cordage workspace crate.
-gate: fmt lint lint-js validate test-all build
+gate: fmt lint lint-js build validate test-all
 
 # non-mutating prove-clean cadence — asserts fmt+lint clean, never fixes
 prove: fmt-check lint
@@ -26,8 +28,25 @@ prove: fmt-check lint
 ##
 
 validate:
-  doctrine prompt check
-  doctrine doctor
+  #!/usr/bin/env bash
+  set -euo pipefail
+  # In a dispatch worker fork the authored .doctrine/ state is coord's (the worker
+  # cannot write it), so these governance self-checks add no worker-delta signal —
+  # they can only false-red on a stale binary. Coord owns them. (SL-225 #1, DEC-003.)
+  if [ -n "${DOCTRINE_DISPATCH_GATE:-}" ] || [ "${DOCTRINE_WORKER:-}" = "1" ] \
+       || [ -f .doctrine/state/dispatch/worker ]; then
+    echo "validate: skipping governance self-checks in a worker fork (coord owns them)"
+    exit 0
+  fi
+  # Off the fork path (dev / CI / the orchestrator's close gate): validate the AUTHORED
+  # corpus with the SOURCE-CONSISTENT binary — the fresh coord build when present, else
+  # PATH. This is what closes the fork-skip's residual, at close, where coord IS built
+  # (SL-225 #1 (ii)). Exact `= "1"` on DOCTRINE_WORKER matches env_worker_set()
+  # (marker.rs:127) — a stray non-`1` value must not false-skip.
+  doc="${DOCTRINE_BIN:-./target/debug/doctrine}"
+  command -v "$doc" >/dev/null 2>&1 || doc=doctrine
+  "$doc" prompt check
+  "$doc" doctor
 
 validate-full: validate
 

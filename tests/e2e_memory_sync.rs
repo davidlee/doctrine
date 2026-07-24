@@ -113,7 +113,7 @@ fn sync_outside_a_doctrine_repo_writes_nothing() {
     // zero markers — the default temp base may itself sit under a stray repo. Pick
     // a base whose chain to `/` is marker-free so this exercises the Charge XI
     // branch deterministically rather than an incidental empty-embed no-op.
-    let base = marker_free_base();
+    let base = common::marker_free_base();
     let bare = tempfile::Builder::new()
         .tempdir_in(&base)
         .expect("tempdir in marker-free base");
@@ -130,28 +130,6 @@ fn sync_outside_a_doctrine_repo_writes_nothing() {
         !bare.path().join(".doctrine").exists(),
         "no-root sync must not write anything"
     );
-}
-
-/// The first temp base whose ancestry to `/` carries no root marker, so a tempdir
-/// under it resolves to no doctrine root. Panics if every candidate is polluted —
-/// a loud, honest failure beats a silently mis-targeted assertion.
-fn marker_free_base() -> std::path::PathBuf {
-    let markers = [".git", ".jj", ".project", "Cargo.toml"];
-    let candidates = [
-        std::path::PathBuf::from("/dev/shm"),
-        std::path::PathBuf::from("/var/tmp"),
-        std::env::temp_dir(),
-    ];
-    for base in candidates {
-        if base.is_dir()
-            && base
-                .ancestors()
-                .all(|a| markers.iter().all(|m| !a.join(m).exists()))
-        {
-            return base;
-        }
-    }
-    panic!("no marker-free temp base available to exercise the no-root path");
 }
 
 #[test]
