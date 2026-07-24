@@ -4,9 +4,9 @@ version = 1
 id = 4
 slug = "path-intent-selector-role-stamped-selectorintent-primitive"
 title = "Path-intent selector: role-stamped selector+intent primitive"
-status = "open"
+status = "resolved"
 created = "2026-06-23"
-updated = "2026-07-02"
+updated = "2026-07-24"
 tags = []
 
 [relationships]
