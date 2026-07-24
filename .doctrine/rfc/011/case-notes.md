@@ -982,3 +982,21 @@ handover terrain / code-impact table; cost one gate round-trip + a file read to
 locate the classification source (it's a TOML the test loads, not an in-test
 table). Cheap once known; a one-line "new module → layering.toml tier" note in
 the design's code-impact summary would have pre-empted it.
+
+[close; sess-sl226-close] SL-226 close (pi-arm): the handover's literal close
+recipe `dispatch sync --slice 226 --integrate --trunk refs/heads/main` FAILED
+with `no phase/226-NN code units to integrate`. Root cause: the pi-arm bundled
+all phase code into a single `review/226` "impl bundle" commit with NO
+`phase/226-NN` refs (they were never created / had been reaped), so `--integrate`
+found no code units to project. Recovery required the candidate close_target
+workflow (close skill §3a, undocumented as the fallback-when-phase-refs-absent):
+`candidate create --role close_target --payload code --base main --source
+review/226` → `candidate admit --review RV-301` → `--integrate --trunk`. Cost:
+~6 investigative tool calls to discover the topology (journal has only a
+review-surface row; phase refs absent; SL-204 precedent showed the trunk row is
+a candidate merge). The handover author's mental model assumed phase refs would
+exist. Second incidental cost: `check gate` on the primary edge tree was red from
+a *different* live agent's uncommitted `src/research.rs` WIP — a concurrent-edit
+false-red unrelated to the slice; had to isolate the SL-226 signal via audit
+evidence (byte-identical src tree) + a corpus-only `doctrine doctor` before edge
+went green/static.
