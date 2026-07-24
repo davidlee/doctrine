@@ -674,3 +674,29 @@ skill doesn't anticipate:
   root cause of the first "compile error" — worth the skill cross-linking that memory
   from the dispatched-slice audit note, since it presents identically to a regression
   (`Assets::get not found`).
+
+[plan; sess-graph-cli]
+plan.toml scaffold's inline comment renders the mandatory VT-mandate example
+as a MULTI-LINE inline table ({ id = "VT-1",\n expects = ...) — invalid TOML.
+Authoring the plan by following the scaffold's own example produced a parse
+failure at `slice phases` (cost: one failed round + a rewrite to single-line
+rows). The scaffold example should be valid TOML as displayed, or the plan
+schema should accept [[phase.verification]] array-of-tables for multi-line
+mandates (they are far more readable at this length).
+
+[close; SL-224-split-lineage]
+Close of a dispatched slice cost heavy read-tokens before any mutation, because the
+correct route was NOT what either tool surface advised. `dispatch status` said
+"refresh-base + re-prepare"; `dispatch candidate status` said "candidate create
+--role review_surface". Both are the naive path that projects code-only and strands
+the reconcile truth stranded on edge (design.md/RV-296/harvest) — silently wrong for
+this topology. The right route (split-lineage-reconcile-on-edge: unite edge⊕review,
+FF main, no-op close_target, integrate, reunite edge) is only discoverable from
+memory, not from the status machine's "next" hint. Compounding cost: coord tree was
+removed (refresh-base unavailable without `dispatch setup` resume); trunk had moved 9
+commits past the prepared base; the canonical selector lived on a *third* branch
+(dispatch/224), not edge. ~15 read-only probes (git topology, 3-way blob compares,
+merge-tree previews, 4 memory retrievals) to ground a plan before touching a ref.
+Signal: a pre-close check that diffs the admitted close_target's tree against edge and
+flags reconcile/authored divergence would collapse this to one command (the memory
+itself calls for it). The status machine being lineage-blind is the root token sink.
