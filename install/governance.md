@@ -9,3 +9,9 @@
 
 ## Behaviours
 
+## Research agents
+
+<!-- The /research pre-design round spawns these — one read-only agent per
+     thread. Define what to spawn: command, model, expectations. If left
+     empty, the orchestrating agent runs the threads itself. -->
+

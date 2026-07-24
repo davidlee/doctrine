@@ -108,7 +108,9 @@ the hypothesis is supported by evidence; `refuted` means it has been falsified.
 | `phases/` | **runtime** (gitignored) | symlink into `.doctrine/state/slice/nnn/phases/` |
 
 Also permitted inside a slice, spec, or backlog dir:
-- `research/*`
+- `research/*` — pre-design research round (gitignored, runtime tier):
+  `research.md` (curated artefact), `raw/` (verbatim thread output),
+  `baseline.toml` (staleness baseline, stamped by `doctrine slice research`)
 - `context/*`
 
 ### `.doctrine/adr/nnn/` — architecture decision records
