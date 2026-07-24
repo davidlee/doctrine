@@ -634,3 +634,11 @@ Minor friction during a dispatched-slice audit (coord tree removed):
   once oriented: canonical selectors from `dispatch/224` tip (edge copy stale by
   design), code leg on a detached `review/224` worktree with `web/map/dist`
   seeded first (RustEmbed). Both already covered by memories — no new discovery.
+
+[design; sess-graph-cli]
+Knowledge-record body file is `record-NNN.md`, but I appended prose to a
+guessed `knowledge-NNN.md` (pattern-matched from `slice-NNN.md` / entity-kind
+naming) — three stray files committed before `knowledge show` exposed the
+empty body. `doctrine knowledge paths` would have answered it; the per-kind
+body filename convention is inconsistent across kinds (slice-NNN.md vs
+backlog-NNN.md vs record-NNN.md), which invites exactly this guess.
