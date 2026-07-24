@@ -203,6 +203,32 @@ pub(crate) struct CommonShowArgs {
     pub(crate) path: Option<PathBuf>,
 }
 
+/// Extract the clean subcommand path from the process args by walking the clap
+/// tree (SL-208 PHASE-02). Skips flag tokens (`-`-led) and `help`; for each
+/// remaining token, descends via `find_subcommand` when it names a real child,
+/// else skips it (an option value like `never` in `--color never`, or an unknown
+/// token). The result is the resolved command chain — e.g.
+/// `doctrine --color never worktree --help` → `["worktree"]`;
+/// `doctrine worktree help provision --help` → `["worktree", "provision"]`.
+/// A tree walk, NOT a `!starts_with('-')` filter, so an option value is never
+/// mistaken for a subcommand name.
+fn subcommand_help_path() -> Vec<String> {
+    let mut node = <Cli as clap::CommandFactory>::command();
+    let mut path: Vec<String> = Vec::new();
+    for tok in std::env::args().skip(1) {
+        if tok.starts_with('-') || tok == "help" {
+            continue;
+        }
+        let next = match node.find_subcommand(&tok) {
+            Some(sub) => sub.clone(),
+            None => continue,
+        };
+        path.push(tok);
+        node = next;
+    }
+    path
+}
+
 fn main() -> anyhow::Result<()> {
     match Cli::try_parse() {
         Ok(cli) => {
@@ -211,22 +237,19 @@ fn main() -> anyhow::Result<()> {
             let Cli { command, .. } = cli;
             crate::commands::cli::dispatch(command, color)
         }
-        Err(e) => {
-            if matches!(
-                e.kind(),
-                clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
-                    | clap::error::ErrorKind::MissingSubcommand
-            ) {
-                // Intercept top-level help; subcommand help falls through to clap.
-                let args: Vec<String> = std::env::args().skip(1).collect();
-                let has_real_subcommand = args.iter().any(|a| !a.starts_with('-') && a != "help");
-                if !has_real_subcommand {
-                    let color = crate::tty::stdout_color_enabled();
-                    let term_width = crate::tty::stdout_terminal_width();
-                    // `--boot-map` wins over `--commands` when both are passed
-                    // (SL-150 §5.5 EDGE — documented precedence, not enforced
+        Err(e) => match e.kind() {
+            clap::error::ErrorKind::DisplayHelp
+            | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => {
+                let path = subcommand_help_path();
+                let color = crate::tty::stdout_color_enabled();
+                let term_width = crate::tty::stdout_terminal_width();
+                if path.is_empty() {
+                    // Top-level help (EX-5) — unchanged. Covers `doctrine --help`
+                    // (DisplayHelp) AND bare `doctrine` (DisplayHelpOnMissing…, an
+                    // empty path). `--boot-map` wins over `--commands` when both are
+                    // passed (SL-150 §5.5 EDGE — documented precedence, not enforced
                     // mutual exclusion).
+                    let args: Vec<String> = std::env::args().skip(1).collect();
                     let help = if args.iter().any(|a| a == "--boot-map") {
                         crate::commands::cli::render_boot_map()
                     } else if args.iter().any(|a| a == "--commands") {
@@ -235,11 +258,27 @@ fn main() -> anyhow::Result<()> {
                         crate::commands::cli::render_top_level_help(color, term_width)
                     };
                     writeln!(std::io::stdout(), "{help}")?;
-                    return Ok(());
+                    Ok(())
+                } else if e.kind() == clap::error::ErrorKind::DisplayHelp {
+                    // An explicit help request (`--help`/`-h`, or the `help`
+                    // subcommand) on a real command → focused cozy-table render (EX-1).
+                    let path_refs: Vec<&str> = path.iter().map(String::as_str).collect();
+                    let help =
+                        crate::commands::cli::render_subcommand_help(&path_refs, color, term_width);
+                    writeln!(std::io::stdout(), "{help}")?;
+                    Ok(())
+                } else {
+                    // A real parent with no verb (`doctrine worktree`) — NOT a help
+                    // request. Preserve clap's error exit (nonzero, EX-2).
+                    e.exit()
                 }
             }
-            e.exit()
-        }
+
+            // Every other clap error — including `MissingSubcommand` (a verb-less
+            // parent stays a nonzero clap error, never silently rendered as help,
+            // EX-2) — keeps clap's default exit.
+            _ => e.exit(),
+        },
     }
 }
 #[cfg(test)]
@@ -872,62 +911,69 @@ mod write_class_tests {
         assert!(help.contains("--color"), "color flag in help");
     }
 
+    // SL-208 PHASE-02: these four now exercise the NEW cozy-table renderer
+    // (`render_subcommand_help`) rather than clap's flat `render_help()`. They
+    // KEEP the PHASE-01 content-preservation assertions (subcommand names present)
+    // AND add new-format assertions: the `│` cozy-table separator and the
+    // full-path `Usage: doctrine <name>` prefix (G1). `help_snapshot_top_level`
+    // stays on `render_help()` — top-level output is unchanged (EX-5).
     #[test]
     fn help_snapshot_slice_subcommand() {
-        let help = <Cli as clap::CommandFactory>::command()
-            .find_subcommand_mut("slice")
-            .unwrap()
-            .render_help()
-            .to_string();
+        let help = crate::commands::cli::render_subcommand_help(&["slice"], false, Some(100));
         assert!(help.contains("Create and list slices"));
         assert!(help.contains("new"));
         assert!(help.contains("design"));
         assert!(help.contains("plan"));
         assert!(help.contains("list"));
         assert!(help.contains("show"));
+        assert!(help.contains('│'), "cozy-table separator");
+        assert!(
+            help.contains("Usage: doctrine slice"),
+            "full-path usage (G1)"
+        );
     }
 
     #[test]
     fn help_snapshot_memory_subcommand() {
-        let help = <Cli as clap::CommandFactory>::command()
-            .find_subcommand_mut("memory")
-            .unwrap()
-            .render_help()
-            .to_string();
+        let help = crate::commands::cli::render_subcommand_help(&["memory"], false, Some(100));
         assert!(help.contains("Record, show, and list memories"));
         assert!(help.contains("record"));
         assert!(help.contains("find"));
         assert!(help.contains("retrieve"));
         assert!(help.contains("list"));
+        assert!(help.contains('│'), "cozy-table separator");
+        assert!(
+            help.contains("Usage: doctrine memory"),
+            "full-path usage (G1)"
+        );
     }
 
     #[test]
     fn help_snapshot_adr_subcommand() {
-        let help = <Cli as clap::CommandFactory>::command()
-            .find_subcommand_mut("adr")
-            .unwrap()
-            .render_help()
-            .to_string();
+        let help = crate::commands::cli::render_subcommand_help(&["adr"], false, Some(100));
         assert!(help.contains("Create and list architecture decision records"));
         assert!(help.contains("new"));
         assert!(help.contains("list"));
         assert!(help.contains("show"));
         assert!(help.contains("status"));
+        assert!(help.contains('│'), "cozy-table separator");
+        assert!(help.contains("Usage: doctrine adr"), "full-path usage (G1)");
     }
 
     #[test]
     fn help_snapshot_spec_subcommand() {
-        let help = <Cli as clap::CommandFactory>::command()
-            .find_subcommand_mut("spec")
-            .unwrap()
-            .render_help()
-            .to_string();
+        let help = crate::commands::cli::render_subcommand_help(&["spec"], false, Some(100));
         assert!(help.contains("Create and list product / technical specifications"));
         assert!(help.contains("new"));
         assert!(help.contains("list"));
         assert!(help.contains("show"));
         assert!(help.contains("validate"));
         assert!(help.contains("req"));
+        assert!(help.contains('│'), "cozy-table separator");
+        assert!(
+            help.contains("Usage: doctrine spec"),
+            "full-path usage (G1)"
+        );
     }
 
     #[test]
@@ -954,6 +1000,167 @@ mod write_class_tests {
         assert!(
             out.contains("command") && out.contains("verb") && out.contains("description"),
             "headers"
+        );
+    }
+
+    // ── SL-208 PHASE-01: focused subcommand-help renderer ───────────────────────
+
+    // VT-1: a command WITH sub-subcommands (worktree) renders the cozy-table `│`
+    // separators via render_subcommand_help, with the subcommand names present.
+    #[test]
+    fn subcommand_help_uses_cozy_table() {
+        let out = crate::commands::cli::render_subcommand_help(&["worktree"], false, Some(80));
+        assert!(out.contains('│'), "cozy-table `│` separators present");
+        assert!(out.contains("provision"), "subcommand name present");
+        assert!(out.contains("fork"), "subcommand name present");
+    }
+
+    // VT-2: the borderless options section has NO `│` and no box-drawing chars.
+    #[test]
+    fn options_section_no_borders() {
+        let cmd = <Cli as clap::CommandFactory>::command();
+        let install = cmd.find_subcommand("install").expect("install command");
+        let out = crate::commands::cli::render_options_section(install, false, Some(80));
+        assert!(
+            !out.is_empty(),
+            "install has visible args → non-empty section"
+        );
+        assert!(!out.contains('│'), "no column separator");
+        for ch in ['┌', '┐', '└', '┘', '─', '├', '┤', '┬', '┴', '┼', '│'] {
+            assert!(!out.contains(ch), "no box-drawing char {ch:?}");
+        }
+    }
+
+    // VT-3: `color: false` renders zero ANSI escapes across the whole surface.
+    #[test]
+    fn subcommand_help_no_color_is_plain() {
+        let out = crate::commands::cli::render_subcommand_help(&["worktree"], false, Some(80));
+        assert!(
+            !out.contains('\u{1b}'),
+            "no ANSI escapes under color: false"
+        );
+    }
+
+    // VT-4: a leaf command (no sub-subcommands) skips the Commands heading but
+    // still renders the Options section.
+    #[test]
+    fn subcommand_help_leaf_skips_commands_table() {
+        let out = crate::commands::cli::render_subcommand_help(&["install"], false, Some(80));
+        assert!(!out.contains("Commands:"), "leaf has no Commands heading");
+        assert!(out.contains("Options:"), "leaf still lists Options");
+    }
+
+    // VT-5: the surface carries the target's about text and a `Usage:` line.
+    #[test]
+    fn subcommand_help_has_about_and_usage() {
+        let out = crate::commands::cli::render_subcommand_help(&["worktree"], false, Some(80));
+        assert!(out.contains("Usage:"), "Usage: line present");
+        // `worktree`'s about (first paragraph) from its clap derive doc-comment.
+        assert!(
+            out.contains("worktree"),
+            "about/usage references the command"
+        );
+    }
+
+    // VT-6: the walk strips intermediate `help` tokens and resolves via
+    // find_subcommand — `["worktree","help","provision"]` lands on provision.
+    #[test]
+    fn subcommand_help_path_walks_clap_tree() {
+        let out = crate::commands::cli::render_subcommand_help(
+            &["worktree", "help", "provision"],
+            false,
+            Some(80),
+        );
+        // provision is a leaf → no Commands heading, but its own usage + options.
+        assert!(!out.contains("Commands:"), "provision is a leaf");
+        assert!(
+            out.contains("provision"),
+            "resolved to provision (find_subcommand walk)"
+        );
+        assert!(out.contains("Options:"), "provision options present");
+    }
+
+    // VT-7: clap's own render_usage line is ANSI-free under color: false.
+    #[test]
+    fn subcommand_help_ansi_stripped_from_usage_plain_mode() {
+        // The Usage: line is produced by clap's render_usage(); assert the whole
+        // surface (which includes it) is escape-free in plain mode.
+        let out = crate::commands::cli::render_subcommand_help(&["slice"], false, Some(80));
+        let usage_line = out
+            .lines()
+            .find(|l| l.starts_with("Usage:"))
+            .expect("a Usage: line");
+        assert!(
+            !usage_line.contains('\u{1b}'),
+            "render_usage line is ANSI-free under color: false"
+        );
+    }
+
+    // ── SL-208 PHASE-02: renderer fidelity fixes G1 / G2 / G3 ───────────────────
+
+    // G1 — the Usage line carries the FULL command path, not the bare leaf. A
+    // depth-3 command (`slice selector add`) is the sharp case.
+    #[test]
+    fn subcommand_help_usage_carries_full_path() {
+        let out = crate::commands::cli::render_subcommand_help(
+            &["slice", "selector", "add"],
+            false,
+            Some(100),
+        );
+        let usage = out
+            .lines()
+            .find(|l| l.starts_with("Usage:"))
+            .expect("a Usage: line");
+        assert!(
+            usage.contains("doctrine slice selector add"),
+            "usage must carry the full invocation path, got: {usage:?}"
+        );
+    }
+
+    // G2 — ancestor global options (the root `--color`) re-appear in a
+    // subcommand's Options, with their possible-value annotation intact.
+    #[test]
+    fn subcommand_help_reattaches_global_color() {
+        let out =
+            crate::commands::cli::render_subcommand_help(&["memory", "sync"], false, Some(120));
+        assert!(
+            out.contains("--color"),
+            "the global --color option must appear in a subcommand's Options"
+        );
+        assert!(
+            out.contains("[possible values: auto, always, never]"),
+            "--color's possible-values annotation must be present"
+        );
+    }
+
+    // G3 — per-arg annotations match clap's exact format & order. The `--color`
+    // help column is asserted byte-for-byte against clap's own rendering: help
+    // text, then `[default:]`, then `[possible values:]`.
+    #[test]
+    fn subcommand_help_annotations_match_clap_for_color() {
+        let out =
+            crate::commands::cli::render_subcommand_help(&["memory", "sync"], false, Some(120));
+        assert!(
+            out.contains(
+                "Control colour output [default: auto] [possible values: auto, always, never]"
+            ),
+            "the --color help column must match clap's annotation format byte-for-byte"
+        );
+    }
+
+    // G3 — a valueless boolean flag carries NO `[default: false]` (clap suppresses
+    // the SetTrue action's internal default); the annotation gate must too.
+    #[test]
+    fn subcommand_help_bool_flag_has_no_default_annotation() {
+        let out =
+            crate::commands::cli::render_subcommand_help(&["memory", "sync"], false, Some(120));
+        let dry_run = out
+            .lines()
+            .find(|l| l.contains("--dry-run"))
+            .expect("a --dry-run line");
+        assert!(
+            !dry_run.contains("[default:"),
+            "valueless flag must not show a default, got: {dry_run:?}"
         );
     }
 

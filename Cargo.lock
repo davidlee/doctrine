@@ -451,6 +451,7 @@ dependencies = [
  "sha2",
  "syn",
  "tempfile",
+ "textwrap",
  "thiserror",
  "time",
  "tokio",
@@ -1493,6 +1494,15 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys",
+]
+
+[[package]]
+name = "textwrap"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c13547615a44dc9c452a8a534638acdf07120d4b6847c8178705da06306a3057"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]

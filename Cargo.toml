@@ -67,6 +67,9 @@ owo-colors.workspace = true
 # `default-features = false` build never activated. terminal::size() is not feature-
 # gated, so OFF keeps zero new compiled weight (single crossterm v0.29.0 in the lock).
 crossterm = { version = "0.29", default-features = false }
+# Direct dep (NOT assumed transitive): the focused subcommand-help options section
+# wraps per-arg help text to the residual column via `textwrap::fill` (SL-208).
+textwrap = { workspace = true }
 cordage = { path = "crates/cordage", version = "0.2.0" }
 walkdir.workspace = true
 webbrowser = "1"
@@ -155,6 +158,11 @@ tower = { version = "0.5", default-features = false, features = ["util"] }
 http-body-util = "0.1"
 tempfile = "3"
 syn = { version = "2", features = ["full", "visit"] }
+# Column-aware text wrapping for the focused subcommand-help options section
+# (SL-208). default-features = false drops the optimal-fit/unicode-linebreak
+# extras (smawk + unicode-linebreak deps) — the greedy first-fit `fill` is all the
+# help renderer needs; unicode-width stays on (default) for correct column maths.
+textwrap = { version = "0.16", default-features = false, features = ["unicode-width"] }
 
 # ---- rustc lints ----
 [workspace.lints.rust]
