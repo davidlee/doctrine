@@ -38,3 +38,27 @@ a canned message that hard-codes "keyword present" regardless of whether the
 substring scan ran.
 
 Surfaced while planning SL-214 (RFC-011 case-noted).
+
+## Additional datum — universal UNATTRIBUTABLE on a dispatch-concluded slice (SL-227 audit, RV-302 F-4)
+
+A distinct trigger of the same UNATTRIBUTABLE path, worth recording because it is
+*total*, not per-file: at SL-227's conclude/audit, `doctrine slice verify-vt 227`
+returned **UNATTRIBUTABLE for EVERY VT across all three phases** — exit 0 (PASS,
+non-halting), no Fail/WAIVED/UNCHECKABLE.
+
+- **Not** missing/failing tests: the mandated tests demonstrably exist and pass
+  (independent `cargo test --bin doctrine` on `review/227` = 3812 pass; e.g. 80+
+  keyword hits in `src/commands/library.rs`; the crux gate in `src/install.rs`).
+- **Mechanism (narrower than the title's "keyword present" message):** for a
+  slice driven to conclusion via `/dispatch`, the source-delta **base** is
+  mis-computed — an 8-commit refresh-base moved the fork-point, so the
+  modified-by-this-slice set resolves to empty and every keyword hit is orphaned
+  as "keyword present but <file> not modified by this slice". The message is the
+  ISS-226 symptom; the base miscomputation for a dispatch-concluded slice is the
+  upstream cause of the *universal* verdict.
+- **Impact on the conclude gate:** UNATTRIBUTABLE is treated as a gate-fidelity
+  artifact (exit 0, non-halting) rather than a delta defect, so it does not block
+  audit/close — but it makes verify-vt uninformative for every dispatch-concluded
+  slice, forcing a manual re-grep + independent test run to establish the floors.
+- See also IMP-228 (`imp-228-vtgate-unattributable` worktree) if a fix is scoped
+  there. Surfaced by SL-227 audit RV-302; `.doctrine/review/302/`.

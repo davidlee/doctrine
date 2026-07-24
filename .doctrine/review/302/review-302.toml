@@ -1,0 +1,106 @@
+id    = 302
+slug  = "sl-227-post-implementation-audit-library-read-surface-minimal-projection-flip-vs-designplan"
+title = "SL-227 post-implementation audit — library read surface + minimal-projection flip vs design/plan"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-227"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "design.md §5.2 prose predicts top-level main.rs/library.rs; reality is src/commands/{cli,library,guard,mod}.rs"
+detail = "Expected (design §5.2 / §5.1 system model): the command tier lands as top-level `main.rs` (CLI wiring) + `src/library.rs` (veneer). Observed (review/227 d32f9100): the veneer is `src/commands/library.rs`, CLI wiring is `src/commands/cli.rs`, plus `src/commands/{guard,mod}.rs` — ADR-001 layering forbids an unclassified top-level command module, so the tier lives under `src/commands/`. The selector registry (slice-227.toml) and plan.toml PHASE-02 VT `test_file` (5× `src/commands/library.rs`) were ALREADY corrected on dispatch/227/review/227; only the design.md §5.2/§5.1 prose remains stale. Non-blocking: canon prose lags reality. Surface: per-slice direct edit (design.md)."
+disposition = "verified"
+response = "Observation confirmed. The command tier lives under src/commands/ (ADR-001 forbids an unclassified top-level module); selector registry + plan.toml VT test_file already corrected on review/227. Remediation delegated to /reconcile — per-slice DIRECT EDIT of design.md §5.1 system model + §5.2 (main.rs/library.rs → src/commands/{cli,library}.rs). Recorded in the Reconciliation Brief. No code change."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "minor"
+title = "design.md §9 flip-list omits the 4 migrated tests/e2e_{policy,knowledge,standard,revision}_install_commit.rs"
+detail = 'Expected (design §9 "Install (changed)"): enumerates the projection-result tests that flip. Observed: 4 e2e tests — `tests/e2e_{policy,knowledge,standard,revision}_install_commit.rs` — were in-scope and correctly migrated (eager-install-scaffolds → lazy-first-scaffold), each STRENGTHENED with a new negative assertion that a bare install must NOT eagerly scaffold `.doctrine/<kind>` then proving `<kind> new` scaffolds lazily (FR-008). They are absent from the §9 flip list and surface as conformance-undeclared (no selector covers them). Not a defect in the tests — a design-list omission + a registry gap. Surface: design.md §9 direct edit (+ selector registry, see the registry finding).'
+disposition = "verified"
+response = """Observation confirmed. The 4 e2e_*_install_commit.rs migrations are in-scope and correctly re-polarised (verified: each adds a negative "bare install must NOT eagerly scaffold" assertion, then proves lazy first-scaffold — strengthened). Remediation delegated to /reconcile — per-slice DIRECT EDIT of design.md §9 flip list; the registry gap is folded into F-5's selector work. Recorded in the Reconciliation Brief."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "seed-gate mechanism (install/manifest.toml [memory].seed_items = []) is design-silent"
+detail = """Expected (design D8 / §5.3): "gate seed_authoring_memories" so a fresh install seeds no memory entity — mechanism unspecified. Observed: the gate is realized declaratively — `install/manifest.toml` ships `[memory] seed_items = []`, and `seed_authoring_memories` early-returns on `manifest.memory.seed_items.is_empty()` (a pre-existing empty-guard). Faithful to D8's intent and arguably the cleanest realization (no new flag, no deleted call), but the design does not record WHICH mechanism was chosen, so a reader could misread the empty `[memory]` block as an accidental omission rather than the deliberate gate. Record as an accepted decision. Surface: per-slice direct edit (design.md §5.3/D8 note); no code change."""
+disposition = "verified"
+response = "Observation confirmed. The declarative gate ([memory].seed_items=[] + the pre-existing is_empty() early-return in seed_authoring_memories) faithfully realizes D8 and is the cleanest mechanism. Remediation delegated to /reconcile — per-slice DIRECT EDIT recording the chosen mechanism as an accepted decision in design.md §5.3/D8 (so the empty [memory] block reads as deliberate, not omission). Recorded in the Reconciliation Brief. No code change."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "ISS-226 reproduction: post-conclude verify-vt 227 returns universal UNATTRIBUTABLE (exit 0, non-halting)"
+detail = 'Expected: `slice verify-vt 227` attributes each VT keyword hit to a slice source-delta. Observed (conclude gate + independently confirmed): every VT across all 3 phases returns UNATTRIBUTABLE ("keyword present but <file> not modified by this slice"), exit 0 (PASS, non-halting) — no Fail/WAIVED/UNCHECKABLE. Root cause is the ISS-226 attribution bug: for a dispatch-concluded slice, the 8-commit refresh-base moved the fork-point so the source-delta base is mis-computed, orphaning every attribution. The mandated tests demonstrably EXIST and PASS (independent `cargo test --bin doctrine` on review/227: 3812 pass, 1 fail = unrelated `test_support::doctrine_bin_returns_existing_executable` env artifact, 1 ignored; the crux gate, flip tests, and library/publication suites all green). Treat UNATTRIBUTABLE as a gate-fidelity artifact, not a delta defect. Fresh reproduction datum for the existing ISS-226. Surface: backlog annotation (ISS-226) via harvest; no slice/spec change.'
+disposition = "verified"
+response = "Observation confirmed and independently reproduced (verify-vt 227 exit 0, all UNATTRIBUTABLE; the mandated tests exist and pass — cargo test on review/227: 3812 pass, clippy clean). This is the known ISS-226 attribution bug (refresh-base moved the fork-point), a gate-fidelity artifact, non-halting — NOT a delta defect, so the conclude-gate is honoured. Remediation is HARVEST: annotate ISS-226 with this fresh universal-UNATTRIBUTABLE reproduction datum. Recorded in the Reconciliation Brief / harvest."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "selector registry: src/main.rs undelivered (stale design-target); guard.rs/mod.rs command-tier glue undeclared"
+detail = "Expected: slice-227.toml `design-target` selectors match the actual edited surface. Observed (conformance vs review/227 registry): (a) `src/main.rs` remains a declared `design-target` but is UNDELIVERED — the CLI wiring landed in `src/commands/cli.rs`, main.rs is untouched (stale-but-harmless, cosmetic); (b) `src/commands/{guard,mod}.rs` were edited (mechanical command-tier wiring for the new `library` module — mod declaration + guard registration) but are conformance-UNDECLARED. Both are registry-completeness gaps, not behavioural defects. Surface: `doctrine slice selector rm src/main.rs` + `slice selector add src/commands/{guard,mod}.rs` (the registry, which `slice conformance` reads — slice-227.toml); design §5.2 is only the human mirror."
+disposition = "verified"
+response = "Observation confirmed. src/main.rs is a stale-but-harmless design-target (undelivered; CLI wired via src/commands/cli.rs); src/commands/{guard,mod}.rs are undeclared mechanical library-module glue. Both are registry-completeness gaps, not behavioural defects. Remediation delegated to /reconcile — the load-bearing surface is the SELECTOR REGISTRY (doctrine slice selector rm src/main.rs; slice selector add src/commands/{guard,mod}.rs), which slice conformance reads; design §5.2 is the human mirror. Recorded in the Reconciliation Brief."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "nit"
+title = "publication.rs completeness test hardcodes BASE_BACKINGS[3], duplicating the manifest's authoritative [base].backings"
+detail = 'Expected (STD-001 named-constants / single-source): the projection base set has one authority — `install/manifest.toml [base].backings`. Observed: the PHASE-01/02 belt-and-suspenders test `publication::tests::published_set_covers_the_full_projection_complement` hardcodes `const BASE_BACKINGS: [&str; 3] = [".gitignore","doctrine.toml","project-orientation.md"]` to compute its exclusion set, duplicating the manifest literal. The AUTHORITATIVE PHASE-03 crux gate (`install::tests::every_unprojected_embed_is_a_published_backing`) correctly DERIVES base from `manifest.base.backings` (drift-guarded). If a 4th base backing is ever added, this duplicate would drift (false-red — asserting the new base file is published) while the real gate stays correct. Low risk (fails safe, and the derived gate is the load-bearing one). Test-hygiene only. Surface: follow-up backlog (test could derive base from the manifest like the crux gate does).'
+disposition = "follow-up"
+response = "Observation confirmed (code/test finding — follow-up is the correct route; the fix is small but out of audit fix-now scope since review/227 is an immutable evidence ref and no candidate branch is in play). The belt-and-suspenders test publication::tests::published_set_covers_the_full_projection_complement hardcodes BASE_BACKINGS[3], duplicating install/manifest.toml [base].backings (STD-001). Fails safe (false-red on a 4th base backing; the authoritative install.rs crux gate stays drift-guarded), so low risk. Mint an IMP during harvest to derive the base from the manifest like the crux gate does."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "crux reachability gate reads compiled embed both sides — can false-green on a stale incremental build (design §8 R3 disk-source pattern not applied)"
+detail = """External pass (codex/GPT-5.5), verified against source. Expected (design §8 R3): staleness-proof reachability — "admission tests read from disk source (staleness-proof, publication VT-3 pattern)". Observed (src/install.rs:3960 every_unprojected_embed_is_a_published_backing): the gate reads BOTH sides from the compiled RustEmbed — the install enumeration via embedded_filenames()→InstallAssets::iter() (asset_source.rs:20) and the published set via PublicationManifest::load()→publication_manifest_bytes()→PublicationAssets embed (publication.rs:343). rust-embed has debug-embed ON (Cargo.toml:126), so assets are compiled in even in debug; a lone install/ asset edit without a rebuild leaves an incremental `cargo test` inspecting the STALE asset set, so an added-but-unpublished asset can pass the gate. `checked > 0` blocks total vacuity, not stale-embed vacuity. The code's OWN doc-comment on publication_manifest_bytes() notes the ADMISSION gate (VT-3) reads disk from CARGO_MANIFEST_DIR "so embed staleness cannot mask a defect" — the crux gate does not apply that same pattern. Current source-set is sound (codex audit: 73 entries, all MIT, all backings resolve, no base/published overlap); the guarantee also holds at CLOSE (`doctrine check gate` builds fresh before validate). So non-blocking, but the load-bearing pairing invariant's test robustness is weaker than design §8 R3 prescribes and inconsistent with its sibling admission gate. Surface: follow-up backlog (harden the gate to read the install enumeration + publication manifest from disk-source, mirroring the VT-3 pattern)."""
+disposition = "follow-up"
+response = "Confirmed against source (debug-embed on; gate reads compiled embed both sides; sibling admission gate uses disk-source). Non-blocking: current source-set sound (codex: 73/73 MIT, all resolve) and the guarantee holds at close (fresh build). Captured as IMP-312 (test-fidelity bundle) — harden the crux gate to enumerate + admit from disk-source per design §8 R3 / the VT-3 pattern."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "major"
+title = "VT-6 NF-002 byte-unchanged test is vacuous — never operates any verb against the temp dir it asserts on"
+detail = "External pass (codex/GPT-5.5), verified against source (src/commands/library.rs:538 every_verb_leaves_the_repo_byte_unchanged). Expected (EX-4/VT-6): drive every library verb incl. every failure path against a clean repository and prove the repo bytes are unchanged. Observed: the test creates `tmp = tempfile::tempdir()` but NEVER changes into it or passes its path to any verb — it calls list_to/tree_to/show_with(&resolver, …, &mut sink) rendering into an in-memory Vec sink over the embedded shipped() resolver, then asserts the UNRELATED, untouched `tmp` is empty (trivially true regardless of verb behaviour). It also (a) discards the three failure results with `let _ =` instead of asserting each is the expected error class, and (b) never exercises the malformed-policy load class. NF-002 holds STRUCTURALLY today (codex confirms no fs-write/mutator path exists from any library verb — read-only by construction), so this is not a current write defect; but VT-6 provides false assurance and will not catch a future command-layer regression. Surface: follow-up backlog (rewrite VT-6 to run each verb with a real repo root, snapshot the tree bytes before/after, and assert each of the four failure classes incl. malformed-policy)."
+disposition = "follow-up"
+response = "Confirmed against source — VT-6 never operates any verb against the temp dir it asserts on; the assertion is trivially true. Non-blocking: NF-002 holds STRUCTURALLY (no fs-write/mutator path exists from any library verb, confirmed by codex), so the invariant is not violated — only its test is vacuous. Captured as IMP-312 — rewrite VT-6 to drive each verb against a real repo root, snapshot bytes before/after, and assert each of the four failure classes incl. malformed-policy."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "library tree silently drops a published entry whose address is a prefix of another (latent — no current collision)"
+detail = "External pass (codex/GPT-5.5), verified against source (src/commands/library.rs:207 TreeNode::insert). Expected: every admitted, prefix-filtered publication entry appears in `library tree`. Observed: TreeNode is Branch|Leaf and cannot hold an entry AND children at one node. If address `a` (a full published address) and `a/b` both exist: inserting the `[last]` segment `a` does children.insert(a, Leaf), overwriting any existing Branch at `a` (drops a/b's subtree); inserting `a/b` after `a` descends via or_insert_with into the existing Leaf and hits the `TreeNode::Leaf(_) => {}` no-op arm (drops a/b). Either order silently loses an entry. Verified NOT currently triggered: all 73 shipped addresses are files (no address is a parent-prefix of another) — LATENT only. `library list` is unaffected (flat). Surface: follow-up backlog (let a tree node carry both a leaf payload and children, or detect+report a prefix collision rather than silently dropping)."
+disposition = "follow-up"
+response = "Confirmed against source (TreeNode Branch|Leaf; both insert orders drop a prefix-colliding entry). Verified LATENT — all 73 shipped addresses are files, none a parent-prefix of another, so no current collision; library list unaffected. Captured as IMP-313 — let a node carry both leaf + children, or detect+surface the collision rather than silently dropping; add a colliding-pair regression test."
+
+[[finding]]
+id = "F-10"
+status = "verified"
+severity = "minor"
+title = "VT-5 NF-004 test proves harness detection, not adapter installation, survives the flip"
+detail = 'External pass (codex/GPT-5.5), verified against source (src/install.rs:4068 detect_agents_is_independent_of_the_base_projection_flip). Expected (VT-5/NF-004): a detected harness still INSTALLS its adapter after the minimal-projection flip. Observed: the test creates a .claude dir, runs execute_plan(build_plan(...)) (the base projection), then asserts only that detect_agents() returns ["claude"] — it never invokes the forward-step/per-agent adapter-installation leg and never checks an adapter file lands at its destination. So detection is proven, installation is not: the forward adapter leg could regress while VT-5 stays green. Non-blocking (the flip touches build_plan leg 2 only; the harness-gated forward legs are unchanged — the behaviour holds). Surface: follow-up backlog (extend VT-5 to run the forward adapter leg and assert an adapter lands post-flip).'
+disposition = "follow-up"
+response = 'Confirmed against source — VT-5 asserts only detect_agents()==["claude"], never the forward adapter-install leg. Non-blocking: the flip touches build_plan leg 2 only; the harness-gated forward legs are unchanged, so the behaviour holds. Captured as IMP-312 — extend VT-5 to fire the forward leg and assert an adapter lands post-flip.'
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

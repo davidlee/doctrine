@@ -931,3 +931,44 @@ Compounded by `cargo build 2>&1 | tail -N` masking cargo's nonzero exit behind t
 the primary tree into the worktree, then rebuild. Latent doc gap: the audit/worktree
 ritual for a slice touching (or coexisting with) an embed root should pre-seed
 gitignored embed folders, or `doctrine worktree fork` should carry them.
+
+[plan; db8e41f5]
+Plan-time re-grep falsified an UNMARKED research row: scout claimed slice
+parse tests live in src/main.rs (parse_coverage_show pattern); they live in
+src/slice.rs's own test module (:4043). Zero cost incurred — the row was
+never load-borne (✓ discipline held); caught by /plan's re-grep step in one
+grep. Also: two VT-mandate keyword choices needed tightening at critical
+review (variant-name keyword satisfiable without any test; prose-heading
+keyword fragile to drift) — keyword selection for prose/test mandates is a
+skill worth a line in /plan or the research skill's conventions.
+
+[audit; SL-227-audit-2026-07-25]
+Incidental complexity / token sinks during /audit of a dispatch-concluded slice:
+
+1. `slice conformance` ran against the PRIMARY tree's (edge) slice-227.toml, which
+   is STALE — the coord's authored selector corrections (adding src/commands/{cli,
+   library}.rs as design-target; the PHASE-02 VT test_file fixes) live on review/227
+   / dispatch/227, NOT edge (they land at close via `dispatch sync --integrate`).
+   So conformance falsely reported src/commands/{cli,library}.rs as `undeclared`
+   and src/library.rs as `undelivered`. An auditor MUST assess conformance against
+   the projected authored state (review/227 selectors via `git show review/227:
+   .doctrine/slice/NNN/slice-NNN.toml`), not the primary tree — cost: an extra
+   git-show round to disambiguate real gaps from the pre-integration lag. The
+   conformance verb has no flag to point it at the review bundle's registry.
+
+2. Independent green-verification needed a review/227 worktree, but a fresh
+   `git worktree add` LACKS the gitignored derived `web/map/dist/` RustEmbed root
+   (built by `just web-build`). `cargo test --bin doctrine` failed to compile
+   (map_server/assets.rs: `Assets::get` not found) — an environmental miss wholly
+   unrelated to the slice. Cost: one wasted compile cycle + diagnosis + a manual
+   `cp -r` of web/map/dist from the primary tree. A fresh audit worktree of any
+   slice touching nothing map-related still can't build until the derived embed is
+   sourced. (`doctrine worktree fork` provisions; a raw `git worktree add` for an
+   ad-hoc audit checkout does not.)
+
+3. On that worktree, `test_support::tests::doctrine_bin_returns_existing_executable`
+   false-reds: it asserts ./target/debug/doctrine exists on disk, but during a
+   from-scratch `cargo test` build the bin isn't placed when the unit test runs
+   (1 fail / 3812 pass). Not an SL-227 defect (test_support.rs is untouched by the
+   slice) — but an independent audit re-run in a clean worktree always eats this
+   false-red and must recognise+discount it.
