@@ -1,6 +1,6 @@
 ---
 name: handover
-description: Use when handing work to a fresh context — first bring the durable harvest current, then emit a continuation at one of two weights: a printed continuation prompt (light) or a handover.md context packet (full). Use whenever a fresh agent would more efficiently continue.
+description: Use when handing work to a fresh context — first bring the durable harvest current, then emit a continuation at one of two weights — a printed continuation prompt (light) or a handover.md context packet (full). Use whenever a fresh agent would more efficiently continue.
 ---
 
 # Handover
