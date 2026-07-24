@@ -54,9 +54,65 @@ pub(crate) fn doctrine_bin() -> PathBuf {
     p
 }
 
+/// The worker-marker path, relative to a repo root. CARVE-OUT (SL-225 #2, OQ-1):
+/// canonical form is `marker.rs`'s `marker_path` (`.doctrine/state/dispatch/worker`);
+/// that lib-crate `pub(crate)` const is unreachable from the separately-compiled
+/// integration-test crate (CHR-014 dual-compilation), so this is a documented
+/// duplicate. Keep in lockstep with `src/worktree/marker.rs:114`.
+pub(crate) const WORKER_MARKER_REL: &str = ".doctrine/state/dispatch/worker";
+
+/// PURE core of [`under_worker_marker`]: true iff a worker signal is present at
+/// `root` — the env leg (`env_present`, passed in) OR the marker file. No disk/env
+/// read of its own beyond the marker probe (the env read is the caller's), so it is
+/// deterministically testable against a temp root without poisoning the real tree.
+pub(crate) fn worker_marker_at(root: &std::path::Path, env_present: bool) -> bool {
+    env_present || root.join(WORKER_MARKER_REL).exists()
+}
+
+/// True when running inside a dispatch worker fork — the env leg (subprocess/pi arm)
+/// OR the marker file at the repo root (claude arm, marker-file-only). Authored-write
+/// e2e goldens early-return on this so a worker's own `cargo test` reflects delta
+/// health, not the worker-mode guard's (correct) refusals. The server-side commit gate
+/// CLEARS the marker before its run (SL-199 F2), so the goldens still execute there —
+/// coverage is preserved; only the worker's manual run skips. `is_some()` is a
+/// deliberately broader env test than `env_worker_set()`'s exact `= "1"` (marker.rs:127):
+/// any `DOCTRINE_WORKER` value conservatively skips a golden. (SL-225 #2, DEC-003.)
+// Consumed only by the separately-compiled integration-test crate (via the `#[path]`
+// include in `tests/common/mod.rs`), never by the bin's own `#[cfg(test)]` unit tests —
+// so it reads as dead in the bin build. Same cross-crate carve-out as `common`'s
+// `#![allow(dead_code)]` (SL-162 D5).
+#[allow(dead_code)]
+pub(crate) fn under_worker_marker() -> bool {
+    worker_marker_at(&repo_root(), std::env::var_os("DOCTRINE_WORKER").is_some())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn worker_marker_at_reads_env_and_marker_legs() {
+        let root = tempfile::tempdir_in(std::env::temp_dir()).expect("tempdir");
+
+        // Neither leg → not under a worker.
+        assert!(
+            !worker_marker_at(root.path(), false),
+            "no env, no marker ⇒ not under worker"
+        );
+        // Env leg alone (subprocess/pi arm) → under a worker.
+        assert!(
+            worker_marker_at(root.path(), true),
+            "env leg ⇒ under worker"
+        );
+        // Marker-file leg alone (claude arm) → under a worker.
+        let marker = root.path().join(WORKER_MARKER_REL);
+        std::fs::create_dir_all(marker.parent().expect("marker parent")).expect("mkdir marker dir");
+        std::fs::write(&marker, b"").expect("write marker");
+        assert!(
+            worker_marker_at(root.path(), false),
+            "marker file at root ⇒ under worker"
+        );
+    }
 
     #[test]
     fn doctrine_bin_returns_existing_executable() {

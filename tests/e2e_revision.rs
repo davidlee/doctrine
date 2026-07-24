@@ -83,6 +83,9 @@ fn ok(out: &Output) -> String {
 /// `approval=none` advances fine), and the `NNN-slug` alias resolves.
 #[test]
 fn revision_new_show_status_round_trip_and_approval_orthogonal() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = RevRepo::new();
 
     ok(&repo.run(&["revision", "new", "revise ADR-006 layering"]));
@@ -138,6 +141,9 @@ fn revision_new_show_status_round_trip_and_approval_orthogonal() {
 /// illegal transition (a skip, or leaving a terminal) is refused.
 #[test]
 fn revision_status_abandons_and_refuses_illegal() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = RevRepo::new();
     ok(&repo.run(&["revision", "new", "retire POL-001"]));
 
@@ -167,6 +173,9 @@ fn revision_status_abandons_and_refuses_illegal() {
 /// `revision/` dir) clean. In a debug build a missing arm would panic the scan.
 #[test]
 fn minting_a_rev_does_not_trip_the_corpus_scan_debug_assert() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = RevRepo::new();
     ok(&repo.run(&["revision", "new", "revise REQ-201"]));
 
@@ -196,6 +205,9 @@ fn minting_a_rev_does_not_trip_the_corpus_scan_debug_assert() {
 /// partition row (G1 mis-class) nor a missing dep_seq arm (G2) trips the scan.
 #[test]
 fn priority_scan_tolerates_a_rev_in_the_corpus() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = RevRepo::new();
     ok(&repo.run(&["revision", "new", "spike revision"]));
     let next = repo.run(&["next"]);

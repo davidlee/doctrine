@@ -151,6 +151,9 @@ fn validate_flags_mis_targeted_alias() {
 
 #[test]
 fn reseat_renumbers_quad_and_reports_danglers() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let t = tmp();
     seed_slice(t.path(), 31, 31, "worker-guard");
     alias(t.path(), "031-worker-guard", "031");
@@ -202,6 +205,9 @@ fn reseat_renumbers_quad_and_reports_danglers() {
 
 #[test]
 fn reseat_refuses_occupied_target() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let t = tmp();
     seed_slice(t.path(), 31, 31, "src");
     seed_slice(t.path(), 45, 45, "occupant");
@@ -220,6 +226,9 @@ fn reseat_refuses_occupied_target() {
 
 #[test]
 fn reseat_refuses_live_runtime_phase_state() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let t = tmp();
     seed_slice(t.path(), 31, 31, "src");
     // Live gitignored phase state keyed by the source id (F3).

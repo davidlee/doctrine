@@ -150,6 +150,9 @@ fn run_conclude_gate(root: &Path, id: &str) -> Output {
 /// summary block — handover proceeds with the gaps visible.
 #[test]
 fn conclude_gate_passes_clean_plan_and_shows_block() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let root = coord_tree(PLAN_CLEAN);
     let out = run_conclude_gate(root.path(), "1");
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -172,6 +175,9 @@ fn conclude_gate_passes_clean_plan_and_shows_block() {
 /// handover rather than shipping an incomplete mandate as green.
 #[test]
 fn conclude_gate_halts_handover_on_fail() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let root = coord_tree(PLAN_FAIL);
     let out = run_conclude_gate(root.path(), "1");
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -192,6 +198,9 @@ fn conclude_gate_halts_handover_on_fail() {
 /// before the gate), so the fs reader sees it.
 #[test]
 fn committed_coord_tree_waiver_is_honoured_at_conclude() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let root = coord_tree(PLAN_CLEAN);
     let out = run_conclude_gate(root.path(), "1");
     let stdout = String::from_utf8_lossy(&out.stdout);

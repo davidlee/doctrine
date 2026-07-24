@@ -70,6 +70,9 @@ fn parse_uid(stdout: &str) -> String {
 
 #[test]
 fn record_commit_verify_show_list_against_the_built_binary() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
@@ -139,6 +142,9 @@ fn record_commit_verify_show_list_against_the_built_binary() {
 /// commit-mode `fresh` staleness (verified SHA == frozen target ⇒ Some(0)).
 #[test]
 fn find_ranks_scope_matches_against_the_built_binary() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
@@ -281,6 +287,9 @@ fn seed_memory(dir: &Path, uid: &str, key: Option<&str>, title: &str, body: &str
 /// asymmetry).
 #[test]
 fn retrieve_frames_clean_blocks_and_holds_back_risky_against_the_built_binary() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
@@ -481,6 +490,9 @@ fn backlinks_returns_source_memories_and_methods() {
 /// unit tests prove in-process. A divergence ⇒ STOP→/consult (the R7 coarsen rung).
 #[test]
 fn find_bm25_ranking_is_cross_process_deterministic() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 

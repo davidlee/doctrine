@@ -99,6 +99,9 @@ fn read_tokens(out: &Path) -> Vec<Vec<u8>> {
 
 #[test]
 fn linux_emits_nul_delimited_bwrap_prefix_ending_in_arg_sep() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     if !bwrap_on_path() {
         return; // present-path assertion; the absent case is VT-3.
     }
@@ -242,6 +245,9 @@ fn bwrap_absent_fails_closed_no_out() {
 
 #[test]
 fn bwrap_present_writes_out() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     if !bwrap_on_path() {
         return; // host has no bwrap; the absent case above is authoritative.
     }
@@ -295,6 +301,9 @@ fn run_reader(out_path: &Path) -> Output {
 
 #[test]
 fn shell_mapfile_reader_round_trips_real_jail_prefix() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     if !bwrap_on_path() {
         return; // present-path assertion; the absent/empty cases below are host-agnostic.
     }

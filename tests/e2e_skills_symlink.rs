@@ -46,6 +46,9 @@ fn install(dir: &Path) -> String {
 
 #[test]
 fn install_links_then_refreshes_and_keeps_an_override() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 

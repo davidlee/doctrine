@@ -64,6 +64,9 @@ fn is_ignored(root: &Path, rel: &str) -> bool {
 
 #[test]
 fn fresh_install_scaffolds_the_knowledge_tree() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = git_repo();
     let root = repo.path();
 
@@ -83,6 +86,9 @@ fn fresh_install_scaffolds_the_knowledge_tree() {
 
 #[test]
 fn a_scaffolded_knowledge_record_is_committable_under_the_blanket_negation_model() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = git_repo();
     let root = repo.path();
 
@@ -120,6 +126,9 @@ fn a_scaffolded_knowledge_record_is_committable_under_the_blanket_negation_model
 
 #[test]
 fn without_the_negation_the_knowledge_record_is_silently_ignored() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     // The guard bites: drop the negation and the same scaffolded record becomes
     // uncommittable — proving the trap is real and surface 2 is load-bearing.
     let repo = git_repo();

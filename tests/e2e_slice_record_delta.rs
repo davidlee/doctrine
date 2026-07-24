@@ -93,6 +93,9 @@ fn deltas_path(root: &Path) -> std::path::PathBuf {
 
 #[test]
 fn happy_path_upserts_a_guarded_row_at_the_runtime_registry() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let repo = init_repo(&tmp.path().join("repo"));
     let start = git(&repo, &["rev-parse", "HEAD"]);
@@ -131,6 +134,9 @@ fn happy_path_upserts_a_guarded_row_at_the_runtime_registry() {
 
 #[test]
 fn guard_rejects_a_non_ancestor_range_and_persists_nothing() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let repo = init_repo(&tmp.path().join("repo"));
     let a = git(&repo, &["rev-parse", "HEAD"]);
@@ -150,6 +156,9 @@ fn guard_rejects_a_non_ancestor_range_and_persists_nothing() {
 
 #[test]
 fn guard_rejects_a_merge_end_and_persists_nothing() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let repo = init_repo(&tmp.path().join("repo"));
     let base = git(&repo, &["rev-parse", "HEAD"]);
@@ -173,6 +182,9 @@ fn guard_rejects_a_merge_end_and_persists_nothing() {
 
 #[test]
 fn record_from_a_linked_worktree_resolves_the_primary_tree_registry() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let primary = init_repo(&tmp.path().join("primary"));
     let head = git(&primary, &["rev-parse", "HEAD"]);
@@ -209,6 +221,9 @@ fn record_from_a_linked_worktree_resolves_the_primary_tree_registry() {
 /// hatch's incoming value). Pins slice.rs:`run_record_delta`'s construction.
 #[test]
 fn record_delta_stamps_manual_on_a_fresh_row() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let repo = init_repo(&tmp.path().join("repo"));
     let start = git(&repo, &["rev-parse", "HEAD"]);
@@ -236,6 +251,9 @@ fn record_delta_stamps_manual_on_a_fresh_row() {
 /// corrected (oids advance) — only the landing-path stamp is sticky.
 #[test]
 fn record_delta_preserves_existing_funnel_and_legacy_unknown() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let repo = init_repo(&tmp.path().join("repo"));
     let start = git(&repo, &["rev-parse", "HEAD"]);
@@ -285,6 +303,9 @@ fn record_delta_preserves_existing_funnel_and_legacy_unknown() {
 /// `[S^, S]` over the built binary: `code_end == S`, `code_start == S^`.
 #[test]
 fn commit_mode_records_single_commit_boundary() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let repo = init_repo(&tmp.path().join("repo"));
     let parent = git(&repo, &["rev-parse", "HEAD"]);

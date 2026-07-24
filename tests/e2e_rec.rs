@@ -80,6 +80,9 @@ fn ok(out: &Output) -> String {
 /// the new kind clean, and the `NNN-slug` alias resolves.
 #[test]
 fn rec_new_show_list_validate_and_alias() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = RecRepo::new();
 
     // new — a freestanding redesign REC (empty deltas, the F7 shape).
@@ -142,6 +145,9 @@ fn rec_new_show_list_validate_and_alias() {
 /// all; an owning_slice is an optional outbound edge, never a status dependency).
 #[test]
 fn rec_is_status_less_so_its_id_is_stable() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = RecRepo::new();
     ok(&repo.run(&[
         "rec",

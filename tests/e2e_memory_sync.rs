@@ -44,6 +44,9 @@ fn doctrine_repo() -> tempfile::TempDir {
 
 #[test]
 fn sync_populates_the_shipped_corpus_then_is_idempotent_and_retrievable() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     // PHASE-05: the embed now carries the real orientation corpus, so an in-repo
     // sync lands every master under shipped/ (gitignored), a re-sync is inert, and
     // a shipped master surfaces through `retrieve` on its scope — the end-to-end
@@ -109,6 +112,9 @@ fn sync_populates_the_shipped_corpus_then_is_idempotent_and_retrievable() {
 
 #[test]
 fn sync_outside_a_doctrine_repo_writes_nothing() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     // `root::find` walks CWD up to `/`, so a true no-root needs an ancestry with
     // zero markers — the default temp base may itself sit under a stray repo. Pick
     // a base whose chain to `/` is marker-free so this exercises the Charge XI
@@ -134,6 +140,9 @@ fn sync_outside_a_doctrine_repo_writes_nothing() {
 
 #[test]
 fn dry_run_prints_the_plan_without_writing() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = doctrine_repo();
     let (ok, stdout) = run(
         repo.path(),
@@ -149,6 +158,9 @@ fn dry_run_prints_the_plan_without_writing() {
 
 #[test]
 fn sync_install_wires_a_session_hook_no_boot_hook_settings_wired() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = doctrine_repo();
     let settings = repo.path().join(".claude/settings.local.json");
 
@@ -211,6 +223,9 @@ fn sync_install_wires_a_session_hook_no_boot_hook_settings_wired() {
 
 #[test]
 fn full_install_gitignores_the_shipped_corpus() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = doctrine_repo();
     let (ok, out) = run(repo.path(), &["install", "-p", &path(&repo), "-y"]);
     assert!(ok, "install: {out}");
@@ -237,6 +252,9 @@ fn path(dir: &tempfile::TempDir) -> String {
 /// compile-time stale embed disagrees with the runtime filesystem.
 #[test]
 fn sync_produces_all_shipped_dirs() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = doctrine_repo();
     let p = path(&repo);
 
@@ -287,6 +305,9 @@ fn sync_produces_all_shipped_dirs() {
 /// `anchor_kind=none`).
 #[test]
 fn each_new_shipped_memory_searches_by_scoped_search_and_has_shipped_signature() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = doctrine_repo();
     let (ok, _) = run(repo.path(), &["memory", "sync", "-y", "-p", &path(&repo)]);
     assert!(ok, "sync must exit 0");

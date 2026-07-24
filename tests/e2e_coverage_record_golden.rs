@@ -90,6 +90,9 @@ fn coverage_body(root: &Path, slice_id: u32) -> String {
 /// `--slice`/`--change` canonicalize to `SL-NNN` in the stored key.
 #[test]
 fn coverage_record_vt_lands_planned_with_check_byte_exact() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
 
@@ -133,6 +136,9 @@ fn coverage_record_vt_lands_planned_with_check_byte_exact() {
 /// injected `--attested-date` (no clock read) — F-VI on the CLI seam.
 #[test]
 fn coverage_record_attestation_stamps_injected_date_byte_exact() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
 
@@ -177,6 +183,9 @@ fn coverage_record_attestation_stamps_injected_date_byte_exact() {
 /// the D3/A mandatory-matcher rule. The write is blocked — no file written.
 #[test]
 fn coverage_record_rejects_empty_matcher_on_shared_base() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
     let out = run(
@@ -208,6 +217,9 @@ fn coverage_record_rejects_empty_matcher_on_shared_base() {
 /// (`GlobEscapesTree`) — the F-III confinement, statically caught.
 #[test]
 fn coverage_record_rejects_escaping_file_glob() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
     let out = run(
@@ -238,6 +250,9 @@ fn coverage_record_rejects_escaping_file_glob() {
 /// A `--regex` matcher whose pattern does not parse is rejected (`BadRegex`).
 #[test]
 fn coverage_record_rejects_bad_regex() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
     let out = run(
@@ -270,6 +285,9 @@ fn coverage_record_rejects_bad_regex() {
 /// (`AliasCommandConflict`) — mutually exclusive bases.
 #[test]
 fn coverage_record_rejects_both_alias_and_command() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
     let out = run(
@@ -311,6 +329,9 @@ fn coverage_record_rejects_both_alias_and_command() {
 /// Here one VT (literal `true`, no matcher) goes Planned→Verified, exit-code-only.
 #[test]
 fn coverage_verify_prints_transition_and_audit_lines() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
     // Seed a recordable VT cell, then re-derive it.
@@ -347,6 +368,9 @@ fn coverage_verify_prints_transition_and_audit_lines() {
 /// untouched; the loud backfill count names it (the F-VII backfill loudness).
 #[test]
 fn coverage_verify_reports_checkless_vt_in_backfill() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
     let sdir = root.join(".doctrine/slice/057");
@@ -375,6 +399,9 @@ fn coverage_verify_reports_checkless_vt_in_backfill() {
 /// `coverage verify` requires exactly one of `<slice>` / `--all`.
 #[test]
 fn coverage_verify_requires_slice_xor_all() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
 
@@ -398,6 +425,9 @@ fn coverage_verify_requires_slice_xor_all() {
 /// cell + its status; a second forget of the same key prints the not-found line.
 #[test]
 fn coverage_forget_prints_withdrawal_then_not_found() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
     let rec = run(
@@ -492,6 +522,9 @@ fn coverage_show_relocated_view_byte_exact() {
 /// with the canonical `REQ-001` erases the cell the non-canonical `record` wrote.
 #[test]
 fn coverage_record_canonicalizes_requirement_ref() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     let root = dir.path();
 

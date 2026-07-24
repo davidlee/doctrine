@@ -192,6 +192,9 @@ fn standard_show_missing_id_errors_with_stable_text() {
 
 #[test]
 fn standard_status_transition_prints_exact_and_preserves_edits() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     // Seed at `draft` with a comment + non-empty rels to prove edit-preservation.
     let toml = std001_toml().replace("status = \"default\"", "status = \"draft\"");
@@ -227,6 +230,9 @@ fn standard_status_transition_prints_exact_and_preserves_edits() {
 
 #[test]
 fn standard_status_no_op_prints_but_writes_nothing() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     seed(
         dir.path(),
@@ -247,6 +253,9 @@ fn standard_status_no_op_prints_but_writes_nothing() {
 
 #[test]
 fn standard_status_on_malformed_toml_refuses_and_leaves_file_untouched() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     // Missing `status` key → the tail-insert-into-[relationships] corruption trap;
     // set_status must REFUSE, not append.

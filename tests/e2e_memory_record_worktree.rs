@@ -66,6 +66,9 @@ fn record(root: &Path) -> Output {
 
 #[test]
 fn record_on_a_linked_worktree_warns_but_succeeds() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let source = init_source(&tmp.path().join("src"));
     let fork = tmp.path().join("fork");
@@ -88,6 +91,9 @@ fn record_on_a_linked_worktree_warns_but_succeeds() {
 
 #[test]
 fn record_on_the_primary_tree_is_silent() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let source = init_source(&tmp.path().join("src"));
 

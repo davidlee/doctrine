@@ -205,6 +205,9 @@ fn seed_two_status_rev(repo: &Repo) {
 /// the REV reaches `done` (dependents would unblock — `done` is terminal).
 #[test]
 fn clean_status_only_apply_lands_rows_emits_recs_and_reaches_done() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     seed_two_status_rev(&repo);
     ok(&repo.run(&["revision", "approve", "REV-001"]));
@@ -234,6 +237,9 @@ fn clean_status_only_apply_lands_rows_emits_recs_and_reaches_done() {
 /// `revision approve` records the approval, apply proceeds.
 #[test]
 fn apply_refused_until_approved() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     seed_two_status_rev(&repo);
 
@@ -267,6 +273,9 @@ fn apply_refused_until_approved() {
 /// status row's target is untouched, and no REC is minted).
 #[test]
 fn from_guard_aborts_whole_apply_and_writes_nothing() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     seed_two_status_rev(&repo);
     ok(&repo.run(&["revision", "approve", "REV-001"]));
@@ -307,6 +316,9 @@ fn from_guard_aborts_whole_apply_and_writes_nothing() {
 /// status-only REV reaches `done`. `done` never lies — it means every row landed.
 #[test]
 fn mixed_rev_stays_started_status_only_reaches_done() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     repo.seed_adr(6);
     repo.seed_req(201, "active");
@@ -356,6 +368,9 @@ fn mixed_rev_stays_started_status_only_reaches_done() {
 /// manual only. The target prose entity is never mutated and no REC is minted for them.
 #[test]
 fn non_status_rows_are_surfaced_not_applied() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     repo.seed_adr(6);
     ok(&repo.run(&["revision", "new", "prose only"]));

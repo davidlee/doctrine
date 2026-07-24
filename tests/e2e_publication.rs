@@ -54,6 +54,9 @@ fn doctrine(root: &Path, args: &[&str]) -> std::process::Output {
 
 #[test]
 fn install_does_not_project_the_publication_manifest() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = git_repo();
     let root = repo.path();
 

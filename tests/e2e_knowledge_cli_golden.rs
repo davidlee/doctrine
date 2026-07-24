@@ -118,6 +118,9 @@ fn minimal_toml(id: u32, slug: &str, title: &str, record_kind: &str, status: &st
 
 #[test]
 fn knowledge_new_mints_canonical_id_and_seeds_default_status() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     // `new` needs a project-root marker; an empty `.git` dir is enough.
     fs::create_dir_all(dir.path().join(".git")).unwrap();
@@ -341,6 +344,9 @@ fn knowledge_inspect_json_omits_body() {
 
 #[test]
 fn knowledge_status_transition_prints_exact_and_preserves_edits() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     seed(dir.path(), "assumption", 7, asm007_toml());
 
@@ -377,6 +383,9 @@ fn knowledge_status_transition_prints_exact_and_preserves_edits() {
 
 #[test]
 fn knowledge_status_refuses_a_foreign_kind_state() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     // FR-002: `accepted` is a DECISION status; on an ASM it is out-of-vocab — refused.
     let dir = tmp();
     seed(dir.path(), "assumption", 7, asm007_toml());
@@ -397,6 +406,9 @@ fn knowledge_status_refuses_a_foreign_kind_state() {
 
 #[test]
 fn knowledge_status_no_op_writes_nothing() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let dir = tmp();
     seed(
         dir.path(),
@@ -418,6 +430,9 @@ fn knowledge_status_no_op_writes_nothing() {
 
 #[test]
 fn knowledge_status_on_malformed_toml_refuses_and_leaves_file_untouched() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     // Hand-stripped `status`/`updated` → a tail `insert` would land AFTER the trailing
     // `[facet]`/`[evidence]` header, inside that subtable (silent corruption).
     // set_record_status must REFUSE, not append (mirrors the adr/standard guard goldens).

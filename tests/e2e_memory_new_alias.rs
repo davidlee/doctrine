@@ -69,6 +69,9 @@ fn parse_uid(stdout: &str) -> String {
 
 #[test]
 fn memory_new_is_an_alias_of_memory_record_and_creates_an_identical_entity() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 

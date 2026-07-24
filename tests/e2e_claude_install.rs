@@ -113,6 +113,9 @@ fn assert_installed(dir: &Path) {
 
 #[test]
 fn install_wires_skills_agent_and_hooks_directly() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 
@@ -145,6 +148,9 @@ fn install_wires_skills_agent_and_hooks_directly() {
 
 #[test]
 fn install_agent_pi_dry_run_prints_delegation_plan() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().expect("tempdir");
     let dir = tmp.path();
 

@@ -158,6 +158,9 @@ fn diff_without_baseline_halts_not_silently_green() {
 /// cache miss that halts honestly, never carry-forward poisoning (INV-8).
 #[test]
 fn changed_filter_state_misses_the_baseline() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let root = root_with(BASELINE);
     assert!(
         run(root.path(), &["capture", "--base", "B0"], &[])

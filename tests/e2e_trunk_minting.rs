@@ -115,6 +115,9 @@ fn assert_trunk_aware_mint(kind_dir: &str, stem: &str, verb: &[&str]) {
 
 #[test]
 fn slice_new_mints_above_trunk() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     assert_trunk_aware_mint(
         ".doctrine/slice",
         "slice",
@@ -124,11 +127,17 @@ fn slice_new_mints_above_trunk() {
 
 #[test]
 fn adr_new_mints_above_trunk() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     assert_trunk_aware_mint(".doctrine/adr", "adr", &["adr", "new", "fixture adr"]);
 }
 
 #[test]
 fn spec_new_mints_above_trunk() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     assert_trunk_aware_mint(
         ".doctrine/spec/product",
         "spec",
@@ -138,6 +147,9 @@ fn spec_new_mints_above_trunk() {
 
 #[test]
 fn backlog_new_mints_above_trunk() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     assert_trunk_aware_mint(
         ".doctrine/backlog/issue",
         "backlog",
@@ -147,6 +159,9 @@ fn backlog_new_mints_above_trunk() {
 
 #[test]
 fn spec_req_add_mints_requirement_above_trunk() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     // The fifth site (requirement::reserve) is spec-mediated: create a product
     // spec in the working tree, then add a requirement. Trunk carries REQ-005;
     // the reserve must land REQ-006.
@@ -174,6 +189,9 @@ fn spec_req_add_mints_requirement_above_trunk() {
 
 #[test]
 fn no_trunk_repo_degrades_to_local_only_mint() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     // VT-2 / X-5: an unborn repo (no commit ⇒ no main peel ⇒ no trunk) must mint
     // the local-only id `001` — the wired call degrades, it does not error.
     let repo = TrunkRepo::new();

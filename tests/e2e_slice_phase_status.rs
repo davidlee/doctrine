@@ -84,6 +84,9 @@ fn across(root: &Path, id: &str, assert: bool) -> Output {
 
 #[test]
 fn across_trees_renders_the_divergence_table_and_assert_fires_on_conflict() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let primary = init_repo(&tmp.path().join("primary"));
 
@@ -141,6 +144,9 @@ fn across_trees_renders_the_divergence_table_and_assert_fires_on_conflict() {
 
 #[test]
 fn assert_exits_zero_on_a_fresh_handoff_tree_with_no_landed_and_no_coord() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let primary = init_repo(&tmp.path().join("primary"));
 

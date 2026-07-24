@@ -12,7 +12,7 @@
 #[path = "../../src/test_support.rs"]
 mod test_support;
 
-pub(crate) use test_support::{doctrine_bin, repo_root};
+pub(crate) use test_support::{doctrine_bin, repo_root, under_worker_marker};
 
 /// Canonical config path — mirrors `src/dtoml::DOCTRINE_TOML` (which
 /// integration tests can't import from a binary-only crate).

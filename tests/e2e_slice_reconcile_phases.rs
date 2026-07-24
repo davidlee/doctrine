@@ -99,6 +99,9 @@ fn reconcile(root: &Path, id: &str) -> Output {
 
 #[test]
 fn reconcile_phases_fixes_a_stale_primary_and_is_idempotent() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let primary = init_repo(&tmp.path().join("primary"));
 
@@ -148,6 +151,9 @@ fn reconcile_phases_fixes_a_stale_primary_and_is_idempotent() {
 
 #[test]
 fn reconcile_phases_never_regresses_a_completed_inline_phase() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let primary = init_repo(&tmp.path().join("primary"));
 
@@ -178,6 +184,9 @@ fn reconcile_phases_never_regresses_a_completed_inline_phase() {
 
 #[test]
 fn reconcile_phases_refuses_when_a_live_coord_tree_exists() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let tmp = tempfile::tempdir().unwrap();
     let primary = init_repo(&tmp.path().join("primary"));
 

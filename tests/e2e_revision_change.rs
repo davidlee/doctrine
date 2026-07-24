@@ -132,6 +132,9 @@ fn read_rev_toml(repo: &Repo) -> String {
 /// inbound reciprocity (ADR-004 §3 reserves it to the scan-backed `inspect`).
 #[test]
 fn three_target_revision_inbound_outbound_and_show_excludes_inbound() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     repo.seed_adr(6);
     repo.seed_req(201, "active");
@@ -209,6 +212,9 @@ fn three_target_revision_inbound_outbound_and_show_excludes_inbound() {
 /// authored-truth kinds are accepted by `revision change add`.
 #[test]
 fn revises_target_validation_and_link_refused() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     repo.seed_adr(6);
     // A slice the off-target attempt points at (exists, but wrong kind).
@@ -251,6 +257,9 @@ fn revises_target_validation_and_link_refused() {
 /// auto-captures `from` (the target's CURRENT ReqStatus) at change add.
 #[test]
 fn creation_requires_label_and_status_captures_from() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     repo.seed_spec(18);
     repo.seed_req(201, "active");
@@ -300,6 +309,9 @@ fn creation_requires_label_and_status_captures_from() {
 /// zero-primary Revision is valid and its rows still surface as `revises` edges.
 #[test]
 fn primary_is_at_most_one_and_zero_primary_is_valid() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let repo = Repo::new();
     repo.seed_adr(6);
     repo.seed_adr(7);

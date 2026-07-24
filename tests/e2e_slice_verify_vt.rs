@@ -150,6 +150,9 @@ fn run(root: &Path, id: &str) -> Output {
 /// the waived reason included.
 #[test]
 fn mixed_plan_halts_and_renders_all_four_verdicts() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let root = fixture_root();
     let out = run(root.path(), "1");
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -179,6 +182,9 @@ fn mixed_plan_halts_and_renders_all_four_verdicts() {
 /// completeness-blindness hole the slice closes.
 #[test]
 fn relation_census_omission_fails_and_halts() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let root = fixture_root();
     let out = run(root.path(), "1");
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -196,6 +202,9 @@ fn relation_census_omission_fails_and_halts() {
 /// A non-gated `VA` row produces no VT line (it is parsed, never gated).
 #[test]
 fn va_row_is_not_gated() {
+    if common::under_worker_marker() {
+        return;
+    } // SL-225 #2: skip in a worker fork
     let root = fixture_root();
     let out = run(root.path(), "1");
     let stdout = String::from_utf8_lossy(&out.stdout);
