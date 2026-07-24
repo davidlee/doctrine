@@ -184,3 +184,115 @@ instead of discarded, but the authoring path still paid a duplicate discovery
 cycle despite following the prescribed pre-record search. A title/body semantic
 duplicate hint before minting would make the record-memory discipline cheaper
 and prevent needless corpus growth.
+
+[dispatch; SL-215-harvest]
+Prose-only slice (13 markdown targets, no engine/CLI). The dispatch funnel's
+per-phase S1 regression diff runs the full Rust per-test suite (~56s/run here,
+0 baseline failures at B). For a net diff verified markdown-only, new∪changed is
+definitionally empty — the suite is invariant when no .rs/Cargo.toml/.lock is
+touched. Running it 2×/phase (capture+diff × 5) is ~9min of compute for zero
+signal. Orchestrator judgment: keep baseline captured at B; per-phase gate with
+the cheap `check prove` (~13s) + net-diff inspection + R-5 belt + VT keyword
+mandate; run full `check gate`+regression once at the PHASE-05 delivery gate.
+Funnel intent (catch a worker delta that breaks build/tests) is preserved by the
+markdown-only invariant check + prove + final gate. Note: the funnel prose
+assumes a code slice; a prose-only slice has no cheap "regression is vacuous"
+escape hatch documented — the orchestrator has to reason it out each time.
+
+[dispatch; SL-215-harvest]
+Working-tree-free funnel leaves the coord working tree stale. After
+dispatch_import + dispatch_conclude_phase the coord HEAD ref advances (object-db
+compose), but the coord tree's index+worktree are never checked out — so
+`git status` shows the landed delta as staged "reversions" and the working-tree
+files still hold the pre-phase content (grep for the new section returns 0).
+This matters because `slice verify-vt` at conclude AND the orchestrator's
+per-phase inspections read the coord WORKING TREE, not the ref graph — a stale
+tree would false-red verify-vt. The dispatch/dispatch-agent funnel step list does
+not mention resyncing; the operator must `git reset --hard HEAD` (same branch,
+no switch — safe on the dedicated sole-writer coord tree) after each land to
+restore INV-6 ("coord working tree == committed graph"). Worth a documented
+funnel beat, or the tooling updating the working tree on import.
+
+[dispatch-conclude; SL-215-ph05-conclude]
+Conclude cadence for an orchestrator-run final phase (delivery gate, no worker)
+surfaced four avoidable token-sinks — each cost a diagnostic detour:
+
+1. verify-vt UNATTRIBUTABLE pre-prepare-review. Ran `slice verify-vt` first per
+   the documented cadence (verify-vt → prepare-review); it reported ALL VTs
+   `UNATTRIBUTABLE` because the conformance registry attribution reads is only
+   *derived* at prepare-review. So the documented order guarantees a scary
+   all-red-looking (but exit-0) first pass. The mechanics doc explains derivation
+   happens "at prepare-review" but the conclude cadence lists verify-vt first
+   without noting its attribution is necessarily blank until the next step.
+   Re-running verify-vt AFTER prepare-review showed 18/19 PASS. Fix candidate:
+   verify-vt could print "registry not yet derived — run prepare-review" instead
+   of N×UNATTRIBUTABLE, or the cadence doc could note the two-pass expectation.
+
+2. record-boundary empty-delta refusal for a no-code phase. PHASE-05 landed no
+   source (re-embed touch = no git delta; only a knowledge-record dogfood commit).
+   Manual `dispatch record-boundary --code-start X --code-end X` refused with
+   `empty-delta`. This is correct, but I only learned it's fine — that
+   prepare-review auto-heals an empty PHASE-05 row itself — by reading the source
+   behaviour. An empty final phase is common (delivery/dogfood); the refusal
+   reads as an error when it's a no-op-by-design.
+
+3. prepare-review leaves a STAGED reversal of its own commits. After a clean
+   exit (5 refs), the coord index held staged deletions of journal.toml AND the
+   PHASE-05 boundary row — i.e. exactly reversing prepare-review's own auto-heal
+   commit. Committing them would delete the journal that `sync --integrate`
+   replays, breaking close. Nothing flags this as disposable; only tracing what
+   each commit did revealed the staged state must NOT be committed and is dropped
+   by the (documented) worktree teardown. High footgun potential for an agent that
+   reflexively commits a dirty tree.
+
+4. slice-status flip didn't visibly persist on first call. `slice status SL-215
+   audit` from the coord tree returned "ready → audit [skip] [self/auto]" but a
+   subsequent `slice status` still showed `ready`; a second identical call from
+   the primary tree stuck it to `audit`. Unclear whether the coord-tree call was
+   discarded at teardown or the first transition silently no-op'd. Cost a re-run
+   + re-verify.
+
+## [audit; SL-215-audit-0724]
+
+1. `slice verify-vt` false-reds ALL VTs when run from edge on a dispatched slice.
+   The impl bundle (incl. the dogfood notes.md) lives only on `review/*` +
+   `dispatch/*` pre-integrate; verify-vt reads the working tree, so on edge every
+   `test_file` is absent → 19/19 FAIL (not UNATTRIBUTABLE — a hard "file not
+   found"). The handover's "18/19 PASS" was against the bundle. An auditor who
+   trusts an edge verify-vt run reads a totally-green slice as totally-broken.
+   The verb has no guard/hint that the slice's deliverables aren't on the current
+   branch; you must know to worktree the bundle first. Cost: one confused re-run
+   until the topology clicked.
+
+2. `doctrine slice notes SL-NNN` silently MINTS an empty stub. Called to locate
+   notes.md (expecting a path, read-only), it instead CREATED a fresh 256-byte
+   stub on edge because notes.md wasn't on the branch (it's a dispatch-side
+   knowledge-record commit). Left uncorrected, that empty stub would collide with
+   the dogfood notes.md at `sync --integrate`. `slice notes` reads as a locator
+   but is a create-if-absent — a read verb with a write side-effect on the
+   authored tree. Had to detect (untracked `??`) and `rm` it.
+
+3. PHASE-05 VT-1 UNATTRIBUTABLE is structural, not incidental: a `/notes`
+   (knowledge-record) commit is never in the code-delta registry (`record-delta`
+   tracks phase-cut code only), so any dogfood-in-notes.md VT can only ever reach
+   UNATTRIBUTABLE, never PASS. The verify beat can confirm keyword substance but
+   not attribution — the two are conflated in one status line. A slice that
+   dogfoods its own artifact into notes.md structurally cannot get a clean VT row
+   for it; the auditor must know UNATTRIBUTABLE-on-a-notes-target is the ceiling.
+
+[close; SL-215-iss030-fp]
+/close step 3a's ISS-030 tree-true verifier (a) `git diff --quiet HEAD` is a
+WHOLE-TREE check. In a multi-agent shared primary tree it false-positives on
+work that has nothing to do with the integrate: (i) the deliberately-uncommitted
+RFC-011 case-notes.md itself, and (ii) a concurrent agent's SL-225 authoring
+(uncommitted, then committed mid-close — edge advanced under me from 0d752778 to
+cb5fd6960 while I closed SL-215). The verifier reported FAIL though the integrate
+was clean. Cost ~4 extra diagnostic steps to prove it a false positive: had to
+re-scope the check to the bundle domain (`git diff --stat HEAD -- install/
+plugins/ .doctrine/slice/215/` → empty) and confirm main==admitted close_target
+OID + journal trunk row (check (b) passed). Suggested firming: scope (a) to the
+projected fileset, or exclude paths outside the slice's delta, so a
+concurrent/uncommitted unrelated change can't mask or mimic a real reverse-diff.
+Also: dispatched-close-on-main + concurrent edge authoring => edge/main diverge
+(2-and-2 here); the next `git fetch . edge:main` promotion is non-FF and needs a
+merge. Not a defect, but a recurring convergence cost worth a documented recipe.
