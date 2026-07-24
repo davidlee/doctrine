@@ -71,10 +71,6 @@ selector = ".doctrine/adr/001/layering.toml"
 intent = "design-target"
 
 [[selector]]
-selector = "tests/architecture_layering.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/kinds.rs"
 intent = "design-target"
 
@@ -103,15 +99,7 @@ selector = "src/catalog/scan.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/commands/cli.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/commands/dep_seq.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/commands/doctor.rs"
 intent = "design-target"
 
 [[selector]]
