@@ -70,9 +70,11 @@ The skill body owns:
 4. **Runner deferral + raw capture.** "Spawn the project's research agents,
    one per thread, read-only, stdout → `research/raw/<thread>.md`." What a
    research agent *is* lives in project governance (governance § research /
-   CLAUDE.md), never in doctrine (POL-002; no executable seam). Researchers
-   never write files or memories (memory distillation = harvest-time, later
-   slice).
+   CLAUDE.md), never in doctrine (POL-002; no executable seam). **Graceful
+   degradation:** project defines no research agents → the orchestrating
+   agent runs the threads itself, or skips and says so in the artefact
+   header. Researchers never write files or memories (memory distillation =
+   harvest-time, later slice).
 5. **Prompt duties.** Thread prompts must demand: the citation forms, the
    structured not-applicable form, output in the artefact's section shape,
    no preamble (known cheap-model failure; assembler strips).
@@ -119,7 +121,8 @@ note:
   → run the round first. Thread 1 stands in for the bulk of the `/canon`
   sweep. Assertions cite `research.md`; load-bear ✓ rows only.
 - `/plan`: check the advisory; draft selectors from the Thread-2 hotspot map;
-  SL-180 dry-run remains the checking half.
+  the design-time selector dry-run remains the checking half. (Rationale
+  cites SL-180; **shipped hook text stays project-neutral** — POL-002.)
 - `/phase-plan`: check the advisory; on drift refresh only affected thread
   sections, then `--restamp`.
 
@@ -145,7 +148,6 @@ note:
 | `src/research.rs` | new leaf — mint/check engine |
 | `src/main.rs` | `mod research;` |
 | `src/slice.rs` | `SliceCommand::Research` variant + dispatch |
-| `src/commands/cli.rs` | (only if slice dispatch needs a touch — likely none) |
 | `src/commands/guard.rs` | write-class arm |
 | `src/contentset.rs` | suppression removal (or fn removal) |
 | `install/governance.md` | § Research agents stub |
@@ -167,8 +169,10 @@ cargo build && ./target/debug/doctrine install -s research -y` (and `-s slice
   overwrite; clap parse test for the variant; guard write-class test.
   Behaviour-preservation: existing suites (contentset, review warm-cache)
   green unchanged.
-- **VA:** post-ritual `doctrine skills list` shows `research`; hook edits
-  present in installed copies.
+- **VA:** post-ritual, the installed copies exist and match
+  (`.doctrine/skills/research/`, agent symlink dirs); hook edits present in
+  installed copies. (Not via `doctrine skills list` — deprecated alias,
+  SL-088.)
 - **VH:** this slice's own dogfood round is the pre-design evidence (this
   design cites it). Closure: one further real slice driven through the round,
   observations to RFC-011 case-notes.

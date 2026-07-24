@@ -59,10 +59,6 @@ selector = "src/slice.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/commands/cli.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/commands/guard.rs"
 intent = "design-target"
 
