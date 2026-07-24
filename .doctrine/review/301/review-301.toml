@@ -1,0 +1,64 @@
+id    = 301
+slug  = "audit-reconciliation-of-sl-226"
+title = "audit reconciliation of SL-226"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-226"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Style-table representation deviates from design §5.2/§5.3 (match-fns, not NODE_STYLES/EDGE_COLORS slice-consts)"
+detail = """
+EXPECTED (design.md §5.2/§5.3, DEC-008, locked post-RV-298): style tables authored as named slice constants `NODE_STYLES: &[(&str, NodeStyle)]` and `EDGE_COLORS: &[(&str, EdgeColor)]`.
+OBSERVED (src/catalog/dot.rs:45-112): rendered as match-lookup fns `node_style(prefix) -> NodeStyle` (l.45) and `edge_color(label_lower) -> EdgeColor` (l.86) with `DEFAULT_NODE_STYLE` (l.72) / `DEFAULT_EDGE_COLOR` (l.109) consts. No slice-const tables exist.
+ASSESSMENT: values verified correct vs web/map/src/dot.ts and by VA-1 real-corpus render; STD-001 single-source intent met (render() references style fields, no scattered literals); functionally equivalent and arguably more idiomatic (`#[expect(clippy::match_same_arms)]` present). No behavioural impact. The divergence is that canon (design.md) now describes a representation the code does not contain. Two legitimate remediations: (a) verified + reconcile design §5.2/§5.3 prose to the as-built match-fn form; (b) fix-now refactor code back to the design's slice-const form (also restores F-2 keyword integrity). Flagged for adjudication in the handover."""
+disposition = "verified"
+response = "Verified — accept the as-built code, reconcile canon to it (user adjudication, audit route (a)). The match-fn representation (node_style()/edge_color() + DEFAULT_* consts) is correct (values verified vs dot.ts and by VA-1 render), STD-001 single-source intent met, idiomatic, landed and green — no code churn warranted. The divergence is a canon-accuracy gap only. Reconciliation Brief → Per-slice (direct edit): update design.md §5.2/§5.3 style-table prose to describe the as-built match-fn + DEFAULT_* form (drop the NODE_STYLES/EDGE_COLORS slice-const prescription). F-2's keyword-provenance residual stays tolerated (POL-002-accepted class); no code change resurrects the constant names."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "PHASE-03 VT-1 keyword-provenance is comment-satisfied (NODE_STYLES/EDGE_COLORS live only in a test comment)"
+detail = """
+EXPECTED: plan.toml PHASE-03 VT-1 keywords `["NODE_STYLES","EDGE_COLORS","render"]` match named style-table constants exercised by the test.
+OBSERVED: because of F-1's match-fn representation, `NODE_STYLES`/`EDGE_COLORS` survive only as a test-section comment (src/catalog/dot.rs:431 `// VT-1: rich fixture — NODE_STYLES, EDGE_COLORS, render`). The `slice verify-vt` raw-byte keyword gate passes on that comment.
+ASSESSMENT: mitigating — the VT-1 behavioural assertions are genuinely strong (assert `fillcolor="#4A90D9"` etc. and `style="filled,rounded"`/no `box,rounded`), so VT-1's real verification is sound; only the keyword provenance is comment-satisfied. IMP-228 (closed/fixed) added source-delta intersection but only catches wholly-untouched files — dot.rs is slice-created, so this residual (keyword in a comment of a touched file) is not caught; POL-002 forbids host-language comment-stripping, so this is a known, consciously-accepted gate limitation, not a new defect. plan.toml VT-1 is immutable-append (off reconcile's surfaces) so the keyword string cannot be edited. Auto-resolves if F-1 is dispositioned fix-now (real constants reappear)."""
+disposition = "tolerated"
+response = """Tolerated. The VT-1 behavioural assertions are strong (fillcolor hex + style="filled,rounded" + no box,rounded, all re-verified green on a fresh binary: catalog:: 80/0), so VT-1's verification of the emitter is sound; only the keyword-provenance rides a comment. plan.toml VT-1 keywords are immutable-append — off every reconcile write surface, so the string cannot be corrected. The residual (keyword in a comment of a slice-touched file) is not reachable by IMP-228's source-delta intersection and cannot be closed without host-language comment-stripping, which POL-002 forbids — a consciously-accepted gate limitation already documented in IMP-228's rationale. No new backlog: no POL-002-compliant fix exists. If F-1 lands as fix-now (real NODE_STYLES/EDGE_COLORS constants), this resolves incidentally."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Conformance reports .doctrine/adr/001/layering.toml undelivered — pi-arm authored-state recording artifact, not dropped work"
+detail = """
+EXPECTED: `doctrine slice conformance 226` attests the layering.toml design-target selector as conformant (the catalog::dot=engine row is gate-critical, design §5.1/§10 F-9).
+OBSERVED: conformance reports `undelivered (1): .doctrine/adr/001/layering.toml`. Root cause: on the pi arm the worker cannot write .doctrine (ro .git), so the orchestrator authored the row in a governance commit `0f93f630` (chore(SL-226): classify catalog::dot as engine) on dispatch/226 — outside any phase source-delta oid range, so the registry cannot attribute it.
+ASSESSMENT: the work IS delivered — `git diff main...review/226 -- .doctrine/adr/001/layering.toml` shows the `+"catalog::dot" = "engine"` line present in the impl bundle, so `dispatch sync --integrate --trunk refs/heads/main` lands it on main. The undelivered cell is a structural artifact of the dispatch topology (authored .doctrine changes ride orchestrator/governance commits, not worker source-deltas), not scope-drop. Residual: the row is NOT yet on edge; close-time integrate must land it on main (gate-critical — without it `just gate` clippy layering check fails, which is self-protecting at close). Brief carries a close-time verification."""
+disposition = "tolerated"
+response = """Tolerated. The row is delivered and integrates: git diff main...review/226 shows +"catalog::dot" = "engine" in the impl bundle, so dispatch sync --integrate --trunk refs/heads/main lands it on main. The undelivered conformance cell is a structural artifact of the pi-arm topology — authored .doctrine changes ride an orchestrator governance commit (0f93f630), never a worker source-delta, so the registry cannot attribute the path. Not scope-drop. Removing the selector would hide a legitimate design-target (design §5.1/§10 F-9); recording a source-delta for an authored governance commit would misuse the code-delta registry. Reconciliation Brief carries the only real action: verify catalog::dot=engine is present on main after integrate (gate-critical; self-protecting since close's doctrine check gate clippy leg would fail without it)."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "PRD-016 §2 interchange-demotion boundary sentence needs reconciliation (pre-declared deferral)"
+detail = """
+EXPECTED: PRD-016 §2 (which demotes static graph-file interchange for external tools to on-demand) should distinguish this new in-workflow, pipe-composable consumption surface (`doctrine graph`, RFC-001) from the demoted static-interchange case.
+OBSERVED: the boundary sentence still reads as a blanket demotion; SL-226 delivers a governed consumption surface that is distinguishable but not yet reflected in PRD-016 prose. This was consciously deferred to reconcile at design time (design §3 Forces/Constraints; scope Context) — not an audit-discovered regression.
+ASSESSMENT: governance/spec reconcile item — PRD-016 §2 needs a REV modification to carve out the in-workflow consumption surface. No code impact; formalized here so reconcile owns the write."""
+disposition = "verified"
+response = "Verified — routed to reconcile as a governance/spec REV. PRD-016 §2's blanket static-interchange demotion needs a carve-out distinguishing SL-226's in-workflow, pipe-composable consumption surface (RFC-001). Pre-declared deferral (design §3, scope Context), not a code divergence. Reconciliation Brief → Governance/spec (REV): PRD-016 §2 modify. No code or per-slice-artefact change."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -919,3 +919,15 @@ Conclude-cadence friction on the claude arm — four token sinks, all in the fun
 4. slice lifecycle stuck at `ready` after a full dispatch drive (never advanced to `started`
    on either edge or dispatch/227). ready→audit is a [skip]; benign but had to verify across
    trees that `started` was genuinely never recorded (not a divergence) before transitioning.
+
+[/audit; sess-audit-sl226]
+Auditing a pi-arm dispatched slice from a fresh `git worktree add --detach review/226`
+worktree: the build failed with `assets::Assets::get not found` (RustEmbed derive
+emitted no `get`) because `web/map/dist/` — a gitignored embedded `#[folder]` root —
+is absent from a fresh worktree (git doesn't carry gitignored artifacts). Cost: one
+failed build + diagnosis before realizing it was environmental, not a slice defect.
+Compounded by `cargo build 2>&1 | tail -N` masking cargo's nonzero exit behind tail's
+0 — the "exit 0" was misleading. Mitigation that worked: `cp -r web/map/dist/.` from
+the primary tree into the worktree, then rebuild. Latent doc gap: the audit/worktree
+ritual for a slice touching (or coexisting with) an embed root should pre-seed
+gitignored embed folders, or `doctrine worktree fork` should carry them.

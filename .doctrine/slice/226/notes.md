@@ -41,19 +41,28 @@ fresh-as-of: 2026-07-25 · all 4 phases landed on dispatch/226 · 08b8d643
 
 ### Open
 
-- **DEVIATION for audit/reconcile:** catalog::dot renders the design §5.3
-  named-slice-const style tables (`NODE_STYLES: &[..]` / `EDGE_COLORS: &[..]`) as
-  match-lookup fns `node_style`/`edge_color` + `DEFAULT_*` consts instead.
-  Functionally equivalent, values correct vs dot.ts, STD-001 intent met; but the
-  VT-1 keyword literals then live only in test comments (vtgate raw-byte match
-  still Passes). Adjudicate: keep, or follow-up refactor to the literal
-  slice-const form. (Recorded in phase-03 sheet Findings — disposable — hence
-  lifted here.)
-- **VA-1 (PHASE-04):** DISCHARGEABLE — graphviz `dot` IS present in the jail.
-  `graph SL-226 --depth 2 --format dot | dot -Tsvg` → valid 29KB SVG, empty
-  graph-side stderr, NO shape/syntax warnings (D10). Lone dot stderr is an
-  environmental `Fontconfig` "cannot load default config" (missing jail font
-  config), NOT emitter-attributable. Audit to formally close VA-1 on this
-  evidence.
-- Deferred to reconcile: PRD-016 §2 interchange boundary sentence revisit.
-  Follow-ons live in IDE-043 (render/mermaid/d2, coverage & actionability views).
+- Audited on **RV-301** (reconciliation, done · 4 findings · 0 blockers). All
+  acceptance re-verified green on a fresh binary (VTs 7/7, VA-1 reproduced,
+  clippy zero). Reconciliation Brief + Synthesis on RV-301. Remaining lifecycle:
+  /reconcile → /close.
+
+Findings settled (were the two Open items above + two conformance/governance):
+
+- **F-1 style-table DEVIATION** (match fns vs design §5.2/§5.3 slice-consts):
+  adjudicated (user) **accept the code, reconcile canon** → reconcile edits
+  design.md §5.2/§5.3 prose to the as-built `node_style()`/`edge_color()` +
+  `DEFAULT_*` form. No code churn.
+- **F-2 VT-1 keyword-provenance** (NODE_STYLES/EDGE_COLORS now comment-only):
+  tolerated — behavioural assertions strong, plan VT-1 immutable, no
+  POL-002-compliant vtgate fix (IMP-228 blind spot for touched files).
+- **VA-1 (PHASE-04):** DISCHARGED — reproduced on the fresh audit binary:
+  `graph SL-226 --depth 2 --format dot | dot -Tsvg` → 29,118-byte SVG, empty
+  graph-side stderr, zero `shape="box,rounded"` (D10). Lone dot stderr is the
+  env `Fontconfig` artifact, not emitter-attributable.
+- **F-3 conformance undelivered layering.toml:** pi-arm topology artifact (row
+  rode gov commit 0f93f630, outside worker source-deltas); delivered in the
+  bundle, integrates to main. Close-time check: confirm catalog::dot=engine on
+  main post-integrate (gate-critical).
+- **F-4 PRD-016 §2 boundary:** routed to reconcile as a governance REV
+  (pre-declared deferral). Follow-ons live in IDE-043 (render/mermaid/d2,
+  coverage & actionability views).
