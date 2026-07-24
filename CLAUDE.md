@@ -31,3 +31,9 @@ Use doctrine memory (the mcp tool). DON'T use claude built-in memory.
   Note: using readonly isolation prevents it raising an inquisitorial review ledger; GPT
   has pretty good adherence so that's a poor tradeoff.
 - Opus sub-agent is also useful for variety on subsequent passes.
+
+## Research
+- DON'T use subagents 
+- do use `./scripts/pi-scout` (quicker, cheaper) or `./scripts/pi-research` (smarter)
+  usage: takes a prompt via stdin or arg; returns results on stdout.
+
