@@ -185,7 +185,7 @@ declared.
   particular embedding ≠ publication ≠ projection. (Publication *policy* only;
   publication *delivery* is contract B.)
 - **D7 — minimal, justified base projection.** The base install is exactly three
-  files — `.gitignore`, `doctrine.toml`, `boot-project.md`. A file is projected
+  files — `.gitignore`, `doctrine.toml`, `project-orientation.md`. A file is projected
   only when its presence at a stable project path is operationally necessary or
   materially improves discoverability, integration, control, or supported
   customization. No template, reference doc, agent definition, hymn, or
@@ -197,7 +197,7 @@ declared.
 - **D9 — governance is a *physically distinct* surface (trust deferred).**
   Standing project governance materializes on **explicit user definition** into
   its own surface (candidate `governance.md`), never folded into the
-  agent-improvable `boot-project.md` orientation surface. This draws the
+  agent-improvable `project-orientation.md` orientation surface. This draws the
   volatility / mutation-authority boundary up front (ADR-019 position 3).
   Enforcing trust/approval on edits to that surface is a **Stage-5 concern,
   explicitly out of scope here** — D9 establishes physical separability, not an
