@@ -1,15 +1,15 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 306
-slug = "consolidate-capture-skills-into-harvest-handoff"
-title = "Consolidate capture skills into harvest + handoff"
+id = 307
+slug = "lint-skillmd-frontmatter-description-hazards"
+title = "Lint SKILL.md frontmatter description hazards"
 kind = "improvement"
-status = "resolved"
-resolution = "done"
-created = "2026-07-23"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-07-24"
 updated = "2026-07-24"
-tags = ["area:docs", "area:skills"]
+tags = ["area:skills", "area:testing"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
@@ -20,8 +20,3 @@ tags = ["area:docs", "area:skills"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
-
-[[relation]]
-label = "references"
-role = "originates_from"
-target = "SL-215"

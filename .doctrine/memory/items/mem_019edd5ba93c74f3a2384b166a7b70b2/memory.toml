@@ -4,10 +4,10 @@ schema_version = 1
 lifespan = "episodic"
 memory_type = "pattern"
 status = "active"
-title = "YAML frontmatter colons break skill SKILL.md parsing"
-summary = "Colons in YAML frontmatter description fields cause parse errors in skill discovery (14 tests fail). Use YAML block scalar (>-) or quote the value."
+title = "YAML frontmatter hazards in SKILL.md descriptions: colon-space, quotes, space-hash"
+summary = 'Unquoted YAML scalars: ": " and \" break parse loudly; " #" starts a comment and truncates silently. Rephrase or block-scalar.'
 created = "2026-06-19"
-updated = "2026-06-19"
+updated = "2026-07-24"
 
 [scope]
 paths = []

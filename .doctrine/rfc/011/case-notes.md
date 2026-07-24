@@ -307,3 +307,10 @@ context; ~3 irrelevant memory summaries injected across 2 calls.
 this; use plain `cargo clippy` / `doctrine check`). Cost one detour before
 recalling the documented trap. Minor: `just -n` writes its dry-run trace to
 stderr, not stdout — cost one red-for-wrong-reason cycle in a belt-order e2e.
+[harvest/handover consolidation; imp306-consolidate-capture] SKILL.md
+frontmatter YAML footguns cost two fix cycles: ': ' in a description is a loud
+parse error, but ' #' silently truncates (YAML comment) — tests green, damage
+visible only in the rendered skill list. No authoring-time lint; each variant
+was discovered downstream (test failure / skill-list inspection). A frontmatter
+lint in `install::tests_skills` (or `doctrine check`) rejecting `: `, `"`, and
+' #' in description values would have saved both cycles.
