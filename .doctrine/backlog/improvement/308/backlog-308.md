@@ -37,11 +37,43 @@ respect — before it is safe to relax the invariant generally.
 Run **at most one audit-or-close at a time** across the repo. More than one
 concurrent `> audit` / `close` risks racing trunk with no coordination primitive.
 
+## Preflight note (2026-07-24) — not a cheap backlog win; governance-gated
+
+Assessed as a candidate off-backlog quick win; **it is not one.** The two framings
+split on governance:
+
+- **Relax-the-invariant (this item's title).** "Trunk integration is post-audit,
+  opt-in, FF-only, no close-time merge" is pinned in **three accepted governance
+  entities** — SPEC-022 (post-audit gate + pinned fork-point RV-030 F-1: projects
+  parent on `trunk_base_B = merge-base(dispatch, trunk)`, never live tip;
+  `refresh-base` the sole explicit advance), SPEC-021 (same two-stage audit-gated
+  projection), ADR-012 (D5 "integrate only after audit passes"; "no close-time
+  merge", SL-068). Relaxing it is a **governance revision** (REV against
+  SPEC-021/022 + ADR-012), not a claim tweak. Expensive; leave here or **absorb
+  into RFC-016** (zero-rescue dispatch: invariants into verbs, lineage rows) — the
+  strategic frame this item's root cause already sits inside.
+- **Reliable `edge → main` promotion (the cheaper, more root-causal wedge).** The
+  base-promotion ritual (`git fetch . edge:main`) is a **workflow convention**
+  (AGENTS.md + IMP-129 prose), not pinned in an accepted spec/ADR — so
+  reliabilising it does *not* relax the governed integrate invariant (a fresher
+  `main` just yields a fresher `trunk_base_B`). But it still **wants skill support
+  and Rust**, not a one-liner: a promote step/verb + TDD, plus a design call on the
+  *firing window* — promoting mid-flight moves `main` under a pinned base, the exact
+  "foreign commit on trunk" hazard SPEC-022's moved-trunk **refusal** guards. So:
+  a **small slice** (skill wiring + Rust verb + tests), explicitly excluding the
+  governed pre-close relaxation above.
+
+**Route when picked up:** `/slice` on the reliable-promotion wedge (skill + Rust),
+keeping the invariant-relaxation half distinct — either resident here or folded
+into RFC-016.
+
 ## Related
 
 - `mem.pattern.dispatch.close-split-lineage-reconcile-on-edge` — the recovery
   route this would obviate; it already calls for a pre-close check diffing the
   admitted `close_target` tree against `edge` to flag the divergence in one
   command (a cheaper partial mitigation than full relaxation).
+- RFC-016 — zero-rescue dispatch (invariants into verbs, lineage rows): the
+  strategic frame that could absorb the invariant-relaxation half.
 - RFC-011 — token-efficiency benchmark; the motivating cost signal.
 - Motivating case: SL-224 close (2026-07-24).
