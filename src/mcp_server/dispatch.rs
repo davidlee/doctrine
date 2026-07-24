@@ -298,7 +298,17 @@ fn import_compose(
     // leg — the SAME verdict the CLI import reaches (VA-1 agreement).
     match classify_import(true, true, single_commit, &delta_paths, selectors) {
         Ok(Apply::Ok) => {}
-        Err(refusal) => return Ok(funnel_refused(refusal.token(), String::new())),
+        // The scope refusal alone carries a runnable `Refused.detail` naming the offending
+        // paths (SL-224 PHASE-01); every other refusal yields an empty detail. Both the
+        // token and the detail are computed on the refusal VALUE (`Refusal` is a
+        // `#[cfg(test)]`-only re-export, never named in prod) — `scope_detail` recomputes
+        // the undeclared set from the SAME pure predicate the belt used.
+        Err(refusal) => {
+            return Ok(funnel_refused(
+                refusal.token(),
+                refusal.scope_detail(slice, selectors, &delta_paths),
+            ));
+        }
     }
 
     // Compose coord-tip ⊕ worker-tip working-tree-free (object-db only, EX-1). When the
@@ -876,11 +886,23 @@ mod tests {
         // A design-target selector that does NOT declare `docs/readme.md`.
         let selectors = vec!["src/**".to_string()];
         let out = import_compose(&ct(&coord, &base), 199, "dispatch/wk", &selectors).unwrap();
-        // HARD refuse — the SAME token the CLI import's `Refusal::UndeclaredScope` uses.
-        assert_eq!(
-            out,
-            funnel_refused(Refusal::UndeclaredScope.token(), String::new())
-        );
+        // HARD refuse with the SAME token the CLI import's `Refusal::UndeclaredScope`
+        // uses, AND a non-empty `detail` that NAMES the offending path via the shared
+        // `undeclared_detail` formatter (SL-224 PHASE-01) — no more empty detail.
+        match out {
+            FunnelOutcome::Refused { reason, detail } => {
+                assert_eq!(reason, Refusal::UndeclaredScope.token());
+                assert!(
+                    detail.contains("docs/readme.md"),
+                    "detail names the offending path: {detail}"
+                );
+                assert!(
+                    detail.contains("doctrine slice selector add SL-199 docs/readme.md"),
+                    "detail carries a runnable remediation: {detail}"
+                );
+            }
+            other => panic!("expected Refused, got {other:?}"),
+        }
         // Coord tip UNCHANGED — nothing landed (report-and-halt before any compose).
         assert_eq!(
             git_run(&coord, &["rev-parse", "refs/heads/dispatch/199"]),
