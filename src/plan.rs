@@ -273,6 +273,62 @@ pub(crate) fn check_vt_shape(plan: &Plan) -> Vec<VtShapeFinding> {
     findings
 }
 
+// ---------------------------------------------------------------------------
+// Selector-completeness check — plan-time under-declaration lint (SL-224)
+// ---------------------------------------------------------------------------
+
+/// A finding from [`undeclared_test_files`] — one non-waived VT whose
+/// `test_file` is covered by NO design-target selector. The "scope-relevant
+/// doesn't clear the belt; must be design-target" trap, caught at plan time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VtSelectorFinding {
+    pub phase_id: String,
+    pub vt_id: String,
+    pub path: String,
+}
+
+/// Flag every non-waived VT whose `test_file` is declared by no design-target
+/// selector — the same under-declaration the import belt refuses at integrate
+/// time, surfaced at plan time instead.
+///
+/// EMPTY `selectors` ⇒ EMPTY result: mirrors the import belt's no-op-when-no-scope
+/// (an unscoped plan cannot under-declare). Guarded FIRST, before delegating to
+/// [`crate::conformance::undeclared_paths`] (which flags every path on empty input).
+///
+/// Coverage is decided by the SHARED `undeclared_paths` predicate — the exact
+/// glob-aware match the import belt uses — so a flag here is precisely what the
+/// belt would refuse. Waived VTs and VTs without a `test_file` are skipped,
+/// mirroring [`check_vt_shape`]'s iteration.
+pub(crate) fn undeclared_test_files(plan: &Plan, selectors: &[String]) -> Vec<VtSelectorFinding> {
+    // No scope ⇒ nothing to under-declare (import belt parity, A3).
+    if selectors.is_empty() {
+        return Vec::new();
+    }
+    let mut findings = Vec::new();
+    for ph in &plan.phases {
+        for vt in &ph.verification {
+            if !vt.id.starts_with("VT-") {
+                continue;
+            }
+            if vt.waived {
+                continue;
+            }
+            let Some(test_file) = &vt.test_file else {
+                continue;
+            };
+            // Shared predicate: non-empty ⇒ the path is declared by no selector.
+            if !crate::conformance::undeclared_paths(selectors, &[test_file.as_str()]).is_empty() {
+                findings.push(VtSelectorFinding {
+                    phase_id: ph.id.clone(),
+                    vt_id: vt.id.clone(),
+                    path: test_file.clone(),
+                });
+            }
+        }
+    }
+    findings
+}
+
 #[cfg(test)]
 mod vt_shape_tests {
     use super::*;
@@ -433,6 +489,73 @@ mod vt_shape_tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].problem, VtShapeProblem::MissingWaiverReason);
         // NOT BareTestFile — waiver short-circuits.
+    }
+}
+
+#[cfg(test)]
+mod undeclared_test_files_tests {
+    use super::*;
+
+    fn plan_with(vt_rows: &str) -> Plan {
+        let text = format!(
+            r#"
+            [[phase]]
+            id = "PHASE-01"
+            verification = [
+              {vt_rows}
+            ]
+        "#
+        );
+        Plan::parse(&text).unwrap()
+    }
+
+    #[test]
+    fn undeclared_test_file_flags_one_finding() {
+        let plan = plan_with(r#"{ id = "VT-1", test_file = "src/plan.rs", keywords = ["fn"] },"#);
+        let selectors = vec!["src/commands/check.rs".to_string()];
+        let findings = undeclared_test_files(&plan, &selectors);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(
+            findings[0],
+            VtSelectorFinding {
+                phase_id: "PHASE-01".to_string(),
+                vt_id: "VT-1".to_string(),
+                path: "src/plan.rs".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn covered_test_file_yields_no_finding() {
+        let plan = plan_with(r#"{ id = "VT-1", test_file = "src/plan.rs", keywords = ["fn"] },"#);
+        let selectors = vec!["src/plan.rs".to_string()];
+        assert!(undeclared_test_files(&plan, &selectors).is_empty());
+    }
+
+    #[test]
+    fn empty_selectors_yields_no_finding() {
+        // A3: no scope ⇒ nothing under-declared, even though the path is unmatched.
+        let plan = plan_with(r#"{ id = "VT-1", test_file = "src/plan.rs", keywords = ["fn"] },"#);
+        assert!(undeclared_test_files(&plan, &[]).is_empty());
+    }
+
+    #[test]
+    fn glob_covered_test_file_yields_no_finding() {
+        // Exercises undeclared_paths's glob path — a directory glob covers the file.
+        let plan = plan_with(r#"{ id = "VT-1", test_file = "src/plan.rs", keywords = ["fn"] },"#);
+        let selectors = vec!["src/**".to_string()];
+        assert!(undeclared_test_files(&plan, &selectors).is_empty());
+    }
+
+    #[test]
+    fn waived_and_bare_vts_skipped() {
+        let plan = plan_with(
+            r#"{ id = "VT-1", test_file = "src/plan.rs", keywords = ["fn"], waived = true, waived_reason = "manual" },
+              { id = "VT-2", expects = "no test_file" },"#,
+        );
+        let selectors = vec!["src/other.rs".to_string()];
+        // VT-1 waived, VT-2 has no test_file — neither is flagged.
+        assert!(undeclared_test_files(&plan, &selectors).is_empty());
     }
 }
 

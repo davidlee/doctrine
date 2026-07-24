@@ -159,23 +159,51 @@ fn dispatch_regression(cmd: RegressionCommand) -> anyhow::Result<()> {
     }
 }
 
-/// `doctrine check plan <id>` — read the authored `plan.toml` and flag bare VT
-/// rows (IMP-209). Pure check: no fs reads beyond the single `plan.toml`.
-/// Renders a per-phase table; exits non-zero iff any non-waived VT lacks
-/// `test_file` or has empty `keywords` (`MissingWaiverReason` is a soft warning).
+/// `doctrine check plan <id>` — read the authored `plan.toml` + the slice's
+/// design-target selectors and flag both bare VT rows (IMP-209) and VTs whose
+/// `test_file` is declared by no design-target selector (SL-224). The thin exit
+/// shell: [`plan_check_report`] does the read+render+decide; this diverges via
+/// `process::exit(1)` on the decision (`MissingWaiverReason` is a soft warning).
 fn run_check_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     use std::io::Write;
     let root = crate::root::find(path, &crate::root::default_markers())?;
+    let (report, fail) = plan_check_report(&root, id)?;
+    write!(std::io::stdout(), "{report}")?;
+    if fail {
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "check plan exits non-zero on bare VTs (IMP-209) or undeclared VT test_files (SL-224)"
+        )]
+        {
+            std::process::exit(1);
+        }
+    }
+    Ok(())
+}
+
+/// Read the authored plan + the slice's design-target selectors, render the
+/// check-plan report, and return `(rendered_output, should_exit_nonzero)`. Split
+/// from [`run_check_plan`] so the read+render+decide is exercisable without the
+/// process-exit shell (SL-224). Fails iff any non-waived VT lacks `test_file` /
+/// has empty `keywords`, OR any non-waived VT's `test_file` is declared by no
+/// design-target selector (the import belt would refuse it at integrate time).
+fn plan_check_report(root: &Path, id: u32) -> anyhow::Result<(String, bool)> {
+    use std::fmt::Write as _;
     let slice_root = root.join(".doctrine/slice");
     let plan = crate::slice::read_plan(&slice_root, id)?;
     let findings = crate::plan::check_vt_shape(&plan);
 
-    if findings.is_empty() {
-        writeln!(
-            std::io::stdout(),
-            "SL-{id:03}: all VT rows carry structured mandates"
-        )?;
-        return Ok(());
+    // Selector-completeness (SL-224): read the SAME design-target selectors the
+    // dispatch scope belt reads (dispatch.rs). Computed ABOVE the clean short-circuit
+    // so a plan with no shape problems (obj-2's primary case) is still gated on it.
+    let selectors =
+        crate::slice::selectors(root, id, Some(crate::slice::SelectorIntent::DesignTarget))?;
+    let coverage = crate::plan::undeclared_test_files(&plan, &selectors);
+
+    let mut out = String::new();
+    if findings.is_empty() && coverage.is_empty() {
+        writeln!(out, "SL-{id:03}: all VT rows carry structured mandates")?;
+        return Ok((out, false));
     }
 
     let bare_count = findings
@@ -185,18 +213,22 @@ fn run_check_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let opaque_count = findings.len() - bare_count;
 
     if bare_count > 0 {
-        writeln!(
-            std::io::stdout(),
-            "SL-{id:03}: {bare_count} bare VT(s) found"
-        )?;
+        writeln!(out, "SL-{id:03}: {bare_count} bare VT(s) found")?;
     }
     if opaque_count > 0 {
         writeln!(
-            std::io::stdout(),
+            out,
             "  ({opaque_count} opaque waiver(s) — add waived_reason)"
         )?;
     }
-    writeln!(std::io::stdout())?;
+    if !coverage.is_empty() {
+        writeln!(
+            out,
+            "SL-{id:03}: {} undeclared VT test_file(s) found",
+            coverage.len()
+        )?;
+    }
+    writeln!(out)?;
 
     let mut lines: Vec<String> = Vec::new();
     for f in &findings {
@@ -218,26 +250,37 @@ fn run_check_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
             f.phase_id, f.vt_id, label
         ));
     }
+    for f in &coverage {
+        lines.push(format!(
+            "  {:<12} {:<8} {:<24} — test_file `{}` declared by no design-target selector",
+            f.phase_id, f.vt_id, "UndeclaredTestFile", f.path
+        ));
+    }
     // Sort by phase then VT id for stable output.
     lines.sort();
     for line in &lines {
-        writeln!(std::io::stdout(), "{line}")?;
+        writeln!(out, "{line}")?;
     }
 
     if bare_count > 0 {
         writeln!(
-            std::io::stdout(),
+            out,
             "\nAdd `test_file` + `keywords` to each bare VT row. Re-run until clean."
         )?;
-        #[expect(
-            clippy::disallowed_methods,
-            reason = "check plan exits non-zero on bare VTs (IMP-209)"
-        )]
-        {
-            std::process::exit(1);
-        }
     }
-    Ok(())
+    if !coverage.is_empty() {
+        // The SAME id-bearing remediation formatter the import belt emits (SL-224
+        // PHASE-01) — one runnable `slice selector add` line per undeclared path.
+        let paths: Vec<String> = coverage.iter().map(|f| f.path.clone()).collect();
+        write!(
+            out,
+            "\n{}",
+            crate::conformance::undeclared_detail(id, &paths)
+        )?;
+    }
+
+    let fail = bare_count > 0 || !coverage.is_empty();
+    Ok((out, fail))
 }
 
 /// Proxy-spawn `argv` with `cwd == root`, INHERITING stdio (live stream; not piped)
@@ -289,5 +332,85 @@ fn exit_code(status: ExitStatus) -> i32 {
     #[cfg(not(unix))]
     {
         1
+    }
+}
+
+#[cfg(test)]
+mod check_plan_report_tests {
+    use super::*;
+
+    /// Scaffold a COMPLETE slice at `root`: `plan.toml`, a full `slice-NNN.toml`
+    /// carrying the given design-target `[[selector]]` line (EX-5 — a bare
+    /// `plan.toml` alone would error at `slice::selectors`), and the `slice-NNN.md`
+    /// body `read_slice` reads. `test_file` is the VT-1 `test_file` under test.
+    fn scaffold(id: u32, selector: &str, test_file: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let slice_dir = dir.path().join(".doctrine/slice").join(format!("{id:03}"));
+        std::fs::create_dir_all(&slice_dir).unwrap();
+        std::fs::write(
+            slice_dir.join("plan.toml"),
+            format!(
+                r#"
+[[phase]]
+id = "PHASE-01"
+verification = [
+  {{ id = "VT-1", test_file = "{test_file}", keywords = ["fn"] }},
+]
+"#
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            slice_dir.join(format!("slice-{id:03}.toml")),
+            format!(
+                r#"id = {id}
+slug = "test-slice"
+title = "Test Slice"
+status = "started"
+created = "2026-07-24"
+updated = "2026-07-24"
+tags = []
+
+[[selector]]
+selector = "{selector}"
+intent = "design-target"
+"#
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            slice_dir.join(format!("slice-{id:03}.md")),
+            "# Test Slice\n",
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn covered_test_file_reports_clean_no_fail() {
+        // Design-target selector covers VT-1's test_file: undeclared_test_files is
+        // empty, so the clean short-circuit fires and the report does NOT fail.
+        let dir = scaffold(42, "src/plan.rs", "src/plan.rs");
+        let (report, fail) = plan_check_report(dir.path(), 42).unwrap();
+        assert!(!fail);
+        assert!(report.contains("all VT rows carry structured mandates"));
+    }
+
+    #[test]
+    fn undeclared_test_file_folds_into_fail_and_names_path() {
+        // The design-target selector (read via slice::selectors with
+        // SelectorIntent::DesignTarget) does NOT cover VT-1's test_file, so
+        // undeclared_test_files flags it and the report FAILS naming the path.
+        let dir = scaffold(42, "src/other.rs", "src/plan.rs");
+        let (report, fail) = plan_check_report(dir.path(), 42).unwrap();
+        assert!(fail);
+        // The finding line names the undeclared test_file path.
+        assert!(report.contains("UndeclaredTestFile"));
+        assert!(report.contains("src/plan.rs"));
+        // The shared id-bearing remediation footer is emitted.
+        assert!(
+            report
+                .contains("doctrine slice selector add SL-042 src/plan.rs --intent design-target")
+        );
     }
 }
