@@ -642,3 +642,35 @@ naming) — three stray files committed before `knowledge show` exposed the
 empty body. `doctrine knowledge paths` would have answered it; the per-kind
 body filename convention is inconsistent across kinds (slice-NNN.md vs
 backlog-NNN.md vs record-NNN.md), which invites exactly this guess.
+
+[preflight; rfc021-next-slice-4a1c]
+Three small CLI-shape misfires cost round-trips while scoping RFC-021's next slice:
+- `doctrine memory retrieve <key>` rejects a positional key (`unexpected argument`);
+  the working read is `memory show <key>`. `retrieve` wants flags, not an id.
+- `doctrine spec req show/get REQ-NNN` do not exist — only `spec req list <SPEC>`.
+  To read a single requirement's statement I had to grep the `spec show` body for
+  `FR-00N (REQ-NNN)` headings; the `req list` table's prose column is `—` for all
+  rows, so the roster gives status but not the requirement text. Reading "which
+  pending requirement is which" is a two-command dance (list for status → grep
+  body for statement) where one `req show <REQ>` would do.
+
+[audit; SL204-recon-297]
+Auditing a dispatched-but-unintegrated slice cost several orientation probes the
+skill doesn't anticipate:
+- `/audit`'s dispatched-slice note says "audit the candidate surface published by
+  `dispatch candidate create`" — but here NO candidate existed and trunk had moved
+  22 commits past the prepared base. The skill assumes a candidate; the real entry
+  state was "sync prepared, never integrated". Had to reconstruct via
+  `dispatch status` + `dispatch candidate status` + `git log --grep` that the impl
+  lived only on `review/204`, not edge HEAD. A one-line "if no candidate: the impl
+  is on the review/* evidence ref; audit there" would save the archaeology.
+- **`cmd | tail -N; echo $?` masks build failure.** Ran `cargo build 2>&1 | tail`
+  and `cargo test 2>&1 | tail` with `echo EXIT $?` — `$?`/last-PIPESTATUS is
+  `tail`'s exit (0), so a compile failure read as "exit 0". Twice mistook a failed
+  build for a pass; only caught it when `grep -c "test result: ok"` returned 0.
+  Cost a diagnosis round-trip. Lesson: capture `${PIPESTATUS[0]}` or grep for the
+  failure token, never trust `$?` after a pipe.
+- web/map/dist seeding into the fresh worktree (known, mem_019f4c64) was the actual
+  root cause of the first "compile error" — worth the skill cross-linking that memory
+  from the dispatched-slice audit note, since it presents identically to a regression
+  (`Assets::get not found`).
