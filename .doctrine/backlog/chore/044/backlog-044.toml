@@ -5,10 +5,10 @@ id = 44
 slug = "worker-marker-skip-for-e2e-write-goldens"
 title = "Worker-marker skip for e2e write goldens"
 kind = "chore"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-16"
-updated = "2026-07-20"
+updated = "2026-07-24"
 tags = ["area:dispatch", "area:testing", "cluster:testing-goldens", "cluster:worker-gate"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
