@@ -16,4 +16,6 @@ character sequences in the value are hazards:
 Fix: rephrase (em dash instead of colon), or use a block scalar (`>-`) / quoted
 string. Sweep check for the silent variant: scan each description *value* for
 `: ` and ` #` — e.g.
-`awk '/^description:/{sub(/^description: */,""); print FILENAME": "$0}' plugins/*/skills/*/SKILL.md | grep -E ': | #'`.
+`awk '/^description:/{sub(/^description: */,""); if ($0 ~ /: | #/) print FILENAME}' plugins/*/skills/*/SKILL.md`.
+(Do not prefix `FILENAME": "` before grepping — the separator itself matches
+`: ` and false-positives on every file.)
