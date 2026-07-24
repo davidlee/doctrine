@@ -972,3 +972,13 @@ Incidental complexity / token sinks during /audit of a dispatch-concluded slice:
    (1 fail / 3812 pass). Not an SL-227 defect (test_support.rs is untouched by the
    slice) — but an independent audit re-run in a clean worktree always eats this
    false-red and must recognise+discount it.
+
+[phase-plan+execute; SL-229-PHASE-01-a1f]
+New engine `mod research;` tripped the ADR-001 architecture-layering gate
+(`tests/architecture_layering.rs` → `Unclassified("research")` ×4) — the module
+must be added to `.doctrine/adr/001/layering.toml [tiers]` or `doctrine check
+gate` fails. This coupling (new module ⇒ layering.toml edit) was NOT in the
+handover terrain / code-impact table; cost one gate round-trip + a file read to
+locate the classification source (it's a TOML the test loads, not an in-test
+table). Cheap once known; a one-line "new module → layering.toml tier" note in
+the design's code-impact summary would have pre-empted it.
