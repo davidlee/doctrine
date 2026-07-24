@@ -153,3 +153,35 @@ impact.
   mechanism, with candidate fixes sketched) and **IMP-292** (audit-time conformance
   signal degradation, incl. authored-metadata pollution). SL-225 PHASE-01 is a fresh
   repro of IMP-175.
+
+## Reconciliation Outcome
+
+### Direct edits applied (per-slice — design.md)
+- **§"What this dissolves" F-3 bullet** (RV-294 F-1): DOCTRINE_BIN rule restated as
+  single-source in `.doctrine/governance.md` (STD-001), reaching CLAUDE.md via the
+  `@.doctrine/state/boot.md` inline — not a separate CLAUDE.md edit.
+- **§"Code impact" table CLAUDE.md row + the trailing prose** (RV-294 F-1): CLAUDE.md
+  marked *(no direct edit)* — carries the rule via the regenerated boot snapshot.
+- **§"Which goldens"** (RV-294 F-2): the three illustrative goldens replaced by the
+  empirical `DOCTRINE_WORKER=1` sweep set (27 suites); a reconciled-note records that
+  `e2e_worker_guard` exercises the guard (stays unguarded) and the other two don't
+  false-red.
+- **§"Code impact" table golden row** (RV-294 F-2): same correction.
+
+### Selector registry (load-bearing — slice-225.toml)
+- **`doctrine slice selector rm`** ×3 — `tests/e2e_worker_guard.rs`,
+  `tests/e2e_dispatch_sync.rs`, `tests/e2e_doctor_golden.rs` (RV-294 F-2). Conformance
+  `undelivered` cell now **0** (was 3); four conformant design-targets remain.
+
+### REVs completed
+- None. F-1/F-2 are per-slice design-prose + selector-registry corrections; no
+  ADR/policy/standard/spec required a REV (the slice's governance touch was authored
+  in-phase and is correct).
+
+### Withdrawn / tolerated / aligned (no writes)
+- **F-3** tolerated — boundary-registry pollution is disposable runtime state,
+  verified manually; durable hazard already tracked by IMP-175 + IMP-292.
+- **F-4** aligned — `e2e_check_regression` guard is in-charter; no change.
+- **F-5** tolerated — explicit early-returns kept over a macro (greppability); no change.
+
+Reconcile pass complete — every brief item resolved, no half-applied REV. Handoff to /close.

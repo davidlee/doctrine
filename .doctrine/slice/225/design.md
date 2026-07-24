@@ -131,10 +131,14 @@ engine or a git inference resolve *which binary* — a project/cargo concern).
   **retained and repurposed, not deleted.** The coord-build lifecycle *is* needed —
   not for the fork gate (which skips), but to close the fork-skip's one residual: the
   orchestrator's fresh-binary corpus gate at **close** (§ "Closing the residual"). So
-  this slice keeps the `DOCTRINE_BIN`→coord-build precondition in
-  `.doctrine/governance.md` and `CLAUDE.md` and **reframes** it — it is no longer a
+  this slice keeps the `DOCTRINE_BIN`→coord-build precondition **single-source in
+  `.doctrine/governance.md`** (STD-001) and **reframes** it — it is no longer a
   fork-side *launch-time* env contract (RV-291 F-1 killed that), but a coord-side
-  *close-time* build the orchestrator performs on the tree it already owns.
+  *close-time* build the orchestrator performs on the tree it already owns. It reaches
+  the agent-facing CLAUDE.md surface via the `@.doctrine/state/boot.md` inline of
+  `governance.md`, refreshed by `doctrine boot` — **not** a separate CLAUDE.md file
+  edit (reconciled RV-294 F-1: the earlier draft naming CLAUDE.md as a second edit
+  target would have violated single-source).
   Establishing the coord build at close is the direct answer to F-3's "promised but
   never established" — established where it is finally tractable (coord *is* built
   there; no flat-worktree topology to defeat it).
@@ -221,10 +225,17 @@ if common::under_worker_marker() { return; }  // SL-225 #2: skip in a worker for
 
 ### Which goldens
 
-The authored-write spawners only (those the marker guard refuses) — `e2e_worker_guard.rs`,
-`e2e_dispatch_sync.rs`, `e2e_doctor_golden.rs`, and the ~30 marker-poisoned suites
-enumerated at implementation from the CHR-044 case-note list. Read-only goldens are
-untouched.
+The authored-write spawners only (those the marker guard refuses), **enumerated
+empirically at implementation** from a `DOCTRINE_WORKER=1` e2e sweep — the 27
+marker-poisoned suites the sweep surfaced (pinned in the PHASE-02 phase sheet's
+Findings). Read-only goldens are untouched.
+
+> **Reconciled RV-294 F-2.** The illustrative names an earlier draft carried —
+> `e2e_worker_guard.rs`, `e2e_dispatch_sync.rs`, `e2e_doctor_golden.rs` — are **not**
+> targets: `e2e_worker_guard` *exercises* the guard (sets the signal per-child and
+> asserts refusal, so it must stay unguarded), and the other two do not false-red
+> under the worker signal. The plan's "enumerated at implementation" is authoritative;
+> the empirical sweep is the source of truth.
 
 ## Code impact (design-target selectors)
 
@@ -233,18 +244,19 @@ untouched.
 | `justfile` | `validate` recipe: (a) **skip** `doctrine prompt check`/`doctor` under the worker-context signal (fork); (b) off the fork path, resolve the **fresh coord build** (`${DOCTRINE_BIN:-./target/debug/doctrine}`, PATH fallback) instead of bare `doctrine`. Plus (c) **reorder `check`/`gate` so `build` precedes `validate`** — belt-enforces close-gate freshness (kills the validate-before-build order) | #1 (ii) |
 | `src/mcp_server/worker_commit.rs` | `run_commit_gate` spawns the gate with `.env("DOCTRINE_DISPATCH_GATE","1")` — the one neutral signal line; the slice's **only** engine touch | #1 |
 | `.doctrine/governance.md` | § orchestration — **retain + reframe** the `DOCTRINE_BIN`→coord-build precondition (now a coord-side *close-time* build governing the fresh-binary corpus gate, not a fork-side launch contract); add the build-before-`check gate` beat to the close ritual | #1 (ii) |
-| `CLAUDE.md` | § "Dispatch precondition" — **retain + reframe** the same rule (coord-side close-time build) | #1 (ii) |
+| `CLAUDE.md` | *(no direct edit — reconciled RV-294 F-1)* — carries the reframed rule via the `@.doctrine/state/boot.md` inline of `.doctrine/governance.md` (the single authored source, STD-001); refreshed by `doctrine boot` | #1 (ii) |
 | `src/test_support.rs` | `under_worker_marker()` + `WORKER_MARKER_REL` const | #2 |
 | `tests/common/mod.rs` | re-export `under_worker_marker` | #2 |
-| `tests/e2e_worker_guard.rs`, `tests/e2e_dispatch_sync.rs`, `tests/e2e_doctor_golden.rs`, … | marker-guard early-return in authored-write goldens | #2 |
+| the 27 authored-write goldens enumerated empirically (`DOCTRINE_WORKER=1` sweep; PHASE-02 sheet) — **not** `e2e_worker_guard`/`_dispatch_sync`/`_doctor_golden` (reconciled RV-294 F-2) | marker-guard early-return in authored-write goldens | #2 |
 | `tests/e2e_*` (new) | VT-1 discriminating gate proof + VT-1b generic-host no-mask + VT-1c signal-legs unit | #1 |
 
 **Engine surface is one line** — `worker_commit.rs` gains a neutral env signal on
 the gate spawn (a `design-target` selector for #1), with **no** change to gate
 logic, staging, or the guard. The `justfile` `validate` edit (both the fork skip and
 the fresh-binary resolution) is a project recipe `design-target`. `.doctrine/governance.md`
-and `CLAUDE.md` are authored/prose edits (rule **retentions/reframes** + the close
-ritual beat), not worker code-deltas, so they are not `design-target` selectors.
+is an authored/prose edit (rule **retention/reframe** + the close ritual beat) —
+reaching CLAUDE.md via the boot inline, not a distinct CLAUDE.md edit — not a worker
+code-delta, so it is not a `design-target` selector.
 **(ii) adds nothing to the engine or to any shipped skill** — it is entirely project-tier.
 
 ## Verification alignment

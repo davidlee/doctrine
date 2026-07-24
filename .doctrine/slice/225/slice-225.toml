@@ -11,10 +11,6 @@ needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
-selector = "tests/e2e_worker_guard.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "tests/common/mod.rs"
 intent = "design-target"
 
@@ -24,14 +20,6 @@ intent = "design-target"
 
 [[selector]]
 selector = "src/test_support.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "tests/e2e_dispatch_sync.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "tests/e2e_doctor_golden.rs"
 intent = "design-target"
 
 [[selector]]
