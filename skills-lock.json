@@ -53,7 +53,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch-agent/SKILL.md",
-      "computedHash": "814b2c3668b2f99a2481e9ebc68dd1cc4c150bb68ed4cb235c971d13695fe7b8"
+      "computedHash": "c10bf650c5dd5e25ac0097bddbdaf86b0037b1b98eda3b058c0752edccaf7528"
     },
     "dispatch-subprocess": {
       "source": "davidlee/doctrine",
@@ -173,13 +173,19 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/route/SKILL.md",
-      "computedHash": "fb0c5ab969a43dfe24db42119e14dca080c5bf69deb59b2b2aa2a0a2fa7acbea"
+      "computedHash": "693e8368867608fd477da8b26ecebd4dca874daf41540e16006b034645c0cf7c"
     },
     "slice": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/slice/SKILL.md",
       "computedHash": "37795c3253b317fd67dfd33aee00722ac08e98576f1c9ec03255d0990d2eaffd"
+    },
+    "spec-coverage-assessment": {
+      "source": "davidlee/doctrine",
+      "sourceType": "github",
+      "skillPath": "plugins/doctrine/skills/spec-coverage-assessment/SKILL.md",
+      "computedHash": "225d8d0539e804131386bb08744e402f815586902261cc517100f7c1d907db27"
     },
     "spec-product": {
       "source": "davidlee/doctrine",
