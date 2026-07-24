@@ -74,10 +74,13 @@ doctrine graph [FOCUS] [--depth N] [--kind K]... [--label L]
 ```
 
 - No FOCUS → whole-corpus projection, silent (DEC-009). FOCUS = canonical
-  entity ref or memory ref; not present in the graph → error, nonzero exit.
+  entity ref or memory ref, resolved against the **filtered universe** (D6):
+  unknown id → "not found" error; id that exists but is excluded by
+  `--kind`/memory default → error naming the excluding filter. Both nonzero.
 - `--depth N`: any N ≥ 0, default 1, no clamp; 0 = focus alone (DEC-009).
-- `--kind K` repeatable (prefix, e.g. `SL`); `--label L` edge filter (D4
-  edge-induced); `--include-memory` off by default.
+- `--kind K` repeatable (prefix, normalized to uppercase); `--label L` edge
+  filter; `--include-memory` off by default. Filters define the universe
+  **before** bounding (D4).
 - `--format dot` (default) | `json` — json serializes the projected subgraph
   through the same `CatalogGraph` contract shape (`nodes`/`edges`/`units`)
   that `catalog graph` and `/api/graph` emit (DEC-007).
@@ -93,12 +96,14 @@ pub(crate) struct Subgraph<'g> {
 }
 impl CatalogGraph {
   pub(crate) fn whole(&self) -> Subgraph<'_>;
-  pub(crate) fn neighbourhood(&self, focus: &NodeKey, depth: u32) -> Subgraph<'_>;
 }
 impl Subgraph<'_> {
-  pub(crate) fn retain_kinds(self, prefixes: &[String]) -> Self;
-  pub(crate) fn retain_label(self, label: &str) -> Self;   // D4: edge-induced
+  // D4: filters apply to the universe BEFORE neighbourhood bounding —
+  // whole() → filter chain → optional neighbourhood(focus, depth).
+  pub(crate) fn retain_kinds(self, prefixes: &[String]) -> Self;  // uppercased
+  pub(crate) fn retain_label(self, label: &str) -> Self;
   pub(crate) fn exclude_memory(self) -> Self;
+  pub(crate) fn neighbourhood(self, focus: &NodeKey, depth: u32) -> Result<Self, FocusError>;
 }
 
 // src/catalog/dot.rs
@@ -118,10 +123,18 @@ pub(crate) fn render(sub: &Subgraph, focus: Option<&NodeKey>) -> String;
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-- One-shot: scan → project → filter → emit → exit. No daemon, no cache; A1
+- One-shot: scan → filter → bound → emit → exit. No daemon, no cache; A1
   (scope) holds — the same hydration already backs `map serve` startup.
-- BFS: undirected (out + in), visited-set, edge dedup by identity tuple,
-  breadth-bounded at `depth`. Port of `model.ts::bfsCore` minus the clamp.
+- BFS: undirected (out + in), visited-set, edge dedup by identity tuple
+  (source, label, role, target), breadth-bounded at `depth`. Port of
+  `model.ts::bfsCore` minus the clamp. Adjacency maps (in/out per node) are
+  built once over the filtered edge set before traversal — no per-node O(E)
+  scans; the existing `outgoing`/`incoming` helpers and their
+  `expect(dead_code)` markers are untouched (they serve per-node queries, not
+  traversal).
+- Edges to `UnresolvedRef`/`UnvalidatedText` targets are **collected** when
+  their source is visited (so D5 ghosts appear) but never **enqueued** — a
+  dangling target has no node to expand.
 - Emission order (byte-determinism): nodes in BTreeMap key order; edges sorted
   by (source, label, role, target). Trailing newline; nothing on stderr on
   success.
@@ -134,17 +147,22 @@ pub(crate) fn render(sub: &Subgraph, focus: Option<&NodeKey>) -> String;
 
 - Every emitted edge's endpoints exist in the emitted DOT: resolved targets as
   styled nodes; `UnresolvedRef`/`UnvalidatedText` targets as dashed grey
-  **ghost nodes** labelled with the raw text (D5). JSON is unaffected — edges
-  already carry the target variant.
+  **ghost nodes** labelled with the raw text (D5), with namespaced ids
+  (`"?:<raw>"`) so a free-text target can never collide with a real node key.
+  Identical raw texts share one ghost node. JSON is unaffected — edges already
+  carry the target variant.
 - Depth 0 emits exactly the focus node, zero edges.
-- Filters compose conjunctively, applied after bounding; `retain_label` is
-  edge-induced (D4): surviving nodes = endpoints of surviving edges ∪ focus.
+- Filters compose conjunctively and define the universe **before** bounding
+  (D4): `retain_kinds`/`exclude_memory` restrict nodes (and their incident
+  edges), `retain_label` restricts edges — so BFS reach travels only the
+  filtered universe (label-chain following works). In whole-corpus mode,
+  `retain_label` additionally drops nodes with no surviving incident edge
+  (edge-induced node set).
 - Empty projection (filters exclude everything) emits a valid empty
   `digraph`/empty-collections JSON — not an error.
-- A FOCUS that parses but isn't in the graph errors; one that names a MEM node
-  works even without `--include-memory`? No — D6: `--include-memory` governs
-  the node universe first; a MEM focus without the flag is "not in the graph"
-  (consistent, documented in help text).
+- D6: FOCUS resolves against the filtered universe. Error messages
+  distinguish the two failure modes: unknown id vs present-but-excluded
+  (naming the excluding filter, e.g. "MEM focus requires --include-memory").
 
 ## 6. Open Questions & Unknowns
 
@@ -161,13 +179,19 @@ None blocking. Scope OQ-1 resolved by DEC-009; scope OQ-2 by DEC-008.
 - **D3 = DEC-009** — bare = whole corpus, silent; depth unclamped, default 1.
   Alt: focus-or-filter gate + `--all` (breaks the pipeline gesture), stderr
   size warnings (pipe chatter).
-- **D4** — `--label` edge-induced: node set shrinks to surviving endpoints
-  (∪ focus). Alt: keep all nodes → orphan clouds defeat the filter.
-- **D5** — dangling refs render as dashed ghost nodes (free diagnostic). Alt:
-  drop silently (hides corpus damage the graph model deliberately preserves).
-- **D6** — memory participation is decided before focus resolution; MEM focus
-  requires `--include-memory`. Alt: focus implies inclusion (surprising
-  asymmetry with non-focus MEM nodes).
+- **D4** (revised in adversarial pass) — filters define the universe before
+  bounding: BFS travels only filtered nodes/edges, so
+  `graph ADR-010 --label governed_by --depth 3` follows governed_by chains.
+  In whole-corpus mode `--label` is additionally edge-induced (orphan nodes
+  dropped). Alt (rejected): filter-after-bounding — reach leaks through
+  non-matching labels, then their edges vanish, leaving inexplicable nodes.
+- **D5** — dangling refs render as dashed ghost nodes (free diagnostic), ids
+  namespaced `?:<raw>`; identical raws collapse. Alt: drop silently (hides
+  corpus damage the graph model deliberately preserves).
+- **D6** (revised in adversarial pass) — FOCUS resolves against the filtered
+  universe; MEM focus requires `--include-memory`. Errors name the excluding
+  filter rather than claiming "not found". Alt: focus implies inclusion
+  (surprising asymmetry with non-focus MEM nodes).
 - **D7** — `-p/--path` (congruent with `relation list`); `catalog graph`'s
   `--root` is the debug-tier oddball, left alone.
 - **D8** — `dot_escape` lifts from `concept_map.rs` into `catalog/dot.rs`;
@@ -189,9 +213,12 @@ None blocking. Scope OQ-1 resolved by DEC-009; scope OQ-2 by DEC-008.
 TDD red/green/refactor per phase; fixtures via `catalog::test_helpers` seeds.
 
 - VT-A projection: undirected reach, depth 0/1/2 bounding, edge dedup,
-  focus-not-found error, empty-projection validity.
-- VT-B filters: kind retention, label edge-induction (D4), memory exclusion
-  default + `--include-memory`, D6 focus/memory interaction.
+  dangling edges collected-not-expanded, focus-not-found error,
+  empty-projection validity.
+- VT-B filters: kind retention (case-normalized), label filter-before-bound
+  chain-following (D4) + whole-corpus edge-induction, memory exclusion
+  default + `--include-memory`, D6 error split (unknown vs excluded, both
+  nonzero, excluding filter named).
 - VT-C DOT: structurally valid digraph on a seeded fixture; per-kind node
   attrs and per-label edge colours match constants (R2); ghost nodes for
   dangling refs (D5); byte-determinism (two runs identical).
@@ -204,4 +231,22 @@ TDD red/green/refactor per phase; fixtures via `catalog::test_helpers` seeds.
 
 ## 10. Review Notes
 
-(adversarial pass pending)
+Internal adversarial pass (design session, 2026-07-24) — findings integrated:
+
+1. D4 inverted: filter-after-bounding leaked reach through non-matching
+   labels; revised to filter-before-bound (universe semantics). §5.2, §5.5.
+2. D6 error honesty: "not found" for a filter-excluded focus was misleading;
+   split into unknown-id vs present-but-excluded errors. §5.2, §5.5.
+3. BFS expansion through dangling targets was unspecified; now
+   collected-not-enqueued. §5.4.
+4. §2's claim that `outgoing`/`incoming` `dead_code` expects come off was
+   wrong — traversal uses once-built adjacency maps (frontend port); the
+   per-node helpers stay as-is. §5.4.
+5. Ghost-node ids namespaced (`?:<raw>`) against collision with real keys.
+   §5.5, D5.
+6. `--kind` case-normalization (uppercase) — a silently-empty graph from
+   `--kind sl` is a trap DEC-009's silence would worsen. §5.2.
+
+Governance re-check: ADR-001 (pure emitter/projection, thin command) holds;
+STD-001 named constants specified for style tables and defaults; PRD-016
+boundary revisit flagged for reconcile (§3). No conflicts requiring /consult.
