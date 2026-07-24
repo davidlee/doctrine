@@ -644,6 +644,12 @@ pub(crate) enum Command {
         command: PublicationCommand,
     },
 
+    /// Read the published framework asset library (SL-227 — list, tree, show).
+    Library {
+        #[command(subcommand)]
+        command: crate::commands::library::LibraryCommand,
+    },
+
     /// Remove a tier-1 relation edge.
     ///
     /// Removes an edge authored by `link` (SL-048 §5.4). Symmetric on the same write
@@ -839,6 +845,7 @@ static FAMILIES: &[Family] = &[
             "concept-map",
             "map",
             "onboard",
+            "library",
         ],
     },
     Family {
@@ -1706,6 +1713,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
                 crate::commands::publication::run_publication_validate()
             }
         },
+        Command::Library { command } => command.run(),
         Command::Unlink {
             source,
             label,
@@ -1828,8 +1836,8 @@ mod tests {
 
         // Census: 46 visible top-level commands (44 at SL-150 A1 + `check` SL-163 + `doctor` SL-168)
         // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01) + `compare` (SL-210 PHASE-02)
-        // + `publication` (SL-223 PHASE-02).
-        assert_eq!(visible.len(), 51, "expected 51 visible top-level commands");
+        // + `publication` (SL-223 PHASE-02) + `library` (SL-227 PHASE-02).
+        assert_eq!(visible.len(), 52, "expected 52 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the
