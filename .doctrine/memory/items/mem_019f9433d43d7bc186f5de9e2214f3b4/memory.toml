@@ -1,0 +1,42 @@
+memory_uid = "mem_019f9433d43d7bc186f5de9e2214f3b4"
+memory_key = "mem.pattern.dispatch.integrate-needs-close-target-first"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Landing a dispatched slice: admit the close_target BEFORE the one integrate, or a candidate-less integrate bakes a sticky code-only trunk row"
+summary = "dispatch integrate --trunk without an admitted close_target projects the code-class phase chain (strips authored .doctrine/) and bakes a sticky verified trunk row that later replays; re-prepare regenerates the journal (no trunk row), then admit close_target BEFORE the single integrate"
+created = "2026-07-24"
+updated = "2026-07-24"
+
+[scope]
+paths = []
+globs = []
+commands = ["doctrine dispatch sync"]
+tags = ["dispatch", "close", "integrate", "journal"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "adfa991b493a3843af4a22479f0f0295fbd01db8"
+tree = "1578e39ae4ce246b060ebd3f178283999fbb6d2e"
+ref_name = "refs/heads/main"
+checkout_state_id = ""
+base_commit = "adfa991b493a3843af4a22479f0f0295fbd01db8"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
