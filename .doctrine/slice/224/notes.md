@@ -37,3 +37,22 @@ fresh-as-of: 2026-07-24 · reconcile-complete (pre-close) · edge 141e5481
 - **Do NOT read as delivery gaps** (RV-296 close guardrails): edge `verify-vt` FAIL ×4
   and edge `conformance` `mod.rs` undeclared — pre-integration coord-topology
   staleness (IMP-228); tests green + selector declared on the delivered surface.
+
+## Close (2026-07-24)
+
+**Landed.** SL-224 `done` (2/2). Code + `mod.rs` selector + reconciled design.md
+on `main`=`edge`=`681d9f1c`; journal trunk row `verified` (payload `367d7a0e`).
+Post-landing on the primary tree: `conformance` 6/6 (mod.rs conformant), `verify-vt`
+4/4 PASS — confirming the RV-296 F-3/F-5 edge over-reports were exactly staleness.
+IMP-256 resolved `fixed`.
+
+**Route taken — split-lineage-reconcile-on-edge** (`mem.pattern.dispatch.close-split-lineage-reconcile-on-edge`,
+2nd application after SL-220). Three divergent lineages at close: code on `review/224`
+(9 commits behind trunk), reconciled truth (design.md/RV-296/harvest) on `edge`,
+canonical selector (`mod.rs`) on `dispatch/224`. `dispatch status`'s "refresh-base +
+re-prepare" hint would have projected code-only and stranded the reconcile — the naive
+path is silently wrong here. Fix: unite `edge ⊕ review/224` on a scratch worktree
+(conflict-free — the slice-224.toml divergence was *disjoint*: edge touched `status`,
+the bundle added the selector → clean auto-merge), gate, FF main → M, no-op
+`close_target` candidate → admit → `sync --integrate --trunk main` (records the row),
+reunite edge via merge (edge had advanced with SL-226/204/227).
