@@ -133,3 +133,32 @@ no ADR/policy/standard/spec.
   undeclared (F-3) are **pre-integration coord-topology artifacts**. The VTs pass and
   the selector is declared on the delivered surface (`review/224` / `dispatch/224`).
   Do not treat either as a delivery gap. Root cause of the verify-vt case: IMP-228.
+
+## Reconciliation Outcome
+
+Direct-edit-only pass — no governance/spec REV (this slice touches no
+ADR/policy/standard/spec/requirement).
+
+### Direct edits applied (design.md, user-confirmed)
+- **§5.2/F4 (RV-296 F-1)** — CLI slice-id prose corrected: threads `Option<u32>`
+  with an honest id-less `None` fallback (`undeclared_scope_report`), replacing the
+  "unwrapped `u32`, no `None` hazard" claim.
+- **§5.2 MCP arm (RV-296 F-2)** — code block marked illustrative; noted the impl
+  routes the detail through a `Refusal::scope_detail` engine value-method (avoids
+  un-gating the `#[cfg(test)]` `Refusal` re-export in prod).
+- **§5.5/A2 (RV-296 F-3)** — noted the obj-1 CLI-threading touch-set includes
+  `src/worktree/mod.rs`, so the structured touch-set was VT `test_file` **plus** the
+  obj-1 call-chain.
+
+### No-write items (recorded, not edited)
+- **`mod.rs` design-target selector (F-3)** — already on `dispatch/224`; delivered
+  by stage-2 integrate. No `slice selector` verb, no edge edit (would fork
+  `slice-224.toml`).
+- **Close guardrails (F-3, F-5)** — edge `verify-vt`/`conformance` staleness
+  artifacts; advisory to /close, no write.
+
+### Withdrawn / tolerated
+- None. F-4, F-5 disposed `aligned` (no artefact change); F-1/F-2/F-3 reconciled
+  above.
+
+Reconcile pass complete — handoff to /close.

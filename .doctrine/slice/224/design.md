@@ -175,14 +175,26 @@ match classify_import(true, true, single_commit, &delta_paths, selectors) {
 the refusal arm is cheap and keeps the widely-used `.token()` / `Copy` contract
 intact; D3). On the MCP arm `slice` is already the fn param — no plumbing.
 
+*(Illustrative — reconciled to impl, RV-296 F-2: the impl realizes this arm via a
+`Refusal::scope_detail(slice, selectors, delta_paths)` engine value-method that
+internally matches `UndeclaredScope` and calls the leaf `undeclared_detail`, rather
+than an inline variant-match in the shell. `Refusal` is a `#[cfg(test)]`-only
+re-export in `mcp_server`, so naming the variant in prod would need an out-of-scope
+un-gate. Same token via `reason`, same detail, engine→leaf layering preserved.)*
+
 **CLI slice-id plumbing (F4).** The CLI arm does NOT currently carry the slice id
 where the remediation is built: `report_undeclared_scope(selectors, delta_paths)`
 ← `classify_or_report(…)` ← `run_import_fork` / `run_import_from_worktree` ←
-`run_import`. To emit a runnable `selector add <ID> …`, thread the resolved
-`slice: u32` down that chain (the scope belt is reached ONLY when `--slice` was
-supplied, so the id is always present on this arm — pass the unwrapped `u32`, no
-`None` hazard). `report_undeclared_scope` then calls `undeclared_detail(slice,
-&undeclared)`. This is a ~4-signature change, not a 3-liner — PHASE-01 owns it.
+`run_import`. To emit a runnable `selector add <ID> …`, thread
+`slice: Option<u32>` down that chain. The scope belt fires in *practice* only when
+`--slice` was supplied, but `run_import` is *type-reachable* with no `--slice`
+(empty selectors → belt no-op), so the chain carries `Option<u32>`, not an
+unwrapped `u32`. On `Some(id)` the render **is** the shared
+`undeclared_detail(id, &undeclared)`; the practically-unreachable `None` arm
+(`undeclared_scope_report`) falls back to an honest id-less path list — invents no
+fake id, never `unwrap`s. This is a ~4-signature change, not a 3-liner — PHASE-01
+owns it. (Reconciled to impl, RV-296 F-1: the design first argued "unwrapped `u32`,
+no `None` hazard"; the `Option<u32>` threading is the correct realization.)
 
 **Objective 2 — selector-coverage lint (engine + command).** A *sibling* pure fn
 to `check_vt_shape` in `src/plan.rs`, with its own finding type:
@@ -295,6 +307,10 @@ reads the authored `plan.toml` + design-target selectors via the existing
 - **A2 (VT `test_file` is the only structured plan touch-target).** EN/EX criteria
   are prose; `test_file` is the sole machine-readable path a plan declares. Obj
   2's "other plan-declared touch targets" has no other referent in today's model.
+  (Refined in impl, RV-296 F-3: obj-1's *CLI slice-id threading* also touched
+  `src/worktree/mod.rs` — the sole non-test caller of `run_import` — added as a
+  design-target selector mid-dispatch. So the structured touch-set was VT
+  `test_file` **plus** the obj-1 call-chain, not `test_file` alone.)
 
 ## 6. Open Questions & Unknowns
 
