@@ -61,28 +61,44 @@ The code scope confirms move A is genuinely new, built on strong existing seams:
   knows nothing of funnel position (imported? concluded? reaped?). Position is
   *derived* today (`ReceiptStatus::ConcludeIncomplete`, and `NextGuidance` — an
   already-deterministic 7-state sequencer) and **stored nowhere, enforced nowhere**.
-  → **FR-008**: position persisted per-phase (spawned → worker-committed → imported
-  → concluded → reaped), authoritative not derived.
+  → **FR-008**: position persisted per-phase, advancing through explicit
+  transitions that **include verification** as an authoritative, evidence-carrying
+  step faithful to REQ-287's ordering (spawned → worker-committed → imported →
+  **verified** → concluded → reaped). A sequence without a `verified` state cannot
+  let `next` choose verify-vs-conclude, nor let the gate refuse conclude-after-
+  unverified (RV-300 F-2). FR-008 also **names the run-state home, single-writer
+  authority, and crash-safe idempotent recovery** — the durable half of OQ-2 that
+  is spec-altitude, not slice discretion (RV-300 F-5).
 - **Legality gates are new.** `dispatch_import` / `dispatch_conclude_phase` /
   `dispatch_reap` each check only *local* invariants (scope belt, CAS, landed-
   oracle) — none reads a position and refuses "illegal here, run X next."
   → **FR-009** (primary): every funnel verb legality-gated on position; refuses
-  out-of-order and names the expected next verb (OQ-1: `next` prescribes **and**
-  verbs refuse — both).
+  out-of-order and names the expected next verb; **conclude refuses after skipped
+  or failed verification** (OQ-1: `next` prescribes **and** verbs refuse — both).
 - **`dispatch next` promotes `NextGuidance` from advisory → prescriptive.**
   `NextGuidance`/`select_guidance` already know the expected action; they only
-  print it. → **FR-010**: `dispatch next` emits the single prescribed action.
-- **One machine, three doors.** The funnel write tools are already transport-
-  agnostic (routed only by `(root, slice)`); the codex/pi subprocess arm is not yet
-  forced through the same gated funnel (it uses `worktree fork --worker` + CLI
-  `record-boundary`/`sync`). → **FR-011**: one funnel state machine across main-
-  thread / subprocess / confined arms; generalises SL-199's confined-arm machine
-  (OQ-2). Relates REQ-335, whose confined-orchestrator altitude folds into the
-  unified machine when this lands.
+  print it. But `select_guidance` routes the **full seven-state guidance domain**
+  (PrepareReview, Audit, Integrate, …), not just the phase sub-funnel. → **FR-010**:
+  `dispatch next` emits the single prescribed action **for the per-phase
+  import→verify→conclude→reap sub-funnel only**; candidate/close/audit sourcing
+  (active REQ-317, OQ-4) is **outside the oracle's scope** until a sibling revision
+  settles it, so the "prompt collapses to `run next`" claim is scoped to that
+  sub-funnel (RV-300 F-6).
+- **One machine, each transport projects into it.** The funnel write tools are
+  already transport-agnostic (routed only by `(root, slice)`); the codex/pi
+  subprocess arm is not yet forced through the same gated funnel (it uses `worktree
+  fork --worker` + CLI `record-boundary`/`sync`). → **FR-011**: one state machine
+  owns the shared transition semantics; each transport (main-thread, subprocess,
+  confined-orchestrator) **projects into that single authority**, recording the
+  same transitions whether committing directly or through mediation. Per-transport
+  *altitude* stays with the existing REQ-291 / REQ-335 (reconciled at ship-time),
+  keeping topology and shared-semantics independently verifiable (RV-300 F-5); the
+  loose "three doors" framing is dropped.
 
-REQ-287's ordered-contract discipline moves from an **orchestrator-held prose
-contract** to a **machine-enforced gate** (report-and-halt becomes the verb's
-refusal, not the operator's judgment) — a `modify`, with the §-prose swept.
+REQ-287's ordered-contract discipline shifts from an **orchestrator-held prose
+contract** to a **machine-enforced gate** — but that is a change to an **active**
+requirement, so it is **not** modified here (see Not in this REV); it reconciles at
+ship-time (RV-300 F-1/F-3).
 
 ### Move E — no shell git in the funnel (SPEC-022)
 
@@ -92,24 +108,31 @@ primitives** in `src/git.rs` and need only a verb surface — `git show <ref>:<p
 `is_ancestor`, `git cherry` → `git_cherry` (already wrapped by `dispatch_reap`),
 `diff --name-only` → `changed_paths`, trunk-ladder → `trunk_commit`, `ls-tree` →
 `blob_oid_at`, `worktree list` → `list_worktrees`, `status` (tracked) →
-`tree_clean`. Seven are genuine gaps blocking a clean prohibition: isolation
-detection (`--git-dir` vs `--git-common-dir`), an **untracked-aware** clean gate
+`tree_clean`. **Isolation detection is not a gap** — `is_linked_worktree`
+(`src/worktree/shared.rs:48-58`, re-exported at `mod.rs:22`, already used by
+marker/jail/provision/gc) implements exactly the `--git-dir` vs `--git-common-dir`
+read; it needs **relocation/wrapping into the read-verb surface, not
+reimplementation** (RV-300 F-7 — a parallel-implementation trap my first sweep
+missed). Five genuine read gaps remain: an **untracked-aware** clean gate
 (`tree_clean` ignores untracked, the commit-before-spawn guard does not), three-dot
-content diff, `branch --show-current`, `git log`, `check-ignore`, and the ISS-234
-`git restore` — which is a working-tree **write**, out of read-verb scope by
-category.
+content diff, `branch --show-current`, `git log`, `check-ignore`. Plus the ISS-234
+`git restore`, which is a working-tree **write** — out of read-verb scope by
+category, and handled by FR-011's guard below.
 
 - → **FR-010** (SPEC-022): a first-class git read-verb surface over the object-db/
-  ref primitives; no funnel read shells raw git. Coverage is enumerated (OQ-7); the
-  seven gaps above are the build list. Extends the REQ-318 precedent (object-db
-  sourcing, "never the working filesystem") — `modify` REQ-318's §-prose to name
-  the surface.
-- → **FR-011** (SPEC-022): the funnel is working-tree-free, so coord tree state is
-  irrelevant; because reads go through verbs, the orchestrator never shells raw git
-  against the coord tree and the **ISS-234 reverse-diff is dissolved** — no `git
-  restore` dance, and explicitly **not** an interim auto-sync (IDE-028 is the wrong
-  path). The one residual write idiom is retired by the funnel not touching the
-  tree, not by a mirror.
+  ref primitives; no funnel read shells raw git. Coverage enumerated (OQ-7); the
+  five gaps are the build list, and **existing seams are reused/relocated, not
+  reimplemented**. Extends the REQ-318 precedent (object-db sourcing, "never the
+  working filesystem") — but REQ-318 is **active**, so its §-prose reconciliation
+  defers to the ship-time sibling REV, not a modify row here.
+- → **FR-011** (SPEC-022): the funnel is working-tree-free **and every coord-tree
+  operation is bounded by a no-pathless-commit / safe-commit guard**. Read verbs
+  keep funnel *reads* from observing the reverse-diff; the guard closes the *write*
+  side — because `dispatch_conclude_phase` still writes the coord runtime sheet
+  before its object-db boundary commit (`src/mcp_server/dispatch.rs:374-392`), the
+  tree is still operationally touched, so reads alone do **not** dissolve ISS-234
+  (RV-300 F-4). ISS-234 is absorbed only when both hold. Still explicitly **not** an
+  auto-sync (IDE-028 is the wrong path).
 
 ### Open questions — settled here vs deferred to the slice
 
