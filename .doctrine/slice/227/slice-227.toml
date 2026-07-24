@@ -1,7 +1,7 @@
 id = 227
 slug = "library-and-minimal-projection"
 title = "Library read surface and minimal projection"
-status = "ready"
+status = "audit"
 created = "2026-07-24"
 updated = "2026-07-24"
 tags = []
