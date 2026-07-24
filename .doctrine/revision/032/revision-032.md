@@ -15,9 +15,10 @@ for prose-body section edits.
 > single prescribed action from the current position (the orchestrator prompt
 > collapses to "run `next`, do what it says, report-and-halt on refusal"). Every
 > funnel git **read** is a first-class read verb over the object-db/ref primitives;
-> **no funnel read shells raw git**, which makes the coord working-tree state
-> irrelevant and dissolves the ISS-234 reverse-diff without any auto-sync. This is
-> RFC-016 Cluster 2 (moves A + E) — the RFC's undelivered core.
+> **no funnel read shells raw git**, and a no-pathless-commit / safe-commit guard
+> bounds every coord-tree write — so the ISS-234 reverse-diff can no longer commit
+> mass reversions, closed without any auto-sync. This is RFC-016 Cluster 2 (moves A
+> + E) — the RFC's undelivered core.
 
 This REV amends the two tech specs that govern the dispatch funnel — **SPEC-021**
 (orchestrator process) and **SPEC-022** (git interaction model) — to carry the
@@ -47,10 +48,12 @@ forward-intent requirements**, which the dual-posture rule expressly permits
 (planned stays distinguishable from verified), following the standing precedent
 that **SPEC-021 already hosts a `pending` requirement — REQ-335** (confined-
 orchestrator altitude). The new requirements ship `pending`; the slice flips them
-`active` at reconcile. Existing `active` requirements are touched only where the
-new mechanism changes their meaning (REQ-287, REQ-293, REQ-294, REQ-318), and those
-§-prose paragraphs are swept in the same change (requirement-entity/§-prose drift
-is silent otherwise).
+`active` at reconcile. The `active` requirements the new mechanism touches
+(REQ-287, REQ-293, REQ-294, REQ-318) are **not** amended here: modifying an active
+requirement to describe unbuilt behaviour would present target behaviour as shipped
+and breach the retrospective charter (RV-300 F-1 — the move REV-030 declined for
+SPEC-022). Their §-prose reconciliation defers to a ship-time sibling revision,
+when evidence exists.
 
 ### Move A — the funnel becomes a state machine (SPEC-021)
 
@@ -137,20 +140,31 @@ category, and handled by FR-011's guard below.
 ### Open questions — settled here vs deferred to the slice
 
 Settled at spec altitude by this REV: **OQ-1** (`next` prescribes + verbs refuse —
-both), **OQ-2** (one machine, three doors; run-state home), **OQ-7** (read-verb
-coverage — the enumeration above is the spine). Deferred to the descending slice as
-implementation/measurement: **OQ-3** (bundle export/ingest metadata), **OQ-5**
-(memory-blind benchmark harness — measured against the Cluster-1 baseline), **OQ-6**
-(which dispatch memories retire vs remain as rationale).
+both), **OQ-7** (read-verb coverage — the enumeration above is the spine). **OQ-2 is
+framed, not fully settled** (RV-300 F-5): FR-008 names the run-state *home*,
+authority, and recovery as spec-altitude obligations, and FR-011 names the
+one-authority/per-transport-projection semantics — but the concrete record layout
+(extend `boundaries`/`journal` vs a new record) and the CAS/concurrency contract are
+left to slice design. Deferred to the descending slice as implementation/
+measurement: **OQ-3** (bundle export/ingest metadata), **OQ-5** (memory-blind
+benchmark harness — measured against the Cluster-1 baseline), **OQ-6** (which
+dispatch memories retire vs remain as rationale).
 
 ### The change payload
 
-Ten `[[change]]` rows. SPEC-021: introduce FR-008/009/010/011 (`pending`); modify
-REQ-287 (cadence now machine-enforced), REQ-293 (reads via verbs), REQ-294
-(checkout-import retires to in-verb fallback). SPEC-022: introduce FR-010/011
-(`pending`); modify REQ-318 (read-verb surface extends object-db sourcing). Prose
-rows are surfaced-for-manual at `revision apply`; the introduce rows are minted via
-`spec req add` at apply and reconciled `active` by the slice.
+Six `introduce` `[[change]]` rows, all `pending`. SPEC-021: FR-008 (persisted
+funnel position incl. verification + run-state authority), FR-009 (per-verb legality
+gate; primary), FR-010 (`dispatch next` over the phase sub-funnel), FR-011 (one
+authority, per-transport projection). SPEC-022: FR-010 (read-verb surface), FR-011
+(working-tree-free + safe-commit guard). Each is minted via `spec req add` at
+`revision apply` and reconciled `active` by the descending slice.
+
+**No modify rows.** REV-032 is introduce-only after RV-300 F-1/F-3: amending the
+four *active* requirements the new mechanism touches (REQ-287 cadence, REQ-293/294
+git-reads, REQ-318 object-db sourcing) would present target behaviour as shipped and
+breach the specs' retrospective charter — the exact move REV-030 declined for
+SPEC-022. Those reconciliations are staged for a **ship-time sibling revision** at
+slice close, when evidence exists, with reviewable before/after prose then.
 
 ### Not in this REV (deliberately)
 
@@ -165,8 +179,20 @@ rows are surfaced-for-manual at `revision apply`; the introduce rows are minted 
   not amended here; orthogonal to A/E.
 - **The benchmark** (OQ-5) and **memory retirement** (OQ-6) are slice deliverables,
   not spec prose.
+- **The four active-requirement / §-prose reconciliations** (REQ-287/293/294/318)
+  defer to a **ship-time sibling revision** at slice close (RV-300 F-1/F-3), not
+  amended here.
 
 ### Review provenance
 
-_Pending._ To be cross-checked by an external adversarial pass (codex, GPT-5.5)
-against the code scope before `revision approve`/`apply`.
+External adversarial pass: **codex (GPT-5.5), ledger [[RV-300]]**, cross-checked
+against SPEC-021/022, RFC-016, ADR-006/012/013/014, REV-030, ISS-234, and the
+dispatch/git source. Five source claims held under inspection (REQ-335 pending;
+`dispatch_next_ready` computes phase readiness not funnel position; funnel verbs
+enforce no global ordering; all nine named `src/git.rs` primitives exist; both specs
+pass structural validation). Seven findings raised, **all seven adjudicated as
+correct and integrated** above: F-1/F-3 (introduce-only; defer active modifies),
+F-2 (verify transition in FR-008/009), F-4 (safe-commit guard in SPEC-022 FR-011),
+F-5 (run-state authority named; OQ-2 downgraded; FR-011 split from topology), F-6
+(FR-010 narrowed to the phase sub-funnel), F-7 (`is_linked_worktree` reuse, gap
+inventory corrected to five). Dispositions recorded on the RV-300 ledger.

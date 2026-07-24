@@ -730,3 +730,28 @@ to enumerate and pick an exemplar (REV-030) — the guardrail-preferred `list`
 verb gave nothing, costing a debug round-trip. Either a default status filter is
 hiding done/approved revisions with no hint, or a genuine bug. Token cost: two
 extra bash calls + reasoning to notice the list was lying rather than truly empty.
+
+[dispatch; SL-227-drive]
+Pre-dispatch base-promotion raced a concurrent agent twice: `dispatch setup`
+fails closed when the fork base predates edge's `.doctrine` corpus tip, and edge
+advanced (bd3582c4d, then 3875d1a40) between each `git fetch . edge:main` and the
+setup retry. Cost: two extra promote+retry cycles + inspection to confirm each was
+a clean fast-forward (not a diverge). The corpus-tip guard is correct, but in a
+multi-agent tree the promote→setup window is inherently racy; a `setup
+--promote-base` that atomically fast-forwards-and-forks (or a retry-with-refresh)
+would collapse the loop. Also incidental: the shared index surfaced another
+agent's *staged* CLAUDE.md mid-drive — required a path-limited-commit posture
+throughout to avoid laundering it.
+
+[corpus-survey; RFC-009-D2-latent-taxonomy]
+- Per-entity `doctrine slice show SL-NNN` in a loop timed out at 2m across 227
+  slices (build a 40-doc index this way = dead). Fell back to slug symlinks +
+  raw `wc -l`/`head -1` for the index tier; reserved `show` for the 2 governing
+  entities. A cheap `doctrine <kind> index --oneline` (id+title, no MD synth)
+  would remove the tax on any corpus-wide census. ~2m + one wasted call.
+- zsh word-splitting footgun: shell is zsh, not bash. `grep ... $VAR` with a
+  newline-joined file list does NOT split in zsh (no `SH_WORD_SPLIT`) → matched
+  the whole blob as one filename → silent 0 hits on the first census pass. Cost
+  one full re-run. `grep -r --include=` sidesteps it (and dedupes slug symlinks
+  for free since `-r` won't follow symlinked dirs). Worth a note in any harness
+  doc that assumes bash splitting.

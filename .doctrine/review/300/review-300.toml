@@ -14,52 +14,66 @@ ref   = "REV-032"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected pending intent to remain distinguishable from shipped truth; observed four active requirements queued for pre-implementation modification"
 detail = "REV-032 says planned stays distinguishable from verified and cites REQ-335 as pending (`revision-032.md:40-53`), but its payload also modifies active REQ-287, REQ-293, REQ-294, and REQ-318 (`revision-032.toml:60-73,89-92`; `doctrine spec req list SPEC-021` and SPEC-022 show all four active). ADR-013 says modify/prose rows land manually at apply, and REV-030 explicitly deferred SPEC-022 amendment until ship-time because changing a retrospective spec ahead of code violates its charter (`REV-030:192-205`). Prescription: keep only genuinely pending introduces in the forward-intent revision, or stage replacement/superseding pending requirements; defer every active requirement/prose mutation until implementation reconciliation, with an explicit transition order that never presents target behaviour as active before evidence."
+disposition = "fixed"
+response = "Accepted. REV-032 reshaped to introduce-only: the 4 active-requirement modify rows (REQ-287/293/294/318) removed. Amending an active requirement to describe unbuilt behaviour would present target behaviour as shipped — the retrospective-charter breach REV-030 declined. Reconciliation deferred to a ship-time sibling revision at slice close, with reviewable before/after prose then."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected the state machine to enforce the existing verify gate; observed a state sequence that cannot represent verification"
 detail = "FR-008 persists only spawned → worker-committed → imported → concluded → reaped (`revision-032.toml:32-37`), while active REQ-287 requires import → verify → branch-point guard → commit → record (`SPEC-021 show:294-296`). Current `dispatch_import` itself creates and CAS-lands the imported commit (`src/mcp_server/dispatch.rs:329-345`), and `dispatch_conclude_phase` immediately flips completed and lands the boundary (`:374-392`); neither stores verification evidence. With no `verified` state/receipt, `next` cannot know whether to prescribe verify or conclude, and a position gate cannot refuse conclude after skipped/failed verification. Prescription: model verification as an authoritative persisted transition (including what evidence/result advances it), make conclude legality depend on it, and reconcile the proposed state names with REQ-287's actual commit/record ordering."
+disposition = "fixed"
+response = "Accepted. FR-008 now models verification as an authoritative, evidence-carrying transition faithful to REQ-287 ordering (spawned, worker-committed, imported, verified, concluded, reaped); FR-009 makes conclude refuse after skipped/failed verification, so next can prescribe verify-vs-conclude and the gate can refuse conclude-after-unverified."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected an approvable staged delta; observed four modify rows with no proposed before/after content"
 detail = "The revision companion says it carries free-text before/after excerpts (`revision-032.md:3-6`), but contains no proposed replacement text for REQ-287, REQ-293, REQ-294, REQ-318, or their cited spec prose; the payload rows contain only target/action (`revision-032.toml:60-73,89-92`) and the rationale merely summarizes intended changes (`revision-032.md:123-130`). ADR-013's purpose is to stage and approve requirement/spec-prose deltas (`ADR-013:9-12,40-46`); approval here would approve an unspecified future manual edit. Prescription: add exact reviewable before/after amendments for every modify row and every promised prose sweep, or remove those rows and defer them to a separately reviewable ship-time revision."
+disposition = "fixed"
+response = "Accepted; dissolved with F-1. The four modify rows carrying no before/after content are removed. Their staged deltas move to a separately-reviewable ship-time sibling revision where exact before/after amendments will be authored — no unspecified future edit is approved here."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected ISS-234 to be eliminated; observed a latent reverse-diff retained without its required safety guard"
 detail = "REV-032 claims read verbs make coord working-tree state irrelevant and dissolve ISS-234 without sync (`revision-032.md:102-112`; FR-011 at `revision-032.toml:82-87`). ISS-234 says object-db ref advances leave staged deletions and a later pathless commit can commit mass reversions; its no-sync option explicitly requires forward-diff reads plus a no-pathless-commit guard. REV-032 specifies only reads and omits that guard. The tree also remains operationally used: `dispatch_conclude_phase` writes the coord runtime sheet before its object-db boundary commit (`src/mcp_server/dispatch.rs:374-392`). Prescription: do not claim absorption/closure until the latent destructive state is made safe—either conditionally synchronize, add an enforceable no-pathless-commit/safe-commit boundary for all coord-tree operations, or narrow the claim to 'funnel reads no longer observe the reverse-diff' while ISS-234 remains open."
+disposition = "fixed"
+response = "Accepted. SPEC-022 FR-011 now carries a no-pathless-commit / safe-commit guard bounding every coord-tree write. Claim narrowed: because dispatch_conclude_phase still writes the coord runtime sheet before its object-db commit (src/mcp_server/dispatch.rs:374-392), read verbs alone do NOT dissolve ISS-234; it is absorbed only when reads-not-observing AND the write-side guard both hold."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected OQ-2 to be settled at tech-spec altitude; observed no run-state home or cross-door transition ownership"
 detail = "RFC-016 OQ-2 asks whether state extends journal/boundaries or uses a new record and whether one machine or per-arm projections. REV-032 declares OQ-2 settled, including 'run-state home' (`revision-032.md:114-118`), but FR-008 says only 'persisted per-phase' and FR-011 only 'one machine, three doors' (`revision-032.toml:32-37,53-58`). No requirement names the persistence boundary, authority/recovery rule, CAS/concurrency contract, or who records spawned/worker-committed across direct subprocess commits versus mediated confined commits. SPEC-021 itself distinguishes two main-thread harness altitudes from a third confined-orchestrator tier, so 'three arms/doors' also blurs topology. Prescription: specify the durable state record/home, transition writers and recovery/idempotency contract, then state accurately how each transport projects into that authority; split FR-011 if needed so topology and shared semantics are independently verifiable."
+disposition = "fixed"
+response = "Accepted. FR-008 names the run-state home, single-writer authority, and crash-safe idempotent recovery; FR-011 split from topology (per-transport altitude stays with REQ-291/REQ-335), 'three doors' dropped, now 'one authority, each transport projects into it'. OQ-2 downgraded in the rationale to framed-not-settled: concrete record layout (extend boundaries/journal vs new record) + CAS/concurrency contract left to slice design."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected the single-action oracle claim to cover its cited guidance domain; observed candidate sourcing deliberately left operator-carried"
 detail = "REV-032 promotes existing `NextGuidance` into the basis for a single prescribed action (`revision-032.md:72-74`) and claims the prompt collapses to 'run next' (`:12-20`), yet scopes OQ-4 candidate auto-sourcing out (`:132-138`). The cited `select_guidance` is not per-phase only: it routes PrepareReview, AuditThenIntegrate, AuditOrCandidateStatus, Complete, and AwaitingIntegration (`src/dispatch.rs:4088-4167`). Active REQ-317 still requires the operator to choose a repaired review_surface as close_target source (`SPEC-022 show:472-496`). Thus a repaired-candidate run still requires exactly the sequencing/sourcing knowledge the broad zero-rescue claim says the oracle owns. Prescription: either narrow FR-010 and the zero-rescue claim to the per-phase import/conclude/reap sub-funnel, or include/depend on the OQ-4 auto-sourcing contract before claiming one prescribed action across the existing seven-state guidance domain."
+disposition = "fixed"
+response = "Accepted. FR-010 narrowed to the per-phase import-verify-conclude-reap sub-funnel; candidate/close/audit sourcing (active REQ-317, OQ-4) explicitly outside the oracle scope until a sibling revision settles it. The 'prompt collapses to run next' claim is scoped to that sub-funnel, not the full seven-state select_guidance domain."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected the seven-gap source inventory to match the repository; observed isolation detection already implemented and shared"
 detail = "REV-032 calls `--git-dir` versus `--git-common-dir` isolation detection one of seven genuine primitive gaps (`revision-032.md:89-100`). The repository already has `pub(crate) fn is_linked_worktree`, implemented with exactly those two reads (`src/worktree/shared.rs:48-58`) and re-exported at `src/worktree/mod.rs:22`; it is used by marker, jail, provision, gc, and subagent flows. This may need relocation/wrapping for the proposed read-verb surface, but it is not a missing capability. Prescription: correct OQ-7's inventory to distinguish absent semantics from existing non-`git.rs` seams, and require reuse/relocation rather than parallel implementation."
+disposition = "fixed"
+response = "Accepted — parallel-implementation trap avoided. OQ-7 inventory corrected: is_linked_worktree (src/worktree/shared.rs:48-58, re-exported mod.rs:22) already implements --git-dir vs --git-common-dir isolation detection; FR-010 now requires reuse/relocation not reimplementation. Genuine read gaps reduced to five (untracked-aware clean gate, three-dot diff, branch --show-current, git log, check-ignore)."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
