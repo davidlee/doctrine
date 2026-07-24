@@ -1,0 +1,52 @@
+id    = 295
+slug  = "audit-sl-208-consistent-cozy-table-subcommand-help"
+title = "Audit SL-208: consistent cozy-table subcommand help"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-208"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Selector registry under-enumerates designed paths — Cargo.toml, Cargo.lock, tests/e2e_subcommand_help.rs report undeclared"
+detail = "`slice conformance SL-208`: undeclared (4) = { M .doctrine/slice/208/slice-208.toml, M Cargo.lock, M Cargo.toml, A tests/e2e_subcommand_help.rs }; undelivered (0); conformant (2) = { src/main.rs, src/commands/cli.rs }. Three undeclared paths are genuinely part of the delivered design: design.md §5 Code Impact explicitly declares the `textwrap` direct dep in Cargo.toml (Cargo.lock is its lockfile consequence), and §6 Verification Impact declares the new black-box suite tests/e2e_subcommand_help.rs. The work matches the design; the design-target *selector set* (src/main.rs, src/commands/cli.rs) simply does not enumerate them, so conformance flags real designed work as undeclared. The fourth, slice-208.toml, is the slice's own authored-metadata file (selector list populated + SL-150 relation added during dispatch) — benign authored churn, not selectable source. Expected vs observed: expected undeclared=0 for a conformant slice; observed 3 designed paths outside the selector registry."
+disposition = "verified"
+response = "Observation confirmed. The three undeclared source paths (Cargo.toml, Cargo.lock, tests/e2e_subcommand_help.rs) are designed work (design §5 declares the textwrap dep; §6 declares the e2e suite) that the design-target selector registry does not enumerate — a where-to-look false positive, not scope creep. slice-208.toml is the entity's own file (benign). Remediation is a per-slice registry edit, delegated to /reconcile (Reconciliation Brief, per-slice): `doctrine slice selector add` Cargo.toml + tests/e2e_subcommand_help.rs (+ Cargo.lock as the lockfile consequence, or note it as such) as design-target, and mirror the added selectors in design §5's prose. Conformance red is dissolved at the registry (the load-bearing change), not the prose. No code/behaviour defect."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "nit"
+title = "design.md F-3 contradicts D2/§5 on textwrap transitivity"
+detail = "design.md §7 adversarial note F-3 states `textwrap` 'is already in the dependency tree (transitive via other crates)'. This directly contradicts D2 and §5 Code Impact, which correctly state textwrap is NOT a transitive dep and must be added explicitly to Cargo.toml. The implementation followed D2/§5 (Cargo.toml now carries `textwrap = { workspace = true }` as a direct dep — correct). F-3's parenthetical is a stale/wrong claim left in the locked design; only the doc-truth is affected, no code defect. Expected vs observed: design internally consistent; observed a contradictory transitivity claim in F-3."
+disposition = "verified"
+response = "Observation confirmed. F-3's 'textwrap is already transitive' parenthetical contradicts D2/§5 and is factually wrong (textwrap was NOT a direct dep; the impl correctly added it explicitly). Remediation is a per-slice design-artifact truth edit, delegated to /reconcile (Reconciliation Brief, per-slice direct edit): correct design.md §7 F-3 to state textwrap is added as an explicit direct dependency (matching D2/§5 and the delivered Cargo.toml). Doc-truth only, no code change."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "SL-150 edge recorded as 'related', design F-5 specified 'supersedes'"
+detail = """design.md §7 F-5 said 'Link SL-208 supersedes SL-150 ... Record with doctrine link after design locks.' slice-208.toml records `[[relation]] label = "related" target = "SL-150"` — 'related', not 'supersedes'. Expected vs observed: F-5 wording 'supersedes'; observed 'related'. Assessing whether the divergence is a defect or the more accurate semantics."""
+disposition = "aligned"
+response = "Aligned — the delivered 'related' edge is the correct semantics; F-5's 'supersedes' was imprecise. SL-208 extends/completes SL-150's top-level cozy-table help down to the subcommand level; it does not replace or obsolete SL-150 (whose top-level rendering is explicitly preserved unchanged — design §6 'help_snapshot_top_level must stay green'). A 'supersedes' edge would wrongly assert SL-150 is defunct. 'related' truthfully records the lineage without that false claim. No change needed; no reconcile item."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "D2 info-contract fidelity confirmed — G1/G2/G3 deviations found pre-audit and fixed"
+detail = "Positive confirmation (aligned candidate). The three RFC-011 case-note deviations from design D2's clap info-contract are all remediated in the delivered impl-bundle and verified by empirical render probe against the built candidate binary: (G1) Usage line carries the full 'doctrine worktree' path via bin_name pin before render_usage; (G2) global --color re-attached from root+ancestors (clone-of-unbuilt drops it) — 'doctrine worktree --help' Options shows '--color <COLOR>  Control colour output [default: auto] [possible values: auto, always, never]'; (G3) arg_annotations appends [env:]/[default:]/[possible values:] to help before wrapping. Full gate green on the candidate: build clean, clippy --bin zero warnings, fmt clean, 3779 unit + 8 e2e tests pass, all 14 VTs PASS mechanically, leaf (onboard --help) skips Commands table + keeps Options, top-level --help unchanged, MissingSubcommand still error-exits. Expected vs observed: design D2 fully realized; observed faithful — no gap."
+disposition = "aligned"
+response = "Aligned — positive confirmation, no change needed. Design D2's info-contract is fully realized in the delivered impl-bundle: G1 (usage path), G2 (global --color re-attach), G3 (default/possible-values annotations) all verified by empirical render probe on the built candidate binary, backed by a fully green gate (clippy/fmt clean, 3779 unit + 8 e2e green, 14/14 VTs PASS) and behaviour-preservation checks (top-level unchanged, MissingSubcommand error-exit preserved, write_class_tests green). The case-note deviations were caught and folded into PHASE-02 before audit — the slice arrives conformant to its design. No remediation."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
