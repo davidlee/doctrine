@@ -1,6 +1,6 @@
 ---
 name: harvest
-description: Use at the end of any coherent unit — a phase, task, review close, or slice wrap — to sweep what the unit produced, learned, and left open into their durable sinks, and to maintain the governing slice's ## Harvest section.
+description: Use at the end of any coherent unit — a phase, task, review close, or slice wrap — to sweep what the unit produced, learned, and left open into their durable sinks, and to maintain the Harvest section of the governing slice's notes.
 ---
 
 # Harvest
