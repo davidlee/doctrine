@@ -17,7 +17,6 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use crate::catalog::hydrate::{Catalog, CatalogEdgeLabel, CatalogKey, EdgeTarget};
-use crate::integrity;
 use crate::listing;
 
 // ---------------------------------------------------------------------------
@@ -90,7 +89,7 @@ pub(crate) struct ListFilter {
     /// Exact match on the edge label's [`name()`](CatalogEdgeLabel::name).
     pub(crate) label: Option<String>,
     /// Canonical-normalised match on [`target_display`]. The filter value is
-    /// parsed through [`integrity::parse_canonical_ref`] and rendered as a
+    /// parsed through [`crate::kinds::parse_canonical_ref`] and rendered as a
     /// canonical id before comparison; a memory UID is matched verbatim (F3/D6).
     pub(crate) target: Option<String>,
     /// Exact (case-sensitive) match on [`source_kind`], uppercased at match
@@ -133,7 +132,7 @@ pub(crate) struct CensusRow {
 pub(crate) fn project_list(catalog: &Catalog, filter: &ListFilter) -> Vec<RelationRow> {
     let normalised_target: Option<String> = filter.target.as_ref().map(|t| {
         // D6 / F3: try canonical-ref parse; memory UIDs are matched verbatim.
-        if let Ok((kref, id)) = integrity::parse_canonical_ref(t) {
+        if let Ok((kref, id)) = crate::kinds::parse_canonical_ref(t) {
             listing::canonical_id(kref.kind.prefix, id)
         } else {
             // Not a canonical ref — match verbatim (memory UID path).
@@ -459,7 +458,7 @@ mod tests {
         target: &str,
     ) -> ScannedEntity {
         use crate::relation::{RelationLabel, Role};
-        let kind = crate::integrity::kind_by_prefix(prefix).unwrap().kind;
+        let kind = crate::kinds::kind_by_prefix(prefix).unwrap().kind;
         // SL-149: a `references(<role>)` label string carries a role; any other label is
         // roleless.
         let (name, role) = match label
@@ -540,8 +539,8 @@ mod tests {
         // REQ-005 seeded → resolves; REQ-999 absent → unresolved.
         // All four axes + include_memory: true narrow to exactly the REQ-999 row.
         use crate::relation::{RelationEdge, RelationLabel, Role};
-        let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
-        let req_kind = crate::integrity::kind_by_prefix("REQ").unwrap().kind;
+        let kind = crate::kinds::kind_by_prefix("SL").unwrap().kind;
+        let req_kind = crate::kinds::kind_by_prefix("REQ").unwrap().kind;
         let sl001 = ScannedEntity {
             key: EntityKey {
                 prefix: "SL",
@@ -696,8 +695,8 @@ mod tests {
         // SL-001 → REQ-005 (resolved, REQ-005 is in the scan).
         // SL-001 → REQ-999 (unresolved, REQ-999 not in the scan).
         use crate::relation::{RelationEdge, RelationLabel, Role};
-        let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
-        let req_kind = crate::integrity::kind_by_prefix("REQ").unwrap().kind;
+        let kind = crate::kinds::kind_by_prefix("SL").unwrap().kind;
+        let req_kind = crate::kinds::kind_by_prefix("REQ").unwrap().kind;
         let sl001 = ScannedEntity {
             key: EntityKey {
                 prefix: "SL",
@@ -755,7 +754,7 @@ mod tests {
     fn project_list_sorts_by_label_source_target() {
         // Two SL entities with edges to create mixed order.
         use crate::relation::{RelationEdge, RelationLabel, Role};
-        let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
+        let kind = crate::kinds::kind_by_prefix("SL").unwrap().kind;
         let sl001 = ScannedEntity {
             key: EntityKey {
                 prefix: "SL",
@@ -817,8 +816,8 @@ mod tests {
     fn census_tallies_honour_breakdown_and_sort() {
         // SL-001 → REQ-005 (resolved), SL-001 → REQ-999 (unresolved), SL-001 → "drift text" (free_text)
         use crate::relation::{RelationEdge, RelationLabel, Role};
-        let kind = crate::integrity::kind_by_prefix("SL").unwrap().kind;
-        let req_kind = crate::integrity::kind_by_prefix("REQ").unwrap().kind;
+        let kind = crate::kinds::kind_by_prefix("SL").unwrap().kind;
+        let req_kind = crate::kinds::kind_by_prefix("REQ").unwrap().kind;
         let sl001 = ScannedEntity {
             key: EntityKey {
                 prefix: "SL",
@@ -962,7 +961,7 @@ mod tests {
     fn target_filter_normalizes_canonical_ref() {
         // Seed ADR-001 with an edge → ADR-002.
         use crate::relation::{RelationEdge, RelationLabel};
-        let adr_kind = crate::integrity::kind_by_prefix("ADR").unwrap().kind;
+        let adr_kind = crate::kinds::kind_by_prefix("ADR").unwrap().kind;
         let adr001 = ScannedEntity {
             key: EntityKey {
                 prefix: "ADR",

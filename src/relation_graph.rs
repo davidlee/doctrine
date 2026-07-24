@@ -3,7 +3,7 @@
 //!
 //! Sits at the engine layer (ADR-001): it imports the relation vocabulary leaf
 //! ([`crate::relation`]) and every edge-authoring kind module, dispatching a
-//! data-driven [`outbound_for`] over `integrity::KINDS` — kind is *data*, not a
+//! data-driven [`outbound_for`] over `crate::kinds::KINDS` — kind is *data*, not a
 //! trait (`mem.pattern.entity.kind-is-data-not-trait`). No kind module imports
 //! back, so there is no cycle (the whole reason the vocabulary lives in the leaf).
 //!
@@ -24,7 +24,6 @@ use cordage::{
 use crate::catalog::hydrate::{CatalogEdgeLabel, CatalogKey, EdgeTarget};
 use crate::dep_seq;
 use crate::entity;
-use crate::integrity;
 use crate::listing::{self, Format};
 use crate::projection::Projection;
 use crate::relation::{RELATION_RULES, RelationEdge, RelationLabel, Role, TargetSpec};
@@ -57,7 +56,7 @@ pub(crate) fn dep_seq_for(
 ) -> anyhow::Result<(dep_seq::DepSeq, bool)> {
     match kind.prefix {
         // Slice authors dep/seq directly (PHASE-03); the leaf reads its own toml. Stem
-        // is `"slice"` (the same id-path shape `integrity::KINDS` carries for SL).
+        // is `"slice"` (the same id-path shape `crate::kinds::KINDS` carries for SL).
         "SL" => {
             let name = format!("{id:03}");
             let path = root
@@ -289,7 +288,7 @@ fn inbound_role_index(
     let mut index = BTreeMap::new();
     for entity in scanned {
         for edge in &entity.outbound {
-            let Ok((kref, tid)) = integrity::parse_canonical_ref(&edge.target) else {
+            let Ok((kref, tid)) = crate::kinds::parse_canonical_ref(&edge.target) else {
                 continue;
             };
             let target = EntityKey {
@@ -311,7 +310,7 @@ pub(crate) fn inbound_degree_index(
     let mut index = BTreeMap::new();
     for entity in scanned {
         for edge in &entity.outbound {
-            let Ok((kref, tid)) = integrity::parse_canonical_ref(&edge.target) else {
+            let Ok((kref, tid)) = crate::kinds::parse_canonical_ref(&edge.target) else {
                 continue;
             };
             let target = EntityKey {
@@ -331,7 +330,7 @@ fn resolve_target(
     projection: &Projection<EntityKey>,
     edge: &RelationEdge,
 ) -> Option<cordage::NodeId> {
-    let (kref, tid) = integrity::parse_canonical_ref(&edge.target).ok()?;
+    let (kref, tid) = crate::kinds::parse_canonical_ref(&edge.target).ok()?;
     projection.resolve(EntityKey {
         prefix: kref.kind.prefix,
         id: tid,
@@ -359,9 +358,9 @@ fn resolve_target(
 ///    row-legality findings the read seam yields.
 ///
 /// Rides the established seams: `scan_entities` for the outbound edges (already legal,
-/// resolved-or-not) and `integrity::ensure_ref_resolves` as the dangler oracle (parse +
+/// resolved-or-not) and `crate::kinds::ensure_ref_resolves` as the dangler oracle (parse +
 /// dir-probe — the same existence check `link` uses forward). The raw block re-read for
-/// `IllegalRows` uses `integrity::KINDS` (dir + stem) — no new path authority.
+/// `IllegalRows` uses `crate::kinds::KINDS` (dir + stem) — no new path authority.
 pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
     let mut findings = Vec::new();
 
@@ -436,7 +435,7 @@ pub(crate) fn validate_relations(root: &Path) -> anyhow::Result<Vec<String>> {
 
     // (2) IllegalRows — hand-edited off-table `(source, label)` rows. Re-read the raw
     // `[[relation]]` block per entity (scan_entities drops the illegal rows).
-    for kref in integrity::KINDS {
+    for kref in crate::kinds::KINDS {
         let mut ids = entity::scan_ids(&root.join(kref.kind.dir))?;
         ids.sort_unstable();
         for id in ids {
@@ -588,7 +587,7 @@ pub(crate) struct InspectView {
 
 /// `inspect <ID>` — the cross-kind relation view of one entity (design §5.2/§5.4).
 ///
-/// Parses `id` via `integrity::parse_canonical_ref` (an unknown prefix / malformed
+/// Parses `id` via `crate::kinds::parse_canonical_ref` (an unknown prefix / malformed
 /// ref → a clean `anyhow` error, never a panic), builds the relation graph once,
 /// and returns the entity's direct relations:
 /// - **outbound**: the entity's own `outbound_for` edges, grouped by label,
@@ -639,7 +638,7 @@ pub(crate) fn inspect_from(
     root: &Path,
     id: &str,
 ) -> anyhow::Result<InspectView> {
-    let (kref, qid) = integrity::parse_canonical_ref(id)?;
+    let (kref, qid) = crate::kinds::parse_canonical_ref(id)?;
     let query_key = EntityKey {
         prefix: kref.kind.prefix,
         id: qid,
@@ -794,7 +793,7 @@ fn render_human(root: &Path, view: &InspectView) -> anyhow::Result<String> {
     // spec authors any; every other kind yields an empty map, so the annotation is a
     // no-op there. `parse_canonical_ref` already classified the id in `inspect`; the
     // queried id is `view.id`.
-    let interaction_types = match integrity::parse_canonical_ref(&view.id) {
+    let interaction_types = match crate::kinds::parse_canonical_ref(&view.id) {
         Ok((kref, qid)) if kref.kind.prefix == "SPEC" => crate::spec::interaction_types(root, qid)?,
         _ => BTreeMap::new(),
     };
@@ -1192,7 +1191,7 @@ pub(crate) fn transitive_from(
     labels: Option<&[RelationLabel]>,
     max_depth: Option<usize>,
 ) -> anyhow::Result<TransitiveView> {
-    let (kref, qid) = integrity::parse_canonical_ref(id)?;
+    let (kref, qid) = crate::kinds::parse_canonical_ref(id)?;
     let query_key = EntityKey {
         prefix: kref.kind.prefix,
         id: qid,
@@ -1332,7 +1331,7 @@ pub(crate) fn transitive_value(view: &TransitiveView) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::integrity::KINDS;
+    use crate::kinds::KINDS;
     use crate::relation::RelationLabel;
     use crate::test_support::{SCHEMA_BACKLOG, SCHEMA_KNOWLEDGE};
     use std::fs;

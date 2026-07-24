@@ -13,7 +13,6 @@ use clap::Args;
 
 use crate::catalog::hydrate::{CatalogEntity, CatalogKey, scan_catalog};
 use crate::catalog::scan::ScanMode;
-use crate::integrity;
 use crate::kinds;
 use crate::lexical::{
     Bm25Ranker, LexDoc, LexicalCorpus, LexicalRanker, tokenize, tokenize_with_spans,
@@ -73,7 +72,10 @@ impl KindSelector {
     /// Returns `Err` if any token is unrecognized.
     fn expand(input: &str) -> Result<BTreeSet<String>> {
         let mut result = BTreeSet::new();
-        let known: BTreeSet<&str> = integrity::KINDS.iter().map(|kr| kr.kind.prefix).collect();
+        let known: BTreeSet<&str> = crate::kinds::KINDS
+            .iter()
+            .map(|kr| kr.kind.prefix)
+            .collect();
 
         for token in input.split(',') {
             let t = token.trim().to_uppercase();
@@ -565,7 +567,7 @@ mod tests {
     #[test]
     fn kind_selector_group_all_covers_known_prefixes() {
         let ks = KindSelector::resolve(Some("all"), &[], &[]).unwrap();
-        let known: BTreeSet<String> = integrity::KINDS
+        let known: BTreeSet<String> = crate::kinds::KINDS
             .iter()
             .map(|kr| kr.kind.prefix.to_string())
             .collect();

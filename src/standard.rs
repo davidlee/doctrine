@@ -18,27 +18,18 @@
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::entity::{self, Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{self, Artifact, Fileset, ScaffoldCtx};
 use crate::governance::{self, GovKind};
 use crate::listing::{Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
-/// Relative dir of the standard tree inside the project root. Distinct top-level
-/// tree (project-global governance), mirroring `.doctrine/policy`.
-const STANDARD_DIR: &str = ".doctrine/standard";
-
-/// The standard governance descriptor the spine binds. `prefix` is the
-/// canonical-id stem (`STD-007`); `stem` is the file/JSON stem (`"standard"`) —
-/// here `stem == prefix.to_lowercase()`, but POL proved the fields independent so
-/// the explicit field carries no risk. `pub(crate)` so `boot` projects standard
-/// rows via `governance::list_rows(&standard::STANDARD_KIND, …)` (SL-033 PHASE-02).
+/// The standard governance descriptor the spine binds. The plain identity lives
+/// in the leaf `kinds` module and is borrowed here (SL-204 PHASE-02) — one `Kind`
+/// value per kind, no copy. `pub(crate)` so `boot` projects standard rows via
+/// `governance::list_rows(&standard::STANDARD_KIND, …)` (SL-033 PHASE-02).
 pub(crate) const STANDARD_KIND: GovKind = GovKind {
-    kind: Kind {
-        dir: STANDARD_DIR,
-        prefix: crate::kinds::STD,
-        stem: "standard",
-        scaffold: standard_scaffold,
-    },
+    kind: &crate::kinds::STANDARD_KIND,
+    scaffold: standard_scaffold,
     statuses: STANDARD_STATUSES,
     hidden: is_hidden,
 };
@@ -118,17 +109,17 @@ fn render_standard_md(canonical_id: &str, title: &str) -> anyhow::Result<String>
 
 /// The standard fileset: sister TOML, prose body, and `<id>-<slug>` symlink, all
 /// relative to the standard tree root. Structurally `policy_scaffold`. Bound as
-/// `STANDARD_KIND.kind.scaffold`.
+/// `STANDARD_KIND.scaffold`.
 fn standard_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let id = ctx.id;
     let name = format!("{id:03}");
     Ok(vec![
         Artifact::File {
-            rel_path: entity::rel_path(&STANDARD_KIND.kind, id, entity::Ext::Toml),
+            rel_path: entity::rel_path(STANDARD_KIND.kind, id, entity::Ext::Toml),
             body: render_standard_toml(id, ctx.slug, ctx.title, ctx.date)?,
         },
         Artifact::File {
-            rel_path: entity::rel_path(&STANDARD_KIND.kind, id, entity::Ext::Md),
+            rel_path: entity::rel_path(STANDARD_KIND.kind, id, entity::Ext::Md),
             body: render_standard_md(ctx.canonical, ctx.title)?,
         },
         Artifact::Symlink {

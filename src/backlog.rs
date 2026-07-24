@@ -330,45 +330,10 @@ pub(crate) enum ItemKind {
     Idea,
 }
 
-/// The issue kind: a defect / problem to fix. Own tree + reservation namespace.
-pub(crate) const ISSUE_KIND: Kind = Kind {
-    dir: ".doctrine/backlog/issue",
-    prefix: crate::kinds::ISS,
-    stem: "backlog",
-    scaffold: |c| backlog_scaffold(ItemKind::Issue, c),
-};
-
-/// The improvement kind: an enhancement to existing behaviour.
-pub(crate) const IMPROVEMENT_KIND: Kind = Kind {
-    dir: ".doctrine/backlog/improvement",
-    prefix: crate::kinds::IMP,
-    stem: "backlog",
-    scaffold: |c| backlog_scaffold(ItemKind::Improvement, c),
-};
-
-/// The chore kind: maintenance with no user-visible behaviour change.
-pub(crate) const CHORE_KIND: Kind = Kind {
-    dir: ".doctrine/backlog/chore",
-    prefix: crate::kinds::CHR,
-    stem: "backlog",
-    scaffold: |c| backlog_scaffold(ItemKind::Chore, c),
-};
-
-/// The risk kind: a tracked risk — the only kind carrying a `[facet]`.
-pub(crate) const RISK_KIND: Kind = Kind {
-    dir: ".doctrine/backlog/risk",
-    prefix: crate::kinds::RSK,
-    stem: "backlog",
-    scaffold: |c| backlog_scaffold(ItemKind::Risk, c),
-};
-
-/// The idea kind: a speculative possibility, not yet committed work.
-pub(crate) const IDEA_KIND: Kind = Kind {
-    dir: ".doctrine/backlog/idea",
-    prefix: crate::kinds::IDE,
-    stem: "backlog",
-    scaffold: |c| backlog_scaffold(ItemKind::Idea, c),
-};
+/// The five backlog identity kinds — each its own tree + reservation namespace.
+/// The identity values live in the leaf `kinds` module (SL-204 PHASE-02);
+/// re-exported here so `ItemKind::kind` and every call site stay put.
+pub(crate) use crate::kinds::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
 
 /// Boundary precedence for the future multi-kind resolver (PRD-009 §4): when one
 /// capture could match several kinds, `risk` wins, then issue/improvement/chore/
@@ -397,6 +362,19 @@ impl ItemKind {
             ItemKind::Chore => &CHORE_KIND,
             ItemKind::Risk => &RISK_KIND,
             ItemKind::Idea => &IDEA_KIND,
+        }
+    }
+
+    /// The fileset renderer for this item kind, passed to `materialise` alongside
+    /// [`kind`](Self::kind) (the scaffold fn was evicted from `Kind`, SL-204). The
+    /// non-capturing closures coerce to `entity::Scaffold` fn pointers.
+    pub(crate) const fn scaffold(self) -> entity::Scaffold {
+        match self {
+            ItemKind::Issue => |c| backlog_scaffold(ItemKind::Issue, c),
+            ItemKind::Improvement => |c| backlog_scaffold(ItemKind::Improvement, c),
+            ItemKind::Chore => |c| backlog_scaffold(ItemKind::Chore, c),
+            ItemKind::Risk => |c| backlog_scaffold(ItemKind::Risk, c),
+            ItemKind::Idea => |c| backlog_scaffold(ItemKind::Idea, c),
         }
     }
 
@@ -897,6 +875,7 @@ pub(crate) fn run_new(
     let date = crate::clock::today();
     let out = entity::materialise(
         item_kind.kind(),
+        item_kind.scaffold(),
         &*backend,
         &root,
         &MaterialiseRequest::Fresh,
@@ -1346,10 +1325,10 @@ pub(crate) fn run_list(
 // ---------------------------------------------------------------------------
 
 /// Normalize a ref string for comparison: parse as canonical ref and re-format,
-/// or fall back to the verbatim input. Uses cross-kind [`crate::integrity::parse_canonical_ref`]
+/// or fall back to the verbatim input. Uses cross-kind [`crate::kinds::parse_canonical_ref`]
 /// so `imp-0194` matches `IMP-194`.
 fn norm_ref(r: &str) -> String {
-    match crate::integrity::parse_canonical_ref(&r.to_uppercase()) {
+    match crate::kinds::parse_canonical_ref(&r.to_uppercase()) {
         Ok((k, id)) => crate::listing::canonical_id(k.kind.prefix, id),
         Err(_) => r.to_string(),
     }
@@ -1981,7 +1960,7 @@ pub(crate) fn run_needs(
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let target = require_item(&root, reference)?;
     for prereq in prereqs {
-        crate::integrity::ensure_ref_resolves(&root, prereq)
+        crate::kinds::ensure_ref_resolves(&root, prereq)
             .with_context(|| format!("prerequisite `{prereq}` does not resolve"))?;
     }
 
@@ -2032,7 +2011,7 @@ pub(crate) fn run_after(
         let mut to_drop: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
         for edge in &ds.after {
-            let is_dangling = match crate::integrity::parse_canonical_ref(&edge.to) {
+            let is_dangling = match crate::kinds::parse_canonical_ref(&edge.to) {
                 Ok((kref, tid)) => {
                     let target_path =
                         crate::entity::id_path(&root, kref.kind, tid, crate::entity::Ext::Toml);
@@ -2052,7 +2031,7 @@ pub(crate) fn run_after(
             };
 
             if is_dangling {
-                let reason = match crate::integrity::parse_canonical_ref(&edge.to) {
+                let reason = match crate::kinds::parse_canonical_ref(&edge.to) {
                     Ok((kref2, tid2)) => {
                         let target_path = crate::entity::id_path(
                             &root,
@@ -2651,6 +2630,7 @@ mod tests {
     fn fresh(root: &Path, item_kind: ItemKind, slug: &str, title: &str) -> entity::Materialised {
         entity::materialise(
             item_kind.kind(),
+            item_kind.scaffold(),
             &LocalFs,
             root,
             &MaterialiseRequest::Fresh,

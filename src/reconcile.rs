@@ -214,7 +214,7 @@ pub(crate) fn run(path: Option<PathBuf>, args: &ReconcileArgs) -> anyhow::Result
     // Forward-edge guard BEFORE any write/mint (mirrors rec::run_new): a dangling
     // `--slice` is refused up front, so a bad edge never mints a REC nor moves a
     // requirement. The requirement ref must resolve too (its id_from_fk + load).
-    crate::integrity::ensure_ref_resolves(&root, &args.slice)?;
+    crate::kinds::ensure_ref_resolves(&root, &args.slice)?;
     let prior = requirement::load(&root, &args.req)
         .with_context(|| format!("reconcile target {} not found", args.req))?
         .status;

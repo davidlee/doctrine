@@ -241,12 +241,12 @@ pub(crate) fn prose_cite_findings(
                     };
 
                     // Unknown prefix — silent skip.
-                    if crate::integrity::kind_by_prefix(prefix).is_none() {
+                    if crate::kinds::kind_by_prefix(prefix).is_none() {
                         continue;
                     }
 
                     // Known prefix but unresolved — emit finding.
-                    if crate::integrity::ensure_ref_resolves(root, token).is_err() {
+                    if crate::kinds::ensure_ref_resolves(root, token).is_err() {
                         findings.push(Finding {
                             category: Category::ProseCite,
                             entity: Some(entry.display().to_string()),
@@ -739,7 +739,7 @@ mod tests {
 
     /// Set up a temp dir with a real entity so `ensure_ref_resolves` can succeed.
     fn seed_entity_dir(root: &Path, prefix: &str, id: u32) {
-        use crate::integrity::kind_by_prefix;
+        use crate::kinds::kind_by_prefix;
         let Some(kref) = kind_by_prefix(prefix) else {
             return;
         };

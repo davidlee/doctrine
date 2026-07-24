@@ -28,7 +28,7 @@ fn resolve_link_path(
     degree: Option<crate::relation::Degree>,
     descriptor: Option<&str>,
 ) -> anyhow::Result<(PathBuf, &'static crate::relation::RelationRule)> {
-    let (kref, id) = crate::integrity::parse_resolvable_ref(root, source)?;
+    let (kref, id) = crate::kinds::parse_resolvable_ref(root, source)?;
     // SL-149 PHASE-04c: the parsed `--role` flows into the legality gate. `validate_link`
     // yields `MissingRole` (a roleful `references` with no role), `RoleNotApplicable`
     // (a role on a label-only label), or `IllegalRole` (a role outside the source's
@@ -114,8 +114,8 @@ pub(crate) fn run_link(
         let toml_path = crate::memory::resolve_memory_toml_path(&root, &mref)?;
         // Best-effort target validation: if target looks like an entity ref,
         // validate it resolves. Free-text and mem_* targets pass through.
-        if crate::integrity::parse_canonical_ref(target).is_ok() || target.parse::<u32>().is_ok() {
-            crate::integrity::ensure_ref_resolves(&root, target).with_context(|| {
+        if crate::kinds::parse_canonical_ref(target).is_ok() || target.parse::<u32>().is_ok() {
+            crate::kinds::ensure_ref_resolves(&root, target).with_context(|| {
                 format!("target `{target}` does not resolve to an existing entity")
             })?;
         }
@@ -138,8 +138,8 @@ pub(crate) fn run_link(
     // Forward-edge validation (§5.5): free-text labels skip both gates; validated
     // labels must resolve AND be of a legal target kind.
     if !matches!(rule.target, crate::relation::TargetSpec::Unvalidated) {
-        let (tkref, _tid) = crate::integrity::parse_resolvable_ref(&root, target)?;
-        let (skref, _sid) = crate::integrity::parse_resolvable_ref(&root, source)?;
+        let (tkref, _tid) = crate::kinds::parse_resolvable_ref(&root, target)?;
+        let (skref, _sid) = crate::kinds::parse_resolvable_ref(&root, source)?;
         crate::relation::check_target_kind(rule, skref.kind, tkref.kind.prefix)?;
     }
     let outcome = crate::relation::append_edge(
@@ -691,7 +691,7 @@ mod tests {
     /// `references --role implements` target). The dir is derived from the canonical ref
     /// so the test stays decoupled from which SPEC sub-kind `kind_by_prefix` resolves.
     fn seed_spec_dir(root: &std::path::Path, reference: &str) {
-        let (kref, id) = crate::integrity::parse_canonical_ref(reference).unwrap();
+        let (kref, id) = crate::kinds::parse_canonical_ref(reference).unwrap();
         let dir = root.join(kref.kind.dir).join(format!("{id:03}"));
         std::fs::create_dir_all(&dir).unwrap();
     }
@@ -703,7 +703,7 @@ mod tests {
             root.join(format!(".doctrine/slice/{padded}/slice-{padded}.toml")),
         )
         .unwrap();
-        let (kref, _id) = crate::integrity::parse_canonical_ref("SL-001").unwrap();
+        let (kref, _id) = crate::kinds::parse_canonical_ref("SL-001").unwrap();
         crate::relation::tier1_edges(kref.kind, &text).unwrap()
     }
 

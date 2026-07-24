@@ -466,7 +466,7 @@ pub(crate) fn next(root: &Path) -> anyhow::Result<NextView> {
 /// Resolve the canonical ref `id` to an [`EntityKey`] — a clean error for an unknown
 /// prefix / malformed ref (never a panic).
 fn parse_key(id: &str) -> anyhow::Result<EntityKey> {
-    let (kref, qid) = crate::integrity::parse_canonical_ref(id)?;
+    let (kref, qid) = crate::kinds::parse_canonical_ref(id)?;
     Ok(EntityKey {
         prefix: kref.kind.prefix,
         id: qid,

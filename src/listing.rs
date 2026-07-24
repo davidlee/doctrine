@@ -35,11 +35,13 @@ use serde::{Deserialize, Serialize};
 pub(crate) const ABSENT_CELL: &str = "·";
 
 /// `SL` + `25` → `"SL-25"`; zero-padded to three digits like the citation
-/// convention (`SL-025`). The single id-form authority for prefixed kinds.
-/// Memory is conformant-by-exception — its uid *is* its canonical id, so it does
-/// not route through here (design §5.3).
+/// convention (`SL-025`). Delegates to the id-form authority in `kinds`
+/// ([`crate::kinds::canonical_id`], the inverse of `parse_canonical_ref`); this
+/// forwarder preserves the caller seam (~30 modules) while `listing::parse_ref`
+/// remains its local inverse. Memory is conformant-by-exception — its uid *is* its
+/// canonical id, so it does not route through here (design §5.3).
 pub(crate) fn canonical_id(prefix: &str, id: u32) -> String {
-    format!("{prefix}-{id:03}")
+    crate::kinds::canonical_id(prefix, id)
 }
 
 /// The symmetric inverse of [`canonical_id`]: parse an entity reference by prefix,

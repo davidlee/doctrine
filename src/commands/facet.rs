@@ -257,7 +257,7 @@ pub(crate) fn resolve_entity_path_and_canonical(
     root: &std::path::Path,
     raw: &str,
 ) -> anyhow::Result<(PathBuf, String)> {
-    let (kref, id) = crate::integrity::parse_resolvable_ref(root, raw)?;
+    let (kref, id) = crate::kinds::parse_resolvable_ref(root, raw)?;
     let path = crate::entity::id_path(root, kref.kind, id, crate::entity::Ext::Toml);
     if !path.exists() {
         anyhow::bail!("entity not found: {raw}");
@@ -782,7 +782,7 @@ mod tests {
     /// Seed a minimal entity TOML for testing, returning (toml_path, canonical_id).
     fn seed_entity(root: &std::path::Path, prefix: &str, id: u32) -> (std::path::PathBuf, String) {
         let padded = format!("{id:03}");
-        let kref = crate::integrity::kind_by_prefix(prefix).expect("valid prefix");
+        let kref = crate::kinds::kind_by_prefix(prefix).expect("valid prefix");
         let toml_path = crate::entity::id_path(&root, kref.kind, id, crate::entity::Ext::Toml);
         let dir = toml_path.parent().unwrap().to_path_buf();
         std::fs::create_dir_all(&dir).unwrap();

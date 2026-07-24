@@ -2,14 +2,13 @@
 //! Richer catalog types — `Catalog`, `CatalogEntity`, `CatalogEdge`,
 //! `EdgeTarget`, `EdgeOrigin` — and their hydration from a raw `Vec<ScannedEntity>`
 //! (SL-071 PHASE-03). `Catalog::from_scanned` is pure: it classifies edge targets
-//! via `integrity::parse_canonical_ref`, derives entity paths, and builds
+//! via `crate::kinds::parse_canonical_ref`, derives entity paths, and builds
 //! structured diagnostics — but reads no files and performs no second disk walk.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::entity;
-use crate::integrity;
 use crate::memory::{self, MemoryCatalogRecord};
 use crate::relation::{RelationLabel, Role};
 
@@ -196,7 +195,7 @@ const MEMORY_WIKILINK_ORIGIN_FIELD: &str = "body";
 
 impl Catalog {
     /// Pure projection of a raw entity scan into a hydrated `Catalog`.
-    /// Classifies every edge target via `integrity::parse_canonical_ref`,
+    /// Classifies every edge target via `crate::kinds::parse_canonical_ref`,
     /// derives entity paths from `EntityKey` + `Kind.dir`, and collects
     /// diagnostics for unresolved and unvalidated targets.
     ///
@@ -441,7 +440,7 @@ impl Catalog {
 
 /// Classify one edge target string against the set of known entity keys.
 ///
-/// Uses `integrity::parse_canonical_ref` — the same oracle `link` and
+/// Uses `crate::kinds::parse_canonical_ref` — the same oracle `link` and
 /// `validate_relations` use. Four outcomes map to three `EdgeTarget` variants:
 /// 1. Parse fails → try memory resolution → `UnvalidatedText` if unresolvable
 /// 2. Parse succeeds, entity present in `key_set` → `Resolved(key)`
@@ -455,7 +454,7 @@ fn classify_target(
     key_set: &BTreeSet<CatalogKey>,
     mem_key_map: &BTreeMap<String, String>,
 ) -> EdgeTarget {
-    if let Ok((kref, id)) = integrity::parse_canonical_ref(raw) {
+    if let Ok((kref, id)) = crate::kinds::parse_canonical_ref(raw) {
         let key = CatalogKey::Numbered(EntityKey {
             prefix: kref.kind.prefix,
             id,
@@ -1073,7 +1072,7 @@ mod tests {
     ) -> ScannedEntity {
         ScannedEntity {
             key: EntityKey { prefix, id },
-            kind: crate::integrity::kind_by_prefix(prefix).unwrap().kind,
+            kind: crate::kinds::kind_by_prefix(prefix).unwrap().kind,
             status: Some("proposed".to_string()),
             title: format!("{prefix}-{id}"),
             outbound: Vec::new(),

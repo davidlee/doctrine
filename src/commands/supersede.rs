@@ -11,7 +11,7 @@ use std::path::PathBuf;
 /// which keys on `listing::canonical_id`).
 fn resolve_supersede_path(
     root: &std::path::Path,
-    kref: &crate::integrity::KindRef,
+    kref: &crate::kinds::KindRef,
     id: u32,
 ) -> (PathBuf, String) {
     let toml_path = crate::entity::id_path(root, kref.kind, id, crate::entity::Ext::Toml);
@@ -43,8 +43,8 @@ pub(crate) fn run_supersede(path: Option<PathBuf>, new: &str, old: &str) -> anyh
     let root = crate::root::find(path, &crate::root::default_markers())?;
 
     // Pre-flight resolution + capability gate (NO write).
-    let (new_kref, new_id) = crate::integrity::parse_resolvable_ref(&root, new)?;
-    let (old_kref, old_id) = crate::integrity::parse_resolvable_ref(&root, old)?;
+    let (new_kref, new_id) = crate::kinds::parse_resolvable_ref(&root, new)?;
+    let (old_kref, old_id) = crate::kinds::parse_resolvable_ref(&root, old)?;
     anyhow::ensure!(
         !(new_kref.kind.prefix == old_kref.kind.prefix && new_id == old_id),
         "`{new}` cannot supersede itself — a self-supersession is not a decision change"

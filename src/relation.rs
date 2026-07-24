@@ -12,7 +12,7 @@
 //! labels back a graph overlay (design §5.3 overlay table — the resolvable subset);
 //! two — [`RelationLabel::Drift`] and [`RelationLabel::DecisionRef`] — are
 //! **target-unvalidated** (ADR-010 Decision 2): their targets are free-text with no
-//! `DRIFT`/`DEC` kind in `integrity::KINDS`, so they never resolve to a node and
+//! `DRIFT`/`DEC` kind in `crate::kinds::KINDS`, so they never resolve to a node and
 //! surface as danglers, never edges (§5.3). They are vocabulary labels with no
 //! overlay, carried so the data is preserved (visibility), not dropped.
 //!
@@ -1354,7 +1354,7 @@ fn row_matches(
 /// The impure shell over the pure [`append_relation_row`]: read the file, apply the
 /// edit-preserving append, write it back ONLY when a row was actually added (`Wrote`)
 /// — a `Noop` never rewrites the file (no spurious mtime churn). The caller resolves
-/// `toml_path` from `(source_kind, id)` via `integrity::KINDS` (the command shell).
+/// `toml_path` from `(source_kind, id)` via `crate::kinds::KINDS` (the command shell).
 pub(crate) fn append_edge(
     toml_path: &std::path::Path,
     label: RelationLabel,
@@ -2828,7 +2828,7 @@ mod tests {
         }
 
         // Governance `supersedes` is LifecycleOnly — refused, names the supersede verb.
-        let e = refusal(&ADR_KIND.kind, "supersedes");
+        let e = refusal(ADR_KIND.kind, "supersedes");
         assert!(e.contains("supersede verb"), "names the owning verb: {e}");
 
         // A TypedVerbOnly label (spec `members`) — refused, names the typed verb.
@@ -2860,10 +2860,10 @@ mod tests {
         }
 
         // SameKind: gov `related` from an ADR accepts an ADR target, refuses a POL.
-        let related = unwrap_rule(validate_link(&ADR_KIND.kind, "related", None, None, None));
-        assert!(check_target_kind(related, &ADR_KIND.kind, "ADR").is_ok());
+        let related = unwrap_rule(validate_link(ADR_KIND.kind, "related", None, None, None));
+        assert!(check_target_kind(related, ADR_KIND.kind, "ADR").is_ok());
         assert!(
-            check_target_kind(related, &ADR_KIND.kind, "POL").is_err(),
+            check_target_kind(related, ADR_KIND.kind, "POL").is_err(),
             "SameKind refuses a cross-gov target"
         );
 
@@ -2946,7 +2946,7 @@ mod tests {
         // supersedes resolves to the SL→SL rule for a slice, the gov rule for ADR.
         let sl_sup = lookup(&SLICE_KIND, RelationLabel::Supersedes, None).unwrap();
         assert_eq!(sl_sup.link, LinkPolicy::Writable);
-        let adr_sup = lookup(&ADR_KIND.kind, RelationLabel::Supersedes, None).unwrap();
+        let adr_sup = lookup(ADR_KIND.kind, RelationLabel::Supersedes, None).unwrap();
         assert_eq!(adr_sup.link, LinkPolicy::LifecycleOnly);
         // Touch the remaining kind statics so the imports are all exercised.
         let _ = (
@@ -3926,7 +3926,7 @@ mod tests {
             let want_role = e.to_role.as_deref().and_then(Role::from_name);
             let want_degree = e.degree.as_deref().and_then(Degree::from_name);
             let (prefix, id) = split_ref(&e.to_source);
-            let kind = crate::integrity::kind_by_prefix(prefix)
+            let kind = crate::kinds::kind_by_prefix(prefix)
                 .unwrap_or_else(|| panic!("unknown kind prefix `{prefix}`"))
                 .kind;
             let edges = crate::catalog::scan::outbound_for(&root, kind, id)

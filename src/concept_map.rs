@@ -18,7 +18,7 @@ use anyhow::Context;
 use clap::Subcommand;
 use serde::Serialize;
 
-use crate::entity::{self, Artifact, Fileset, Inputs, Kind, MaterialiseRequest, ScaffoldCtx};
+use crate::entity::{self, Artifact, Fileset, Inputs, MaterialiseRequest, ScaffoldCtx};
 use crate::listing::{self, Format, ListArgs};
 use crate::meta::{self, Meta};
 use crate::tomlfmt::toml_string;
@@ -241,7 +241,7 @@ pub(crate) fn dispatch(cmd: ConceptMapCommand, color: bool) -> anyhow::Result<()
 }
 
 /// Relative dir of the concept-map tree inside the project root.
-pub(crate) const CONCEPT_MAP_DIR: &str = ".doctrine/concept-map";
+pub(crate) use crate::kinds::CONCEPT_MAP_DIR;
 
 /// Statuses for concept maps — authored-artifact lifecycle (SL-074 design §2).
 const CONCEPT_MAP_STATUSES: &[&str] = &["draft", "accepted", "superseded"];
@@ -252,13 +252,9 @@ fn is_hidden(status: &str) -> bool {
     matches!(status, "superseded")
 }
 
-/// The top-level reserved concept-map kind: toml + md + slug symlink.
-pub(crate) const CONCEPT_MAP_KIND: Kind = Kind {
-    dir: CONCEPT_MAP_DIR,
-    prefix: crate::kinds::CM,
-    stem: "concept-map",
-    scaffold: concept_map_scaffold,
-};
+/// The top-level reserved concept-map kind: toml + md + slug symlink. The
+/// identity value lives in the leaf `kinds` module (SL-204 PHASE-02).
+pub(crate) use crate::kinds::CONCEPT_MAP_KIND;
 
 // ---------------------------------------------------------------------------
 // Pure: render, scaffolds
@@ -324,6 +320,7 @@ pub(crate) fn run_new(
     let date = crate::clock::today();
     let out = entity::materialise(
         &CONCEPT_MAP_KIND,
+        concept_map_scaffold,
         &*backend,
         &root,
         &MaterialiseRequest::Fresh,

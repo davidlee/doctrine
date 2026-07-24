@@ -91,11 +91,15 @@ exit_criteria = [
   { id = "EX-2", text = "tests/architecture_layering.rs green with the 13 up-reaches gone and the 4 back-cycles broken" },
   { id = "EX-3", text = "measured tangle delta + catalog/relation_graph re-tier verdicts recorded in slice notes (Tier-3 follow-up input)" },
   { id = "EX-4", text = "just gate green (clippy zero warnings) on the full slice delta" },
+  { id = "EX-5", text = "canonical-id format single-sourced: a kinds-owned canonical_id(prefix,id) authority; listing::canonical_id delegates to it (caller seam preserved, zero retarget); resolve.rs uses the shared authority, dropping its PHASE-03 inline (user-authorized D2 follow-up — D2's listing route was cycle-infeasible)" },
+  { id = "EX-6", text = "collateral gate-blocker fix (ISS-235, not SL-204 design surface): vt9_no_discoverable_root_emits_nothing made hermetic (rootless tempdir cwd, no ambient CLAUDE_PROJECT_DIR fallback) so worker_commit's full-suite gate stops false-redding the unrelated canonical_id delta — discovered mid-dispatch, folded into this phase's worker delta" },
 ]
 verification = [
   { id = "VT-1", expects = "integrity is classified engine in the tier map", test_file = ".doctrine/adr/001/layering.toml", keywords = ["integrity = \"engine\""], waived = false },
+  { id = "VT-2", expects = "kinds owns the canonical-id format authority (resolve.rs), the inverse of parse_canonical_ref", test_file = "src/kinds/resolve.rs", keywords = ["fn canonical_id"], waived = false },
   { id = "VA-1", expects = "tangle measured empirically at execute time (not the design's prediction); baseline set to the measured actual; architecture_layering suite green" },
-  { id = "VA-2", expects = "doctrine slice conformance clean against the 43 design-target selectors" },
+  { id = "VA-2", expects = "doctrine slice conformance clean against the design-target selectors" },
+  { id = "VA-3", expects = "listing::canonical_id delegates to kinds (no duplicated format!); every existing canonical_id caller unchanged and green" },
 ]
 specs        = []
 requirements = []

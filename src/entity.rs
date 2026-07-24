@@ -82,25 +82,15 @@ impl Claim for LocalFs {
 // The `Kind` descriptor
 // ---------------------------------------------------------------------------
 
-/// A `Kind` is *data*, not a trait: one dispatch site, no per-kind state (D2).
-/// Placement is no longer a `Kind` field — it is a runtime `MaterialiseRequest`,
-/// because a named entity carries its uid only at call time (D8).
-#[derive(serde::Serialize)]
-pub(crate) struct Kind {
-    /// Entity-tree root, relative to the project root, e.g. `.doctrine/slice`.
-    /// Also the base every artifact path is joined to (H1).
-    pub dir: &'static str,
-    /// Canonical-id prefix, e.g. `SL` → `SL-003` (the `{{ref}}` token). Unused
-    /// by named kinds, which have no numeric canonical id.
-    pub prefix: &'static str,
-    /// File stem for `<stem>-NNN.toml` / `<stem>-NNN.md` file names. Empty for
-    /// sub-kinds that nest under a parent entity's numeric directory.
-    #[serde(skip)]
-    pub stem: &'static str,
-    /// Fileset as a function — kind-supplied, never a frozen file count (D3).
-    #[serde(skip)]
-    pub scaffold: fn(&ScaffoldCtx<'_>) -> anyhow::Result<Fileset>,
-}
+/// The `Kind` identity descriptor now lives in the leaf `kinds` module (SL-204
+/// PHASE-02) — pure identity data sits below the engine (ADR-001). Re-exported
+/// so `entity::Kind` call sites stay put.
+pub(crate) use crate::kinds::Kind;
+
+/// A kind's fileset renderer — kind-supplied, never a frozen file count (D3).
+/// Passed explicitly to `materialise` rather than carried on `Kind`, which is
+/// pure identity data.
+pub(crate) type Scaffold = fn(&ScaffoldCtx<'_>) -> anyhow::Result<Fileset>;
 
 /// The resolved context a `scaffold` renders from. Pure over these inputs plus
 /// compile-time-embedded template text (M4): no disk, clock, git, or root. Only
@@ -306,8 +296,13 @@ pub(crate) fn scan_named(tree_root: &Path) -> anyhow::Result<Vec<String>> {
 /// numeric parent. Returns the owned identity and entity dir. (Named placement
 /// rides the separate `materialise_named` seam — memory's record fields exceed
 /// `ScaffoldCtx`, so it renders eagerly and hands a pre-built fileset.)
+#[expect(
+    clippy::too_many_arguments,
+    reason = "scaffold evicted from Kind rides as an explicit param (SL-204)"
+)]
 pub(crate) fn materialise(
     kind: &Kind,
+    scaffold: Scaffold,
     claim: &dyn Claim,
     project_root: &Path,
     request: &MaterialiseRequest,
@@ -322,10 +317,12 @@ pub(crate) fn materialise(
         .with_context(|| format!("Failed to create {}", tree_root.display()))?;
 
     match *request {
-        MaterialiseRequest::Fresh => {
-            allocate_fresh(kind, claim, &tree_root, inputs, trunk_ids, reserved)
+        MaterialiseRequest::Fresh => allocate_fresh(
+            kind, scaffold, claim, &tree_root, inputs, trunk_ids, reserved,
+        ),
+        MaterialiseRequest::InExisting { id } => {
+            create_in_existing(kind, scaffold, &tree_root, id, inputs)
         }
-        MaterialiseRequest::InExisting { id } => create_in_existing(kind, &tree_root, id, inputs),
     }
 }
 
@@ -351,6 +348,7 @@ pub(crate) fn local_reserved() -> impl FnMut(&[u32]) -> anyhow::Result<Vec<u32>>
 /// bounded retry loop, then scaffold from the `Kind`'s `ScaffoldCtx` template.
 fn allocate_fresh(
     kind: &Kind,
+    scaffold: Scaffold,
     claim: &dyn Claim,
     tree_root: &Path,
     inputs: &Inputs<'_>,
@@ -371,7 +369,7 @@ fn allocate_fresh(
                 title: inputs.title,
                 date: inputs.date,
             };
-            (kind.scaffold)(&ctx)
+            (scaffold)(&ctx)
         },
     )
 }
@@ -457,6 +455,7 @@ fn claim_fresh_id(
 /// then write. The parent `id` comes straight from the request.
 fn create_in_existing(
     kind: &Kind,
+    scaffold: Scaffold,
     tree_root: &Path,
     id: u32,
     inputs: &Inputs<'_>,
@@ -474,7 +473,7 @@ fn create_in_existing(
         title: inputs.title,
         date: inputs.date,
     };
-    let fileset = (kind.scaffold)(&ctx)?;
+    let fileset = scaffold(&ctx)?;
     refuse_clobber(tree_root, &fileset)?; // no silent clobber (D7)
     write_fileset(tree_root, &fileset)?;
     Ok(Materialised {
@@ -772,7 +771,6 @@ mod tests {
         dir: "tree",
         prefix: "TK",
         stem: "",
-        scaffold: one_file,
     };
 
     fn inputs() -> Inputs<'static> {
@@ -791,6 +789,7 @@ mod tests {
 
         let out = allocate_fresh(
             &TEST_KIND,
+            one_file,
             &LocalFs,
             &tree,
             &inputs(),
@@ -822,8 +821,16 @@ mod tests {
             Ok(if n == 0 { vec![] } else { vec![1] })
         };
 
-        let out =
-            allocate_fresh(&TEST_KIND, &LocalFs, &tree, &inputs(), &[], &mut reserved).unwrap();
+        let out = allocate_fresh(
+            &TEST_KIND,
+            one_file,
+            &LocalFs,
+            &tree,
+            &inputs(),
+            &[],
+            &mut reserved,
+        )
+        .unwrap();
         assert_eq!(out.eid.numeric_id(), Some(2));
         assert!(tree.join("002/body.md").is_file());
         assert_eq!(calls.get(), 2, "expected one collision then success");
@@ -845,6 +852,7 @@ mod tests {
 
         let err = allocate_fresh(
             &TEST_KIND,
+            one_file,
             &AlwaysHeld,
             &tree,
             &inputs(),
@@ -885,7 +893,6 @@ mod tests {
         dir: "tree",
         prefix: "TK",
         stem: "",
-        scaffold: doomed_fileset,
     };
 
     #[test]
@@ -896,6 +903,7 @@ mod tests {
 
         let err = allocate_fresh(
             &DOOMED_KIND,
+            doomed_fileset,
             &LocalFs,
             &tree,
             &inputs(),
@@ -920,7 +928,6 @@ mod tests {
         dir: "tree",
         prefix: "TK",
         stem: "",
-        scaffold: escaping_fileset,
     };
 
     #[test]
@@ -931,6 +938,7 @@ mod tests {
 
         let err = allocate_fresh(
             &ESCAPING_KIND,
+            escaping_fileset,
             &LocalFs,
             &tree,
             &inputs(),
@@ -949,7 +957,6 @@ mod tests {
         dir: "tree",
         prefix: "TK",
         stem: "",
-        scaffold: one_file,
     };
 
     #[test]
@@ -960,6 +967,7 @@ mod tests {
 
         let out = create_in_existing(
             &SUB_KIND,
+            one_file,
             &tree,
             3,
             &Inputs {
@@ -982,6 +990,7 @@ mod tests {
 
         let err = create_in_existing(
             &SUB_KIND,
+            one_file,
             &tree,
             9,
             &Inputs {
@@ -1003,6 +1012,7 @@ mod tests {
 
         let err = create_in_existing(
             &SUB_KIND,
+            one_file,
             &tree,
             3,
             &Inputs {
@@ -1042,7 +1052,6 @@ mod tests {
         dir: "tree",
         prefix: "TK",
         stem: "",
-        scaffold: two_files,
     };
 
     #[test]
@@ -1053,6 +1062,7 @@ mod tests {
 
         create_in_existing(
             &SUB_TWO_KIND,
+            two_files,
             &tree,
             3,
             &Inputs {
@@ -1093,7 +1103,6 @@ mod tests {
         dir: "tree",
         prefix: "TK",
         stem: "",
-        scaffold: sub_doomed_fileset,
     };
 
     #[test]
@@ -1106,6 +1115,7 @@ mod tests {
 
         let err = create_in_existing(
             &SUB_DOOMED_KIND,
+            sub_doomed_fileset,
             &tree,
             3,
             &Inputs {

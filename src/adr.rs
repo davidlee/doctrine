@@ -14,7 +14,7 @@
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::entity::{Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{Artifact, Fileset, ScaffoldCtx};
 use crate::governance::{self, GovKind};
 use crate::listing::{Format, ListArgs};
 use crate::tomlfmt::toml_string;
@@ -144,21 +144,13 @@ pub(crate) fn dispatch(cmd: AdrCommand, color: bool) -> anyhow::Result<()> {
 
 // ---------------------------------------------------------------------------
 
-/// Relative dir of the ADR tree inside the project root. Distinct top-level tree,
-/// not nested under slice (D2 — ADRs are project-global governance).
-const ADR_DIR: &str = ".doctrine/adr";
-
-/// The ADR governance descriptor the spine binds. `prefix` is the canonical-id
-/// stem (`ADR-007`); `stem` is the file/JSON stem (`"adr"`) — see `meta` on why
-/// prefix ≠ stem. `pub(crate)` so `boot` projects ADR rows via
-/// `governance::list_rows(&adr::ADR_KIND, …)`.
+/// The ADR governance descriptor the spine binds. The plain identity (`dir` /
+/// `prefix` / `stem`) lives in the leaf `kinds` module and is borrowed here
+/// (SL-204 PHASE-02) — one `Kind` value per kind, no copy. `pub(crate)` so `boot`
+/// projects ADR rows via `governance::list_rows(&adr::ADR_KIND, …)`.
 pub(crate) const ADR_KIND: GovKind = GovKind {
-    kind: Kind {
-        dir: ADR_DIR,
-        prefix: crate::kinds::ADR,
-        stem: "adr",
-        scaffold: adr_scaffold,
-    },
+    kind: &crate::kinds::ADR_KIND,
+    scaffold: adr_scaffold,
     statuses: ADR_STATUSES,
     hidden: is_hidden,
 };
@@ -232,7 +224,7 @@ fn render_adr_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 
 /// The ADR fileset: sister TOML, prose body, and `<id>-<slug>` symlink, all
 /// relative to the ADR tree root — structurally `slice_scaffold` (D2). Bound as
-/// `ADR_KIND.kind.scaffold`.
+/// `ADR_KIND.scaffold`.
 fn adr_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let id = ctx.id;
     let name = format!("{id:03}");

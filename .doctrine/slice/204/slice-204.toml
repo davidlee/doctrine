@@ -182,6 +182,23 @@ intent = "design-target"
 selector = "src/supersede.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/lazyspec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/compare.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/listing.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+note = "Collateral gate-blocker fix, not SL-204 design surface: ISS-235 (vt9 surface test non-hermetic on ambient CLAUDE_PROJECT_DIR) false-reds worker_commit's gate; fixed hermetic in PHASE-04's worker delta so the canonical_id delta can land."
+
 [[relation]]
 label = "governed_by"
 target = "ADR-001"

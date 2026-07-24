@@ -83,7 +83,7 @@ fn run_set(
 
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (kref, id) = {
-        let (k, i) = crate::integrity::parse_resolvable_ref(&root, reference).map_err(|e| {
+        let (k, i) = crate::kinds::parse_resolvable_ref(&root, reference).map_err(|e| {
             anyhow::anyhow!(
                 "{e}\n  hint: `doctrine tag` works on numbered entity refs (e.g. SL-136, ADR-004). \
                  Use `doctrine memory tag` for memories."
@@ -119,7 +119,7 @@ fn run_set(
 fn run_clear(path: Option<std::path::PathBuf>, reference: &str) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     let (kref, id) = {
-        let (k, i) = crate::integrity::parse_resolvable_ref(&root, reference)?;
+        let (k, i) = crate::kinds::parse_resolvable_ref(&root, reference)?;
         anyhow::ensure!(
             tag::TAGGABLE.contains(&k.kind.prefix),
             "{} is not taggable yet (see IMP-144)",

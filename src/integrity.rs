@@ -16,163 +16,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
 
-use crate::adr::ADR_KIND;
-use crate::backlog::{CHORE_KIND, IDEA_KIND, IMPROVEMENT_KIND, ISSUE_KIND, RISK_KIND};
-use crate::concept_map::CONCEPT_MAP_KIND;
-use crate::knowledge::{
-    ASSUMPTION_KIND, CONCEPT_KIND, CONSTRAINT_KIND, DECISION_KIND, EVIDENCE_KIND, HYPOTHESIS_KIND,
-    QUESTION_KIND,
-};
-use crate::policy::POLICY_KIND;
-use crate::rec::REC_KIND;
-use crate::requirement::REQUIREMENT_KIND;
-use crate::review::REVIEW_KIND;
-use crate::revision::REV_KIND;
-use crate::rfc::RFC_KIND;
-use crate::slice::SLICE_KIND;
-use crate::spec::{PRODUCT_SPEC_KIND, TECH_SPEC_KIND};
-use crate::standard::STANDARD_KIND;
+use crate::kinds::{KINDS, KindRef, parse_canonical_ref};
 use crate::{entity, fsutil, git, listing, meta, root};
-
-/// A numbered entity kind's identity for the id scan — a *referencing view* over
-/// the engine [`entity::Kind`] each kind-owning module already declares (its
-/// canonical `prefix` and tree `dir`), plus the two facts the engine leaf does
-/// not carry: `stem` names the metadata file (`slice-007.toml`), and `state_dir`
-/// is the gitignored runtime phase-state tree (`.doctrine/state/slice`) a kind
-/// owns — `Some` only for slice today — which `reseat` refuses to strand (F3).
-pub(crate) struct KindRef {
-    pub(crate) kind: &'static entity::Kind,
-    pub(crate) state_dir: Option<&'static str>,
-}
-
-/// When adding a numbered kind, add its `KindRef` row here and bump the count
-/// in `kinds_table_covers_the_numbered_kinds`.
-///
-/// Every numbered kind, in canonical order. The one place this list lives; a new
-/// numbered kind must be added here or it silently escapes `validate` (R-b — a
-/// drift surface this table accepts in exchange for not threading a registry
-/// through every kind-owning module).
-pub(crate) const KINDS: &[KindRef] = &[
-    KindRef {
-        kind: &SLICE_KIND,
-        state_dir: Some(".doctrine/state/slice"),
-    },
-    KindRef {
-        kind: &ADR_KIND.kind,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &POLICY_KIND.kind,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &STANDARD_KIND.kind,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &PRODUCT_SPEC_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &TECH_SPEC_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &REQUIREMENT_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &ISSUE_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &IMPROVEMENT_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &CHORE_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &RISK_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &IDEA_KIND,
-        state_dir: None,
-    },
-    // Review (SL-040) — the 2nd kind with a runtime state tree (baton/lock/cache,
-    // PHASE-03+), mirroring slice. Its authored toml is status-LESS (derived,
-    // D-C8); the scan reads `.id` via the id-only reader (D2), so a status-less
-    // ledger scans cleanly while the strict `Meta` stays untouched.
-    KindRef {
-        kind: &REVIEW_KIND,
-        state_dir: Some(".doctrine/state/review"),
-    },
-    // REC (SL-042) — the reconciliation-record kind. Status-LESS like review
-    // (D-Q3: one REC per act, no lifecycle), so the scan reads `.id` via the
-    // id-only reader (meta::read_id). Owns no runtime state tree (state_dir None).
-    KindRef {
-        kind: &REC_KIND,
-        state_dir: None,
-    },
-    // Knowledge records (SL-059) — seven numbered kinds over one engine, each its
-    // own tree + reservation namespace. Status-ful (scanned via the standard
-    // `meta::Meta` path), one shared `record-NNN.{toml,md}` stem, no runtime state
-    // tree. Their `outbound_for` arm (`relation_graph.rs`, L7) co-lands so the
-    // KINDS-driven dispatch stays total (a row with no arm panics every debug-build
-    // graph scan).
-    KindRef {
-        kind: &ASSUMPTION_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &DECISION_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &QUESTION_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &CONSTRAINT_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &EVIDENCE_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &HYPOTHESIS_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &CONCEPT_KIND,
-        state_dir: None,
-    },
-    KindRef {
-        kind: &CONCEPT_MAP_KIND,
-        state_dir: None,
-    },
-    // Revision (SL-066, ADR-013) — the REV change-axis kind. Status-ful (scanned via
-    // the standard id-only reader; its `revision-NNN.toml` carries `status`), stem
-    // `revision`, no runtime state tree (state_dir None). Its THREE corpus-walk arms
-    // (G1 `priority::partition` REV row, G2 `relation_graph::dep_seq_for` REV arm,
-    // G3 `relation_graph::outbound_for` REV arm) co-land with this row, or the
-    // debug-build corpus scan panics/mis-classifies the moment a REV is minted.
-    KindRef {
-        kind: &REV_KIND,
-        state_dir: None,
-    },
-    // RFC (SL-122) — the governance-neutral discussion kind. Status-ful (scanned via
-    // the standard meta::Meta path; its `rfc-NNN.toml` carries `status`), stem `rfc`,
-    // no runtime state tree. Its `outbound_for` arm co-lands with this row, or the
-    // debug-build corpus scan panics the moment an RFC is minted.
-    KindRef {
-        kind: &RFC_KIND.kind,
-        state_dir: None,
-    },
-];
 
 // ---------------------------------------------------------------------------
 // Pure check layer — facts in, findings out. No disk (design pure/impure split).
@@ -409,100 +254,9 @@ fn extract_entity_id(msg: &str, kind: &KindRef) -> Option<String> {
     None
 }
 
-/// The roster of kinds `validate` scanned, for the summary line (so the memory
-/// omission is visible, D-A).
-pub(crate) fn scanned_kinds() -> String {
-    KINDS
-        .iter()
-        .map(|k| k.kind.prefix)
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
 // ---------------------------------------------------------------------------
 // reseat — the D3 repair backstop (renumber an entity's canonical-id triple).
 // ---------------------------------------------------------------------------
-
-/// Resolve a numbered kind by its canonical prefix (`SL` → the slice [`KindRef`]).
-pub(crate) fn kind_by_prefix(prefix: &str) -> Option<&'static KindRef> {
-    KINDS.iter().find(|k| k.kind.prefix == prefix)
-}
-
-/// Validate that a canonical ref (`SL-024`) resolves to a real entity on disk —
-/// the forward-edge guard a kind reuses at authoring time (SL-040 §7: `review
-/// new` refuses a dangling / unknown-prefix `[target].ref` before minting an RV).
-/// Two failure modes, both surfaced by [`parse_canonical_ref`] + a dir probe: an
-/// unknown prefix / non-canonical shape, and a well-formed ref to an id with no
-/// entity directory (dangling). Read-only.
-pub(crate) fn ensure_ref_resolves(root: &Path, reference: &str) -> anyhow::Result<()> {
-    parse_resolvable_ref(root, reference)?;
-    Ok(())
-}
-
-/// Parse a canonical ref (`SL-031`) into its kind and numeric id. Reseat keys on
-/// the canonical ref, never a bare number (X2/D7) — the kind disambiguates the
-/// per-namespace id.
-pub(crate) fn parse_canonical_ref(reference: &str) -> anyhow::Result<(&'static KindRef, u32)> {
-    let (prefix, num) = reference
-        .rsplit_once('-')
-        .with_context(|| format!("`{reference}` is not a canonical ref (expected e.g. SL-031)"))?;
-    let kind = kind_by_prefix(prefix)
-        .with_context(|| format!("unknown kind prefix `{prefix}` in `{reference}`"))?;
-    let id = num
-        .parse::<u32>()
-        .with_context(|| format!("`{num}` is not a numeric id in `{reference}`"))?;
-    Ok((kind, id))
-}
-
-/// Parse an entity reference, accepting both canonical (`SL-031`) and bare (`31`)
-/// forms. For bare numbers, scans all entity kinds to find the matching entity
-/// directory. Returns the resolved kind and numeric id.
-pub(crate) fn parse_resolvable_ref(
-    root: &Path,
-    reference: &str,
-) -> anyhow::Result<(&'static KindRef, u32)> {
-    // Canonical form (has a hyphen) — parse, then verify the entity exists.
-    if reference.contains('-') {
-        let (kref, id) = parse_canonical_ref(reference)?;
-        let name = format!("{id:03}");
-        let dir = root.join(kref.kind.dir).join(&name);
-        anyhow::ensure!(
-            fsutil::is_real_dir(&dir),
-            "`{reference}` does not resolve to an entity (no {} at {})",
-            listing::canonical_id(kref.kind.prefix, id),
-            dir.display()
-        );
-        return Ok((kref, id));
-    }
-    // Bare number — scan all kinds for matching entity directories.
-    let id: u32 = reference.parse().with_context(|| {
-        format!("`{reference}` is not a valid entity reference (expected e.g. SL-031 or 31)")
-    })?;
-    let name = format!("{id:03}");
-    let mut matches: Vec<&'static KindRef> = Vec::new();
-    for kref in KINDS {
-        let dir = root.join(kref.kind.dir).join(&name);
-        if fsutil::is_real_dir(&dir) {
-            matches.push(kref);
-        }
-    }
-    match matches.as_slice() {
-        [] => anyhow::bail!(
-            "no entity found for bare id `{reference}` — try the prefixed form (e.g. SL-{name})"
-        ),
-        [single] => Ok((single, id)),
-        many => {
-            let ids: Vec<String> = many
-                .iter()
-                .map(|k| listing::canonical_id(k.kind.prefix, id))
-                .collect();
-            anyhow::bail!(
-                "bare id `{reference}` is ambiguous — matches {}; use the prefixed form",
-                ids.join(", ")
-            )
-        }
-    }
-}
 
 /// `doctrine reseat <CANONICAL_REF> [--to <NNN>]` — renumber an entity's
 /// canonical-id quad (dir name, the `<stem>-NNN.{toml,md}` filenames, the toml
@@ -730,6 +484,7 @@ fn line_cites(line: &str, needle: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kinds::{REVIEW_KIND, kind_by_prefix};
 
     fn snap(entities: Vec<(u32, u32)>, aliases: Vec<(u32, Option<u32>)>) -> KindSnapshot {
         KindSnapshot {
@@ -823,49 +578,6 @@ mod tests {
         assert!(diagnostics.is_empty());
         assert_eq!(snap.entities.len(), 1);
         assert_eq!(snap.entities[0].toml_id, 1);
-    }
-
-    /// SL-040 §7: `ensure_ref_resolves` accepts a real target, refuses a dangling
-    /// (well-formed but absent) ref and an unknown-prefix ref — the `review new`
-    /// forward-edge guard.
-    #[test]
-    fn ensure_ref_resolves_guards_the_forward_edge() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        let dir = root.join(".doctrine/slice/024");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("slice-024.toml"), "id = 24\n").unwrap();
-
-        assert!(ensure_ref_resolves(root, "SL-024").is_ok());
-        let dangling = ensure_ref_resolves(root, "SL-099").unwrap_err();
-        assert!(
-            dangling.to_string().contains("does not resolve"),
-            "{dangling}"
-        );
-        let unknown = ensure_ref_resolves(root, "ZZ-001").unwrap_err();
-        assert!(
-            unknown.to_string().contains("unknown kind prefix"),
-            "{unknown}"
-        );
-    }
-
-    #[test]
-    fn parse_canonical_ref_resolves_kind_and_id() {
-        let (kind, id) = parse_canonical_ref("SL-031").expect("valid ref");
-        assert_eq!(kind.kind.prefix, "SL");
-        assert_eq!(id, 31);
-        assert!(
-            parse_canonical_ref("031").is_err(),
-            "bare id is not canonical"
-        );
-        assert!(
-            parse_canonical_ref("ZZ-001").is_err(),
-            "unknown prefix rejected"
-        );
-        assert!(
-            parse_canonical_ref("SL-x").is_err(),
-            "non-numeric id rejected"
-        );
     }
 
     #[test]

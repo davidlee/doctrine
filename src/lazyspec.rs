@@ -674,7 +674,7 @@ fn load_spec(
 
 /// Load the ADR tree into flat [`EntityRecord`]s.
 fn load_adrs(root: &Path) -> anyhow::Result<Vec<EntityRecord>> {
-    let kind = &crate::adr::ADR_KIND.kind;
+    let kind = crate::adr::ADR_KIND.kind;
     let tree = root.join(kind.dir);
     let mut out = Vec::new();
     for id in crate::entity::scan_ids(&tree)? {

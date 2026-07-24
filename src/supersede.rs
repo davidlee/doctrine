@@ -132,7 +132,7 @@ mod tests {
     // --- supersede_policy tests (SL-095 PHASE-03) ---
 
     fn governance_kind(prefix: &str) -> &'static crate::entity::Kind {
-        for kref in crate::integrity::KINDS {
+        for kref in crate::kinds::KINDS {
             if kref.kind.prefix == prefix {
                 return kref.kind;
             }

@@ -15,25 +15,19 @@
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::entity::{self, Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{self, Artifact, Fileset, ScaffoldCtx};
 use crate::governance::{self, GovKind};
+#[cfg(test)]
+use crate::kinds::RFC_DIR;
 use crate::listing::{Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
-/// Relative dir of the RFC tree inside the project root. Distinct top-level
-/// tree — singular per design §3 (.doctrine/rfc).
-const RFC_DIR: &str = ".doctrine/rfc";
-
-/// The RFC governance descriptor the spine binds. `prefix` is the canonical-id
-/// stem (`RFC-007`); `stem` is the file/JSON stem (`"rfc"`). `pub(crate)` so
-/// `boot` etc. can access it.
+/// The RFC governance descriptor the spine binds. The plain identity lives in the
+/// leaf `kinds` module and is borrowed here (SL-204 PHASE-02) — one `Kind` value
+/// per kind, no copy. `pub(crate)` so `boot` etc. can access it.
 pub(crate) const RFC_KIND: GovKind = GovKind {
-    kind: Kind {
-        dir: RFC_DIR,
-        prefix: crate::kinds::RFC,
-        stem: "rfc",
-        scaffold: rfc_scaffold,
-    },
+    kind: &crate::kinds::RFC_KIND,
+    scaffold: rfc_scaffold,
     statuses: RFC_STATUSES,
     hidden: is_hidden,
 };
@@ -97,16 +91,16 @@ fn render_rfc_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 
 /// The RFC fileset: sister TOML, prose body — no symlink (RFCs are simpler than
 /// governance kinds; design §3 omits a slug symlink as unnecessary). Bound as
-/// `RFC_KIND.kind.scaffold`.
+/// `RFC_KIND.scaffold`.
 fn rfc_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let id = ctx.id;
     Ok(vec![
         Artifact::File {
-            rel_path: entity::rel_path(&RFC_KIND.kind, id, entity::Ext::Toml),
+            rel_path: entity::rel_path(RFC_KIND.kind, id, entity::Ext::Toml),
             body: render_rfc_toml(id, ctx.slug, ctx.title, ctx.date)?,
         },
         Artifact::File {
-            rel_path: entity::rel_path(&RFC_KIND.kind, id, entity::Ext::Md),
+            rel_path: entity::rel_path(RFC_KIND.kind, id, entity::Ext::Md),
             body: render_rfc_md(ctx.canonical, ctx.title)?,
         },
     ])
@@ -369,7 +363,7 @@ mod tests {
              id = {id}\nslug = \"{slug}\"\ntitle = \"{title}\"\n\
              status = \"{status}\"\ncreated = \"2026-06-04\"\nupdated = \"2026-06-04\"\n"
         );
-        let toml_path = entity::id_path(root, &RFC_KIND.kind, id, entity::Ext::Toml);
+        let toml_path = entity::id_path(root, RFC_KIND.kind, id, entity::Ext::Toml);
         std::fs::write(&toml_path, toml).unwrap();
     }
 

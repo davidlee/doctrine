@@ -511,8 +511,10 @@ pub(crate) fn dispatch(cmd: SliceCommand, color: bool) -> anyhow::Result<()> {
 
 // ---------------------------------------------------------------------------
 
-/// Relative dir of the slice tree inside the project root.
-const SLICE_DIR: &str = ".doctrine/slice";
+/// Relative dir of the slice tree inside the project root. The identity value
+/// lives in the leaf `kinds` module (SL-204 PHASE-02); re-exported for the
+/// module-local design/plan/notes sub-kinds that nest under it.
+pub(crate) use crate::kinds::SLICE_DIR;
 
 /// clap `ArgGroup` id for `record-delta`'s two mutually exclusive recording modes
 /// — the safe `--commit <S>` vs the raw `--start/--end` range (STD-001, design
@@ -525,20 +527,15 @@ const RECORD_DELTA_MODE: &str = "record-delta-mode";
 /// Must match the key the PHASE-01 master ships (R5/POL-002: no unshipped key).
 const CLOSE_DRIFT_RECIPE_MEMORY: &str = "mem.pattern.doctrine.close-drift-discharge-rec";
 
-/// The top-level reserved slice kind: toml + md + slug symlink.
-pub(crate) const SLICE_KIND: Kind = Kind {
-    dir: SLICE_DIR,
-    prefix: crate::kinds::SL,
-    stem: "slice",
-    scaffold: slice_scaffold,
-};
+/// The top-level reserved slice kind: toml + md + slug symlink. The identity
+/// value lives in the leaf `kinds` module (SL-204 PHASE-02).
+pub(crate) use crate::kinds::SLICE_KIND;
 
 /// The non-reserved design-doc sibling: one `design.md` under an existing slice.
 const DESIGN_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: crate::kinds::SL,
     stem: "",
-    scaffold: design_scaffold,
 };
 
 /// The implementation-plan facet: `plan.toml` (authored relational `plan.overview`
@@ -548,7 +545,6 @@ const PLAN_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: crate::kinds::SL,
     stem: "",
-    scaffold: plan_scaffold,
 };
 
 /// The durable per-slice notes scratchpad: one `notes.md` under an existing
@@ -557,7 +553,6 @@ const NOTES_KIND: Kind = Kind {
     dir: SLICE_DIR,
     prefix: crate::kinds::SL,
     stem: "",
-    scaffold: notes_scaffold,
 };
 
 // ---------------------------------------------------------------------------
@@ -695,6 +690,7 @@ pub(crate) fn run_new(
     let date = crate::clock::today();
     let out = entity::materialise(
         &SLICE_KIND,
+        slice_scaffold,
         &*backend,
         &root,
         &MaterialiseRequest::Fresh,
@@ -725,6 +721,7 @@ pub(crate) fn run_design(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let date = crate::clock::today();
     let out = entity::materialise(
         &DESIGN_KIND,
+        design_scaffold,
         &LocalFs,
         &root,
         &MaterialiseRequest::InExisting { id },
@@ -754,6 +751,7 @@ pub(crate) fn run_plan(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let date = crate::clock::today();
     let out = entity::materialise(
         &PLAN_KIND,
+        plan_scaffold,
         &LocalFs,
         &root,
         &MaterialiseRequest::InExisting { id },
@@ -856,6 +854,7 @@ pub(crate) fn run_notes(path: Option<PathBuf>, id: u32) -> anyhow::Result<()> {
     let date = crate::clock::today();
     let out = entity::materialise(
         &NOTES_KIND,
+        notes_scaffold,
         &LocalFs,
         &root,
         &MaterialiseRequest::InExisting { id },
@@ -3372,6 +3371,7 @@ mod tests {
     fn make_slice(root: &Path, slug: &str, title: &str, date: &str) -> entity::Materialised {
         entity::materialise(
             &SLICE_KIND,
+            slice_scaffold,
             &LocalFs,
             root,
             &MaterialiseRequest::Fresh,
@@ -3556,6 +3556,7 @@ mod tests {
 
         let out = entity::materialise(
             &DESIGN_KIND,
+            design_scaffold,
             &LocalFs,
             root,
             &MaterialiseRequest::InExisting { id: 1 },
@@ -3586,6 +3587,7 @@ mod tests {
 
         let err = entity::materialise(
             &DESIGN_KIND,
+            design_scaffold,
             &LocalFs,
             root,
             &MaterialiseRequest::InExisting { id: 1 },
@@ -3616,6 +3618,7 @@ mod tests {
 
         let out = entity::materialise(
             &PLAN_KIND,
+            plan_scaffold,
             &LocalFs,
             root,
             &MaterialiseRequest::InExisting { id: 1 },
@@ -3648,6 +3651,7 @@ mod tests {
 
         let err = entity::materialise(
             &PLAN_KIND,
+            plan_scaffold,
             &LocalFs,
             root,
             &MaterialiseRequest::InExisting { id: 1 },
@@ -3680,6 +3684,7 @@ mod tests {
 
         entity::materialise(
             &NOTES_KIND,
+            notes_scaffold,
             &LocalFs,
             root,
             &MaterialiseRequest::InExisting { id: 1 },
@@ -3707,6 +3712,7 @@ mod tests {
 
         let err = entity::materialise(
             &NOTES_KIND,
+            notes_scaffold,
             &LocalFs,
             root,
             &MaterialiseRequest::InExisting { id: 1 },

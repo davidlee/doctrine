@@ -16,27 +16,18 @@
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use crate::entity::{Artifact, Fileset, Kind, ScaffoldCtx};
+use crate::entity::{Artifact, Fileset, ScaffoldCtx};
 use crate::governance::{self, GovKind};
 use crate::listing::{Format, ListArgs};
 use crate::tomlfmt::toml_string;
 
-/// Relative dir of the policy tree inside the project root. Distinct top-level
-/// tree (project-global governance), mirroring `.doctrine/adr`.
-const POLICY_DIR: &str = ".doctrine/policy";
-
-/// The policy governance descriptor the spine binds. `prefix` is the canonical-id
-/// stem (`POL-007`); `stem` is the file/JSON stem (`"policy"`) — policy is the
-/// first kind where `stem != prefix.to_lowercase()` (design §10 R3), validating
-/// the explicit field. `pub(crate)` so `boot` projects policy rows via
+/// The policy governance descriptor the spine binds. The plain identity lives in
+/// the leaf `kinds` module and is borrowed here (SL-204 PHASE-02) — one `Kind`
+/// value per kind, no copy. `pub(crate)` so `boot` projects policy rows via
 /// `governance::list_rows(&policy::POLICY_KIND, …)` (SL-030 PHASE-04).
 pub(crate) const POLICY_KIND: GovKind = GovKind {
-    kind: Kind {
-        dir: POLICY_DIR,
-        prefix: crate::kinds::POL,
-        stem: "policy",
-        scaffold: policy_scaffold,
-    },
+    kind: &crate::kinds::POLICY_KIND,
+    scaffold: policy_scaffold,
     statuses: POLICY_STATUSES,
     hidden: is_hidden,
 };
@@ -107,7 +98,7 @@ fn render_policy_md(canonical_id: &str, title: &str) -> anyhow::Result<String> {
 
 /// The policy fileset: sister TOML, prose body, and `<id>-<slug>` symlink, all
 /// relative to the policy tree root. Structurally `adr_scaffold`. Bound as
-/// `POLICY_KIND.kind.scaffold`.
+/// `POLICY_KIND.scaffold`.
 fn policy_scaffold(ctx: &ScaffoldCtx<'_>) -> anyhow::Result<Fileset> {
     let id = ctx.id;
     let name = format!("{id:03}");

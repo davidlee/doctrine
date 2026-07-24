@@ -33,7 +33,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::CommonListArgs;
-use crate::entity::{self, Kind, Materialised};
+use crate::entity::{self, Materialised};
 use crate::listing::{self, Column, Format, ListArgs};
 use crate::requirement::ReqStatus;
 use crate::tomlfmt::toml_string;
@@ -458,25 +458,15 @@ pub(crate) struct RevDoc {
 
 /// Relative dir of the REV tree inside the project root — a distinct top-level
 /// authored tree (design §4.1), parallel to `.doctrine/rec`.
-pub(crate) const REV_DIR: &str = ".doctrine/revision";
+pub(crate) use crate::kinds::REV_DIR;
 
 /// The REV kind: `revision-NNN.toml` + `revision-NNN.md` + `NNN-slug` symlink,
-/// riding the kind-blind engine. The scaffold is inert — REV's fields exceed
-/// `ScaffoldCtx` (`status`/`approval`/seeded dep/seq/future `[[change]]`), so it
-/// renders its fileset eagerly in [`run_new`] (the rec rationale); this stub exists
-/// only to satisfy the `Kind` descriptor `integrity::KINDS` references.
-pub(crate) const REV_KIND: Kind = Kind {
-    dir: REV_DIR,
-    prefix: crate::kinds::REV,
-    stem: "revision",
-    scaffold: rev_scaffold_unused,
-};
-
-/// Inert scaffold — see [`REV_KIND`]. REV never rides `Kind.scaffold`; this is the
-/// descriptor stub.
-fn rev_scaffold_unused(_ctx: &entity::ScaffoldCtx<'_>) -> anyhow::Result<entity::Fileset> {
-    anyhow::bail!("revision materialises eagerly, not via Kind.scaffold")
-}
+/// riding the kind-blind engine. REV's fields exceed `ScaffoldCtx`
+/// (`status`/`approval`/seeded dep/seq/future `[[change]]`), so it renders its
+/// fileset eagerly in [`run_new`] via `materialise_fresh_prebuilt` (the rec
+/// rationale) — it never rides a scaffold fn and carries none. The identity
+/// value lives in the leaf `kinds` module (SL-204 PHASE-02).
+pub(crate) use crate::kinds::REV_KIND;
 
 /// Render `revision-NNN.toml` from the embedded template (design §4.1). Every
 /// user-supplied string (`slug`/`title`) is spliced through `toml_string`, so a
@@ -709,8 +699,7 @@ pub(crate) fn run_new(
     // Validate and canonicalise the optional originates-from ref.
     let rfcref: Option<String> = match originates_from {
         Some(raw) => {
-            use crate::integrity;
-            let (kref, id) = integrity::parse_canonical_ref(raw)
+            let (kref, id) = crate::kinds::parse_canonical_ref(raw)
                 .map_err(|e| anyhow::anyhow!("invalid --originates-from `{raw}`: {e}"))?;
             anyhow::ensure!(
                 kref.kind.prefix == "RFC",
@@ -718,7 +707,7 @@ pub(crate) fn run_new(
                 kref.kind.prefix
             );
             let canonical = crate::listing::canonical_id(kref.kind.prefix, id);
-            integrity::ensure_ref_resolves(&root, &canonical).map_err(|e| {
+            crate::kinds::ensure_ref_resolves(&root, &canonical).map_err(|e| {
                 anyhow::anyhow!("--originates-from `{canonical}` does not resolve: {e}")
             })?;
             Some(canonical)
@@ -1073,13 +1062,13 @@ fn build_creation_row(root: &Path, args: &ChangeAddArgs) -> anyhow::Result<Chang
             args.action.as_str()
         )
     })?;
-    let (kref, _) = crate::integrity::parse_canonical_ref(&member_of)?;
+    let (kref, _) = crate::kinds::parse_canonical_ref(&member_of)?;
     anyhow::ensure!(
         kref.kind.prefix == "SPEC",
         "`--member-of` must name a SPEC, got a {}",
         kref.kind.prefix
     );
-    crate::integrity::ensure_ref_resolves(root, &member_of)?;
+    crate::kinds::ensure_ref_resolves(root, &member_of)?;
 
     Ok(ChangeRow {
         target: None,
@@ -1117,11 +1106,11 @@ fn build_existing_target_row(
 
     // Validate the target against the `revises` rule: kind ∈ the six authored-truth
     // kinds (off-target — e.g. `revises SL-001` — refused), then existence.
-    let (kref, _) = crate::integrity::parse_canonical_ref(&target)?;
+    let (kref, _) = crate::kinds::parse_canonical_ref(&target)?;
     let rule = crate::relation::lookup(&REV_KIND, crate::relation::RelationLabel::Revises, None)
         .context("internal: missing `revises` rule row")?;
     crate::relation::check_target_kind(rule, &REV_KIND, kref.kind.prefix)?;
-    crate::integrity::ensure_ref_resolves(root, &target)?;
+    crate::kinds::ensure_ref_resolves(root, &target)?;
 
     // OQ-1 — the change is named once per target: refuse a second row of the same
     // (action, target). (Against the table shape: existing-target ops key on the FK, so
