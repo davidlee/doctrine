@@ -1,0 +1,112 @@
+# Implementation plan for SL-227 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-227"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Design canon: .doctrine/slice/227/design.md (RV-299 integrated, Option A).
+# Phase order enforces the pairing invariant: the read path (P01 engine, P02
+# veneer+manifest) lands before the cut (P03 flip); P03's derived gate proves it.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Publication engine additions (additive)"
+objective = """
+Extend publication.rs (+ leaf asset_source) additively so the library veneer can \
+render entry metadata and probe availability, without touching resolve/emit \
+behaviour or projection. Structured PublicationEntry accessors, a SourceAdapter \
+existence probe, Resolver::available, and an additively-widened ContentKind. \
+Behaviour-preservation: every existing publication + install test stays green \
+unchanged (ADR-019 embedding/publication/projection independence; ADR-001 \
+leaf<-engine layering)."""
+entrance_criteria = [
+  { id = "EN-1", text = "Design locked (design → plan); RV-299 integrated; SL-223 publication substrate (Resolver/PublicationEntry/EmbeddedAdapter) present in src/publication.rs." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "PublicationEntry exposes title/kind/licence/customization accessors; SourceAdapter gains exists(backing)->bool (EmbeddedAdapter via asset_source::exists); Resolver::available(&PublicationEntry)->bool." },
+  { id = "EX-2", text = "ContentKind widened additively to {Template, Reference, Guidance, Integration} — STD-001 named variants, no external exhaustive match broken." },
+  { id = "EX-3", text = "No change to resolve/emit signatures or LogicalAddress; backing stays private. All publication VT-1..6 and install mechanism tests green UNCHANGED (behaviour-preservation gate)." },
+]
+verification = [
+  { id = "VT-1", expects = "Accessors + availability probe exist on the engine types: title/kind/licence/customization readers, SourceAdapter::exists, Resolver::available.", test_file = "src/publication.rs", keywords = ["fn title", "fn kind", "fn customization", "fn available", "fn exists"], patterns = ["^\\s*(pub\\(crate\\) )?fn (title|kind|customization|available|exists)"], waived = false },
+  { id = "VT-2", expects = "ContentKind carries the widened closed set of variants.", test_file = "src/publication.rs", keywords = ["enum ContentKind", "Reference", "Guidance", "Integration"], waived = false },
+  { id = "VT-3", expects = "Leaf existence probe over the install embed without materializing bytes.", test_file = "src/asset_source.rs", keywords = ["fn exists"], patterns = ["^\\s*pub\\(crate\\) fn exists"], waived = false },
+  { id = "VA-1", expects = "Diff review confirms publication VT-1..6 and install mechanism test BODIES are unchanged (green-unchanged, not merely green) — the additive-only claim." },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Library read surface + full-complement publication manifest"
+objective = """
+Land `doctrine library {list,tree,show}` as a pure read veneer over the Resolver, \
+and grow publication/manifest.toml from the SL-223 templates-only stub to the FULL \
+projection complement (every install/ asset the flip will drop, all licence=MIT). \
+This completes the read path BEFORE any file stops landing. show streams byte-exact \
+and reports the four reachable error classes distinctly; list/tree filter by logical \
+prefix, mark unavailable entries, and carry the house --format/--json. NF-002 \
+read-only is structural; FR-001 manifest is sole authority."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 exited — accessors, SourceAdapter::exists, Resolver::available, widened ContentKind available." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "src/library.rs provides load_resolver + run_list/run_tree/run_show; main.rs wires `doctrine library {list,tree,show}`; list/tree carry --format/--json (Format enum, main.rs), show streams raw bytes via Resolver::emit to stdout.lock()." },
+  { id = "EX-2", text = "show maps the four REACHABLE error classes to distinct stderr + non-zero exit: TraversalRejected, UnknownAddress, BackingSourceMissing, malformed-policy (MalformedManifest/ManifestAssetMissing). Never a silent empty." },
+  { id = "EX-3", text = "publication/manifest.toml declares every install/ asset in {embedded_filenames()} that is NOT in the projected base — the full complement (~70 entries), each licence=MIT/declared; every declared entry's backing resolves (no hollow entry)." },
+  { id = "EX-4", text = "FR-001 sole-authority: an embedded-but-undeclared asset is invisible to every library verb. NF-002: no reachable write path from any library verb (byte-unchanged over a clean repo across list/tree/show incl. failure paths)." },
+]
+verification = [
+  { id = "VT-1", expects = "library show round-trips a published asset byte-exact via the Resolver.", test_file = "src/library.rs", keywords = ["fn run_show", "LogicalAddress", "emit"], waived = false },
+  { id = "VT-2", expects = "show maps each of the four reachable error classes to a distinct diagnostic + non-zero.", test_file = "src/library.rs", keywords = ["TraversalRejected", "UnknownAddress", "BackingSourceMissing", "MalformedManifest"], waived = false },
+  { id = "VT-3", expects = "list/tree render metadata, filter by logical prefix, mark unavailable entries, and honour --format/--json.", test_file = "src/library.rs", keywords = ["fn run_list", "fn run_tree", "available", "Format"], waived = false },
+  { id = "VT-4", expects = "Every shipped publication entry resolves — the manifest declares only real (non-hollow) backings.", test_file = "src/publication.rs", keywords = ["fn available", "entries()"], patterns = ["licence=MIT"], waived = false },
+  { id = "VT-5", expects = "FR-001 sole authority — an embedded-but-undeclared asset does not appear in library list.", test_file = "src/library.rs", keywords = ["fn run_list", "undeclared"], waived = false },
+  { id = "VT-6", expects = "NF-002 structural no-write — every library verb (incl. failure paths) leaves a clean repo byte-unchanged.", test_file = "src/library.rs", keywords = ["byte", "unchanged"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Minimal-projection install flip"
+objective = """
+Cut the base install to the three-file [base] set, gate the eager memory seed, and \
+prove — with a DERIVED gate — that everything the cut drops is reachable via the \
+library. install/manifest.toml gains a [base] section; new embeds install/doctrine.toml \
+and install/project-orientation.md ship; build_plan leg 2 reads [base] instead of \
+embedded_filenames(); the eager [dirs].create is trimmed (FR-008 lazy via entity.rs); \
+seed_authoring_memories is gated (D8). The projection-RESULT tests flip; the embed \
+tests stay green (they test embedding, not projection). The crux: a test asserts \
+{embedded_filenames()} - {base backings} ⊆ {published backings}."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 exited — the read path is complete: the full projection complement is published and every entry resolves. The cut may now land safely." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A fresh install lands EXACTLY {.gitignore, doctrine.toml, project-orientation.md} and NO memory entity (FR-007; seed gated per D8). project-orientation.md carries the orientation content the eager seed used to." },
+  { id = "EX-2", text = "build_plan leg 2 reads manifest [base]; embedded_filenames() no longer drives projection (FR-007 'not from embed contents'). install/manifest.toml [base] deserializes onto the Manifest struct." },
+  { id = "EX-3", text = "Derived no-silent-unreachable gate GREEN: {embedded_filenames()} - {base backings} is a subset of {published backings}. A future added install asset that is neither base nor published reddens it." },
+  { id = "EX-4", text = "NF-004: no auxiliary asset projected by default, but a detected harness still installs its adapter (detect_agents forward legs survive). FR-008: entity roots appear on first scaffold. NF-005: project-governance.md is absent (not projected)." },
+]
+verification = [
+  { id = "VT-1", expects = "Fresh install plan/execute yields exactly the three-file base and seeds no memory entity.", test_file = "src/install.rs", keywords = ["project-orientation.md", "doctrine.toml", "base"], patterns = ["fn .*base.*install|fn .*three_file|fn .*minimal"], waived = false },
+  { id = "VT-2", expects = "The crux derived gate: every embedded non-base backing is declared in the publication manifest (delta ⊆ published).", test_file = "src/install.rs", keywords = ["embedded_filenames", "published", "backing"], patterns = ["fn .*unreachable|fn .*reachab|fn .*complement"], waived = false },
+  { id = "VT-3", expects = "build_plan leg 2 reads the manifest [base] set, not embedded_filenames().", test_file = "src/install.rs", keywords = ["build_plan", "base"], waived = false },
+  { id = "VT-4", expects = "The eager memory seed is gated under minimal projection — no memory entity on a base install.", test_file = "src/install.rs", keywords = ["seed_authoring_memories"], waived = false },
+  { id = "VT-5", expects = "NF-004 harness survival — a detected harness still installs its adapter after the flip.", test_file = "src/install.rs", keywords = ["detect_agents"], waived = false },
+  { id = "VH-1", expects = "A real `doctrine install` into a scratch directory lands the minimal three-file base and nothing else — human end-to-end acceptance." },
+]
+specs        = []
+requirements = []
