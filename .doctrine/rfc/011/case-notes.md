@@ -1522,3 +1522,45 @@ or trains workers to ignore the guard.
   prose would silently drop binding constraints from a research round. Requirement
   prose needs to be reachable from the req surface, or `req list` should at least
   signal "prose lives elsewhere" rather than rendering an unqualified `—`.
+
+## [spec-tech; CHR-046-spec027-2026-07-26]
+
+**1. The boot snapshot's command tree implies a subcommand that does not exist.**
+The Commands block renders `explore` as a group heading with
+`search inspect relation concept-map graph map onboard` indented beneath it —
+the same visual shape as `slice`, `review`, `memory`, which *are* real parent
+verbs. But `explore` is a documentation grouping only; `doctrine explore inspect
+IDE-015` errors with `unrecognized subcommand 'explore'`. Cost: one failed
+six-ref loop (every ref reported MISSING — a *plausible* result, which is the
+dangerous part), then a debug round to discover the shape. The same trap exists
+for `governance`, `relations`, `facets`, `reports`, `knowledge`, `infra`. Either
+mark the pure groupings visually distinct from real parent verbs, or make them
+real no-op parents.
+
+**2. Requirement acceptance criteria have no write surface at all.** `spec req
+add` reserves id + title + kind and nothing else; `description` and
+`acceptance_criteria` are hand-edited into each `requirement-NNN.toml`. For a
+7-requirement spec that is 7 Read+Edit pairs, or (what I did) writing a
+throwaway Python script with a scaffold assertion. Both are pure ceremony
+against a closed, known schema. This is the third distinct `spec req` friction
+note in this file — the first two were about *reading* requirement prose
+(`req list` renders `—`); this is the write half of the same gap.
+
+**3. A handover asserting "settled, do not reopen" mixed a real decision with a
+derived fact.** The packet fixed SPEC-027's anchor set at two files as part of
+the settled boundary. The boundary *was* settled and correct; the anchor set was
+not — `src/catalog/dot.rs` (719 loc, the pure DOT emitter SL-226 PHASE-03
+delivered) sits squarely inside it, is governed by nothing else, and is not
+covered by any module-root anchor. Honouring the instruction literally would
+have shipped a new spec with a fresh coverage hole, in the very session
+chartered to close coverage holes. Handover packets should separate *decisions*
+(which a receiving agent must not relitigate) from *derived facts* (which it
+must re-verify) — an undifferentiated "settled" list invites one or the other
+error.
+
+**4. `git commit <path>` cannot commit an untracked file.** The house rule is
+path-limit the commit itself, not just the add — correct, but for new entities
+it still needs `git add <paths>` first, or the commit fails with `pathspec did
+not match any file(s) known to git`. Cost one round per new-entity commit (twice
+this session). Worth stating explicitly in AGENTS.md beside the existing rule,
+since entity-creating verbs always produce untracked files plus a symlink.
