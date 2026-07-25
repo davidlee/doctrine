@@ -5,11 +5,11 @@ id = 240
 slug = "worker-mode-guard-resolves-root-from-cwd-ignoring-p"
 title = "Worker-mode guard resolves root from CWD, ignoring -p"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "closed"
+resolution = "duplicate"
 created = "2026-07-25"
 updated = "2026-07-25"
-tags = []
+tags = ["next"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
 # — `originates_from` for backlog→slice provenance — governed_by, related, drift) are

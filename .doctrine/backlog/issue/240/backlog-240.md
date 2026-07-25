@@ -1,5 +1,10 @@
 # ISS-240: Worker-mode guard resolves root from CWD, ignoring -p
 
+> **CLOSED — duplicate of [[ISS-028]]** (filed 2026-06-19, same symptom).
+> Filed in error: the backlog was not scanned before capture. The root-cause
+> diagnosis below has been folded into ISS-028 § "Sharper diagnosis"; read it
+> there. Kept for the id trail only.
+
 <!-- Backlog item body — context, detail, links. The structured, queried fields
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
      structurally parsed (the storage rule). -->
