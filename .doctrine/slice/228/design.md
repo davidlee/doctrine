@@ -239,23 +239,32 @@ convention).
   full prefix (`Spawn` + `RecordWorkerCommit`) **only from the durable fork
   binding**: `DispatchRecord` gains `slice` + `phase` fields, snapshotted by
   the trusted create-fork path exactly as `base` already is — and the record
-  write moves **before** the worktree-mutating act (**record-before-act**,
-  RV-304 F-2: today `create.rs` writes it *after* `fork_core`, leaving a crash
-  window in which a live fork exists with no binding — permanently
-  `unprovable-fork`). Reordered, a crash between record write and fork leaves
-  only an **orphan record** (harmless: resolution keys on the live worktree
-  first; gc sweeps it), so **a live fork implies its binding exists**. The
-  reordered write is **no-clobber-unless-orphan** (RV-304 F-2 contest: the
-  write sits *ahead* of `fork_core`'s dir/branch collision refusals, and
-  today's `write_atomic` overwrites unconditionally — a colliding spawn would
-  replace a LIVE fork's binding and only then be refused): provision refuses
-  when a record for that name exists **and** its worktree is live (one
-  liveness read — the same fact resolution already keys on); only an orphan
-  record (crash residue, no live worktree) is replaced, which keeps the
-  crash-retry legal. A colliding spawn against a live fork thus refuses at
-  the record write, before any clobber; `fork_core`'s own collision gate
-  still owns the no-record collision cases (no parallel re-check of
-  dir/branch existence). Honest
+  write moves **before** the worktree-mutating act (RV-304 F-2: today
+  `create.rs` writes it *after* `fork_core`, leaving a crash window in which
+  a live fork exists with no binding — permanently `unprovable-fork`), with
+  the fork sequence restructured around **branch-as-claim** (F-2 contests:
+  a plain reorder lets a colliding spawn clobber a live fork's binding, and
+  a liveness-read-then-replace is a TOCTOU under concurrent same-name
+  spawns — the claim must be one atomic op, and the repo already owns one):
+
+  1. **claim** — create the branch ref at `base` (git ref creation is
+     atomic; `fork_core`'s existing `branch exists` refusal *is* the claim
+     gate — exactly one concurrent same-name spawn wins, the loser refuses);
+  2. **bind** — write the `DispatchRecord` under the held claim: no
+     concurrent writer for the name can exist (a spawn never adopts an
+     existing branch), so no clobber path exists — the write keeps a
+     no-clobber belt regardless;
+  3. **act** — create the worktree last, so **a live fork implies its
+     binding exists by construction**.
+
+  Crash residues (branch-only, or branch⊕record without a worktree) are
+  inert — never a live fork, `worker_commit`/import refuse on their own
+  gates; a same-name retry refuses at the claim and the refusal prescribes
+  the gc sweep (gc already owns record deletion — "no record survives
+  without a live worktree" — and gains the branch-residue sweep). A residue
+  can never acquire a worktree concurrently with its sweep, because
+  acquiring one would require winning a claim the residue still holds
+  (zero-rescue: refusal + prescription, never inline replace). Honest
   tier claim: the binding is a crash-durable *local file* in the coord's
   runtime-state tier, **not a git fact** — destroying that tier under a live
   fork ⇒ `unprovable-fork`, the deliberate triage beat (zero-rescue never
@@ -535,7 +544,7 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
 | `src/worktree/dispatch_record.rs` | `DispatchRecord` gains `slice` + `phase` (fork-creation snapshot — the durable fork binding; F-4); resolver/classifier gains the caller-declared **expected fork state** (`AtBase` \| `Advanced` — RV-304 F-7). `arm-spawn` / `worktree fork --worker` gain the phase argument |
 | `src/verify.rs` + `src/commands/check.rs` | runner extraction: status-returning `run_suite` callable below command tier; `check.rs` thin exit-forwarding shell (F-10) |
 | `.doctrine/adr/001/layering.toml` | `funnel_machine = "leaf"` row — the pure-leaf claim gated by the architecture-layering check, not prose (F-12) |
-| `src/worktree/create.rs` | **record-before-act reorder**: `provision_dispatch_record` moves ahead of `fork_core`, and the record write gains **no-clobber-unless-orphan** semantics (liveness-keyed — RV-304 F-2 + contest) |
+| `src/worktree/create.rs` + `src/worktree/fork.rs` | **branch-as-claim fork sequence** (RV-304 F-2 + contests): claim (atomic branch create) → bind (record write under the claim, no-clobber belt) → act (worktree last); gc gains the branch-residue sweep |
 | `src/commands/` | CLI wiring: `dispatch verify\|next\|commit\|tree-state\|delta\|whereami\|history\|ignored\|hook-check`; `arm-spawn` spawn-row; `record-boundary` reroute |
 | `src/dispatch_config.rs` | `[dispatch] verify_suite` key |
 | `src/doctor_checks.rs` | hook-present + worktreeConfig checks for live coord worktrees |
@@ -552,12 +561,16 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
   **lost-response import retry** (RV-304 F-1): CAS landed, reply lost,
   re-drive `dispatch_import` ⇒ no-op replay on matching `fork_tip` despite the
   freshly derived `onto`; distinct from the pre-CAS lost-ref-race retry (acts
-  onto the new tip). VT — **record-before-act** (RV-304 F-2): kill between
-  record write and fork ⇒ orphan record only (gc sweeps, nothing to heal);
+  onto the new tip). VT — **branch-as-claim** (RV-304 F-2): kill between the
+  claim/bind steps and the worktree act ⇒ inert residue (branch⊕record,
+  never a live fork; gc sweeps; retry refuses at the claim);
   any live fork resolves its binding — driven through the production resolver
-  with the `Advanced` expectation (RV-304 F-7), not a test-local read; a
-  **colliding spawn against a live fork refuses at the record write and
-  leaves the original binding byte-identical** (F-2 contest). VT — a
+  with the `Advanced` expectation (RV-304 F-7), not a test-local read;
+  **two concurrent same-name spawns ⇒ exactly one wins the atomic branch
+  claim**, the loser refuses, and the winner's worktree pairs with the
+  binding written under its own claim — the original binding stays
+  byte-identical under any collision (F-2 contests); a crash-residue retry
+  refuses at the claim naming the gc sweep. VT — a
   **fresh verify pass concludes** (the evidence commit never self-stales) and
   an unrelated post-verify commit refuses `conclude-verify-stale` (F-1). VT —
   conclude kill-window: kill between boundary⊕position CAS and sheet
