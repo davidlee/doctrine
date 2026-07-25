@@ -5,7 +5,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/audit/SKILL.md",
-      "computedHash": "eca338c1863dd9a647f7203f0f8c913477210d23f6b344925a0904bcb04fd2df"
+      "computedHash": "b1b5ddd4dce583078f5ec591514dfee814e7d589492e013d8f82d5a074a08e1d"
     },
     "backlog": {
       "source": "davidlee/doctrine",
@@ -23,13 +23,13 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/close/SKILL.md",
-      "computedHash": "4377558cf1145860edfc5cf02e871011abd7ee777462468bbe5d783fa36f3937"
+      "computedHash": "113a1417a9ae2f1bd53ae9f8c921d858fd57c4062c564a90b4271080f963b9ce"
     },
     "code-review": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/code-review/SKILL.md",
-      "computedHash": "1d8761956629a21585d84697d21e1c8a261e78deff0e4c7dda8b90c7ed2e4374"
+      "computedHash": "cd9cd2fb02c27c5fa81c3edc5eab9209f58b26f0c90251c7a779dcf3335cb3a6"
     },
     "consult": {
       "source": "davidlee/doctrine",
@@ -41,13 +41,13 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/design/SKILL.md",
-      "computedHash": "7419d050d8e350f43a7df068096082996c1d574b40dd87667689be4637002d6d"
+      "computedHash": "80736c8c2cbc2fbb0981417eb86e3c01ecbbec9c159fec9db35930e9dc602e74"
     },
     "dispatch": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/dispatch/SKILL.md",
-      "computedHash": "33c60b3e5dbbe260aa639778d6929f226ec3219c97547296274046997a1f653b"
+      "computedHash": "1bb05c9be6a931d5a5b8cb4a4cfe79356c5f1cbbb7d41b3311075bffafc51e44"
     },
     "dispatch-agent": {
       "source": "davidlee/doctrine",
@@ -77,25 +77,31 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/execute/SKILL.md",
-      "computedHash": "056badf4d818cc701a2d60c32f40428d493a5a1047d3ba9ab018380821df1350"
+      "computedHash": "2f3bb2fcddf2d17f4c3a543fd335e88136dd7f216a68090b839649a61aff51b6"
     },
     "feedback": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/feedback/SKILL.md",
-      "computedHash": "a0d0ecfb81fa3243a9787b7abbbc77d61a5aa93ca9b50f03cc57b772e8e04a35"
+      "computedHash": "97d0bffd274a7270d1cdad82b862fb5eb318c6e22e11142dae92950db5a989b6"
     },
     "handover": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/handover/SKILL.md",
-      "computedHash": "80e402d3fcf567e5a9c484689e7efff7f51028c4f7ae82a387c61111e283a85c"
+      "computedHash": "1225ce0e54d0fc5de7a91f7016fda4bf648db933dd1f2eda9d825946063d01f9"
+    },
+    "harvest": {
+      "source": "davidlee/doctrine",
+      "sourceType": "github",
+      "skillPath": "plugins/doctrine/skills/harvest/SKILL.md",
+      "computedHash": "ad8a9c712231550b43f23a6568465b206181dc59f3611f4aa2e005b5c45b4d25"
     },
     "inquisition": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/inquisition/SKILL.md",
-      "computedHash": "c978865b24b43ef04be5d60915387bb0ba99c9c8c452797b813cd21ed9735904"
+      "computedHash": "83c66b2cdc74da87f9609b274b166530ec9e50bffc62151f3a6f42e861c965c3"
     },
     "knowledge": {
       "source": "davidlee/doctrine",
@@ -125,13 +131,13 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/phase-plan/SKILL.md",
-      "computedHash": "9d5a2893f1381f0124a261f59e4676c08788678edb4b7be358fda0a23672ae79"
+      "computedHash": "c0e05a3be2dabb597c4aa0629f0964b6ec44e1504c0ee1910631f83eec3f5372"
     },
     "plan": {
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/plan/SKILL.md",
-      "computedHash": "1b52b83a6303a679ed9b4df960cdb970b7cd2abde8ff5419aa4f0a24bafe1ba7"
+      "computedHash": "42f53a2fdad3c1b4e6643e974ca7b5481e46979374bc6f2dd660c0b263a184b5"
     },
     "preflight": {
       "source": "davidlee/doctrine",
@@ -150,6 +156,12 @@
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/record-memory/SKILL.md",
       "computedHash": "6878b387175db213dc8cc4e19ff3076c31fb7cecbbfc85d26ef2c174ac3b495d"
+    },
+    "research": {
+      "source": "davidlee/doctrine",
+      "sourceType": "github",
+      "skillPath": "plugins/doctrine/skills/research/SKILL.md",
+      "computedHash": "834f6991d4bfa0304a6b3fece40ae7d7b9b5b3d7c021b66835207e1cea0516b5"
     },
     "retrieve-memory": {
       "source": "davidlee/doctrine",
@@ -179,7 +191,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/slice/SKILL.md",
-      "computedHash": "37795c3253b317fd67dfd33aee00722ac08e98576f1c9ec03255d0990d2eaffd"
+      "computedHash": "ff4139773d092c546ab5f0c46c98d249cfd68d20c1eba60a4eb57319259c2e8a"
     },
     "spec-coverage-assessment": {
       "source": "davidlee/doctrine",
@@ -203,7 +215,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/walkthrough/SKILL.md",
-      "computedHash": "c46abd8d0210de918a591105f2373fb356a22bf29806073848621a4f88d47118"
+      "computedHash": "f6995bc495e3a0714cc59a55698affc3641e57247462c17d0c8f62d04caa4f6b"
     },
     "worktree": {
       "source": "davidlee/doctrine",
