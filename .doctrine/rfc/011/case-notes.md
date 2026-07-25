@@ -1122,3 +1122,55 @@ integrate, assert it is unchanged after, and assert no path outside it moved.
 [preflight; sl228-rv-advice-0725] `doctrine review status <SL-id>` refuses — status takes only RV refs and
 there is no `--slice` filter, so surveying a slice's review history costs a full `review list` scan + manual
 grep. A `review list --entity SL-228` (or `status --slice`) filter would save the scan tokens.
+
+[preflight; SL-229-P03-sl227-delta-9af]
+SL-227 (minimal projection, ADR-019) landed *between* SL-229's plan authoring
+and PHASE-03, invalidating that phase's EX-2/VA-1 verification surface:
+- `install --dry-run` in this repo now emits **no local skill-file rows** at
+  all. Claude = "register marketplace + install plugin"; codex/pi/universal =
+  "delegates to npx". `.agents/` survives only as an *auto-detection probe*
+  (`src/install.rs:1570`), no longer a write target. `.doctrine/skills/` never
+  existed.
+- So EX-2 ("embed ritual run; installed copies … match plugins/ masters") and
+  VA-1 ("installed copies exist and match masters") name a mechanism that no
+  longer exists. The real claude-side mirror is the marketplace cache
+  `~/.claude/plugins/cache/doctrine/doctrine/<version>/skills/`, populated by
+  `claude plugin install/update` — i.e. by a **release cut + plugin update**,
+  not by `doctrine install -s <skill>`.
+- Generalised friction: **phase verification criteria that name a projection
+  path are hostage to any concurrent slice that changes projection policy.**
+  Authored criteria should name the *contract* ("the harness-visible copy
+  matches the master") and let the phase resolve the path, or the plan silently
+  rots. Cost here: ~10 probes to re-derive the install topology, on top of the
+  3 already spent on the phantom `.doctrine/skills/` path.
+- `plugins/` is still a RustEmbed root (`src/install.rs:21`), so the
+  `touch src/install.rs && cargo build` embed ritual is not obsolete — but it
+  is no longer *sufficient* for EX-2, and the design's "Post-authoring ritual"
+  reads as if it were.
+- Live gate discovered, not in the handover: `dedup_skills_route_not_restate`
+  (`src/install.rs:~2694`) asserts named skills carry no flag-syntax fragments
+  and do point at a tier-1/2 reference. Of PHASE-03's four targets only
+  `phase-plan` is in the named set — but hook edits there must satisfy it.
+
+[execute; SL-229-PHASE-03-e1d]
+- `record-delta` before `verify-vt` confirmed again: PHASE-03's VT-1..4 read
+  `UNATTRIBUTABLE — keyword present but <file> not modified by this slice`
+  *before* the delta was recorded, and PASS immediately after, with no file
+  change between. The reason string's "keyword present" clause is still
+  unearned (keywords aren't evaluated, `vtgate.rs:124`). Two phases in a row
+  have paid attention-cost to this; the fix is one string.
+- Renumbering a markdown ordered list to insert a step cost 3-4 lines of
+  otherwise-untouched diff per skill (`/design`, `/phase-plan`). Cheap, but on
+  shared live masters it widens the surface a concurrent agent can conflict on.
+  Semantically-ordered hook insertion has no cheaper form; noting the cost, not
+  proposing prose-only lists.
+- `grep -c` on a binary prints nothing (suppressed as binary) rather than 0 —
+  needed `grep -a -c` to prove the re-embed took. The silent-empty result reads
+  as "not embedded" and invited a wrong conclusion.
+- Verification-surface rot (see the sl227-delta note above) cost this phase a
+  documented reinterpretation (D-a) plus a selector removal. The generalisable
+  lesson for authored criteria: name the *contract*, not the projection path.
+- Self-inflicted, but cheap to avoid: a stray `cat >> file` with no stdin in a
+  compound command hung for the full 120s tool timeout and created an empty
+  file. Append-via-heredoc is the instrumentation duty's own recipe; a typo in
+  it silently costs a timeout window.
