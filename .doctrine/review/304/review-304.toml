@@ -14,7 +14,7 @@ ref   = "SL-228"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Import retries should replay the landed transition, but retry-derived onto mismatches stored provenance"
 detail = "Expected: REQ-384 crash-safe idempotent recovery makes a retry after a successful import whose response was lost a no-op. Observed: design.md:56 defines Import{fork_tip, onto}; design.md:130-135 permits replay only when candidate facts match stored provenance and otherwise refuses already-<position>; design.md:165-172 stores the original onto. The public import surface has only {slice,name} today (src/mcp_server/dispatch.rs:226-251), and resolve_coord re-reads the live coord tip (src/mcp_server/dispatch.rs:128-159); import_compose uses that tip as the CAS parent (src/mcp_server/dispatch.rs:329-343). After the first CAS lands, a lost-response retry therefore derives onto=the new imported tip, not the originally stored pre-import tip. Position is already Imported, the payload mismatches, and the purported recovery refuses already-imported instead of replaying. This is the repaired F-2 mechanism failing a new crash scenario. Bind retry identity to facts recoverable from the landed provenance/row rather than a freshly sampled onto, and VT the lost-response (CAS landed, caller saw no reply) retry separately from a pre-CAS lost-ref-race."
@@ -28,7 +28,7 @@ severity = "blocker"
 title = "Heal-forward needs a crash-surviving phase binding, but fork creation can crash before DispatchRecord exists"
 detail = "Expected: D8/REQ-384 can heal a missing Spawn row from a durable slice+phase binding that is part of the fork act. Observed: design.md:205-220 calls DispatchRecord durable and says the binding is part of the act, yet the live record is gitignored runtime state at .doctrine/state/dispatch/record (src/worktree/dispatch_record.rs:24-29). More decisively, the trusted create path creates/provisions/marks the worktree first at src/worktree/create.rs:316-328, then writes the DispatchRecord only afterward at :334-340. A hard crash after fork_core returns but before provision_dispatch_record completes leaves exactly a live worker fork with no funnel Spawn row and no binding. The repaired rule at design.md:219-233 then refuses unprovable-fork forever; no later verb can heal the Class-2 prefix, contradicting design.md:210-218 and the §11 kill-between-act-and-record VT at :464-467. The binding also is not a git fact as D8 claims at design.md:38. Make binding creation atomic-before/extrinsically reconstructable relative to the fork act, and VT the crash boundary between worktree creation and binding persistence."
 disposition = "fix-now"
-response = """Confirmed against src/worktree/create.rs:316-340 (fork_core then provision_dispatch_record — the crash window is real) and dispatch_record.rs:24-29 (gitignored runtime state, not a git fact). Repaired two-fold in design §3/D8/§10: (1) record-before-act — provision_dispatch_record moves AHEAD of fork_core (a crash between record and fork leaves an orphan record: harmless, resolution keys on the live worktree, gc sweeps it; so a live fork implies its binding exists) — §10 gains a src/worktree/create.rs row; (2) honest tier claim — the binding is a crash-durable LOCAL file in the runtime-state tier, not a git fact; D8's wording amended to "fork binding plus git facts", and destroying the state tier under a live fork ⇒ unprovable-fork, the deliberate triage beat (zero-rescue never guesses ownership). §11 REQ-384 VT covers the kill-between-record-and-fork boundary."""
+response = "Contest upheld — confirmed against fork.rs:106-115 (dir/branch collision refusals live INSIDE fork_core, after the reordered record write) and dispatch_record.rs:82-83 (write_atomic overwrites unconditionally): a colliding spawn would clobber a live fork's binding and only then be refused. Repaired in §3 D8 + §10: the reordered record write is NO-CLOBBER-UNLESS-ORPHAN — provision refuses when a record for that name exists AND its worktree is live (one liveness read, the same fact resolution already keys on); only an orphan record (crash residue, no live worktree) is replaced, keeping the crash-retry legal. A colliding spawn against a live fork refuses at the record write before any clobber; fork_core's own collision gate still owns the no-record cases (no parallel dir/branch re-check). §11 REQ-384 VT: colliding spawn against a live fork leaves the original binding byte-identical."
 
 [[finding]]
 id = "F-3"
@@ -37,11 +37,11 @@ severity = "blocker"
 title = "Verify must legality-gate before running, but attempt requires evidence that exists only afterward"
 detail = "Expected: REQ-385 gates dispatch verify before its working-tree sync and configured suite, refusing out-of-order execution without acting. Observed: design.md:53-60 makes the only Verify transition require a complete VerifyEvidence{status,verified_oid,suite,at} (design.md:77-82), and attempt consumes that typed transition (design.md:84-89). But §5 invokes attempt at step 1 before sync/suite (design.md:266-268); status is not known until the suite runs at step 3, post-suite identity is not known until step 4, and evidence is landed only at step 5 (design.md:286-301). The API therefore cannot perform the prescribed pre-act gate without fabricating evidence, nor can one call both a legality check and the state transition through the asserted single attempt authority without specifying two distinct operations. Running first and attempting later violates legality-gated verbs; inventing placeholder evidence corrupts replay semantics. Split pure preflight legality from evidence-bearing transition application while keeping one normative table, or define a staged typed API, and VT that an illegal verify runs neither sync nor suite."
 disposition = "fix-now"
-response = "Confirmed from the design's own text: §2's only Verify transition demanded a complete VerifyEvidence pre-act while §5 step 1 invoked attempt() before the suite ran — unconstructible without fabricating evidence. Repaired in §2: a pure `preflight(current, TransitionKind) -> Result<(), IllegalTransition>` kind-level gate, derived from the SAME const table as attempt (its kind column — one table, D7 artifact unchanged in authority); attempt remains the sole evidence-bearing transition authority at landing. §5 step 1 and the §4 verify row now name preflight at entry, attempt at step-5 landing. §11 REQ-385 gains the VT: an illegal verify (e.g. at spawned) refuses at preflight — neither sync nor suite runs."
+response = "Contest upheld — the repair left IllegalTransition.attempted: Transition, so a pre-suite Verify refusal still could not be constructed without fabricating VerifyEvidence; the preflight gate was unimplementable as typed. Repaired in §2: IllegalTransition.attempted is now TransitionKind — the refusal names the attempted VERB by kind; candidate payload facts are not part of the refusal (reason token + expected carry the recovery procedure). Both preflight and attempt construct the same refusal type from the same const table; no second refusal shape, no fabricated evidence."
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Parallel oracle should prescribe an actionable phase, but lowest-id await can starve ready work"
 detail = "Expected: REQ-386 dispatch next emits the single prescribed next action for the current per-phase sub-funnel, including supported file-disjoint parallel phases. Observed: design.md:309-316 selects the lowest phase id among every non-reaped phase, regardless of whether that phase has an executable next action; design.md:330-332 gives await-worker no command. Scenario: PHASE-01 is Spawned with a slow worker while PHASE-02 is WorkerCommitted and ready to import. next deterministically selects PHASE-01 and emits await-worker forever, suppressing the runnable PHASE-02 import even though it is the only progress-making action. The same starvation occurs when a lower phase sits at judgment-only triage and a higher phase is actionable. §11 tests only each position in isolation (design.md:483-486), so the multi-phase selection defect is unverified. Define an explicit cross-phase priority that selects runnable actions before waits/triage (with a documented halt policy if red evidence must globally stop), and VT mixed-position parallel rows plus fairness/progress."
@@ -50,7 +50,7 @@ response = "Confirmed from §6's text: the bare lowest-id pick prescribes await-
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Declared deletions should bypass only their guard, but one deletion disables reversion checks for the whole commit"
 detail = "Expected: REQ-389's verb+hook composition keeps the modification-reversion arm active while allowing a specifically validated deletion. Observed: design.md:343-348 says dispatch commit sets the hook escape env whenever any declared deletion is present, while design.md:381-382 defines DOCTRINE_ALLOW_DELETE=1 to cover both the deletion and reversion arms. Thus a pathspec such as a declared directory containing one intentional deletion plus stale reverse-modified files causes the verb to set the escape for the entire child git commit; every modification-reversion check is skipped. The verb only proves the commit set is within declared paths and deletions are named (design.md:343-346), not that the sibling modifications are non-reversions. A broad but legitimate pathspec therefore reopens the modification-only ISS-234 arm precisely when a deletion coexists. Scope the exemption to the validated deletion paths/arm, never the whole hook invocation, and add a VT where one allowed deletion is mixed with a stale reverse modification that must still refuse; the current mixed A/M/D VT at design.md:498-505 does not specify the automatic dispatch-commit escape path."
@@ -59,7 +59,7 @@ response = "Confirmed from §7's text: the verb set the both-arms escape (DOCTRI
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Persistence placement should match ADR-001, but the design calls command-tier dispatch an engine"
 detail = "Expected: architectural placement uses ADR-001's authoritative tier names consistently so dependency direction and ownership are reviewable. Observed: D6 says persistence lives in the engine tier (design.md:36), §3 calls src/dispatch.rs the Engine (design.md:187), and §10 labels that file's new writer/verify/next/guard work engine (design.md:447). The authoritative map classifies dispatch = command at .doctrine/adr/001/layering.toml:92, while ADR-001 states that this map is authoritative; the design's only map change is adding funnel_machine=leaf (design.md:454), not reclassifying dispatch. Live src/dispatch.rs itself remains the orchestrator command surface and already owns DispatchCommand. This is not harmless role language: it obscures whether lower-tier consumers may call the sole writer and makes the REQ-387 visibility argument appear stronger than the actual same-tier command authority. Name src/dispatch.rs command-tier consistently, or design an actual engine extraction and include its map/dependency impact."
@@ -68,7 +68,7 @@ response = """Confirmed against .doctrine/adr/001/layering.toml:92 (`dispatch = 
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Import healing should reuse the trusted fork binding, but its resolver rejects every advanced worker fork"
 detail = "Expected: after worker_commit advances the fork but crashes before recording WorkerCommitted, dispatch_import proves the missing transition from the existing DispatchRecord binding and heals forward (design.md:210-229). Observed: the only exported binding resolver, resolve_agent, gathers the record and fork head (src/worktree/dispatch_record.rs:223-251), but classify_resolve defines any branch HEAD != record.base as StaleRecord (src/worktree/dispatch_record.rs:145-168). That inequality is exactly the successful worker-commit fact the heal path needs. The record path/read helper is private (src/worktree/dispatch_record.rs:49-52,186-190), and §10 lists only adding slice+phase fields, not a post-commit-safe resolver/classifier contract (design.md:452). Therefore import cannot reuse the existing trusted seam after the Class-2 act; it must either receive stale-record or invent a parallel raw record read, contrary to the stated one-read reuse and no-parallel-implementation posture. Design a single resolver with explicit expected states (at-base for pre-commit; exactly-one-commit C^==base for heal/import), preserve the live worktree/record consistency checks, and VT the post-act/pre-record crash through that production seam."
@@ -77,7 +77,7 @@ response = "Confirmed against src/worktree/dispatch_record.rs:145-168 (classify_
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Durable position should remain senior, but a disposable sheet read error masks completed funnel truth"
 detail = "Expected: D2 makes committed position the senior authority for funnel receipt truth and treats the runtime sheet as a projection/worker-condition axis. Observed: the ordered repair at design.md:419-436 gives sheet read Err first-match precedence over every position and boundary cell. Scenario: position=Reaped, boundary present, but the gitignored runtime sheet is absent/corrupt/unreadable after a restart or state cleanup; the matrix returns Unknown instead of Completed. That preserves today's pre-position behavior (src/dispatch.rs:3590-3615) by allowing the disposable tier to overrule the new committed authority, contradicting design.md:32 and :421-426 and obscuring successful crash recovery on dispatch_phase_receipt. Preserve byte identity only for position=None; for Some(p), derive the durable funnel result first and surface a sheet read failure as detail/integrity degradation unless the sheet is genuinely required to distinguish a pre-concluded worker condition. Extend the full-matrix VT with Err at Concluded/Reaped plus present boundary."
@@ -86,7 +86,7 @@ response = "Confirmed: the §9 first-match matrix gave sheet read Err precedence
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Post-suite proof should cover all tested filesystem state, but untracked mutations can still earn pass evidence"
 detail = "Expected: authoritative verify evidence names an oid that represents the bytes/environment the suite passed on, and I2 survives arbitrary configured suites. Observed: the repaired post-suite check explicitly re-proves only tracked index + worktree identity (design.md:294-298), while the suite is arbitrary project-configured argv (design.md:286-293). A green suite can create or modify an untracked generated source/fixture, consume it during the test, and exit zero; tracked identity still equals verified_oid, so step 5 lands Pass even though the successful run depended on bytes absent from that oid. It also leaves coord-tree dirt while I2 claims the repair survives arbitrary suites (design.md:294-301 and §13 I2). The design already introduces an untracked-aware tree-state primitive at design.md:400-402, so the post-suite proof should reuse it: snapshot/require the permitted untracked set before and after, refuse any suite-created/changed untracked path (or define and persist an owned exclusion contract). Add VT for a green suite that creates and consumes an untracked file, not only a tracked formatter/codegen mutation."
@@ -95,7 +95,7 @@ response = """Confirmed: §5 step 4 re-proved tracked identity only, while the s
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Move-E should reuse the existing branch-read seam, but the design declares current_branch a new gap"
 detail = "Expected: REQ-388 reuses or relocates existing git-read seams and builds only genuinely absent reads. Observed: §8 labels current branch as gap 3 and says git.rs gains current_branch (design.md:400-407); §10 repeats it among five new gap reads (design.md:450). Live code already has fn current_branch(root)->Result<Option<String>> in src/dispatch.rs:1758-1766 using symbolic-ref --quiet --short HEAD, and multiple dispatch guards consume it (e.g. src/dispatch.rs:841-854). The new whereami surface is also placed in src/dispatch.rs/commands, so treating this as absent invites a parallel implementation and violates the requirement's explicit reuse rule. Amend the design to reuse that function in place or deliberately relocate/generalize it into git.rs with all existing callers migrated; verification should prove one owned branch-read seam rather than only testing the new verb."

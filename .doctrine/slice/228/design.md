@@ -102,10 +102,14 @@ pub(crate) fn preflight(
 ) -> Result<(), IllegalTransition>
 
 /// The FR-009 refusal payload — surfaced VERBATIM by verbs and rendered by
-/// `next`: the refusal text IS the recovery procedure.
+/// `next`: the refusal text IS the recovery procedure. `attempted` is the
+/// KIND, not the full payload (RV-304 F-3 contest: `preflight` must be able
+/// to construct the refusal pre-act, when a full `Transition::Verify`
+/// payload cannot exist; the refusal names the verb — `reason` + `expected`
+/// carry the recovery, candidate facts are not part of the refusal).
 pub(crate) struct IllegalTransition {
   pub current: Option<Position>,
-  pub attempted: Transition,
+  pub attempted: TransitionKind,
   pub expected: Expected,          // the machine's prescription from `current`
   pub reason: &'static str,        // distinct token, e.g. "conclude-unverified"
 }
@@ -240,7 +244,18 @@ convention).
   window in which a live fork exists with no binding — permanently
   `unprovable-fork`). Reordered, a crash between record write and fork leaves
   only an **orphan record** (harmless: resolution keys on the live worktree
-  first; gc sweeps it), so **a live fork implies its binding exists**. Honest
+  first; gc sweeps it), so **a live fork implies its binding exists**. The
+  reordered write is **no-clobber-unless-orphan** (RV-304 F-2 contest: the
+  write sits *ahead* of `fork_core`'s dir/branch collision refusals, and
+  today's `write_atomic` overwrites unconditionally — a colliding spawn would
+  replace a LIVE fork's binding and only then be refused): provision refuses
+  when a record for that name exists **and** its worktree is live (one
+  liveness read — the same fact resolution already keys on); only an orphan
+  record (crash residue, no live worktree) is replaced, which keeps the
+  crash-retry legal. A colliding spawn against a live fork thus refuses at
+  the record write, before any clobber; `fork_core`'s own collision gate
+  still owns the no-record collision cases (no parallel re-check of
+  dir/branch existence). Honest
   tier claim: the binding is a crash-durable *local file* in the coord's
   runtime-state tier, **not a git fact** — destroying that tier under a live
   fork ⇒ `unprovable-fork`, the deliberate triage beat (zero-rescue never
@@ -520,7 +535,7 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
 | `src/worktree/dispatch_record.rs` | `DispatchRecord` gains `slice` + `phase` (fork-creation snapshot — the durable fork binding; F-4); resolver/classifier gains the caller-declared **expected fork state** (`AtBase` \| `Advanced` — RV-304 F-7). `arm-spawn` / `worktree fork --worker` gain the phase argument |
 | `src/verify.rs` + `src/commands/check.rs` | runner extraction: status-returning `run_suite` callable below command tier; `check.rs` thin exit-forwarding shell (F-10) |
 | `.doctrine/adr/001/layering.toml` | `funnel_machine = "leaf"` row — the pure-leaf claim gated by the architecture-layering check, not prose (F-12) |
-| `src/worktree/create.rs` | **record-before-act reorder**: `provision_dispatch_record` moves ahead of `fork_core` (RV-304 F-2) |
+| `src/worktree/create.rs` | **record-before-act reorder**: `provision_dispatch_record` moves ahead of `fork_core`, and the record write gains **no-clobber-unless-orphan** semantics (liveness-keyed — RV-304 F-2 + contest) |
 | `src/commands/` | CLI wiring: `dispatch verify\|next\|commit\|tree-state\|delta\|whereami\|history\|ignored\|hook-check`; `arm-spawn` spawn-row; `record-boundary` reroute |
 | `src/dispatch_config.rs` | `[dispatch] verify_suite` key |
 | `src/doctor_checks.rs` | hook-present + worktreeConfig checks for live coord worktrees |
@@ -540,7 +555,9 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
   onto the new tip). VT — **record-before-act** (RV-304 F-2): kill between
   record write and fork ⇒ orphan record only (gc sweeps, nothing to heal);
   any live fork resolves its binding — driven through the production resolver
-  with the `Advanced` expectation (RV-304 F-7), not a test-local read. VT — a
+  with the `Advanced` expectation (RV-304 F-7), not a test-local read; a
+  **colliding spawn against a live fork refuses at the record write and
+  leaves the original binding byte-identical** (F-2 contest). VT — a
   **fresh verify pass concludes** (the evidence commit never self-stales) and
   an unrelated post-verify commit refuses `conclude-verify-stale` (F-1). VT —
   conclude kill-window: kill between boundary⊕position CAS and sheet
