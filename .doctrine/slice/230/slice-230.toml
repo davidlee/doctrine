@@ -61,6 +61,18 @@ role = "implements"
 target = "SPEC-007"
 
 [[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the attestation defect SL-230 closes"
+target = "EVD-001"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "residual digest-based invalidation deferred from SL-230"
+target = "QUE-173"
+
+[[relation]]
 label = "related"
 target = "CHR-035"
 

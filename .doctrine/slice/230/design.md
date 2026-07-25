@@ -145,25 +145,45 @@ body to append to.
 `body_mode`. Metadata-only edit stays the default path. Tool count is unchanged
 (no new tools), so the `25` assertions at `tools.rs:1488` / `:1870` do not move.
 
-**Source-cleanliness probe (leaf, `src/git.rs`)** — new, additive.
+**Exclusion-aware capture (leaf, `src/git.rs`)** — parameterised, not parallel.
 
 ```rust
-/// Is the tree clean once `excludes` are ignored? Returns a commit-anchored
-/// Frame when so, `None` when genuinely dirty. Never mutates; `capture()` and
-/// its three callers are untouched.
-pub(crate) fn source_clean(root: &Path, excludes: &[&str]) -> Result<Option<Frame>>
+/// Capture the git frame, ignoring paths under `excludes` when deciding
+/// dirtiness. `excludes` are pathspec roots, applied to all three probes.
+pub(crate) fn capture_with(root: &Path, excludes: &[&str]) -> Result<Frame, CaptureError>
+
+/// Unchanged public behaviour — the existing three callers keep this signature.
+pub(crate) fn capture(root: &Path) -> Result<Frame, CaptureError> {
+    capture_with(root, &[])
+}
 ```
 
-Required because `capture()` **blanks the commit oid whenever the tree is dirty**
+**Revised by adversarial review (see § 10, A1).** The first draft proposed a
+separate `source_clean` probe. That would have duplicated everything `capture()`
+does *around* the dirty check — repo-identity derivation, the multi-root guard,
+submodule rejection, ref-name resolution — which is precisely the parallel
+implementation the standards forbid. Parameterising is strictly better: one
+implementation, and `capture(root)` delegating with an empty slice is
+byte-identical for the existing three callers, which is I1 by construction rather
+than by test.
+
+The measurement still tells the truth: `excludes` is supplied by the caller, and
+only `verify` supplies a non-empty one. Policy stays with the consumer.
+
+This is required because `capture()` **blanks the commit oid whenever the tree is dirty**
 (`git.rs`: `commit: String::new(), // empty iff dirty`) — it yields only a
 `checkout_state_id` hash, and you cannot subtract corpus paths from a sha256. The
 probe re-runs the same three measurements with exclusion pathspecs:
 
-| Probe | `capture()` | `source_clean()` |
+| Probe | Command | Exclusion |
 |---|---|---|
-| worktree | `git diff HEAD --binary …` | same `+ :(exclude)<root>` per exclude |
-| untracked | `untracked_fingerprint` | same, exclusions applied |
-| index | `git diff-index --quiet --cached HEAD` | same `+ :(exclude)…` |
+| worktree | `git diff HEAD --binary …` | `:(exclude)<root>` per exclude |
+| untracked | `untracked_fingerprint` → `git ls-files --others --exclude-standard -z` | same — ✓ verified `ls-files` accepts pathspecs |
+| index | `git diff-index --quiet --cached HEAD` | `:(exclude)…` |
+
+All three take pathspecs natively, so no probe needs re-implementing.
+`untracked_fingerprint` gains an `excludes` parameter — a signature change to a
+private leaf fn, its only caller being `capture_with`.
 
 Untracked coverage is not optional: a freshly-recorded memory's directory is
 untracked, so `record` → `verify` is otherwise still blocked by the memory just
@@ -192,18 +212,35 @@ and `RecordArgs` gain `body: Option<&str>`; `memory_scaffold` substitutes it for
 (`fileset.get_mut(1)` → `body.clone_into(b)`, `:1808-1810`). The transactional
 `materialise_named` write is preserved unchanged.
 
-**Body on `edit`** calls `write_body` after the TOML write. `EditFields` gains
-`body` + `body_mode`; `has_any()` counts body, so `--body` alone is a valid edit,
-and a body-only edit stamps `updated` (the memory did change).
+**Body on `edit`.** `EditFields` gains `body` + `body_mode`; `has_any()` counts
+body, so `--body` alone is a valid edit.
 
-**Write ordering.** `run_edit` now writes two files and is no longer atomic.
-Order is **body first, then TOML**, so `updated` lands last and never claims a
-change that did not. Full two-tier atomicity would mean routing `edit` through
-the fileset/rollback machinery — a large refactor of a shared write path,
-disproportionate to a crash window this narrow. Stated, not buried (R1).
+**Write ordering and the composed changed-flag.** `run_edit` now writes two files
+and is no longer atomic. Order is **body first, then TOML** — and that ordering
+is load-bearing beyond crash-safety, because the TOML content *depends* on
+whether the body actually changed:
 
-**Verify.** Gate becomes: probe `source_clean`; if it yields a Frame, attest
-against that HEAD commit; else refuse unless `--allow-dirty`. Corpus-dirty now
+```
+body_changed = write_body(dir, "memory.md", text, mode)?     // 1. body first
+toml_changed = apply_edit(&mut doc, fields, today)?          // 2. metadata
+if body_changed { clear_verification(&mut doc) }             // 3. D4
+if body_changed || toml_changed { stamp_updated(&mut doc) }  // 4.
+if body_changed || toml_changed { write_atomic(toml_path) }  // 5. TOML last
+```
+
+So `updated` is stamped, and the verification axis cleared, **iff the body
+genuinely changed** — a `--body` that replaces content with itself is a full
+no-op on both tiers (content and mtime hold), consistent with the existing
+`apply_edit` no-op guard. A crash between steps leaves a changed body with a
+stale `updated`, never the reverse (R1).
+
+Full two-tier atomicity would mean routing `edit` through the fileset/rollback
+machinery — a large refactor of a shared write path, disproportionate to a crash
+window this narrow. Stated, not buried.
+
+**Verify.** Gate becomes: `capture_with(root, corpus_roots)`; if the frame is
+`Commit`-anchored, attest against that HEAD commit; if `CheckoutState`, refuse
+unless `--allow-dirty`. Corpus-dirty now
 produces a *stronger* anchor than today's `checkout_state_id` — a real,
 addressable commit.
 
@@ -230,10 +267,12 @@ stashing. The refusal names its own flag.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
-- **I1** — `capture()`'s behaviour and its three call sites are byte-for-byte
-  unchanged. `record`'s born anchor and the retrieve read path must not move.
-- **I2** — `source_clean` never mutates; no `write-tree`, no index lock on the
-  clean path.
+- **I1** — the three existing `capture()` call sites see byte-for-byte identical
+  frames. Guaranteed by construction (`capture` delegates with `&[]`), pinned by
+  T11. `record`'s born anchor and the retrieve read path must not move.
+- **I2** — the clean-after-exclusion path never calls `write-tree`, so it takes
+  no index lock — preserving the lock-contention property `capture()` documents
+  for concurrent doctrine processes.
 - **I3** — a genuinely dirty *source* tree still refuses without `--allow-dirty`.
 - **I4** — `--allow-dirty` semantics unchanged (attest anyway, stamp
   `checkout_state_id`).
@@ -274,12 +313,20 @@ stashing. The refusal names its own flag.
   `--replace-body`/`--append-body` (IMP-221's original — reads better but
   diverges from MCP's single `body_mode` and scales badly to a third mode);
   `--body` + explicit `--body-file` (a flag stdin already covers).
-- **D3 — new `source_clean` probe; `capture()` untouched.** *Alternative:* apply
-  the exclusion inside `capture()`. *Rejected:* two of its three callers would be
-  damaged — `record` would stamp a false born anchor and the retrieve read path
-  would shift. *Alternative:* soften the refusal and keep stamping
-  `checkout_state_id`. *Rejected:* weaker evidence for the common case, and it
-  makes the default and `--allow-dirty` near-identical.
+- **D3 — parameterise capture (`capture_with(root, excludes)`); `capture()`
+  becomes a delegating wrapper.** *Revised by review (§ 10, A1).* The original
+  decision was a separate `source_clean` probe, on the reasoning that `capture()`
+  must stay untouched. That confused *behaviour* with *code*: the invariant worth
+  protecting is that the three existing callers see identical frames (I1), and
+  delegation with an empty exclude slice guarantees that by construction, whereas
+  a parallel probe would have re-implemented repo-identity derivation, the
+  multi-root guard, submodule rejection and ref resolution — a textbook parallel
+  implementation. *Alternative:* bake the exclusion into `capture()`
+  unconditionally. *Rejected:* two of its three callers would be damaged —
+  `record` would stamp a false born anchor and the retrieve read path would
+  shift. *Alternative:* soften the refusal and keep stamping `checkout_state_id`.
+  *Rejected:* weaker evidence for the common case, and it makes the default and
+  `--allow-dirty` near-identical.
 - **D4 — body edit clears the verification axis.** Affordable only because the
   gate relaxation makes re-verifying cheap; the halves pay for each other.
   *Alternative:* leave it (status quo) — rejected, the stamp would lie by
@@ -302,11 +349,16 @@ stashing. The refusal names its own flag.
   Accepted; full atomicity is a shared-write-path refactor.
 - **R2 — hostile-input substrate.** SPEC-007 treats stored memory text as
   untrusted, and SL-005 justified thin bodies with "`show` therefore renders
-  bounded, tool-authored prose" — rich bodies make "bounded" false. The
-  body-guard nonce and data-framing (`src/memory.rs:2021-2045`) are unchanged and
-  still apply; the new path must not bypass the scaffold's escaping. No size cap
-  is imposed: anyone who can run the verb can already write the file, so a cap
-  would be theatre rather than a boundary.
+  bounded, tool-authored prose" — rich bodies make "bounded" false.
+  **Corrected by review (§ 10, A3):** there is no *write-time* escaping on the
+  `.md` tier to bypass — SL-024's escaping work was TOML free-text, and markdown
+  prose is stored verbatim by design. The entire defence is **read-time**: the
+  per-render nonce and `data, never instruction` framing at
+  `src/memory.rs:2021-2045`, which this slice does not touch. So the risk is not
+  "the new path bypasses escaping" but "bodies get large enough to matter". No
+  size cap is imposed: anyone who can run the verb can already write the file, so
+  a cap is theatre rather than a boundary. T16 pins the read-time framing against
+  a hostile body written through the *new* path.
 - **R3 — behaviour preservation on shared machinery.** `entity.rs` and
   `validate` are shared. Existing suites must stay green unchanged.
 - **R4 — mass re-verification.** D4 means every body edit costs a verify.
@@ -329,13 +381,68 @@ fixture: `GitScratch` (`:5617`); MCP e2e: `tests/e2e_mcp_server.rs:963-1110`.
 | T8 | verify, untracked memory dir only | succeeds — the `record` → `verify` case |
 | T9 | verify, source tree dirty | still refuses; message names `--allow-dirty` |
 | T10 | `--allow-dirty` | unchanged, stamps `checkout_state_id` |
-| T11 | `capture()` behaviour | unchanged — I1 regression guard |
-| T12 | body edit | clears `verification_state`/`reviewed`/`verified_sha` |
-| T13 | `validate` after committed body edit | flags stale via own-directory drift |
+| T11 | `capture(root)` == `capture_with(root, &[])` | I1 — identical frames on clean, dirty, unborn, non-repo |
+| T12 | body edit via the verb | clears `verification_state`/`reviewed`/`verified_sha` |
+| T12b | `--body` replacing content with itself | full no-op: `updated` **not** stamped, verification **not** cleared |
+| T13 | **hand-edit** `memory.md` directly, commit, `validate` | flags stale via own-directory drift — must exercise the *bypass* path, since the verb path clears the stamp and would never reach the staleness check |
 | T14 | `memory/` absent | exclusion root not contributed; no error |
 | T15 | existing memory + entity suites | green unchanged (R3) |
+| T16 | hostile body written via `--body`, then `show` | read-time nonce + `data, never instruction` framing intact (R2) |
 
 Closure: T1-T15 green; `doctrine check gate` clean; SPEC-007 REV applied so text
 and implementation agree.
 
 ## 10. Review Notes
+
+### Internal adversarial pass (pre-external)
+
+Four findings against the first draft. All integrated above; recorded here so the
+reasoning is not lost.
+
+- **A1 — parallel implementation in `source_clean` (material; design changed).**
+  The draft added a second git probe alongside `capture()`, justified as "keeping
+  `capture()` untouched". But `capture()` does far more than the dirty check —
+  repo-identity derivation, multi-root guard, submodule rejection, ref resolution
+  — so a parallel probe either duplicates all of it or silently returns a
+  differently-constituted `Frame`. Both are worse than the problem being solved,
+  and duplication is explicitly forbidden. **Root cause: I protected the wrong
+  invariant.** What matters is that existing callers see identical frames, not
+  that the function's bytes are unchanged. D3 revised to `capture_with(root,
+  excludes)` with `capture()` delegating — I1 now holds by construction.
+- **A2 — the changed-flag was underspecified (material; design changed).** The
+  draft said a body-only edit "stamps `updated`", ignoring the case where
+  `--body` replaces content with itself. Left as written, a no-op body write
+  would stamp `updated` *and* clear a valid attestation — actively destructive.
+  § 5.4 now specifies the composed flag and the exact step order, and T12b pins
+  it. This also revealed *why* body-first ordering is mandatory: the TOML content
+  depends on `body_changed`, so the body write must precede it. The draft had the
+  right order for the wrong reason (crash-safety alone).
+- **A3 — R2 was confused about where the defence lives (correction).** The draft
+  warned the new path "must not bypass the scaffold's escaping". There is no
+  write-time escaping on the `.md` tier — SL-024's work was TOML free-text, and
+  markdown bodies are stored verbatim by design. The defence is entirely
+  read-time (per-render nonce + data-framing), and this slice doesn't touch it.
+  R2 rewritten; T16 added to pin read-time framing against a body written through
+  the new path.
+- **A4 — T13 would not have tested what it claimed (test gap).** It asserted
+  `validate` flags staleness after a body edit — but under D4 a *verb* edit
+  clears the stamp, so there would be no `verified_sha` left to compare and the
+  staleness check would never run. The test only has meaning on the **hand-edit
+  bypass** path, which is the whole reason D5 exists. T13 rewritten to hand-edit
+  the file directly.
+
+**Feasibility claim checked, not assumed:** all three dirtiness probes accept
+pathspecs natively — `untracked_fingerprint` shells `git ls-files --others
+--exclude-standard -z` (`src/git.rs:2201`), so exclusion is a parameter, not a
+re-implementation. ✓
+
+**Not found wanting:** the layering (ADR-001) holds — `entity` is engine and
+imports only `fsutil`; `corpus_guard` and `git` are leaf; the pure predicate
+takes roots as data rather than reaching up to command tier for
+`MEMORY_MASTERS_DIR`. POL-002 is satisfied by guarding the `memory/` root on
+existence rather than assuming it. STD-001 is satisfied by reusing
+`DOCTRINE_PATHSPEC` instead of minting a literal.
+
+### External review
+
+Not yet run.

@@ -91,6 +91,21 @@ already diverged when `--allow-dirty` shipped; this slice widens the gap
 further. The spec text is corrected through a Revision — this debt is owed
 regardless of the rest of this slice, and is folded in rather than left to rot.
 
+### 5. Attestation invalidation
+
+Added during design — see "Discovered during design" below.
+
+A body write through `edit` clears the verification axis
+(`verification_state`/`reviewed`/`verified_sha`), iff the body genuinely changed.
+`validate`'s staleness check additionally counts commits touching the memory's
+**own item directory** since `verified_sha`, catching the hand-edit bypass,
+masters, and other agents. Advisory surface only; retrieve-side ranking is
+deliberately untouched (design OQ-2).
+
+### 6. Verify refusal names its escape hatch
+
+The dirty-tree refusal names `--allow-dirty` instead of prescribing a commit.
+
 ## Non-Goals
 
 - **An MCP `memory_verify` tool.** SL-164's stated reason for excluding it
@@ -109,43 +124,42 @@ regardless of the rest of this slice, and is folded in rather than left to rot.
 
 ## Risks, assumptions, open questions
 
-- **A1 — body-write is unbuilt, not forbidden.** `render_memory_md`'s comment
-  ("the tool-authored body: title + summary only (design § 5.2)") is read as
-  describing scaffold-time output, not prohibiting body writes — `seed_by_key`
-  writing a verbatim body supports that reading. **Unverified: SL-005 design
-  §5.2 has not been read.** If §5.2 turns out to *constrain* body authorship,
-  objectives 1 and 2 need a governance step before code. Design must resolve
-  this first.
-- **OQ-1 — does the exclusion set cover the shipped `memory/` tree?** In a
-  client project the shipped corpus is materialised gitignored, so it can never
-  block; the repo-root `memory/` tree is live only on doctrine's own
-  corpus-authoring path. Including it may be dead weight everywhere but here —
-  which edges toward the POL-002 smell of shaping the product around one client.
-  Argues for exclusion by owned-constant, and for design to confirm the tree is
-  genuinely platform surface rather than dogfooding residue.
-- **OQ-3 — where does the exclusion live?** The clean/dirty decision is not
-  verify-private: it is the shared git frame computation (`src/git.rs:1943-2043`),
-  which `record` also consumes to choose between a commit anchor and a
-  `checkout_state_id`. Applying the exclusion *there* would silently change
-  record-time anchoring across the product — almost certainly wrong, since a
-  frame legitimately wants the literal truth about the tree. Applying it at
-  verify's gate keeps the frame honest and scopes the leniency to the one
-  decision that warrants it. Design must pick deliberately; the second reading
-  is the working assumption.
-- **OQ-2 — is body-append the right second mode?** Append is cheap and covers
-  the additive case, but agents may actually want targeted replacement. Ship
-  replace + append; revisit only on evidence.
-- **R1 — attestation semantics.** Ignoring the doctrine corpus makes verify
-  succeed where it used to refuse. The claim being weakened is "the tree was
-  clean when attested". Design must state plainly what the verification axis
-  now means, and whether the anchor stays a commit oid when only doctrine files
-  are dirty (the honest answer is probably yes — the code the memory speaks
-  about *is* at that commit).
-- **R2 — hostile-input substrate.** SPEC-007 § Concerns treats stored memory
-  text as untrusted data. A body-write verb is a new ingress for that text.
-  The render-side guard (body-guard nonce, data-framing) already exists and is
-  unchanged, but the new write path must not bypass whatever escaping the
-  scaffold seam applies.
+**Status: design locked-pending-review (`design.md`). All scoping-stage unknowns
+below are resolved; live open questions now live in `design.md` § 6.**
+
+- **A1 — RESOLVED ✓.** SL-005 § 5.2 (review #7) reads: "v1 scaffolds a template
+  containing title + summary only — no editor, no stdin, no `--body`. *Richer
+  body capture is a later mutation verb.*" A deferral, not a prohibition — this
+  slice is that verb. No governance step needed before objectives 1-2.
+- **OQ-1 — RESOLVED.** Narrowed to a single path: `MEMORY_SHIPPED_DIR` and
+  `MEMORY_ITEMS_DIR` are both *under* `.doctrine`, so one exclusion root covers
+  them; only repo-root `MEMORY_MASTERS_DIR` sits outside. Excluded, guarded on
+  the directory's existence — POL-002-legal (an owned constant) without carrying
+  dead weight into client projects that have no such tree.
+- **OQ-3 — RESOLVED ✓.** Exclusion applies at verify only. `capture()` has
+  exactly three callers (verified: `retrieve.rs:532`, `memory.rs:1708`,
+  `memory.rs:3382`); two would be damaged by unconditional leniency. Implemented
+  as `capture_with(root, excludes)` with `capture()` delegating — see design D3
+  and review finding A1 (the first draft's parallel probe was rejected).
+- **OQ-2 — RESOLVED.** Replace + append, via `--body-mode`. Revisit on evidence.
+- **R1 — RESOLVED.** Corpus-dirty stamps the **HEAD commit**, which is *stronger*
+  evidence than today's `checkout_state_id` hash, not weaker. See design D3.
+- **R2 — CARRIED, sharpened.** Stored memory text is untrusted (SPEC-007
+  § Concerns). Review finding A3 corrected the framing: there is no write-time
+  escaping on the `.md` tier to bypass; the defence is read-time (nonce +
+  data-framing), untouched here. Pinned by T16.
+
+### Discovered during design — scope grew from 4 objectives to 6
+
+- **Attestation survives claim change (new objective 5).** Observed live: a
+  memory verified at `933b747c` kept `verification_state = "verified"` through a
+  committed body edit. `apply_edit` touches no verification field. Body-write
+  turns a hand-edit-only footgun into a one-command operation, so this slice
+  closes it: the verb clears the axis (D4), and `validate` gains an
+  own-directory staleness check to catch the hand-edit bypass (D5).
+- **The dirty refusal hides its own escape hatch (new objective 6).** The message
+  prescribes committing and never mentions `--allow-dirty` — which is why, in
+  practice, agents reach for `git stash` instead. The refusal now names the flag.
 
 ## Verification / closure intent
 
