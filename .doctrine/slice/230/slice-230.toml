@@ -1,7 +1,7 @@
 id = 230
 slug = "memory-body-write-verbs-and-corpus-aware-verify-gate"
 title = "Memory body-write verbs and corpus-aware verify gate"
-status = "proposed"
+status = "design"
 created = "2026-07-25"
 updated = "2026-07-25"
 tags = ["area:cli", "area:mcp", "area:memory"]
