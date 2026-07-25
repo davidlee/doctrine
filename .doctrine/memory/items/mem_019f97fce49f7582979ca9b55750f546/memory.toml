@@ -1,0 +1,42 @@
+memory_uid = "mem_019f97fce49f7582979ca9b55750f546"
+memory_key = "mem.pattern.testing.census-counter-auto-merge-wrong-total"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Both merge sides bumping the same assert counter to the same value auto-merges to a wrong total"
+summary = "Two branches each add one entity and bump `assert_eq!(visible.len(), N)` from 52 to 53; git sees identical text and auto-merges clean — but the merged tree needs base+Δ_ours+Δ_theirs (54). Verify census/count assertions empirically after any merge, never trust the clean auto-merge."
+created = "2026-07-25"
+updated = "2026-07-25"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch", "close", "audit"]
+tags = ["testing", "merge", "census", "counters", "false-green"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7fa002dc94ea1e489c7212789f57dd76349c4fb7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "00106fae1b15425da68bdfc4c308ea49641012f81b8c4154adb32a4c642bd03b"
+base_commit = "42087a4bebddea0ceddf7808ffcb2c84ff8343c1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

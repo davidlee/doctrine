@@ -1,0 +1,42 @@
+memory_uid = "mem_019f97fcb93c79708c23b4c351f7633a"
+memory_key = "mem.pattern.dispatch.admit-fix-on-top-not-supersede"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "candidate admit accepts a fix-on-top tip — the DRIFT flag advises supersede, but do not"
+summary = "A fix-now commit stacked on the recorded candidate merge is a first-class flow: admit's I3 ancestor-check accepts a descendant of the recorded merge. `candidate status` shows DRIFT and suggests supersede — superseding re-runs the merge and DROPS the on-top commit."
+created = "2026-07-25"
+updated = "2026-07-25"
+
+[scope]
+paths = ["src/dispatch.rs"]
+globs = []
+commands = ["dispatch", "close"]
+tags = ["dispatch", "candidate", "admit", "drift", "close"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7fa002dc94ea1e489c7212789f57dd76349c4fb7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3e6d2a2c5c235b1ad3f743715c2c10f7a29f27ec3e67fc533250cae1dd72e446"
+base_commit = "42087a4bebddea0ceddf7808ffcb2c84ff8343c1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

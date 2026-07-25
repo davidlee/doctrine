@@ -1,0 +1,42 @@
+memory_uid = "mem_019f97fcab2e77a28902371f80743605"
+memory_key = "mem.pattern.review.verified-is-terminal-amend-in-prose"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Verified RV findings are terminal — a post-verification decision change is a prose amendment, not a reopened disposition"
+summary = "ADR-007: no verb transitions a finding out of `verified`. If the operator later changes a deferral to fix-now, record it as a `## Post-verification amendment` on the RV .md — the structured disposition stays the immutable audit-time record."
+created = "2026-07-25"
+updated = "2026-07-25"
+
+[scope]
+paths = ["src/review.rs"]
+globs = []
+commands = ["review", "audit", "reconcile", "close"]
+tags = ["review", "adr-007", "rv-ledger", "disposition", "audit"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7fa002dc94ea1e489c7212789f57dd76349c4fb7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "9c7f9cef786d42ff6ac5bb5a4152fa94c960688ec37f752cf004a2faaf85e235"
+base_commit = "42087a4bebddea0ceddf7808ffcb2c84ff8343c1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

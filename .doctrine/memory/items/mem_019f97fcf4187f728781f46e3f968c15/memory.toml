@@ -1,0 +1,42 @@
+memory_uid = "mem_019f97fcf4187f728781f46e3f968c15"
+memory_key = "mem.fact.dispatch.integrate-projects-authored-corpus"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "dispatch sync --integrate projects .doctrine/** too — coord-authored corrections DO reach trunk"
+summary = "Integrate is NOT code-only: it carries the candidate's `.doctrine/**` (FF+CAS, clobber-guarded by --allow-corpus-clobber). So selector/plan corrections authored on review/NNN propagate to trunk — redoing them on edge is redundant, and reconcile edits made on edge diverge from what integrate lands."
+created = "2026-07-25"
+updated = "2026-07-25"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch", "reconcile", "close"]
+tags = ["dispatch", "integrate", "reconcile", "selectors", "edge-main"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "7fa002dc94ea1e489c7212789f57dd76349c4fb7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5253de046a4402c7222a66d47cd46346779f1cb344de4f78d9606d592200ca33"
+base_commit = "42087a4bebddea0ceddf7808ffcb2c84ff8343c1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
