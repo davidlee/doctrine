@@ -2,7 +2,7 @@
 
 ## Harvest
 
-fresh-as-of: `PHASE-02 completed` @ `14a9f9f8`
+fresh-as-of: `audit complete, lifecycle audit → reconcile` @ `ba85b3d6`
 
 **Produced**
 - `design.md` (D1–D6; internal adversarial pass integrated, 4 findings) —
