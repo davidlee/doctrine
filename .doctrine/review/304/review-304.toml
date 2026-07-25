@@ -23,7 +23,7 @@ response = "Confirmed against src/mcp_server/dispatch.rs:237-251 (import surface
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Heal-forward needs a crash-surviving phase binding, but fork creation can crash before DispatchRecord exists"
 detail = "Expected: D8/REQ-384 can heal a missing Spawn row from a durable slice+phase binding that is part of the fork act. Observed: design.md:205-220 calls DispatchRecord durable and says the binding is part of the act, yet the live record is gitignored runtime state at .doctrine/state/dispatch/record (src/worktree/dispatch_record.rs:24-29). More decisively, the trusted create path creates/provisions/marks the worktree first at src/worktree/create.rs:316-328, then writes the DispatchRecord only afterward at :334-340. A hard crash after fork_core returns but before provision_dispatch_record completes leaves exactly a live worker fork with no funnel Spawn row and no binding. The repaired rule at design.md:219-233 then refuses unprovable-fork forever; no later verb can heal the Class-2 prefix, contradicting design.md:210-218 and the §11 kill-between-act-and-record VT at :464-467. The binding also is not a git fact as D8 claims at design.md:38. Make binding creation atomic-before/extrinsically reconstructable relative to the fork act, and VT the crash boundary between worktree creation and binding persistence."
