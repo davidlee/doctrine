@@ -1564,3 +1564,148 @@ it still needs `git add <paths>` first, or the commit fails with `pathspec did
 not match any file(s) known to git`. Cost one round per new-entity commit (twice
 this session). Worth stating explicitly in AGENTS.md beside the existing rule,
 since entity-creating verbs always produce untracked files plus a symlink.
+
+[dispatch-agent / phase-plan; SL-228-P04-drive]
+
+1. **The runtime phase sheet never reaches the worker — the single largest
+   avoidable cost this phase.** `.doctrine/state/` is gitignored runtime tier, so
+   a fork minted from a commit carries none of it. The orchestrator wrote a
+   ~250-line phase sheet and the worker prompt cited it by path; the worker found
+   it absent (and found the coord tree's copy to be the un-expanded 28-line stub)
+   and had to reconstruct intent from the prompt + design. It survived only
+   because the prompt independently inlined D1–D6, the STOP conditions and the
+   scope list. Cost: a worker-side detour plus a deviation report entry (D0)
+   explaining the gap. **Fix shape:** either the funnel provisions the sheet into
+   the fork (it is exactly the kind of per-worktree state `run_provision` already
+   copies), or `/dispatch-agent` states outright that sheet paths are unreachable
+   from a fork and the prompt must inline. Right now nothing warns.
+
+2. **Design/plan assigned a Class-2 record to a verb that cannot carry it.** §4
+   line 377 + §10's `src/commands/` row put the `Spawn` funnel row on `arm-spawn`,
+   which runs pre-fork and cannot know the harness-assigned fork name, and which
+   contradicts the design's own D8 ("record lands strictly after the act"). Cost:
+   ~40 minutes of orchestrator reading (design §2/§3/§4/§6/§10, funnel_machine's
+   TABLE, the layering gate's actual rules, `cargo tree` twice) to establish that
+   the contradiction was real and to find a routing with no new module edge. Two
+   of the three obvious resolutions were dead ends that only the §6 oracle ladder
+   ruled out. **This is a design-review escape, not a phase-plan cost** — the
+   review ledger settled §3's fork protocol in detail while leaving the recorder
+   assignment unexamined against the arm it runs on.
+
+3. **RETRACTED — the gate does enforce it, by a different assertion than the one
+   I read.** I originally logged that a `worktree → dispatch` command-tier
+   back-cycle "would have passed green", reasoning from assertion 2 (upward tier
+   edges, `tests/architecture_layering.rs:630`), which indeed does not fire on a
+   same-tier edge and additionally skips edges out of sub-classified modules like
+   `worktree`. **Probed empirically before handover and the claim is false:** a
+   throwaway `use crate::dispatch::…` in `worktree/shared.rs` fails the gate with
+   `TangleGrew { tier: Command, baseline: 76, actual: 79 }` — `worktree` is
+   already in the command SCC, so the new edge grows the tangle ratchet
+   (assertion 4). The gate stops it.
+
+   **The transferable cost is the reasoning error, not the gate.** I read one
+   assertion, generalised it to the whole gate, and stated a governance
+   conclusion to the user from it — then wrote it into a durable case note. What
+   caught it was checking a neighbouring backlog item (RSK-227) before filing a
+   duplicate, which described the ratchet I had skipped. **A multi-assertion gate
+   should not be characterised from one assertion; the cheap probe (make the edge,
+   run the gate, revert) costs ~2 minutes and is decisive.** The residual blind
+   spot RSK-227 does name — acyclic same-tier fan-out, sub-module coupling — is
+   real and already filed; no new item needed.
+
+4. **`slice selector list` output does not distinguish "declared for this phase"
+   from "declared for the slice".** Pre-declaring PHASE-04's scope meant reading
+   24 rows and cross-checking each against §10's file map by hand to notice that
+   `src/worktree/**` was `scope-relevant` (so every core file would have returned
+   `undeclared`) while four sibling paths were `design-target`. A per-phase view,
+   or a `selector doctor` leg that flags design-target gaps against a phase's
+   declared file set, would have made this one command instead of a manual diff.
+
+5. **The prompt's scope list silently narrowed the real selector set.** The
+   orchestrator wrote `src/mcp_server/worker_commit.rs` into the worker prompt's
+   "Declared scope" while `src/mcp_server/tools.rs` was *already* design-target
+   from PHASE-01. The worker correctly refused to touch tools.rs and reported the
+   stale enumeration for adjudication — the right behaviour, but it cost a
+   round-trip and a second orchestrator commit for a one-line doc fix that the
+   worker was in fact authorised to make. **Deriving the prompt's scope block
+   from `slice selector list` rather than retyping it would remove this class.**
+
+6. **ISS-241 still bites every phase.** `dispatch_conclude_phase` landed the
+   committed boundary and again skipped the arm-neutral source-delta registry;
+   without the manual `slice record-delta` step the VT gate would have reported
+   `Unattributable` for all eight PHASE-04 criteria while exiting 0. Step 12 of
+   the funnel cadence remains load-bearing and remains invisible — nothing in the
+   tool output hints it is owed.
+
+[inquisition; SL-230-external-rv307]
+
+- `doctrine review list` has no `--slice` / `--target` filter. Checking "does an
+  RV already exist for this slice?" costs a full `review list` dump (300+ rows,
+  tail-truncated) that then has to be eyeballed. Cheap fix: a `--target <REF>`
+  filter. Cost this session: one wasted call + one retry + ~1.5k tokens of
+  unrelated ledger rows.
+- The routing digest sends `/inquisition` → `review-ledger.md` for mechanics,
+  which is correct and lean — but the Inquisition skill then requires the
+  *facet* vocabulary, which lives only in `doctrine review new --help`. Three
+  reads (skill → ledger doc → CLI help) to compose one `review new`. The facet
+  enum in the skill text (or a pointer to the exact help line) would collapse
+  two of them.
+- `doctrine review prime RV-307` reported "101 tracked path(s)" — good, no
+  curation tax. No friction; recording the positive as a control.
+
+## [phase-plan + dispatch-agent; SL-228-P05-drive]
+
+1. **The phase sheet is written twice.** `/phase-plan` writes the runtime sheet
+   (`.doctrine/state/…/phase-05.md`), but `.doctrine/state/` is gitignored so the
+   worker fork carries none of it — every decision, STOP condition, task and scope
+   line must then be re-authored *inline* into the spawn prompt. This drive: ~250
+   lines of sheet, ~300 lines of prompt, ~80% semantically identical. It is the
+   single largest avoidable cost of the beat, and it is now a **second** sighting
+   (PHASE-04 recorded the same, notes.md:365). Candidate fixes: (a) a
+   `doctrine slice phase-brief <SL> <PHASE>` verb that renders the worker-facing
+   subset of the sheet to stdout for the orchestrator to paste; (b) let the sheet
+   have a designated `## For the worker` section the spawn path materialises into
+   the fork as an untracked file. Either collapses the duplication to one authoring.
+
+2. **"Grep the seams, don't recall them" is right and costs ~8 tool calls.** The
+   PHASE-04 handover correctly forbids citing seams from the design file-map (it was
+   wrong twice in PHASE-03). Honouring that meant re-locating ~30 symbols across 8
+   files before a single decision could be pinned. A `doctrine explore` verb that
+   takes a symbol list and emits `path:line` for each — or simply caching the
+   previous phase's verified seam table in the handover in the form the next prompt
+   needs — would pay for itself immediately. (The PHASE-04 handover's "Terrain"
+   section did this for prose but not for `file:line`.)
+
+3. **`slice status` in the coord tree reports the pre-dispatch lifecycle state**
+   (`ready`, not `started`) because the lifecycle flip commits on the edge line
+   while the coord tree sits on `dispatch/<N>` forked before it. Harmless once known;
+   costs one confused re-check per fresh orchestrator context. The handover flagged
+   it, which is the only reason it cost nothing here — i.e. it is currently carried
+   by prose rather than by the verb.
+
+4. **A worker cannot write case-notes at all** — `.doctrine/` is a hard worker wall
+   (`classify_import` returns `doctrine-touch` before the selector leg), but
+   CLAUDE.md's instrumentation instruction is unconditional and reaches the worker
+   through the same boot snapshot. The PHASE-05 worker correctly refused and handed
+   its two entries back in prose for the orchestrator to transcribe (below). The
+   instruction should say *orchestrators only*, or the observation should have a
+   worker-reachable sink.
+
+5. **(worker-reported) A pinned "unconditional gate" conflicted with the
+   "no pre-existing test may go red" STOP condition.** The phase plan told the
+   worker to gate `dispatch_conclude_phase` and `dispatch_reap` unconditionally,
+   *and* forbade editing any existing test. Pre-existing tests drive both verbs with
+   no funnel row, where an unconditional gate refuses `not-spawned`. The two
+   instructions were jointly unsatisfiable. The plan already carried the resolution
+   one paragraph away — a decision (D3) extending the row-present/row-absent split to
+   `record-boundary` — but scoped it to that one verb, so the worker had to rediscover
+   the general rule under adversarial pressure. **Lesson: when a phase-plan decision
+   resolves a class of cases, state the class, not the instance.**
+
+6. **(worker-reported) A pinned decision silently orphaned a function four existing
+   tests depend on.** Pinning the gated heal-forward as the only production import
+   path (D6) left `import_compose` with no production caller. The plan did not note
+   this, so the worker had to invent a disposition mid-flight (it made it a
+   `#[cfg(test)]` wrapper over the shared production core — a reasonable call, but an
+   unreviewed one). **Lesson: a phase-plan that reroutes a call path should name what
+   the old path's callers become.**
