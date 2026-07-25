@@ -1266,3 +1266,16 @@ PHASE-01 funnel (import→verify→conclude→reap) token-inefficiency notes:
   exactly the op the AGENTS.md git-footgun rules make one hesitate over). FIX:
   add an explicit "sync coord worktree to HEAD after each MCP funnel write
   (git reset --hard HEAD — the writes are object-db-only)" beat to the skill.
+
+[reconcile; SL-229/RV-306 reconcile pass]
+`doctrine review show RV-306 --json` omits the finding array from its top-level
+keys (`body`, `kind`, `review`) — findings are nested under `review.finding`,
+which is not discoverable from the table view or `--help`. Cost: three probe
+round-trips (a python filter over the wrong shape, a raw head dump, then a key
+dump) to answer "are all findings terminal?", which is step 1 of every reconcile
+pass. A `doctrine review status <RV>` that printed the per-finding disposition
+table — or a documented `--json` shape — would collapse that to one call.
+Secondary: the PATH binary (~/.cargo/bin) rejected `doctrine reports findings`
+while boot.md's command map lists `reports  status next blockers survey explain
+findings`; the map is written against a newer surface than the installed binary,
+so an agent trusting it burns a call discovering the skew.
