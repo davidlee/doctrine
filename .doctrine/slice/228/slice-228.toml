@@ -1,9 +1,9 @@
 id = 228
 slug = "zero-rescue-dispatch-funnel"
 title = "Zero-rescue dispatch funnel"
-status = "design"
+status = "ready"
 created = "2026-07-24"
-updated = "2026-07-24"
+updated = "2026-07-25"
 tags = []
 
 [relationships]
