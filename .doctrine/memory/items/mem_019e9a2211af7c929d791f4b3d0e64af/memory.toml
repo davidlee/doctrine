@@ -25,12 +25,12 @@ tree = "f552b563c273f192de14fc487d0ca63b36605778"
 ref_name = "refs/heads/SL-018-work"
 checkout_state_id = "1f6d9dac9b6053691af5d52fb88017722df21e4e51e969f40a369fa3e868603f"
 base_commit = "4e3cb65ce82dbbd3d6c3f0d38646d7f11e130d58"
-verified_sha = ""
+verified_sha = "933b747cfa45d0a8c44ef7c69998e09c9a6932b5"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-07-25"
 review_by = ""
 
 [trust]
