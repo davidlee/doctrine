@@ -257,14 +257,29 @@ convention).
   3. **act** — create the worktree last, so **a live fork implies its
      binding exists by construction**.
 
+  The claim→bind→act window is held under a per-name **claim lock** — an OS
+  advisory lock (`flock`) on `<coord>/.doctrine/state/dispatch/lock/<name>`
+  (runtime tier; kernel-mediated, **auto-released on process death**, so no
+  stale-lease problem exists by construction; single-host is already the
+  dispatch topology, ADR-008) — taken before the claim, released after the
+  worktree act. This closes the **spawn–gc race** (RV-304 F-2, third
+  contest): the branch claim serializes spawn against spawn, but gc could
+  otherwise mistake an *active claimant's* branch (claimed, worktree not yet
+  created) for crash residue, sweep it, and let a second spawn re-claim the
+  name while the first continues into bind/act — cross-pairing bindings.
+
   Crash residues (branch-only, or branch⊕record without a worktree) are
   inert — never a live fork, `worker_commit`/import refuse on their own
   gates; a same-name retry refuses at the claim and the refusal prescribes
   the gc sweep (gc already owns record deletion — "no record survives
-  without a live worktree" — and gains the branch-residue sweep). A residue
-  can never acquire a worktree concurrently with its sweep, because
-  acquiring one would require winning a claim the residue still holds
-  (zero-rescue: refusal + prescription, never inline replace). Honest
+  without a live worktree" — and gains the branch-residue sweep). The sweep
+  **must hold the same per-name claim lock** before classifying or deleting
+  a residue: a busy lock IS the active-claimant signal — gc skips that name
+  this sweep (non-blocking acquire); a crashed spawn's lock is already
+  kernel-released, so its residue sweeps freely. A residue can never
+  acquire a worktree concurrently with its sweep — the sweep holds the very
+  lock bind/act require (zero-rescue: refusal + prescription, never inline
+  replace). Honest
   tier claim: the binding is a crash-durable *local file* in the coord's
   runtime-state tier, **not a git fact** — destroying that tier under a live
   fork ⇒ `unprovable-fork`, the deliberate triage beat (zero-rescue never
@@ -544,7 +559,8 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
 | `src/worktree/dispatch_record.rs` | `DispatchRecord` gains `slice` + `phase` (fork-creation snapshot — the durable fork binding; F-4); resolver/classifier gains the caller-declared **expected fork state** (`AtBase` \| `Advanced` — RV-304 F-7). `arm-spawn` / `worktree fork --worker` gain the phase argument |
 | `src/verify.rs` + `src/commands/check.rs` | runner extraction: status-returning `run_suite` callable below command tier; `check.rs` thin exit-forwarding shell (F-10) |
 | `.doctrine/adr/001/layering.toml` | `funnel_machine = "leaf"` row — the pure-leaf claim gated by the architecture-layering check, not prose (F-12) |
-| `src/worktree/create.rs` + `src/worktree/fork.rs` | **branch-as-claim fork sequence** (RV-304 F-2 + contests): claim (atomic branch create) → bind (record write under the claim, no-clobber belt) → act (worktree last); gc gains the branch-residue sweep |
+| `src/worktree/create.rs` + `src/worktree/fork.rs` | **branch-as-claim fork sequence** (RV-304 F-2 + contests): claim (atomic branch create) → bind (record write under the claim, no-clobber belt) → act (worktree last), all under the per-name claim lock (`flock`, runtime tier, crash-released) |
+| `src/worktree/gc.rs` | branch-residue sweep, **lock-gated**: non-blocking acquire of the per-name claim lock before classify/delete — busy lock = active claimant, skip (RV-304 F-2) |
 | `src/commands/` | CLI wiring: `dispatch verify\|next\|commit\|tree-state\|delta\|whereami\|history\|ignored\|hook-check`; `arm-spawn` spawn-row; `record-boundary` reroute |
 | `src/dispatch_config.rs` | `[dispatch] verify_suite` key |
 | `src/doctor_checks.rs` | hook-present + worktreeConfig checks for live coord worktrees |
@@ -563,7 +579,10 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
   freshly derived `onto`; distinct from the pre-CAS lost-ref-race retry (acts
   onto the new tip). VT — **branch-as-claim** (RV-304 F-2): kill between the
   claim/bind steps and the worktree act ⇒ inert residue (branch⊕record,
-  never a live fork; gc sweeps; retry refuses at the claim);
+  never a live fork; gc sweeps — the kernel released the crashed spawn's
+  claim lock; retry refuses at the claim); a sweep attempted while a live
+  spawn holds the claim lock skips that name (busy lock = active claimant —
+  the spawn–gc race cell);
   any live fork resolves its binding — driven through the production resolver
   with the `Advanced` expectation (RV-304 F-7), not a test-local read;
   **two concurrent same-name spawns ⇒ exactly one wins the atomic branch
