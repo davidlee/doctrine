@@ -1,0 +1,43 @@
+memory_uid = "mem_019f999fd18a794297c735ac3eae11b7"
+memory_key = "mem.fact.spec.activation-is-hand-edit-asymmetry"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "fact"
+status = "active"
+title = "Spec draft→active is a hand-edit — no `spec status` verb exists, though `spec req status` does for requirements"
+summary = "A spec's status is advanced by editing `status =` in its TOML — `spec edit` covers descent/parent scalars only and there is no `spec status`. Requirements are the opposite: `spec req status` transitions them any→any. Generalising from either axis to the other guesses wrong."
+created = "2026-07-25"
+updated = "2026-07-25"
+
+[scope]
+paths = [".doctrine/spec", "src/spec.rs", "src/requirement.rs"]
+globs = []
+commands = ["doctrine spec edit", "doctrine spec req status"]
+tags = ["spec", "requirement", "lifecycle", "activation", "cli-shape", "chr-046"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ed8f9534d798fbe60dcd8fad55f5005ed7f298f6"
+ref_name = "refs/heads/edge"
+checkout_state_id = "3a074d7f08e0c0c6ea3a9a60fb15bb62741a3817e9e924316e35339fcad11d36"
+base_commit = "76a13a6ced40df3ec89f432a1894c5f9eaf420e1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+

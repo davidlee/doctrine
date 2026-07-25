@@ -1,0 +1,43 @@
+memory_uid = "mem_019f999f39fe7820a0831f4413a539b4"
+memory_key = "mem.pattern.spec.source-anchor-liveness-unchecked"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "Spec [[source]] anchors rot silently — validate never checks them; identifier is path-form, module is the Rust path"
+summary = "Nothing verifies a spec's [[source]] anchor still resolves — `spec validate` FK-checks members/interactions only, so a spec anchoring a vanished path reports clean and misreads as covered. Check with `test -e` before trusting an anchor as coverage."
+created = "2026-07-25"
+updated = "2026-07-25"
+
+[scope]
+paths = [".doctrine/spec/tech", "src/spec.rs"]
+globs = []
+commands = ["doctrine spec validate", "doctrine spec show"]
+tags = ["spec", "source-anchor", "coverage", "validate", "rot", "chr-046"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "ed8f9534d798fbe60dcd8fad55f5005ed7f298f6"
+ref_name = "refs/heads/edge"
+checkout_state_id = "6c46ab3955f57bd5f671150c65e2bc341f929fdf180823b4768cdbac3be93fe4"
+base_commit = "76a13a6ced40df3ec89f432a1894c5f9eaf420e1"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
