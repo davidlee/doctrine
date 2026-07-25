@@ -1174,3 +1174,22 @@ and PHASE-03, invalidating that phase's EX-2/VA-1 verification surface:
   compound command hung for the full 120s tool timeout and created an empty
   file. Append-via-heredoc is the instrumentation duty's own recipe; a typo in
   it silently costs a timeout window.
+
+[record-memory; SL-229-memfix-c7b]
+- `memory verify` refuses on a dirty tree ("a dirty tree cannot be attested"),
+  but **verify itself writes the anchor into `memory.toml`** — so it dirties the
+  tree it just required to be clean. Verifying N corrected memories costs N-1
+  interleaved commits, each a one-line `chore(memory): re-attest …`. Correct as
+  an attestation invariant; the cost is that a batch correction becomes a
+  commit-per-item ratchet. A `--batch`/`--allow-own-writes` affordance, or
+  deferring the anchor write to an explicit `attest`, would collapse it.
+- The refusal is also whole-tree, not scoped-paths. An unrelated dirty file
+  (here: the RFC-011 case-notes file this instrumentation duty tells agents to
+  append to) blocks all attestation. Two duties in the same repo pull against
+  each other. Note: the prior handover asserted case-notes "stays uncommitted";
+  `git log` shows it is routinely committed (`doc(RFC-011): case note — …`), so
+  that convention was local to one agent and is what created the deadlock.
+- `doctrine memory validate` walks the corpus with per-memory git checks and
+  exceeded a 120s tool timeout on this corpus; running it twice in one compound
+  command (count, then grep) doubled that into a backgrounded read. Cheap
+  mitigation for agents: one pass, filter the saved output.
