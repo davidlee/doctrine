@@ -1,38 +1,69 @@
-# Use jail-built binary for doctrine install and boot after plugin edits
+# Run doctrine install and boot from the freshly built in-tree binary, not PATH
 
-## The trap
+> **Key is a misnomer.** `…jail-binary-for-skill-install` dates from the shared
+> `CARGO_TARGET_DIR` era; that redirect is gone (SL-156 / ADR-008 D-B1). Memory
+> keys are immutable once recorded, so the key stays — read it as
+> *"fresh-binary-for-skill-install"*. Corrected 2026-07-25 against live evidence.
 
-`plugins/doctrine/skills/**` and `install/routing-process.md` are RustEmbed-compiled
-into the binary. `doctrine install` and `doctrine boot` read the
-**currently-running binary's** embedded assets — NOT the on-disk files.
+## The trap (unchanged, and the reason this memory exists)
 
-Three binaries exist, only one is current:
+`plugins/**` and `install/**` are RustEmbed-compiled into the binary. `doctrine
+install` and `doctrine boot` read the **currently-running binary's** embedded
+assets — NOT the on-disk files. So *which binary you invoke* is load-bearing,
+and `cargo build` printing `Finished` proves nothing about the binary on `PATH`.
 
-| Binary | Location | Has latest plugins? |
+## Which binary is current
+
+| Binary | Location | Has latest embedded assets? |
 |---|---|---|
-| AUR release (PATH) | `~/.cargo/bin/doctrine` | **No** — stale from last release |
-| Jail build | `/home/david/.cargo/doctrine-target-jail/debug/doctrine` | **Yes** — after `cargo build` |
-| `./target/debug/doctrine` | repo-local symlink | **Stale** — CARGO_TARGET_DIR redirects elsewhere |
+| release / PATH | `~/.cargo/bin/doctrine` | **No** — stale from last release; read-only in the jail |
+| **in-tree build** | `./target/debug/doctrine` | **Yes** — after `touch src/install.rs && cargo build` |
+| old jail target | `~/.cargo/doctrine-target-jail/debug/doctrine` | **Leftover — ignore.** Pre-SL-156 path, no longer written |
 
-The trap: `cargo build` prints `Finished` (the crate recompiled), but the PATH
-binary and `./target/` are untouched. Running `doctrine boot` or `doctrine
-install` from PATH produces **stale output** — the boot snapshot shows old routing
-rows, and `install` refreshes skills from the old embedded master.
+**Corrected claim.** This memory previously said `./target/debug/doctrine` was a
+symlink made stale by a `CARGO_TARGET_DIR` redirect, and prescribed the jail
+path. That is now exactly inverted. Verified in-jail 2026-07-25:
+`CARGO_TARGET_DIR` unset; `cargo metadata` → `target_directory:
+/workspace/doctrine/target`; no `target-dir` in any `.cargo/config.toml`;
+`./target/debug/doctrine` a real 250MB executable freshly built; the jail path
+last written weeks earlier. Each worktree builds into its own gitignored in-tree
+`target/` (SL-156, ADR-008 D-B1) — cargo's default, no redirect.
+
+## The consequence when you get it wrong
+
+Not just stale skills — **`boot` regen from a stale-embed binary silently rolls
+back governance**, and `boot --check` self-reports clean. Observed 2026-07-25:
+the boot snapshot's command spine had lost `slice research`, `explore graph`,
+*and* SL-227's `library` verb, because something ran `boot` from an older
+binary. Regen from `./target/debug/doctrine` restored all three. The snapshot is
+gitignored runtime state, so it is cheap to repair — but until someone notices,
+every session boots with degraded governance context.
+See [[mem.fact.doctrine.boot-regen-binary-embed-divergence]].
 
 ## The fix
 
-After editing embedded assets (`plugins/doctrine/skills/**` or `install/`):
+After editing embedded assets (`plugins/**` or `install/**`):
 
 ```bash
-# Force recompile (RustEmbed has no rerun-if-changed)
-touch src/install.rs && cargo build
-
-# THEN use the jail binary
-export TARGET_DIR=$(cargo metadata --format-version=1 | jq -r '.target_directory')
-$TARGET_DIR/debug/doctrine boot
-$TARGET_DIR/debug/doctrine install
+touch src/install.rs && cargo build   # RustEmbed has no rerun-if-changed
+./target/debug/doctrine boot
+./target/debug/doctrine install -s <id> -y
 ```
 
-Related: [[mem_019e98a783ea7471ac4bfcefdc04ae5e]] — the RustEmbed recompile
-footgun (touch src/install.rs). This memory adds the **which binary** dimension:
-recompile matters, but so does selecting the right binary afterward.
+Prove the re-embed took by grepping the built binary — note `-a`, or grep
+suppresses output on a binary and the empty result reads as a miss:
+
+```bash
+grep -a -c "<a distinctive string you just added>" target/debug/doctrine
+```
+
+If you are somewhere the in-tree path may not hold, resolve it rather than
+hardcoding either path — this form is correct in both eras:
+
+```bash
+TARGET_DIR=$(cargo metadata --format-version=1 | jq -r '.target_directory')
+```
+
+Related: [[mem.pattern.build.rust-embed-no-rerun]] — the recompile footgun this
+one builds on (recompiling matters; so does then picking the right binary).
+[[mem.pattern.distribution.skill-refresh-command]] — the skill-refresh sequence.

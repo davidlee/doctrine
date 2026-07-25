@@ -3,10 +3,10 @@ memory_key = "mem.pattern.build.jail-binary-for-skill-install"
 schema_version = 1
 memory_type = "pattern"
 status = "active"
-title = "Use jail-built binary for doctrine claude install and boot after plugin edits"
-summary = "After editing plugin SKILL.md, use the jail-built binary for claude install and boot — the PATH binary carries stale embedded assets"
+title = "Run doctrine install and boot from the freshly built in-tree binary, not PATH"
+summary = "install/boot read the RUNNING binary's embedded assets: after touch src/install.rs && cargo build, invoke ./target/debug/doctrine — the in-tree target is live (no CARGO_TARGET_DIR redirect since SL-156); a stale-embed binary silently rolls back the boot snapshot"
 created = "2026-06-17"
-updated = "2026-07-04"
+updated = "2026-07-25"
 
 [scope]
 paths = ["plugins/doctrine/skills/", "install/routing-process.md"]
