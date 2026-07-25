@@ -4,7 +4,7 @@ version = 1
 id = 343
 slug = "three-tier-pure-resolve-compile-project-pipeline"
 title = "Three-tier pure resolve-compile-project pipeline"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The engine derives a per-entity value scalar and its provenance from the ledger through three pure tiers, row-validity resolution, constraint compilation, and gauge-based projection, composed behind one impure disk seam."

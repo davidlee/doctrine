@@ -4,7 +4,7 @@ version = 1
 id = 27
 slug = "graph-projection-and-cli-emitter"
 title = "Graph projection and CLI emitter"
-status = "draft"
+status = "active"
 kind = "tech"
 tags = [
   "graph",

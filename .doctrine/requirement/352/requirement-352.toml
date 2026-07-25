@@ -4,7 +4,7 @@ version = 1
 id = 352
 slug = "frontend-dot-authoring-is-pure-and-client-side"
 title = "Frontend DOT authoring is pure and client-side"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The frontend composes DOT source text for the semantic graph and concept-map diagrams entirely in TypeScript with no DOM or network dependency, and posts only finished text to the server."

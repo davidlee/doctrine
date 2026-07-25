@@ -4,7 +4,7 @@ version = 1
 id = 347
 slug = "serve-three-independent-graph-resources"
 title = "Serve three independent graph resources"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The map server exposes the presentation catalog graph, the actionability graph, and per-entity concept maps as three separately-fetchable JSON resources built by three separate functions."

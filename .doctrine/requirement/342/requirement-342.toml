@@ -4,7 +4,7 @@ version = 1
 id = 342
 slug = "append-only-session-ledger-capture"
 title = "Append-only session ledger capture"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The engine captures every value/estimate judgement, relative or absolute, as an immutable, dated, attributed row in an append-only session ledger, never as an in-place edit."

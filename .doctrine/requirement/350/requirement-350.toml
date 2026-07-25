@@ -4,7 +4,7 @@ version = 1
 id = 350
 slug = "concept-map-writes-are-stale-write-guarded"
 title = "Concept-map writes are stale-write guarded"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Concept-map mutations apply against a client-supplied DSL hash and are refused when the on-disk DSL has changed since the client last read it."

@@ -4,7 +4,7 @@ version = 1
 id = 339
 slug = "concept-map-view-and-structural-editing"
 title = "Concept-map view and structural editing"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The explorer renders a human-authored concept map's DSL as a diagram and applies structural edits through the same seam the CLI exposes."

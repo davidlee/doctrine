@@ -4,7 +4,7 @@ version = 1
 id = 341
 slug = "dual-agent-and-human-json-graph-contract"
 title = "Dual agent and human JSON graph contract"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Every explorer view's read model must be independently fetchable as JSON so an agent consumes the same graph a human browses."

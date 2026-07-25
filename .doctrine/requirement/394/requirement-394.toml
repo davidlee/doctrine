@@ -4,7 +4,7 @@ version = 1
 id = 394
 slug = "emit-the-semantic-graph-to-stdout-via-the-graph-verb"
 title = "Emit the semantic graph to stdout via the graph verb"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "`doctrine graph [FOCUS]` emits the semantic graph to stdout, whole-corpus or as a focus neighbourhood, with kind, label, and memory filters applied in a fixed order."

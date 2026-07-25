@@ -4,7 +4,7 @@ version = 1
 id = 344
 slug = "tiered-claim-authority-ladder-for-anchors"
 title = "Tiered claim-authority ladder for anchors"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The engine resolves competing absolute value claims through a derived authority ladder, pin, human, comparison projection, agent, migrated, default, rather than treating every authored magnitude as equally constitutional."

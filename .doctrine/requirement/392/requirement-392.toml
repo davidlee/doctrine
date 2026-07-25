@@ -4,7 +4,7 @@ version = 1
 id = 392
 slug = "bound-an-ego-view-by-undirected-breadth-from-a-focus"
 title = "Bound an ego-view by undirected breadth from a focus"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "`neighbourhood(focus, depth)` returns the undirected, breadth-bounded subgraph within `depth` hops of a focus node, including boundary nodes without expanding them."

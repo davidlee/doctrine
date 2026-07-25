@@ -4,7 +4,7 @@ version = 1
 id = 351
 slug = "route-handlers-stay-policy-free-wrappers"
 title = "Route handlers stay policy-free wrappers"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "HTTP route handlers in map_server::routes never duplicate graph-construction logic or entity semantics; they call one builder and serialise its result."

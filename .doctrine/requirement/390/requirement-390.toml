@@ -4,7 +4,7 @@ version = 1
 id = 390
 slug = "project-a-hydrated-catalog-into-a-presentation-neutral-graph"
 title = "Project a hydrated catalog into a presentation-neutral graph"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "A hydrated `Catalog` projects into `CatalogGraph` — a key-indexed node map, a flat edge list, and one top-level units block — purely, with unresolved and unvalidated edge targets preserved rather than dropped."

@@ -4,7 +4,7 @@ version = 1
 id = 337
 slug = "semantic-graph-neighbourhood-exploration"
 title = "Semantic graph neighbourhood exploration"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The explorer renders a focus-and-depth-bounded neighbourhood of the entity+relation graph, filterable by kind and navigable node to node."

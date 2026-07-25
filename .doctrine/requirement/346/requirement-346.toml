@@ -4,7 +4,7 @@ version = 1
 id = 346
 slug = "pure-core-determinism-across-pipeline-tiers"
 title = "Pure-core determinism across pipeline tiers"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Every pure tier of the comparison engine is deterministic and side-effect-free, so pipeline output depends only on the active row set, never on read order, machine, or wall-clock time."

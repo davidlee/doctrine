@@ -4,7 +4,7 @@ version = 1
 id = 391
 slug = "compose-bounded-projections-through-a-self-consuming-filter-algebra"
 title = "Compose bounded projections through a self-consuming filter algebra"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "Bounded projections compose from self-consuming filters over `CatalogGraph` — kind, label, memory exclusion, and isolate-dropping — each returning an owned graph."

@@ -4,7 +4,7 @@ version = 1
 id = 396
 slug = "keep-projection-logic-out-of-the-command-layer"
 title = "Keep projection logic out of the command layer"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "Per ADR-001 the command layer holds no projection logic: every filter, traversal, and DOT construction lives in the engine modules it composes."

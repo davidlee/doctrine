@@ -4,7 +4,7 @@ version = 1
 id = 340
 slug = "loopback-only-embedded-explorer-serving"
 title = "Loopback-only embedded explorer serving"
-status = "pending"
+status = "active"
 kind = "quality"
 
 description = "The web explorer must run with no external network dependency, binding to loopback and serving assets embedded in the binary."

@@ -4,7 +4,7 @@ version = 1
 id = 349
 slug = "delegate-dot-to-svg-rendering-to-graphviz"
 title = "Delegate DOT-to-SVG rendering to Graphviz"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The server renders client-submitted DOT source to SVG by shelling out to the local dot binary behind an injectable DotRenderer trait, capped and time-bounded."

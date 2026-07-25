@@ -4,7 +4,7 @@ version = 1
 id = 338
 slug = "actionability-graph-exploration-surface"
 title = "Actionability graph exploration surface"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "The explorer renders PRD-011's derived priority and actionability ordering as a navigable diagram distinct from the semantic view."

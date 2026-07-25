@@ -4,7 +4,7 @@ version = 1
 id = 348
 slug = "refresh-swaps-all-data-stores-atomically"
 title = "Refresh swaps all data stores atomically"
-status = "pending"
+status = "active"
 kind = "functional"
 
 description = "POST /api/refresh rescans the corpus and replaces the catalog, priority graph, and presentation graph together under one write-lock acquisition so readers never see a mixed generation."
