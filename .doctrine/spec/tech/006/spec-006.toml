@@ -35,7 +35,3 @@ module = "doctrine::requirement"
 language = "rust"
 identifier = "src/registry.rs"
 module = "doctrine::registry"
-
-[[source]]
-language = "markdown"
-identifier = "doc/spec-entity-spec.md"

@@ -34,7 +34,3 @@ module = "doctrine::conduct"
 language = "rust"
 identifier = "src/state.rs"
 module = "doctrine::state"
-
-[[source]]
-language = "markdown"
-identifier = "doc/slices-spec.md"

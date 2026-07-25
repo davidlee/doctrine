@@ -23,8 +23,8 @@ responsibilities = [
 
 [[source]]
 language = "rust"
-identifier = "src/skills.rs"
-module = "doctrine::skills"
+identifier = "src/install.rs"
+module = "doctrine::install"
 
 [[source]]
 language = "directory"
@@ -33,7 +33,3 @@ identifier = "plugins/"
 [[source]]
 language = "json"
 identifier = ".claude-plugin/marketplace.json"
-
-[[source]]
-language = "markdown"
-identifier = "doc/skills-spec.md"

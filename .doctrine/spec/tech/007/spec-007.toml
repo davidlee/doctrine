@@ -36,7 +36,3 @@ module = "doctrine::retrieve"
 language = "rust"
 identifier = "src/git.rs"
 module = "doctrine::git"
-
-[[source]]
-language = "markdown"
-identifier = "doc/memory-spec.md"

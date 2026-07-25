@@ -29,7 +29,3 @@ module = "doctrine::integrity"
 language = "rust"
 identifier = "src/entity.rs"
 module = "doctrine::entity"
-
-[[source]]
-language = "markdown"
-identifier = "doc/reservation-spec.md"
