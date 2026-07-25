@@ -1,9 +1,9 @@
 id = 229
 slug = "pre-design-research-stage-v1"
 title = "Pre-design research stage v1"
-status = "ready"
+status = "started"
 created = "2026-07-24"
-updated = "2026-07-24"
+updated = "2026-07-25"
 tags = []
 
 [relationships]

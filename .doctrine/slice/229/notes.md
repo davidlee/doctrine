@@ -35,6 +35,41 @@ fresh-as-of: `PHASE-02 completed` @ `14a9f9f8`
   deferred to PHASE-03. VT-1/2/3 ✓ (post `record-delta --commit 14a9f9f8`),
   VA-1 self-review confirmed; `check gate` clean.
 
+- **PHASE-03** (`64fcc7ad`, path-limited to the 4 skill masters): advisory
+  research hooks in `/slice` (`## Next`), `/design` (`### Explore context`, new
+  step 2 *before* the `/canon` step — D-b, following items renumbered), `/plan`
+  (appended to step 2's re-grep bullet list), `/phase-plan` (new step 4). Each
+  1–3 lines, pointer + consumption note, D6 advisory, project-neutral
+  (POL-002); inverse pointers left single-sourced in `/research`. `/phase-plan`
+  says **"re-stamp the baseline" in prose, not `--restamp`** (D-c: ADR-005
+  restate rule, and `phase-plan` is inside `dedup_skills_route_not_restate`'s
+  named set). Re-embed via `touch src/install.rs && cargo build`, all four hook
+  strings verified in the fresh binary. `check gate` exit 0; VT-1..4 ✓ after
+  `record-delta --commit 64fcc7ad`; 10/10 slice VTs green.
+
+**Decisions carried out of PHASE-03** (durable — the phase sheet is disposable)
+
+- **D-a — EX-2/VA-1 read as a contract, not a path.** SL-227 (minimal
+  projection, ADR-019) landed *between* this slice's plan authoring and
+  PHASE-03 and removed local skills projection entirely: `install --dry-run`
+  emits no skill-file rows; claude installs via the plugin marketplace, other
+  harnesses delegate to `npx`; `.agents/` survives only as an auto-detection
+  probe (`src/install.rs:1570`); `.doctrine/skills/` never existed in this repo.
+  The criteria's named paths are dead. Satisfied as the **contract** — the
+  harness-visible copy matches the `plugins/` master — with the marketplace
+  cache as the claude-side mirror. The embed ritual stays *necessary*
+  (`plugins/` is still a RustEmbed root, `src/install.rs:21`) but is no longer
+  *sufficient*. Criteria ids are immutable; this is interpretation, not an edit.
+  **Selector consequence:** `.agents/skills/**` was `unmatched` under `selector
+  doctor` and was removed (`9aedc079`).
+- **VA-1 residual → `/audit`.** Cache comparison: `research/SKILL.md` **matches**
+  its master (so the tag + `claude plugin update` path is proven end-to-end),
+  and the four hooked skills differ by *exactly* PHASE-03's edits and nothing
+  else. The only gap is that `64fcc7ad` postdates the `v0.31.0` tag — release
+  work, deliberately not done here (user ruling: leave it to audit absent a
+  compelling reason). Note `v0.31.0` is contained in `origin/edge` only, while
+  `.claude-plugin/marketplace.json` sources `ref: main`.
+
 **Learned** (routed to sinks)
 - Pre-existing research-scratch seams (SL-055 gitignore, SL-116
   `Tier::Research`, doctor skip) → design D1 rationale + research.md
@@ -54,6 +89,27 @@ fresh-as-of: `PHASE-02 completed` @ `14a9f9f8`
   `Unattributable`. And that verdict's reason string says "keyword present"
   without evaluating keywords (`vtgate.rs:124`) — misleading at red-phase →
   case-notes `[execute; SL-229-PHASE-02-b7c]`.
+- **Two shipped memories are stale post-SL-227 and need correction** (found at
+  PHASE-03 phase-plan; not yet fixed):
+  `mem.pattern.build.jail-binary-for-skill-install` (**high** trust) tables
+  `./target/debug/doctrine` as "stale — CARGO_TARGET_DIR redirects elsewhere",
+  but SL-156 / ADR-008 D-B1 removed that redirect; in-tree `target/` is the live
+  binary (AGENTS.md, and `--version` → 0.31.0 carrying `slice research`).
+  A high-trust memory misdirecting binary choice is the more dangerous of the
+  two. `mem.pattern.distribution.skills-source-vs-installed` describes
+  `.doctrine/skills/` as the gitignored installed copy — mechanism now dead,
+  headline claim (source of truth is `plugins/`) still holds.
+- **`dedup_skills_route_not_restate`** (`src/install.rs:~2694`) is a live gate on
+  shipped skill wording — no flag-syntax fragments, must retain a tier-1/2
+  pointer. Named set covers `phase-plan`, `execute`, `canon`, `spec-*`,
+  `record-memory`, `retrieve-memory`, `inquisition` — not `slice`/`design`/`plan`.
+  It was absent from the PHASE-02 handover's terrain.
+- **Boot-snapshot regression observed and repaired** at PHASE-03 start: the
+  spine had lost `research`, `graph`, *and* SL-227's `library` — the
+  `mem.fact.doctrine.boot-regen-binary-embed-divergence` footgun (a stale-embed
+  binary had run `boot`). Regen from `./target/debug/doctrine` restored all
+  three. Gitignored runtime state, so cheap — but it silently degrades every
+  session's governance context until someone notices.
 - `mem.pattern.skills.yaml-frontmatter-colons` sweep recipe false-positived
   (its own `FILENAME": "` separator matched the `: ` grep); memory body
   corrected in place → case-notes ditto.
