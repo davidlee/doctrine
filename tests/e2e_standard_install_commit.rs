@@ -5,7 +5,8 @@
 //! tree, and — under THIS repo's blanket `.doctrine/*` + per-tree negation model —
 //! the tree must be negated or a scaffolded entity is `git add`-rejected with
 //! "paths are ignored", invisibly uncommittable. These tests pin both: a fresh
-//! install creates `.doctrine/standard`, and a scaffolded `standard-NNN.toml` is
+//! first `standard new` lazily scaffolds `.doctrine/standard` (SL-227 FR-008 — bare
+//! install no longer eagerly creates it), and a scaffolded `standard-NNN.toml` is
 //! committable under the negation (and provably NOT, without it — the guard bites).
 //! Mirrors `e2e_policy_install_commit.rs`.
 
@@ -58,16 +59,18 @@ fn is_ignored(root: &Path, rel: &str) -> bool {
     git(root, &["check-ignore", rel]).status.success()
 }
 
-// --- Surface 1: the manifest scaffolds the authored tree -----------------
+// --- Surface 1: the authored tree is scaffolded lazily on first use ------
 
 #[test]
-fn fresh_install_scaffolds_the_standard_tree() {
+fn first_scaffold_creates_the_standard_tree() {
     if common::under_worker_marker() {
         return;
     } // SL-225 #2: skip in a worker fork
     let repo = git_repo();
     let root = repo.path();
 
+    // SL-227 FR-008: bare install no longer eagerly scaffolds entity roots —
+    // it projects only the three-file base. The standard root must be ABSENT here.
     let out = doctrine(root, &["install", "-y"]);
     assert!(
         out.status.success(),
@@ -75,8 +78,16 @@ fn fresh_install_scaffolds_the_standard_tree() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
+        !root.join(".doctrine/standard").exists(),
+        "bare install must NOT eagerly scaffold .doctrine/standard after the minimal-projection flip"
+    );
+
+    // First `standard new` materialises the tree lazily (entity.rs materialise*).
+    let out = doctrine(root, &["standard", "new", "Two space indent"]);
+    assert!(out.status.success(), "standard new failed");
+    assert!(
         root.join(".doctrine/standard").is_dir(),
-        "fresh install must scaffold .doctrine/standard (manifest [dirs].create)"
+        "first `standard new` must lazily scaffold .doctrine/standard"
     );
 }
 

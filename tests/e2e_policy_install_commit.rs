@@ -4,9 +4,10 @@
 //! (`mem.pattern.install.authored-entity-wiring`): the manifest must scaffold its
 //! tree, and — under THIS repo's blanket `.doctrine/*` + per-tree negation model —
 //! the tree must be negated or a scaffolded entity is `git add`-rejected with
-//! "paths are ignored", invisibly uncommittable. These tests pin both: a fresh
-//! install creates `.doctrine/policy`, and a scaffolded `policy-NNN.toml` is
-//! committable under the negation (and provably NOT, without it — the guard bites).
+//! "paths are ignored", invisibly uncommittable. These tests pin both: the first
+//! `policy new` lazily scaffolds `.doctrine/policy` (SL-227 FR-008 — bare install no
+//! longer eagerly creates it), and a scaffolded `policy-NNN.toml` is committable
+//! under the negation (and provably NOT, without it — the guard bites).
 
 #![allow(
     clippy::expect_used,
@@ -57,16 +58,18 @@ fn is_ignored(root: &Path, rel: &str) -> bool {
     git(root, &["check-ignore", rel]).status.success()
 }
 
-// --- Surface 1: the manifest scaffolds the authored tree -----------------
+// --- Surface 1: the authored tree is scaffolded lazily on first use ------
 
 #[test]
-fn fresh_install_scaffolds_the_policy_tree() {
+fn first_scaffold_creates_the_policy_tree() {
     if common::under_worker_marker() {
         return;
     } // SL-225 #2: skip in a worker fork
     let repo = git_repo();
     let root = repo.path();
 
+    // SL-227 FR-008: bare install no longer eagerly scaffolds entity roots —
+    // it projects only the three-file base. The policy root must be ABSENT here.
     let out = doctrine(root, &["install", "-y"]);
     assert!(
         out.status.success(),
@@ -74,8 +77,16 @@ fn fresh_install_scaffolds_the_policy_tree() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
+        !root.join(".doctrine/policy").exists(),
+        "bare install must NOT eagerly scaffold .doctrine/policy after the minimal-projection flip"
+    );
+
+    // First `policy new` materialises the tree lazily (entity.rs materialise*).
+    let out = doctrine(root, &["policy", "new", "Two space indent"]);
+    assert!(out.status.success(), "policy new failed");
+    assert!(
         root.join(".doctrine/policy").is_dir(),
-        "fresh install must scaffold .doctrine/policy (manifest [dirs].create)"
+        "first `policy new` must lazily scaffold .doctrine/policy"
     );
 }
 

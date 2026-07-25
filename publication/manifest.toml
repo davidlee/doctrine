@@ -5,9 +5,593 @@
 # and under what licence. Lives in its OWN embed root (`publication/`) that
 # install's projection never walks — publication is not projection (REQ-380).
 #
-# Templates-only this slice (D-D, OQ-1 deferred): the unambiguous MIT copyable
-# case. `address` is the stable logical contract; `backing` is the physical
+# SL-227 (Option A, DEC-010): grown from the templates-only stub to the FULL
+# projection complement — EVERY embedded `install/` asset the minimal-projection
+# flip stops landing gets a library address here, so reachability is a *derived*
+# invariant (`{embedded_filenames()} - {base backings}` is a subset of the
+# published backings), not a hand-curated list. All of `install/` is MIT
+# (`install/LICENSE`); every entry is MIT / declared / customizable.
+#
+# `address` is the stable logical contract; `backing` is the physical
 # InstallAssets embed key (they may diverge — storage independence, D-F).
+# Address category prefixes: templates/ (template), hymns/ (guidance),
+# integration/ (integration: agents, workflows, mod.just), reference/ (reference).
+
+[[entry]]
+address       = "reference/LICENSE"
+backing       = "LICENSE"
+kind          = "reference"
+title         = "Install asset licence (MIT)"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/agents/AGENTS.md"
+backing       = "agents/AGENTS.md"
+kind          = "integration"
+title         = "Agent integration guide"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/agents/claude/dispatch-orchestrator.md"
+backing       = "agents/claude/dispatch-orchestrator.md"
+kind          = "integration"
+title         = "Claude dispatch orchestrator agent"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/agents/claude/dispatch-probe.md"
+backing       = "agents/claude/dispatch-probe.md"
+kind          = "integration"
+title         = "Claude dispatch probe agent"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/agents/claude/dispatch-worker.md"
+backing       = "agents/claude/dispatch-worker.md"
+kind          = "integration"
+title         = "Claude dispatch worker agent"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/agents/pi/dispatch-worker.md"
+backing       = "agents/pi/dispatch-worker.md"
+kind          = "integration"
+title         = "Pi dispatch worker agent"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/boot-footer.md"
+backing       = "boot-footer.md"
+kind          = "reference"
+title         = "Boot snapshot footer"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/dispatch-mechanics.md"
+backing       = "dispatch-mechanics.md"
+kind          = "reference"
+title         = "Dispatch mechanics reference"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/doctrine.toml.example"
+backing       = "doctrine.toml.example"
+kind          = "reference"
+title         = "Example doctrine.toml"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/glossary.md"
+backing       = "glossary.md"
+kind          = "reference"
+title         = "Glossary"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/governance.md"
+backing       = "governance.md"
+kind          = "reference"
+title         = "Governance reference"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/harvest.md"
+backing       = "harvest.md"
+kind          = "reference"
+title         = "Harvest reference"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/README.md"
+backing       = "hymns/README.md"
+kind          = "guidance"
+title         = "Hymns overview"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/harness/claude.md"
+backing       = "hymns/harness/claude.md"
+kind          = "guidance"
+title         = "Claude harness hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/harness/cursor.md"
+backing       = "hymns/harness/cursor.md"
+kind          = "guidance"
+title         = "Cursor harness hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/model/adherence/low.md"
+backing       = "hymns/model/adherence/low.md"
+kind          = "guidance"
+title         = "Low-adherence model hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/model/anthropic/claude-sonnet-4.md"
+backing       = "hymns/model/anthropic/claude-sonnet-4.md"
+kind          = "guidance"
+title         = "Claude Sonnet 4 model hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/model/deepseek/_default.md"
+backing       = "hymns/model/deepseek/_default.md"
+kind          = "guidance"
+title         = "DeepSeek default model hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/preamble/core.md"
+backing       = "hymns/preamble/core.md"
+kind          = "guidance"
+title         = "Core preamble hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/role/orchestrator.md"
+backing       = "hymns/role/orchestrator.md"
+kind          = "guidance"
+title         = "Orchestrator role hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "hymns/role/worker.md"
+backing       = "hymns/role/worker.md"
+kind          = "guidance"
+title         = "Worker role hymn"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/mod.just"
+backing       = "mod.just"
+kind          = "integration"
+title         = "Justfile module"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/model-band.md"
+backing       = "model-band.md"
+kind          = "reference"
+title         = "Model band reference"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/review-ledger.md"
+backing       = "review-ledger.md"
+kind          = "reference"
+title         = "Review ledger protocol"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/routing-process.md"
+backing       = "routing-process.md"
+kind          = "reference"
+title         = "Routing process reference"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/.gitignore"
+backing       = "templates/.gitignore"
+kind          = "template"
+title         = "Derived-tree gitignore template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/adr.md"
+backing       = "templates/adr.md"
+kind          = "template"
+title         = "ADR body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/adr.toml"
+backing       = "templates/adr.toml"
+kind          = "template"
+title         = "ADR metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/backlog-risk.toml"
+backing       = "templates/backlog-risk.toml"
+kind          = "template"
+title         = "Backlog risk metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/backlog.md"
+backing       = "templates/backlog.md"
+kind          = "template"
+title         = "Backlog body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/backlog.toml"
+backing       = "templates/backlog.toml"
+kind          = "template"
+title         = "Backlog metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/concept-map.md"
+backing       = "templates/concept-map.md"
+kind          = "template"
+title         = "Concept map body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/concept-map.toml"
+backing       = "templates/concept-map.toml"
+kind          = "template"
+title         = "Concept map metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/design.md"
+backing       = "templates/design.md"
+kind          = "template"
+title         = "Slice design template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/interactions.toml"
+backing       = "templates/interactions.toml"
+kind          = "template"
+title         = "Spec interactions template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/knowledge-assumption.toml"
+backing       = "templates/knowledge-assumption.toml"
+kind          = "template"
+title         = "Assumption metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/knowledge-concept.toml"
+backing       = "templates/knowledge-concept.toml"
+kind          = "template"
+title         = "Concept metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/knowledge-constraint.toml"
+backing       = "templates/knowledge-constraint.toml"
+kind          = "template"
+title         = "Constraint metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/knowledge-decision.toml"
+backing       = "templates/knowledge-decision.toml"
+kind          = "template"
+title         = "Decision metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/knowledge-evidence.toml"
+backing       = "templates/knowledge-evidence.toml"
+kind          = "template"
+title         = "Evidence metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/knowledge-hypothesis.toml"
+backing       = "templates/knowledge-hypothesis.toml"
+kind          = "template"
+title         = "Hypothesis metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/knowledge-question.toml"
+backing       = "templates/knowledge-question.toml"
+kind          = "template"
+title         = "Question metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/knowledge.md"
+backing       = "templates/knowledge.md"
+kind          = "template"
+title         = "Knowledge body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/members.toml"
+backing       = "templates/members.toml"
+kind          = "template"
+title         = "Spec members template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/memory.md"
+backing       = "templates/memory.md"
+kind          = "template"
+title         = "Memory body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/memory.toml"
+backing       = "templates/memory.toml"
+kind          = "template"
+title         = "Memory metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/notes.md"
+backing       = "templates/notes.md"
+kind          = "template"
+title         = "Slice notes template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/phase.md"
+backing       = "templates/phase.md"
+kind          = "template"
+title         = "Phase sheet template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/plan.md"
+backing       = "templates/plan.md"
+kind          = "template"
+title         = "Plan body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/plan.toml"
+backing       = "templates/plan.toml"
+kind          = "template"
+title         = "Plan metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/policy.md"
+backing       = "templates/policy.md"
+kind          = "template"
+title         = "Policy body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/policy.toml"
+backing       = "templates/policy.toml"
+kind          = "template"
+title         = "Policy metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/rec.md"
+backing       = "templates/rec.md"
+kind          = "template"
+title         = "Reconciliation body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/rec.toml"
+backing       = "templates/rec.toml"
+kind          = "template"
+title         = "Reconciliation metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/requirement.md"
+backing       = "templates/requirement.md"
+kind          = "template"
+title         = "Requirement body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/requirement.toml"
+backing       = "templates/requirement.toml"
+kind          = "template"
+title         = "Requirement metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/review.md"
+backing       = "templates/review.md"
+kind          = "template"
+title         = "Review body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/review.toml"
+backing       = "templates/review.toml"
+kind          = "template"
+title         = "Review metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/revision.md"
+backing       = "templates/revision.md"
+kind          = "template"
+title         = "Revision body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/revision.toml"
+backing       = "templates/revision.toml"
+kind          = "template"
+title         = "Revision metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/rfc.md"
+backing       = "templates/rfc.md"
+kind          = "template"
+title         = "RFC body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/rfc.toml"
+backing       = "templates/rfc.toml"
+kind          = "template"
+title         = "RFC metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/seed-onboarding.md"
+backing       = "templates/seed-onboarding.md"
+kind          = "template"
+title         = "Onboarding seed template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/slice.md"
+backing       = "templates/slice.md"
+kind          = "template"
+title         = "Slice body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
 
 [[entry]]
 address       = "templates/slice.toml"
@@ -19,10 +603,73 @@ provenance    = "declared"
 customization = "customizable"
 
 [[entry]]
-address       = "templates/adr.toml"
-backing       = "templates/adr.toml"
+address       = "templates/spec-product.md"
+backing       = "templates/spec-product.md"
 kind          = "template"
-title         = "ADR metadata template"
+title         = "Product spec body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/spec-product.toml"
+backing       = "templates/spec-product.toml"
+kind          = "template"
+title         = "Product spec metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/spec-tech.md"
+backing       = "templates/spec-tech.md"
+kind          = "template"
+title         = "Tech spec body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/spec-tech.toml"
+backing       = "templates/spec-tech.toml"
+kind          = "template"
+title         = "Tech spec metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/standard.md"
+backing       = "templates/standard.md"
+kind          = "template"
+title         = "Standard body template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "templates/standard.toml"
+backing       = "templates/standard.toml"
+kind          = "template"
+title         = "Standard metadata template"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "reference/using-doctrine.md"
+backing       = "using-doctrine.md"
+kind          = "reference"
+title         = "Using doctrine guide"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
+address       = "integration/workflows/drive-slice.js"
+backing       = "workflows/drive-slice.js"
+kind          = "integration"
+title         = "Drive-slice workflow"
 licence       = "MIT"
 provenance    = "declared"
 customization = "customizable"

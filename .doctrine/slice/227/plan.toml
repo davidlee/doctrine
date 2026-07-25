@@ -69,12 +69,12 @@ exit_criteria = [
   { id = "EX-4", text = "FR-001 sole-authority: an embedded-but-undeclared asset is invisible to every library verb. NF-002: no reachable write path from any library verb (byte-unchanged over a clean repo across list/tree/show incl. failure paths)." },
 ]
 verification = [
-  { id = "VT-1", expects = "library show round-trips a published asset byte-exact via the Resolver.", test_file = "src/library.rs", keywords = ["fn run_show", "LogicalAddress", "emit"], waived = false },
-  { id = "VT-2", expects = "show maps each of the four reachable error classes to a distinct diagnostic + non-zero.", test_file = "src/library.rs", keywords = ["TraversalRejected", "UnknownAddress", "BackingSourceMissing", "MalformedManifest"], waived = false },
-  { id = "VT-3", expects = "list/tree render metadata, filter by logical prefix, mark unavailable entries, and honour --format/--json.", test_file = "src/library.rs", keywords = ["fn run_list", "fn run_tree", "available", "Format"], waived = false },
+  { id = "VT-1", expects = "library show round-trips a published asset byte-exact via the Resolver.", test_file = "src/commands/library.rs", keywords = ["fn run_show", "LogicalAddress", "emit"], waived = false },
+  { id = "VT-2", expects = "show maps each of the four reachable error classes to a distinct diagnostic + non-zero.", test_file = "src/commands/library.rs", keywords = ["TraversalRejected", "UnknownAddress", "BackingSourceMissing", "MalformedManifest"], waived = false },
+  { id = "VT-3", expects = "list/tree render metadata, filter by logical prefix, mark unavailable entries, and honour --format/--json.", test_file = "src/commands/library.rs", keywords = ["fn run_list", "fn run_tree", "available", "Format"], waived = false },
   { id = "VT-4", expects = "Every shipped publication entry resolves — the manifest declares only real (non-hollow) backings.", test_file = "src/publication.rs", keywords = ["fn available", "entries()"], patterns = ["licence=MIT"], waived = false },
-  { id = "VT-5", expects = "FR-001 sole authority — an embedded-but-undeclared asset does not appear in library list.", test_file = "src/library.rs", keywords = ["fn run_list", "undeclared"], waived = false },
-  { id = "VT-6", expects = "NF-002 structural no-write — every library verb (incl. failure paths) leaves a clean repo byte-unchanged.", test_file = "src/library.rs", keywords = ["byte", "unchanged"], waived = false },
+  { id = "VT-5", expects = "FR-001 sole authority — an embedded-but-undeclared asset does not appear in library list.", test_file = "src/commands/library.rs", keywords = ["fn run_list", "undeclared"], waived = false },
+  { id = "VT-6", expects = "NF-002 structural no-write — every library verb (incl. failure paths) leaves a clean repo byte-unchanged.", test_file = "src/commands/library.rs", keywords = ["byte", "unchanged"], waived = false },
 ]
 specs        = []
 requirements = []
