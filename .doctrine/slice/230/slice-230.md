@@ -1,0 +1,169 @@
+# Memory body-write verbs and corpus-aware verify gate
+
+## Context
+
+Descends from IMP-221, re-scoped against three facts the backlog item predates.
+
+A memory is two tiers: `memory.toml` (structured, edit-preserving) and
+`memory.md` (prose body). Every write verb reaches only the first tier. There is
+**no supported write path for memory body prose anywhere in the product** —
+neither `memory record` nor `memory edit`, on neither the CLI nor the MCP
+surface. The only ways to put prose in a body today are hand-editing
+`memory.md` (the raw-file write the guardrails tell agents not to do) and the
+internal `seed_by_key` (`src/memory.rs:1785`), which already writes a full body
+verbatim from a template. The machinery exists; the public verb does not.
+
+This bites agents twice. On record, a freshly-minted memory is a title and a
+summary with an empty body — CHR-035 is an open item tracking exactly one such
+carcass. On edit, correcting a stale body means bypassing the CLI entirely,
+which is how IMP-221 was surfaced in the first place (a stale spec reference in
+`mem.signpost.project.orientation` during RFC-012).
+
+The verify half of IMP-221 was filed on a stale premise. It asserts that
+`memory verify` refuses a dirty working tree, full stop; `--allow-dirty` had
+already shipped 2026-06-18/21, roughly ten days before the item was written.
+But the friction is real and still recurring — the flag is undiscoverable, and
+in practice agents hit the refusal and reach for `git stash` rather than for
+`--help`. Worse, the common case is self-inflicted: doing doctrine work means
+the authored corpus is essentially always dirty, so verifying a memory you just
+edited is blocked *by your own edit*.
+
+The fix is to make the cleanliness test measure the thing the attestation is
+actually about. A memory attests a claim against the **code**; a dirty
+governance corpus says nothing about whether that claim still holds. So the
+dirty check should ignore doctrine's own authored trees by default, and keep
+refusing on a genuinely dirty source tree — where the attestation truly cannot
+be pinned to a commit.
+
+Two prior decisions bear on this and neither is recorded in IMP-221:
+
+- **SL-164 rejected an MCP `memory_verify` tool**, reasoning: *"clean-tree
+  precondition makes it fragile as a tool anyway."* That rationale is exactly
+  what this slice dissolves. The MCP verify question therefore reopens — noted
+  here, deliberately not answered (see Non-Goals).
+- **`mem.pattern.memory.thread-hidden-until-verified`** (trust: high): a
+  `thread` memory is invisible to `find`/`retrieve` until verified. Verify
+  friction is not cosmetic for that type — it is the difference between recorded
+  and reachable. That memory also warns the SL-008 D6 gate is reviewed canon and
+  must not be loosened, which bounds how far the relaxation may go.
+
+## Scope & Objectives
+
+### 1. Body-write on the CLI (`record` and `edit`)
+
+- `memory edit` gains body-replace and body-append, sourced from stdin or a
+  file.
+- `memory record` gains the same body affordance, so a memory can be born with
+  its content instead of requiring a follow-up edit.
+- Both ride the existing `seed_by_key` / `memory_scaffold` fileset seam. No
+  second body-write path — the transactional write already exists and must be
+  reused, not paralleled.
+- `updated` stamping and the edit-preserving `memory.toml` contract behave
+  exactly as they do for metadata edits.
+
+### 2. Body-write on the MCP surface
+
+- `memory_edit` gains `body` + `body_mode` (`replace` | `append`). Metadata-only
+  edit stays the default path — backward compatible.
+- `memory_record` gains the matching `body` field.
+- Both delegate to the same core as the CLI verbs; the MCP layer stays a thin
+  argument adapter.
+
+### 3. Corpus-aware verify dirty-tree gate
+
+- The clean/dirty decision for `verify` ignores modifications confined to
+  doctrine's **own authored trees** — `.doctrine/**` and the repo-root `memory/`
+  corpus-authoring tree that `record --global` writes into (SL-018).
+- The exclusion set is computed from **doctrine-owned path constants**, not a
+  hardcoded literal list. POL-002 forbids load-bearing on host layout; STD-001
+  forbids the magic strings. These are owned platform paths — the engine already
+  defines them — so the exclusion is grounded on an owned contract, which is
+  precisely what makes it legal.
+- A dirty **source** tree still refuses, and `--allow-dirty` remains the escape
+  hatch for that case with its `checkout_state_id` stamping unchanged.
+- The `thread_expiry` gate (SL-008 D6) is not touched.
+
+### 4. SPEC-007 reconciliation
+
+SPEC-007 states in both `spec-007.toml:22` and `spec-007.md:132` that verify
+attests "against a clean working tree, refusing a dirty one". The implementation
+already diverged when `--allow-dirty` shipped; this slice widens the gap
+further. The spec text is corrected through a Revision — this debt is owed
+regardless of the rest of this slice, and is folded in rather than left to rot.
+
+## Non-Goals
+
+- **An MCP `memory_verify` tool.** SL-164's stated reason for excluding it
+  dissolves here, but re-litigating that exclusion is its own decision with its
+  own scope. Captured as a follow-up, not smuggled in.
+- **`--edit-body` / `$EDITOR` interactive body editing.** Floated in IMP-221 as
+  a nice-to-have; an interactive editor is unusable from a jailed or MCP agent
+  context, which is the whole audience. Dropped, not deferred.
+- **Loosening `thread_expiry`** or any other retrieval-side gate. Reviewed canon
+  (SL-008 D6).
+- **The shipped-corpus authoring pipeline** (`cargo build` re-embed →
+  `memory sync` → `doctrine install`). Untouched.
+- **Filling CHR-035's empty body.** This slice supplies the verb; using it is
+  that item's job.
+- **Any change to the memory TOML/MD schema.**
+
+## Risks, assumptions, open questions
+
+- **A1 — body-write is unbuilt, not forbidden.** `render_memory_md`'s comment
+  ("the tool-authored body: title + summary only (design § 5.2)") is read as
+  describing scaffold-time output, not prohibiting body writes — `seed_by_key`
+  writing a verbatim body supports that reading. **Unverified: SL-005 design
+  §5.2 has not been read.** If §5.2 turns out to *constrain* body authorship,
+  objectives 1 and 2 need a governance step before code. Design must resolve
+  this first.
+- **OQ-1 — does the exclusion set cover the shipped `memory/` tree?** In a
+  client project the shipped corpus is materialised gitignored, so it can never
+  block; the repo-root `memory/` tree is live only on doctrine's own
+  corpus-authoring path. Including it may be dead weight everywhere but here —
+  which edges toward the POL-002 smell of shaping the product around one client.
+  Argues for exclusion by owned-constant, and for design to confirm the tree is
+  genuinely platform surface rather than dogfooding residue.
+- **OQ-3 — where does the exclusion live?** The clean/dirty decision is not
+  verify-private: it is the shared git frame computation (`src/git.rs:1943-2043`),
+  which `record` also consumes to choose between a commit anchor and a
+  `checkout_state_id`. Applying the exclusion *there* would silently change
+  record-time anchoring across the product — almost certainly wrong, since a
+  frame legitimately wants the literal truth about the tree. Applying it at
+  verify's gate keeps the frame honest and scopes the leniency to the one
+  decision that warrants it. Design must pick deliberately; the second reading
+  is the working assumption.
+- **OQ-2 — is body-append the right second mode?** Append is cheap and covers
+  the additive case, but agents may actually want targeted replacement. Ship
+  replace + append; revisit only on evidence.
+- **R1 — attestation semantics.** Ignoring the doctrine corpus makes verify
+  succeed where it used to refuse. The claim being weakened is "the tree was
+  clean when attested". Design must state plainly what the verification axis
+  now means, and whether the anchor stays a commit oid when only doctrine files
+  are dirty (the honest answer is probably yes — the code the memory speaks
+  about *is* at that commit).
+- **R2 — hostile-input substrate.** SPEC-007 § Concerns treats stored memory
+  text as untrusted data. A body-write verb is a new ingress for that text.
+  The render-side guard (body-guard nonce, data-framing) already exists and is
+  unchanged, but the new write path must not bypass whatever escaping the
+  scaffold seam applies.
+
+## Verification / closure intent
+
+- Body written via `record` and via `edit` (both modes, both surfaces) round-
+  trips through `memory show` byte-for-byte.
+- Verify succeeds with only `.doctrine/**` dirty; still refuses with a dirty
+  source tree; `--allow-dirty` behaviour unchanged.
+- Exclusion set derives from named constants — no path literals at the call
+  site.
+- Existing memory suites stay green unchanged (behaviour-preservation gate on
+  shared machinery).
+- SPEC-007 text and implementation agree.
+
+## Summary
+
+## Follow-Ups
+
+- Reopen SL-164's MCP `memory_verify` exclusion now that its stated rationale
+  no longer holds.
+- Correct IMP-221's body: sub-item C's premise is stale (`--allow-dirty` predates
+  the filing).
