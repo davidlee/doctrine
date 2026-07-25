@@ -117,3 +117,26 @@ thread); staleness header structured vs prose; mint-verb shape.
   SL-180 — selector-correctness cluster this would feed from the front.
 - IDE-016 — agent UX research on efficient read surfaces.
 - RFC-011 — token-efficiency benchmarking that motivates this.
+
+## Delivery status (2026-07-25)
+
+**SL-229 `fulfils` this idea `--degree partial`** — the kernel shipped; the item
+stays `open` for the deferred remainder.
+
+Delivered by SL-229 (closed 2026-07-25): the `/research` skill as the single
+conventions surface (artefact contract, citation forms, runner deferral); the
+`.doctrine/slice/NNN/research/` storage convention (D1 — gitignored in place,
+superseding this item's original state-tier+symlink wording); `slice research`
+mint/check with a `ContentSet` staleness baseline, advisory and never a gate
+(D6); and the four consumption hooks in `/slice`, `/design`, `/plan`,
+`/phase-plan`.
+
+Not yet delivered — still this item's scope: spec-coverage trigger heuristics;
+findings→globbed memories; incremental refresh + review/phase-plan triggered
+passes; reconciliation prose additions.
+
+Caveat carried from SL-229's audit (RV-306 F-1): the four hooks are authored and
+correct but postdate `v0.31.0` and are not on `origin/main`, so no harness sees
+them yet. **CHR-048** owns the release. Until it lands the capability has no
+callers, and the idea's premise — agents citing research instead of recall —
+remains untested in the field.

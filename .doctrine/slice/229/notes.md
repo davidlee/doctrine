@@ -2,7 +2,7 @@
 
 ## Harvest
 
-fresh-as-of: `audit complete, lifecycle audit → reconcile` @ `ba85b3d6`
+fresh-as-of: `reconcile complete, closing` @ `e700350d`
 
 **Produced**
 - `design.md` (D1–D6; internal adversarial pass integrated, 4 findings) —
@@ -157,6 +157,31 @@ fresh-as-of: `audit complete, lifecycle audit → reconcile` @ `ba85b3d6`
   phase` has no read-only query form, `backlog new` takes a positional title,
   conformance needed hand-adjudication, and distribution is invisible from the
   authored tree.
+
+- **RECONCILE** (`e767790f`): three per-slice direct edits from RV-306's brief,
+  **zero REVs** — the audit found nothing wrong in canon and routed every
+  out-of-scope finding to the backlog. F-3 registry write (`selector add 229
+  .doctrine/adr/001/layering.toml --intent design-target`) moved conformance
+  19/0/12 → **18/0/13**; the residual 18 are F-4's foreign-commit noise
+  (IMP-175 / IMP-292), not SL-229's. F-3 mirror row + the general rule added to
+  design § Code impact summary. F-2 honesty edit: the design VH now reads
+  *partially satisfied* — the dogfood round is the real pre-design evidence, the
+  further-slice datapoint is **deferred to CHR-048 step 4, not waived**, and R1
+  is annotated untestable until the hooks distribute. `plan.toml` untouched
+  (immutable-append; PHASE-03 EX-2's D-a interpretation stays a ledger fact).
+  `## Reconciliation Outcome` recorded on RV-306.
+
+**Learned at reconcile**
+- `doctrine review show <RV> --json` does **not** expose findings at the top
+  level (`body` / `kind` / `review`); they nest under `review.finding`, and no
+  view or `--help` says so — three probes to answer "are all findings
+  terminal?", which is step 1 of every reconcile pass. Also `doctrine reports
+  findings` (boot's command map) is unrecognised by the PATH binary — the map is
+  written against a newer surface than the installed one. Both → case-notes
+  `[reconcile; SL-229/RV-306 reconcile pass]`. **Consciously not minted as a
+  memory:** the honest fix is a CLI change (a per-finding disposition table on
+  `review status`), and a memory would ossify the workaround; RFC-011 is the
+  right sink.
 
 **Open**
 - A1 (prose runner deferral suffices for both arms), A2 (fixed baseline path

@@ -76,6 +76,11 @@ intent = "design-target"
 note = "ADR-001 layering entry — mandatory for any new src/ module"
 
 [[relation]]
+label = "fulfils"
+degree = "partial"
+target = "IDE-044"
+
+[[relation]]
 label = "references"
 role = "originates_from"
 target = "IDE-044"
