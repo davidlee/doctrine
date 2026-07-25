@@ -1119,3 +1119,6 @@ The skill states the invariant (tracked tree matches HEAD) only as a command tha
 presumes a clean tree. Worth stating the invariant separately from the command,
 with the shared-tree adaptation named: baseline the divergence set before
 integrate, assert it is unchanged after, and assert no path outside it moved.
+[preflight; sl228-rv-advice-0725] `doctrine review status <SL-id>` refuses — status takes only RV refs and
+there is no `--slice` filter, so surveying a slice's review history costs a full `review list` scan + manual
+grep. A `review list --entity SL-228` (or `status --slice`) filter would save the scan tokens.
