@@ -15,10 +15,6 @@ selector = "plugins/doctrine/skills/**"
 intent = "scope-relevant"
 
 [[selector]]
-selector = ".agents/skills/**"
-intent = "scope-relevant"
-
-[[selector]]
 selector = "src/**"
 intent = "scope-relevant"
 
