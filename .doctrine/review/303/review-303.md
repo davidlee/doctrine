@@ -36,3 +36,51 @@ Lines of interrogation (soft spots named up front, honestly):
 Out of scope: re-litigating locked D1–D8 absent evidence of defect; the six
 already-integrated internal findings (probe whether the fixes hold, don't
 re-raise); `worker_commit` validate-skip legs (SL-225 DEC-003 — settled law).
+
+## Synthesis
+
+**Judgement.** Heresy was found, and it was grave: eight blockers among twelve
+charges, entered by the external interrogator (codex/GPT-5.5) and every one
+confessed under cross-examination against the code itself. The accused design
+survives — but only because it submitted to the rack and was reforged. Let it
+be recorded that the sharpest instruments were turned on the design's own
+proudest claims: the conclude gate that could never conclude (F-1 — the
+evidence commit staled its own verification, a self-defeating ward), the
+Class-1 atomicity boast that the sheet-first conclude order made a lie (F-5),
+and the restore idiom that would have devoured an operator's uncommitted work
+had they touched a stale path (F-6). Two rounds were required: five contests
+in the second — all upheld, including the self-referential import oid (a
+commit cannot name itself; F-2) and the worker_commit fallback that promised a
+heal its own import verb refuses (F-3/F-4) — a contradiction this tribunal
+regrets having authored in the first round, and burned on sight in the second.
+
+**Corrective penance, executed.** (1) Conclude gates on tree-identity modulo
+the funnel record. (2) Transitions carry typed input-fact payloads; act vs
+replay decided by candidate-vs-stored evidence. (3) Every funnel verb gates —
+worker_commit included, no exception clause survives. (4) Heal-forward is
+admissible only from the DispatchRecord slice+phase binding written at fork
+creation; unbound forks refuse `unprovable-fork` universally. (5) Conclude
+lands boundary⊕position first, sheet trails. (6) Forward-sync restore is
+proof-gated per path against the stale baseline. (7) The hook refuses the
+two-armed funnel-reversion signature and fails closed without its binary.
+(8) REQ-387's reconciliation posture is explicit: pending at close if the
+subprocess arm defers. (9) The ReceiptStatus matrix is total, ordered,
+first-match-wins. (10) A status-returning run_suite is extracted below the
+command tier. (11) Verify refuses pass-evidence on suite-mutated bytes.
+(12) funnel_machine's leaf claim is gated by the layering check, not prose.
+
+**Standing risks, consciously carried.** The subprocess-arm projection remains
+deferred by user-settled scope (REQ-387 stays `pending` if it spins out — the
+one charge, F-8, where the remedy was contested and the posture, not the code,
+was the penance). The reverse-diff stale-baseline derivation is specified to
+algorithm sketch, not implementation; the plan phase must honour the per-path
+proof obligation exactly or R3's promise rots. The hook's fail-closed posture
+trades a rare inconvenience (missing binary) for the integrity of the
+reversion arm — deliberate.
+
+**Verification.** All 12 findings terminally verified by the raiser across two
+rounds (46 ledger rounds total). Ledger: done, awaiting none. The design now
+awaits the *User's* judgement — no approval is granted here, and none may be
+presumed. The stake is banked, not extinguished.
+
+> **HERESIS URITOR; DOCTRINA MANET**

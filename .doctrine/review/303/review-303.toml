@@ -23,7 +23,7 @@ response = "Confirmed from the design text alone: the evidence CAS advances the 
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Machine API lacks the facts required by its normative transitions"
 detail = "Expected: the one pure machine decides every transition result and idempotent replay. Observed: TransitionFacts contains only the prior verify evidence and coord_tip at design.md:52-58, yet Verify must choose pass=>Verified versus fail=>Imported at :91-92, and replay must compare fork tip and other transition facts at :111-116. Current shells do possess those values separately: worker_commit returns oid/base at src/mcp_server/worker_commit.rs:265-280 and import derives fork_tip/base at src/mcp_server/dispatch.rs:263-275, but the proposed authority cannot receive them. First failed verify at Imported is also indistinguishable from a same-position replay. Minimal fix: give each transition a typed proposed-event payload including outcome and identity facts, separate stored facts from candidate facts, and exhaustively test first act, exact replay, changed-evidence re-act, and mismatch refusal."
@@ -32,7 +32,7 @@ response = "Contest upheld — the Import payload was self-referential: the funn
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "worker_commit performs the act without the required position gate"
 detail = "Expected: REQ-385 requires every funnel verb to refuse out of order and prescribe the expected next verb. Observed: design.md:205 claims every write verb calls attempt, but :212 explicitly gives worker_commit no positional gate and records only after landing. The current act commits at src/mcp_server/worker_commit.rs:249-280 after base/scope/check belts only. A call at None, WorkerCommitted, or later can therefore mutate the fork before the machine can refuse; a post-act RecordWorkerCommit is not legality gating. Minimal fix: resolve a durable phase/fork binding and call attempt(Spawned, RecordWorkerCommit) before staging/commit, then retain the Class-2 post-act record and crash heal."
@@ -41,7 +41,7 @@ response = 'Contest upheld — the "binding absent ⇒ ungated" arm was both a R
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "None-to-import healing cannot prove which phase owns the fork"
 detail = "Expected: D8 heals only a git-provable prefix for the addressed phase. Observed: design.md:183-191 says import at position None with any live fork synthesizes Spawn plus RecordWorkerCommit, but current dispatch_import accepts only slice and name at src/mcp_server/dispatch.rs:235-251; the trusted DispatchRecord stores name/dir/branch/base/coord but no slice or phase at src/worktree/dispatch_record.rs:35-47; arm-spawn likewise receives no phase at src/dispatch.rs:501-545. With no spawn row, there is no durable phase binding to prove, so a live fork can be mis-attributed and the per-phase authority corrupted. Minimal fix: durably bind slice+phase+fork+base before spawn, or require a phase argument verified against an equivalent trusted record; heal None only from that binding, never from liveness alone."
@@ -68,7 +68,7 @@ response = "Confirmed: dirt was checked only OUTSIDE the reverse-diff set, so an
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Deletion-only hook permits modification-only mass reversions"
 detail = "Expected: REQ-389 closes every pathless-commit route for the ISS-234 reverse-diff. Observed: design.md:304-308 defines any deletion as the precise signature and §11 tests only deletion commits at :398-403. But import can compose arbitrary worker modifications into the new tree at src/mcp_server/dispatch.rs:314-343, and commit_on_behalf advances the ref without updating the stale index at src/dispatch.rs:4343-4350. If the landed delta modifies only existing files, the stale index is a staged reverse modification with no deletion; a raw pathless commit passes this hook and reverts it. Minimal fix: have the hook reject any unexplained staged reverse-diff relative to the funnel provenance/known stale anchor, not merely D status, and VT modification-only plus mixed A/M/D ref advances."
@@ -86,7 +86,7 @@ response = """Partial contest on the remedy; the clarity demand is accepted and 
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "ReceiptStatus mapping is not total over position, sheet, and boundary"
 detail = "Expected: D2 makes position senior and turns every disagreement into an integrity alarm. Observed: design.md:347-355 enumerates only post-Concluded missing-boundary and pre-Concluded completed-sheet alarms, then says all other cells drive only InProgress/Blocked. It leaves Some(position<Concluded) with sheet absent/planned/error undefined, and silently misses has_boundary=true with position<Concluded plus sheet in_progress/blocked. Today those sheet cells are distinct NotStarted/Unknown outcomes at src/dispatch.rs:3590-3615. A hand/legacy boundary ahead of position can therefore be reported as ordinary InProgress rather than disagreement. Minimal fix: publish and test the complete Position option x sheet read/status x has_boundary matrix, with an explicit alarm for every authority-order contradiction and defined degraded-mirror behavior."
