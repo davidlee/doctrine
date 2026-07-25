@@ -28,15 +28,15 @@ responsibilities = [
 
 [[source]]
 language = "rust"
-identifier = "doctrine/estimate"
+identifier = "src/estimate.rs"
 module = "doctrine::estimate"
 
 [[source]]
 language = "rust"
-identifier = "doctrine/entity"
+identifier = "src/entity.rs"
 module = "doctrine::entity"
 
 [[source]]
 language = "rust"
-identifier = "doctrine/catalog/hydrate"
+identifier = "src/catalog/hydrate.rs"
 module = "doctrine::catalog::hydrate"
