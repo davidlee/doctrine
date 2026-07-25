@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 396
+slug = "keep-projection-logic-out-of-the-command-layer"
+title = "Keep projection logic out of the command layer"
+status = "pending"
+kind = "quality"
+
+description = "Per ADR-001 the command layer holds no projection logic: every filter, traversal, and DOT construction lives in the engine modules it composes."
+tags = []
+acceptance_criteria = [
+  "build_graph_output composes engine operations only; no node filtering, edge filtering, or traversal is implemented in the command module.",
+  "All DOT text construction lives in catalog::dot; the command module neither builds nor post-processes DOT.",
+  "run_graph resolves the project root, delegates to build_graph_output, and writes the result to stdout — nothing else.",
+  "build_graph_output returns the output as a String, so its behaviour is testable without capturing stdout.",
+]

@@ -1,0 +1,47 @@
+schema = "doctrine.spec.tech"
+version = 1
+
+id = 27
+slug = "graph-projection-and-cli-emitter"
+title = "Graph projection and CLI emitter"
+status = "draft"
+kind = "tech"
+tags = [
+  "graph",
+  "projection",
+  "cli",
+  "dot",
+  "graphviz",
+  "ego-view",
+  "json-contract",
+  "presentation-neutral",
+]
+responsibilities = [
+  "Define `CatalogGraph` — the presentation-neutral projection of a hydrated `Catalog` into a key-indexed node map, a flat edge list, and one top-level `units` block — built by a pure `from_catalog` with no disk reads and no cordage dependency.",
+  "Fix the projection algebra: the self-consuming, composable filters (`filter_kinds`, `filter_label`, `exclude_memory`, `drop_isolated`) and the undirected breadth-bounded `neighbourhood(focus, depth)` subgraph, including their edge-incidence and boundary-node rules.",
+  "Preserve unresolved and unvalidated edge targets in the edge list with no target node, so a dangling reference stays visible to every consuming surface instead of being silently dropped.",
+  "Emit the projection as deterministic, byte-stable Graphviz DOT (`catalog::dot::render`) — styled by kind prefix and relation label, focus-highlighted, escaped for DOT string literals — with no filesystem or external-renderer dependency.",
+  "Serve `doctrine graph [FOCUS]` as a thin ADR-001 command shell: validate `--kind` against the kind registry, resolve FOCUS to a `CatalogKey`, apply the projection pipeline in fixed order, and write to stdout.",
+  "Guarantee `--format json` emits the same `CatalogGraph` serialisation `/api/graph` serves, so the CLI and the web explorer consume one graph contract rather than two.",
+  "Report focus exclusion as a named, self-describing error — focus absent, focus filtered out by `--kind`, or a memory focus without `--include-memory` — rather than emitting a silently empty graph.",
+]
+
+category = "explorer"
+c4_level = "component"
+descends_from = "PRD-016"
+parent = "SPEC-004"
+
+[[source]]
+language = "rust"
+identifier = "src/catalog/graph.rs"
+module = "doctrine::catalog::graph"
+
+[[source]]
+language = "rust"
+identifier = "src/catalog/dot.rs"
+module = "doctrine::catalog::dot"
+
+[[source]]
+language = "rust"
+identifier = "src/commands/graph.rs"
+module = "doctrine::commands::graph"

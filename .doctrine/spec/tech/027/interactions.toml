@@ -1,15 +1,7 @@
 [[edge]]
-target = "SPEC-001"
-type = "uses"
-
-[[edge]]
 target = "SPEC-018"
 type = "uses"
-
-[[edge]]
-target = "SPEC-027"
-type = "uses"
-notes = "The map server consumes CatalogGraph::from_catalog as the /api/graph read model; it does not own the projection."
+notes = "Consumes the relation contract: CatalogEdge labels, roled references, and the tier partition are SPEC-018's vocabulary, projected verbatim and never re-validated here."
 # Interactions — outbound spec -> spec edges (tech specs only).
 # Seeded empty; authored via `doctrine spec interactions add`:
 #   [[edge]]

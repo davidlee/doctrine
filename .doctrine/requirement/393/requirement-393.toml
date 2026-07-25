@@ -1,0 +1,19 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 393
+slug = "emit-the-projection-as-deterministic-styled-dot"
+title = "Emit the projection as deterministic styled DOT"
+status = "pending"
+kind = "functional"
+
+description = "`catalog::dot::render` emits a projected graph as deterministic, styled Graphviz DOT — byte-identical on repeat calls, with ghost nodes for dangling targets."
+tags = []
+acceptance_criteria = [
+  "Repeat render calls on the same graph and focus return byte-identical output.",
+  "Node lines follow the nodes map's key order; edge lines are sorted by source, then display label, then target, then original edge index.",
+  "Each distinct unresolved or unvalidated target renders as exactly one dashed ghost node, deduplicated across edges.",
+  "A roled references edge renders its label as references(role) rather than the bare label name.",
+  "The focus node, when supplied, is distinguished by pen weight alone — shape and colour continue to encode kind.",
+  "render performs no disk read and invokes no external renderer.",
+]

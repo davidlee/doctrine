@@ -1,0 +1,18 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 390
+slug = "project-a-hydrated-catalog-into-a-presentation-neutral-graph"
+title = "Project a hydrated catalog into a presentation-neutral graph"
+status = "pending"
+kind = "functional"
+
+description = "A hydrated `Catalog` projects into `CatalogGraph` — a key-indexed node map, a flat edge list, and one top-level units block — purely, with unresolved and unvalidated edge targets preserved rather than dropped."
+tags = []
+acceptance_criteria = [
+  "CatalogGraph::from_catalog builds a nodes map keyed by CatalogKey (numbered entity key or memory uid), a flat edges list, and a units block copied verbatim from the source catalog.",
+  "Each node carries title, optional status, kind label, and optional memory type — and nothing else a presentation surface would not need.",
+  "The projection performs no disk read and takes no cordage dependency.",
+  "An edge whose target is UnresolvedRef or UnvalidatedText appears in the edge list with no corresponding node in the nodes map.",
+  "outgoing() returns edges with dangling targets; incoming() excludes them, since an edge with no resolved target points at no node.",
+]

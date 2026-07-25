@@ -1,0 +1,16 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 395
+slug = "one-graph-contract-across-the-cli-and-web-surfaces"
+title = "One graph contract across the CLI and web surfaces"
+status = "pending"
+kind = "quality"
+
+description = "The CLI and the web explorer consume one graph contract: `--format json` emits the same `CatalogGraph` serialisation `GET /api/graph` returns."
+tags = []
+acceptance_criteria = [
+  "--format json emits the CatalogGraph's own serialisation — the same payload shape GET /api/graph serves — with no CLI-specific wrapper or reshaping.",
+  "--format defaults to dot.",
+  "GraphFormat is a dedicated dot|json enum, distinct from the corpus-listing format type, and rejects any other value with the expected set named.",
+]

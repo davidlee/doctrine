@@ -1,0 +1,17 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 392
+slug = "bound-an-ego-view-by-undirected-breadth-from-a-focus"
+title = "Bound an ego-view by undirected breadth from a focus"
+status = "pending"
+kind = "functional"
+
+description = "`neighbourhood(focus, depth)` returns the undirected, breadth-bounded subgraph within `depth` hops of a focus node, including boundary nodes without expanding them."
+tags = []
+acceptance_criteria = [
+  "neighbourhood traverses both outbound edges and inbound edges with Resolved targets, so a focus's neighbourhood includes what points at it.",
+  "A node at distance equal to depth is included in the result, but its incident edges are not collected.",
+  "depth 0 yields the focus node alone with no edges.",
+  "The returned graph is owned, carrying only the visited nodes and collected edges plus the source graph's units block.",
+]

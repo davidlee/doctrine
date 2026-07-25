@@ -1,0 +1,18 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 394
+slug = "emit-the-semantic-graph-to-stdout-via-the-graph-verb"
+title = "Emit the semantic graph to stdout via the graph verb"
+status = "pending"
+kind = "functional"
+
+description = "`doctrine graph [FOCUS]` emits the semantic graph to stdout, whole-corpus or as a focus neighbourhood, with kind, label, and memory filters applied in a fixed order."
+tags = []
+acceptance_criteria = [
+  "doctrine graph with no FOCUS emits the whole-corpus projection; with FOCUS it emits that focus's neighbourhood at --depth (default 1).",
+  "The projection pipeline applies in fixed order: --kind, then memory exclusion unless --include-memory, then --label, then either the focus neighbourhood or (label-filtered and unfocused) drop_isolated.",
+  "An unknown --kind prefix fails with the legal prefix set rather than being silently ignored.",
+  "A FOCUS absent from the corpus, a FOCUS excluded by --kind, and a memory FOCUS without --include-memory each fail with a distinct message rather than emitting an empty graph.",
+  "A FOCUS resolves as a memory key by its mem. or mem_ prefix and otherwise as a canonical entity reference.",
+]

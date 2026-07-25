@@ -1,0 +1,19 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 391
+slug = "compose-bounded-projections-through-a-self-consuming-filter-algebra"
+title = "Compose bounded projections through a self-consuming filter algebra"
+status = "pending"
+kind = "functional"
+
+description = "Bounded projections compose from self-consuming filters over `CatalogGraph` — kind, label, memory exclusion, and isolate-dropping — each returning an owned graph."
+tags = []
+acceptance_criteria = [
+  "filter_kinds keeps only nodes whose uppercase kind prefix is in the given set and drops their incident edges.",
+  "filter_label keeps only edges whose label name equals the given label and never drops a node; a bare 'references' match retains roled references edges.",
+  "exclude_memory drops every memory-keyed node and its incident edges.",
+  "drop_isolated drops nodes with no incident edge, where an edge incidents a node if it sources from it or resolves to it.",
+  "A node-dropping filter keeps an edge only if its source survives and, when its target is Resolved, its target survives; a dangling-target edge lives or dies with its source alone.",
+  "Each filter consumes self and returns Self, so a partially filtered graph cannot be reused mid-pipeline.",
+]
