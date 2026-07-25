@@ -101,11 +101,49 @@ invariant (read path before the cut) is executable via the derived crux gate.
   and *metadata-without-bytes* (D3, both need >1 adapter). These stay `pending`
   by design — not audit findings.
 
+## Post-verification amendment — F-6/F-7/F-8 pulled to fix-now (2026-07-25)
+
+After this ledger reached `done` (F-6/F-7/F-8 verified with a `follow-up`
+disposition, deferred to IMP-312), the operator **elected to fix F-6/F-7/F-8
+now**, before close, reversing the IMP-312 deferral for those three only (F-9→IMP-313
+and F-10→IMP-312 stay deferred). The three verified findings are terminal by
+construction (ADR-007 — no verb transitions out of `verified`), so their structured
+`follow-up` disposition stands as the immutable audit-time record; this prose
+amendment carries the reversal.
+
+**Fix delivered on a candidate interaction branch**, not the immutable evidence
+ref: `cand-227-fix-001` / `refs/heads/candidate/227/fix-001`, merge tip
+`7684b705` (3-way of base `main 3e083d4` × source `review/227 d32f9100`), fix-now
+commit **`30e538be`** — `fix(SL-227): harden reachability gates + VT-6 no-write
+(RV-302 F-6/F-7/F-8)`. Green + clippy-clean on a fresh full build in the candidate
+worktree; the four affected tests
+(`families_partition_the_visible_command_tree` census→**53**,
+`every_unprojected_embed_is_a_published_backing`,
+`published_set_covers_the_full_projection_complement`,
+`every_verb_leaves_the_repo_byte_unchanged`) pass, full suite 3850 pass.
+
+- **F-6 (nit)** — `publication.rs` VT-3 no longer hardcodes the `BASE_BACKINGS`
+  literal; it and the install crux gate now delegate to a single shared
+  disk-source assertion in `asset_source.rs`.
+- **F-7 (major)** — the crux reachability gate
+  `every_unprojected_embed_is_a_published_backing` now derives its base from a
+  **disk source** (mirroring `shipped_manifest_admits_from_disk_source`, CHR-014),
+  closing the stale-incremental-build false-green; twin gate VT-3 hardened
+  identically (chosen scope **B**: harden both twins + dissolve F-6).
+- **F-8 (major)** — VT-6 `every_verb_leaves_the_repo_byte_unchanged` rewritten
+  **non-vacuous**: populated repo root, byte-tree snapshot before/after, all four
+  failure classes asserted incl. malformed-policy load `Err`.
+
+**Supersedes** the two "Standing risks" bullets below (NF-002 no-write rests on a
+vacuous VT-6; crux reachability robust only at close): both are now closed in
+candidate. The candidate is admitted `--review RV-302` and is the `close_target`.
+
 ## Reconciliation Brief
 
-Surface I reviewed: **`review/227` @ `d32f9100`** (immutable impl bundle). No
-candidate interaction branch created — every finding is reconcile-surface or a
-captured follow-up; none needed a code `fix-now`.
+Surface I reviewed: **`review/227` @ `d32f9100`** (immutable impl bundle). Findings
+were reconcile-surface or captured follow-ups; **post-audit, F-6/F-7/F-8 were pulled
+to fix-now on candidate `cand-227-fix-001` `30e538be`** (see amendment above) — the
+remaining findings need no code `fix-now`.
 
 ### Per-slice (direct edit — design.md / slice-227.toml)
 
@@ -136,8 +174,9 @@ captured follow-up; none needed a code `fix-now`.
 ### Backlog (already captured during this audit — harvest, no reconcile write)
 
 - **F-4 → ISS-226:** annotated with the fresh universal-UNATTRIBUTABLE reproduction.
-- **F-6/F-7/F-8/F-10 → IMP-312** (test-fidelity hardening); **F-9 → IMP-313**
-  (latent `library tree` prefix-collision).
+- **F-10 → IMP-312** (test-fidelity hardening — VT-5 adapter-install); **F-9 →
+  IMP-313** (latent `library tree` prefix-collision). **F-6/F-7/F-8 fixed-in-candidate**
+  `cand-227-fix-001` `30e538be` (post-audit fix-now — see amendment), trimmed from IMP-312.
 
 ### Off-surface (no brief item — recorded so reconcile does not chase them)
 
