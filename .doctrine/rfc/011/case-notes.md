@@ -1465,7 +1465,11 @@ marker makes ~8 authored-write e2e targets fail with `worker fork (signal:
 marker): refusing authored write`. The same targets pass inside the
 `worker_commit` gate's own run — so it is a worker-shell artifact, but it means
 the worker cannot self-verify before committing and burns a commit-gate round
-trip to find out. Filed as a backlog item.
+trip to find out. **ISS-028** (the CWD-vs-`-p` root cause is new; the item
+previously read this as inherent collateral damage with a workaround only).
+Item 1 above is **ISS-219**, open since SL-206 — a second sighting, not a new
+defect. The two compound: a worker that cannot self-verify *provokes* the
+refusal that then floods its context.
 
 **3. `just validate` is a no-op in a worker fork, so the commit gate carries no
 test signal** (`justfile:36-40`). Combined with (2), the worker has no reliable
@@ -1499,3 +1503,22 @@ proceeded rather than aborting. Root cause: the orchestrator wrote seam
 assertions from the design's file map rather than from a grep. Cheap fix — grep
 the seams while composing the prompt; a wrong guard either aborts a good phase
 or trains workers to ignore the guard.
+
+## [research; SL-230-research-2026-07-25]
+
+- Both research threads (`pi-research`, `pi-scout`) emitted a preamble line
+  ("I now have all the evidence needed. Let me compile...") despite an explicit
+  "no preamble, start at `## Thread N`" instruction in the prompt. Small per-run
+  tax, but it is 100% reproducible across both scripts and both models, so the
+  assembler must always strip. Cheaper fix than repeating the instruction:
+  have the wrapper scripts trim everything before the first `##`.
+- **Escalation of the `spec req` note above — it now has a correctness cost, not
+  just a token cost.** Because `doctrine spec req list` renders empty prose and
+  the roster lives in `members.toml`, the governance thread concluded outright
+  that *"SPEC-007 has no REQ-144 through REQ-156"* — they exist and the CLI lists
+  them. A research agent told to read entities via the CLI found nothing and
+  inferred absence. The verdict happened to survive (the binding text really is
+  in the spec body), but the same failure on a spec whose requirements *do* carry
+  prose would silently drop binding constraints from a research round. Requirement
+  prose needs to be reachable from the req surface, or `req list` should at least
+  signal "prose lives elsewhere" rather than rendering an unqualified `—`.
