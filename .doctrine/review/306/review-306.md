@@ -179,3 +179,58 @@ None.
   IMP-315 (F-7 — stale projected reference docs). F-4 routed to existing IMP-175
   and IMP-292. F-6 was fixed during the audit (`.doctrine/governance.md`
   § Research agents + boot regen).
+
+## Reconciliation Outcome
+
+### Direct edits applied
+
+- **`slice-229.toml` selector registry (RV-306 F-3, load-bearing).**
+  `doctrine slice selector add 229 .doctrine/adr/001/layering.toml --intent
+  design-target` — declared the one genuine undeclared touch. `slice conformance
+  229` moved from 19 undeclared / 0 undelivered / 12 conformant to **18
+  undeclared / 0 undelivered / 13 conformant**; the residual 18 are the
+  foreign-commit rows F-4 routed to IMP-175 / IMP-292, not SL-229's.
+- **`design.md` § Code impact summary (F-3, human mirror).** Added the
+  `.doctrine/adr/001/layering.toml` row, plus a note carrying the general
+  lesson: a new `src/` module always implies an ADR-001 `layering.toml` entry,
+  because the `architecture_layering` gate fails `Unclassified` without one.
+  Secondary to the registry write, which is what `slice conformance` reads.
+- **`design.md` § Verification alignment (F-2, honesty edit).** The VH now reads
+  *partially satisfied at close* — the dogfood round on SL-229 itself is stated
+  as the real pre-design evidence (it overturned the scope's state-tier+symlink
+  wording into D1), and the "one further real slice driven through the round"
+  datapoint is recorded as **deferred to CHR-048 step 4, not waived**, with its
+  cause: the hooks are authored but undistributed (F-1). The same edit records
+  that R1 is consequently untestable until CHR-048 lands.
+- **`design.md` § Open questions / risks (F-2).** R1 annotated with the same
+  close-time fact and cross-referenced to § Verification alignment.
+
+### REVs completed
+
+None. The brief carried no governance/spec items — no ADR, policy, standard,
+spec or requirement was found wrong by this audit, and every out-of-scope
+finding was routed to the backlog rather than to canon.
+
+### Withdrawn / tolerated
+
+None — all seven findings are `verified`. Findings whose remediation lands
+outside this reconcile pass are carried by already-minted backlog items, not by
+disposition changes:
+
+- **F-1, F-2 (second leg)** → CHR-048 — release the hooks; step 4 carries the
+  deferred VH datapoint.
+- **F-4** → existing IMP-175 / IMP-292 #1 (shared-`edge` boundary-range noise).
+  No third duplicate minted.
+- **F-5** → IMP-314 — close-side harvest pointer for gitignored research/.
+- **F-7** → IMP-315 — stale projected reference docs, post-SL-227.
+- **F-6** was fixed during the audit itself (`.doctrine/governance.md`
+  § Research agents + boot regen).
+
+### Off-surface, confirmed untouched
+
+`plan.toml` — no criterion edited; `PHASE-NN` and `EN-/EX-/VT-` ids are
+immutable-append. PHASE-03's EX-2 remains satisfied by the interpretation
+recorded in `notes.md` D-a, which stays a ledger fact and did not become a plan
+edit.
+
+Reconcile pass complete — handoff to `/close`.

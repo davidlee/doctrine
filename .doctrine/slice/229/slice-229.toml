@@ -70,6 +70,11 @@ intent = "design-target"
 selector = "install/glossary.md"
 intent = "design-target"
 
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+note = "ADR-001 layering entry — mandatory for any new src/ module"
+
 [[relation]]
 label = "references"
 role = "originates_from"
