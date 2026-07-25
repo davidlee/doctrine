@@ -6,7 +6,7 @@ status = "active"
 title = "Skill source-of-truth is plugins/, not the gitignored .doctrine/skills installed copy"
 summary = "Skills are authored in plugins/doctrine/skills/; .doctrine/skills/* is the gitignored installed copy — edit the source, not the copy"
 created = "2026-06-09"
-updated = "2026-06-09"
+updated = "2026-07-25"
 
 [scope]
 paths = []
@@ -25,12 +25,12 @@ tree = "f35c6b8eec37e9561208c5c6c87ff84798811825"
 ref_name = "refs/heads/main"
 checkout_state_id = "29ae4224230fd572f4d986a39bf39bf4172ce57d3cc81530f289a2e38e59d507"
 base_commit = "689742b1ae6f357c704d29b4970bc745fb493d17"
-verified_sha = ""
+verified_sha = "4fed7e9d91ba1484275f7ce8d17de6331e681773"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-07-25"
 review_by = ""
 
 [trust]
