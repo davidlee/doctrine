@@ -5,10 +5,10 @@ id = 238
 slug = "candidate-create-deadlocks-on-large-trees-git-stdin-writes-all-stdin-before-reading-stdout"
 title = "candidate create deadlocks on large trees: git_stdin writes all stdin before reading stdout"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-24"
-updated = "2026-07-24"
+updated = "2026-07-25"
 tags = []
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

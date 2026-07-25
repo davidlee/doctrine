@@ -51,3 +51,27 @@ with the stdin write — spawn a thread for the `write_all` (dropping the stdin
 handle to close it) while the main thread `wait_with_output`s, or read stdout on a
 thread. ~10 lines, TDD with a large-input regression that reliably exceeds the
 pipe buffer. Behaviour-preservation: existing small-input callers must stay green.
+
+## Resolution — fixed (2026-07-25)
+
+Landed as prescribed, in `f53fc81a` *"fix(ISS-238): drain git_stdin stdout
+concurrently with the write"* (`src/git.rs`, +51/-7). On `main` since the
+2026-07-25 edge promotion.
+
+- **Mechanism.** `git_stdin` now feeds stdin from a `std::thread::scope` thread
+  while the calling thread drains stdout/stderr via `wait_with_output`; the moved
+  `stdin` handle drops at thread end, giving git its EOF. A broken pipe from the
+  write is bind-and-ignored deliberately — when git exits early (e.g. bad args)
+  its *stderr* is the real diagnostic, and propagating `EPIPE` would mask it.
+- **Regression.** `custom_merge_driver_paths_does_not_deadlock_on_large_tree`
+  (`src/git.rs` tests) drives a ~2000-file tree through the batched check-attr
+  path; it must complete rather than hang, and still flag only the custom driver.
+- **Latent exposure closed too.** The fix sits in `git_stdin` itself, so
+  `hash_object_stdin` — flagged above as sharing the seam — is covered by
+  construction, not left as a residual.
+- **Behaviour preservation.** Full gate green on the merged tree (zero test
+  failures); existing small-input callers unchanged.
+
+Surfaced by SL-227's fix-now candidate create; the command-tier reorg was the
+first tree large enough to exceed the pipe buffer since the SL-212 batched
+provenance guard landed.
