@@ -1407,3 +1407,28 @@ positive, but only because every load-bearing claim got re-verified locally.
    out-of-scope clauses and declared-relation claims as unverified until re-read
    at source, and prefer the cheaper scout for anything file-shaped. Cost here:
    ~5 verification probes, all of which paid for themselves.
+
+[preflight; CHR-048/sessA — outcome]
+Release landed as v0.31.1 (host). Verified in the live cache: all five skills at
+`~/.claude/plugins/cache/doctrine/doctrine/0.31.1/skills/` are byte-identical to
+their `plugins/doctrine/skills/` masters — `slice`/`plan`/`phase-plan` 1 hook
+each, `design` 2, `research` 2. SL-229's mechanism is now live for the first
+time; PHASE-03 EX-2 is satisfied under notes.md D-a's contract reading, and
+RV-306 F-1/F-2 are discharged.
+
+Two mechanism facts worth carrying:
+- `just sync-plugin-versions` (run inside `just release`) derives all five plugin
+  manifests from the Cargo version, so CHR-045's "plugin.json drifts from the
+  skill set" failure is structurally fixed, not merely fixed-this-time: 0.31.0 →
+  0.31.1 propagated with no manual step.
+- The cache key is the *version directory*, and the marketplace sources
+  `ref: main` — so a bump is load-bearing for invalidation, and pushing main
+  without one leaves agents on the stale dir. Corollary: the plugin cache tracks
+  main's tip, not the tag (two commits landed past v0.31.1 and the 0.31.1 cache
+  still matches current masters).
+
+Residual: SL-229's design VH — one further real slice driven through the round,
+observations recorded here — is now *possible* but not *done*. R1 ("advisory
+hooks may under-deliver without enforcement") becomes testable from the next
+slice that reaches `/slice`; until one does, the harder-gating question stays
+open. That is the eval this release unblocks.
