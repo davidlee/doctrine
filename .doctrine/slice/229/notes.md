@@ -114,8 +114,56 @@ fresh-as-of: `PHASE-02 completed` @ `14a9f9f8`
   (its own `FILENAME": "` separator matched the `: ` grep); memory body
   corrected in place → case-notes ditto.
 
+- **AUDIT** (`RV-306`, reconciliation facet, parent tree `edge`): 7 findings,
+  all terminal, **0 blockers**. `check gate` exit 0; 10/10 VTs pass; conformance
+  12/12 design-targets delivered, 0 undelivered, 1 genuine undeclared row.
+  Two majors, both distribution rather than defect: **F-1** — PHASE-03
+  (`64fcc7ad`) postdates `v0.31.0` and is not on `origin/main`, so the four
+  consumption hooks are absent from every harness-visible copy (verified by
+  grepping the live plugin cache: `research/SKILL.md` present, hook text zero
+  matches in all four) → **CHR-048**; **F-2** — the design VH ("one further real
+  slice driven through the round") is consequently unevidenced → CHR-048 step 4.
+  Operator elected to close with the release tracked rather than hold. Minors:
+  **F-3** `.doctrine/adr/001/layering.toml` undeclared → reconciliation brief
+  (selector registry first, design § Code impact mirror second); **F-4**
+  conformance noise → existing IMP-175 / IMP-292 (SL-229 is the first *solo*
+  datapoint); **F-5** no harvest pointer for `research/` at close → **IMP-314**.
+  Nits: **F-6** this repo's `.doctrine/governance.md` had no § Research agents
+  section for `/research` to point at → **fixed in audit** (pi-scout /
+  pi-research, boot regenerated); **F-7** five of nine projected reference docs
+  under `.doctrine/` are stale and unrefreshable post-SL-227 → **IMP-315**.
+  Synthesis + reconciliation brief in `.doctrine/review/306/review-306.md`.
+
+**Learned at audit**
+- **`mem.pattern.distribution.skills-source-vs-installed` corrected** (was flagged
+  stale at PHASE-03, now done): the `.doctrine/skills/` installed-copy mechanism
+  is dead post-SL-227; the real route is `plugins/` master → RustEmbed → release
+  tag → `origin/main` → `claude plugin update` → the harness cache. Re-attested.
+  Its sibling `mem.pattern.build.jail-binary-for-skill-install` was already
+  corrected earlier the same day.
+- **Authored-and-committed no longer implies reachable.** Post-SL-227 there is no
+  verb answering "is this authored asset live in a harness?"; establishing it
+  during the audit took five probes across four surfaces (`merge-base
+  --is-ancestor` vs the tag, `branch --contains` vs `origin/main`,
+  `marketplace.json`, the cache dir, `library show`). For any slice whose product
+  *is* shipped prose, that question is the audit. Recorded in CHR-048 § Wider
+  point and in the corrected memory.
+- **A new `src/` module always implies an ADR-001 `layering.toml` entry** — the
+  `architecture_layering` gate fails `Unclassified` without it. Predictable
+  enough that a design declaring a new module should declare that path as a
+  design-target up front (F-3; already in case-notes from PHASE-01).
+- RFC-011 case-notes entry `[audit; SL-229-RV306-a4d]`: `slice show` has no
+  plan/phases face (forcing a raw-file read against the boot guardrail), `slice
+  phase` has no read-only query form, `backlog new` takes a positional title,
+  conformance needed hand-adjudication, and distribution is invisible from the
+  authored tree.
+
 **Open**
 - A1 (prose runner deferral suffices for both arms), A2 (fixed baseline path
   set incl. plan.toml is enough for v1), R1 (advisory hooks may
   under-deliver; escalation = ADR, not skill tweak) — all in design.md § Open
   questions / risks. No DEC/QUE/ASM entities minted; design.md is the record.
+  **Post-audit:** A1 is marginally better supported (F-6 filled this repo's own
+  runner socket). **R1 is not merely open but untestable until CHR-048 lands** —
+  no agent sees a hook, so the RFC-011 eval that was to judge whether harder
+  gating needs an ADR cannot run.

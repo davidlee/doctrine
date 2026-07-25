@@ -25,6 +25,17 @@ Finish every turn which references a doctrine entity by printing its ID:
 if your first message is a handover from another agent, read it and follow 
 the instructions.
 
+## Research agents
+
+The `/research` pre-design round spawns these — one read-only agent per thread.
+
+- `./scripts/pi-scout` — quicker, cheaper; the default for a code-map thread.
+- `./scripts/pi-research` — smarter; use for governance applicability or when a
+  thread needs judgement.
+- Both take a prompt via stdin or arg and return results on stdout — pipe each
+  thread's stdout to `.doctrine/slice/NNN/research/raw/<thread>.md`.
+- Do NOT use harness subagents for research in this repo.
+
 ## useful commands
 
 just -l                    # list tasks

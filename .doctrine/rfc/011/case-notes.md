@@ -1193,3 +1193,76 @@ and PHASE-03, invalidating that phase's EX-2/VA-1 verification surface:
   exceeded a 120s tool timeout on this corpus; running it twice in one compound
   command (count, then grep) doubled that into a backgrounded read. Cheap
   mitigation for agents: one pass, filter the saved output.
+
+[dispatch; SL-228/orchestrator-sessA]
+Orchestrator-side token-inefficiency notes, PHASE-01 setup:
+- `doctrine memory retrieve` flag mismatch: the /retrieve-memory skill prose says
+  "scoped to the concrete files"; I guessed `--scope` (natural reading) → hard
+  error → had to `--help`. Correct flag is `--path-scope`. One wasted call +
+  a help round-trip. The skill could name the flag, or the CLI could accept
+  `--scope` as an alias.
+- Slice-lifecycle-flip tree placement under dispatch is under-documented: the
+  /dispatch skill says "authored writes from session root" but doesn't state
+  that the ready→started (and later audit) slice-status flip commits directly on
+  edge/main, NOT via dispatch/<slice>. Had to infer from SL-229's commit history
+  that lifecycle commits land on the primary line. Cost extra reasoning to
+  convince myself the three-way merge at integrate wouldn't conflict. A one-line
+  note in the dispatch skill ("slice lifecycle status commits on the session
+  line, not the coord branch") would remove this.
+
+## [audit; SL-229-RV306-a4d]
+
+Friction during the SL-229 post-implementation audit (solo slice, parent tree).
+
+- **`slice show <id>` has no plan/phases face.** The boot guardrail says "read
+  entities via `doctrine <kind> show <ID>`, not raw files", but `slice show`
+  takes only `<REFERENCE>` — `--plan` is rejected. To read the plan I had to
+  `Read .doctrine/slice/229/plan.toml` directly, i.e. violate the guardrail the
+  same snapshot mandates. Same for `notes.md`. Cost: one failed invocation plus
+  the doubt about whether I was reading an authoritative surface.
+- **`slice phase` has no read-only query form.** `doctrine slice phase 229`
+  errors demanding `--status` and `<PHASE_ID>` — the verb is write-only. The
+  read I wanted was `slice status 229`. One wasted round trip; the noun/verb
+  collision (`phase` = mutate, `status` = read) is not guessable.
+- **`backlog new` takes a positional title, not `--title`.** Every sibling mint
+  verb I had used that session took flags. One wasted round trip.
+- **Conformance's undeclared cell needed hand-adjudication.** 19 rows, 18 of
+  them foreign commits swept in by shared-`edge` boundary ranges (IMP-175) and
+  `.doctrine/**` authored metadata that should be classified out (IMP-292 #1).
+  Establishing the real touch-set cost three `git show --stat` calls plus a
+  `git log` per boundary range. The `/audit` skill tells you to "read the
+  algebra"; on a busy shared branch the algebra has to be reconstructed before
+  it can be read. Second datapoint after SL-138/SL-219, and the first on a
+  *solo* slice — the defect is not funnel-specific.
+- **Distribution is invisible from the authored tree.** Verifying that the
+  slice's own deliverable reached a consumer took five probes across four
+  surfaces (`git merge-base --is-ancestor` vs the tag, `git branch --contains`,
+  `.claude-plugin/marketplace.json`, the plugin cache dir, `library show`).
+  There is no single verb answering "is this authored asset live in a harness?".
+  For any slice whose product IS shipped prose, that question is the audit.
+
+[dispatch; SL-228/orchestrator-sessA]
+PHASE-01 funnel (import→verify→conclude→reap) token-inefficiency notes:
+- DOCTRINE_BIN-at-launch friction (cost the most tokens this batch): the MCP
+  server launched under ${DOCTRINE_BIN:-doctrine} with DOCTRINE_BIN unset, so it
+  ran the stale PATH binary (0.29.0) while the coord build is 0.31.0. `export`
+  doesn't persist across Bash calls and the server was already up, so the
+  boot.md rule ("set DOCTRINE_BIN to the coord build") could not be satisfied
+  post-hoc. I burned a chunk of budget proving 0.29.0 still carried the needed
+  import mechanics (advanced-tip merge_tree compose + SelectorIntent::DesignTarget
+  — both present since ≤0.29.0, so it was safe). FIX: `dispatch setup` should
+  emit a one-line advisory comparing the live MCP server's doctrine version to
+  the coord build and telling the operator to set DOCTRINE_BIN + restart if they
+  diverge — instead of leaving each orchestrator to discover the skew and
+  re-derive its severity.
+- Working-tree-free MCP writes leave a STALE coord worktree. Both dispatch_import
+  and dispatch_conclude_phase mutate the dispatch/<slice> ref object-db-only and
+  never touch the coord working tree, so after each the coord tree is behind HEAD
+  (import: worker files show as reverted `M`; conclude: the new boundaries.toml
+  shows as staged `D`). The verify beat (`check regression diff`) needs the
+  worktree AT S, so a `git reset --hard HEAD` sync is required after import AND
+  after conclude. The /dispatch-agent funnel steps don't mention this sync — I
+  had to discover it from `git status` and reason it out (and reset --hard is
+  exactly the op the AGENTS.md git-footgun rules make one hesitate over). FIX:
+  add an explicit "sync coord worktree to HEAD after each MCP funnel write
+  (git reset --hard HEAD — the writes are object-db-only)" beat to the skill.
