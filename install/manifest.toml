@@ -1,35 +1,27 @@
 # SPDX-License-Identifier: MIT
 target = ".doctrine"
 
+[base]
+# The MINIMAL projection base (SL-227 FR-007/FR-008, D8). `doctrine install`
+# eagerly projects ONLY these backings; every other embedded asset is PUBLISHED
+# (reachable on demand via the publication manifest), never eagerly copied. Keys
+# MUST match publication.rs's BASE_BACKINGS. `.gitignore` is served by the
+# [gitignore] leg below; the two content backings map to `install/<key>` embed
+# sources and land write-if-absent into `.doctrine/<key>`.
+backings = [".gitignore", "doctrine.toml", "project-orientation.md"]
+
 [dirs]
-create = [
-  ".doctrine/adr",
-  ".doctrine/agents",
-  ".doctrine/backlog",
-  ".doctrine/hymns",
-  ".doctrine/knowledge",
-  ".doctrine/memory/items",
-  ".doctrine/policy",
-  ".doctrine/rec",
-  ".doctrine/requirement",
-  ".doctrine/review",
-  ".doctrine/revision",
-  ".doctrine/rfc",
-  ".doctrine/scripts",
-  ".doctrine/slice",
-  ".doctrine/spec/product",
-  ".doctrine/spec/tech",
-  ".doctrine/standard",
-  ".doctrine/templates",
-]
+# Entity roots are NO LONGER eagerly scaffolded here (FR-008): each appears
+# lazily on first `<kind> new` via entity.rs `materialise*`. Infrastructure dirs
+# (agents, hymns, workflows) are created by their own forward-step install legs.
+create = []
 
 [memory]
-# Seed one key-addressed memory item into .doctrine/memory/items/ during install.
-# The body is drawn from a template under install/templates/; the user edits it
-# in place. Idempotent — re-install skips existing key symlinks.
-seed_items = [
-  { key = "mem.signpost.project.orientation", type = "signpost", title = "Project Orientation", body_template = "templates/seed-onboarding.md" }
-]
+# The eager orientation-memory seed is retired (D8, ACCEPTED). Its orientation
+# content now ships as the projected `project-orientation.md` base backing, so a
+# base install seeds NO memory entity. `seed_authoring_memories` early-returns on
+# this empty list; `seed_by_key` remains a live caller for explicit re-seeding.
+seed_items = []
 
 [gitignore]
 # Runtime state is disposable and must never be committed; the convenience

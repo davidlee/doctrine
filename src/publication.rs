@@ -108,20 +108,32 @@ impl CustomizationStatus {
     }
 }
 
-/// The kind of published content. Templates-only this slice (D-D); the enum is
-/// the closed vocabulary (STD-001) and widens additively when a later slice
-/// declares non-template collections (OQ-1).
+/// The kind of published content — the closed vocabulary (STD-001), widened
+/// additively (SL-227) to the full complement a library veneer renders. Existing
+/// entries declare `template`; the new variants deserialize their lowercase
+/// spellings (`reference`/`guidance`/`integration`) via [`ContentKind::parse`],
+/// preserving the prior rename semantics. Adding variants is additive: no
+/// existing entry's `kind` changes meaning.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ContentKind {
     Template,
+    Reference,
+    Guidance,
+    Integration,
 }
 
 impl ContentKind {
     const TEMPLATE: &'static str = "template";
+    const REFERENCE: &'static str = "reference";
+    const GUIDANCE: &'static str = "guidance";
+    const INTEGRATION: &'static str = "integration";
 
     fn parse(s: &str) -> Option<Self> {
         match s {
             Self::TEMPLATE => Some(Self::Template),
+            Self::REFERENCE => Some(Self::Reference),
+            Self::GUIDANCE => Some(Self::Guidance),
+            Self::INTEGRATION => Some(Self::Integration),
             _ => None,
         }
     }
@@ -129,6 +141,9 @@ impl ContentKind {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Template => Self::TEMPLATE,
+            Self::Reference => Self::REFERENCE,
+            Self::Guidance => Self::GUIDANCE,
+            Self::Integration => Self::INTEGRATION,
         }
     }
 }
@@ -182,6 +197,29 @@ impl PublicationEntry {
     /// production path by `run_publication_validate`, which emits each entry).
     pub(crate) fn address(&self) -> &LogicalAddress {
         &self.address
+    }
+
+    /// The declared human-readable title (SL-227) — the structured accessor a
+    /// library veneer renders in a list/tree, distinct from `report_line`'s
+    /// single-string form. `backing` stays private; only the fields a veneer
+    /// legitimately shows are surfaced.
+    pub(crate) fn title(&self) -> &str {
+        &self.title
+    }
+
+    /// The declared content kind (SL-227) — returned by value (`Copy`).
+    pub(crate) fn kind(&self) -> ContentKind {
+        self.kind
+    }
+
+    /// The declared licence (SL-227) — returned by value (`Copy`).
+    pub(crate) fn licence(&self) -> Licence {
+        self.licence
+    }
+
+    /// The declared customization status (SL-227) — returned by value (`Copy`).
+    pub(crate) fn customization(&self) -> CustomizationStatus {
+        self.customization
     }
 
     /// A single human-readable validation line that reads EVERY field — the
@@ -312,6 +350,21 @@ impl PublicationManifest {
     pub(crate) fn entries(&self) -> &[PublicationEntry] {
         &self.entries
     }
+
+    /// Whether any admitted entry declares `backing` as its physical embed key
+    /// (SL-227) — a membership predicate the PHASE-03 derived reachability gate
+    /// checks so it can ask "is this embed key published?" without `backing`
+    /// leaving the module (the field stays private).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "consumed by the PHASE-03 reachability gate (SL-227)"
+        )
+    )]
+    pub(crate) fn declares_backing(&self, backing: &str) -> bool {
+        self.entries.iter().any(|e| e.backing == backing)
+    }
 }
 
 /// Validate one raw entry into a typed [`PublicationEntry`], reading every field.
@@ -386,6 +439,11 @@ pub(crate) enum EmitError {
 /// reorganisation moves bytes behind `read`, never the logical addresses above.
 pub(crate) trait SourceAdapter {
     fn read(&self, backing: &str) -> Result<Cow<'static, [u8]>, ResolveError>;
+
+    /// Whether the adapter can serve bytes for `backing`, WITHOUT reading them
+    /// (SL-227) — the availability probe a library veneer needs to report an
+    /// entry's status without materializing its payload.
+    fn exists(&self, backing: &str) -> bool;
 }
 
 /// The one production adapter: reads immutable compiled bytes by embed key via
@@ -397,6 +455,10 @@ impl SourceAdapter for EmbeddedAdapter {
     fn read(&self, backing: &str) -> Result<Cow<'static, [u8]>, ResolveError> {
         crate::asset_source::read_bytes(backing)
             .ok_or_else(|| ResolveError::BackingSourceMissing(backing.to_string()))
+    }
+
+    fn exists(&self, backing: &str) -> bool {
+        crate::asset_source::exists(backing)
     }
 }
 
@@ -420,6 +482,14 @@ impl<A: SourceAdapter> Resolver<A> {
     /// it to emit every declared entry.
     pub(crate) fn manifest(&self) -> &PublicationManifest {
         &self.manifest
+    }
+
+    /// Whether the entry's backing is currently servable by the bound adapter
+    /// (SL-227) — an availability probe that reads no bytes, so a library veneer
+    /// can flag an admitted-but-unbacked entry. Reaches `backing` within-module
+    /// (the field stays private to the engine).
+    pub(crate) fn available(&self, e: &PublicationEntry) -> bool {
+        self.source.exists(&e.backing)
     }
 
     /// Resolve a logical address to its backing bytes through the bound adapter.
@@ -620,6 +690,10 @@ mod tests {
                 .map(|v| Cow::Owned(v.clone()))
                 .ok_or_else(|| ResolveError::BackingSourceMissing(backing.to_string()))
         }
+
+        fn exists(&self, backing: &str) -> bool {
+            self.bytes.contains_key(backing)
+        }
     }
 
     /// A writer that always fails — drives emit's output-failure path (VT-2).
@@ -787,5 +861,136 @@ mod tests {
                 .is_none(),
             "resolve/emit must not create any path in the temp repo"
         );
+    }
+
+    // ── PHASE-01 (SL-227): accessors, availability, membership, widened kind ───
+
+    /// Build a one-entry manifest with an explicit content kind (else MIT /
+    /// declared / customizable), for accessor + widened-kind assertions.
+    fn one_entry_kind(kind: &str) -> PublicationManifest {
+        let body = format!(
+            "[[entry]]\n\
+             address = \"templates/thing.txt\"\n\
+             backing = \"backing/thing.txt\"\n\
+             kind = \"{kind}\"\n\
+             title = \"Human Title\"\n\
+             licence = \"MIT\"\n\
+             provenance = \"declared\"\n\
+             customization = \"customizable\"\n"
+        );
+        PublicationManifest::admit(body.as_bytes()).expect("fixture admits")
+    }
+
+    // Structured accessors read the declared values (backing stays private).
+    #[test]
+    fn entry_accessors_read_declared_values() {
+        let manifest = one_entry_kind("template");
+        let entry = &manifest.entries()[0];
+        assert_eq!(entry.title(), "Human Title");
+        assert_eq!(entry.kind(), ContentKind::Template);
+        assert_eq!(entry.licence(), Licence::Mit);
+        assert_eq!(entry.customization(), CustomizationStatus::Customizable);
+    }
+
+    // ContentKind widened additively: each new lowercase spelling admits and
+    // round-trips through `kind()`; the existing `template` is unchanged.
+    #[test]
+    fn content_kind_admits_widened_variants() {
+        for (raw, expected) in [
+            ("template", ContentKind::Template),
+            ("reference", ContentKind::Reference),
+            ("guidance", ContentKind::Guidance),
+            ("integration", ContentKind::Integration),
+        ] {
+            let manifest = one_entry_kind(raw);
+            assert_eq!(
+                manifest.entries()[0].kind(),
+                expected,
+                "kind {raw:?} admits and round-trips"
+            );
+            assert_eq!(expected.as_str(), raw, "as_str is the declared spelling");
+        }
+    }
+
+    // available(): true for a backing the bound EmbeddedAdapter can serve,
+    // false for a declared-but-absent backing (reads no bytes).
+    #[test]
+    fn available_true_for_shipped_backing_false_for_absent() {
+        let resolver = shipped_resolver();
+        let entry = resolver
+            .manifest()
+            .entries()
+            .iter()
+            .find(|e| e.address().as_str() == "templates/slice.toml")
+            .expect("shipped entry present");
+        assert!(resolver.available(entry), "shipped backing is available");
+
+        let absent = one_entry("templates/ghost.toml", "backing/does-not-exist.bin");
+        let resolver2 = Resolver::new(absent, EmbeddedAdapter);
+        let ghost = &resolver2.manifest().entries()[0];
+        assert!(!resolver2.available(ghost), "absent backing is unavailable");
+    }
+
+    // available() honours the bound adapter: the in-memory MapAdapter reports
+    // its own membership.
+    #[test]
+    fn available_reflects_bound_adapter_membership() {
+        let manifest = one_entry("templates/slice.toml", "relocated/elsewhere.bin");
+        let mut bytes = BTreeMap::new();
+        bytes.insert("relocated/elsewhere.bin".to_string(), b"payload".to_vec());
+        let resolver = Resolver::new(manifest, MapAdapter { bytes });
+        assert!(resolver.available(&resolver.manifest().entries()[0]));
+
+        let missing = one_entry("templates/slice.toml", "relocated/elsewhere.bin");
+        let empty = Resolver::new(
+            missing,
+            MapAdapter {
+                bytes: BTreeMap::new(),
+            },
+        );
+        assert!(!empty.available(&empty.manifest().entries()[0]));
+    }
+
+    // declares_backing(): membership over declared entries' backings.
+    #[test]
+    fn declares_backing_membership() {
+        let manifest = one_entry("templates/slice.toml", "backing/present.bin");
+        assert!(manifest.declares_backing("backing/present.bin"));
+        assert!(!manifest.declares_backing("backing/not-declared.bin"));
+    }
+
+    // VT-4 (SL-227): every shipped entry resolves — the grown manifest declares
+    // only real (non-hollow) backings — and every entry is licence=MIT (Option A
+    // uniform MIT, D5, keeping the SL-223 VT-3 licence assertion green).
+    #[test]
+    fn every_shipped_entry_resolves_and_is_mit() {
+        let resolver = shipped_resolver();
+        let entries = resolver.manifest().entries();
+        assert!(!entries.is_empty(), "shipped manifest is non-empty");
+        for entry in entries {
+            assert!(
+                resolver.available(entry),
+                "shipped entry {} has a real (non-hollow) backing",
+                entry.address().as_str()
+            );
+            assert_eq!(entry.licence(), Licence::Mit, "Option A: uniform MIT");
+            let mut sink = std::io::sink();
+            resolver
+                .emit(entry.address(), &mut sink)
+                .unwrap_or_else(|e| panic!("{} resolves: {e}", entry.address().as_str()));
+        }
+    }
+
+    // COMPLETENESS (SL-227, de-risks the PHASE-03 crux gate): the published set
+    // covers the WHOLE projection complement — `{install} − {base} ⊆ published`,
+    // else the minimal-projection flip strands a silent-unreachable file. Both the
+    // enumeration and the base set are read from disk-source (`repo_root()`), never
+    // the compiled embed or a hardcoded literal — so the gate is staleness-proof
+    // and single-sourced (SL-227 F-6/F-7). Delegates to the shared disk-source
+    // check so this sibling and the `install.rs` crux gate attest the SAME
+    // invariant.
+    #[test]
+    fn published_set_covers_the_full_projection_complement() {
+        crate::asset_source::assert_unprojected_install_assets_are_published();
     }
 }

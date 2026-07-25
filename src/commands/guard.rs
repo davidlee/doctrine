@@ -356,6 +356,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
         // publication validate reads the embedded manifest + emits to a sink;
         // never writes repo state (SL-223 D-A).
         | Command::Publication { .. }
+        // library {list,tree,show} is a pure read veneer over the Resolver —
+        // no path to a project mutation exists by construction (SL-227 NF-002).
+        | Command::Library { .. }
         | Command::Doctor { .. }
         | Command::Inspect { .. }
         | Command::Survey { .. }

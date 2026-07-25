@@ -64,6 +64,9 @@ struct Manifest {
     target: String,
 
     #[serde(default)]
+    base: BaseSection,
+
+    #[serde(default)]
     dirs: DirsSection,
 
     #[serde(default)]
@@ -81,6 +84,15 @@ struct Manifest {
 
 fn default_target() -> String {
     ".doctrine".to_string()
+}
+
+/// The minimal projection base set (SL-227). `backings` are the ONLY embedded
+/// assets `build_plan` projects eagerly; every other embed is published, not
+/// projected. Keys must match `publication.rs`'s `BASE_BACKINGS`.
+#[derive(Debug, Default, Deserialize)]
+struct BaseSection {
+    #[serde(default)]
+    backings: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -1391,10 +1403,19 @@ fn build_plan(manifest: &Manifest, project_root: &Path) -> Plan {
         steps.push(Step::CreateDir(p));
     }
 
-    // 2. Embedded files (except manifest.toml).
-    for filename in embedded_filenames() {
-        let source = filename.clone();
-        let dest = target_dir.join(&filename);
+    // 2. Base backings — the MINIMAL projection (SL-227 FR-007/FR-008, D8). Only
+    //    the manifest-declared `[base].backings` land eagerly; every other embedded
+    //    asset is published (reachable on demand), never eagerly copied. `.gitignore`
+    //    is served by leg 3, so it is skipped here; the two content backings map to
+    //    `install/<key>` embed sources and land write-if-absent under the target.
+    //    `embedded_filenames()` stays defined (the crux reachability gate consumes
+    //    it) but no longer drives projection.
+    for key in &manifest.base.backings {
+        if key == ".gitignore" {
+            continue;
+        }
+        let source = key.clone();
+        let dest = target_dir.join(key);
         // Ensure parent directory exists in plan.
         if let Some(parent) = dest.parent()
             && !parent.exists()
@@ -1427,7 +1448,17 @@ fn build_plan(manifest: &Manifest, project_root: &Path) -> Plan {
     }
 }
 
-/// Sorted list of embedded asset names, excluding `manifest.toml`.
+/// Sorted list of embedded asset names, excluding `manifest.toml`. Since the
+/// SL-227 minimal-projection flip, `build_plan` projects only the manifest base
+/// backings, so this enumerator no longer drives projection — it is consumed by
+/// the crux reachability gate and the `*_is_shipped` embedding tests.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "consumed by the SL-227 reachability gate + embedding tests"
+    )
+)]
 fn embedded_filenames() -> Vec<String> {
     let mut names: Vec<String> = crate::asset_source::iter()
         .map(|f| f.to_string())
@@ -3287,8 +3318,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join(".doctrine");
         fs::create_dir_all(&target).unwrap();
-        // Pre-create an embedded target file so the plan must Skip it.
-        let existing = target.join("glossary.md");
+        // Pre-create a base backing so the plan must Skip it (SL-227: projection is
+        // now the three-file base set, so the skip target is a base backing).
+        let existing = target.join("doctrine.toml");
         fs::write(&existing, "old content").unwrap();
 
         let manifest = Manifest::default_for_tests();
@@ -3298,7 +3330,10 @@ mod tests {
             .steps
             .iter()
             .any(|s| matches!(s, Step::Skip { dest, .. } if dest == &existing));
-        assert!(has_skip, "Expected a Skip step for the pre-existing file");
+        assert!(
+            has_skip,
+            "Expected a Skip step for the pre-existing base backing"
+        );
     }
 
     #[test]
@@ -3371,15 +3406,15 @@ mod tests {
     fn embedded_manifest_creates_memory_items_and_ignores_derived_subtrees() {
         let manifest = load_manifest().unwrap();
 
-        // items/ is the only memory subtree the installer materialises — it
-        // holds committed, authored memory entities.
+        // SL-227 FR-008: items/ is NO LONGER eagerly scaffolded by the manifest — it
+        // materialises lazily on the first `memory record` (entity.rs materialise*).
         assert!(
-            manifest
+            !manifest
                 .dirs
                 .create
                 .iter()
                 .any(|d| d == ".doctrine/memory/items"),
-            "manifest must create the memory items tree"
+            "memory items/ is lazy now — not an eager manifest [dirs].create entry"
         );
         // The derived subtrees are gitignored but NOT created (future slices own
         // their on-demand creation). `shipped/` is the SL-018 binary-materialized
@@ -3417,9 +3452,11 @@ mod tests {
     #[test]
     fn embedded_manifest_creates_the_policy_tree() {
         let manifest = load_manifest().unwrap();
+        // SL-227 FR-008: the policy root is lazy now — created on first `policy new`,
+        // not an eager manifest [dirs].create entry.
         assert!(
-            manifest.dirs.create.iter().any(|d| d == ".doctrine/policy"),
-            "manifest must create the authored policy tree"
+            !manifest.dirs.create.iter().any(|d| d == ".doctrine/policy"),
+            "the policy tree is lazily scaffolded on first `policy new`, not eagerly"
         );
         assert!(
             !manifest
@@ -3438,13 +3475,15 @@ mod tests {
     #[test]
     fn embedded_manifest_creates_the_standard_tree() {
         let manifest = load_manifest().unwrap();
+        // SL-227 FR-008: the standard root is lazy now — created on first
+        // `standard new`, not an eager manifest [dirs].create entry.
         assert!(
-            manifest
+            !manifest
                 .dirs
                 .create
                 .iter()
                 .any(|d| d == ".doctrine/standard"),
-            "manifest must create the authored standard tree"
+            "the standard tree is lazily scaffolded on first `standard new`, not eagerly"
         );
         assert!(
             !manifest
@@ -3463,9 +3502,11 @@ mod tests {
     #[test]
     fn embedded_manifest_creates_the_review_tree_and_embeds_its_templates() {
         let manifest = load_manifest().unwrap();
+        // SL-227 FR-008: the review root is lazy now — created on first `review …`,
+        // not an eager manifest [dirs].create entry. Its templates must still embed.
         assert!(
-            manifest.dirs.create.iter().any(|d| d == ".doctrine/review"),
-            "manifest must create the authored review tree"
+            !manifest.dirs.create.iter().any(|d| d == ".doctrine/review"),
+            "the review tree is lazily scaffolded on first use, not eagerly"
         );
         assert!(
             !manifest
@@ -3486,9 +3527,11 @@ mod tests {
     #[test]
     fn embedded_manifest_creates_the_rec_tree_and_embeds_its_templates() {
         let manifest = load_manifest().unwrap();
+        // SL-227 FR-008: the rec root is lazy now — created on first `rec new`, not
+        // an eager manifest [dirs].create entry. Its templates must still embed.
         assert!(
-            manifest.dirs.create.iter().any(|d| d == ".doctrine/rec"),
-            "manifest must create the authored rec tree"
+            !manifest.dirs.create.iter().any(|d| d == ".doctrine/rec"),
+            "the rec tree is lazily scaffolded on first `rec new`, not eagerly"
         );
         assert!(
             !manifest
@@ -3580,11 +3623,12 @@ mod tests {
         execute_plan(&plan).unwrap();
 
         assert!(dir.path().join(".doctrine/custom-dir").is_dir());
-        // An embedded file (glossary.md) should be installed.
-        let glossary = dir.path().join(".doctrine/glossary.md");
-        assert!(glossary.is_file());
-        let content = fs::read_to_string(&glossary).unwrap();
-        assert!(content.contains("glossary"));
+        // A base backing (project-orientation.md) should be installed under the
+        // target (SL-227: only the three-file base projects).
+        let orientation = dir.path().join(".doctrine/project-orientation.md");
+        assert!(orientation.is_file());
+        let content = fs::read_to_string(&orientation).unwrap();
+        assert!(content.contains("Project Orientation"));
     }
 
     #[test]
@@ -3618,14 +3662,16 @@ mod tests {
     #[test]
     fn install_writes_no_shipped_tree() {
         let dir = tempfile::tempdir().unwrap();
-        // The REAL manifest: items/ is created, shipped/ is gitignored-not-created.
+        // The REAL manifest. SL-227: after the minimal-projection flip, install no
+        // longer eagerly scaffolds the memory items/ tree — it appears lazily on the
+        // first `memory record` (entity.rs materialise*). shipped/ is `memory sync`'s.
         let manifest = load_manifest().unwrap();
         let plan = build_plan(&manifest, dir.path());
         execute_plan(&plan).unwrap();
 
         assert!(
-            dir.path().join(".doctrine/memory/items").is_dir(),
-            "install materializes the committed items/ tree"
+            !dir.path().join(".doctrine/memory/items").exists(),
+            "install no longer eagerly creates items/ (lazy on first `memory record`)"
         );
         assert!(
             !dir.path().join(".doctrine/memory/shipped").exists(),
@@ -3640,7 +3686,7 @@ mod tests {
             target: ".doctrine".to_string(),
             ..Manifest::default_for_tests()
         };
-        let dest = dir.path().join(".doctrine/glossary.md");
+        let dest = dir.path().join(".doctrine/doctrine.toml");
         fs::create_dir_all(dest.parent().unwrap()).unwrap();
         let original = "original content";
         fs::write(&dest, original).unwrap();
@@ -3648,7 +3694,7 @@ mod tests {
         let plan = build_plan(&manifest, dir.path());
         execute_plan(&plan).unwrap();
 
-        // Must still be original.
+        // Must still be original (an existing base backing is never clobbered).
         let content = fs::read_to_string(&dest).unwrap();
         assert_eq!(content, original);
     }
@@ -3862,35 +3908,174 @@ mod tests {
         assert!(traits_of("claude/dispatch-worker.md").is_empty());
     }
 
-    // SL-011 VT-1: the boot governance layer rides the existing seed path —
-    // created create-if-missing, left untouched when already present.
+    // SL-227 (was SL-011 VT-1, flipped): a base backing rides the write-if-absent
+    // projection — installed create-if-missing, left untouched when already present.
+    // Governance is no longer projected; `project-orientation.md` is the base backing
+    // that now exercises this create-if-missing / skip-when-present behaviour.
     #[test]
-    fn seeds_governance_when_missing_and_skips_when_present() {
+    fn seeds_base_backing_when_missing_and_skips_when_present() {
         let dir = tempfile::tempdir().unwrap();
         let manifest = Manifest {
             target: ".doctrine".to_string(),
             ..Manifest::default_for_tests()
         };
-        let dest = dir.path().join(".doctrine/governance.md");
+        let dest = dir.path().join(".doctrine/project-orientation.md");
 
-        // missing → seeded with the embedded template.
+        // missing → written from the embedded base backing.
         execute_plan(&build_plan(&manifest, dir.path())).unwrap();
-        assert!(dest.is_file(), "governance.md seeded when missing");
+        assert!(
+            dest.is_file(),
+            "project-orientation.md written when missing"
+        );
         assert!(
             fs::read_to_string(&dest)
                 .unwrap()
-                .contains("Project-Specific Governance"),
-            "seeded from the embedded template",
+                .contains("Project Orientation"),
+            "written from the embedded backing",
         );
 
         // present → a re-install leaves the user's edits untouched (Skip).
-        let edited = "# Governance (project)\n\nmy own pointers\n";
+        let edited = "# My own orientation\n\nmy own pointers\n";
         fs::write(&dest, edited).unwrap();
         execute_plan(&build_plan(&manifest, dir.path())).unwrap();
         assert_eq!(
             fs::read_to_string(&dest).unwrap(),
             edited,
-            "an existing governance.md is never clobbered",
+            "an existing base backing is never clobbered",
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // SL-227 PHASE-03: the minimal-projection flip
+    // ---------------------------------------------------------------
+
+    /// VT-2 / EX-3 — the derived no-silent-unreachable gate. Every install asset
+    /// that is NOT a projection base backing MUST be declared as a published backing
+    /// (`{install} − {base}` ⊆ published) — else the minimal-projection flip would
+    /// strand it (neither eagerly projected nor reachable). Both the enumeration and
+    /// the base set are DERIVED from disk-source (`repo_root()`), never the compiled
+    /// embed or a hardcoded list — so an incremental build over a stale `install/`
+    /// edit cannot false-green the gate (SL-227 F-7; the `debug-embed` footgun,
+    /// CHR-014). Shares the disk-source check with its `publication.rs` sibling.
+    #[test]
+    fn every_unprojected_embed_is_a_published_backing() {
+        crate::asset_source::assert_unprojected_install_assets_are_published();
+    }
+
+    /// VT-1 / VT-4 — a fresh install materialises EXACTLY the three-file base
+    /// {.gitignore, doctrine.toml, project-orientation.md} and seeds NO memory entity.
+    /// The seed gate: `seed_authoring_memories` early-returns on the manifest's now
+    /// empty `[memory].seed_items`, so a base install writes no memory.
+    #[test]
+    fn fresh_install_projects_exactly_the_three_file_base_and_seeds_no_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = load_manifest().unwrap();
+
+        // The shipped manifest declares exactly the three base backings.
+        let base: BTreeSet<&str> = manifest.base.backings.iter().map(String::as_str).collect();
+        let expected: BTreeSet<&str> = [".gitignore", "doctrine.toml", "project-orientation.md"]
+            .into_iter()
+            .collect();
+        assert_eq!(base, expected, "base must be the three-file set");
+
+        execute_plan(&build_plan(&manifest, dir.path())).unwrap();
+        seed_authoring_memories(dir.path(), &manifest).unwrap();
+
+        // Under the target, EXACTLY the two content backings appear — nothing else.
+        let target = dir.path().join(".doctrine");
+        let mut present: Vec<String> = fs::read_dir(&target)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        present.sort();
+        assert_eq!(
+            present,
+            vec![
+                "doctrine.toml".to_string(),
+                "project-orientation.md".to_string()
+            ],
+            "the target holds exactly the two content base backings"
+        );
+        // The third base member, .gitignore, lands at the project root (leg 3).
+        assert!(dir.path().join(".gitignore").is_file());
+        // The seed gate: no memory entity was created on a base install.
+        assert!(
+            !dir.path().join(".doctrine/memory").exists(),
+            "the seed gate must leave no memory entity on a base install"
+        );
+    }
+
+    /// VT-3 — `build_plan` leg 2 is driven by the manifest `[base].backings` set: the
+    /// two content backings land as Install steps under the target, and `.gitignore`
+    /// is NOT projected by leg 2 (leg 3 owns it).
+    #[test]
+    fn build_plan_projects_the_manifest_base_backings() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = Manifest {
+            base: BaseSection {
+                backings: vec![
+                    ".gitignore".to_string(),
+                    "doctrine.toml".to_string(),
+                    "project-orientation.md".to_string(),
+                ],
+            },
+            target: ".doctrine".to_string(),
+            ..Manifest::default_for_tests()
+        };
+        let plan = build_plan(&manifest, dir.path());
+        let installs: BTreeSet<String> = plan
+            .steps
+            .iter()
+            .filter_map(|s| match s {
+                Step::Install { dest, .. } => {
+                    Some(dest.file_name().unwrap().to_string_lossy().into_owned())
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(installs.contains("doctrine.toml"));
+        assert!(installs.contains("project-orientation.md"));
+        // .gitignore is served by leg 3 — never an Install into the target.
+        assert!(
+            !installs.contains(".gitignore"),
+            "leg 2 must not project .gitignore; leg 3 owns it"
+        );
+    }
+
+    /// VT-5 / NF-004 — the minimal-projection flip is orthogonal to harness adapter
+    /// installation: a base-only projection installs no agent defs in leg 2, yet
+    /// `detect_agents` still resolves a present harness dir, so the forward-step
+    /// adapter leg still fires after the flip.
+    #[test]
+    fn detect_agents_is_independent_of_the_base_projection_flip() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".claude")).unwrap();
+        // A base-only install projects just the three backings (no agent defs)…
+        let manifest = load_manifest().unwrap();
+        execute_plan(&build_plan(&manifest, dir.path())).unwrap();
+        // …yet the harness is still detected, so the adapter leg fires.
+        assert_eq!(
+            detect_agents(&[], dir.path()),
+            vec!["claude".to_string()],
+            "a detected harness must still resolve for adapter install after the flip"
+        );
+    }
+
+    /// NF-005 — the project-governance seed is retired: a base install writes no
+    /// governance.md under the target (governance is published, reachable on demand,
+    /// not eagerly projected), and it is not a declared base backing.
+    #[test]
+    fn base_install_does_not_project_governance() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = load_manifest().unwrap();
+        execute_plan(&build_plan(&manifest, dir.path())).unwrap();
+        assert!(
+            !dir.path().join(".doctrine/governance.md").exists(),
+            "governance.md is published, not eagerly projected, after the flip"
+        );
+        assert!(
+            !manifest.base.backings.iter().any(|b| b == "governance.md"),
+            "governance.md must not be a base backing"
         );
     }
 
@@ -4056,6 +4241,13 @@ mod tests {
         fn default_for_tests() -> Self {
             Manifest {
                 target: default_target(),
+                base: BaseSection {
+                    backings: vec![
+                        ".gitignore".to_string(),
+                        "doctrine.toml".to_string(),
+                        "project-orientation.md".to_string(),
+                    ],
+                },
                 dirs: DirsSection::default(),
                 gitignore: GitignoreSection::default(),
                 root_markers: RootMarkersSection::default(),
