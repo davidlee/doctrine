@@ -6,6 +6,22 @@ slug = "graph-exploration"
 title = "Graph exploration"
 status = "draft"
 kind = "product"
-tags = []
+tags = ["graph", "exploration", "semantic-graph", "actionability", "concept-map", "web-explorer", "legibility", "json-contract", "local-first"]
 product_level = "capability"
+
+[[relation]]
+label = "consumes"
+target = "PRD-011"
+
+[[relation]]
+label = "consumes"
+target = "PRD-014"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-004"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-019"
 # parent = "PRD-NNN"   # decomposition parent (product→product)

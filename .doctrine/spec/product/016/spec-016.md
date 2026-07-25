@@ -50,6 +50,16 @@ Out of scope:
 - Computing priority, actionability, blockers, or explanations — that
   synthesis is PRD-011's; this capability consumes its output and renders
   it, never re-derives or restates the policy.
+- The **CLI text rendering** of the actionability surfaces — `survey`,
+  `next`, `explain`, `blockers`, `inspect` and their terminal output,
+  including folding `explain`'s decomposition inline, a `--why` flag, and
+  what-if/trace modes (RFC-007 workstream 2). PRD-011 §2 claims those
+  surfaces in scope, and the rendering of a computation stays with the
+  capability that owns the computation. This capability's rendering claim is
+  the **interactive, explorable** surface — the web explorer's three views
+  and their JSON read models — not terminal text. The distinguishing axis
+  against PRD-011 is therefore *which consumption surface*, not
+  render-versus-compute (OQ-003, settled).
 - Authoring or validating relation edges on the semantic graph — SPEC-018
   owns the `link`/`unlink` write seam and its validation policy; the
   explorer's semantic and actionability views are read-only.
@@ -264,17 +274,37 @@ entities, not duplicated here.
   export for external tools like Gephi/Neo4j) become a channel of this
   capability if a concrete external-tool need appears, per RFC-002's
   on-demand deferral, or does it belong to a separate interchange spec?
-- OQ-003 — Should `next`/`survey`'s CLI text rendering (RFC-007 workstream
-  2 — folding `explain`'s decomposition inline, a `--why` flag, a
-  what-if/trace mode) be governed by this capability, since it is graph
-  legibility for the same actionability view, or does it stay scoped to
-  PRD-011 as a CLI-surface concern of the computation it renders? The
-  boundary drawn here (§2) treats the *web* actionability view as this
-  capability's and leaves the *CLI* rendering question open.
-- OQ-004 — What is this capability's C4/product-altitude boundary against
-  a future tech spec for `map_server`/`web/map`: one tech spec spanning
-  both, or a container-level split (server vs. frontend)? Blocks the
-  downstream `/spec-tech` authoring CHR-046 also scopes.
+- OQ-003 — **Settled (CHR-046).** Asked whether `next`/`survey`'s CLI text
+  rendering (RFC-007 workstream 2) is governed by this capability, since it
+  is graph legibility for the same actionability view, or stays scoped to
+  PRD-011 as a CLI-surface concern of the computation it renders.
+  **Resolution: it stays with PRD-011**, now stated explicitly in §2's
+  out-of-scope list. The question was not merely open but a live *overlap*:
+  PRD-011 §2 claims the `survey`/`next-work`/`inspect`/`explain`/`blockers`
+  surfaces in scope and "show[s] … priority explanations", and its
+  out-of-scope list disclaims no rendering at all — so both capabilities
+  reached for the same surface. Resolving toward PRD-011 costs no amendment
+  to an active spec and keeps a CLI surface with the computation it renders;
+  the alternative would have split the survey CLI from the survey engine
+  across two PRDs. The operative axis is *which consumption surface*
+  (terminal text vs. interactive/explorable), superseding the
+  render-versus-compute framing in §3's first principle, which remains true
+  of this capability but is not the boundary against PRD-011.
+- OQ-004 — **Settled (CHR-046), and replaced.** Asked whether the
+  `map_server`/`web/map` tech spec should be one spec spanning both or a
+  container-level split (server vs. frontend), and asserted it blocked the
+  downstream `/spec-tech` authoring. SPEC-025 answered it by construction:
+  **one container** spanning server and embedded SPA, anchored at
+  `src/map_server/mod.rs`, `src/commands/map.rs`, and `web/map/src/app.ts`.
+  The live boundary question was never server-versus-frontend but
+  **web-versus-CLI**: `CatalogGraph` (`src/catalog/graph.rs`) and the
+  `doctrine graph` emitter (`src/commands/graph.rs`, SL-226, which declares
+  `implements PRD-016`) realise this capability with no tech spec governing
+  them, and SPEC-025 consumes `CatalogGraph` without owning it. That gap is
+  the CHR-046 deliverable: a component-level tech spec descending from this
+  capability. A third surface — the concept-map kind itself
+  (`src/concept_map.rs` and its nine CLI verbs) — is dark on both the
+  product and tech axes and is deliberately deferred, not overlooked.
 - OQ-005 — Should the actionability view eventually render epistemic
   gating (RFC-007 workstream 3 — records blocking dependents) once
   populated, or is that automatic once PRD-011's derived view includes
