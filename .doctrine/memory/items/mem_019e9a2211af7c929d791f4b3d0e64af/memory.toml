@@ -6,11 +6,11 @@ status = "active"
 title = "Authoring global orientation masters via record --global"
 summary = "Global orientation masters: record --global suppresses the born frame and writes to repo-root memory/, riding past the repo-anchor gate"
 created = "2026-06-05"
-updated = "2026-06-05"
+updated = "2026-07-25"
 
 [scope]
 paths = ["memory/", "src/corpus.rs", "src/memory.rs"]
-globs = []
+globs = ["memory/**"]
 commands = ["doctrine memory record", "doctrine memory sync"]
 tags = ["doctrine", "memory", "corpus", "global"]
 workspace = "default"
@@ -34,10 +34,10 @@ reviewed = ""
 review_by = ""
 
 [trust]
-trust_level = "medium"
+trust_level = "high"
 
 [ranking]
-severity = "none"
+severity = "high"
 weight = 0
 
 [[relation]]
