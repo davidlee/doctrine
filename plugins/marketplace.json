@@ -1,7 +1,7 @@
 {
   "name": "doctrine",
   "owner": { "name": "doctrine" },
-  "version": "0.30.0",
+  "version": "0.31.0",
   "plugins": [
     {
       "name": "doctrine",
