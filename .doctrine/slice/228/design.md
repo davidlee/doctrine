@@ -324,7 +324,20 @@ convention).
   tip; row absent / position `spawned` ⇒ the verb lands its own lagging
   Class-2 `RecordWorkerCommit` record now — it *is* the original recorder
   (D8), and import's heal-forward remains the backstop when no retry ever
-  comes. A *dirty* tree on an advanced fork is not a retry: refuse (late
+  comes. The self-record leg is **belt-gated, provenance-indifferent**
+  (RV-305 F-1 contest): before recording, it re-runs the same delta/scope/
+  gate belts the first-commit leg enforces, against `C`'s delta — an
+  *ungated* one-commit fork (a raw-git bypass wearing the retry signature)
+  either fails a belt and refuses with that belt named (triage beat — never
+  adopted, never recorded) or passes them all, in which case adoption is
+  sound by construction: the belts, not authorship, are the content
+  authority, and a commit they cannot distinguish from a legitimate one *is*
+  legitimate. The no-op replay leg needs no re-run: a row at exactly
+  `worker-committed` can only have been landed by a belt-running leg (the
+  first-commit leg or the belt-gated self-record; import's heal lands the
+  row only together with `Import`, a position the `already-<position>`
+  refusal already screens), so the stored row is the belt-proof by
+  induction. A *dirty* tree on an advanced fork is not a retry: refuse (late
   re-commit); position `imported`+ refuses `already-<position>` naming the
   imported tip — the worker's lost-response ambiguity always ends in a
   truthful terminal answer, never a `stale-record` misdiagnosis.
@@ -348,7 +361,7 @@ runnable command) — the existing refusal channel, richer payload, no new shape
 
 | Verb | New gate (before existing belts) | Existing belts (unchanged) |
 |---|---|---|
-| `worker_commit` | `attempt(RecordWorkerCommit)` **pre-act, always** — the fork binding is the same `DispatchRecord` the verb already reads for its base guard (claude arm = its only arm), so there is no unbound-but-legitimate case: refuses at `imported`+ (no late re-commit) and refuses `unprovable-fork` on a missing binding (RV-303 F-3 contest — no ungated fallback); the pre-gate is advisory against races, the post-act CAS record stays authoritative — **adds** post-land `RecordWorkerCommit` record on coord; the **retry signature** (clean tree, one commit, `C^==B` — §3, RV-305 F-1) bypasses the `AtBase`/base-guard refusal into the replay/self-record leg | delta/scope/base/gate belts (base guard `HEAD==B` gates the *first-commit* leg only) |
+| `worker_commit` | `attempt(RecordWorkerCommit)` **pre-act, always** — the fork binding is the same `DispatchRecord` the verb already reads for its base guard (claude arm = its only arm), so there is no unbound-but-legitimate case: refuses at `imported`+ (no late re-commit) and refuses `unprovable-fork` on a missing binding (RV-303 F-3 contest — no ungated fallback); the pre-gate is advisory against races, the post-act CAS record stays authoritative — **adds** post-land `RecordWorkerCommit` record on coord; the **retry signature** (clean tree, one commit, `C^==B` — §3, RV-305 F-1) bypasses the `AtBase`/base-guard refusal into the replay/self-record leg — the self-record leg re-runs the content belts against `C` before recording (belt-gated adoption, F-1 contest) | delta/scope/base/gate belts (base guard `HEAD==B` gates the *first-commit* leg only; the content belts gate *both* acting legs) |
 | `dispatch_import` | `attempt(Import)` (heal-forward per D8) | scope belt, merge compose, CAS |
 | `dispatch verify` *(new)* | `preflight(Verify)` at entry (pure kind gate — evidence exists only post-suite, RV-304 F-3); the evidence-bearing `attempt(Verify)` runs at landing | — (see §5) |
 | `dispatch_conclude_phase` | `attempt(Conclude)` — refuses `conclude-unverified` / `conclude-verify-failed` / `conclude-verify-stale` | **reordered** (RV-303 F-5): boundary⊕position CAS lands **first**; sheet flip + mirror becomes a trailing projection (crash after CAS ⇒ sheet lags position — benign, position is senior per §9) |
@@ -603,7 +616,12 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
   the landed tip; kill between fork commit and coord record, re-drive ⇒ the
   verb lands its own lagging `RecordWorkerCommit` row; dirty advanced fork
   refuses (late re-commit); retry at `imported`+ refuses `already-<position>`
-  — never a `stale-record` misdiagnosis. VT — **branch-as-claim** (RV-304 F-2): kill between the
+  — never a `stale-record` misdiagnosis. VT — **ungated one-commit fork**
+  (F-1 contest): a commit created outside `worker_commit` wearing the retry
+  signature with a belt-violating delta (scope breach / red gate) refuses
+  naming the violated belt — never adopted, never recorded; the same shape
+  with a belt-passing delta adopts and records (belts are the content
+  authority, not authorship). VT — **branch-as-claim** (RV-304 F-2): kill between the
   claim/bind steps and the worktree act ⇒ inert residue (branch⊕record,
   never a live fork; gc sweeps — the kernel released the crashed spawn's
   claim lock; retry refuses at the claim); a sweep attempted while a live
