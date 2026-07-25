@@ -1432,3 +1432,70 @@ observations recorded here — is now *possible* but not *done*. R1 ("advisory
 hooks may under-deliver without enforcement") becomes testable from the next
 slice that reaches `/slice`; until one does, the harder-gating question stays
 open. That is the eval this release unblocks.
+
+## [preflight; IMP-221-preflight-2026-07-25]
+
+- `doctrine spec req` has no `show` verb, and `req list` takes a **positional**
+  `<SPEC_REF>` (not `--spec`). Cost 3 wasted probes to find the shape. Worse:
+  `req list` renders `prose │ —` for every REQ, so the governed requirement text
+  is **not reachable through the req surface at all** — I had to fall back to
+  `grep` on `spec-007.toml`, which is exactly the raw-file read the guardrails
+  tell agents not to do. Either `req list` should carry a prose column that works,
+  or there should be a `req show <REQ-NNN>`.
+- Backlog items carry no staleness signal. IMP-221's sub-item C asserts
+  "`memory verify` currently refuses with a dirty working tree" — but
+  `--allow-dirty` shipped 2026-06-18/21, ~10 days **before** the item was filed
+  2026-07-01. Confirming the premise was stale cost a `--help` read plus a
+  `git log -S` archaeology pass. A backlog item whose premise names a CLI
+  behaviour has no cheap way to be re-checked against the current binary.
+
+## [dispatch-agent / phase-plan; SL-228-P03-drive]
+
+**1. `worker_commit` refusal payload embeds the whole test log.** The worker's
+first commit attempt returned `Refused: commit-gate-red` with the *entire*
+~400 KB `check commit` output inline. The actionable content was one line (an
+`e2e_no_baked_paths` ban on `env!("CARGO_MANIFEST_DIR")`). Extracting it cost a
+full re-read cycle inside the worker's context. The refusal should carry the
+failing assertion(s) — or a path to the log — not the log.
+
+**2. A worker's own `doctrine check gate` is not a usable signal.**
+`commands/guard.rs:461` resolves the project root from **CWD**, ignoring the
+test's `-p <temp root>`, so the worktree's `.doctrine/state/dispatch/worker`
+marker makes ~8 authored-write e2e targets fail with `worker fork (signal:
+marker): refusing authored write`. The same targets pass inside the
+`worker_commit` gate's own run — so it is a worker-shell artifact, but it means
+the worker cannot self-verify before committing and burns a commit-gate round
+trip to find out. Filed as a backlog item.
+
+**3. `just validate` is a no-op in a worker fork, so the commit gate carries no
+test signal** (`justfile:36-40`). Combined with (2), the worker has no reliable
+local green signal at all: its own gate run is polluted, and the recipe the
+commit gate runs short-circuits. Cost: the real verification only happens at the
+orchestrator's `check regression diff` beat, one funnel step too late to be cheap
+to fix.
+
+**4. `.doctrine/` hard wall + a symmetric layering gate forces orchestrator
+pre-authoring.** `classify_import` returns `doctrine-touch` before the selector
+leg, so no `design-target` selector can admit a `.doctrine/` path. Meanwhile
+`tests/architecture_layering.rs` flags BOTH a `[tiers]` row without an on-disk
+module (`StaleEntry`) and a module without a row (`Unclassified`). A phase that
+adds a new module therefore has no green ordering unless the orchestrator lands
+the layering row, an empty module stub, and the module declaration together as
+the phase base. This is discoverable only by reading two unrelated source files;
+nothing in the design or the skills says it. Cost here: ~6 tool calls of
+source-reading plus a non-obvious base-authoring beat.
+
+**5. A selector that a worker can never satisfy reads as permission.** The
+design declares `.doctrine/spec/tech/021/**` design-target, which is inert for
+import purposes (see 4) and governs slice conformance only. It reads as if a
+worker may write there. Same class as the `.agents/skills/**` mis-targeting
+already logged for PHASE-06.
+
+**6. Orchestrator-authored base-guard seams went stale/wrong.** The spawn
+prompt's check-4 greps named `read_boundaries_at` in `src/dispatch.rs` (it is in
+`src/mcp_server/dispatch.rs:663`) and `commit_on_behalf` in `src/git.rs` (it is
+in `src/dispatch.rs:5113`). The worker correctly judged intent-satisfied and
+proceeded rather than aborting. Root cause: the orchestrator wrote seam
+assertions from the design's file map rather than from a grep. Cheap fix — grep
+the seams while composing the prompt; a wrong guard either aborts a good phase
+or trains workers to ignore the guard.
