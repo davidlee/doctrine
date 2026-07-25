@@ -53,7 +53,10 @@ pub(crate) enum Position { Spawned, WorkerCommitted, Imported, Verified, Conclud
 pub(crate) enum Transition {
   Spawn { fork: String, base_oid: String },
   RecordWorkerCommit { fork_tip: String },
-  Import { import_oid: String },
+  Import { fork_tip: String, onto: String },  // INPUTS only — the import commit
+                                              // cannot contain its own oid (F-2
+                                              // contest); it is identified
+                                              // post-hoc by funnel provenance
   Verify { evidence: VerifyEvidence },   // Pass ⇒ Verified; Fail ⇒ stays Imported
   Conclude,
   Reap,
@@ -160,8 +163,13 @@ updated_at = "2026-07-25T09:00:00Z"
   at = "…"
 
   [phase.import]
-  import_oid = "…"               # the import commit itself
-  at = "…"
+  fork_tip = "…"                 # the fork commit imported (input fact)
+  onto = "…"                     # the coord tip composed onto (input fact)
+  at = "…"                       # NB no import_oid: the row rides the import
+                                 # commit's own tree, so the commit cannot name
+                                 # itself (F-2); it is identified post-hoc as
+                                 # the funnel-provenance commit introducing this
+                                 # row
 
   [phase.verify]                 # LAST attempt; pass required to advance
   status = "pass"                # "pass" | "fail"
@@ -218,8 +226,12 @@ convention).
   `dispatch_reap` re-run at `concluded` with the fork already absent records
   `Reaped` (idempotent completion). Re-running the original recorder is a no-op
   replay (§2). `worker_commit` resolves fork → (slice, phase) via the same
-  durable binding (the spawn row corroborates when present); no binding ⇒ skip
-  the record (import heals it).
+  durable binding — the very `DispatchRecord` it already consumes for the base
+  guard, so the lookup is one read, always available on its (claude) arm; a
+  fork with **no** binding refuses `unprovable-fork` outright (consistent with
+  import — there is no "skip and let import heal" arm: import refuses the same
+  unbound fork, so a skip would promise a heal that never comes; F-3/F-4
+  contests).
 
 ### CAS / concurrency contract (the OQ-2 durable half)
 
@@ -240,7 +252,7 @@ runnable command) — the existing refusal channel, richer payload, no new shape
 
 | Verb | New gate (before existing belts) | Existing belts (unchanged) |
 |---|---|---|
-| `worker_commit` | `attempt(RecordWorkerCommit)` **pre-act** when the fork binding resolves — refuses at `imported`+ (no late re-commit; the pre-gate is advisory, the post-act CAS record stays authoritative; RV-303 F-3); binding absent ⇒ ungated (deferred arm, import heals) — **adds** post-land `RecordWorkerCommit` record on coord | delta/scope/base/gate belts (base guard `HEAD==B` stays) |
+| `worker_commit` | `attempt(RecordWorkerCommit)` **pre-act, always** — the fork binding is the same `DispatchRecord` the verb already reads for its base guard (claude arm = its only arm), so there is no unbound-but-legitimate case: refuses at `imported`+ (no late re-commit) and refuses `unprovable-fork` on a missing binding (RV-303 F-3 contest — no ungated fallback); the pre-gate is advisory against races, the post-act CAS record stays authoritative — **adds** post-land `RecordWorkerCommit` record on coord | delta/scope/base/gate belts (base guard `HEAD==B` stays) |
 | `dispatch_import` | `attempt(Import)` (heal-forward per D8) | scope belt, merge compose, CAS |
 | `dispatch verify` *(new)* | `attempt(Verify)` | — (see §5) |
 | `dispatch_conclude_phase` | `attempt(Conclude)` — refuses `conclude-unverified` / `conclude-verify-failed` / `conclude-verify-stale` | **reordered** (RV-303 F-5): boundary⊕position CAS lands **first**; sheet flip + mirror becomes a trailing projection (crash after CAS ⇒ sheet lags position — benign, position is senior per §9) |
@@ -360,8 +372,12 @@ parity by construction, the ADR-011 disk-over-env argument; VA-gated anyway):
      reversions with **no** deletions — the deletion arm alone waves it
      through). Delegated to a thin binary check (`doctrine dispatch
      hook-check`; logic in Rust, unit-testable, bounded by the `FUNNEL_MARKER`
-     provenance walk). Binary absent ⇒ script degrades to the deletion arm
-     (belt degrades; never blocks legitimate commits).
+     provenance walk). Binary absent ⇒ **fail-closed**: refuse, naming the
+     missing binary and the escape hatch — a coord worktree without `doctrine`
+     on PATH is already a broken operating posture, and degrading to
+     deletion-only would silently reopen exactly the modification-only hole
+     this arm exists to close (F-7 contest); the escape hatch keeps a
+     deliberate operator unblocked.
    Refusals name the paths, the escape hatch (`DOCTRINE_ALLOW_DELETE=1` —
    covers both arms), and `dispatch commit`.
 2. On pass, **chain**: resolve the effective non-worktree `core.hooksPath`
@@ -405,7 +421,9 @@ the tree, and `tree-state` reports it when needed. The dispatch skills +
 - `Some(p)` — the **full matrix** (total, table-driven-tested; RV-303 F-9).
   Position is senior; every authority-order contradiction is an explicit alarm;
   the sheet remains the worker-condition axis (the ladder grows no off-ladder
-  nodes). Wire tokens unchanged; doc-comments updated:
+  nodes). Wire tokens unchanged; doc-comments updated. **Rows are ordered:
+  first match wins, top to bottom** (F-9 contest — `Err` outranks everything;
+  the boundary-ahead alarm outranks the sheet-ahead alarm):
 
   | position | sheet | boundary | receipt |
   |---|---|---|---|
@@ -456,7 +474,8 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
 - **REQ-385**: VT — table-driven exhaustive `(position × transition)` legality
   matrix (every illegal pair refuses with the right `expected`/`reason`);
   conclude refusals: unverified / verify-failed / verify-stale each distinct;
-  `worker_commit` pre-gate refuses a late re-commit at `imported`+ (F-3);
+  `worker_commit` pre-gate refuses a late re-commit at `imported`+ AND a
+  missing-binding fork (`unprovable-fork` — no ungated fallback; F-3);
   heal-at-`None` with no fork binding refuses `unprovable-fork` (F-4). VT —
   verify: a green-but-mutating suite lands `VerifyFailed{suite-mutated-tree}`,
   never pass evidence (F-11); a reverse-set path carrying an operator edit
@@ -479,8 +498,9 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
 - **REQ-389**: VT — hook refuses a deletion-carrying commit (the ISS-234 repro:
   ref-advance → pathless commit → refused) **and** a modification-only
   reverse-diff (import modifies existing files only → pathless commit → the
-  reversion arm refuses; F-7), plus a mixed A/M/D case; deletion-arm degraded
-  mode when the binary is absent; escape hatch works; **chained global hook
+  reversion arm refuses; F-7), plus a mixed A/M/D case; binary-absent ⇒
+  fail-closed refusal naming the escape hatch (no deletion-only degrade);
+  escape hatch works; **chained global hook
   still fires** (the operator-gotcha case: global `core.hooksPath` set → both
   run); guard verb refuses undeclared paths/deletions, pathless is
   unrepresentable. VA — hook parity across supported arms (claude main-thread,

@@ -14,7 +14,7 @@ ref   = "SL-228"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Verification evidence commit makes every fresh pass stale"
 detail = "Expected: a passing dispatch verify permits the next Conclude. Observed: design.md:33 and :93 require verify.verified_oid == the live coord tip; design.md:237-241 runs the suite at the current tip and then lands evidence in a CAS commit. commit_on_behalf creates a child commit and advances the ref to that new oid at src/dispatch.rs:4343-4350. Thus evidence records T while the post-verify tip is E, so T != E immediately and every fresh pass is conclude-verify-stale. Minimal fix: define verification identity against the tested tree/parent plus the evidence commit, and gate that the live tip is exactly the evidence commit with the tested tree relation intact; add VTs for fresh-pass conclude and unrelated post-verify advance refusal."
@@ -28,7 +28,7 @@ severity = "blocker"
 title = "Machine API lacks the facts required by its normative transitions"
 detail = "Expected: the one pure machine decides every transition result and idempotent replay. Observed: TransitionFacts contains only the prior verify evidence and coord_tip at design.md:52-58, yet Verify must choose pass=>Verified versus fail=>Imported at :91-92, and replay must compare fork tip and other transition facts at :111-116. Current shells do possess those values separately: worker_commit returns oid/base at src/mcp_server/worker_commit.rs:265-280 and import derives fork_tip/base at src/mcp_server/dispatch.rs:263-275, but the proposed authority cannot receive them. First failed verify at Imported is also indistinguishable from a same-position replay. Minimal fix: give each transition a typed proposed-event payload including outcome and identity facts, separate stored facts from candidate facts, and exhaustively test first act, exact replay, changed-evidence re-act, and mismatch refusal."
 disposition = "fix-now"
-response = "Confirmed: the normative table needs the verify outcome to pick Verified-vs-Imported, and replay needs candidate-vs-stored fact comparison — neither fit the drafted `TransitionFacts{verify, coord_tip}`. Integrated (§2): `Transition` variants now carry typed proposed-event payloads (Spawn{fork, base_oid}, RecordWorkerCommit{fork_tip}, Import{import_oid}, Verify{evidence}); `TransitionFacts` carries the STORED row + coord_tip + paths_since_verify. Act-vs-replay is decided by comparing candidate to stored evidence — the first Verify{Fail} at Imported is an act (no/different stored evidence), an identical payload is a replay. Exhaustive first-act / exact-replay / changed-evidence / mismatch cases ride the REQ-385 legality-matrix VT."
+response = "Contest upheld — the Import payload was self-referential: the funnel row rides the import commit's own tree, so the commit cannot contain its own oid. Amended (§2, §3): Transition::Import carries INPUT facts only — {fork_tip, onto} (the fork commit imported and the coord tip composed onto); [phase.import] in funnel.toml records fork_tip + onto and explicitly drops import_oid, with the import commit identified post-hoc as the funnel-provenance commit that introduced the row. Replay comparison for Import keys on the input pair, which is knowable pre-commit."
 
 [[finding]]
 id = "F-3"
@@ -37,7 +37,7 @@ severity = "blocker"
 title = "worker_commit performs the act without the required position gate"
 detail = "Expected: REQ-385 requires every funnel verb to refuse out of order and prescribe the expected next verb. Observed: design.md:205 claims every write verb calls attempt, but :212 explicitly gives worker_commit no positional gate and records only after landing. The current act commits at src/mcp_server/worker_commit.rs:249-280 after base/scope/check belts only. A call at None, WorkerCommitted, or later can therefore mutate the fork before the machine can refuse; a post-act RecordWorkerCommit is not legality gating. Minimal fix: resolve a durable phase/fork binding and call attempt(Spawned, RecordWorkerCommit) before staging/commit, then retain the Class-2 post-act record and crash heal."
 disposition = "fix-now"
-response = """Confirmed against REQ-385's letter ("EVERY funnel verb is legality-gated"): §4's "none positional" row contradicted it, and the gap is real — a late worker_commit after import could mutate the fork ungated. Integrated (§4): worker_commit gains an `attempt(RecordWorkerCommit)` pre-act gate whenever the fork binding (F-4's DispatchRecord slice/phase) resolves — refuses at `imported`+ with the expected-verb prescription; binding absent (deferred subprocess arm) ⇒ ungated with import healing, stated honestly. The pre-gate is advisory against races; the post-act CAS-landed record stays authoritative. VT added under REQ-385 (late re-commit refuses)."""
+response = 'Contest upheld — the "binding absent ⇒ ungated" arm was both a REQ-385 residual and dead-wrong in its premise: worker_commit runs only on the claude arm, whose forks are all created by the trusted path that writes DispatchRecord, and the verb ALREADY reads that record for its base guard — so an unbound-but-legitimate caller does not exist. Amended (§4, §3): worker_commit gates unconditionally — attempt(RecordWorkerCommit) pre-act, refusing at imported+ AND refusing `unprovable-fork` on a missing binding; the ungated fallback is deleted. Every funnel verb is now positionally gated with no exception clause. VT updated: missing-binding refusal added.'
 
 [[finding]]
 id = "F-4"
@@ -46,11 +46,11 @@ severity = "blocker"
 title = "None-to-import healing cannot prove which phase owns the fork"
 detail = "Expected: D8 heals only a git-provable prefix for the addressed phase. Observed: design.md:183-191 says import at position None with any live fork synthesizes Spawn plus RecordWorkerCommit, but current dispatch_import accepts only slice and name at src/mcp_server/dispatch.rs:235-251; the trusted DispatchRecord stores name/dir/branch/base/coord but no slice or phase at src/worktree/dispatch_record.rs:35-47; arm-spawn likewise receives no phase at src/dispatch.rs:501-545. With no spawn row, there is no durable phase binding to prove, so a live fork can be mis-attributed and the per-phase authority corrupted. Minimal fix: durably bind slice+phase+fork+base before spawn, or require a phase argument verified against an equivalent trusted record; heal None only from that binding, never from liveness alone."
 disposition = "fix-now"
-response = "Confirmed against code: DispatchRecord (src/worktree/dispatch_record.rs:35-47) carries exactly name/dir/branch/base/coord — no slice, no phase; arm-spawn takes no phase. Fork liveness alone cannot attribute, so the drafted heal-at-None was unprovable. Integrated (§3, §10): DispatchRecord gains `slice` + `phase`, snapshotted at fork creation by the trusted create-fork path exactly as `base` is — the binding rides the act itself, never the crashed Class-2 record; both arms' fork-creation paths write it (arm-spawn and `worktree fork --worker` gain the phase argument). Heal-at-None is admissible ONLY from that binding; a live fork without one refuses `unprovable-fork` (deliberate triage beat). worker_commit resolves fork→(slice,phase) via the same binding. VT: heal without binding refuses."
+response = """Contest upheld — the residual contradiction was worker_commit's "no binding ⇒ skip the record (import heals it)" line, which promised a heal that import itself refuses on the same unbound fork. Amended (§3): the skip arm is deleted; worker_commit refuses `unprovable-fork` on a missing binding, identical to import's posture — one consistent rule everywhere: bound fork + missing funnel rows ⇒ heal the provable prefix from the binding; unbound fork ⇒ refuse, triage beat. The subprocess-arm entry ramp is unaffected: its forks are created by `worktree fork --worker`, which writes the binding, so import heals from the binding, never from liveness."""
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Conclude still has a crash window despite its Class-1 atomicity claim"
 detail = "Expected: design.md:170-174 makes Conclude boundary+position atomic and calls ConcludeIncomplete structurally impossible; :352-353 treats a completed sheet ahead of position as corruption. Observed: the unchanged conclude belt at design.md:215 still maps to current code that writes and mirrors the completed runtime sheet first at src/mcp_server/dispatch.rs:374-390, then attempts the boundary commit at :391-392. A crash or lost-ref-race between them yields completed sheet, position below Concluded, and no boundary through an ordinary supported execution. Minimal fix: land boundary+position first and project the disposable sheet afterward, with retry semantics for mirror lag; add a kill/fault VT at every boundary."
@@ -59,7 +59,7 @@ response = "Confirmed against code: dispatch_conclude_phase writes and mirrors t
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Forward-sync can discard edits that overlap the reverse-diff set"
 detail = "Expected: R3 promises no uncommitted work is discarded. Observed: design.md:229-235 and :436-440 restore every path in the derived reverse-diff set and refuse dirt only outside that set. commit_on_behalf intentionally leaves index/worktree byte-unchanged while advancing the ref at src/dispatch.rs:4317-4321 and :4343-4350. If the stale checkout path P is then edited by the user, P remains inside the reverse set, passes the outside-set test, and restore --staged --worktree overwrites the edit. The design also names FUNNEL_MARKER but supplies no stale-baseline/content proof algorithm; the marker currently identifies subjects only at src/dispatch.rs:4179-4187. Minimal fix: persist or derive the exact old checkout/index anchor, prove index and worktree bytes for every restored path equal the expected stale state, and refuse any overlap; VT modified, deleted, staged, and untracked collisions."
@@ -73,11 +73,11 @@ severity = "blocker"
 title = "Deletion-only hook permits modification-only mass reversions"
 detail = "Expected: REQ-389 closes every pathless-commit route for the ISS-234 reverse-diff. Observed: design.md:304-308 defines any deletion as the precise signature and §11 tests only deletion commits at :398-403. But import can compose arbitrary worker modifications into the new tree at src/mcp_server/dispatch.rs:314-343, and commit_on_behalf advances the ref without updating the stale index at src/dispatch.rs:4343-4350. If the landed delta modifies only existing files, the stale index is a staged reverse modification with no deletion; a raw pathless commit passes this hook and reverts it. Minimal fix: have the hook reject any unexplained staged reverse-diff relative to the funnel provenance/known stale anchor, not merely D status, and VT modification-only plus mixed A/M/D ref advances."
 disposition = "fix-now"
-response = "Confirmed: an import composing only modifications leaves the stale index as staged reverse-MODIFICATIONS — no deletions — and the deletion-only predicate waves the mass reversion through. Integrated (§7, D5): the hook predicate becomes the funnel-reversion signature with two arms — (a) deletion arm, pure git (`diff --cached --diff-filter=D`), retained; (b) reversion arm — any modification whose staged blob equals the path's pre-advance blob while HEAD carries a funnel-advanced blob, delegated to a thin `doctrine dispatch hook-check` binary check (logic in Rust, unit-testable, bounded by the FUNNEL_MARKER provenance walk); binary absent ⇒ script degrades to the deletion arm rather than blocking legitimate work. Escape hatch covers both arms. VTs added under REQ-389: modification-only repro, mixed A/M/D, degraded mode."
+response = "Contest upheld — degrade-to-deletion-arm silently reopened the exact modification-only hole the reversion arm exists to close. Amended (§7, §11): binary absent ⇒ FAIL-CLOSED — the hook refuses, naming the missing binary and the escape hatch. Rationale: the hook's scope is coord worktrees only (doctrine-owned topology), where a missing doctrine binary is already a broken operating posture; the escape hatch (DOCTRINE_ALLOW_DELETE=1) keeps a deliberate operator unblocked, so fail-closed never hard-blocks. VT updated: binary-absent ⇒ refusal naming the hatch, no deletion-only degrade."
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Subprocess transport parity is deferred despite REQ-387"
 detail = "Expected: REQ-387 requires every transport to project the same transitions through the one authority. Observed: design.md:36 claims every transport reaches the writer, but :185-187 substitutes synthetic import-time healing for unrecorded subprocess spawn/commit acts and :454-457 explicitly defers subprocess-arm full gating. The current subprocess source path is a distinct worktree import mode at src/worktree/mod.rs:278-308, not the MCP funnel. This ships one transport outside the legality authority and records transitions it did not gate, so FR-011 is not met. Minimal fix: bring the subprocess act points through the same pre-gates and post-act recorder in this slice, or narrow/revise REQ-387 before approval; verify identical transition traces per transport."
@@ -91,11 +91,11 @@ severity = "major"
 title = "ReceiptStatus mapping is not total over position, sheet, and boundary"
 detail = "Expected: D2 makes position senior and turns every disagreement into an integrity alarm. Observed: design.md:347-355 enumerates only post-Concluded missing-boundary and pre-Concluded completed-sheet alarms, then says all other cells drive only InProgress/Blocked. It leaves Some(position<Concluded) with sheet absent/planned/error undefined, and silently misses has_boundary=true with position<Concluded plus sheet in_progress/blocked. Today those sheet cells are distinct NotStarted/Unknown outcomes at src/dispatch.rs:3590-3615. A hand/legacy boundary ahead of position can therefore be reported as ordinary InProgress rather than disagreement. Minimal fix: publish and test the complete Position option x sheet read/status x has_boundary matrix, with an explicit alarm for every authority-order contradiction and defined degraded-mirror behavior."
 disposition = "fix-now"
-response = 'Confirmed: §9 enumerated three cells and hid the rest in "otherwise as today" — a hand-landed boundary ahead of position would report plain InProgress, and Some(p)-with-absent/planned/error sheets had no defined outcome. Integrated (§9): the full position × sheet × boundary matrix is now published as a table — sheet-Err stays Unknown fail-loud; boundary-ahead-of-position and sheet-ahead-of-position are each explicit ConcludeIncomplete-class alarms; sheet absent/planned with funnel activity reports InProgress with "sheet not started" detail (benign lag, position-senior, consistent with the F-5 reorder posture); in_progress/blocked drive as today. Table-driven VT over the whole matrix added under REQ-384. Position=None remains byte-identical (R1 behaviour-preservation gate).'
+response = "Contest upheld — the `any` rows overlapped (p≥Concluded with sheet Err matched both Unknown and Completed; p<Concluded with completed sheet + present boundary matched two alarms) with no tiebreak. Amended (§9): the matrix is declared ORDERED, first-match-wins top to bottom, with the precedence stated: sheet-read Err outranks everything (fail-loud wins); the boundary-ahead alarm outranks the sheet-ahead alarm. The table rows were already listed in that order; the rule is now normative rather than typographic, and the table-driven VT exercises the overlap cells against the ordered semantics."
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Existing check pipeline cannot return evidence to dispatch_verify"
 detail = "Expected: CLI and MCP dispatch verify run the configured suite, capture pass/fail, then land evidence from the engine tier. Observed: design.md:237-241 says to use the existing check pipeline and :365-372 places verify in engine src/dispatch.rs, but the current runner is command-tier and private; it proxy-spawns then terminates the whole process via process::exit at src/commands/check.rs:286-317. Calling it cannot return a verdict to land evidence and importing command into engine violates ADR-001. Minimal fix: extract a non-diverging lower-tier runner that returns structured status/transcript, keep the CLI exit-forwarding shell above it, and test both MCP continuation and CLI exit fidelity."
@@ -104,7 +104,7 @@ response = "Confirmed against code: run_proxy (src/commands/check.rs:291-317) is
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Configured verification may mutate the tested checkout without detection"
 detail = "Expected: authoritative evidence proves the recorded oid and I2 permits only the bounded forward-sync mutation. Observed: design.md:237-241 runs a project-configured gate in the coord worktree and immediately records the pre-run coord tip, with no post-suite tree/index check. The existing pipeline accepts arbitrary configured argv at src/verify.rs:200-223 and executes it with cwd=root at src/commands/check.rs:286-300. A green formatter/codegen gate can mutate tracked files, so the suite passes on bytes not represented by verified_oid while I2 at design.md:447-449 is false. Minimal fix: require an owned non-mutating verification contract or prove tracked index/worktree identity before and after the suite, refuse/record dirt, and VT a green mutating command."
@@ -113,7 +113,7 @@ response = "Confirmed: resolve_check yields arbitrary project-configured argv (s
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "New leaf module is omitted from the architecture classification gate"
 detail = "Expected: ADR-001 classifies every top-level module and the design makes the new pure-leaf claim mechanically reviewable. Observed: design.md:365 adds src/funnel_machine.rs but the code-impact and verification lists at :363-403 omit .doctrine/adr/001/layering.toml and the architecture-layering gate. The authoritative map currently classifies git as leaf and dispatch as command at .doctrine/adr/001/layering.toml:37 and :92, with no funnel_machine entry. Minimal fix: include the map update and architecture_layering VT in selectors/phasing so the claimed leaf home is gated rather than prose-only."
