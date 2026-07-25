@@ -131,7 +131,10 @@ pub(crate) struct IllegalTransition {
 Everything not in the table refuses with `IllegalTransition{expected, reason}`.
 Distinct reason tokens (STD-001 consts): `not-spawned`, `worker-not-committed`,
 `not-imported`, `conclude-unverified` (no evidence), `conclude-verify-failed`
-(red evidence), `conclude-verify-stale` (`verified_oid != tip`), `not-concluded`,
+(red evidence), `conclude-verify-stale` (non-funnel-record paths changed in
+`verified_oid‥tip` — the D3 modulo-funnel-record gate, **not** bare
+`verified_oid != tip`, which would stale every fresh pass on its own evidence
+commit — RV-305 F-2), `not-concluded`,
 `already-<position>` (see idempotent replay), `terminal`.
 
 ### Expected-next map (shared by refusals and `next`)
@@ -152,7 +155,12 @@ transition's *stable input facts* only**: `fork_tip` for `RecordWorkerCommit`
 from replay identity, because a lost-response retry (CAS landed, reply lost)
 re-resolves the live coord tip and derives a *fresh* `onto`; keying replay on
 it would refuse the very retry REQ-384 promises (RV-304 F-1). `verified_oid`
-for `Verify`. Mismatched replay-identity facts refuse (`already-<position>` +
+for `Verify`. `RecordWorkerCommit`'s replay leg must be **reachable on its
+acting arm**: `worker_commit`'s belts resolve the fork before `attempt` runs,
+so its **retry signature** (§3/§4 — clean tree, exactly one commit `C`,
+`C^ == base`) resolves as `Advanced` rather than refusing at the `AtBase`
+guard; only then can the `fork_tip` comparison decide replay vs act
+(RV-305 F-1 — a replay promise a verb's own belts refuse is no promise). Mismatched replay-identity facts refuse (`already-<position>` +
 detail). A **first** `Verify{Fail}` at `Imported` is not a replay: act-vs-replay
 is decided by comparing candidate evidence to *stored* evidence (none, or a
 different `verified_oid`/outcome ⇒ act; identical ⇒ replay) — evidence
@@ -285,8 +293,9 @@ convention).
   fork ⇒ `unprovable-fork`, the deliberate triage beat (zero-rescue never
   guesses ownership). Heal reads the binding through the **single existing
   resolver** (`resolve_agent`/`classify_resolve`), which gains a
-  caller-declared **expected fork state** — `AtBase` (worker_commit pre-act:
-  `HEAD == base`) vs `Advanced` (import/heal: exactly one commit,
+  caller-declared **expected fork state** — `AtBase` (worker_commit
+  *first-commit* pre-act: `HEAD == base`) vs `Advanced` (import/heal — and
+  `worker_commit`'s **retry signature**, RV-305 F-1: exactly one commit,
   `C^ == base`): today's classifier folds ANY `HEAD != base` to
   `stale-record`, which is precisely the advanced state heal-forward needs
   (RV-304 F-7); every other consistency check (live worktree, record present,
@@ -306,7 +315,19 @@ convention).
   fork with **no** binding refuses `unprovable-fork` outright (consistent with
   import — there is no "skip and let import heal" arm: import refuses the same
   unbound fork, so a skip would promise a heal that never comes; F-3/F-4
-  contests).
+  contests). Its own crash window is healed **by its own re-drive** (RV-305
+  F-1): a retry after a lost response or a kill between fork commit and coord
+  record arrives at the **retry signature** — worktree *clean*, fork advanced
+  by exactly one commit `C` with `C^ == base` — which resolves `Advanced`
+  (never the `AtBase` refusal) and forks two truthful legs: stored
+  `worker_commit.fork_tip == C` ⇒ recorded **no-op replay** naming the landed
+  tip; row absent / position `spawned` ⇒ the verb lands its own lagging
+  Class-2 `RecordWorkerCommit` record now — it *is* the original recorder
+  (D8), and import's heal-forward remains the backstop when no retry ever
+  comes. A *dirty* tree on an advanced fork is not a retry: refuse (late
+  re-commit); position `imported`+ refuses `already-<position>` naming the
+  imported tip — the worker's lost-response ambiguity always ends in a
+  truthful terminal answer, never a `stale-record` misdiagnosis.
 
 ### CAS / concurrency contract (the OQ-2 durable half)
 
@@ -327,7 +348,7 @@ runnable command) — the existing refusal channel, richer payload, no new shape
 
 | Verb | New gate (before existing belts) | Existing belts (unchanged) |
 |---|---|---|
-| `worker_commit` | `attempt(RecordWorkerCommit)` **pre-act, always** — the fork binding is the same `DispatchRecord` the verb already reads for its base guard (claude arm = its only arm), so there is no unbound-but-legitimate case: refuses at `imported`+ (no late re-commit) and refuses `unprovable-fork` on a missing binding (RV-303 F-3 contest — no ungated fallback); the pre-gate is advisory against races, the post-act CAS record stays authoritative — **adds** post-land `RecordWorkerCommit` record on coord | delta/scope/base/gate belts (base guard `HEAD==B` stays) |
+| `worker_commit` | `attempt(RecordWorkerCommit)` **pre-act, always** — the fork binding is the same `DispatchRecord` the verb already reads for its base guard (claude arm = its only arm), so there is no unbound-but-legitimate case: refuses at `imported`+ (no late re-commit) and refuses `unprovable-fork` on a missing binding (RV-303 F-3 contest — no ungated fallback); the pre-gate is advisory against races, the post-act CAS record stays authoritative — **adds** post-land `RecordWorkerCommit` record on coord; the **retry signature** (clean tree, one commit, `C^==B` — §3, RV-305 F-1) bypasses the `AtBase`/base-guard refusal into the replay/self-record leg | delta/scope/base/gate belts (base guard `HEAD==B` gates the *first-commit* leg only) |
 | `dispatch_import` | `attempt(Import)` (heal-forward per D8) | scope belt, merge compose, CAS |
 | `dispatch verify` *(new)* | `preflight(Verify)` at entry (pure kind gate — evidence exists only post-suite, RV-304 F-3); the evidence-bearing `attempt(Verify)` runs at landing | — (see §5) |
 | `dispatch_conclude_phase` | `attempt(Conclude)` — refuses `conclude-unverified` / `conclude-verify-failed` / `conclude-verify-stale` | **reordered** (RV-303 F-5): boundary⊕position CAS lands **first**; sheet flip + mirror becomes a trailing projection (crash after CAS ⇒ sheet lags position — benign, position is senior per §9) |
@@ -577,7 +598,12 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
   **lost-response import retry** (RV-304 F-1): CAS landed, reply lost,
   re-drive `dispatch_import` ⇒ no-op replay on matching `fork_tip` despite the
   freshly derived `onto`; distinct from the pre-CAS lost-ref-race retry (acts
-  onto the new tip). VT — **branch-as-claim** (RV-304 F-2): kill between the
+  onto the new tip). VT — **worker_commit retry signature** (RV-305 F-1):
+  lost-response retry (row landed, reply lost) ⇒ recorded no-op replay naming
+  the landed tip; kill between fork commit and coord record, re-drive ⇒ the
+  verb lands its own lagging `RecordWorkerCommit` row; dirty advanced fork
+  refuses (late re-commit); retry at `imported`+ refuses `already-<position>`
+  — never a `stale-record` misdiagnosis. VT — **branch-as-claim** (RV-304 F-2): kill between the
   claim/bind steps and the worktree act ⇒ inert residue (branch⊕record,
   never a live fork; gc sweeps — the kernel released the crashed spawn's
   claim lock; retry refuses at the claim); a sweep attempted while a live
@@ -590,8 +616,10 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
   binding written under its own claim — the original binding stays
   byte-identical under any collision (F-2 contests); a crash-residue retry
   refuses at the claim naming the gc sweep. VT — a
-  **fresh verify pass concludes** (the evidence commit never self-stales) and
-  an unrelated post-verify commit refuses `conclude-verify-stale` (F-1). VT —
+  **fresh verify pass concludes** (the evidence commit never self-stales —
+  the stale gate is modulo-funnel-record, never bare oid inequality, RV-305
+  F-2) and an unrelated post-verify commit refuses `conclude-verify-stale`
+  (F-1). VT —
   conclude kill-window: kill between boundary⊕position CAS and sheet
   projection ⇒ receipt still `Completed`, next prescribes `Reap` (F-5). VT —
   §9 full matrix, table-driven over position × sheet × boundary (F-9),
