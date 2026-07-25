@@ -1,0 +1,169 @@
+# Implementation plan for SL-228 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-228"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# Phasing refines design §12: move E first (reads → guard, ISS-234 closes at
+# PHASE-02), then move A split three ways (machine+record / fork-binding
+# protocol / gates+verify) because the fork protocol carried three RV-304
+# contests and deserves its own boundary, then oracle+skills, then the OQ-5
+# benchmark as terminal acceptance. Move A lands behind move E so no refusal
+# ever prescribes a verb that does not exist yet (design §12).
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Move E reads — git primitives + read verbs"
+objective = "The funnel read surface (REQ-388, design §8): four new git.rs primitives (tree_clean_untracked, three_dot_diff, log_oneline, check_ignore), current_branch relocated from src/dispatch.rs into git.rs with every caller migrated, is_linked_worktree wrapped into the read surface, and the five read verbs (dispatch tree-state [CLI+MCP] / delta / whereami / history / ignored)."
+entrance_criteria = [
+  { id = "EN-1", text = "design.md §8 locked (post-RV-305); baseline suites green on the working branch" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Five read verbs exist and emit typed payloads; tree-state exposed on CLI and MCP; no new verb shells raw git for a funnel read" },
+  { id = "EX-2", text = "current_branch lives in git.rs; zero callers of a dispatch.rs-local copy remain (reuse/relocate, no parallel implementation)" },
+  { id = "EX-3", text = "The nine existing git.rs primitives are unchanged in signature and stay engine-internal (pub(crate))" },
+]
+verification = [
+  { id = "VT-1", expects = "unit tests over fixture repos for the four new primitives: untracked-aware clean detection, three-dot diff names+content, bounded oneline log, ignore check", test_file = "src/git.rs", keywords = ["tree_clean_untracked", "three_dot_diff", "log_oneline", "check_ignore"], waived = false },
+  { id = "VT-2", expects = "current_branch relocated into git.rs and unit-covered there", test_file = "src/git.rs", keywords = ["current_branch"], waived = false },
+  { id = "VA-1", expects = "grep sweep: no fn current_branch remains in src/dispatch.rs; no raw-git shelling in the new verb handlers; existing suites green unchanged" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Move E guard — dispatch commit + pre-commit hook"
+objective = "The write guard (REQ-389, design §7): pathspec-mandatory `dispatch commit` verb with declared-deletion validation and the scoped DOCTRINE_ALLOWED_DELETIONS env; the shipped pre-commit hook (embedded asset) with deletion + reversion arms, fail-closed on missing binary, runtime hooksPath chaining; `dispatch setup` install (worktreeConfig, per-worktree hooksPath) + doctor checks; skill/mechanics prose moved off raw git commit. ISS-234 closes here."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 landed (tree_clean_untracked and read verbs available); design §7 locked" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "dispatch commit refuses undeclared paths and undeclared deletions; pathless is structurally unrepresentable (clap-mandatory pathspec)" },
+  { id = "EX-2", text = "Hook refuses both funnel-reversion arms, fail-closed without the binary, and chains the effective non-worktree hooksPath (local -> global -> system -> common-gitdir) at runtime; coord worktrees only" },
+  { id = "EX-3", text = "Hook script grafted into flake.nix srcWithDist (R2); dispatch setup installs, doctor re-checks" },
+  { id = "EX-4", text = "Dispatch skills + install/dispatch-mechanics.md route orchestrator authored-write commits through dispatch commit" },
+]
+verification = [
+  { id = "VT-1", expects = "guard verb refusal tests: undeclared path, undeclared deletion, declared-deletion pass with scoped env handed to the child commit only", test_file = "src/dispatch.rs", keywords = ["commit-undeclared-path", "commit-undeclared-deletion", "DOCTRINE_ALLOWED_DELETIONS"], waived = false },
+  { id = "VT-2", expects = "hook-check unit tests: deletion arm (ISS-234 repro), modification-only reversion arm, mixed A/M/D, declared-deletion + stale reverse-modification still refused (reversion arm never sleeps)", test_file = "src/dispatch.rs", keywords = ["DOCTRINE_ALLOW_DELETE", "reversion"], waived = false },
+  { id = "VA-1", expects = "flake.nix srcWithDist carries the hook asset (R2); chained-global-hook behaviour exercised in a fixture repo; skill prose sweep complete" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Machine + record — funnel_machine leaf and the sole writer"
+objective = "The state machine and its durable record (REQ-384/385/387 core, design §2–§3): src/funnel_machine.rs pure leaf (Position, Transition, TransitionFacts, attempt, preflight, expected_next, IllegalTransition, single const table + D7 renderer); the D7 golden artifact under .doctrine/spec/tech/021/ pinned by a golden test; ADR-001 layering row funnel_machine = leaf; FunnelRecord parse/render + read_funnel_at + land_funnel_transition sole writer (splice + commit_on_behalf CAS); run_suite extraction from commands/check.rs (status-returning, engine-callable — needed by PHASE-05 and by PHASE-04's belt-gated adoption)."
+entrance_criteria = [
+  { id = "EN-1", text = "design §2–§3 locked (post-RV-305 including the one-commit heal rule); ADR-001 layering check green at baseline" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "attempt/preflight/expected_next derive from ONE const table; leaf has no git/disk/clock/engine imports; layering gate covers funnel_machine = leaf" },
+  { id = "EX-2", text = "land_funnel_transition is the only code path writing funnel.toml (splice fns private to the writer module); reads via read_funnel_at (object-db, absent => empty)" },
+  { id = "EX-3", text = "D7 golden artifact committed and pinned; run_suite(root, argv) -> SuiteStatus callable below command tier, check.rs a thin exit-forwarding shell" },
+]
+verification = [
+  { id = "VT-1", expects = "table-driven exhaustive (position x transition) legality matrix: every illegal pair refuses with the right expected/reason token; replay identity per §2 (fork_tip for RecordWorkerCommit/Import, verified_oid for Verify; onto excluded); distinct conclude refusal tokens incl. modulo-funnel-record stale gate", test_file = "src/funnel_machine.rs", keywords = ["attempt", "preflight", "expected_next", "conclude-verify-stale", "already-"], waived = false },
+  { id = "VT-2", expects = "D7 golden test: rendered table+mermaid artifact matches the leaf const table byte-for-byte", test_file = "src/funnel_machine.rs", keywords = ["mermaid"], waived = false },
+  { id = "VT-3", expects = "FunnelRecord round-trip + read-at-tip absent=>empty + sole-writer CAS landing; lost-ref-race retry lands exactly one transition", test_file = "src/dispatch.rs", keywords = ["FunnelRecord", "land_funnel_transition", "read_funnel_at"], waived = false },
+  { id = "VT-4", expects = "run_suite extraction: status-returning runner unit-covered; check.rs forwards exit unchanged", test_file = "src/verify.rs", keywords = ["run_suite", "SuiteStatus"], waived = false },
+  { id = "VA-1", expects = "ADR-001 layering gate run confirms leaf placement; no position write bypasses attempt (code-shape review)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Fork binding protocol — claim/bind/act, worker_commit legs"
+objective = "The durable fork binding and its writers (REQ-384 Class-2, design §3): DispatchRecord gains slice+phase snapshotted at fork creation; branch-as-claim sequence (claim -> bind -> act) under the per-name flock claim lock in create.rs/fork.rs; gc gains the lock-gated branch-residue sweep; resolver/classifier gains caller-declared expected fork state (AtBase | Advanced); arm-spawn/worktree fork --worker gain the phase argument and arm-spawn lands the Spawn row; worker_commit lands its post-act RecordWorkerCommit record and gains the retry-signature legs (recorded no-op replay; belt-gated self-record — RV-305 F-1 + contests)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 landed (attempt/land_funnel_transition available; run_suite available for the belt-gated self-record leg)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "A live fork implies its binding by construction (worktree created last); crash residues are inert and swept only under the claim lock (busy lock = active claimant, skip)" },
+  { id = "EX-2", text = "worker_commit: first-commit leg unchanged in belt behaviour; retry signature (clean tree, one commit, C^==base) reaches replay/self-record; self-record leg re-runs the content belts before recording; unbound fork refuses unprovable-fork" },
+  { id = "EX-3", text = "Resolver honours AtBase vs Advanced expectations with every other consistency check preserved; no parallel record read built" },
+]
+verification = [
+  { id = "VT-1", expects = "branch-as-claim crash windows: kill between claim/bind and act => inert residue, gc sweeps, same-name retry refuses at the claim; two concurrent same-name spawns => exactly one wins, binding byte-identical; sweep vs live claimant skips (busy lock)", test_file = "src/worktree/fork.rs", keywords = ["claim"], waived = false },
+  { id = "VT-2", expects = "resolver expected-state split: AtBase accepts HEAD==base only; Advanced accepts exactly-one-commit C^==base; all other consistency checks preserved", test_file = "src/worktree/dispatch_record.rs", keywords = ["AtBase", "Advanced"], waived = false },
+  { id = "VT-3", expects = "worker_commit retry signature: lost-response retry => recorded no-op replay naming landed tip; kill between fork commit and coord record + re-drive => verb lands its own lagging row; dirty advanced fork refuses; imported+ refuses already-<position>; ungated one-commit fork with belt-violating delta refuses naming the belt, belt-passing delta adopts", test_file = "src/mcp_server/worker_commit.rs", keywords = ["RecordWorkerCommit"], waived = false },
+  { id = "VT-4", expects = "gc lock-gated sweep: non-blocking acquire before classify/delete; crashed spawn's residue sweeps freely (kernel-released lock)", test_file = "src/worktree/gc.rs", keywords = ["lock"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Gates + verify — legality on every verb, dispatch verify, receipt matrix"
+objective = "Close the write-verb loop (REQ-384/385, design §4–§5, §9): attempt() gates on dispatch_import (with one-commit heal-forward), dispatch_conclude_phase (strict gate + boundary-first reorder), dispatch_reap (idempotent completion), record-boundary rerouted through the sole writer; the new dispatch verify verb (CLI + MCP): preflight entry gate, proof-gated conditional forward-sync over the reverse-diff set, configured suite via run_suite ([dispatch] verify_suite key), post-suite identity check, one-CAS-commit evidence landing; derive_receipt_status gains Option<Position> with the ordered total matrix, position=None byte-identical (R1)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 and PHASE-04 landed; existing receipt/status suites green at baseline (R1 reference behaviour captured)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Every funnel write verb refuses out-of-order with the machine's refusal payload naming the expected verb; conclude lands boundary+position CAS first, sheet as trailing projection" },
+  { id = "EX-2", text = "Import heal-forward records the provable prefix in the same CAS commit as its own transition (one-commit heal); position never durably rests at worker-committed via any import path" },
+  { id = "EX-3", text = "verify: refuses illegal entry at preflight before sync/suite; restore is proof-gated per path against the stale baseline; refuses verify-tree-dirty on outside-set dirt, unignored untracked paths, or inside-set divergence; suite mutation or untracked creation => VerifyFailed{suite-mutated-tree}, never pass evidence" },
+  { id = "EX-4", text = "position=None receipt behaviour byte-identical (existing suites green unchanged — R1 behaviour-preservation gate)" },
+]
+verification = [
+  { id = "VT-1", expects = "verify pipeline: fresh pass concludes (evidence commit never self-stales — modulo-funnel-record); unrelated post-verify commit refuses conclude-verify-stale; green-but-mutating suite and untracked-creating suite land VerifyFailed{suite-mutated-tree}; reverse-set path with operator edit refuses verify-tree-dirty with restore untouched", test_file = "src/dispatch.rs", keywords = ["suite-mutated-tree", "verify-tree-dirty", "verified_oid"], waived = false },
+  { id = "VT-2", expects = "one-commit heal: kill dispatch_import mid-heal => nothing landed or position imported, never a resting worker-committed row; lost-response import retry => no-op replay on matching fork_tip despite fresh onto", test_file = "src/dispatch.rs", keywords = ["heal"], waived = false },
+  { id = "VT-3", expects = "ordered receipt matrix table-driven over position x sheet x boundary, first-match-wins, incl. sheet-Err x concluded x boundary-present => Completed and the two ConcludeIncomplete alarms; position=None rows byte-identical to pre-change fixtures", test_file = "src/dispatch.rs", keywords = ["derive_receipt_status"], waived = false },
+  { id = "VT-4", expects = "conclude kill-window: kill between boundary+position CAS and sheet projection => receipt Completed, next prescribes Reap", test_file = "src/dispatch.rs", keywords = ["ConcludeIncomplete"], waived = false },
+  { id = "VA-1", expects = "record-boundary escape hatch demonstrably routes through land_funnel_transition (no second writer); MCP gate parity on import/conclude/reap" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Oracle + skills — dispatch next and the verb-driven loop"
+objective = "The single-prescription oracle and the prose retirement (REQ-386, design §6): dispatch next (CLI + MCP dispatch_next) over the actionability ladder (red-evidence triage globally first, runnable outranks waiting, awaits never starve imports, spawn via the existing readiness authority, all-reaped terminal); NextCore payload with runnable command literals; dispatch skills + dispatch-mechanics.md rewritten to the next-loop with rescue-idiom prose deleted; R5 two-oracle altitude documented."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 landed (every verb the oracle prescribes exists and gates)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "next is read-only, never heals, total over the domain: every reachable state yields exactly one prescription; kind derives from expected_next (same function as refusals)" },
+  { id = "EX-2", text = "Parallel mid-funnel phases: red evidence anywhere => triage for the lowest such; an awaiting phase never suppresses a runnable one; other in-flight phases surfaced in detail" },
+  { id = "EX-3", text = "Dispatch skills and install/dispatch-mechanics.md drive the phase funnel by next/refusal output alone; rescue-idiom prose deleted; next's terminal beat hands off to dispatch status (R5)" },
+]
+verification = [
+  { id = "VT-1", expects = "oracle totality property test over the table (every reachable position => one prescription) + actionability-ladder cells: mixed-position parallel rows, await never starves import, red evidence triages globally, all-reaped terminal", test_file = "src/dispatch.rs", keywords = ["triage-verify-failure", "await-worker", "all-reaped"], waived = false },
+  { id = "VA-1", expects = "skill sweep: no raw-git funnel reads or rescue idioms remain in dispatch skills/mechanics docs; next agrees with expected_next by construction (same fn, code-shape check)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Benchmark — OQ-5 memory-blind acceptance"
+objective = "Terminal acceptance (scope OQ-5): build the memory-blind benchmark harness; run a fresh orchestrator with zero dispatch memories through a standard run plus the top-5 quirk scenarios (RFC-011 case-notes prioritisation) driven by next/refusal output alone; measure token cost + completion against the SL-224/225 cleaned baseline; produce the OQ-6 dispatch-memory retirement list."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 landed; a full dispatch funnel is drivable end-to-end by verbs alone" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Benchmark executed: standard run + top-5 quirk scenarios completed by a memory-blind orchestrator following verb output" },
+  { id = "EX-2", text = "Measurement recorded against the SL-224/225 baseline (token cost + completion), filed with the slice evidence" },
+  { id = "EX-3", text = "OQ-6 retirement list drafted: which dispatch memories the verbs obsolete" },
+]
+verification = [
+  { id = "VA-1", expects = "benchmark protocol followed as designed (zero dispatch memories confirmed in the fresh context; scenarios from the RFC-011 prioritisation); results internally consistent" },
+  { id = "VH-1", expects = "User accepts the benchmark result as satisfying the OQ-5 terminal-acceptance bar for the cluster" },
+]
+specs        = []
+requirements = []
