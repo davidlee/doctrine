@@ -60,3 +60,6 @@ You MUST shape the design before planning: record the lifecycle move
 (`doctrine slice status <id> design` — bare number) and hand off to `/design`.
 Do not jump to `/plan` or `/execute` from a bare slice — `/route`'s gate forbids
 it. If genuine tradeoffs or unknowns surface while scoping, `/consult`.
+
+Before `/design`, run the pre-design research round per `/research`, so the
+design load-bears on a cited artefact rather than recall.

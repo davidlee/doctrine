@@ -61,9 +61,12 @@ Complete in order without deviation. Each depends on the preceding stage:
 ### Explore context
 
 1. Read the slice scope + relevant specs, ADRs, prior art first.
-2. Run `/canon` before drafting so relevant ADRs, policies, and standards are in view for this design surface.
-3. Run `/retrieve-memory` against the files and subsystems you expect to touch, so scope-bound gotchas surface early.
-4. Before drafting sections, explicitly generate a list of concerns and then triage the design surface:
+2. Run `doctrine slice research <id>`; if the artefact is absent, run the round
+   per `/research` first. Thread 1 stands in for the bulk of the `/canon` sweep
+   below; design assertions cite `research.md`, load-bearing on ✓ rows only.
+3. Run `/canon` before drafting so relevant ADRs, policies, and standards are in view for this design surface.
+4. Run `/retrieve-memory` against the files and subsystems you expect to touch, so scope-bound gotchas surface early.
+5. Before drafting sections, explicitly generate a list of concerns and then triage the design surface:
    - open questions that must be resolved
    - risks and underspecified areas
    - assumptions you are carrying

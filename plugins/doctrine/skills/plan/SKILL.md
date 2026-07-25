@@ -33,6 +33,9 @@ Inputs:
       rests on a stale premise: STOP and run `/design` to reconcile it before
       scaffolding phase sheets against wrong paths. (A design that names nothing
       concrete has nothing to check — this costs only what the design asserts.)
+    - **check the research advisory** (`doctrine slice research <id>`), then draft
+      the slice's selectors from its Thread 2 hotspot map rather than from recall
+      — the design-time selector dry-run is only the checking half.
 3.  Scaffold the plan: `doctrine slice plan <ID>` writes `plan.toml` + `plan.md`
     (refuses to clobber existing files). The tool reads these but never rewrites
     them — hand-edit freely.

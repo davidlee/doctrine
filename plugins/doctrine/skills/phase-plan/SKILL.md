@@ -27,19 +27,22 @@ Inputs:
 3. Run `/retrieve-memory` against the concrete files and subsystems you expect to
    touch, so scope-bound gotchas and patterns surface before you commit to a
    task breakdown.
-4. Fill the runtime phase sheet `phase-NN.md` (under `.doctrine/state/`, GITIGNORED and
+4. Check the research advisory — `doctrine slice research <id>`. Where it reports
+   drift, refresh only the affected thread sections, then re-stamp the baseline;
+   plan the phase against the refreshed artefact, not the stale one.
+5. Fill the runtime phase sheet `phase-NN.md` (under `.doctrine/state/`, GITIGNORED and
    disposable) with:
    - a concrete task breakdown — small, coherent units of work
    - assumptions and constraints carried into execution
    - the verification steps that will satisfy each `VT-`/`VA-`/`VH-` expectation
    - the files / components each task is expected to touch
-5. This is **runtime state**. Never write task detail or progress back into the
+6. This is **runtime state**. Never write task detail or progress back into the
    authored `plan.toml` / `plan.md` (the storage rule) — those stay the durable
    record; the sheet is `rm -rf`-able working context.
-6. If detailing the phase surfaces new design problems, unresolved tradeoffs, or
+7. If detailing the phase surfaces new design problems, unresolved tradeoffs, or
    policy ambiguity, stop — `/consult`, or return to `/design` if the design
    itself is the gap. Do not invent your way past it.
-7. When the sheet tells a coherent story, flip the phase to `in_progress` with
+8. When the sheet tells a coherent story, flip the phase to `in_progress` with
    `doctrine slice phase` (see `using-doctrine.md`), then `/execute`.
 
 ## Outcomes
