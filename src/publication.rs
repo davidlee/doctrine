@@ -982,32 +982,15 @@ mod tests {
     }
 
     // COMPLETENESS (SL-227, de-risks the PHASE-03 crux gate): the published set
-    // covers the WHOLE projection complement. Enumerate every embedded install
-    // asset via the leaf enumerator, exclude the install manifest and the three
-    // projection base backings, and assert every remaining key is declared by some
-    // publication entry (delta ⊆ published backings) — the pre-image of PHASE-03's
-    // derived reachability gate, proven here through `declares_backing` so
-    // `backing` stays private.
+    // covers the WHOLE projection complement — `{install} − {base} ⊆ published`,
+    // else the minimal-projection flip strands a silent-unreachable file. Both the
+    // enumeration and the base set are read from disk-source (`repo_root()`), never
+    // the compiled embed or a hardcoded literal — so the gate is staleness-proof
+    // and single-sourced (SL-227 F-6/F-7). Delegates to the shared disk-source
+    // check so this sibling and the `install.rs` crux gate attest the SAME
+    // invariant.
     #[test]
     fn published_set_covers_the_full_projection_complement() {
-        const BASE_BACKINGS: [&str; 3] = [".gitignore", "doctrine.toml", "project-orientation.md"];
-        let manifest = PublicationManifest::load().expect("shipped manifest loads");
-        let mut checked = 0usize;
-        for key in crate::asset_source::iter() {
-            let key = key.as_ref();
-            if key == "manifest.toml" || BASE_BACKINGS.contains(&key) {
-                continue;
-            }
-            assert!(
-                manifest.declares_backing(key),
-                "embedded install asset {key:?} is neither base nor published — \
-                 a silent-unreachable file the flip would strand"
-            );
-            checked += 1;
-        }
-        assert!(
-            checked > 0,
-            "the enumerator yielded install assets to check"
-        );
+        crate::asset_source::assert_unprojected_install_assets_are_published();
     }
 }

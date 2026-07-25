@@ -530,13 +530,44 @@ mod tests {
         );
     }
 
-    // VT-6: NF-002 structural no-write — every library verb, including every
-    // failure path, leaves the repo byte-for-byte unchanged (the path holds no
-    // write capability by construction). A clean temp dir stays empty across
-    // list/tree/show + each failure class.
+    // VT-6: NF-002 structural no-write. The library verbs hold only a read-only
+    // Resolver (read+exists) and a `Write` sink — no filesystem-write, install,
+    // state, or entity mutator is imported, so no write path exists BY
+    // CONSTRUCTION. This is the behavioural tripwire over that guarantee: seed a
+    // POPULATED repo root, snapshot its byte tree, drive the ENTIRE verb surface
+    // (list/tree/show, both formats) plus all FOUR failure classes — each asserted
+    // `Err`, including the malformed-policy LOAD class — then prove the tree is
+    // byte-for-byte unchanged (a real content comparison, not the prior vacuous
+    // empty-dir assertion over a dir no verb ever referenced).
     #[test]
     fn every_verb_leaves_the_repo_byte_unchanged() {
-        let tmp = tempfile::tempdir().expect("tempdir");
+        use std::collections::BTreeMap;
+
+        fn snapshot(root: &std::path::Path) -> BTreeMap<String, Vec<u8>> {
+            walkdir::WalkDir::new(root)
+                .into_iter()
+                .filter_map(Result::ok)
+                .filter(|e| e.file_type().is_file())
+                .map(|e| {
+                    let rel = e
+                        .path()
+                        .strip_prefix(root)
+                        .expect("under root")
+                        .to_string_lossy()
+                        .into_owned();
+                    (rel, std::fs::read(e.path()).expect("read seeded file"))
+                })
+                .collect()
+        }
+
+        // A populated repo root — "unchanged" is now a real byte comparison.
+        let repo = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(repo.path().join(".doctrine/state")).expect("mkdir");
+        std::fs::write(repo.path().join("doctrine.toml"), b"[seed]\nk = 1\n").expect("seed");
+        std::fs::write(repo.path().join(".doctrine/state/note.md"), b"seed body\n").expect("seed");
+        let before = snapshot(repo.path());
+        assert!(!before.is_empty(), "the repo root is genuinely populated");
+
         let resolver = shipped();
         let mut sink: Vec<u8> = Vec::new();
 
@@ -547,21 +578,34 @@ mod tests {
         tree_to(&resolver, Some("hymns/"), Format::Json, &mut sink).expect("tree json");
         show_with(&resolver, "templates/slice.toml", &mut sink).expect("show");
 
-        // Failure paths (each returns Err; none writes to disk).
+        // All FOUR failure classes — each returns Err, none writes.
+        assert!(
+            show_with(&resolver, "../escape", &mut sink).is_err(),
+            "traversal address rejected"
+        );
+        assert!(
+            show_with(&resolver, "templates/nope.zzz", &mut sink).is_err(),
+            "unknown address errors"
+        );
         let ghost = Resolver::new(
             fixture(&entry_toml("templates/ghost.toml", "backing/nope.bin")),
             EmbeddedAdapter,
         );
-        let _ = show_with(&resolver, "../escape", &mut sink);
-        let _ = show_with(&resolver, "templates/nope.zzz", &mut sink);
-        let _ = show_with(&ghost, "templates/ghost.toml", &mut sink);
-
         assert!(
-            std::fs::read_dir(tmp.path())
-                .expect("read temp repo")
-                .next()
-                .is_none(),
-            "no library verb creates any path — the repo is byte-unchanged"
+            show_with(&ghost, "templates/ghost.toml", &mut sink).is_err(),
+            "missing backing errors"
+        );
+        // Class 4: malformed/unreadable policy — the load path fails closed and,
+        // like every other class, holds no write capability.
+        assert!(
+            PublicationManifest::admit(b"this is [[[ not valid").is_err(),
+            "malformed policy fails closed"
+        );
+
+        assert_eq!(
+            snapshot(repo.path()),
+            before,
+            "no library verb (success or failure) mutates the repo tree"
         );
     }
 }

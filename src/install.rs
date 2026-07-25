@@ -3949,35 +3949,17 @@ mod tests {
     // SL-227 PHASE-03: the minimal-projection flip
     // ---------------------------------------------------------------
 
-    /// VT-2 / EX-3 — the derived no-silent-unreachable gate. Every embedded install
-    /// asset that is NOT a projection base backing MUST be declared as a published
-    /// backing in the publication manifest (`{embedded_filenames()} − {base}` ⊆
-    /// published) — else the minimal-projection flip would strand it (neither eagerly
-    /// projected nor reachable). GATE-DRIFT GUARD: the base set is DERIVED from the
-    /// shipped manifest's `[base].backings`, never a hardcoded list, so the gate
-    /// cannot drift from the projection it guards.
+    /// VT-2 / EX-3 — the derived no-silent-unreachable gate. Every install asset
+    /// that is NOT a projection base backing MUST be declared as a published backing
+    /// (`{install} − {base}` ⊆ published) — else the minimal-projection flip would
+    /// strand it (neither eagerly projected nor reachable). Both the enumeration and
+    /// the base set are DERIVED from disk-source (`repo_root()`), never the compiled
+    /// embed or a hardcoded list — so an incremental build over a stale `install/`
+    /// edit cannot false-green the gate (SL-227 F-7; the `debug-embed` footgun,
+    /// CHR-014). Shares the disk-source check with its `publication.rs` sibling.
     #[test]
     fn every_unprojected_embed_is_a_published_backing() {
-        let manifest = load_manifest().unwrap();
-        let publication = crate::publication::PublicationManifest::load()
-            .expect("shipped publication manifest loads");
-        let base: BTreeSet<&str> = manifest.base.backings.iter().map(String::as_str).collect();
-        let mut checked = 0usize;
-        for key in embedded_filenames() {
-            if base.contains(key.as_str()) {
-                continue;
-            }
-            assert!(
-                publication.declares_backing(&key),
-                "embedded install asset {key:?} is neither a base backing nor \
-                 published — the minimal-projection flip would strand it"
-            );
-            checked += 1;
-        }
-        assert!(
-            checked > 0,
-            "the embed enumerator must yield non-base assets to check"
-        );
+        crate::asset_source::assert_unprojected_install_assets_are_published();
     }
 
     /// VT-1 / VT-4 — a fresh install materialises EXACTLY the three-file base

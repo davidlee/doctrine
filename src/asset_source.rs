@@ -58,12 +58,98 @@ pub(crate) fn iter() -> impl Iterator<Item = std::borrow::Cow<'static, str>> {
     InstallAssets::iter()
 }
 
-/// Read the shipped publication manifest's bytes (`publication/manifest.toml`),
-/// `None` if the embed is hollow. The `publication` engine's `load()` admits
-/// these; the disk-source admission gate (VT-3) reads the same file from
-/// `CARGO_MANIFEST_DIR` so embed staleness cannot mask a defect.
+/// Read the shipped publication manifest's bytes (`publication/manifest.toml`)
+/// from the compiled embed, `None` if hollow. The `publication` engine's `load()`
+/// admits these in production. The reachability gates instead read disk-source via
+/// [`publication_manifest_bytes_from_disk`] so embed staleness cannot mask a defect.
 pub(crate) fn publication_manifest_bytes() -> Option<std::borrow::Cow<'static, [u8]>> {
     PublicationAssets::get("manifest.toml").map(|f| f.data)
+}
+
+// ---------------------------------------------------------------------------
+// SL-227 F-6/F-7: disk-source authority for the reachability gates. RustEmbed
+// runs with `debug-embed` on, so `iter()`/`PublicationAssets::get()` read the
+// COMPILED embed — an incremental build over a stale `install/` edit can
+// false-green a gate. These helpers read the SAME assets from RUNTIME disk-source
+// (`repo_root()`, per CHR-014) so the pairing invariant is proven staleness-proof.
+// ---------------------------------------------------------------------------
+
+/// Disk-source enumeration of install asset keys (relative to `install/`),
+/// excluding the manifest itself — the disk sibling of [`iter`].
+#[cfg(test)]
+pub(crate) fn install_asset_keys_from_disk() -> Vec<String> {
+    let root = crate::test_support::repo_root().join("install");
+    let mut names: Vec<String> = walkdir::WalkDir::new(&root)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| {
+            e.path()
+                .strip_prefix(&root)
+                .ok()
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+        })
+        .filter(|n| n != "manifest.toml")
+        .collect();
+    names.sort();
+    names
+}
+
+/// Disk-source bytes of the shipped `publication/manifest.toml` — the disk sibling
+/// of [`publication_manifest_bytes`], authoritative regardless of embed staleness.
+#[cfg(test)]
+pub(crate) fn publication_manifest_bytes_from_disk() -> Vec<u8> {
+    let path = crate::test_support::repo_root().join("publication/manifest.toml");
+    std::fs::read(&path).expect("shipped publication/manifest.toml on disk")
+}
+
+/// Disk-source projection base backings (`install/manifest.toml [base].backings`) —
+/// the single authority both reachability gates derive the base set from, so no
+/// gate hardcodes the list (STD-001, dissolves the F-6 duplicate literal).
+#[cfg(test)]
+pub(crate) fn base_backings_from_disk() -> Vec<String> {
+    #[derive(serde::Deserialize)]
+    struct BaseOnly {
+        base: Base,
+    }
+    #[derive(serde::Deserialize)]
+    struct Base {
+        backings: Vec<String>,
+    }
+    let path = crate::test_support::repo_root().join("install/manifest.toml");
+    let bytes = std::fs::read(&path).expect("shipped install/manifest.toml on disk");
+    let text = std::str::from_utf8(&bytes).expect("install manifest is UTF-8");
+    let parsed: BaseOnly = toml::from_str(text).expect("install manifest [base] parses");
+    parsed.base.backings
+}
+
+/// The shared reachability invariant, read entirely from disk-source: every install
+/// asset that is NOT a projection base backing MUST be a published backing
+/// (`{install} − {base} ⊆ {published}`) — else the minimal-projection flip would
+/// strand it. Both the crux gate (`install.rs`) and its sibling (`publication.rs`)
+/// delegate here so the two attest the SAME staleness-proof check (SL-227 F-6/F-7).
+#[cfg(test)]
+pub(crate) fn assert_unprojected_install_assets_are_published() {
+    let published =
+        crate::publication::PublicationManifest::admit(&publication_manifest_bytes_from_disk())
+            .expect("shipped publication manifest admits from disk");
+    let base: std::collections::BTreeSet<String> = base_backings_from_disk().into_iter().collect();
+    let mut checked = 0usize;
+    for key in install_asset_keys_from_disk() {
+        if base.contains(&key) {
+            continue;
+        }
+        assert!(
+            published.declares_backing(&key),
+            "install asset {key:?} is neither a base backing nor published — the \
+             minimal-projection flip would strand it (disk-source reachability gate)"
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "the disk enumerator must yield non-base install assets to check"
+    );
 }
 
 #[cfg(test)]
