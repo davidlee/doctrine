@@ -178,6 +178,45 @@ remaining findings need no code `fix-now`.
   IMP-313** (latent `library tree` prefix-collision). **F-6/F-7/F-8 fixed-in-candidate**
   `cand-227-fix-001` `30e538be` (post-audit fix-now — see amendment), trimmed from IMP-312.
 
+## Reconciliation Outcome
+
+Reconcile pass complete (2026-07-25). Every finding terminal (10 verified); no
+governance/spec REV needed — the SPEC-009/026 deferrals are off-surface (already
+reconciled in `slice-227.md` scope).
+
+### Direct edits applied (design.md, on edge)
+- **§5.1 + §5.2 (F-1):** command-tier module names corrected to
+  `src/commands/{cli,library,guard,mod}.rs`; CLI dispatch + house `--format`/`--json`
+  flatten located in `src/commands/cli.rs` (`LibraryCommand`), not `main.rs`.
+- **§9 flip-list (F-2):** added the 4 migrated e2e suites
+  `tests/e2e_{policy,knowledge,standard,revision}_install_commit.rs`.
+- **D8 (F-3):** recorded the seed-gate mechanism — empty `[memory].seed_items` +
+  `seed_authoring_memories` `is_empty()` early-return (`src/install.rs:242`).
+
+### Selector registry (`slice-227.toml`, on edge — load-bearing for conformance)
+Applied to the **authoritative edge tree**, not the candidate: the code integration
+projects the `code` class only (SL-226 precedent — `slice-226.toml` was only ever
+edited by authored edge commits, never by integrate), so the selector corrections
+"already on review/227" do **not** propagate to trunk and had to be redone on edge.
+- `rm src/main.rs`, `rm src/library.rs` (undelivered stale design-targets — F-5/F-1).
+- `add src/commands/{library,cli,guard,mod}.rs` (design-target — F-1/F-2).
+- `add tests/e2e_{policy,knowledge,standard,revision}_install_commit.rs` (design-target — F-2).
+
+> **Scope note.** This exceeds the brief's literal delta (`rm src/main.rs` + add
+> `guard.rs`/`mod.rs`), which assumed review/227's registry corrections would
+> propagate. Per the code-only integration topology they do not, so edge's registry
+> was brought to full as-built conformance (operator-approved, 2026-07-25).
+
+### Fixed-in-candidate (post-verification, not a reconcile write)
+- **F-6/F-7/F-8:** pulled to fix-now on `cand-227-fix-001` `30e538be` (see the
+  Post-verification amendment above). The verified `follow-up` dispositions stand
+  as the immutable audit-time record (ADR-007).
+
+### Withdrawn / tolerated
+- None.
+
+Reconcile complete — handoff to /close.
+
 ### Off-surface (no brief item — recorded so reconcile does not chase them)
 
 - No `plan.toml` `EN-/EX-/VT-` edits (immutable-append; the test_file correction

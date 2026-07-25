@@ -31,14 +31,6 @@ selector = "src/publication.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/library.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/main.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "install/manifest.toml"
 intent = "design-target"
 
@@ -53,6 +45,46 @@ intent = "design-target"
 [[selector]]
 selector = "publication/manifest.toml"
 intent = "design-target"
+
+[[selector]]
+selector = "src/commands/library.rs"
+intent = "design-target"
+note = "PHASE-02: command tier lives in src/commands/ (not top-level/main.rs) — design §5.2 predicted the stale layout; ADR-001 layering forbids an unclassified top-level module"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "PHASE-02: command tier lives in src/commands/ (not top-level/main.rs) — design §5.2 predicted the stale layout; ADR-001 layering forbids an unclassified top-level module"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "PHASE-02: command tier lives in src/commands/ (not top-level/main.rs) — design §5.2 predicted the stale layout; ADR-001 layering forbids an unclassified top-level module"
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+note = "PHASE-02: command tier lives in src/commands/ (not top-level/main.rs) — design §5.2 predicted the stale layout; ADR-001 layering forbids an unclassified top-level module"
+
+[[selector]]
+selector = "tests/e2e_policy_install_commit.rs"
+intent = "design-target"
+note = "PHASE-03: FR-008 lazy roots — migrate fresh_install_scaffolds_the_<kind>_tree from eager-install to lazy first-scaffold (design §9 omitted these e2e tests)"
+
+[[selector]]
+selector = "tests/e2e_knowledge_install_commit.rs"
+intent = "design-target"
+note = "PHASE-03: FR-008 lazy roots — migrate fresh_install_scaffolds_the_<kind>_tree from eager-install to lazy first-scaffold (design §9 omitted these e2e tests)"
+
+[[selector]]
+selector = "tests/e2e_standard_install_commit.rs"
+intent = "design-target"
+note = "PHASE-03: FR-008 lazy roots — migrate fresh_install_scaffolds_the_<kind>_tree from eager-install to lazy first-scaffold (design §9 omitted these e2e tests)"
+
+[[selector]]
+selector = "tests/e2e_revision_install_commit.rs"
+intent = "design-target"
+note = "PHASE-03: FR-008 lazy roots — migrate fresh_install_scaffolds_the_<kind>_tree from eager-install to lazy first-scaffold (design §9 omitted these e2e tests)"
 
 [[relation]]
 label = "governed_by"

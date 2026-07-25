@@ -66,12 +66,18 @@ any file stops landing (PHASE-02).
 ### 5.1 System Model
 
 ```
-command   library.rs (NEW)            install.rs (flip: build_plan leg 2 + base policy)
-              │  depends on                 │  reads
+command   src/commands/library.rs (NEW)   install.rs (flip: build_plan leg 2 + base policy)
+              │  wired via src/commands/cli.rs; depends on   │  reads
 engine    publication.rs (Resolver, manifest — ADDITIVE only)   install/manifest.toml [base]
               │  IO only through
 leaf      asset_source.rs (byte reads over embeds; + exists)
 ```
+
+> **Reconciled (RV-302 F-1).** The command tier is `src/commands/{cli,library,guard,mod}.rs`,
+> not a top-level `main.rs` / `src/library.rs` — ADR-001 layering forbids an unclassified
+> top-level command module, so PHASE-02 placed the veneer under `src/commands/`. The
+> command dispatch + house `--format`/`--json` flatten live in `src/commands/cli.rs`
+> (the `LibraryCommand` clap subcommand), not `main.rs`.
 
 `library → publication → asset_source`, no cycle. The two independent manifests
 are the structural spine (NF-001):
@@ -109,7 +115,7 @@ enum ContentKind { Template, Reference, Guidance, Integration }  // widened addi
 Leaf `asset_source` gains `exists(key) -> bool` (existence without materializing
 bytes).
 
-**New command module `library.rs`:**
+**New command module `src/commands/library.rs`:**
 
 ```rust
 fn load_resolver() -> Result<Resolver<EmbeddedAdapter>, AdmissionError>;
@@ -118,9 +124,11 @@ pub(crate) fn run_tree(path: Option<&str>, fmt: OutputFormat) -> anyhow::Result<
 pub(crate) fn run_show(addr: &str) -> anyhow::Result<()>;   // raw byte stream — no format
 ```
 
-CLI (`main.rs`): `doctrine library {list,tree,show}`. `list`/`tree` carry the
-house `--format <table|json>` / `--json` flatten struct (`main.rs:150-199`);
-`show` streams raw bytes via `Resolver::emit` into `io::stdout().lock()`.
+CLI (`src/commands/cli.rs`, reconciled RV-302 F-1 — not `main.rs`): `doctrine
+library {list,tree,show}` is the `LibraryCommand` clap subcommand. `list`/`tree`
+carry the house `--format <table|json>` / `--json` flatten struct from the shared
+CLI layer; `show` streams raw bytes via `Resolver::emit` into
+`io::stdout().lock()`.
 
 **`show` error-class mapping (FR-003) — four reachable classes, each distinct
 stderr + non-zero, never a silent empty:**
@@ -278,6 +286,13 @@ proving each authored kind's root appears on first scaffold.
   unconditionally today; minimal projection makes corpus materialization
   on-demand, so a fresh install lands exactly the three-file base and **no**
   memory entity (X-F2).
+  - **Mechanism (ACCEPTED; reconciled RV-302 F-3 — was design-silent).** The gate
+    is *data*, not a code branch: `install/manifest.toml` ships an **empty**
+    `[memory].seed_items = []`, and `seed_authoring_memories` early-returns when
+    that list `is_empty()` (`src/install.rs:242`). So the empty `[memory]` block is
+    a deliberate retirement of the eager seed, not an omission; `seed_by_key`
+    stays a live caller for explicit re-seeding, and orientation content now ships
+    as the projected `project-orientation.md` base backing.
 - **DEC-010 — published set = full projection complement** (Option A; supersedes
   the earlier "templates + reference docs" bound); [[QUE-172]] answered *no*
   (corpus not published-for-copy → the seed is gated (D8), not published).
@@ -312,6 +327,11 @@ proving each authored kind's root appears on first scaffold.
   (`execute_creates_dirs_and_files`, `execute_skips_existing_files`,
   `plan_skips_existing_files`, `seeds_governance_when_missing`, the `[dirs]` tree
   assertions) — they assert files land in `.doctrine/`, which the flip changes.
+  Plus (reconciled RV-302 F-2 — this flip-list omitted them) the **4 migrated e2e
+  suites** `tests/e2e_{policy,knowledge,standard,revision}_install_commit.rs`:
+  each `fresh_install_scaffolds_the_<kind>_tree` moves from eager-install to
+  lazy-first-scaffold and each gains a "bare install must NOT eagerly scaffold"
+  negative assertion (FR-008).
   **Not** `glossary_is_shipped` / `using_doctrine_is_shipped` /
   `review_ledger_is_shipped`: those assert `embedded_filenames().contains(x)` +
   non-empty bytes — they test **embedding**, which the flip preserves (ADR-019),
