@@ -35,7 +35,7 @@ Two moves, E before A, benchmark terminal:
 | **D5** | Safe-commit guard = **verb + hook**: a pathspec-mandatory commit verb for the orchestrator's authored writes, plus a `dispatch setup`-installed per-worktree pre-commit hook (worktreeConfig) that refuses the funnel-reversion signature in the commit set (deletion arm + modification-reversion arm, RV-303 F-7). Hook **chains to the effective non-worktree hooksPath** (local → global → system — the operator's global hook must keep firing) with fallback to common-gitdir hooks. Coord worktrees only (POL-002). | REQ-389; ISS-234 (6 repros); ADR-011 mechanism-over-prose |
 | **D6** | Machine = **pure leaf** `src/funnel_machine.rs` (ADR-001); persistence behind a **sole-writer module boundary** in `src/dispatch.rs` — **command tier** per ADR-001's authoritative map (the map's only change is `funnel_machine = leaf`; "writer role", not an ADR-001 "engine" tier — RV-304 F-6); every transport reaches the same sole writer, which consults the same leaf — projection additive for the deferred subprocess arm. Spec home: **inline SPEC-021 §** at reconcile; SPEC-022 FRs cross-reference (no new spec; REQ custody stays where REV-032 minted it). | REQ-387; NEW-OQ-A |
 | **D7** | Drift resistance = **code-derived golden artifact**: the leaf's `const` transition table renders to a committed table+mermaid artifact under `.doctrine/spec/tech/021/`, pinned by a golden VT test; the SPEC-021 § embeds/references it. Structure pinned mechanically; semantics governed socially (REV). | NEW-OQ-B |
-| **D8** | Class-2 transitions (act on a non-coord ref) are recorded **post-act** by the acting verb, with **heal-forward**: a later verb that can *prove* the missing Class-2 transition — from the durable fork binding plus git facts (RV-304 F-2: the binding is a crash-durable local file, not a git fact) — records it itself before its own transition. No rescue verbs, no read-side healing. | REQ-384 crash-safety; zero-rescue |
+| **D8** | Class-2 transitions (act on a non-coord ref) are recorded **post-act** by the acting verb, with **heal-forward**: a later verb that can *prove* the missing Class-2 transition — from the durable fork binding plus git facts (RV-304 F-2: the binding is a crash-durable local file, not a git fact) — records it itself, **in the same CAS commit as its own transition** (one splice, all or none — RV-305 F-1). No rescue verbs, no read-side healing. | REQ-384 crash-safety; zero-rescue |
 
 ## §2 The machine (`src/funnel_machine.rs`, new — pure leaf)
 
@@ -241,11 +241,16 @@ convention).
   `Reap` (worktree/branch deletion; recorded by `dispatch_reap` after `run_gc`).
   Rule (D8): record lands strictly **after** the act. Crash window ⇒ position
   lags reality; recovery is **heal-forward over the provable prefix**: a verb
-  that can prove missing earlier transitions records them before its own.
+  that can prove missing earlier transitions records them **in the same CAS
+  commit as its own transition** — one funnel-record splice, one tree, all
+  or none (RV-305 F-1 second contest: a separately-landed prefix row would
+  durably rest position at `worker-committed` without worker_commit's belts
+  ever having run, forging the §3 replay induction's premise; the record is
+  one file, so prefix⊕own is naturally a single splice — never two landings).
   `dispatch_import` at `position == spawned` with `fork tip ≠ base` lands
-  `RecordWorkerCommit` then `Import`; at `position == None` it heals the
-  full prefix (`Spawn` + `RecordWorkerCommit`) **only from the durable fork
-  binding**: `DispatchRecord` gains `slice` + `phase` fields, snapshotted by
+  `RecordWorkerCommit` ⊕ `Import` in that one commit; at `position == None`
+  it heals the full prefix (`Spawn` + `RecordWorkerCommit`) the same way,
+  **only from the durable fork binding**: `DispatchRecord` gains `slice` + `phase` fields, snapshotted by
   the trusted create-fork path exactly as `base` already is — and the record
   write moves **before** the worktree-mutating act (RV-304 F-2: today
   `create.rs` writes it *after* `fork_core`, leaving a crash window in which
@@ -335,9 +340,10 @@ convention).
   legitimate. The no-op replay leg needs no re-run: a row at exactly
   `worker-committed` can only have been landed by a belt-running leg (the
   first-commit leg or the belt-gated self-record; import's heal lands the
-  row only together with `Import`, a position the `already-<position>`
-  refusal already screens), so the stored row is the belt-proof by
-  induction. A *dirty* tree on an advanced fork is not a retry: refuse (late
+  row only **in the same CAS commit as** `Import` — D8's one-commit heal
+  rule — so position never durably *rests* at `worker-committed` via heal,
+  and a crash mid-heal lands nothing at all), so the stored row is the
+  belt-proof by induction. A *dirty* tree on an advanced fork is not a retry: refuse (late
   re-commit); position `imported`+ refuses `already-<position>` naming the
   imported tip — the worker's lost-response ambiguity always ends in a
   truthful terminal answer, never a `stale-record` misdiagnosis.
@@ -621,7 +627,10 @@ Altitude-B readiness (`plan_next_rows` / `compute_next_phases`): untouched.
   signature with a belt-violating delta (scope breach / red gate) refuses
   naming the violated belt — never adopted, never recorded; the same shape
   with a belt-passing delta adopts and records (belts are the content
-  authority, not authorship). VT — **branch-as-claim** (RV-304 F-2): kill between the
+  authority, not authorship). VT — **one-commit heal** (F-1 second contest):
+  kill `dispatch_import` mid-heal ⇒ either nothing landed (retry re-heals
+  the full prefix) or position is `imported` — the record never durably
+  rests at `worker-committed` from any import path. VT — **branch-as-claim** (RV-304 F-2): kill between the
   claim/bind steps and the worktree act ⇒ inert residue (branch⊕record,
   never a live fork; gc sweeps — the kernel released the crashed spawn's
   claim lock; retry refuses at the claim); a sweep attempted while a live
