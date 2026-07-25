@@ -76,3 +76,47 @@ deferral posture (user-settled scope, REQ-387 may stay `pending`).
 blockers and no repair mints a new mechanism, the design is declared
 converged, pending the User's approval. Only a repair introducing genuinely
 new machinery earns a further pass, and then only on that machinery.
+
+## Synthesis
+
+**Judgement.** The scoped round returned lean and sharp: two charges — one
+blocker among them — and seven of the nine interrogated lines held outright
+(claim→bind→act locking and gc residue, import replay identity, the
+preflight/attempt table, the oracle ladder, the receipt matrix, the
+untracked-aware verify boundary, the scoped deletion exemption). The blocker
+(F-1) was the round's one deep cut: the design promised crash-retry replay
+"on every arm" while `worker_commit`'s own `AtBase` belt refused the advanced
+fork before the replay comparison could ever run — a promise the verb's own
+gates made unreachable. The minor (F-2) caught the `conclude-verify-stale`
+token gloss contradicting the normative modulo-funnel-record gate it
+abbreviates.
+
+**Corrective penance, executed.** F-1 took three turns to settle, each
+contest upheld and conceded: (1) the retry-signature leg — clean tree, one
+commit, `C^==base` resolves `Advanced`, forking recorded-replay vs
+self-record; (2) first contest: the self-record leg is belt-gated and
+provenance-indifferent — an ungated raw-git commit wearing the signature
+must pass the same delta/scope/gate belts or refuse with the belt named;
+(3) second contest: heal-forward tightened to a **one-commit rule** (D8) —
+the healing verb records the provable prefix in the same CAS commit as its
+own transition, so position never durably rests at `worker-committed` via
+any import path and the replay leg's belt-proof induction closes. F-2:
+the token gloss now states the D3 rule and disclaims bare oid inequality;
+§11 pins both repairs with new VTs (retry signature, ungated one-commit
+fork, one-commit-heal kill window).
+
+**Standing risks, consciously carried.** Unchanged from RV-304: the claim
+lock is single-host by topology (ADR-008); the stale-baseline derivation and
+OQ-5 harness are plan-phase obligations; ignored paths sit outside verify's
+evidence scope by definition.
+
+**Verification.** Both findings terminally verified by the raiser (F-2 first
+pass; F-1 after two upheld contests — 10 ledger rounds). Ledger: done,
+awaiting none. Commits: `e3bce6f3` (both repaired), `5a755f0d` (belt-gated
+adoption), `3e100b3e` (one-commit heal). **Convergence verdict, per the
+declared rule: one blocker, no new mechanism minted — the repairs compose
+the existing resolver seam, content belts, and splice+CAS machinery. The
+design is CONVERGED**, pending the User's approval — which is not granted
+here and may not be presumed.
+
+> **HERESIS URITOR; DOCTRINA MANET**

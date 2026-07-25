@@ -14,7 +14,7 @@ ref   = "SL-228"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "AtBase resolver rejects worker_commit crash replay"
 detail = "Preconditions: PHASE-NN is Spawned, its durable binding exists, and worker_commit is invoked on a fork at base B. Event sequence: (1) worker_commit resolves the binding with the caller-declared AtBase expectation, creates C with C^=B, and either lands the WorkerCommitted funnel row before its response is lost, or crashes after advancing the fork but before that row lands; (2) the caller re-drives the same worker_commit, as §2 Idempotent replay and §3's 'Re-running the original recorder is a no-op replay' promise; (3) §3 fixes worker_commit's resolver expectation at AtBase, so the now-advanced fork is rejected by resolve_agent/classify_resolve before funnel_machine::attempt can compare the matching fork_tip or record the missing transition. Actual code confirms the seam: src/worktree/dispatch_record.rs classify_resolve currently folds every HEAD != base to stale-record, while src/mcp_server/worker_commit.rs resolves before all later gates. Thus a lost-response retry cannot be a no-op and a kill between fork commit and position record cannot be repaired by re-driving the acting verb; only a later import may heal it. This violates REQ-384's crash-safe idempotent recovery and the every-arm replay contract. Design cites: §2 Idempotent replay; §3 Class-2 resolver paragraph and CAS/concurrency contract; §4 worker_commit row; §11 REQ-384 Class-2 re-drive VT."
