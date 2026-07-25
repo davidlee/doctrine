@@ -1000,3 +1000,122 @@ a *different* live agent's uncommitted `src/research.rs` WIP — a concurrent-ed
 false-red unrelated to the slice; had to isolate the SL-226 signal via audit
 evidence (byte-identical src tree) + a corpus-only `doctrine doctor` before edge
 went green/static.
+
+[walkthrough; SL-228-extraction-b4c81d24]
+Pre-design extraction of the dispatch funnel state machine. Low friction — the
+surface was well-signposted by the handover (exact symbols + file anchors),
+REV-032 rationale pre-quoted the crux claims, and the code carried dense doc
+comments so the as-built graph read directly off ReceiptStatus/NextGuidance/the
+verb bodies. No corpus-archaeology needed. One genuine cost: the "seven-state"
+framing in REV-032/handover conflates two altitudes (per-phase sub-funnel vs
+slice-lifecycle guidance) — reconciling that took a careful second read of
+select_guidance to confirm the sub-funnel has NO node there today. Worth flagging
+as a latent design ambiguity, not a token sink. ~1 read-round of redundancy.
+
+[execute; SL-229-PHASE-02-b7c]
+verify-vt `UNATTRIBUTABLE` verdict reason reads "keyword present but `<file>`
+not modified by this slice" even when the keywords are NOT present — the
+attribution check (vtgate.rs step 4) fires before keyword matching, so the
+fixed reason string asserts a keyword state it never tested. During the
+red-phase reading this sent me on a grep round to disprove "keyword present"
+(keywords were absent in all three files). Minor token bleed + confusion;
+phrasing like "attribution unknown (file not in slice delta); keywords not
+evaluated" would be truthful.
+
+[execute; SL-229-PHASE-02-b7c]
+The sweep command embedded in mem.pattern.skills.yaml-frontmatter-colons
+false-positives on every file: the awk prints `FILENAME": "` and the grep for
+`: ` matches that separator itself, not the description value. Cost one
+re-check round to falsify. The memory needs its recipe corrected (print the
+value alone, or grep before prefixing).
+
+[design; SL-228-design-b4c81d24]
+Design session for SL-228 rode the extraction artifact cleanly — zero re-derivation
+of the as-built graph; Q&A loop settled 7 decision forks in ~7 turns. Friction
+worth logging: (1) two CLI shape misses (`spec req show` absent — requirement
+bodies unreachable via a show verb, had to read raw entity files against the
+reading-rule; `memory retrieve` positional query rejected — needs `--query`).
+A `req show`/`requirement show` verb would close a real gap: requirement kind
+has no CLI read surface. (2) `prompt resolve` requires `--role` — the boot
+snapshot's floor directive omits it, so the model-band ritual fails as written;
+boot text should carry the full invocation. Both are token-cheap here but
+recur every session that hits them.
+
+[inquisition; inq-228-0725a]
+- Boot spine lists `explore  search inspect relation concept-map map onboard` as a
+  command group, but the CLI has no `explore` subcommand — `doctrine explore inspect
+  REQ-384` fails; the real shape is top-level `doctrine inspect`. Cost: one failed
+  6-iteration loop + a --help round trip. Spine table grouping ≠ CLI grammar.
+- Requirement statement text is hard to reach by CLI: `doctrine inspect REQ-NNN`
+  shows relations only; `spec req list` shows `prose —` even when the requirement
+  TOML carries a full `title` statement. Had to raw-read
+  `.doctrine/requirement/NNN/requirement-NNN.toml` (storage-rule friction: no
+  `req show`-equivalent surfaces the statement). ~3 probe commands wasted.
+
+[inquisition; d757bead-rv304]
+Round-2 external inquisition (RV-304). Friction was low — the handover packet
+pre-paid the CLI gotchas — but two small token sinks: (1) shared-tree dirt
+required a `git diff .doctrine/doctrine.toml` detour to prove `review new` had
+NOT touched it before path-limiting the commit (the entity counter's home is
+non-obvious; a `review new` result naming every file it wrote would remove the
+check); (2) `review show --view full` returns brief + all finding details in
+one large JSON blob — fine once, but there is no per-finding fetch for
+re-reading a single detail during adjudication.
+
+[reconcile+close; sl227-close-4edfdbfa]
+- `dispatch candidate status` DRIFT flag advises "supersede with a fresh
+  candidate" whenever the live tip ≠ recorded merge_oid — but a fix-now commit
+  ON TOP of the recorded merge is a legit first-class flow that `admit` accepts
+  (I3 ancestor-check, dispatch.rs:2099). Superseding would re-run the 3-way merge
+  and DROP the on-top commit. Cost: ~4 calls + reading dispatch.rs:2016-2135 to
+  trust admit over the status hint. The "next" hint should distinguish
+  drift-off-lineage (supersede) from drift-forward-on-lineage (admit handles it).
+- Handover prescribed reopening verified RV findings via contest→dispose→verify,
+  but `verified` is a terminal sink (review.rs:703-728 — no verb leaves it). Only
+  discovered by attempting `contest` (rejected "out of turn... verified !=
+  answered"). A post-verify decision reversal (defer→fix-now) has no CLI path;
+  it must be a prose amendment on the RV .md. An agent following the handover
+  literally burns cycles before finding this.
+- Reconcile-target ambiguity for `.doctrine/slice/NNN`: edge-authored (rides
+  edge→main) vs carried by the candidate/integration. `dispatch sync --integrate`
+  --help says "project the audited code units", but `--allow-corpus-clobber`
+  reveals it ALSO projects `.doctrine/**` (FF+CAS, clobber-guarded). Resolving
+  took an SL-226 git-log precedent (MISLEADING — SL-226 had no dispatch-time
+  .doctrine corrections, led to a wrong intermediate "code-only" conclusion) +
+  the notes.md auditor note + re-reading sync help. ~6 calls + one wrong turn.
+  The integrate help's "code units" phrasing undersells the corpus projection.
+
+[preflight; SL-229-P03-preflight-c4e]
+- `doctrine slice notes <id>` is a **mint** verb that errors with "Refusing to
+  overwrite existing …/notes.md" — but it reads like a sibling of `slice show`
+  / `slice paths` (read verbs). Cost one wasted round-trip before falling back
+  to `Read`. The spine line `slice → design plan phases notes phase status …`
+  gives no read/write signal. Cheap fix: name the read path, or have the error
+  say "notes.md exists — read it with `doctrine slice show`/Read".
+- `plan.toml` SL-229 PHASE-03 VA-1 names `.doctrine/skills/` as an installed-
+  copy location; that dir does not exist in this repo. The real derived mirror
+  is `.agents/skills/` (gitignored, `.gitignore:5`). Cost ~3 probes to
+  establish which path VA-1 actually means. Authored criteria naming a
+  derived path that the repo doesn't materialise is a re-verification tax on
+  every agent that picks the phase up.
+- Third mirror discovered: `~/.claude/plugins/cache/doctrine/doctrine/0.30.0/
+  skills/` (marketplace cache — the source of the running `/doctrine:*`
+  skills). `doctrine install` does not refresh it, so a newly authored skill
+  is not slash-invocable in the authoring session. Not in any phase criteria;
+  bears on SL-229's closure evidence ("one real slice driven with the round").
+
+[close; SL-227-close-integrate]
+The close skill §3a verify gate (a) is `git diff --quiet HEAD` — the ISS-030
+phantom-reverse-diff detector, deliberately whole-tree and not path-limited.
+In a **shared coordination tree with a concurrent agent** it is unusable
+verbatim: three unrelated uncommitted files (another agent's `doctrine.toml`,
+`flake.lock`, plus this very case-notes file) make it exit nonzero regardless of
+what integrate did, so the literal recipe reads as STOP on a clean integration.
+Cost: a pre-integrate `git status --porcelain` snapshot, a post-integrate diff of
+the two, then a second content-level pass (`git diff --name-only HEAD` minus the
+known-foreign paths) because porcelain compares *status*, not bytes — ~3 extra
+tool calls and the reasoning to notice the trap before tripping it.
+The skill states the invariant (tracked tree matches HEAD) only as a command that
+presumes a clean tree. Worth stating the invariant separately from the command,
+with the shared-tree adaptation named: baseline the divergence set before
+integrate, assert it is unchanged after, and assert no path outside it moved.

@@ -1,12 +1,11 @@
 [priority]
 
 [priority.coefficients]
-risk = 0.4
 
 [priority.tag_coefficients]
-boring = 0.0
+next = 2.0
 [dispatch]
-claude-force-subprocess-dispatch = true
+# claude-force-subprocess-dispatch = true
 # SL-166: buffered-trunk posture — arms g1 (refuse trunk-mutating verbs on a
 # `main` checkout) and g2 (base-corpus freshness at setup). deliver-to defaults
 # to refs/heads/main, so authoring=edge / buffer=main. Env-local (untracked
