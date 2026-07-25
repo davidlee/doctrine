@@ -1279,3 +1279,131 @@ Secondary: the PATH binary (~/.cargo/bin) rejected `doctrine reports findings`
 while boot.md's command map lists `reports  status next blockers survey explain
 findings`; the map is written against a newer surface than the installed binary,
 so an agent trusting it burns a call discovering the skew.
+
+[dispatch; SL-228/orchestrator-sessA]
+PHASE-02 funnel — scope-declaration friction:
+- Design/plan design-target selectors named `.agents/skills/dispatch*/**`, but
+  that tree is the UNTRACKED installed projection — the tracked skill source is
+  `plugins/doctrine/skills/`. The worker discovered this mid-phase (had to notice
+  .agents/ wasn't tracked and redirect to plugins/), and the orchestrator had to
+  adjudicate + declare the plugins path at import. A design-time selector authored
+  against the wrong tree costs every consuming phase (PHASE-06 too). FIX: author
+  skill selectors against the tracked source path, and/or a `slice selector doctor`
+  that flags a selector matching zero tracked files at plan time.
+- Recurring pattern: design §10's per-file change map is non-exhaustive on
+  "forced consequence" files (MCP registry wiring, a doctor Category enum, a
+  publication/manifest reachability entry, a registry-count test twin). Each
+  surfaces as an `undeclared-scope` import refusal the orchestrator must adjudicate
+  and hand-declare. Not wrong per se (these ARE in-objective), but a design-time
+  "forced-consequence" checklist (adding an MCP tool ⇒ tools.rs + manifest + count
+  test; adding a doctor check ⇒ finding.rs Category) would let selectors be
+  pre-declared and avoid the per-phase import round-trip.
+
+[preflight; CHR-048/sessA]
+Card-accuracy vs environment: CHR-048's Steps preface asserts the blocker as
+"must run on the host — `just release-check` includes a hermetic nix flake build
+and nix is absent in the jail." That's the wrong blocker, and it cost two extra
+probes to establish. `just nix-build` self-skips gracefully when nix is off PATH
+(justfile:141-146 — stderr note, exit 0), so `just release <bump>` would in fact
+*succeed* in the jail with the hermetic build silently elided. The real hard
+blocker is unmentioned: the jail points `GIT_SSH` at a nonexistent
+`git-ssh-disabled` shim, so `git push` / `git ls-remote` cannot run at all.
+Cheap general lesson: when a card names a host-only precondition, name the
+*failing* mechanism, not a mechanism that degrades — an agent that trusts a
+soft-skip gate as a hard gate will cut a release that skipped it.
+
+[preflight; CHR-046/sessA]
+Three instrumentation findings, all "the CLI's own read surface misled the
+orienting agent" — the expensive class, because each one nearly caused a wrong
+readiness verdict rather than just costing tokens.
+
+1. `spec req list` prose column is a readiness trap. It renders a `prose │ —`
+   column meaning "the requirement's `.md` tier is empty". Every one of PRD-016's
+   and SPEC-025's 11 members shows `—`, which reads as "requirements are stubs,
+   nothing authored". In fact all 11 carry a full structured tier — title,
+   description, and 3-4 acceptance criteria each, visible only via `spec show
+   <SPEC>`'s synthesized Requirements section. I was one step from reporting
+   CHR-046's requirement work as unstarted when it is essentially complete. This
+   is the two-tier "never judge an entity from one tier" guardrail biting through
+   a *listing* rather than a `show` — the guardrail warns about reading raw files,
+   not about a listing column that silently reports on one tier only. FIX: either
+   label the column for the tier it describes (`md │ —`), or make it reflect
+   whether the requirement has *any* content (structured or prose). Cost here:
+   ~2 extra probes; cost in the bad branch: a wrong "not yet authored" verdict
+   driving redundant re-authoring of 11 requirements.
+
+2. No CLI verb owns the `draft → active` spec transition. `spec edit` covers
+   "descent/parent scalar fields" only; there is no `spec status`. Establishing
+   that activation is a legitimate hand-edit of `status =` in the TOML took a
+   git-archaeology detour (`git log -S 'status = "active"'` → abd843922
+   `req(ISS-023): activate 20 draft specs + 161 requirements`). This collides
+   head-on with two standing guardrails — "use the CLI, don't guess command
+   shapes" and "read entities via `show`, not raw files" — so an agent that obeys
+   the guardrails cannot discover the transition at all, and an agent that finds
+   it is uncertain whether hand-editing is sanctioned. FIX: either mint a `spec
+   status` verb, or state explicitly in the spec skills that spec activation is a
+   sanctioned edit-preserving hand-edit, with ISS-023 as the precedent.
+   CORRECTION (same session): this note first claimed the gap extended to
+   requirement `pending → active` as well. Wrong — `spec req status` exists
+   ("Transition a requirement's authored status (free any→any, edit-preserving)").
+   The asymmetry is itself the finding: the *requirement* axis has a verb, the
+   *spec* axis does not, so an agent generalising from one to the other guesses
+   wrong in whichever direction it starts. I generalised from spec→requirement and
+   was wrong; a pi-research thread generalised the other way and asserted `spec req
+   status --to <status>` for the spec too. Two agents, two directions, same
+   asymmetry. FIX as above, plus: `spec --help`'s verb list should make the
+   lifecycle affordance (or its absence) legible at the group level.
+
+3. Second instance of the boot command-map skew already noted at e700350d6.
+   The boot snapshot's Commands block lists `explore  search inspect relation
+   concept-map graph map onboard`, formatted identically to real command groups
+   (`change  slice revision rfc ...`). But `explore` is not a command — it is an
+   editorial grouping heading, and `search`/`inspect`/`graph`/`map` are top-level
+   verbs. `doctrine explore relation --help` fails with "unrecognized subcommand".
+   Cost is small per occurrence (one failed probe) but it recurs for every agent
+   that trusts the map, and it teaches distrust of the whole block. FIX: visually
+   distinguish grouping headings from dispatchable parents, or drop the grouping.
+
+[preflight/research; CHR-046/sessA-delegated]
+Two findings about the `pi-research` delegated-thread arm, both about *verification
+cost of a plausible brief* rather than raw token count. The thread (deepseek-v4-pro,
+one prompt, ~6 min) returned a well-structured 200-line coverage brief that was
+right on structure and wrong on three checkable facts. Net value was clearly
+positive, but only because every load-bearing claim got re-verified locally.
+
+1. Finding 1 above (the `spec req list` prose-column trap) caught the research
+   agent too — independent confirmation that it is a genuine trap, not my slip.
+   Its summary asserted PRD-016's and SPEC-025's requirements are "identity-only
+   placeholders" with "empty prose bodies" that "need their statement/acceptance
+   criteria written", and §4 recommended writing them. All 11 in fact carry
+   complete structured title/description/acceptance-criteria tiers. Two agents
+   reading the same corpus by different routes reached the same wrong conclusion
+   from the same column. That elevates it from friction to a defect: a listing
+   column that reports on one storage tier while reading as a verdict on the
+   entity. If the brief had been trusted, CHR-046 would have re-authored 11
+   already-complete requirements.
+
+2. **A fabricated quote inverted a boundary verdict** — the expensive failure mode
+   for delegated governance research. The brief's boundary table attributes to
+   "PRD-011 §2 Out of scope" the claim "**any graph rendering or visualization**
+   (this is the key seam against PRD-016)", and builds on it a "Seam A: CLEAN. No
+   overlap and no gap" verdict. PRD-011 §2's out-of-scope list contains no such
+   clause (verified verbatim: authored rank/band scalar, scheduling engine,
+   time-pressure semantics, urgency score, persisting derived truth, replacing
+   human priority, external policy engine — no rendering disclaim anywhere). What
+   PRD-011 §2 *does* claim IN scope is "Registry-backed survey / next-work /
+   inspect / explain / blockers surfaces". So the seam is the opposite of clean on
+   the CLI-rendering axis — which is precisely what PRD-016's own OQ-003 flags as
+   an open boundary question. A trusted brief would have closed a live open
+   question as settled, in the wrong direction, with a citation that looks
+   authoritative. Also wrong in the same brief: SPEC-025's `interactions.toml` was
+   reported as missing `uses SPEC-001` / `uses SPEC-018` edges (both are present —
+   I had read the file), and `src/concept_map/` reported as a directory (it is a
+   single 143 KB `src/concept_map.rs`; the cheaper `pi-scout` thread got this right).
+   Pattern: the research arm is reliable on *structure* (which specs exist, how
+   they nest, where the seams are) and unreliable on *verbatim attribution* —
+   exactly inverting where an agent's instinct to trust a citation is strongest.
+   Practice worth codifying in `/research`: treat a delegated brief's quoted
+   out-of-scope clauses and declared-relation claims as unverified until re-read
+   at source, and prefer the cheaper scout for anything file-shaped. Cost here:
+   ~5 verification probes, all of which paid for themselves.
