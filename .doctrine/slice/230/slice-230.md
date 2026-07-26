@@ -89,6 +89,14 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
   `items/` are symlinks and git will not traverse one in a pathspec, so a claim
   surface built from a key-form reference reads clean against a modified body —
   the same false attestation, reached through the reference form.
+- **Scope entries are treated as data, never as pathspec syntax** (RV-307 F-18).
+  Memory text is untrusted (SPEC-007 § Concerns); interpolated raw, a
+  `:(exclude)` scope value subtracts the memory's own directory from the surface
+  it is measured against. Every entry is magic-prefixed.
+- **A declared scope that cannot be observed makes `verify` refuse** (design D10),
+  rather than warn and attest anyway. And `validate` measures the *same*
+  constructed surface as `verify` (D11) — one notion of the claim's evidence, not
+  two.
 - **Consequence, stated plainly:** `record` → `verify` now **refuses** until the
   new memory is committed. The friction this slice removes is *unrelated* corpus
   dirt — another agent's uncommitted backlog file, your own unrelated spec edit —

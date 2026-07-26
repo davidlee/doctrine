@@ -1785,3 +1785,15 @@ path+intent table with `--notes` to expand.
   finding text needs the toml or `review list`. A `--findings` flag on `show`
   would save a full-file read per pass. (Related to the earlier note asking for
   `review list --target`.)
+
+[inquisition; RV307-R3-external]
+
+- A seven-finding handback required correlating the synthesized `review show`
+  output with raw TOML because `review show` omits every finding. This duplicated
+  the round-3 responder's exact token-efficiency complaint one turn later.
+- The requested contest shape used `--detail`, while the live CLI accepts only
+  `--note`; checking `review contest --help` prevented a failed write call.
+- Git-mechanics verification needed a second scratch repository because the
+  first fixture accidentally committed empty files. A small shipped pathspec
+  probe fixture would turn symlink, absolute, unmatched, ignored, and magic
+  pathspec claims into one repeatable command.
