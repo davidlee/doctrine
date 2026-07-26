@@ -6,24 +6,28 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-26 · design · a0b6c49d
+fresh-as-of: 2026-07-27 · design · 81fdf237
 
 ### Produced
 
-- SL-231 — observation architecture designed and adversarial findings integrated
-  (commits 1ff203ad..52e8f654)
-- PRD-018 and SPEC-028 — approved observation capability and ledger-container
-  contracts with REQ-397..REQ-413 (commits 6393a93e, a0b6c49d)
-- REV-035 — SPEC-003 container inventory revised for SPEC-028 (commit 6393a93e)
-- IMP-319 — subprocess-worker observation capture parity
-- IMP-320 — configurable observation guidance in boot context
+- SL-231 — design and scope reconciled after adversarial review (commit 1dd7b15d)
+- RV-310 — thirteen adversarial findings adjudicated
+- REV-036 — SPEC-028 and REQ-405..REQ-413 reconciled with the accepted design
+  decisions (commit 81fdf237)
 - quick check passed; full gate not run for this governance-only unit
 
 ### Learned
 
-- DEC-043 — observations use a dedicated capability and container pending
-  evidence for a reusable ledger abstraction
+- DEC-044, DEC-045, DEC-046, DEC-047, DEC-048, DEC-049, DEC-050, DEC-051,
+  DEC-052 — UUID identity, correction, publication, capture, query, enrichment,
+  safety, and authored-storage contracts
+- EVD-002 — `claude -p` is the first candidate for trustworthy token telemetry
+- RV-310/F-6 — observations reuse lexical and rendering leaves without entering
+  the entity-oriented CommonListArgs conformance spine
 
 ### Open
 
 - QUE-176 — trustworthy per-harness token instrumentation boundaries
+- IMP-319 — subprocess-worker observation capture parity
+- IMP-320 — configurable observation guidance in boot context
+- IDE-005 — harness identification through bounded environment enrichment
