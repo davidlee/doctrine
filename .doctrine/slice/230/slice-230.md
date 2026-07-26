@@ -29,11 +29,16 @@ the authored corpus is essentially always dirty, so verifying a memory you just
 edited is blocked *by your own edit*.
 
 The fix is to make the cleanliness test measure the thing the attestation is
-actually about. A memory attests a claim against the **code**; a dirty
-governance corpus says nothing about whether that claim still holds. So the
+actually about: a memory attests a claim against **what it declares**. Dirt the
+memory does not declare says nothing about whether that claim still holds. So the
 dirty check should ignore doctrine's own authored trees by default, and keep
 refusing on a genuinely dirty source tree — where the attestation truly cannot
 be pinned to a commit.
+
+*Sharpened during design (RV-307 F-6/F-33).* "Against the **code**" was too narrow
+and is not the contract: **81 items in this corpus scope `.doctrine/**`**, so an
+ADR or spec a memory explicitly names is claim evidence exactly as `src/` is. What
+is excluded is unclaimed dirt, not governance dirt.
 
 Two prior decisions bear on this and neither is recorded in IMP-221:
 
@@ -84,7 +89,9 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
   are the evidence the attestation is about. Blanket exclusion would have stamped
   a commit that did not contain the attested body, and would have ignored a
   modified file a memory explicitly scopes. So `verify` asks two questions: is the
-  code dirty, and is the claim committed?
+  unclaimed tree dirty, and is the **observable** claim committed? Never-excluded
+  is not the same as always-required: an entry git does not track contributes no
+  evidence and is reported rather than demanded (design D10, R8; RV-307 F-33).
 - **That item directory is the canonicalised uid dir** (RV-307 F-15). Keys in
   `items/` are symlinks and git will not traverse one in a pathspec, so a claim
   surface built from a key-form reference reads clean against a modified body —
@@ -93,16 +100,18 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
   Memory text is untrusted (SPEC-007 § Concerns); interpolated raw, a
   `:(exclude)` scope value subtracts the memory's own directory from the surface
   it is measured against. Every entry is magic-prefixed.
-- **Non-contribution is classified, and refusal follows actionability** (design
-  D10). Malformed entries refuse; *stale* ones — the path does not resolve but git
-  tracked it once — refuse, because the fix is a path correction; *unobservable*
-  ones — never tracked — are reported, raised by `validate`, and attested over;
-  observable ones must be clean. Both a blanket refusal and a filesystem-existence
-  split were measured against the real corpus and rejected: the first disables 36
-  active items, the second refuses a protected class of harness memory in a source
-  checkout while admitting it in an installed one. The line is drawn on git
-  history, which is checkout-stable. Cost of the chosen cut: **4** currently-stamped
-  active memories, each a moved-source-path correction.
+- **Non-contribution is reported, not classified** (design D10, **DEC-020**).
+  `verify` attests over every declared entry that contributes no tracked file,
+  names each on stderr, and `validate` raises them. The only refusal is the entry
+  git cannot answer for at all — empty, or an emitted form outside the repository,
+  where the probe *aborts* rather than returning a verdict. That is a mechanical
+  necessity, not a judgement about the memory. Three derived boundaries were
+  measured against the real corpus and rejected in turn — blanket refusal (36
+  active items stop verifying), filesystem existence (checkout-dependent), and
+  `git rev-list --all` history (ref-set-dependent: deleting a branch flips the
+  verdict). All three read *local repository state*, which is why a fourth was not
+  attempted. Cost of the chosen cut: **zero** — no memory loses a stamp. The
+  deferred question, and the declared-boundary answer it needs, is design OQ-6.
 - **The claim-surface constructor serves `verify` alone** (D11). `validate`'s
   staleness check and `retrieve`'s ranking both keep the raw scope seam. Not
   bounded for convenience: they ask a *historical* question, and the
@@ -111,9 +120,13 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
   a change to corpus-wide staleness ranking, which is OQ-2's deferred decision.
   The gap is design R7, routed as IMP-317; adoption needs a dataflow change, not a
   call-site swap.
-- **An attestation does not record what it covered** (design R8). Under D10's
-  unobservable class a stamp may cover a proper subset of the declared scope, and
-  a consumer cannot tell. Needs a persisted field; routed as IMP-318.
+- **An attestation does not record what it covered** (design R8). A stamp may
+  cover a proper subset of the declared scope, and a consumer cannot tell — the
+  shortfall lives on stderr and in `validate`, not on the record. This is the
+  **weak reading** of `verified_sha`, and it is the only reading the design
+  carries: *everything git could observe about the claim was committed and
+  unchanged at that commit*, not *every declared entry was observed*. Needs a
+  persisted field to close; routed as IMP-318.
 - **Consequence, stated plainly:** `record` → `verify` now **refuses** until the
   new memory is committed. The friction this slice removes is *unrelated* corpus
   dirt — another agent's uncommitted backlog file, your own unrelated spec edit —
@@ -212,7 +225,8 @@ below are resolved; live open questions now live in `design.md` § 6.**
 
 - Body written via `record` and via `edit` (both modes, both surfaces) round-
   trips through `memory show` byte-for-byte.
-- Verify succeeds with only `.doctrine/**` dirty; still refuses with a dirty
+- Verify succeeds with only **unclaimed** `.doctrine/**` dirty — and refuses when
+  the dirty governance file is one the memory declares (design T25); still refuses with a dirty
   source tree; `--allow-dirty` behaviour unchanged.
 - Exclusion set derives from named constants — no path literals at the call
   site.
