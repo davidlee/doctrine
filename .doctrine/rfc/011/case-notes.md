@@ -2293,3 +2293,57 @@ the back-up-then-mutate idiom for mutation testing silently loses the backup
 (recovered via an inverse patch). And one `python3 - <<'EOF'` heredoc was refused
 by the worktree-isolation guard as "too complex to verify" while structurally
 identical ones ran — an inconsistency that cost a fallback to `Edit` calls.
+
+[design/slice; SL-230→SL-232 split, session dec027-split]
+
+- **Another agent's pathless commit swept my in-progress files.** Commit
+  `b6f8b876` (message: literally `doctrine`) committed my half-finished
+  `design.md` split for both slices, plus `slice-230.toml` and the slug-symlink
+  rename, mixed with that agent's own `case-notes.md` edit. AGENTS.md warns about
+  the *outbound* direction of this hazard ("another agent's already-staged file
+  rides a pathless commit into your commit"); this was the *inbound* direction and
+  it is worse, because the victim cannot prevent it by being disciplined. My own
+  commits were all path-limited and it made no difference. Content survived
+  intact, so cost was diagnosis (~4 commands) plus a commit-message trail that now
+  misattributes a 1700-line design split. **No agent-side mitigation exists** —
+  the only fixes are structural (per-agent index via `GIT_INDEX_FILE`, or
+  worktrees for authored-state work too, not just code).
+
+- **Two CLI gaps found in one task, both in the same shape: append-only verbs with
+  no inverse.** `doctrine needs` cannot be un-done (filed **ISS-247**);
+  `backlog after` cannot target a slice (noted by another agent in the entry
+  above). Both surfaced only after a failed write. Related third: no verb owns an
+  entity **title** or **slug**, so retitling SL-230 and IMP-317 required TOML
+  hand-edits plus a manual `git mv` of the slug symlink. That is sanctioned
+  (`using-doctrine.md`: hand-edit fields no verb owns, cite the gap) but it means
+  a *rename* — an ordinary consequence of scope changing — is entirely outside the
+  CLI. Est. 6-8 commands and one wrong-guess id per rename.
+
+- **Writing to a guessed entity path cost a wasted file.** I ran
+  `cat > .doctrine/backlog/issue/247/issue-247.md`; the real body tier is
+  `backlog-247.md`, so I created a stray file and `backlog show` kept rendering the
+  template. AGENTS.md says to Read before any substantial write precisely to avoid
+  this, and `doctrine <kind> paths <id>` answers it in one call — I used neither
+  because `cat >` felt like a shell operation rather than a write. **The guardrail
+  needs to name the tool-agnostic version of itself:** it is not "use the Read
+  tool", it is "never construct an entity path from a pattern".
+
+- **Where the tokens went, and the shape worth generalising.** The split cost far
+  less than authoring would have: the gate design was extracted by *verified line
+  range* into scratch files and reassembled, so ~1700 lines of reviewed prose moved
+  for the price of a section map plus seam repair. Building the map cost 4 targeted
+  greps. **The failure mode this avoids is paraphrase** — re-authoring inherited
+  design silently drops the measured evidence (censuses, exit codes, refuted
+  alternatives) that is the actual product of eight review rounds. Extract, then
+  repair seams, then grep for dangling cross-references. The seam repairs that
+  mattered were all *reference-scope* bugs: bare `D5` in the new document would
+  read as that document's D5, so every cross-slice decision ref needed qualifying.
+
+- **Two false statements I introduced while assembling, both caught by grep rather
+  than by reading.** I wrote that "E10 and E12 are struck, never reused" — E10 was
+  never minted at all, so I invented a deletion. And an earlier turn asserted
+  F-34/F-35 were disposed on the strength of a handover; the ledger showed no
+  disposition. Both are the same error at different scales: **asserting a fact
+  about queryable state instead of querying it.** One grep and one python pass over
+  the ledger caught them for ~200 tokens each. This is the slice's own
+  dominant-cost-driver lesson, and it kept applying to the meta-work.

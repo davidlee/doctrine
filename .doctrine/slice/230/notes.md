@@ -6,10 +6,21 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-26 · design (DEC-020 applied; RV-307 fully disposed) · 8a625cb5
+fresh-as-of: 2026-07-26 · design (round 8 disposed; slice split by DEC-027) · ca4bb4cd
 
 ### Produced
 
+- **DEC-027** — the corpus-aware verify gate leaves SL-230 into **SL-232**. User
+  ruling at RV-307 round 8. The governing record for the split boundary, the
+  accepted R4 tradeoff, and the RV-307 disposition policy.
+- **SL-232** — corpus-aware memory verify gate. Scope doc + inherited design
+  (gate half of this slice's design.md, carried verbatim so eight rounds of
+  review are not re-derived). Status `proposed`, design NOT locked, two open
+  blockers (F-36, F-37).
+- **ISS-247** — no verb removes a `needs` edge; re-pointing REV-034 needed a
+  sanctioned TOML hand-edit.
+- IMP-317 retitled (F-34/F-39) — the body was correct since round 7, the title
+  still advertised the rejected shared-constructor model.
 - RV-307 — round-7 raiser adjudication accepted F-19/F-20/F-27/F-29/F-30,
   returned F-6/F-22/F-24/F-25/F-26/F-28, and raised F-31–F-35. All five new
   charges reproduced by the responder. **All 35 findings now disposed
@@ -44,32 +55,26 @@ fresh-as-of: 2026-07-26 · design (DEC-020 applied; RV-307 fully disposed) · 8a
 
 ### Open
 
-- RV-307 — **`await=raiser`**, 35 findings, all disposed. Round 8 is the raiser's
-  confirmatory pass on the DEC-020 remediation.
-- QUE-175 / **OQ-2** — still open as a question; body corrected (F-34) and
-  re-verified at round 7. Gates IMP-317.
-- **OQ-6 (new)** — should non-contribution ever refuse, and on which entries?
-  Deferred out of the slice by DEC-020. The answer that survives cloning is a
-  *declared* boundary, not a derived one — a schema change. Scope with QUE-173
-  (digest) and IMP-318 (persist attested coverage); all three are the same
-  change, each making an attestation say more than a sha.
-- REV-034 — governance amendment reserved for close.
-- R5 — masters remain outside every invalidation path.
-- R7 — `validate` and `retrieve::git_facts` retain raw historical scope seams.
-  Untouched by DEC-020 and slightly sharpened by it: with `verify` no longer
-  refusing on non-contribution, the two weaker notions of scoped drift are the
-  only signal for a moved source path.
-- R8 — **widened by DEC-020**: the stamp does not record its covered surface,
-  and the residual now spans all non-contribution rather than only the
-  never-tracked. Routed as IMP-318.
+**This slice.** Nothing blocking. Design narrowed to the body-write seam and
+attestation invalidation; scope doc reconciled; RV-307 fully disposed.
 
-### Decision awaiting the user
+- **Design is NOT locked.** It was locked-pending-review until round 8; the split
+  rewrote it, so the retained half needs a confirming pass before `/plan`. The 7
+  findings on this half (F-3, F-8, F-9, F-10, F-12, F-14, F-17) are all verified
+  and quiet since round 4, so the pass is a coherence check, not a re-review.
+- **R4 runs unmitigated** until SL-232 lands. D4's affordability argument depended
+  on the gate relaxation; the split removed that support. Accepted by DEC-027 —
+  friction, not incorrectness — and the reason to sequence SL-232 next.
+- New ids this slice: I10, I11, I12, E14, OQ-4, OQ-7. Moved ids are **not** reused.
+- OQ-4 — when do other kinds adopt `write_body`? Not here.
 
-Seven rounds, 35 findings, nine blockers, and the finding rate had not decayed
-through round 7. DEC-020 removed the surface that generated F-21/F-25/F-31, so
-round 8 should be markedly quieter — **hypothesis, not promise**. If it returns
-near-clean, lock. If it produces another decision-level refutation, the honest
-read is that the claim-probe design is past the point where more rounds buy
-correctness, and the alternative is a deliberate lock carrying named residual
-risk into `/plan`. That is the user's call; surface it with the result rather
-than opening round 9.
+**Moved to SL-232 (do not track here).** OQ-2/3/5/6, D3/D9/D10/D11, I1-I4/I6-I9,
+E2/E4-E9/E11-E13, R6/R7/R8, REV-034, QUE-173, QUE-175, IMP-317, IMP-318, and
+RV-307 F-25/F-26/F-32/F-36/F-37/F-38 + F-39's first limb.
+
+### Next
+
+1. Confirming pass over SL-230's narrowed `design.md`, then `slice status 230 plan`.
+2. `/design` on SL-232, starting from F-37 and F-36. Enumerate-then-probe before
+   asserting any replacement rule — that is § 8 R-A and it is the whole lesson of
+   the eight rounds behind the inherited text.
