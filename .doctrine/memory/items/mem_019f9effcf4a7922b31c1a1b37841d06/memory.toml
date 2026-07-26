@@ -1,0 +1,42 @@
+memory_uid = "mem_019f9effcf4a7922b31c1a1b37841d06"
+memory_key = "mem.pattern.dispatch.half-arm-unprovable-fork"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "arm-spawn --slice without --phase yields an unbound fork and worker_commit refuses unprovable-fork"
+summary = "A claude-arm spawn armed with --slice but no --phase binds nothing; the worker does the whole job, then worker_commit refuses unprovable-fork with a detail that names only the branch."
+created = "2026-07-26"
+updated = "2026-07-26"
+
+[scope]
+paths = []
+globs = []
+commands = ["dispatch arm-spawn", "worker_commit", "dispatch_import"]
+tags = ["dispatch", "funnel", "claude-arm", "footgun", "arm-spawn"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b41b891819aed1a4924a633a54862d2466003d4c"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d28477104b4c1b362c4b005197bbd69b520544f1348b6225bfa4990679979f7d"
+base_commit = "1dd7b15dc2ed2b8f7ce7b1e6475414b567b20606"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

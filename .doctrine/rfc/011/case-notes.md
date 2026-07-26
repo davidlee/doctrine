@@ -2582,3 +2582,25 @@ changed), never the exit status of the control command.
   it. Open question for RFC-011: in dispatch mode the *distilled worker prompt* is
   the real pre-execution artefact, and `/phase-plan`'s sheet is a second place to
   write much the same content. That is a duplication cost paid per phase.
+
+[dispatch-agent; SL-228-P09-drive]
+- **Half-arm burns a whole worker run before it refuses.** `arm-spawn --base B
+  --slice 228` (the shape this slice's own handover documented, written before
+  PHASE-04 made the binding `(slice, phase)`) silently arms nothing. No refusal at
+  arm, `cd`, or spawn — the worker forked, implemented, ran 4011 tests, and only
+  its FINAL `worker_commit` refused `unprovable-fork`. ~75 K subagent tokens and
+  ~8 minutes spent before an orchestrator-side flag omission surfaced. A refusal
+  at `arm-spawn` time ("--slice without --phase binds nothing — the fork will be
+  unprovable") would cost one line and save the run. The flag's help text already
+  says it; nothing enforces it.
+- **The refusal carried no procedure.** `{"reason":"unprovable-fork","detail":
+  "dispatch/agent-<id>"}` — the detail is just the branch name. It names neither
+  the cause nor a fixing verb, and there is no re-bind verb to find. Recovering
+  cost a read of `dispatch_record.rs`, `arm-spawn --help`, `worktree --help` and
+  `worktree import --help` to establish the option set. This is the second
+  instance in this slice of D10's "a refusal's text IS the recovery procedure"
+  not holding (ISS-250 was the first); here the text carried nothing at all.
+- **Two `handover.md` files, and the stale one is authoritative-looking.** Cost
+  a full read of a superseded 14 KB packet before mtimes exposed it (logged at
+  phase-plan; repeating here because the same packet's stale `arm-spawn` recipe
+  is what caused the half-arm above — one stale artefact, two separate costs).
