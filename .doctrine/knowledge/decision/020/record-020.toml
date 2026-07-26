@@ -1,0 +1,47 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 20
+slug = "non-contribution-classification-leaves-sl-230"
+title = "Non-contribution classification leaves SL-230"
+record_kind = "decision"
+status = "proposed"
+created = "2026-07-26"
+updated = "2026-07-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "residual left open"
+target = "IMP-318"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "same schema-change class"
+target = "QUE-173"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "decision taken for this slice's D10"
+target = "SL-230"
