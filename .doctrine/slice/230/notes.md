@@ -178,3 +178,47 @@ readiness fixes. Documented footgun; it bites silently.
 **Arm.** Not pre-chosen: `/dispatch` routes on a claude↔env-marker agreement, and
 the funnel cadence is identical either way (claude arm self-commits via
 `worker_commit`; pi arm has the orchestrator import the working-tree diff).
+
+**Arm taken 2026-07-27: claude.** No `[dispatch]` table in `doctrine.toml`, so
+`claude-force-subprocess-dispatch` defaults false; `.claude/` present → claude
+arm. Coordination worktree `.dispatch/SL-230` on `refs/heads/dispatch/230`.
+
+## Phase trail
+
+Per-phase facts the *next* phase's implementer needs. Distinct from Harvest
+(which `/harvest` rewrites wholesale) and from Execution constraints (orchestrator
+rules). Append one block per landed phase.
+
+### PHASE-01 — Engine body seam · landed 2026-07-27
+
+Coord `56520c04b → 74620ec5e` (import `290148469`, boundary `74620ec5e`). Worker
+model **sonnet**; `src/entity.rs` +190/−0, six tests, no caller wired. Funnel
+green: S1 baseline 0 failures at B, `regression diff` no new/changed; R-5 clean.
+
+**`write_body` and `BodyMode` each carry
+`#[cfg_attr(not(test), expect(dead_code, reason = "…"))]`, and PHASE-03 must
+remove both.** `expect` (not `allow`) fails the build when the lint *stops*
+firing, so the attributes self-retire by hard error the moment a caller exists —
+deliberate, and the pre-existing project idiom (`src/install.rs:225-228` is the
+identical `cfg_attr` form; `src/retrieve.rs:16` and `src/listing.rs:22` document
+the same self-retiring phase-scoped pattern, verified live rather than taken from
+the worker's word). **PHASE-02 is not the trigger** — it rides the `memory_scaffold`
+fileset seam and never calls `write_body`, so the attributes must survive PHASE-02
+untouched. PHASE-03 wires the first caller and owns their removal. An implementer
+who meets this as a surprise build failure will reach for `allow` or delete the
+wrong thing.
+
+**The landed no-op guard is slightly broader than the design's wording.** § 5.2
+says "returns false when the write was a no-op (Replace with identical content)";
+the implementation compares composed content against existing for *both* modes, so
+an `Append` of empty text onto a body already ending in a blank line also returns
+false. A harmless superset — and the right shape for D4's `body_changed` signal,
+which PHASE-03 reads. No criterion needs restating; noted so it does not read as
+drift at audit.
+
+**Reporting nit, no code defect.** The worker returned `Deviations: NONE` while
+separately declaring two additions (the `Clone, Copy` derive on `BodyMode`, the
+`expect(dead_code)` attributes). Both are sound and additive, and both were
+verified here. `Deviations: NONE` is a funnel tripwire precisely because of this
+pattern — the mandatory per-phase review it triggered is what confirmed the
+`cfg_attr` idiom was real convention and not invention.
