@@ -1,0 +1,176 @@
+# Implementation plan for SL-231 — the authored, durable phase plan.
+#
+# Runtime progress lives under .doctrine/state/. Phase and criterion ids are
+# immutable once authored: append; never renumber or reuse.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-231"
+
+[specs]
+primary       = ["SPEC-028"]
+collaborators = ["SPEC-013"]
+
+[requirements]
+targets = [
+  "REQ-405",
+  "REQ-406",
+  "REQ-407",
+  "REQ-408",
+  "REQ-409",
+  "REQ-410",
+  "REQ-411",
+  "REQ-412",
+  "REQ-413",
+]
+dependencies = []
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Typed observation core"
+objective = """
+Introduce the `observation` leaf umbrella and its pure wire, resolution, and
+query modules. Pin the UUID-native envelope, typed facets and controls, strict
+write validation, tolerant read diagnostics, per-control correction semantics,
+Boolean lexical matching, deterministic ordering, and keyset continuation
+before either public adapter exists. Register the exact ADR-001 leaf
+classification in the same increment.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "SL-231 design is approved and the pre-design research baseline is current" },
+  { id = "EN-2", text = "`src/observation/**` is absent and `src/lexical.rs:20` remains the shared tokenizer to reuse unchanged" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Versioned envelopes, friction and measurement payloads, controls, all five facets, field origins, limits, and canonical serialization round-trip without guessed sentinels" },
+  { id = "EX-2", text = "Writes reject unknown fields, invalid ids/timestamps, NUL, empty required payloads, and every named byte limit; tolerant reads isolate malformed or unsupported records as path-bearing diagnostics" },
+  { id = "EX-3", text = "Per-control resolution is deterministic and cannot resurrect a validly corrected observation; repeated equivalent controls are idempotent, retraction dominates, and resolved lookup follows chains to a possibly retracted terminus" },
+  { id = "EX-4", text = "Query uses shared tokenization across summary, detail, and string facets, returns the resolved active projection by default, and resumes through an opaque `(recorded_at desc, uid)` keyset cursor" },
+  { id = "EX-5", text = "`observation = \"leaf\"` is mechanically classified with no upward edge or tangle growth" },
+]
+verification = [
+  { id = "VT-1", expects = "Wire round-trips every kind and facet; omission remains unknown; invalid fields, hostile strings, NUL, and all byte limits are rejected without truncation; malformed/unsupported reads yield isolated diagnostics", test_file = "src/observation/wire.rs", keywords = ["wire_round_trips_all_kinds_and_facets", "write_limits_and_nul_are_strict", "tolerant_read_isolates_bad_records"], waived = false },
+  { id = "VT-2", expects = "Resolution covers supersession, retraction, dangling and cycle edges, conflicting successors, duplicate controls, retraction dominance, transitive chains, retracted termini, and irreversible V1 corrections", test_file = "src/observation/resolve.rs", keywords = ["invalid_control_cannot_resurrect", "duplicate_controls_are_idempotent", "resolved_chain_reports_retracted_terminus"], waived = false },
+  { id = "VT-3", expects = "Query covers active/history projections, typed filters, Boolean token matching over the enumerated fields, total ordering, and head insertion between keyset pages without duplicates", test_file = "src/observation/query.rs", keywords = ["query_defaults_to_active_projection", "search_uses_shared_lexical_tokens", "keyset_head_insert_does_not_duplicate"], waived = false },
+  { id = "VT-4", expects = "The architecture gate accepts the new observation leaf umbrella and rejects an upward dependency", test_file = "tests/architecture_layering.rs", keywords = ["observation", "layering"], patterns = ["observation"], waived = false },
+]
+specs        = ["SPEC-028"]
+requirements = ["REQ-405", "REQ-407", "REQ-408", "REQ-411", "REQ-412"]
+
+[[phase]]
+id        = "PHASE-02"
+name      = "No-clobber publication and store"
+objective = """
+Extract the entity engine's component-wise safe parent creation into `fsutil`
+and add the complete-content atomic no-clobber publication primitive. Preserve
+the entity engine unchanged at the behavioural boundary, then build the
+UUID-sharded observation store and shared service over that primitive:
+create/replay/collision, tolerant corpus loading, fixed first-write enrichment,
+and registered-source measurement admission.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 is complete and supplies validated canonical bytes plus pure resolution/query inputs" },
+  { id = "EN-2", text = "`src/entity.rs:600` remains the component-wise parent walk to extract, while `src/fsutil.rs` has no complete-content create-new primitive" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`fsutil` owns component-wise parent creation that refuses symlink and non-directory squatters; `entity.rs` delegates to it with its existing suite unchanged" },
+  { id = "EX-2", text = "Publication writes and closes a reserved sibling temp, publishes only through a no-clobber hard link, never opens the destination for write, and cleans the temp after publication or collision" },
+  { id = "EX-3", text = "The store maps every UUID directly to `records/<tail-2>/<uuid>.toml`; path/envelope disagreement fails and corpus loading ignores reserved temps" },
+  { id = "EX-4", text = "Same-intent retry returns a replay receipt retaining first-write time/enrichment; different intent at the same UUID fails without overwrite; distinct UUIDs survive concurrent creation" },
+  { id = "EX-5", text = "Public service creation admits friction only; measurement creation requires a registered machine source, with an empty production registry and an injected fake for tests" },
+]
+verification = [
+  { id = "VT-1", expects = "Shared parent creation refuses file/symlink squatters and entity materialisation behaviour remains green unchanged after delegation", test_file = "src/fsutil.rs", keywords = ["ensure_parent_dirs", "parent_creation_refuses_symlink_squatter", "parent_creation_refuses_file_squatter"], waived = false },
+  { id = "VT-2", expects = "Publication accepts complete closed content, creates the destination only by no-clobber hard link, cleans collision temps, and leaves no partial authoritative file", test_file = "src/fsutil.rs", keywords = ["publish_complete_new", "publication_never_opens_destination_for_write", "publication_cleans_temp_after_collision"], waived = false },
+  { id = "VT-3", expects = "Store tests cover direct UUID sharding, distinct and same-UUID concurrency, month/kind-independent identity, replay, collision refusal, path mismatch, temp ignoring, and first-write metadata retention", test_file = "src/observation/store.rs", keywords = ["uuid_path_is_kind_and_time_blind", "same_intent_replays_without_rewrite", "different_intent_collides_without_overwrite", "concurrent_distinct_uuids_survive"], waived = false },
+  { id = "VT-4", expects = "The façade refuses public measurements while an injected registered source admits a valid machine measurement and caller-asserted source metadata cannot open the gate", test_file = "src/observation/mod.rs", keywords = ["public_capture_refuses_measurement", "registered_machine_source_admits_measurement", "asserted_source_cannot_open_measurement_gate"], waived = false },
+]
+specs        = ["SPEC-028"]
+requirements = ["REQ-405", "REQ-406", "REQ-409", "REQ-410", "REQ-411", "REQ-413"]
+
+[[phase]]
+id        = "PHASE-03"
+name      = "CLI, reads, and corrections"
+objective = """
+Expose the trusted `doctrine observation` command family through one thin
+adapter over the shared service. Land cheap friction capture, UUID-native
+show/list/search, append-only supersede/retract controls, structured receipts,
+safe terminal/JSON rendering, and the exhaustive worker-mode classification:
+record/corrections are writes; reads are reads.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 is complete and the service owns all validation, storage, replay, correction, and query policy" },
+  { id = "EN-2", text = "`src/commands/guard.rs:46` and `src/main.rs:304` remain the exhaustive worker classification and argv-test seams" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`observation record friction <summary>` plus detail, uid, typed facets, structured input, and enrichment opt-out produce the shared machine-readable receipt without staging or committing" },
+  { id = "EX-2", text = "Show supports raw and resolved UUID lookup; list/search support active/history views, typed filters, deterministic pagination, table and JSON rendering, and the explicit non-entity SPEC-013 carve-out" },
+  { id = "EX-3", text = "Supersede and retract create one validated control atomically; missing/control-kind/kind-incompatible targets fail before creation" },
+  { id = "EX-4", text = "Record, supersede, and retract are Write-classed and refused in marked worker forks with the capability-aware diagnostic; show, list, and search are Read-classed" },
+  { id = "EX-5", text = "Hostile content is escaped at terminal boundaries and framed as untrusted data in any agent-facing rendering" },
+]
+verification = [
+  { id = "VT-1", expects = "CLI e2e covers cheap record, explicit-over-automatic enrichment, replay/collision receipts, stdin/file input, strict failures, no staging/commit side effects, and raw JSON/table rendering", test_file = "tests/e2e_observation.rs", keywords = ["record_friction_returns_receipt", "record_replay_and_collision", "record_does_not_touch_git_index", "hostile_content_is_safely_rendered"], waived = false },
+  { id = "VT-2", expects = "CLI e2e covers exact/resolved show, active/history list, lexical search, filters, keyset pages, supersession, retraction, invalid controls, and complete history", test_file = "tests/e2e_observation.rs", keywords = ["show_resolves_correction_chain", "list_and_search_use_resolved_projection", "corrections_preserve_complete_history"], waived = false },
+  { id = "VT-3", expects = "Argv-driven guard tests pin all six observation verbs and the worker refusal diagnostic for dispatched and solo marked forks", test_file = "src/main.rs", keywords = ["observation_write_class_split", "observation_worker_refusal_points_to_broker"], waived = false },
+]
+specs        = ["SPEC-028", "SPEC-013"]
+requirements = ["REQ-405", "REQ-407", "REQ-408", "REQ-409", "REQ-410", "REQ-411", "REQ-413"]
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Confined-worker MCP capture"
+objective = """
+Add `observation_record` as a bounded friction-only MCP adapter over the same
+service. Resolve the registered primary root server-side, reject caller paths
+and controls, preserve CLI-equivalent records and receipts, then widen the
+worker role's exact MCP ceiling and shipped Claude worker definition by that one
+named capability.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 is complete and primary-tree CLI capture is verified" },
+  { id = "EN-2", text = "`src/doctor_checks.rs:373` still defines the worker role's exact MCP ceiling and the shipped worker has no observation capability" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`observation_record` accepts only friction request fields, delegates to the shared service, and emits a CLI-equivalent record and receipt" },
+  { id = "EX-2", text = "The server selects only its registered primary repository root; arbitrary caller paths, measurements, supersession, and retraction are impossible or refused" },
+  { id = "EX-3", text = "Automatic enrichment maps only the named MCP interface/product/command, trusted repository context, and already-supplied opaque agent id; explicit values win and enrichment failure warns without blocking capture" },
+  { id = "EX-4", text = "Worker conformance admits exactly `worker_commit` and `observation_record` for the worker role while continuing to reject bare Doctrine and unrelated MCP grants" },
+  { id = "EX-5", text = "The shipped confined Claude worker receives the bounded capture token without gaining a general `.doctrine/` write path" },
+]
+verification = [
+  { id = "VT-1", expects = "MCP e2e proves CLI parity, server-side primary-root resolution, friction-only admission, no caller path, explicit enrichment precedence, and safe hostile JSON", test_file = "tests/e2e_mcp_server.rs", keywords = ["observation_record_matches_cli_contract", "observation_record_uses_registered_primary_root", "observation_record_refuses_non_friction_authority"], waived = false },
+  { id = "VT-2", expects = "Agent-conformance tests admit the two exact worker tokens and reject a bare server grant, unrelated MCP token, and observation capture on non-worker roles where not sanctioned", test_file = "src/doctor_checks.rs", keywords = ["worker_observation_capture_is_allowlisted", "worker_unrelated_mcp_tool_is_rejected", "worker_bare_doctrine_grant_is_rejected"], waived = false },
+  { id = "VT-3", expects = "Doctor command fixtures and the installed worker definition carry the same exact worker capability set", test_file = "src/commands/doctor.rs", keywords = ["observation_record", "dispatch-worker"], waived = false },
+]
+specs        = ["SPEC-028"]
+requirements = ["REQ-409", "REQ-410", "REQ-411", "REQ-413"]
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Distribution and dogfood activation"
+objective = """
+Distribute the reserved publication-temp ignore rule and document the
+authored-by-default corpus plus its PR-review/local-ignore tradeoff. Only after
+the verified CLI and MCP paths exist, replace the live shared-file friction
+instruction in project governance and RFC-011 with capability-aware observation
+capture guidance while retaining the historical case-note corpus.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 is complete: primary-tree CLI capture, confined-Claude MCP capture, worker guard refusal, and conformance ceilings are green" },
+  { id = "EN-2", text = "The historical RFC-011 case-note corpus remains out of scope for migration or deletion" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "This repository and newly installed clients ignore only reserved observation publication temporary names; authoritative records remain authored and visible by default" },
+  { id = "EX-2", text = "`using-doctrine.md` documents capture, authored durability, review-noise cost, repository-wide and local exclusion choices, and the correlation/audit tradeoff of local-only storage" },
+  { id = "EX-3", text = "Governance routes primary-tree agents to CLI, confined Claude workers to MCP, and unbrokered/solo worker forks away from fork-local capture; RFC-011 points live instrumentation at the same interface" },
+  { id = "EX-4", text = "No by-month deriving verb or ignore pattern, reporting/aggregation, retention, subprocess broker, boot option, harness detection, or concrete measurement adapter enters the slice" },
+  { id = "EX-5", text = "Architecture, entity, memory, comparison, dispatch, MCP, install, and observation regression gates are green" },
+]
+verification = [
+  { id = "VT-1", expects = "Install tests prove the narrow reserved-temp ignore rule reaches a client while observation records and reserved by-month paths remain unignored", test_file = "src/install.rs", keywords = ["observation_publication_temps_are_ignored", "observation_records_remain_authored_by_default"], waived = false },
+  { id = "VT-2", expects = "Black-box observation tests retain authored records and ignore only reserved temps under the repository's own git disposition", test_file = "tests/e2e_observation.rs", keywords = ["authored_records_are_visible_to_git", "reserved_publication_temp_is_ignored"], waived = false },
+  { id = "VA-1", expects = "Agent verifies governance, RFC-011, using-doctrine, install manifest, and shipped worker guidance describe one capability-aware contract and retain the historical case-note corpus" },
+  { id = "VA-2", expects = "Agent confirms the implementation diff contains no reporting, aggregation, retention, by-month generation, subprocess broker, doctrine.toml boot option, ENV harness detection, or concrete measurement adapter" },
+]
+specs        = ["SPEC-028"]
+requirements = ["REQ-406", "REQ-409", "REQ-410", "REQ-413"]
+

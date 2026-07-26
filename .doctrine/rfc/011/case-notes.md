@@ -2604,3 +2604,12 @@ changed), never the exit status of the control command.
   a full read of a superseded 14 KB packet before mtimes exposed it (logged at
   phase-plan; repeating here because the same packet's stale `arm-spawn` recipe
   is what caused the half-arm above — one stale artefact, two separate costs).
+
+[research; SL-231-plan-pi-home-erofs]
+- Both project-mandated research runners (`scripts/pi-research` and
+  `scripts/pi-scout`) failed before reading the repository because Pi attempted
+  to create settings/session locks under read-only `/home/david/.pi`. The
+  failure consumed two subprocess starts plus diagnosis and forced the
+  documented orchestrator-run fallback. Research runners need a writable,
+  disposable agent/session directory inside the workspace or cache so their
+  read-only repository posture does not depend on a writable home.
