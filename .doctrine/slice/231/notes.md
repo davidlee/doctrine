@@ -6,14 +6,17 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · design · 81fdf237
+fresh-as-of: 2026-07-27 · design · 32b9fdd3
 
 ### Produced
 
-- SL-231 — design and scope reconciled after adversarial review (commit 1dd7b15d)
-- RV-310 — thirteen adversarial findings adjudicated
-- REV-036 — SPEC-028 and REQ-405..REQ-413 reconciled with the accepted design
-  decisions (commit 81fdf237)
+- SL-231 — design and scope reconciled through the adversarial re-review
+  (commit 32b9fdd3)
+- RV-311 — nine re-review findings adjudicated
+- REV-037 — observation worker, enrichment, correction, query, and publication
+  contracts reconciled
+- REV-038 — SPEC-013 member requirements aligned with its non-entity ledger
+  exception
 - quick check passed; full gate not run for this governance-only unit
 
 ### Learned
@@ -22,8 +25,10 @@ fresh-as-of: 2026-07-27 · design · 81fdf237
   DEC-052 — UUID identity, correction, publication, capture, query, enrichment,
   safety, and authored-storage contracts
 - EVD-002 — `claude -p` is the first candidate for trustworthy token telemetry
-- RV-310/F-6 — observations reuse lexical and rendering leaves without entering
-  the entity-oriented CommonListArgs conformance spine
+- RV-311/F-1 — marked solo worktrees defer friction for coordination-tree capture
+- RV-311/F-5 — source admission is fixed before the harness extraction adapter,
+  which remains owned by QUE-176
+- RV-311/F-6 — SPEC-013 owns the explicit non-entity ledger exception
 
 ### Open
 
