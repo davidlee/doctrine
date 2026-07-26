@@ -2827,6 +2827,8 @@ mod tests {
                 commands: &[],
                 repo: None,
                 global: false,
+                body: None,
+                body_mode: None,
             },
             &mut io::stdout(),
         )
@@ -3085,6 +3087,8 @@ mod tests {
                     commands: &[],
                     repo: None,
                     global: false,
+                    body: None,
+                    body_mode: None,
                 },
                 &mut io::stdout(),
             )
@@ -3175,6 +3179,8 @@ mod tests {
                     commands: &[],
                     repo: None,
                     global: false,
+                    body: None,
+                    body_mode: None,
                 },
                 &mut io::stdout(),
             )
@@ -3331,6 +3337,8 @@ mod tests {
                 commands: &[],
                 repo: None,
                 global: false,
+                body: None,
+                body_mode: None,
             },
             &mut io::stdout(),
         )

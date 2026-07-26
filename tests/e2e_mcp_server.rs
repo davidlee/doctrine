@@ -1065,6 +1065,154 @@ fn e2e_memory_edit_roundtrip() {
     kill(child);
 }
 
+/// The one refusal wording for `body_mode` with no `body`, asserted as a
+/// literal because this integration crate cannot see the `pub(crate)` const it
+/// mirrors (`memory::BODY_MODE_REQUIRES_BODY`). That duplication is the point:
+/// the rule is implemented once, in `run_edit`, and this is the drift detector
+/// on the MCP surface that inherits it (SL-230 PHASE-05 D-P5-3).
+const BODY_MODE_REQUIRES_BODY: &str = "body_mode requires body — a mode with no body to apply it \
+     to is never an edit (CLI: --body-mode requires --body)";
+
+/// Extract a `-32602` refusal's worded detail (`error.data.parse_error`) —
+/// `error.message` is the generic "Invalid params" for every such error.
+fn parse_error_detail(resp: &Value) -> &str {
+    resp["error"]["data"]["parse_error"]
+        .as_str()
+        .expect("parse_error detail")
+}
+
+/// Record a memory over the wire, returning its uid.
+fn record_memory(
+    stdin: &mut impl Write,
+    reader: &mut BufReader<impl std::io::Read>,
+    arguments: Value,
+) -> String {
+    let params = tools_call_params("memory_record", arguments);
+    let resp = call(stdin, reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_record: {resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).expect("parse record JSON");
+    out["Recorded"]["uid"].as_str().expect("uid").to_owned()
+}
+
+/// Read a memory's prose back over the wire. `view: full` is what keeps `body`
+/// in the projection (summary drops it), and `body` sits at the TOP level of
+/// the show envelope, alongside `memory`.
+fn show_body(
+    stdin: &mut impl Write,
+    reader: &mut BufReader<impl std::io::Read>,
+    uid: &str,
+) -> String {
+    let params = tools_call_params(
+        "memory_show",
+        serde_json::json!({"reference": uid, "view": "full"}),
+    );
+    let resp = call(stdin, reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_show: {resp:?}");
+    let out: Value = serde_json::from_str(tool_result_text(&resp)).expect("parse show JSON");
+    out["body"].as_str().expect("body in full view").to_owned()
+}
+
+// SL-230 PHASE-05 VT-1: the body fields round-trip over the real JSON-RPC
+// transport — `memory_record` seeds the prose, `memory_edit` with
+// `body_mode: append` GROWS it (the prior text survives, which is what
+// separates append from the default replace).
+#[test]
+fn e2e_memory_body_record_edit_append_roundtrip() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/memory/shipped")).unwrap();
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let uid = record_memory(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({
+            "title": "Body Roundtrip",
+            "memory_type": "fact",
+            "body": "recorded prose\n"
+        }),
+    );
+
+    let recorded = show_body(&mut stdin, &mut reader, &uid);
+    assert!(
+        recorded.contains("recorded prose"),
+        "record must land the body: {recorded:?}"
+    );
+
+    let params = tools_call_params(
+        "memory_edit",
+        serde_json::json!({
+            "reference": &uid,
+            "body": "appended prose\n",
+            "body_mode": "append"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    assert!(resp.get("error").is_none(), "memory_edit: {resp:?}");
+
+    let appended = show_body(&mut stdin, &mut reader, &uid);
+    assert!(
+        appended.contains("recorded prose"),
+        "append must preserve the prior text: {appended:?}"
+    );
+    assert!(
+        appended.contains("appended prose"),
+        "append must add the new text: {appended:?}"
+    );
+    assert!(
+        appended.len() > recorded.len(),
+        "the body must grow: {recorded:?} -> {appended:?}"
+    );
+
+    kill(child);
+}
+
+// SL-230 PHASE-05 VT-1 (D-P5-3): `body_mode` with no `body` is refused over the
+// wire with the SAME worded message the CLI raises — because the MCP adapter
+// delegates to `run_edit`, where the rule is implemented exactly once. The
+// reference is a real, existing memory, so the refusal is demonstrably the
+// totality guard and not a resolution failure.
+#[test]
+fn e2e_body_mode_without_body_is_rejected() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/memory/shipped")).unwrap();
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let uid = record_memory(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({"title": "Mode Without Body", "memory_type": "fact"}),
+    );
+
+    let params = tools_call_params(
+        "memory_edit",
+        serde_json::json!({"reference": &uid, "body_mode": "append"}),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let err = resp.get("error").expect("should have error");
+    assert_eq!(err["code"], -32602, "{resp:?}");
+    let detail = parse_error_detail(&resp);
+    assert!(
+        detail.contains(BODY_MODE_REQUIRES_BODY),
+        "the MCP refusal must carry the CLI's wording verbatim: {detail}"
+    );
+
+    kill(child);
+}
+
 #[test]
 fn e2e_onboard_returns_non_empty() {
     let dir = tmp();
