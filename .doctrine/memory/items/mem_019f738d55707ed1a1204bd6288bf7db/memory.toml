@@ -6,7 +6,7 @@ status = "active"
 title = "Dispatched-slice audit: primary tree answers the algebra, candidate tree the code"
 summary = "Candidate worktrees lack phase runtime state (conformance reads incomplete there) and check out detached; run registry/ledger/lifecycle verbs from the primary tree, advance the candidate branch ref after repair commits, and route selector edits to post-integration reconcile."
 created = "2026-07-18"
-updated = "2026-07-18"
+updated = "2026-07-26"
 
 [scope]
 paths = []
@@ -25,12 +25,12 @@ tree = "f90da8c76f9026f96c2019e472d8856465f0a3fe"
 ref_name = "refs/heads/edge"
 checkout_state_id = "65b7e0e035eb15ec8248f1870b4f7e32de079b8b30524bcff0a69bafcffcf0b8"
 base_commit = "051367407ec9d4f89479cc84b3a51cbd2adbf0ca"
-verified_sha = ""
+verified_sha = "139166dbf45dea0cae7382cb1f6b203425065d21"
 normalizer = "forget.checkout.v1"
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-07-26"
 review_by = ""
 
 [trust]
