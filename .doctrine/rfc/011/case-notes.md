@@ -2490,3 +2490,56 @@ modified". Pre-execution, no keyword is ever checked, so the wording invites the
 reader to bank signal that does not exist. A handover had recorded "the mandates
 have signal" on exactly that misreading. Cheaper phrasing: "keywords unchecked —
 `<path>` not modified by this slice".
+
+[preflight; pf-iss249-a]
+Backlog bodies cite paths without branch provenance. ISS-249's body cites
+`install/git-hooks/pre-commit` as if it were a repo path; it exists ONLY on
+`dispatch/228` (SL-228 PHASE-02, unlanded). A `cat` failed, then `find` +
+`git log --all -- <path>` + coord-tree archaeology to establish where the file
+actually lives (~4 extra tool calls). Cheap fix at the authoring seam: when
+`backlog new` runs inside/alongside a live coordination worktree, stamp the
+originating branch (or slice) in the body's fix-direction section so a later
+reader knows the target isn't on trunk yet.
+
+[preflight; pf-iss249-b]
+`doctrine slice phase` is a WRITE verb (`--status <STATUS> <ID> <PHASE_ID>`) with
+no read form; the read is `dispatch status --slice N` (funnel-scoped) or
+`slice status`. Reached for `slice phase <ID>` as the obvious read and burned a
+usage error. The singular/plural split (`slice phases` = materialise sheets,
+`slice phase` = set status) reads as a read/write pair but isn't one.
+
+[preflight; pf-iss249-c]
+`dispatch status` renders the phase roster in ID order, but SL-228's plan
+deliberately positions PHASE-08 BEFORE PHASE-07 (user-approved amendment, ids
+immutable / order is plan order). The status output therefore shows
+"PHASE-07 planned" last with "next: PHASE-07" while coord commits reference a
+concluded PHASE-08 — looks like ledger drift until you read plan.toml. Costs a
+plan.toml grep to disambiguate. Rendering in PLAN order (or annotating the
+out-of-sequence id) would remove the false-drift signal.
+
+[execute; SL-228-P07-plan-a7f21]
+A git clone is NOT a faithful substrate for a dispatch benchmark, and the two
+gaps both cost real turns. (1) `.claude/` is untracked, so it does not clone —
+and the dispatch skill routes arms on `.claude/` presence, so the subject
+silently took the subprocess arm instead of the configured claude arm. Nothing
+errored; the run simply measured a different arm than intended, discovered only
+by reading the tool histogram for `Agent` spawns and finding zero. (2) Gitignored
+build products do not clone either, so `web/map/dist/` was absent and the baked
+`prove` fallback (`just prove`) was red for a reason orthogonal to the slice —
+which matters because `worktree import --from-worktree` runs `prove` as an
+in-process reject-and-halt gate, so an unrouted `prove` halts EVERY
+subprocess-arm import. The subject diagnosed both correctly and worked around
+them, but paid ~15 turns for it. Lesson for any future harness: clone gives you
+tracked content only; enumerate the untracked/gitignored inputs the system
+actually routes on before treating a clone as the system.
+
+[execute; SL-228-P07-plan-a7f21]
+`pgrep`/`pkill` cannot see processes started by a backgrounded harness task from
+the main session's Bash sandbox — they return nothing and exit 0. A watcher
+script built on `pkill` therefore prints "killed" and exits successfully while
+its target keeps running: a false success in the one direction that silently
+invalidates an experiment (the "crash" never happened, so the heal-forward
+measurement would have been of an uninterrupted run). The working mechanism is
+the harness's own TaskStop against the task id. Generalisable: when a control
+action crosses the sandbox boundary, verify the EFFECT (process gone, marker
+changed), never the exit status of the control command.
