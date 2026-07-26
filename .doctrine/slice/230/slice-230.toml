@@ -7,7 +7,7 @@ updated = "2026-07-25"
 tags = ["area:cli", "area:mcp", "area:memory"]
 
 [relationships]
-needs = []                      # slice→work hard prerequisite
+needs = ["REV-034"]                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]

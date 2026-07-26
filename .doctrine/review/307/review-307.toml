@@ -14,80 +14,158 @@ ref   = "SL-230"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected verified_sha to contain the attested body; observed T7/T8 stamp a HEAD that omits it"
 detail = 'Design evidence: .doctrine/slice/230/design.md:241-245 makes corpus-only dirt yield a Commit frame and :380-381 requires T7/T8 to stamp HEAD even when the target item is dirty or wholly untracked; :299-302 defers the only body-content anchor it names. Current stamp logic at src/memory.rs:3357-3361 writes frame.commit unless allow_dirty is explicitly paired with CheckoutState. Empirical probe: in /tmp/sl230-attest-*, after creating an untracked .doctrine/memory/items/mem_probe/memory.md, `git cat-file -e "$verified_sha:.doctrine/memory/items/mem_probe/memory.md"` returned exit 128, while `git rev-list --count "$verified_sha..HEAD" -- .doctrine/memory/items/mem_probe` printed 0 both at stamp time and after an unrelated commit; `git ls-files --others` still printed the body. Therefore D5 sees no commit and reports no drift while verified_sha names a commit that never contained the claim. This is a false attestation and must not ship; OQ-3 or an equivalent content-bearing anchor is load-bearing.'
+disposition = "fix-now"
+response = """
+Charge sustained; proven, not argued. The relaxation excluded .doctrine/** wholesale, and memory items live inside it — so record → verify stamped a HEAD that provably lacked the body, and D5's rev-list drift count returned 0 forever because it counts commits and there was none to count. The design's own OQ-3 was the only named remedy and it was deferred; the charge is right that this made the deferral load-bearing.
+
+Remedy is not OQ-3 (schema change, own slice) but a claim-aware gate, which needs no new field. § 5.2 is restructured around a single leaf primitive: dirty_under(root, pathspecs) -> Result<bool>, the three probes with an arbitrary pathspec set. capture_with(root, excludes) delegates its dirty decision to it; capture(root) = capture_with(root, &[]) as before. verify then composes TWO calls to the one primitive:
+
+  source = capture_with(root, corpus_excludes)   // Frame — the anchor
+  claim  = dirty_under(root, claim_pathspecs)?   // bool — is the evidence committed?
+
+where claim_pathspecs = the memory's own item directory (+ its declared scopes, see F-6). Refuse unless the source frame is Commit-anchored AND the claim surface is clean. verified_sha is then a commit that provably contains the attested body.
+
+Consequence accepted deliberately: T8's record → verify case now REFUSES until the memory is committed. That is the honest answer — an attestation naming a commit that does not contain the claim is worthless, and 'commit the memory, then verify' is one command. The friction this slice actually set out to kill — unrelated corpus dirt, another agent's uncommitted backlog file, your own unrelated spec edit — is still killed. T8 rewritten accordingly; the refusal names the fix."""
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected one integrated exclusion design; observed dead is_excluded and stale source_clean mechanisms"
 detail = 'The corrected D3 at .doctrine/slice/230/design.md:148-186 performs exclusion natively through pathspecs inside capture_with. Yet the system model at :98-99 still specifies corpus_guard::is_excluded plus source_clean, :192-196 describes a pure exclusion predicate without any consumer, and :200-201 says source_clean returns a value. Command `rg -n "is_excluded|source_clean|capture_with" .doctrine/slice/230/design.md src/corpus_guard.rs src/git.rs src/memory.rs` found is_excluded/source_clean only in the design and no live seam to receive the predicate. A1 was not completely integrated: the design currently specifies two exclusion mechanisms, one dead, and retains the rejected function in normative sections.'
+disposition = "fix-now"
+response = """
+Sustained — A1 was integrated in the decision (D3) but not in the normative sections, leaving the retired source_clean standing in the § 5.1 tier diagram and § 5.3 prose, and a corpus_guard::is_excluded predicate with no consumer anywhere. Two specified mechanisms for one job, one dead, is the very duplication A1 was raised to destroy; the charge is right that partial integration of a settled finding is itself a defect.
+
+§ 5.1 and § 5.3 rewritten. source_clean is gone from every section, not just from D3. is_excluded is deleted outright rather than rehomed: exclusion is performed entirely by git pathspecs inside dirty_under, so a path predicate has no work to do. corpus_guard keeps DOCTRINE_PATHSPEC (src/corpus_guard.rs:43) as the named constant STD-001 requires; the pathspec vectors are composed at command tier, which is where the memory-layout knowledge legitimately lives."""
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected rejected edit arguments to leave both tiers untouched; observed body-first ordering mutates before validation"
 detail = "Design steps at .doctrine/slice/230/design.md:218-229 call write_body before apply_edit. Actual apply_edit performs fallible validation after entry: src/memory.rs:3817-3827 rejects key/title, :3844-3860 rejects status/lifespan, :3893-3921 rejects trust/severity, and :3935-3939 can reject key normalization. The current shell at :4005-4014 safely mutates only an in-memory DocumentMut until apply_edit succeeds. Under the proposed order, `memory edit --body ... --trust bogus` returns an error after memory.md has already been atomically replaced, while memory.toml, updated, and verification remain untouched. This is mutation on an argument-validation failure, distinct from the acknowledged crash window. Validate against a cloned document before the first disk write or otherwise restore failure atomicity."
+disposition = "fix-now"
+response = """
+Sustained. apply_edit is fallible at four sites after entry (src/memory.rs:3817-3827 key/title, :3844-3860 status/lifespan, :3893-3921 trust/severity, :3935-3939 key normalisation), and the current shell mutates only an in-memory DocumentMut until it succeeds. Body-first would have made 'memory edit --body - --trust bogus' rewrite memory.md and then error — mutation on an argument-validation failure, which is a strictly new failure mode, not the acknowledged crash window.
+
+The fix costs nothing, because apply_edit's mutation is already in-memory only. Validation moves first without giving up the body-dependent TOML content:
+
+  1. toml_changed = apply_edit(&mut doc, fields, today)?   // validates + mutates IN MEMORY only
+  2. body_changed = write_body(dir, 'memory.md', text, mode)?   // first and only disk write so far
+  3. if body_changed { clear_verification(&mut doc); doc['updated'] = today }   // see F-12
+  4. if body_changed || toml_changed { write_atomic(toml_path) }
+
+Every fallible step now precedes every disk write. R1's crash asymmetry survives intact — body still lands before TOML — so a crash still leaves a changed body with a stale updated, never the reverse. A2's insight that TOML content depends on body_changed also survives: step 3 applies it to the same in-memory document. The draft simply confused 'the TOML WRITE must follow the body write' with 'the TOML COMPUTATION must follow it'; only the former is true."""
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected ADR-013 dependency to name an active Revision; observed SL-230 has no REV anchor"
 detail = 'ADR-013 states that work waiting on governance or spec change declares `needs REV-NNN`. The design promises a Revision at .doctrine/slice/230/design.md:68-69 and requires it applied at :392-393, but names no REV and the synthesized `doctrine slice show SL-230` output contains governed_by POL-002/STD-001 and implements SPEC-007 with no needs relation. `doctrine revision list --format json` printed an empty rows array; `doctrine revision list --all --format json` showed only REV-001 through REV-033, all status done; `rg -n "SPEC-007" .doctrine/revision` printed nothing. The governance dependency is therefore uninstantiated and cannot order or gate this work as ADR-013 requires.'
+disposition = "fix-now"
+response = "Sustained without defence — the design promised a Revision twice (:68-69, :392-393) and named none, and no revision in the corpus touched SPEC-007. Discharged during this disposition: REV-034 minted ('Verify attests against a claim-relevant clean tree, not a globally clean one'), and 'doctrine needs SL-230 REV-034' authored, so slice show now reports the needs edge. ADR-013's ordering constraint is instantiated rather than promised. Rationale, both change rows and their before/after excerpts are in .doctrine/revision/034/revision-034.md; application is deferred to SL-230 close so spec and code turn over at the same moment."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected the SPEC-007 revision inventory to cover every binding contract; observed REQ-147 is omitted"
 detail = 'The design and scope assert that only spec-007.toml:22 and spec-007.md:132 carry the clean-tree contract (.doctrine/slice/230/design.md:68; slice-230.md:88-92). Repository search `rg -n -i "clean working tree|refus.*dirty|no false attestation" .doctrine/spec/tech/007 .doctrine/requirement` also found .doctrine/requirement/147/requirement-147.toml:5-6 and requirement-147.md:1. `doctrine inspect REQ-147` printed inbound membership in SPEC-007. The active REQ-147 title is itself the exact old contract: clean working tree, refuse dirty tree, no false attestation. A Revision changing only the two cited spec sites would leave SPEC-007 internally incoherent and the requirement false. Also, the prose citation is currently line 133, not 132.'
+disposition = "fix-now"
+response = """
+Sustained, and verified independently before disposition: 'doctrine inspect REQ-147' reports inbound members: SPEC-007, and requirement-147.toml:6 carries the retired contract as its literal title — 'against a clean working tree, refusing a dirty tree so no false attestation is recorded'. A two-site amendment would have shipped an active SPEC-007 member asserting the opposite of the code. This was the most dangerous of the governance charges precisely because it was invisible from the spec files themselves.
+
+REV-034 carries REQ-147 as its --primary change row, with the before/after title text written out. A further fact the charge did not reach: requirement-147.md is still an unfilled template — Statement and Rationale are both empty comment stubs — so the title has been carrying the entire contract alone. REV-034 fills both bodies rather than only retitling.
+
+The line-number correction is accepted too: the prose site is spec-007.md:133, not :132 (the sentence spans :131-133); design § 3 and § 9 now cite :132-133 as a range."""
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected exclusions to ignore irrelevant corpus dirt; observed blanket roots hide legitimately scoped evidence"
 detail = '''Design principle .doctrine/slice/230/design.md:80-82 assumes every memory attests its body only against code, then :195-196 and :241-245 exclude all .doctrine plus repo-root memory. SPEC-007, as rendered by `doctrine spec show SPEC-007`, owns arbitrary path/glob/command scopes and does not restrict claims to source code. Live corpus evidence from `rg -n '"?\\.doctrine/' .doctrine/memory/items/*/memory.toml` printed many legitimate scopes including .doctrine/spec, .doctrine/adr, .doctrine/slice, and .doctrine/review. Thus an uncommitted change to a governance file explicitly named by the memory scope is ignored and verify stamps the old HEAD. Doctrine ownership makes the path constant legal under POL-002; it does not make the changed evidence irrelevant. Exclusion must be claim-aware or the anchor must include the excluded state.'''
+disposition = "fix-now"
+response = """
+Sustained, and independently corroborated before disposition: 81 of the item corpus's memory.toml files carry .doctrine/** in their scope arrays — paths = ['.doctrine/slice/056'], globs = ['.doctrine/adr/**', '.doctrine/slice/**'], paths = ['.doctrine/adr/001/layering.toml', 'src/mcp_server/tools.rs', ...]. A blanket exclusion would have blinded verify to precisely the evidence those memories name. The charge's distinction is the correct one and is now quoted in the design: doctrine's ownership of the path constant makes the exclusion legal under POL-002; it does not make the excluded evidence irrelevant.
+
+Remedy composes with F-1's, at no extra mechanism. claim_pathspecs = the memory's own item directory PLUS its declared scope.paths and scope.globs (globs as :(glob) magic; scope.commands are not path-shaped and are excluded, stated explicitly as E5). The claim probe is dirty_under over that set. So a memory scoped at .doctrine/adr/001/layering.toml refuses while that file is modified — as it must — while dirt in .doctrine/backlog it never named is ignored.
+
+Deliberately NOT narrowed further: a dirty source tree still refuses even for a memory that does not scope the dirty file (I3 preserved). Narrowing the source leg to scopes-only is a larger semantic change to the anchor, out of scope here, and is recorded as OQ-5 rather than smuggled in."""
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected own-directory staleness to catch masters as claimed; observed masters are unanchored and never scanned"
 detail = 'The design says own-directory drift catches masters at .doctrine/slice/230/design.md:252-257, but later concedes at :299-302 that masters have no verified_sha. Actual code corroborates the latter: src/memory.rs:1705-1707 records globals with unanchored_frame; :1750-1757 writes them under MEMORY_MASTERS_DIR; collect_all at :2826-2834 scans only items and shipped; run_validate consumes collect_all at :3480-3488; and writable resolution at :2468-2505 is items-only. `rg -n "MEMORY_MASTERS_DIR" src/memory.rs` found production use only in record placement, not validate. E2 is correct that the minted master anchor is None, but D5 cannot catch master edits and the design should stop claiming that it does.'
+disposition = "fix-now"
+response = """
+Sustained; the design asserted at :252-257 that own-directory drift is 'edit-path agnostic: catches the verb, hand-edits, masters, and other agents', then conceded at :299-302 that masters have no verified_sha. Corroborated independently: rg -n MEMORY_MASTERS_DIR src/memory.rs returns production use only at :1753 (record placement) and :5931 (a test) — it appears nowhere in collect_all or run_validate, so masters are not scanned at all, quite apart from being unanchored.
+
+The claim is struck rather than the behaviour changed. D6 already puts masters out of scope, and making validate scan them is a separate slice. § 5.4 now states the truth plainly: own-directory staleness catches the verb path, hand-edits to items, and other agents; it does NOT catch masters, which are unanchored (anchor_kind = None, no verified_sha to diff from) and are not scanned by collect_all. The only mitigation for masters remains the mem.system.memory.global-master-authoring guard memory, glob-scoped memory/** at severity high — stated as a known gap in § 8 (R5) rather than left as a false capability claim. E2 stands unaltered; the charge agreed it was correct."""
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected claim changes to invalidate verification; observed title and summary edits remain verified by design"
 detail = "The design problem says it closes the defect that nothing invalidates an attestation when the claim changes (.doctrine/slice/230/design.md:23-24), and its principle says a change to the body says everything (:80-82). Yet OQ-1 at :291-295 explicitly defers title and summary invalidation even while admitting both are claim-bearing. Actual apply_edit changes title/summary at src/memory.rs:3822-3842 and has no verification mutation. After SL-230, a user can still replace the summary or title of a verified memory and retain verification. This is a known residual false-stamp path concealed beneath a broader closure claim; either narrow the stated invariant and problem honestly or clear verification for all claim-bearing fields in this slice."
+disposition = "fix-now"
+response = """
+Sustained; OQ-1's deferral does not survive contact with the charge. The design's § 1 claims to close 'nothing invalidates an attestation when the claim it attests to changes' and its § 4 principle says a change to the claim 'says everything' — then OQ-1 conceded title and summary are claim-bearing and deferred them anyway. That is a residual false-stamp path concealed beneath a broader closure claim, exactly as charged, and the deferral's stated reason (behaviour-preservation on shared machinery) is void: D4 ALREADY changes edit's behaviour via the same clear_verification call. The regression surface is not widened by which field triggers it.
+
+OQ-1 is therefore closed as D8, drawing the line where it is principled rather than where it is convenient — claim fields versus record fields. Editing title, summary, body, or scopes (paths/globs/commands) clears the verification axis: these constitute what is asserted and what it is asserted against. Editing status, lifespan, review_by, trust, or severity does not: these are judgements ABOUT the record, not the claim itself. Note scopes are included on the same reasoning the charge used — changing what a memory attests against invalidates the attestation as surely as changing the assertion. T20 pins the claim-field set; T21 pins that record fields do NOT clear."""
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected hostile-body protection to gate closure; observed T16 is excluded from the closure commandment"
 detail = "Internal finding A3 added T16 specifically to pin read-time nonce and data framing (.doctrine/slice/230/design.md:420-426), and the test table lists T16 at :390. But the normative closure sentence at :392 requires only T1-T15 green. This is an incomplete integration of settled A3: the newly required hostile-body regression may fail while the authored closure condition still passes. Change the closure range to T1-T16 or name every required test explicitly."
+disposition = "fix-now"
+response = "Sustained — a settled finding (A3) added T16 to the table but the normative closure sentence at :392 still read 'T1-T15 green', so the hostile-body regression could fail while the authored closure condition passed. Range corrected to T1-T21 (the matrix grows under F-8, F-10 and F-11). The lesson generalises and is applied: the closure sentence now reads 'every test in § 9 green' rather than a hand-maintained numeric range, so a test added by a later review cannot fall outside the gate by omission."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected body_mode to have a total cross-surface contract; observed mode-without-body is undefined and untested"
 detail = 'The interface says CLI body/body-mode maps one-to-one to MCP body/body_mode (.doctrine/slice/230/design.md:128-145), and EditFields gains both while has_any counts body at :215-216. It specifies rejection only for body_mode on record (:141-142). It never defines `memory edit --body-mode append` without --body, MCP `{body_mode:"append"}` without body, or body_mode combined with metadata-only edits; T1-T6 and T12/T12b contain no such case. The two adapters can therefore reject, ignore, or count the same request differently while each still satisfies the written tests. Specify rejection or a meaningful default and pin both surfaces.'
+disposition = "fix-now"
+response = """
+Sustained. The design specified rejection only for --body-mode on record, and left --body-mode append without --body undefined on the CLI, {body_mode: 'append'} without body undefined over MCP, and body_mode alongside a metadata-only edit undefined on both. As charged, the two adapters could each satisfy every written test while behaving differently — which is precisely the divergence the 1:1 CLI/MCP mapping in § 5.2 exists to prevent.
+
+Contract made total: body_mode without body is REJECTED on both surfaces, with the same message. Rejection over a default because a silent default would let a caller believe an append happened when nothing was written, and because it is symmetric with the existing --body-mode-on-record rejection — one rule ('body_mode is meaningless without body'), two instances, rather than two unrelated special cases. has_any() is unaffected: body_mode alone never constitutes an edit. T22 pins both surfaces."""
 
 [[finding]]
 id = "F-11"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected every stated capture invariant to be pinned; observed I2 and the three exclusion probes lack explicit tests"
 detail = 'I2 at .doctrine/slice/230/design.md:273-275 preserves a concurrency property: clean-after-exclusion must never call write-tree. The test table has no lock/write-tree observation; T11 at :384 checks only frame equality and cannot detect an unnecessary write-tree call. T7 says only `.doctrine/** dirty` without identifying staged versus unstaged, while the design changes three independent probes at :178-186; T8 pins only the untracked leg. `rg -n "index\\.lock|capture.*lock|write-tree" src/git.rs` found implementation comments/retry code but no capture lock-avoidance test. Add explicit staged, unstaged/binary, and untracked exclusion cases plus a seam or lock-contention canary for I2.'
+disposition = "fix-now"
+response = """
+Sustained in full. T11 compares frames and cannot observe an unnecessary write-tree call; T7 said only '.doctrine/** dirty' without partitioning staged from unstaged; only the untracked leg (T8) was individually pinned, though the design modifies three independent probes.
+
+I2's substance is confirmed sound — capture takes the lock only in the dirty branch, and src/git.rs:1996-2000 documents exactly that ('write-tree acquires .git/index.lock, so we defer it to the rare dirty case'). The restructure under F-1 strengthens it: the claim probe is dirty_under, which returns a bool and never computes checkout_state_id, so it never reaches write_tree_with_retry (src/git.rs:1924) even when the claim surface IS dirty. I2 is restated to that stronger, testable form.
+
+Tests added: T17 staged-only corpus change excluded; T18 unstaged/binary corpus change excluded; T19 untracked corpus change excluded (T8 keeps the record → verify case, now as a refusal). T23 is the I2 canary — hold .git/index.lock and assert verify still completes on the clean-after-exclusion path, which fails if write-tree creeps back in. Frame equality (T11) stays as the I1 pin."""
+
+[[finding]]
+id = "F-12"
+status = "answered"
+severity = "major"
+title = "Expected stamp_updated to be a composable step; observed apply_edit stamps `updated` internally, so a body-only edit never stamps it"
+detail = 'Raised by the responder during disposition of F-3; missed by both the internal pass (A2) and the external pass. Design .doctrine/slice/230/design.md:223-229 models step 4 as `if body_changed || toml_changed { stamp_updated(&mut doc) }`, treating `stamp_updated` as a discrete helper the caller composes. No such helper exists. `apply_edit` (src/memory.rs:3810) ends with its own terminal block — "Stamp `updated` ONCE at root if any field changed" — writing `doc["updated"] = toml_edit::value(today)` gated solely on its internal `changed` flag, which counts metadata fields only and cannot see the body. Consequence: under the design as written, `memory edit --body -` with no metadata flags yields toml_changed=false, so `updated` is never stamped, directly falsifying T5 (":378 — body-only edit | has_any() true; updated stamped"). The composed-flag correction A2 introduced is therefore incomplete: it composed a flag over a step that does not exist as a separate step. Fix requires either an explicit re-stamp after write_body (idempotent — same date value) or splitting the stamp out of apply_edit; the former avoids touching shared machinery under R3.'
+disposition = "fix-now"
+response = "Self-raised during F-3's disposition; sustained. Step 3 above re-stamps updated explicitly after a body change. The re-stamp is idempotent when apply_edit already stamped (identical date value), so no double-write and no ordering hazard, and it leaves apply_edit's signature untouched — which matters under R3, since apply_edit is shared machinery whose existing suite must stay green unchanged. T5 is now satisfiable; T12b (identical-content body replace) is unaffected because body_changed is false there and step 3 never runs."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

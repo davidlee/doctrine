@@ -65,8 +65,8 @@ into a first-class, one-command operation. It must be closed here.
 | Authority | Constraint |
 |---|---|
 | **SL-005 § 5.2 (review #7)** ✓ | "v1 scaffolds a template containing title + summary only — no editor, no stdin, no `--body`. **Richer body capture is a later mutation verb.**" A deferral, not a prohibition — this slice is that verb. No governance step needed. |
-| **SPEC-007** | Asserts verify attests "against a clean working tree, refusing a dirty one" (`spec-007.toml:22`, `spec-007.md:132`). Already false since `--allow-dirty`; this slice widens it. Amend via REV. |
-| **ADR-013** | Governance→work dependency routes through a Revision — the SPEC-007 fix is a `REV-NNN`, not a raw edit. |
+| **SPEC-007** | Asserts verify attests "against a clean working tree, refusing a dirty one" — **three** sites, not two: `spec-007.toml:22`, `spec-007.md:132-133`, and **`REQ-147`**, whose *title is the retired contract verbatim* and which is an active member of SPEC-007 (`doctrine inspect REQ-147` → `members: SPEC-007`). Already false since `--allow-dirty`; this slice changes it further. Amended by **REV-034**. |
+| **ADR-013** ✓ | Governance→work dependency routes through a Revision. **REV-034** is minted and `SL-230 needs REV-034` is authored — the dependency is instantiated, not promised. |
 | **ADR-001** ✓ | `corpus_guard` = leaf, `git` = leaf, `entity` = engine ("the hub — kind-agnostic directory-entity scaffold", imports `fsutil` only), `memory` = command. Downward edges only. |
 | **POL-002** | The exclusion set must rest on doctrine-owned contracts, never host layout. `.doctrine` and `MEMORY_MASTERS_DIR` are platform-owned constants, so exclusion is legal — but `memory/` exists only in this repo, so guard it on existence rather than assume it. |
 | **STD-001** | Named constants, not path literals. Satisfied by reuse: `DOCTRINE_PATHSPEC` already exists (`src/corpus_guard.rs:43`). |
@@ -92,16 +92,22 @@ into a first-class, one-command operation. It must be closed here.
 
 ```
 command tier   memory.rs ──────────────┬──────────── run_record / run_edit / run_verify
-                                       │
+                                       │             composes the pathspec sets (policy)
 engine tier    entity.rs  write_body(dir, file, text, mode) -> Result<bool>
                                        │
-leaf tier      fsutil.rs  write_atomic          corpus_guard.rs  is_excluded(path, roots)
-               git.rs     capture()  +  source_clean(root, excludes) -> Option<Frame>
+leaf tier      fsutil.rs  write_atomic
+               corpus_guard.rs  DOCTRINE_PATHSPEC  (existing constant, STD-001)
+               git.rs     dirty_under(root, pathspecs) -> Result<bool>     ← the primitive
+                          capture_with(root, excludes) -> Result<Frame>    ← delegates to it
+                          capture(root) = capture_with(root, &[])          ← unchanged behaviour
 ```
 
-Four changes, each at its correct altitude: a kind-agnostic body writer at
-engine, a pure exclusion predicate and a new git probe at leaf, and policy
-composition at command.
+Three changes, each at its correct altitude: a kind-agnostic body writer at
+engine, one parameterised dirtiness primitive at leaf, and policy composition at
+command. **There is exactly one dirtiness measurement in the design** —
+`dirty_under` — used twice by `verify` with different pathspec sets. No path
+predicate exists at leaf and no second probe exists anywhere; both were specified
+by earlier drafts and are deleted (RV-307 F-2).
 
 ### 5.2 Interfaces & Contracts
 
@@ -145,11 +151,24 @@ body to append to.
 `body_mode`. Metadata-only edit stays the default path. Tool count is unchanged
 (no new tools), so the `25` assertions at `tools.rs:1488` / `:1870` do not move.
 
-**Exclusion-aware capture (leaf, `src/git.rs`)** — parameterised, not parallel.
+**`body_mode` without `body` is rejected on both surfaces**, with the same
+message — one rule (*`body_mode` is meaningless without `body`*) instanced twice,
+alongside the `--body-mode`-on-`record` rejection. A silent default would let a
+caller believe an append happened when nothing was written, and would let the two
+adapters diverge while both still passed the test matrix (RV-307 F-10).
+`has_any()` is unaffected: `body_mode` alone never constitutes an edit.
+
+**Dirtiness primitive (leaf, `src/git.rs`)** — one implementation, parameterised.
 
 ```rust
+/// Is anything under `pathspecs` dirty? Runs the three dirtiness probes with
+/// the given pathspec set. Returns a bool: it never computes
+/// `checkout_state_id`, so it never calls `write-tree` and never takes
+/// `.git/index.lock` (I2). An empty set means "the whole tree".
+pub(crate) fn dirty_under(root: &Path, pathspecs: &[&str]) -> Result<bool, CaptureError>
+
 /// Capture the git frame, ignoring paths under `excludes` when deciding
-/// dirtiness. `excludes` are pathspec roots, applied to all three probes.
+/// dirtiness. Delegates the dirty decision to `dirty_under`.
 pub(crate) fn capture_with(root: &Path, excludes: &[&str]) -> Result<Frame, CaptureError>
 
 /// Unchanged public behaviour — the existing three callers keep this signature.
@@ -158,51 +177,79 @@ pub(crate) fn capture(root: &Path) -> Result<Frame, CaptureError> {
 }
 ```
 
-**Revised by adversarial review (see § 10, A1).** The first draft proposed a
-separate `source_clean` probe. That would have duplicated everything `capture()`
-does *around* the dirty check — repo-identity derivation, the multi-root guard,
-submodule rejection, ref-name resolution — which is precisely the parallel
-implementation the standards forbid. Parameterising is strictly better: one
-implementation, and `capture(root)` delegating with an empty slice is
-byte-identical for the existing three callers, which is I1 by construction rather
-than by test.
+`pathspecs` are *arbitrary* git pathspecs — negative (`:(exclude)…`) or positive
+(`.doctrine/memory/items/<key>`, `:(glob).doctrine/adr/**`) — which is what lets
+one primitive serve both of `verify`'s questions. Git's rule is that a path
+matches iff it matches at least one positive pathspec (or there are none) *and* no
+negative one, so the two questions cannot be folded into a single call: **two
+calls, one implementation.**
 
-The measurement still tells the truth: `excludes` is supplied by the caller, and
-only `verify` supplies a non-empty one. Policy stays with the consumer.
+*Revised twice.* The first draft proposed a separate `source_clean` probe, which
+would have duplicated repo-identity derivation, the multi-root guard, submodule
+rejection and ref resolution (§ 10, A1). The second parameterised `capture()`
+itself, but that left `verify` with only a whole-frame answer when it needed a
+narrow boolean — and computing a `Frame` for the claim question would have taken
+the index lock on exactly the path I2 protects (§ 10, X1/F-11). Extracting
+`dirty_under` is what A1 actually wanted: the shared measurement lifted once, with
+`capture_with` as its first consumer. I1 still holds by construction —
+`capture(root)` delegates with an empty slice.
 
-This is required because `capture()` **blanks the commit oid whenever the tree is dirty**
-(`git.rs`: `commit: String::new(), // empty iff dirty`) — it yields only a
-`checkout_state_id` hash, and you cannot subtract corpus paths from a sha256. The
-probe re-runs the same three measurements with exclusion pathspecs:
+Parameterisation is required because `capture()` **blanks the commit oid whenever
+the tree is dirty** (`git.rs`: `commit: String::new(), // empty iff dirty`) — it
+yields only a `checkout_state_id` hash, and you cannot subtract corpus paths from
+a sha256. The three probes take pathspecs natively:
 
-| Probe | Command | Exclusion |
+| Probe | Command | Pathspec |
 |---|---|---|
-| worktree | `git diff HEAD --binary …` | `:(exclude)<root>` per exclude |
-| untracked | `untracked_fingerprint` → `git ls-files --others --exclude-standard -z` | same — ✓ verified `ls-files` accepts pathspecs |
-| index | `git diff-index --quiet --cached HEAD` | `:(exclude)…` |
+| worktree | `git diff HEAD --binary …` | passed through |
+| untracked | `untracked_fingerprint` → `git ls-files --others --exclude-standard -z` | passed through |
+| index | `git diff-index --quiet --cached HEAD` | passed through |
 
-All three take pathspecs natively, so no probe needs re-implementing.
-`untracked_fingerprint` gains an `excludes` parameter — a signature change to a
-private leaf fn, its only caller being `capture_with`.
+✓ **Verified empirically, not assumed** (RV-307 brief line 3, Git 2.54.0, scratch
+repos + this repo). Exclusion-only pathspec sets behave as required: a binary
+worktree change confined to `.doctrine` yielded 0 diff bytes, adding a source
+change yielded 3,824,818; the untracked leg printed nothing until a source file
+was added; the index leg exited 0 then 1. `untracked_fingerprint` gains a
+`pathspecs` parameter — a signature change to a private leaf fn whose only caller
+is `dirty_under`.
 
-Untracked coverage is not optional: a freshly-recorded memory's directory is
-untracked, so `record` → `verify` is otherwise still blocked by the memory just
-recorded.
+**The two questions `verify` asks.** Policy stays entirely at command tier:
 
-**Exclusion predicate (leaf, `src/corpus_guard.rs`)** — pure, roots passed in as
-data (a leaf module cannot import `MEMORY_MASTERS_DIR` from command tier; this
-also honours the pure/imperative split). Roots supplied by the command-tier
-caller: `DOCTRINE_PATHSPEC` always, `MEMORY_MASTERS_DIR` only when that directory
-exists.
+```rust
+// 1. Is the CODE dirty?  (the anchor — corpus dirt is not evidence about it)
+let source = capture_with(root, &corpus_excludes)?;
+
+// 2. Is the CLAIM's own evidence committed?
+let claim_dirty = dirty_under(root, &claim_pathspecs)?;
+```
+
+| Set | Contents | Why |
+|---|---|---|
+| `corpus_excludes` | `:(exclude)` + `DOCTRINE_PATHSPEC`; plus `:(exclude)memory` (`MEMORY_MASTERS_DIR`) **only when that directory exists** | dirt in doctrine's own authored trees says nothing about whether a claim about the code still holds |
+| `claim_pathspecs` | the memory's **own item directory**, plus its declared `scope.paths` and `scope.globs` (globs as `:(glob)…`) | this *is* the claim's evidence surface — the prose being attested, and the code it is attested against |
+
+`scope.commands` is not path-shaped and contributes nothing (E5).
+
+This is the correction for RV-307 F-1 and F-6. Excluding `.doctrine/**` wholesale
+excluded the memory *being verified* — items live at
+`.doctrine/memory/items/<key>/` — so `verify` would have stamped a HEAD that
+provably lacked the attested body, and would have ignored a modified
+`.doctrine/adr/001/layering.toml` that a memory explicitly scopes. **81 items in
+this corpus carry `.doctrine/**` scopes.** Doctrine's ownership of the path
+constant makes the exclusion legal under POL-002; it does not make the excluded
+evidence irrelevant.
 
 ### 5.3 Data, State & Ownership
 
 No schema change. No new persisted field. The verification axis keeps its three
-existing fields; `write_body` owns no state; `source_clean` returns a value.
+existing fields; `write_body` owns no state; `dirty_under` returns a value.
 
 `MEMORY_SHIPPED_DIR` (`.doctrine/memory/shipped`) and `MEMORY_ITEMS_DIR`
 (`.doctrine/memory/items`) are both *under* `.doctrine`, so one exclusion root
-covers them. Only `MEMORY_MASTERS_DIR` (`memory`, repo-root) sits outside.
+covers them. Only `MEMORY_MASTERS_DIR` (`memory`, repo-root) sits outside — and
+it is contributed only when the directory exists (E4). The item under attestation
+is then re-admitted as a *positive* pathspec in `claim_pathspecs`; the two sets are
+independent, so no re-inclusion magic is needed (git offers none).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
@@ -215,46 +262,111 @@ and `RecordArgs` gain `body: Option<&str>`; `memory_scaffold` substitutes it for
 **Body on `edit`.** `EditFields` gains `body` + `body_mode`; `has_any()` counts
 body, so `--body` alone is a valid edit.
 
-**Write ordering and the composed changed-flag.** `run_edit` now writes two files
-and is no longer atomic. Order is **body first, then TOML** — and that ordering
-is load-bearing beyond crash-safety, because the TOML content *depends* on
-whether the body actually changed:
+**Write ordering: validate everything, then write.** `run_edit` now writes two
+files and is no longer atomic across them. **Every fallible step precedes every
+disk write**, and the body still lands before the TOML:
 
 ```
-body_changed = write_body(dir, "memory.md", text, mode)?     // 1. body first
-toml_changed = apply_edit(&mut doc, fields, today)?          // 2. metadata
-if body_changed { clear_verification(&mut doc) }             // 3. D4
-if body_changed || toml_changed { stamp_updated(&mut doc) }  // 4.
-if body_changed || toml_changed { write_atomic(toml_path) }  // 5. TOML last
+toml_changed = apply_edit(&mut doc, fields, today)?    // 1. VALIDATES; mutates in memory only
+body_changed = write_body(dir, "memory.md", text, mode)?  // 2. first disk write
+if body_changed {                                      // 3. D4/D8
+    clear_verification(&mut doc);
+    doc["updated"] = today;                            //    re-stamp — see below
+}
+if body_changed || toml_changed { write_atomic(toml_path) }  // 4. TOML last
 ```
+
+*Revised by RV-307 F-3.* The previous order put `write_body` first, on the reading
+that the TOML content depends on `body_changed`. But `apply_edit` is fallible at
+four sites *after entry* (`src/memory.rs:3817-3827` key/title, `:3844-3860`
+status/lifespan, `:3893-3921` trust/severity, `:3935-3939` key normalisation),
+while mutating only an in-memory `DocumentMut`. So `memory edit --body - --trust
+bogus` would have rewritten `memory.md` and *then* errored — mutation on an
+argument-validation failure, a new failure mode rather than the acknowledged crash
+window. The fix is free: what must follow the body write is the TOML **write**, not
+the TOML **computation**. Step 3 applies the body-dependent mutation to the same
+in-memory document, after validation has already passed.
+
+*Why the explicit re-stamp (RV-307 F-12).* There is no separate `stamp_updated`
+helper to compose — `apply_edit` stamps `updated` itself, in a terminal block
+gated on its own internal `changed` flag, which counts metadata fields only and
+cannot see the body. Left as drafted, a body-only edit would never stamp
+`updated`, falsifying T5. Step 3 re-stamps explicitly; the write is idempotent when
+`apply_edit` already stamped (identical date), and `apply_edit`'s signature is
+untouched — which matters under R3, since its existing suite must stay green
+unchanged.
 
 So `updated` is stamped, and the verification axis cleared, **iff the body
 genuinely changed** — a `--body` that replaces content with itself is a full
 no-op on both tiers (content and mtime hold), consistent with the existing
-`apply_edit` no-op guard. A crash between steps leaves a changed body with a
-stale `updated`, never the reverse (R1).
+`apply_edit` no-op guard. A crash between steps 2 and 4 leaves a changed body with
+a stale `updated`, never the reverse (R1).
 
 Full two-tier atomicity would mean routing `edit` through the fileset/rollback
 machinery — a large refactor of a shared write path, disproportionate to a crash
 window this narrow. Stated, not buried.
 
-**Verify.** Gate becomes: `capture_with(root, corpus_roots)`; if the frame is
-`Commit`-anchored, attest against that HEAD commit; if `CheckoutState`, refuse
-unless `--allow-dirty`. Corpus-dirty now
-produces a *stronger* anchor than today's `checkout_state_id` — a real,
-addressable commit.
+**Verify.** The gate is **two questions, both of which must pass**:
 
-**Verification invalidation.** A body write through `edit` clears the axis:
-`verification_state` → `unverified`, `reviewed` and `verified_sha` → empty. Not a
-new state; the scaffold default. Append clears too — appended prose is unverified
-claim.
+```
+source = capture_with(root, corpus_excludes)?   // 1. is the code dirty?
+claim_dirty = dirty_under(root, claim_pathspecs)?  // 2. is the claim committed?
+
+match (source.anchor_kind, claim_dirty) {
+    (Commit, false) => attest against source.commit,       // the only success
+    _               => refuse unless --allow-dirty,
+}
+```
+
+Dirt in doctrine's authored corpus that the memory does not claim against no
+longer blocks, and the anchor is a real addressable commit rather than a
+`checkout_state_id`. But the memory's own body — and every path it declares a
+scope over — must be committed, because that is what the stamp asserts.
+
+**This costs the `record` → `verify` convenience, deliberately** (RV-307 F-1). A
+freshly recorded memory's directory is untracked, so `verify` now refuses until it
+is committed. The alternative was a `verified_sha` naming a commit that provably
+did not contain the attested prose — demonstrated in a scratch repo, where
+`git cat-file -e "$verified_sha:.../memory.md"` exited 128 while the drift count
+that was supposed to catch it printed 0, then and forever. A worthless stamp is
+worse than an extra `git commit`. The refusal says which of the two questions
+failed, and what to do about it.
+
+**Verification invalidation — claim fields, not record fields.** Editing what the
+memory *asserts*, or *what it asserts against*, clears the axis:
+`verification_state` → `unverified`, `reviewed` and `verified_sha` → empty (not a
+new state; the scaffold default).
+
+| Cleared by | Not cleared by |
+|---|---|
+| `body` (replace **and** append — appended prose is unverified claim) | `status` |
+| `title` | `lifespan` |
+| `summary` | `review_by` |
+| `scope.paths` / `scope.globs` / `scope.commands` | `trust` |
+| | `severity` |
+
+*Widened by RV-307 F-8, closing OQ-1 as D8.* The left column constitutes the
+claim; the right column is judgement *about* the record. Deferring title and
+summary would have left a residual false-stamp path beneath § 1's broader closure
+promise, and the stated reason for deferring (behaviour-preservation on shared
+machinery) was void — D4 already changes `edit`'s behaviour through the same
+`clear_verification` call, so the regression surface does not widen with the field
+set. Scopes are included on the same reasoning: changing what a memory is attested
+*against* invalidates the attestation as surely as changing the assertion.
 
 **Staleness (the hand-edit path).** Clearing on the verb alone would invert the
 guardrail: the sanctioned path would be stricter than hand-editing, rewarding
-bypass — and masters are hand-edit-only by design. So `validate`'s staleness
-check additionally counts commits touching **the memory's own item directory**
-since `verified_sha`, alongside the existing scoped-paths count. Edit-path
-agnostic: catches the verb, hand-edits, masters, and other agents.
+bypass. So `validate`'s staleness check additionally counts commits touching **the
+memory's own item directory** since `verified_sha`, alongside the existing
+scoped-paths count.
+
+Coverage stated honestly (RV-307 F-7 — the draft claimed more): this catches the
+verb path, hand-edits to **items**, and other agents. It does **not** catch
+masters. Masters are minted unanchored (`anchor_kind = None`, `src/memory.rs:1705`)
+so there is no `verified_sha` to diff from, and `collect_all` scans only items and
+shipped — `MEMORY_MASTERS_DIR` appears in production code at `:1753` (record
+placement) alone, never in `validate`. Masters are out of scope by D6; the gap is
+carried as R5, not papered over.
 
 Verified against live data: `git rev-list --count <verified_sha>..HEAD -- <dir>`
 returned 3 for the memory whose stamp survived a committed body edit — the same
@@ -272,11 +384,17 @@ stashing. The refusal names its own flag.
   T11. `record`'s born anchor and the retrieve read path must not move.
 - **I2** — the clean-after-exclusion path never calls `write-tree`, so it takes
   no index lock — preserving the lock-contention property `capture()` documents
-  for concurrent doctrine processes.
+  for concurrent doctrine processes (`src/git.rs:1996-2000`). **Strengthened**:
+  `dirty_under` returns a bool and never computes `checkout_state_id`, so the
+  *claim* probe never reaches `write_tree_with_retry` (`src/git.rs:1924`) even when
+  the claim surface is dirty. Pinned by T23.
 - **I3** — a genuinely dirty *source* tree still refuses without `--allow-dirty`.
 - **I4** — `--allow-dirty` semantics unchanged (attest anyway, stamp
-  `checkout_state_id`).
+  `checkout_state_id`). It overrides **both** gate questions.
 - **I5** — `thread_expiry` untouched.
+- **I6** — a successful attestation's `verified_sha` **contains the attested
+  body**. The point of the claim probe; pinned by T24 (`git cat-file -e
+  "$verified_sha:<dir>/memory.md"` must succeed).
 - **E1** — thread memories vanish from `find`/`retrieve` after a body edit until
   re-verified (SL-008 D6 feeding on honest input). Correct but surprising —
   the verb says so on stderr.
@@ -285,22 +403,32 @@ stashing. The refusal names its own flag.
 - **E3** — body content `-` is unreachable inline; use stdin.
 - **E4** — `memory/` absent (every client project) → that exclusion root is
   simply not contributed.
+- **E5** — `scope.commands` is not path-shaped and contributes no pathspec to
+  `claim_pathspecs`; a memory scoped only by command has just its item directory
+  in the claim surface.
+- **E6** — a memory with an empty scope has a claim surface of exactly its own
+  item directory. Still meaningful: the body must be committed.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1** — should `--summary` / `--title` also clear verification? They are
-  claim-bearing and today do not. Deferred: changing them alters existing verb
-  behaviour and puts the behaviour-preservation gate on shared machinery in play
-  for no gain to the motivating case. Lean: yes, in a follow-up owning the
-  regression surface.
+- ~~**OQ-1**~~ — **closed by RV-307 F-8**; answered as **D8**. Title, summary and
+  scopes clear verification alongside body; status / lifespan / review_by / trust /
+  severity do not.
 - **OQ-2** — should own-directory drift feed *retrieve-side* `staleness`, not
   just `validate`? Deferred deliberately: it would reclassify a large fraction of
   the corpus at once and shift retrieval ordering broadly (D5).
 - **OQ-3** — a body digest stamped at verify time would make invalidation
   git-independent and path-independent, covering uncommitted edits and masters
   (which have no `verified_sha`). Needs a new persisted field → schema change →
-  its own slice.
+  its own slice. **No longer load-bearing** (it was, before the claim probe closed
+  F-1): it would now buy master coverage and uncommitted-edit detection, not
+  attestation truth.
 - **OQ-4** — when do other kinds adopt `write_body`? This slice wires memory only.
+- **OQ-5** — should the *source* leg narrow to the memory's declared scopes too,
+  so a dirty `src/` file no memory claims against stops blocking? Raised by the
+  F-6 disposition and deliberately not taken: it changes what the anchor means for
+  every memory at once, where the claim probe only adds a check. I3 is preserved
+  as-is.
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -313,25 +441,45 @@ stashing. The refusal names its own flag.
   `--replace-body`/`--append-body` (IMP-221's original — reads better but
   diverges from MCP's single `body_mode` and scales badly to a third mode);
   `--body` + explicit `--body-file` (a flag stdin already covers).
-- **D3 — parameterise capture (`capture_with(root, excludes)`); `capture()`
-  becomes a delegating wrapper.** *Revised by review (§ 10, A1).* The original
-  decision was a separate `source_clean` probe, on the reasoning that `capture()`
-  must stay untouched. That confused *behaviour* with *code*: the invariant worth
-  protecting is that the three existing callers see identical frames (I1), and
-  delegation with an empty exclude slice guarantees that by construction, whereas
-  a parallel probe would have re-implemented repo-identity derivation, the
-  multi-root guard, submodule rejection and ref resolution — a textbook parallel
-  implementation. *Alternative:* bake the exclusion into `capture()`
+- **D3 — extract one dirtiness primitive (`dirty_under(root, pathspecs)`);
+  `capture_with` delegates to it; `capture()` delegates with `&[]`.** *Revised
+  twice — by § 10 A1, then by RV-307 F-1/F-11.* The original decision was a
+  separate `source_clean` probe, on the reasoning that `capture()` must stay
+  untouched; that confused *behaviour* with *code* (the invariant worth protecting
+  is I1, which delegation gives by construction). The second version parameterised
+  `capture()` alone, which was still short: `verify` needs a *narrow boolean* for
+  the claim question, and building a whole `Frame` to answer it would take the
+  index lock on precisely the path I2 protects. Extracting the measurement is what
+  A1 was actually asking for. *Alternative:* bake the exclusion into `capture()`
   unconditionally. *Rejected:* two of its three callers would be damaged —
   `record` would stamp a false born anchor and the retrieve read path would
   shift. *Alternative:* soften the refusal and keep stamping `checkout_state_id`.
   *Rejected:* weaker evidence for the common case, and it makes the default and
   `--allow-dirty` near-identical.
+- **D9 — the gate asks two questions: is the code dirty, and is the claim
+  committed?** The exclusion set answers the first; a positive pathspec set over
+  the memory's item directory and declared scopes answers the second. *Forced by
+  RV-307 F-1/F-6* — a single exclusion set cannot express "ignore corpus dirt
+  except the part this memory is about", because git offers no re-inclusion after
+  an exclude. *Alternative:* OQ-3's body digest. *Rejected here:* new persisted
+  field, schema change, own slice — and unnecessary, since a positive pathspec
+  answers the same question with machinery this slice already builds.
+  *Alternative:* keep the blanket exclusion and accept the false stamp.
+  *Rejected:* it is the exact hazard SPEC-007 § Concerns names, made cheap.
 - **D4 — body edit clears the verification axis.** Affordable only because the
   gate relaxation makes re-verifying cheap; the halves pay for each other.
   *Alternative:* leave it (status quo) — rejected, the stamp would lie by
   one command. *Alternative:* a third "stale" state — rejected, new vocabulary
   for no gain over `unverified`.
+- **D8 — invalidation covers claim fields, not record fields.** Body, title,
+  summary and scopes clear; status, lifespan, review_by, trust and severity do
+  not. *Closes OQ-1, forced by RV-307 F-8.* The line is what the memory asserts
+  and what it asserts against, versus judgement about the record. *Alternative:*
+  body only (the draft) — rejected: § 1 claims to close "nothing invalidates an
+  attestation when the claim changes", and a summary rewrite is a claim change.
+  *Alternative:* every field — rejected: a `trust` downgrade is a statement about
+  the memory, not by it, and clearing on it would make `verify` and `trust`
+  fight.
 - **D5 — own-directory staleness in `validate` only.** Closes the hand-edit
   inversion without re-ranking the corpus as a side effect of a body-write slice.
 - **D6 — items-only; masters out of scope.** The motivating memory
@@ -361,8 +509,21 @@ stashing. The refusal names its own flag.
   a hostile body written through the *new* path.
 - **R3 — behaviour preservation on shared machinery.** `entity.rs` and
   `validate` are shared. Existing suites must stay green unchanged.
-- **R4 — mass re-verification.** D4 means every body edit costs a verify.
+- **R4 — mass re-verification.** D4/D8 mean every claim-field edit costs a verify.
   Mitigated by the gate relaxation; if it still bites, that is evidence for OQ-3.
+  D8 widens the trigger set, so this risk grows — accepted, because the
+  alternative is a stamp that lies.
+- **R5 — masters remain uncovered by every invalidation path** (RV-307 F-7).
+  They are unanchored (no `verified_sha`) and `collect_all` does not scan them, so
+  neither D5's own-directory drift nor D8's field-clearing reaches a master edit.
+  D6 puts them out of scope; the only standing mitigation is the
+  `mem.system.memory.global-master-authoring` guard memory (glob `memory/**`,
+  severity high). Stated as a known gap, not a solved problem; OQ-3 would close it.
+- **R6 — `verify` is now harder to satisfy, not easier, for the freshly-recorded
+  memory.** `record` → `verify` refuses until the memory is committed (D9). The
+  slice's headline benefit is narrower than the scope document implied: unrelated
+  corpus dirt stops blocking, your own uncommitted claim still does. Accepted as
+  the honest reading; `slice-230.md` is reconciled to say so.
 
 ## 9. Quality Engineering & Validation
 
@@ -377,10 +538,10 @@ fixture: `GitScratch` (`:5617`); MCP e2e: `tests/e2e_mcp_server.rs:963-1110`.
 | T4 | `--body-mode` on `record` | rejected, not ignored |
 | T5 | body-only edit | `has_any()` true; `updated` stamped |
 | T6 | replace with identical content | no-op: content + mtime hold |
-| T7 | verify, only `.doctrine/**` dirty | succeeds, stamps **HEAD commit** (not `checkout_state_id`) |
-| T8 | verify, untracked memory dir only | succeeds — the `record` → `verify` case |
+| T7 | verify, unrelated `.doctrine/**` dirty, memory committed | succeeds, stamps **HEAD commit** (not `checkout_state_id`) |
+| T8 | verify, memory dir untracked (`record` → `verify`) | **refuses** (D9); message names both the cause and `git commit` |
 | T9 | verify, source tree dirty | still refuses; message names `--allow-dirty` |
-| T10 | `--allow-dirty` | unchanged, stamps `checkout_state_id` |
+| T10 | `--allow-dirty` | unchanged, stamps `checkout_state_id`; overrides **both** gate questions |
 | T11 | `capture(root)` == `capture_with(root, &[])` | I1 — identical frames on clean, dirty, unborn, non-repo |
 | T12 | body edit via the verb | clears `verification_state`/`reviewed`/`verified_sha` |
 | T12b | `--body` replacing content with itself | full no-op: `updated` **not** stamped, verification **not** cleared |
@@ -388,9 +549,20 @@ fixture: `GitScratch` (`:5617`); MCP e2e: `tests/e2e_mcp_server.rs:963-1110`.
 | T14 | `memory/` absent | exclusion root not contributed; no error |
 | T15 | existing memory + entity suites | green unchanged (R3) |
 | T16 | hostile body written via `--body`, then `show` | read-time nonce + `data, never instruction` framing intact (R2) |
+| T17 | verify, **staged-only** corpus change | excluded; succeeds (index probe leg) |
+| T18 | verify, **unstaged/binary** corpus change | excluded; succeeds (worktree diff leg) |
+| T19 | verify, **untracked** corpus file outside the memory | excluded; succeeds (untracked leg) |
+| T20 | edit `title` / `summary` / `scope.*`, each alone | clears the verification axis (D8) |
+| T21 | edit `status` / `lifespan` / `review_by` / `trust` / `severity`, each alone | does **not** clear (D8's other half) |
+| T22 | `body_mode` without `body`, CLI **and** MCP | rejected on both, same message (F-10) |
+| T23 | verify on the clean-after-exclusion path while `.git/index.lock` is held | completes — I2 canary; fails if `write-tree` creeps back in |
+| T24 | after a successful verify | `git cat-file -e "$verified_sha:<dir>/memory.md"` succeeds — I6, the attested body is *in* the stamped commit |
+| T25 | verify, memory scopes `.doctrine/adr/**`, an ADR under it modified | **refuses** — scoped corpus dirt is claim-relevant (F-6) |
 
-Closure: T1-T15 green; `doctrine check gate` clean; SPEC-007 REV applied so text
-and implementation agree.
+Closure: **every test in § 9 green** (stated as a set, not a numeric range, so a
+test added by a later review cannot fall outside the gate by omission — RV-307
+F-9); `doctrine check gate` clean; **REV-034 applied** so SPEC-007, REQ-147 and the
+implementation agree.
 
 ## 10. Review Notes
 
@@ -443,6 +615,64 @@ takes roots as data rather than reaching up to command tier for
 existence rather than assuming it. STD-001 is satisfied by reusing
 `DOCTRINE_PATHSPEC` instead of minting a literal.
 
-### External review
+### External review — RV-307 (codex/GPT, inquisitor posture)
 
-Not yet run.
+Twelve findings: five blockers, two majors, five minors. **All disposed
+`fix-now`; none deferred, none tolerated.** Full charges, evidence and responses
+are on the ledger (`doctrine review show RV-307`) — summarised here only where the
+design moved.
+
+**Blockers.**
+
+- **F-1 — false attestation (design changed; D9, I6, T8, T24).** The relaxation
+  excluded `.doctrine/**` wholesale, and memory items live *inside* it. So
+  `verify` would have stamped `verified_sha = HEAD` for a memory whose body HEAD
+  did not contain, and D5's own-directory drift count — which counts *commits* —
+  would have returned 0 forever, defeating the invalidation precisely in the case
+  the relaxation created. Proven in a scratch repo, not argued. Fixed by the claim
+  probe rather than by OQ-3's schema change. **Root cause: the exclusion set was
+  written from the perspective of "what is noise?" and never asked "where does the
+  thing being attested actually live?"**
+- **F-3 — mutation on argument-validation failure (design changed; § 5.4).**
+  Body-first ordering meant `--body - --trust bogus` rewrote `memory.md` and then
+  errored. Fixed free, because `apply_edit` mutates only in memory: validate
+  first, write second. The draft had confused "the TOML *write* must follow the
+  body" (true) with "the TOML *computation* must follow it" (false).
+- **F-4 / F-5 — governance debt (discharged).** The Revision was promised twice
+  and never minted; worse, the amendment inventory named two sites and missed
+  **REQ-147**, an active SPEC-007 member whose *title is the retired contract
+  verbatim*. REV-034 now carries REQ-147 as its primary row plus SPEC-007, and
+  `SL-230 needs REV-034` is authored.
+- **F-6 — blanket exclusion hid claim-relevant evidence (design changed; D9).**
+  81 items in this corpus scope into `.doctrine/**`. Doctrine's ownership of the
+  path constant makes the exclusion legal under POL-002; it does not make the
+  excluded evidence irrelevant. Declared scopes joined the claim surface.
+
+**Majors.** F-8 closed OQ-1 as **D8** (claim fields clear, record fields do not) —
+the deferral's stated reason was void, since D4 already changes the same
+behaviour. **F-12 was raised by the responder during disposition**, and had
+escaped both the internal and external passes: there is no `stamp_updated` helper
+to compose — `apply_edit` stamps `updated` itself, gated on a metadata-only flag,
+so a body-only edit would never have stamped it and T5 was unsatisfiable.
+
+**Minors.** F-2 purged the dead `is_excluded` / stale `source_clean` that A1's
+integration had left in the normative sections. F-7 struck a false capability
+claim (own-directory drift does *not* catch masters — they are unanchored and
+`collect_all` never scans them); the gap is now R5. F-9 replaced the closure
+range with a set. F-10 made the `body_mode`-without-`body` contract total on both
+surfaces. F-11 added the probe-partition tests (T17-T19) and the I2 lock canary
+(T23).
+
+**Acquitted on the evidence.** The git pathspec claims — the one place the design
+had marked ✓ without proof at the time of writing. The tribunal built scratch
+repositories under Git 2.54.0 and put all three probes to the question:
+exclusion-only pathspec sets behave exactly as § 5.2 asserts. Recorded because a
+review that only ever confirms suspicion is not measuring anything.
+
+**Pattern across the twelve.** Four of the findings (F-2, F-7, F-9, F-12) are
+*incomplete integration of already-settled corrections* — A1's decision landed in
+D3 but not in § 5.1/§ 5.3; A3's T16 reached the table but not the gate; A2
+composed a flag over a step that does not exist. The lesson is recorded in the
+closure criterion (a set, not a range) and is worth carrying beyond this slice:
+**integrating a finding means sweeping every section it touches, not the one where
+the decision is recorded.**

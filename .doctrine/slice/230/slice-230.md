@@ -79,28 +79,46 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
   forbids the magic strings. These are owned platform paths — the engine already
   defines them — so the exclusion is grounded on an owned contract, which is
   precisely what makes it legal.
+- **The exclusion is claim-aware, not blanket** (revised by RV-307 F-1/F-6). The
+  memory's own item directory and its declared scopes are *never* excluded — they
+  are the evidence the attestation is about. Blanket exclusion would have stamped
+  a commit that did not contain the attested body, and would have ignored a
+  modified file a memory explicitly scopes. So `verify` asks two questions: is the
+  code dirty, and is the claim committed?
+- **Consequence, stated plainly:** `record` → `verify` now **refuses** until the
+  new memory is committed. The friction this slice removes is *unrelated* corpus
+  dirt — another agent's uncommitted backlog file, your own unrelated spec edit —
+  not the requirement that the claim you are attesting exist in a commit.
 - A dirty **source** tree still refuses, and `--allow-dirty` remains the escape
   hatch for that case with its `checkout_state_id` stamping unchanged.
 - The `thread_expiry` gate (SL-008 D6) is not touched.
 
-### 4. SPEC-007 reconciliation
+### 4. SPEC-007 reconciliation — REV-034
 
-SPEC-007 states in both `spec-007.toml:22` and `spec-007.md:132` that verify
-attests "against a clean working tree, refusing a dirty one". The implementation
-already diverged when `--allow-dirty` shipped; this slice widens the gap
-further. The spec text is corrected through a Revision — this debt is owed
-regardless of the rest of this slice, and is folded in rather than left to rot.
+The retired "clean working tree, refusing a dirty one" contract lives at **three**
+sites, not two: `spec-007.toml:22`, `spec-007.md:132-133`, and **REQ-147**, an
+active member of SPEC-007 whose *title is that contract verbatim* (found by
+RV-307 F-5; a two-site amendment would have left the requirement asserting the
+opposite of the code). The implementation already diverged when `--allow-dirty`
+shipped; this slice changes it further. Corrected through **REV-034**
+(`SL-230 needs REV-034`), applied at close so spec and code turn over together.
 
 ### 5. Attestation invalidation
 
 Added during design — see "Discovered during design" below.
 
-A body write through `edit` clears the verification axis
-(`verification_state`/`reviewed`/`verified_sha`), iff the body genuinely changed.
+Editing a **claim field** through `edit` clears the verification axis
+(`verification_state`/`reviewed`/`verified_sha`), iff the content genuinely
+changed. Claim fields are `body`, `title`, `summary` and `scope.*` — what the
+memory asserts and what it asserts against (design D8, widened from body-only by
+RV-307 F-8). Record fields — `status`, `lifespan`, `review_by`, `trust`,
+`severity` — do not clear; they are judgements *about* the record.
+
 `validate`'s staleness check additionally counts commits touching the memory's
-**own item directory** since `verified_sha`, catching the hand-edit bypass,
-masters, and other agents. Advisory surface only; retrieve-side ranking is
-deliberately untouched (design OQ-2).
+**own item directory** since `verified_sha`, catching the hand-edit bypass and
+other agents. It does **not** catch masters: they are unanchored and `collect_all`
+never scans them (RV-307 F-7; design R5). Advisory surface only; retrieve-side
+ranking is deliberately untouched (design OQ-2).
 
 ### 6. Verify refusal names its escape hatch
 
