@@ -31,6 +31,7 @@ mod facet;
 mod facet_write;
 mod finding;
 mod fsutil;
+mod funnel_machine;
 mod git;
 mod globmatch;
 mod governance;

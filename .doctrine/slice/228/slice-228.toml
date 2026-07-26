@@ -39,10 +39,6 @@ selector = "src/mcp_server/worker_commit.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/worktree/shared.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/commands/**"
 intent = "design-target"
 
@@ -55,27 +51,106 @@ selector = "src/doctor_checks.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "flake.nix"
-intent = "design-target"
-
-[[selector]]
-selector = ".agents/skills/dispatch/**"
-intent = "design-target"
-
-[[selector]]
-selector = ".agents/skills/dispatch-agent/**"
-intent = "design-target"
-
-[[selector]]
-selector = ".agents/skills/dispatch-subprocess/**"
-intent = "design-target"
-
-[[selector]]
 selector = "install/dispatch-mechanics.md"
 intent = "design-target"
 
 [[selector]]
-selector = ".doctrine/spec/tech/021/**"
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+note = "PHASE-01: MCP tree-state registration wiring (tools.rs) + its registry-count e2e twin — forced by EX-1's MCP requirement; design §10 file-map non-exhaustive here"
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+note = "PHASE-01: MCP tree-state registration wiring (tools.rs) + its registry-count e2e twin — forced by EX-1's MCP requirement; design §10 file-map non-exhaustive here"
+
+[[selector]]
+selector = "install/git-hooks/**"
+intent = "design-target"
+note = "PHASE-02: shipped pre-commit hook script, embedded via the existing install/ RustEmbed root (R2 dissolved — rides srcWithDist without a new graft)"
+
+[[selector]]
+selector = "src/finding.rs"
+intent = "design-target"
+note = "PHASE-02 forced consequences: finding.rs=doctor CoordHook category; publication/manifest.toml=SL-227 reachability entry for the install/ hook asset; plugins/doctrine/skills/dispatch=prose-sweep source (design .agents/skills selectors mis-target the untracked installed projection — real source is plugins/doctrine/skills/)"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "design-target"
+note = "PHASE-02 forced consequences: finding.rs=doctor CoordHook category; publication/manifest.toml=SL-227 reachability entry for the install/ hook asset; plugins/doctrine/skills/dispatch=prose-sweep source (design .agents/skills selectors mis-target the untracked installed projection — real source is plugins/doctrine/skills/)"
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch/**"
+intent = "design-target"
+note = "PHASE-02 forced consequences: finding.rs=doctor CoordHook category; publication/manifest.toml=SL-227 reachability entry for the install/ hook asset; plugins/doctrine/skills/dispatch=prose-sweep source (design .agents/skills selectors mis-target the untracked installed projection — real source is plugins/doctrine/skills/)"
+
+[[selector]]
+selector = "src/verify.rs"
+intent = "design-target"
+note = "PHASE-03: verify.rs=run_suite extraction target (design §10); main.rs=mod funnel_machine declaration; layering.toml=ADR-001 funnel_machine=leaf row (§10 line 601). All three orchestrator-authored at the phase base — .doctrine/ is a hard worker wall (import.rs classify_import)."
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+note = "PHASE-03: verify.rs=run_suite extraction target (design §10); main.rs=mod funnel_machine declaration; layering.toml=ADR-001 funnel_machine=leaf row (§10 line 601). All three orchestrator-authored at the phase base — .doctrine/ is a hard worker wall (import.rs classify_import)."
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+note = "PHASE-03: verify.rs=run_suite extraction target (design §10); main.rs=mod funnel_machine declaration; layering.toml=ADR-001 funnel_machine=leaf row (§10 line 601). All three orchestrator-authored at the phase base — .doctrine/ is a hard worker wall (import.rs classify_import)."
+
+[[selector]]
+selector = "src/worktree/create.rs"
+intent = "design-target"
+note = "PHASE-04 pre-declaration: design §10 names create.rs+fork.rs (branch-as-claim), gc.rs (lock-gated sweep), dispatch_record.rs (slice+phase binding + AtBase|Advanced). mod.rs = mod decl + WorktreeCommand::Fork --phase. claim_lock.rs = the per-name flock primitive (module name pinned at phase-plan so the selector is exact). Cargo.toml/lock = the rustix fs-feature dep (already transitive via crossterm; zero new compiled crates). src/worktree/** was scope-relevant only."
+
+[[selector]]
+selector = "src/worktree/fork.rs"
+intent = "design-target"
+note = "PHASE-04 pre-declaration: design §10 names create.rs+fork.rs (branch-as-claim), gc.rs (lock-gated sweep), dispatch_record.rs (slice+phase binding + AtBase|Advanced). mod.rs = mod decl + WorktreeCommand::Fork --phase. claim_lock.rs = the per-name flock primitive (module name pinned at phase-plan so the selector is exact). Cargo.toml/lock = the rustix fs-feature dep (already transitive via crossterm; zero new compiled crates). src/worktree/** was scope-relevant only."
+
+[[selector]]
+selector = "src/worktree/gc.rs"
+intent = "design-target"
+note = "PHASE-04 pre-declaration: design §10 names create.rs+fork.rs (branch-as-claim), gc.rs (lock-gated sweep), dispatch_record.rs (slice+phase binding + AtBase|Advanced). mod.rs = mod decl + WorktreeCommand::Fork --phase. claim_lock.rs = the per-name flock primitive (module name pinned at phase-plan so the selector is exact). Cargo.toml/lock = the rustix fs-feature dep (already transitive via crossterm; zero new compiled crates). src/worktree/** was scope-relevant only."
+
+[[selector]]
+selector = "src/worktree/dispatch_record.rs"
+intent = "design-target"
+note = "PHASE-04 pre-declaration: design §10 names create.rs+fork.rs (branch-as-claim), gc.rs (lock-gated sweep), dispatch_record.rs (slice+phase binding + AtBase|Advanced). mod.rs = mod decl + WorktreeCommand::Fork --phase. claim_lock.rs = the per-name flock primitive (module name pinned at phase-plan so the selector is exact). Cargo.toml/lock = the rustix fs-feature dep (already transitive via crossterm; zero new compiled crates). src/worktree/** was scope-relevant only."
+
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+note = "PHASE-04 pre-declaration: design §10 names create.rs+fork.rs (branch-as-claim), gc.rs (lock-gated sweep), dispatch_record.rs (slice+phase binding + AtBase|Advanced). mod.rs = mod decl + WorktreeCommand::Fork --phase. claim_lock.rs = the per-name flock primitive (module name pinned at phase-plan so the selector is exact). Cargo.toml/lock = the rustix fs-feature dep (already transitive via crossterm; zero new compiled crates). src/worktree/** was scope-relevant only."
+
+[[selector]]
+selector = "src/worktree/claim_lock.rs"
+intent = "design-target"
+note = "PHASE-04 pre-declaration: design §10 names create.rs+fork.rs (branch-as-claim), gc.rs (lock-gated sweep), dispatch_record.rs (slice+phase binding + AtBase|Advanced). mod.rs = mod decl + WorktreeCommand::Fork --phase. claim_lock.rs = the per-name flock primitive (module name pinned at phase-plan so the selector is exact). Cargo.toml/lock = the rustix fs-feature dep (already transitive via crossterm; zero new compiled crates). src/worktree/** was scope-relevant only."
+
+[[selector]]
+selector = "Cargo.toml"
+intent = "design-target"
+note = "PHASE-04 pre-declaration: design §10 names create.rs+fork.rs (branch-as-claim), gc.rs (lock-gated sweep), dispatch_record.rs (slice+phase binding + AtBase|Advanced). mod.rs = mod decl + WorktreeCommand::Fork --phase. claim_lock.rs = the per-name flock primitive (module name pinned at phase-plan so the selector is exact). Cargo.toml/lock = the rustix fs-feature dep (already transitive via crossterm; zero new compiled crates). src/worktree/** was scope-relevant only."
+
+[[selector]]
+selector = "Cargo.lock"
+intent = "design-target"
+note = "PHASE-04 pre-declaration: design §10 names create.rs+fork.rs (branch-as-claim), gc.rs (lock-gated sweep), dispatch_record.rs (slice+phase binding + AtBase|Advanced). mod.rs = mod decl + WorktreeCommand::Fork --phase. claim_lock.rs = the per-name flock primitive (module name pinned at phase-plan so the selector is exact). Cargo.toml/lock = the rustix fs-feature dep (already transitive via crossterm; zero new compiled crates). src/worktree/** was scope-relevant only."
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-agent/**"
+intent = "design-target"
+note = "PHASE-06 pre-declaration: the prose-retirement surface. Design §10's `.agents/skills/**` selectors target the UNTRACKED installed projection; the real tracked source is plugins/doctrine/skills/. dispatch/** was declared at PHASE-02; dispatch-agent/** and dispatch-subprocess/** are declared here so the next-loop rewrite (EX-3) sweeps clean."
+
+[[selector]]
+selector = "plugins/doctrine/skills/dispatch-subprocess/**"
+intent = "design-target"
+note = "PHASE-06 pre-declaration: the prose-retirement surface. Design §10's `.agents/skills/**` selectors target the UNTRACKED installed projection; the real tracked source is plugins/doctrine/skills/. dispatch/** was declared at PHASE-02; dispatch-agent/** and dispatch-subprocess/** are declared here so the next-loop rewrite (EX-3) sweeps clean."
+
+[[selector]]
+selector = "src/worktree/inventory.rs"
 intent = "design-target"
 
 [[relation]]

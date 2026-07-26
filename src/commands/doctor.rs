@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! `doctrine doctor` — corpus health scan.
 //!
-//! Runs all ten checks (id integrity, relation integrity, spec FK, memory health,
+//! Runs all eleven checks (id integrity, relation integrity, spec FK, memory health,
 //! lifecycle, raw label, TOML parse, prose citation, agent conformance, spawn seam
-//! symmetry) over the corpus, renders them
+//! symmetry, coord hook) over the corpus, renders them
 //! grouped by category with severity, and exits non-zero on any error-severity
 //! finding. The `--json` flag emits a flat JSON array of finding objects.
 
@@ -71,6 +71,10 @@ pub(crate) fn run_doctor(
     // nomination/gate deny-set must be ONE list covering EVERY harness spawn seam
     // (`Agent`, `Workflow`); a drift here is an open escalation hole, not a lint nit.
     findings.extend(crate::doctor_checks::spawn_seam_symmetry_findings(&root));
+
+    // #11 — Coord Hook (Warning) — SL-228 PHASE-02: every live coordination worktree
+    // must carry the safe-commit pre-commit backstop (design §7), else ISS-234 reopens.
+    findings.extend(crate::doctor_checks::coord_hook_findings(&root));
 
     if json {
         // Reuse the shared list envelope `{kind, rows}` (design §5.4 / F7) so the

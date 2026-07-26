@@ -339,7 +339,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "worker_commit".to_owned(),
-            description: "Gated server-side self-commit for a jailed dispatch worker (SL-198). The worker passes ONLY its opaque `agent` id (its worktree name) — never a path — and the unconfined server resolves the target, runs the belts (non-empty pre-fmt delta → two-tier scope → HEAD==B → the `check commit` gate), and lands exactly ONE non-merge commit on the worker's own `dispatch/<agent>` branch. Belts are the security boundary; a `.doctrine/`/`.claude/` or `[dispatch].worker-forbidden-writes` write hard-refuses.\n\nReturns: {\"Committed\": { oid: string, base: string, undeclared: [string] }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-agent | ambiguous-agent | stale-record | empty-delta | forbidden-zone | not-at-base | commit-gate-red.".to_owned(),
+            description: "Gated server-side self-commit for a jailed dispatch worker (SL-198). The worker passes ONLY its opaque `agent` id (its worktree name) — never a path — and the unconfined server resolves the target, runs the belts (non-empty pre-fmt delta → two-tier scope → HEAD==B → the `check commit` gate), and lands exactly ONE non-merge commit on the worker's own `dispatch/<agent>` branch. Belts are the security boundary; a `.doctrine/`/`.claude/` or `[dispatch].worker-forbidden-writes` write hard-refuses.\n\nReturns: {\"Committed\": { oid: string, base: string, undeclared: [string] }} or {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-agent | ambiguous-agent | stale-record | unprovable-fork | empty-delta | forbidden-zone | not-at-base | late-recommit | commit-gate-red | the machine's `already-<position>` family (SL-228 PHASE-04).".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -384,7 +384,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_REAP.to_owned(),
-            description: "Dispatch funnel WRITE SURFACE (SL-199): reap a spent worker fork via the CLI gc's landed-oracle, UNCHANGED. Resolves the coord tree SERVER-SIDE by `slice`, then runs `run_gc`: the patch-id oracle (`git cherry`) REFUSES deleting a fork whose patch is not yet in coord history; a landed fork's worktree + branch are removed.\n\nReturns: {\"Reaped\": { fork: string }} or {\"Refused\": { reason: string, detail: string }} (coord refusal); an unlanded fork is a hard gc error (not-landed).".to_owned(),
+            description: "Dispatch funnel WRITE SURFACE (SL-199/SL-228): reap a spent worker fork's worktree + branch and record the `reap` milestone. Resolves the coord tree SERVER-SIDE by `slice`.\n\nThe LANDING PROOF for a funnel-managed fork is the COMMITTED funnel record, not git archaeology: a conjunction of three checks — (1) EXACTLY one funnel row's `spawn.fork` names the branch, (2) that row stands at `concluded` or `reaped`, (3) the LIVE branch oid still equals that row's `import.fork_tip`. All three ⇒ the reap is authorised with no `--force`. This is needed because the import lands the worker delta ⊕ the funnel row in ONE commit, so the landing commit's patch is a strict superset of the fork's and `git cherry` matches no patch-id — it reports every funnel-managed fork unlanded. Any check failing injects NO fact and the patch-id oracle (`git cherry`) decides, unchanged; that oracle is the ONLY authority for a fork with no funnel row (solo / pre-funnel / legacy). A branch advanced past `import.fork_tip` carries work nothing certified and is never deleted.\n\nEvery actionable verdict is a structured refusal, never a JSON-RPC error: `Err` is reserved for internal faults (an unreadable record, a git plumbing failure).\n\nReturns: {\"Reaped\": { fork: string }} | {\"ReapedRowPending\": { fork: string, detail: string }} (the fork IS gone but the Class-2 reap row did not land — re-drive to complete it) | {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | not-landed | gc-incomplete | claim-busy | ambiguous-fork-row | the machine's refusal family (not-spawned | not-imported | worker-not-committed | already-<position> | terminal). `detail` carries the operator remedy.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -392,6 +392,18 @@ fn tools() -> Vec<McpTool> {
                     "name": { "type": "string", "description": "The worker fork branch to reap (e.g. `dispatch/<agent>`)." }
                 },
                 "required": ["slice", "name"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_VERIFY.to_owned(),
+            description: "Dispatch funnel WRITE SURFACE (SL-228): run a phase's verify suite in the coordination worktree and land the verdict as funnel evidence, in ONE compare-and-swap commit. Resolves the coord SERVER-SIDE by `slice`. Gates FIRST (an illegal verify refuses before anything runs), then CONDITIONALLY fast-forwards the coord checkout over paths it has PROVEN byte-identical to the stale baseline — an operator edit, an unignored untracked file, or an unprovable baseline refuses `verify-tree-dirty` and touches NOTHING (never a reset, never a stash, never a discard). Runs the `[dispatch] verify-suite` cadence (default `gate`), then RE-PROVES the tree: a green-but-mutating suite is recorded as a FAIL, because pass evidence may never describe bytes `verified_oid` does not. A suite that could not run at all is a refusal, not red evidence.\n\nReturns: {\"Verified\": { coord_tip: string, suite: string }} | {\"VerifyFailed\": { suite: string, detail: string }} (fail evidence IS landed) | {\"Refused\": { reason: string, detail: string }} — reason ∈ unknown-slice | ambiguous | stale | verify-tree-dirty | verify-suite-unresolved | lost-ref-race | the machine's refusal family (not-spawned | not-imported | already-<position> | terminal).".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree. Resolved server-side." },
+                    "phase": { "type": "string", "description": "The PHASE-NN id whose funnel row the evidence belongs to." }
+                },
+                "required": ["slice", "phase"]
             }),
         },
         McpTool {
@@ -420,6 +432,28 @@ fn tools() -> Vec<McpTool> {
         McpTool {
             name: super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE.to_owned(),
             description: "Dispatch funnel READ SURFACE (SL-206): report whether the coordination worktree's `.doctrine/**` authored tree has diverged from the trunk over `trunk_ref..dispatch_tip`. Resolves the coord SERVER-SIDE by `slice`; read-only (a name-only diff, no mutation). The trunk `compared_ref` is resolved from the REAL trunk authority (`git::trunk_commit` — the peeled ladder DOCTRINE_TRUNK_REF / origin/HEAD / main / master), never a hardcoded branch. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { diverged: bool, compared_ref: string, drifted_paths?: [string] }} or {\"CoordRefused\": { reason: string }} — `drifted_paths` present only when non-empty; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree. Resolved server-side." }
+                },
+                "required": ["slice"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_TREE_STATE.to_owned(),
+            description: "Dispatch funnel READ SURFACE (SL-228): report the coordination worktree's UNTRACKED-AWARE tree state — staged (index-vs-tip / reverse-diff) anomalies, tracked worktree modifications, and unignored untracked paths. Resolves the coord SERVER-SIDE by `slice`; read-only (a `git status` read, no mutation). Replaces a raw post-write `git status` in the funnel. A coord refusal surfaces as `CoordRefused`.\n\nReturns: {\"Resolved\": { slice: int, clean: bool, staged?: [string], tracked_dirty?: [string], untracked?: [string] }} or {\"CoordRefused\": { reason: string }} — each path array present only when non-empty (a clean tree is just {slice, clean: true}); reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "slice": { "type": "integer", "description": "The slice id keying the coordination worktree. Resolved server-side." }
+                },
+                "required": ["slice"]
+            }),
+        },
+        McpTool {
+            name: super::dispatch::TOOL_DISPATCH_NEXT.to_owned(),
+            description: "Dispatch funnel READ SURFACE (SL-228): the single-prescription funnel ORACLE — read the committed funnel record and return the ONE thing to do next for this slice's phases. Resolves the coord SERVER-SIDE by `slice`; STRICTLY read-only (it never heals, lands no transition, touches neither index nor worktree). `kind` is a projection of the state machine's own `expected_next` — the same function the refusals use — ranked by the actionability ladder: red verify evidence anywhere triages GLOBALLY (the suite is coord-tree-wide) and outranks every runnable phase; else the lowest-id runnable verb (an awaiting phase never starves a runnable one); else await-worker naming every awaited phase; else the readiness authority names a phase to spawn; else all-reaped. The other in-flight phases are surfaced in `detail` at every rung. `command` is the runnable literal in the surface that OWNS the verb (import/conclude/reap are MCP tool calls; verify is a CLI line) — absent for spawn (arm-specific, so the oracle stays arm-agnostic), await-worker, triage-verify-failure and all-reaped. DISTINCT from `dispatch_next_ready`, which answers which phase may START; this answers what to DO now. The terminal beat hands off to `dispatch status` (the slice-lifecycle altitude).\n\nReturns: {\"Resolved\": { kind: string, phase?: string, command?: string, detail: string }} or {\"CoordRefused\": { reason: string }} — kind ∈ spawn | await-worker | import | verify | triage-verify-failure | reverify-stale | conclude | reap | all-reaped; reason ∈ unknown-slice | ambiguous | stale.".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1059,6 +1093,16 @@ fn call_tool(
             let out = super::dispatch::dispatch_reap(root, slice, &branch)?;
             Ok(serde_json::to_string(&out)?)
         }
+        super::dispatch::TOOL_DISPATCH_VERIFY => {
+            let slice = require_slice(arguments.get("slice"))?;
+            let fields = ExtractFields::from_value(arguments, &["phase"]);
+            let phase = fields.str_field("phase");
+            if phase.is_empty() {
+                anyhow::bail!("invalid arguments: phase is required");
+            }
+            let out = super::dispatch::dispatch_verify(root, slice, &phase)?;
+            Ok(serde_json::to_string(&out)?)
+        }
         super::dispatch::TOOL_DISPATCH_PHASE_RECEIPT => {
             let slice = require_slice(arguments.get("slice"))?;
             let fields = ExtractFields::from_value(arguments, &["phase"]);
@@ -1077,6 +1121,16 @@ fn call_tool(
         super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE => {
             let slice = require_slice(arguments.get("slice"))?;
             let out = super::dispatch::dispatch_authored_divergence(root, slice)?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        super::dispatch::TOOL_DISPATCH_TREE_STATE => {
+            let slice = require_slice(arguments.get("slice"))?;
+            let out = super::dispatch::dispatch_tree_state(root, slice)?;
+            Ok(serde_json::to_string(&out)?)
+        }
+        super::dispatch::TOOL_DISPATCH_NEXT => {
+            let slice = require_slice(arguments.get("slice"))?;
+            let out = super::dispatch::dispatch_next(root, slice)?;
             Ok(serde_json::to_string(&out)?)
         }
         _ => anyhow::bail!("Tool not found: {name}"),
@@ -1483,9 +1537,9 @@ mod tests {
     // VT-3: tool list response contains exactly 10 tools with correct names
 
     #[test]
-    fn tool_list_has_25_tools() {
+    fn tool_list_has_28_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 25);
+        assert_eq!(list.tools.len(), 28);
         // The SL-199 funnel write surface is registered (named via the STD-001 consts).
         let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_IMPORT));
@@ -1495,6 +1549,13 @@ mod tests {
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_PHASE_RECEIPT));
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_NEXT_READY));
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_AUTHORED_DIVERGENCE));
+        // The SL-228 Move-E tree-state read tool (PHASE-01) and the PHASE-05
+        // evidence-producing write verb.
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_TREE_STATE));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_VERIFY));
+        // The SL-228 PHASE-06 funnel ORACLE — distinct from `dispatch_next_ready`.
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_NEXT));
+        assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_NEXT_READY));
     }
 
     #[test]
@@ -1867,7 +1928,7 @@ mod tests {
         let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 25);
+        assert_eq!(tools.len(), 28);
     }
 
     #[test]

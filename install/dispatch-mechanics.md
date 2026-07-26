@@ -17,6 +17,43 @@ The orchestrator is the sole writer. Workers execute one phase inside an
 isolated worktree and hand back a single source-delta; the orchestrator imports
 that delta, verifies, and commits. Everything below protects that contract.
 
+## The funnel is driven by an oracle, not by a remembered checklist
+
+Each phase's position in the funnel (spawned → worker-committed → imported →
+verified → concluded → reaped) is **durable committed state**, not something the
+orchestrator holds in its head or reconstructs from `git log`. So the funnel is
+not a sequence to memorise and it is not something to work out by hand: ask it.
+
+`dispatch next` reads the committed funnel record and returns **exactly one**
+prescription — a kind, the phase it applies to, and the runnable literal in the
+surface that owns that verb (some verbs exist only as MCP tools, some only as CLI
+lines; they are not interchangeable). Do that one thing, ask again, repeat. It is
+strictly read-only, it never heals anything, and it always exits 0 — a
+"triage this red evidence" answer is information, not a command failure.
+
+Two properties matter when several file-disjoint phases are in flight at once:
+
+- **Red evidence is global.** The verify suite covers the whole coordination
+  tree, so red evidence anywhere is a halt for the whole batch. Triage outranks
+  every mechanically-runnable phase, whatever the phase ids are.
+- **Waiting never starves work.** A phase whose worker has not returned yet can
+  never suppress a phase that has something runnable pending. The other in-flight
+  phases are named alongside every prescription, so a single-prescription oracle
+  never hides the batch.
+
+**Two altitudes, and they do not overlap.** `dispatch next` answers the
+*sub-funnel* question — where ONE phase stands between spawn and reap. `dispatch
+status` answers the *slice-lifecycle* question — phases remaining, bundle
+staleness against trunk, candidate admission, close-readiness. When `next` reports
+that everything is reaped, it hands off to `status` by name; that is the boundary
+between the two, and neither subsumes the other.
+
+**A refusal is the recovery procedure.** Every funnel verb refuses in one shape —
+the attempted transition, the position it was attempted at, why, and what was
+expected instead. That text is not a diagnostic to be interpreted into a repair
+plan; it *is* the plan. Read it, act on it, and never improvise around it: a
+refusal is a defect or a halt, never a detour.
+
 ## The fork base is explicit, never the session HEAD
 
 A worker's fork **must** be created from the explicit coordination base `B` —
@@ -29,12 +66,13 @@ implicit HEAD lands on a divergent base: `S.parent != B`, and the net diff
 `B..S` then smuggles the session↔coordination divergence into the import —
 unrelated commits ride into the wrong slice's delta.
 
-Two belts enforce it:
-- **Worker baseline guard.** Immediately after `git worktree add <dir> <branch>
-  <B>`, assert `git -C <dir> rev-parse HEAD == B` and abort otherwise.
-- **Orchestrator import guard (trusted side).** Assert `git rev-parse S^ == B`
-  before applying the delta — catches a misbased fork even if the worker skipped
-  its own guard.
+Two belts enforce it, and both are implemented by verbs rather than run by hand:
+- **Worker baseline guard.** The fork's HEAD must be `B` (or a descendant of it,
+  once the worker has self-committed) — checked at creation and again by
+  `worktree verify-worker`.
+- **Import guard (trusted side).** The delta's parent must be `B`, checked on the
+  orchestrator's side before anything is applied — so a misbased fork is caught
+  even if the worker's own guard never ran.
 
 Harness trap: some spawn backends build the fork from the session HEAD and give
 no reliable base control (the claude `Agent` tool at `isolation: worktree` is
@@ -84,6 +122,32 @@ section) — the delta is diff-applied, and the orchestrator commits separately.
 Ask `doctrine worktree --help` / `doctrine mcp` for exact flags and the tool's
 refusal tokens.
 
+## The orchestrator's authored writes go through `dispatch commit`
+
+The worker's delta lands through the import/`worker_commit` path above. The
+*orchestrator's* own authored coord-tree writes — slice status, memory, audit
+notes, the boundaries/funnel ledgers — are committed with **`doctrine dispatch
+commit --slice N -m <msg> -- <path>…`**, never a raw `git commit`. The verb:
+
+- makes the **pathspec structurally mandatory** (at least one path after `--`;
+  a pathless commit is unrepresentable, so another agent's already-staged file
+  never rides along — the AGENTS.md path-limit rule, enforced);
+- **refuses before touching the index** if the to-be-committed set escapes the
+  declared paths (`commit-undeclared-path`) or deletes a path that was not
+  *explicitly* named (`commit-undeclared-deletion`) — the ISS-234 mass-delete shape;
+- hands the child `git commit` exactly the *validated* deletion set via a
+  child-scoped `DOCTRINE_ALLOWED_DELETIONS`, so a **declared** deletion passes the
+  coord pre-commit hook's deletion arm while its **reversion arm still runs**.
+
+A **coord-worktree pre-commit hook** (installed by `dispatch setup`,
+worktree-scoped `core.hooksPath`) is the backstop under *any* `git commit` in a
+coordination worktree: it refuses the funnel-reversion signature — a staged
+deletion, or a modification that reverts a funnel-advanced file back to its
+pre-advance blob (`doctrine dispatch hook-check`) — then chains to the operator's
+effective global/local hook. A deliberate act bypasses **both** arms with
+`DOCTRINE_ALLOW_DELETE=1`; the verb never sets it. `doctor` re-checks that every
+live coord worktree carries the hook.
+
 ## Mode B — the confined-orchestrator arm drives the funnel through MCP
 
 Everything above assumes the **main thread** orchestrates: an unconfined driver
@@ -102,13 +166,13 @@ its jail record provisioned. That provisioning is what makes the worker's
 `worker_commit` resolvable server-side — without the armed base there is no
 branch for the gated self-commit to land on.
 
-**The funnel folds the by-hand steps.** Where the main-thread arm imports, then
-commits, then flips the phase, then records the boundary as separate manual acts,
-Mode B's MCP tools fold each pair into one server-side act:
+**The tools fold the beats.** Where the main-thread arm applies a delta, commits
+it, flips the phase, and records the boundary as separate acts, Mode B's MCP tools
+fold each pair into one server-side act:
 
 - `dispatch_import` **applies AND commits** the delta server-side — the import
   folds the commit (no separate orchestrator commit step).
-- `dispatch_conclude_phase` is a **two-tier, self-healing conclude**. The
+- `dispatch_conclude_phase` is a **two-tier, retry-safe conclude**. The
   `completed` flip is a **disposable runtime write** to the gitignored phase sheet
   (`.doctrine/state/…`) — it never enters committed history, so it can never be a
   "completed-without-boundary" hazard. The real completion signal is the
@@ -120,9 +184,11 @@ Mode B's MCP tools fold each pair into one server-side act:
 - an **undeclared-scope delta is hard-refused before anything lands** — the scope
   belt is server-side, not an orchestrator judgement call.
 
-**reads-raw / writes-MCP split.** The confined orchestrator reads git directly
-(`status`, `diff`, `log`, `rev-parse` — to know the coord tip and inspect a
-worker's commit) but every *write* goes through an MCP tool. It never mutates
+**reads-verb / writes-MCP split.** Funnel state comes from the funnel's own read
+verbs (`next` for the prescription, plus the tree-state / delta / history reads),
+never from a hand-assembled `rev-parse`+`diff` reconstruction. Raw git reads
+remain fine for what the verbs do not cover — inspecting a worker's commit, for
+instance — but every *write* goes through an MCP tool. Mode B never mutates
 `.git` by hand.
 
 **The boundary — report-and-halt, never auto-merge.** Trunk-facing ops
@@ -163,6 +229,56 @@ commit leaves no landed patch ⇒ `+` ⇒ refuse), robust to a sibling moving HE
 apply severing ancestry (patch-id ≠ ancestry). Ranging over *all* commits (not a
 single tip) lets one oracle serve both the single-commit dispatch fork and the
 multi-commit solo fork.
+
+### …and where the patch-id oracle does *not* reach: a funnel-managed fork
+
+The patch-id oracle is **not replaced**. It is **narrowed** to the case it can
+still decide: a fork with **no funnel row** (solo / pre-funnel / legacy).
+
+Once import became **atomic** — the worker delta ⊕ the funnel row landing in
+*one* commit — the landing commit's patch became a strict **superset** of the
+fork's, so no patch-id matches and `git cherry` reports **every** funnel-managed
+fork unlanded. That is the delta-emptiness failure mode all over again: reap
+becomes unreachable on its own prescribed path and the operator learns a
+`--force` reflex, which is exactly the collapse the gate exists to prevent.
+
+**For a funnel-managed fork the landing proof is the funnel record** — a
+conjunction of three checks, evaluated in order, any one failing falling back to
+`git cherry` unchanged (fail-closed):
+
+1. **exactly one** funnel row's `spawn.fork` names the branch (two rows ⇒ refuse
+   `ambiguous-fork-row`: no single import speaks for it, and binding the first
+   would be a guess);
+2. that row stands at **`concluded`** or beyond (`reaped` is the replay case);
+3. the **live branch oid** still equals that row's **`import.fork_tip`** — the
+   commit the funnel actually imported. A branch advanced past it carries work
+   nothing certified, so it is never deleted.
+
+**Why this is not the "import receipt" wearing a hat.** The receipt bullet above
+is still correct, and it is the paragraph to check this design against. It fails
+on two grounds, and the funnel record inverts *both*:
+
+- *Disposable state.* The receipt lives in gitignored runtime state, which
+  `rm -rf` (or a fresh clone) removes and nothing reviews. The funnel record is
+  **durable committed state** on the coordination ref, and that ref is
+  append-only under compare-and-swap — every advance is constructed with the
+  expected old tip as its parent, so a recorded row cannot be quietly rewritten.
+- *Born before the commit.* The receipt certifies the **apply**, not the
+  **commit**, so it survives a crash-before-commit reading "landed" when nothing
+  landed. The `Import` row lands in the **same commit** as the delta. There is no
+  window between them: a crash mid-import lands **nothing**, so `imported` ⇒ the
+  delta is committed. Positions only advance, so `concluded` ⇒ the delta is
+  committed. Check 3 then pins the certificate to the exact commit that was
+  imported, so it can never stretch over work pushed to the branch afterwards.
+
+A flag in disposable state must never gate an irreversible `branch -D`. A
+committed row that cannot exist unless the commit exists is a different animal.
+
+**One consequence, deliberately accepted.** `doctrine worktree gc` alone takes no
+slice and derives none, so it cannot read the record and keeps the patch-id
+oracle as its only authority. On a funnel-managed fork it can therefore *disagree*
+with `dispatch_reap` and refuse `not-landed`. That refusal's message signposts
+`dispatch_reap` as the right route; do not answer it with `--force`.
 
 ### The squash blind spot
 
