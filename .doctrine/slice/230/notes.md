@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · started, **6 of 6 landed**; coord `dispatch/230` at
-8538a2658, `prepare-review` run, 8 refs projected · c691558a
+fresh-as-of: 2026-07-27 · **audit**, 6 of 6 landed; `dispatch/230` at 8538a2658,
+`review/230` at 66d478cc2, 8 refs projected, coord worktree removed · 6e82cd56e
 
 ### Produced
 
