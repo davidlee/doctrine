@@ -237,3 +237,101 @@ touch. Every non-aligned finding that touches design or governance appears here.
   a backlog item if the operator wants it, not a reconcile write.
 - **DEC-027 / OQ-4 / OQ-7 / R4** — carried forward unsettled by explicit
   instruction. Reconcile must not settle them.
+
+## Reconciliation Outcome
+
+`/reconcile` pass, 2026-07-27. Every brief item resolved; nothing outstanding
+blocks `/close`. Findings stay `verified` — remediation is recorded here, never by
+mutating a disposition.
+
+### Direct edits applied — `298d583f`
+
+- **`design.md` § 5.4** — D5's pathspec measurement restated (**F-1**). The stale
+  `30 of 30` / `11 of 30` figures are replaced by the audit measurement carrying
+  its denominator, date and tree: primary HEAD `46c4eac83`, 2026-07-27, **48
+  reachable-anchored** memories, shipped `memory.md` form flags **3**, item-directory
+  form flags **25**, **8.3×**. Added the durable sentence — *the property D5 relies
+  on is the discrimination ratio, not the absolute count*. The superseded figures
+  are retained as superseded, and VA-1's derivation from them is stated.
+  `plan.toml` **not** edited: VA-1 and every `EN-`/`EX-`/`VT-` id is
+  immutable-append.
+  - One thing the brief did not anticipate, resolved conservatively: the old text
+    derived `30 of 30` from a structural claim (`rev-list … -- <uid-dir>` ≥ 1 for
+    *every* verified-then-committed memory, forever). At **25 of 48** that
+    saturation no longer holds numerically, and audit did not establish why. Per
+    D9 this is not opened as a finding; the structural sentence was narrowed to
+    "every memory whose stamp has been committed", which stays true without
+    overclaiming, and the measurement is stated as measured.
+- **`design.md` § 5.4** — corpus reach cap stated (**F-2**). New stated residual in
+  the voice § 5.4 already uses: `commits_touching` returns `None` for a
+  non-ancestor `verified_sha`, both call sites let it fall out, **67 of 115**
+  anchored memories are silently exempt, reach **~42%**. Guard is correct and
+  stays; the defect is at the call sites. Owner **ISS-257**.
+- **`design.md` § 5.5** — **`E15`** appended (**F-4**), the next free id per
+  `notes.md` § Open. A missing or non-table `[review]`/`[git]` is silently skipped
+  by `clear_verification`, so a hand-corrupted `memory.toml` keeps a stale
+  attestation through a genuine claim change; the tolerance is **forced** by the
+  step order I10 depends on, not chosen. The § 5.5 immutability note now reads
+  "edge cases" plural.
+- **`notes.md` § Harvest** — extended, not redone: the I10/T40 and I13/T42
+  mutation results including T42's *red-alone* property, and the
+  compile-failure-is-not-a-check caveat. § Open: `E15` spent, next free **E16**.
+
+### REVs completed
+
+- **REV-041** (`reconcile-sl-230`) — **done**, approved, one `modify` row against
+  **SPEC-007**, surfaced-for-manual and landed by hand. Covers **F-6**. Rationale,
+  the evidence table, and all three before/after excerpts are in `revision-041.md`.
+
+  **The brief asked reconcile to pick among three routes; it picked a fourth, on
+  evidence the audit did not have.** Two facts found by reading the spec's *structured*
+  tier rather than its prose:
+
+  1. **`validate` is absent from SPEC-007 entirely** — `validate`, `health` and
+     `finding` occur **zero** times in the spec.
+  2. **The spec contradicts itself on precisely this scope question.** The Overview
+     (`:15`) binds staleness *to the `find`/`retrieve` reader*; `spec-007.toml`
+     `responsibilities[20]` carries "Compute git-anchored staleness" as its own item,
+     **separate from** `[19]`'s reader. Not a soft reading — both readings are
+     asserted, one per tier. That contradiction *is* the defect.
+
+  Route (b) whole was rejected as a verdict `validate` cannot discharge: the
+  guarantee's remedy vocabulary is five *states*, two of which (`unanchored`,
+  `reference`) exist only to be rendered, and `validate` emits findings, not states.
+  What is genuinely surface-independent is the *over-trust* half.
+
+  **Resolution — split the sentence along that seam:** the five-state **render
+  contract** binds the `find`/`retrieve` axis; the **prohibition on silent
+  over-trust binds any git-anchored staleness computation**, `memory validate`'s
+  health checks included. The Overview and `responsibilities[20]` were amended in
+  the same REV so the two tiers agree. Operator-approved.
+
+  **Consequence:** `memory validate`'s staleness checks are **non-conformant** with
+  SPEC-007 as amended, and **ISS-257 is a conformance fix, not an improvement** —
+  recorded in ISS-257's body under § Conformance standing. The *code* outcome is
+  unchanged under every route considered; what moved is the spec's clarity and
+  ISS-257's standing. `spec validate SPEC-007` clean after landing.
+
+- **No REQ status changes** — as the brief recorded; not re-derived.
+
+### Carried forward, deliberately unsettled
+
+Reconcile wrote none of these, by explicit instruction:
+
+- **DEC-027** (`proposed`), **OQ-4**, **OQ-7**, **R4**.
+- The **adapter-wide unknown-field class** — `deny_unknown_fields` still appears
+  zero times in `src/mcp_server/tools.rs`. F-3 closed the one instance that
+  mattered, not the class. Unfiled by decision.
+- The **`needs` edge gating SL-232** on RV-307 F-25/F-33/F-36/F-37. Offered, not
+  accepted; inheritance remains prose-only.
+
+### For `/close`
+
+The sourcing constraint in § Synthesis stands unchanged and is the highest-value
+line in this ledger: **source the close candidate from `candidate/230/review-001`
+(`18fc99613`), never from `review/230` (`66d478cc2`)**, which does not carry the
+F-3 fix and would ship without it, silently and green. Expect authored divergence
+on `slice-230.toml` (now `reconcile` on `edge`, `started` on the evidence refs) →
+resolve primary-wins.
+
+Reconcile pass complete — handoff to `/close`.

@@ -6,7 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · **reconcile**, 6 of 6 landed, audit closed (RV-313 done);
+fresh-as-of: 2026-07-27 · **reconcile complete** (RV-313 § Reconciliation Outcome;
+direct edits 298d583f, **REV-041** done) — ready for `/close`; 6 of 6 landed;
 `dispatch/230` at 8538a2658, `review/230` at 66d478cc2, **reviewed surface
 `candidate/230/review-001` at 18fc99613** (base `main` c2e9191a2 post-SL-228 +
 source `review/230`), coord worktree removed · 2f8b3fbdf
@@ -111,11 +112,12 @@ source `review/230`), coord worktree removed · 2f8b3fbdf
   constraints.
 - Moved ids never reused. Next free: **I14, E16, T43** — `E15` was spent at
   reconcile on `clear_verification`'s tolerance (RV-313 F-4, design § 5.5).
-- **RV-313 F-6 / SPEC-007 — open, and NOT settled by audit.** Does § "Git-anchored
-  staleness"'s explicit-state guarantee bind `memory validate`'s health checks, or
-  only the `find`/`retrieve` axis? The sentence does not determine its own scope.
-  Reconcile's REV to answer; the brief recommends *clarify the scope* over
-  adjudicating conformance, since the code outcome (ISS-257) is identical either way.
+- ~~**RV-313 F-6 / SPEC-007**~~ — **settled at reconcile by REV-041.** The
+  five-state render contract binds the `find`/`retrieve` axis; the prohibition on
+  silent over-trust binds *any* git-anchored staleness computation, `memory
+  validate` included. `validate` is therefore **non-conformant** and **ISS-257 is a
+  conformance fix**. Reconcile found the spec asserting *both* readings — Overview
+  vs `responsibilities[20]` — and amended both tiers. No longer open.
 - **The MCP adapter rejects no unknown fields at all** — `deny_unknown_fields`
   appears zero times in `src/mcp_server/tools.rs`, so every tool silently swallows
   unknown keys. F-3 closed the one instance that mattered, not the class.
@@ -127,10 +129,9 @@ source `review/230`), coord worktree removed · 2f8b3fbdf
 
 ### Next
 
-1. **`/reconcile`** — consume RV-313's `## Reconciliation Brief`. Four per-slice
-   direct edits (three in `design.md`: the stale D5 figures, the new `E15` edge
-   case, the reach limit; plus this file) and one governance REV (SPEC-007 § F-6).
-   The brief states "no REQ status changes identified" so it is not re-derived.
+1. ~~**`/reconcile`**~~ — **done 2026-07-27.** Four direct edits landed
+   (`298d583f`); **REV-041** authored, approved, applied and `done`, amending
+   SPEC-007 across both tiers. Outcome recorded in RV-313 § Reconciliation Outcome.
 2. **`/close`** — and note the sourcing trap: the `close_target` candidate must
    **not** be sourced from `review/230` (`66d478cc2`), which does not carry the
    F-3 fix. Source from `candidate/230/review-001` (`18fc99613`). Expect authored

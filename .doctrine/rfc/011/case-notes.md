@@ -116,3 +116,41 @@ pointers*, never missing content.
   suggested in the handover (`--id` vs `--candidate`, plus a required `--role`),
   costing one refused invocation — the self-describing `status` output is the
   pattern the other verbs should follow.
+
+[reconcile; SL-230-recon-a1]
+
+- **A spec's prose tier alone lost the decisive evidence.** RV-313 F-6 asked
+  whether SPEC-007's "Git-anchored staleness" guarantee binds `memory validate`.
+  Audit reasoned from the `.md` section's placement ("a peer section under
+  `## Responsibilities`") and reached a hedged recommendation. The `.toml`
+  structured `responsibilities` list settled far more of it in one read: item [20]
+  carries staleness as its own responsibility *separate from* the reader [19]
+  (supporting the broad reading), while the prose Overview binds staleness *to the
+  find/retrieve reader* (supporting the narrow one) — an outright two-tier
+  contradiction neither audit nor the brief noticed. Cost: an audit recommendation
+  built on half the evidence, revised at reconcile. The boot guardrail already says
+  read via `show`, never one tier — this is a concrete case where the omitted tier
+  was the load-bearing one, and worth generalising: for a *scope* question about a
+  spec sentence, the structured responsibilities list is higher-signal than the
+  prose section's heading level.
+- **`grep` for the governed surface before adjudicating conformance.** `validate`,
+  `health`, and `finding` occur **zero** times in SPEC-007. Three seconds of grep
+  reframed "is this behaviour conformant?" into "does the spec govern this surface
+  at all?", which is the question actually worth answering. Neither the audit
+  finding nor the brief recorded this fact.
+- **Per-item confirmation on brief-verbatim items costs a round trip.** `/reconcile`
+  § 3 requires presenting each direct edit for confirmation before writing. All four
+  here were specified verbatim by the audit brief, down to the id (`E15`) and the
+  figures. The confirmation turn surfaced nothing on those four; the operator engaged
+  only with the one genuinely open fork (F-6). Possible sharpening: distinguish
+  brief-verbatim items (batch-confirm, or proceed and report) from items where
+  reconcile exercises judgement.
+- **A REV has no relation surface, so its provenance is prose-only.** `doctrine link
+  REV-041 references SL-230 --role originates_from` (and `related` to RV-313 /
+  ISS-257) all refuse: "REV may not author `references` (illegal for this source)".
+  `revision new --originates-from` accepts an **RFC** ref only. So a REV born from a
+  slice reconcile — the modal case the `/reconcile` skill documents — cannot record
+  structurally *what it reconciles*. The edge exists only in `revision-NNN.md` prose
+  and in the RV's outcome section, i.e. exactly the "recorded in prose only" shape
+  the slice already flags as a weakness elsewhere. Costs a downstream reader a
+  full-text search to answer "which REV settled this finding?".

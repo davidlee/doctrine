@@ -12,9 +12,9 @@ engine (SPEC-004) for materialisation, the storage rule, and edit-preserving wri
 it restates none of that. What it owns is everything specific to *memory*: the
 named (UUID-identity, no-reservation) entity shape, the memory domain vocabulary,
 the `record` producer with its git-frame capture, the scope-aware `find`/`retrieve`
-reader with its deterministic ranking and git-anchored staleness, the security
-render contract with its non-bypassable trust holdback, and the global/derived
-orientation class. The append-only lifecycle ledger, NDJSON interchange, and
+reader with its deterministic ranking, git-anchored staleness as an engine-wide
+computation, the security render contract with its non-bypassable trust holdback,
+and the global/derived orientation class. The append-only lifecycle ledger, NDJSON interchange, and
 event-store backend adapter are designed reserved seams, not shipped, and are not
 owned here.
 
@@ -112,8 +112,16 @@ class is evergreen — decay-exempt, rendering an explicit non-decaying `referen
 state, its `reviewed` never re-stamped (that would break idempotent sync). Every
 undecidable reachability case (shallow/partial clone, detached HEAD, rebase,
 non-ancestor anchor, non-git project) resolves to an *explicit* state — `fresh` /
-`stale` / `unknown` / `unanchored` / `reference` — never a silent hide or a silent
-over-trust.
+`stale` / `unknown` / `unanchored` / `reference` — never a silent hide. That
+five-state resolution is the **render contract**, and it binds the `find` /
+`retrieve` axis, which is where a staleness state is rendered.
+
+The prohibition on **silent over-trust is surface-independent**: it binds *any*
+git-anchored staleness computation in this engine, including `memory validate`'s
+health checks. A computation that cannot decide reachability must say so on
+whatever surface it speaks, and must never render *cannot determine* as *no drift*.
+A surface that emits findings rather than states discharges this by emitting a
+finding, not by falling silent.
 
 ### Security render contract and the trust holdback
 
