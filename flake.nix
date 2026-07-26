@@ -296,6 +296,14 @@
             # Must come from pub's eval; doctrine's own pkgs (different nixpkgs +
             # rust-overlay pin) would fork the drv and rebuild from scratch.
             dirge = inputs.pub.packages.${system}.dirge;
+            # Frontend layers exposed individually so they are buildable and
+            # debuggable without the full rust binary — `nix build .#web-modules -L`
+            # streams the bun install, `.#web-dist` the vite build. Reaching them
+            # only through `doctrine` means a stuck frontend build also blocks the
+            # devshell (jailPkgs bind ${doctrine}/bin/doctrine), i.e. blocks
+            # entering the directory at all.
+            web-modules = webModules;
+            web-dist = webDist;
             default = doctrine;
           };
 
