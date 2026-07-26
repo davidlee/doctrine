@@ -23,10 +23,12 @@ response = "Observation confirmed and independently reproduced by audit (3 of 48
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Both staleness checks silently render 'cannot determine' as 'no drift': 67 of 115 anchored memories are exempt, capping corpus reach at ~42%"
 detail = "git::commits_touching (src/git.rs:2493) guards with 'merge-base --is-ancestor since target' and returns None when the stamp is NOT an ancestor of HEAD — deliberate (comment F2: a non-ancestor 'since' would over-count a set difference, 'no over-trust'). The guard is correct. The DEFECT is at the two call sites: Check 2 (:3521) and Check 4 (:3568) both bind with 'let Some(commits_behind) = ...' followed by '&& commits_behind > 0', so None falls out of the if-chain and emits NO finding. An UNKNOWN is thus indistinguishable from a verified-clean row. Audit measured on the primary tree independently: 115 anchored, 48 reachable, 67 NON-ancestor — exactly the 67 the slice disclosed. So ~58% of the anchored corpus is silently exempt from BOTH staleness checks, capping reach at 41.7%. This is a PRE-EXISTING property of the incumbent seam (Check 2 has always had it), NOT a PHASE-06 regression — Check 4 inherits it. It is raised because no criterion in this slice states the reach limit, while § 1's closure promise reads corpus-wide. The honest fix is a tri-state at the call sites (drift / no-drift / undeterminable) rather than removing the ancestry guard, which exists for a good reason."
+disposition = "follow-up"
+response = "Observation confirmed and independently re-measured by audit (115 anchored / 48 reachable / 67 non-ancestor on primary HEAD 46c4eac83 — reach capped at 41.7%). Routed to owned future work as ISS-257 'Memory staleness checks render an undeterminable stamp as clean', linked to this review and originating from SL-230. follow-up is the correct route here and not an escape: the defect is PRE-EXISTING in Check 2 (SL-230 PHASE-06's Check 4 merely inherits it), so it is outside this slice's delta, and the remedy — lifting both call sites to a tri-state so 'cannot determine' stops masquerading as 'clean' — changes an incumbent seam that no SL-230 criterion governs. Not tolerated, because nothing in the corpus recorded the reach limit until now and design § 1's closure promise reads corpus-wide; the gap is real and is now owned rather than accepted. ISS-257 also records the alternative route: if SL-232's body digest (OQ-3) lands first, the issue narrows to Check 2 alone."
 
 [[finding]]
 id = "F-3"
