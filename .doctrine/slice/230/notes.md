@@ -6,13 +6,18 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-26 · design (round 8 disposed; slice split by DEC-027) · ca4bb4cd
+fresh-as-of: 2026-07-26 · plan (design locked after the confirming pass; plan authored, 0/6 phases) · 68bf7f21
 
 ### Produced
 
+- **plan.toml / plan.md** — six phases, split by seam not by verb (`record` rides
+  the scaffold fileset, `edit` rides the new `write_body`). Phase sheets
+  materialised. Awaiting user approval before `ready`.
 - **DEC-027** — the corpus-aware verify gate leaves SL-230 into **SL-232**. User
   ruling at RV-307 round 8. The governing record for the split boundary, the
-  accepted R4 tradeoff, and the RV-307 disposition policy.
+  accepted R4 tradeoff, and the RV-307 disposition policy. **Its boundary table
+  and finding sort were corrected** by the confirming pass (68bf7f21) — the table
+  contradicted its own prose; the decision itself is untouched.
 - **SL-232** — corpus-aware memory verify gate. Scope doc + inherited design
   (gate half of this slice's design.md, carried verbatim so eight rounds of
   review are not re-derived). Status `proposed`, design NOT locked, two open
@@ -52,30 +57,45 @@ fresh-as-of: 2026-07-26 · design (round 8 disposed; slice split by DEC-027) · 
   went on successive locally-varying instruments for one class boundary
   (F-25 → F-31). Recorded in `case-notes.md`; a `/record-memory` candidate, since
   it is not memory-specific.
+- **run the query** — D5's defect (below) survived eight rounds because § 10's
+  live-data check read a count of 3 as confirmation the plumbing worked; the 3 was
+  partly the stamp commit itself. F-17/F-23's defect, third instance, in the
+  document that names it twice. When a design states a concrete query, execute it
+  against the real corpus. Same `/record-memory` candidate as the entry above —
+  both are one lesson at different altitudes.
+- **mechanical narrowing damages joints, not blocks** — the reassembly's defects
+  were all at seams: a retained paragraph whose justification was rewritten to be
+  local and now cited a verb that had left; a routing notice naming a section that
+  exists in both documents; an invariant pinned to the nearest-looking test.
+  Cheapest instrument by far was `git show <narrowing-commit>^:<path>` — it settled
+  the invented-id question, E10's non-existence, and step-numbering provenance in
+  one read.
+- **no kind has a prose-write verb, and `knowledge` has no `edit` at all** —
+  correcting DEC-027 needed a raw-file write of `record-027.md`. This slice's own
+  § 2 claim, paid for in the session that authored it. Bears on OQ-4: adoption for
+  knowledge is a **new verb**, not a new flag, so D1's "adoption is a caller
+  change" understates it there. In `case-notes.md`.
 
 ### Open
 
-**This slice.** Nothing blocking. Design narrowed to the body-write seam and
-attestation invalidation; scope doc reconciled; RV-307 fully disposed.
+**This slice.** Design locked, plan authored, nothing blocking. Confirming pass
+done (10 mechanical defects + 3 substantive on D5); RV-307 fully disposed.
 
-- **Confirming pass DONE** (2026-07-26). Ten mechanical defects fixed; three
-  substantive findings on D5 resolved by user ruling. The 7 local findings are
-  F-3, **F-7**, F-8, F-9, F-10, F-12, F-17 — not F-14, which lands on I6/T24 and
-  is SL-232's (it was an orphan; corrected above).
-- **D5 narrowed to `memory.md`** by the pass, on the user's ruling. The item-
-  directory pathspec reported drift on **30 of 30** anchored memories: `verify`
-  stamps `verified_sha`, the stamp is then committed, and that commit touches the
-  memory's own directory — so the check flagged the sanctioned flow. Body-file form
-  fires on 11/30. Registered as I13, falsified by T42. Also fixed: D5's count sits
-  outside the pre-existing `!scope.paths.is_empty()` guard (26 of 56 anchored
-  memories declare no path scope), and § 5.4's canonicalisation justification named
-  `run_verify`'s `safe_join` when the path is in fact *constructed* from `uid`.
-- **Lesson, generalisable** — the defect above survived eight review rounds because
-  § 10's live-data check read a count of 3 as confirmation the plumbing worked; the
-  3 was partly the stamp commit itself. That is F-17/F-23's defect ("a probe that
-  cannot distinguish the two outcomes proves nothing") committed a third time, in
-  the document that names it twice. When a design states a concrete query, **run
-  the query**. `/record-memory` candidate alongside the F-25→F-31 entry.
+- **Plan awaits user approval** before `slice status 230 ready` → `/phase-plan`
+  PHASE-01. No code without an approved plan.
+- **PHASE-03 and PHASE-04 must not be separated.** At PHASE-03's HEAD
+  `edit --body` works and the attestation does not clear — strictly worse than
+  today, since the footgun currently needs a forbidden raw-file write and after 03
+  needs one supported command (§ 1). No intermediate HEAD between them is landable.
+  Recorded in `plan.md`; the phase boundary reads innocuous and the consequence
+  does not.
+- **D5 = `memory.md`, not the item directory** (user ruling; I13, T42). The
+  directory form reported drift on 30/30 anchored memories because `verify` stamps
+  `verified_sha` and the stamp's own commit touches the directory being measured.
+  Body-file form: 11/30. T42 is the falsifier — **a 30/30 result at any point means
+  the pathspec regressed.**
+- **DEC-027 is still status `proposed`** despite having been taken and executed.
+  Left deliberately; settle it or leave it, but do not assume.
 - **R4 runs unmitigated** until SL-232 lands. D4's affordability argument depended
   on the gate relaxation; the split removed that support. Accepted by DEC-027 —
   friction, not incorrectness — and the reason to sequence SL-232 next.
@@ -95,7 +115,10 @@ inherited set. F-7 (→ R5) is the seventh local finding. Count unchanged.
 
 ### Next
 
-1. Confirming pass over SL-230's narrowed `design.md`, then `slice status 230 plan`.
-2. `/design` on SL-232, starting from F-37 and F-36. Enumerate-then-probe before
-   asserting any replacement rule — that is § 8 R-A and it is the whole lesson of
-   the eight rounds behind the inherited text.
+1. Readiness check over design / plan / selectors / phase gates before execution
+   (a fresh pass; the pass that produced them should not also clear them).
+2. On approval: `slice status 230 ready` → `/phase-plan` PHASE-01 → `/execute`.
+3. `/design` on SL-232, starting from F-37 and F-36 — **and F-14**, which this
+   slice handed over. Enumerate-then-probe before asserting any replacement rule:
+   that is § 8 R-A and the whole lesson of the eight rounds behind the inherited
+   text.
