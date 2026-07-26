@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · started, PHASE-05 (5 of 6 landed; coord `dispatch/230` at
-3cf7c040) · c691558a
+fresh-as-of: 2026-07-27 · started, **6 of 6 landed**; coord `dispatch/230` at
+8538a2658, `prepare-review` run, 8 refs projected · c691558a
 
 ### Produced
 
@@ -27,6 +27,9 @@ fresh-as-of: 2026-07-27 · started, PHASE-05 (5 of 6 landed; coord `dispatch/230
   `memory_edit`, both pure argument mapping onto `run_edit`/`run_record`; the
   `body_mode`-without-`body` totality rule landed as ONE const + ONE bail site
   (coord aae133bb3→43190de93, boundary 3cf7c040).
+- **PHASE-06** `validate` own-body staleness — a fourth, independent health check
+  counting commits touching `<items>/<uid>/memory.md` since `verified_sha`
+  (coord 3cf7c040→eb53c3770, boundary 8538a2658 after `prepare-review`).
 - **ISS-248** — selector doctor's redundancy scan is class-blind.
 - **ISS-252** — claude-arm funnel verify beat runs against a stale coord
   checkout; fails open as a false green.
@@ -67,14 +70,15 @@ fresh-as-of: 2026-07-27 · started, PHASE-05 (5 of 6 landed; coord `dispatch/230
 
 ### Next
 
-1. `/phase-plan` PHASE-06 (validate own-body staleness), then dispatch it — but
-   **its VA-1 runs on the coord/landing tree, never a worker fork** (expects ~11
-   of 30; 30/30 means the D5 pathspec regressed). The worker delivers the VT half
-   only.
-2. Conclude cadence once 6/6: `slice verify-vt 230` → `dispatch sync
-   --prepare-review` → remove coord worktree (keep refs) → `slice status 230
-   audit` → `/audit`.
-3. `/design` SL-232 from F-37, F-36, and F-14.
+1. **Remove the coordination worktree directory** `.dispatch/SL-230` (KEEP the
+   refs — `dispatch/230`, `review/230`, `phase/230-01..06` are the deliverables),
+   then `slice status 230 audit` → `/audit`.
+2. Carry into audit: the two VA-1 deviations and the corpus-reach finding (§ Phase
+   trail → PHASE-06); the `body_mode`-on-`record` MCP asymmetry (→ PHASE-05); and
+   `clear_verification`'s tolerant-vs-refusing divergence from `stamp_verification`
+   (→ PHASE-04). All three are live, disclosed, and legitimately arguable.
+3. Integration is **stage-2, `/close`'s job, post-audit** — never pre-audit.
+4. `/design` SL-232 from F-37, F-36, and F-14.
 
 ## Execution constraints (dispatch)
 
@@ -462,6 +466,104 @@ terrain is a *claim*, and a worker correcting it is the funnel working.
 it drives the real `stamp_verification`, so the fixture cannot drift from what
 `memory verify` actually writes. **PHASE-06's VA-1 is orchestrator work on the
 coord/landing tree** (§ Execution constraints #2), not the worker's.
+
+### PHASE-06 — validate own-body staleness · landed 2026-07-27
+
+Coord `3cf7c040 (B) → eb53c3770 → 8538a2658`. Worker model **opus**.
+`src/memory.rs` +143/−3, one file. Funnel green throughout: base `check prove`
+clean at B, S1 baseline 0 failures, `regression diff` no new/changed with the
+checkout reset per ISS-252. R-5 clean.
+
+Check 4 is a fourth **independent** block guarded on `verified_sha` alone (EX-2),
+with the pathspec `format!("{MEMORY_ITEMS_DIR}/{}/memory.md", memory.uid)` —
+repo-relative, because `commits_touching` already runs git with `-C root` and the
+incumbent Check 2 feeds it repo-relative strings. **An absolute pathspec would
+have matched nothing and returned 0 — a false green in exactly the direction that
+makes the falsifier pass for the wrong reason.**
+
+**Both mutations red *alone*, as required:** item-directory pathspec →
+only `validate_ignores_verification_stamp_commit`; nesting under `scope.paths` →
+only `validate_flags_unscoped_memory_body_drift`. That pairing is what separates
+"correctly not flagged" from "silently inert", which this phase's falsifier cannot
+distinguish on its own.
+
+**A test-fixture defect the sheet predicted and the worker found independently.**
+`stamp_verified` attested the literal `VERIFIED_SHA` (`feedface…`), which is not a
+real object — so `commits_touching`'s `merge-base --is-ancestor` no-over-trust
+guard folds it to `None` and **no own-body test could ever have fired**. Split
+into `stamp_verified_at(toml_path, sha)` with `stamp_verified` a thin delegate;
+the real `stamp_verification` is still driven, so the anti-drift property holds
+and existing callers are behaviour-unchanged. Generalisable: *a fixture constant
+that is not a real git object silently disables every check that walks history.*
+
+#### VA-1 — discharged orchestrator-side, with two deviations recorded
+
+Run on the **primary/landing tree**, not the coord tree, and not a fork. The
+reason matters: on the coord tree the measurement is *deflated by ancestry* — 67
+of 111 anchored memories carry a `verified_sha` unreachable from `dispatch/230`'s
+HEAD, and `commits_touching` folds a non-ancestor to `None`. Measuring there
+reported 3 of 111 and looked like a catastrophic under-count until the denominator
+was corrected. **§ Execution constraints #2 says "coord/landing tree"; read it as
+*landing*.**
+
+Both pathspecs run over the live corpus, same denominator:
+
+| pathspec | flagged | of 44 reachable-anchored |
+|---|---|---|
+| `memory.md` — **shipped** | 3 | 6.8 % |
+| item directory — **the regression form** | 23 | 52 % |
+
+**The falsifier is decisively absent**: 7.7× discrimination, nowhere near the
+saturation the design predicted for the directory form. Two things not smoothed
+over:
+
+- **The design's absolute expectation does not reproduce.** It said ~11 of 30;
+  shipped reports 3 of 44. *Lower*, not higher — the safe direction — and the
+  corpus grew from 30 anchored to 111 between the design measurement and now, so
+  the mix is not comparable. Mutation (a) independently rules out a silently-inert
+  check, which is what the absolute figure was standing in for. Recorded because a
+  criterion whose number no longer reproduces should be re-stated, not quietly
+  re-interpreted.
+- **New finding, for audit: 67 of 111 anchored memories are silently exempt from
+  BOTH staleness checks.** Their `verified_sha` is not an ancestor of HEAD
+  (verified on a branch or linked worktree whose commits never landed), so
+  `commits_touching` returns `None` and the row degrades to "no drift". This is a
+  **pre-existing property of the incumbent seam**, not a PHASE-06 regression — but
+  it caps the corpus-wide reach of both checks at ~40 %, which no criterion in this
+  slice states. Candidate ISS.
+
+**ISS-028 / § Execution constraints #3 confirmed, and benign.** `doctrine check
+commit` inside a worker fork goes red on three `tests/e2e_adr_cli_golden.rs` cases
+with `refusing authored write 'adr status'` — the worker-marker authored-write
+guard tripping e2e tests that shell the binary. Orthogonal to this delta; the
+`worker_commit` gate runs with the right environment and returned `Committed`. The
+constraint said to check this on first worker return — it survived all six phases
+without biting, because no phase's own suite shells the CLI.
+
+### Conclude cadence — run 2026-07-27
+
+`slice verify-vt 230` → `dispatch sync --prepare-review` → 8 refs projected
+(`review/230`, `phase/230-01..06`, `dispatch/230`). Completeness gate passed: all
+six phases carry a registry row.
+
+**S6 embed — VT gate: all 8 rows `✓ PASS`.** Zero `Fail` / `WAIVED` /
+`UNCHECKABLE`. The handover's blanket `≈ UNATTRIBUTABLE` block was exactly the
+registry-derivation artifact it predicted, and it resolved on `prepare-review`
+with no intervening code or plan change — which is now recorded in ISS-252 as
+empirical confirmation that the pre-`prepare-review` reading carries no signal.
+
+**S6 embed — S1 regression: green all six phases.** `check regression diff` →
+`✓ no new or changed failures` at PHASE-01 (base `56520c04b`), 02 (`74620ec5e`),
+03 (`e7e0d42f`), 04 (`4d8c1e49`), 05 (`aae133bb3`) and 06 (`3cf7c040`). Baselines
+0 failures at every base. Every green from PHASE-03 on was taken after the ISS-252
+reset — genuinely earned.
+
+**ISS-252 gained a THIRD surface here:** `sync --prepare-review` is working-tree-
+free too, and left the tree staged with the inverse of its own journal commit
+(`D .doctrine/dispatch/230/journal.toml`, −57). Written into the issue as a *class*
+rule rather than a third enumerated instance — every working-tree-free write on
+this arm has this post-condition, so a fix patching only the known verbs will be
+overtaken by the fourth.
 
 ## Funnel mechanics (claude arm)
 

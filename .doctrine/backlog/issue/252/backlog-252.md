@@ -122,6 +122,35 @@ compose gives up the working-tree-free property, but the property is only load-
 bearing *during* the compose. A post-success `reset --hard` to the new tip is not
 the same concession and would close both surfaces.
 
+## Third surface — `sync --prepare-review`, at the conclude cadence
+
+Confirmed SL-230, 2026-07-27, at 6 of 6. `dispatch sync --slice 230
+--prepare-review` commits the boundaries ledger and the journal, and it is
+working-tree-free by the same construction. Immediately after a successful run
+(7 refs created, exit 0):
+
+```
+$ git status --porcelain
+D  .doctrine/dispatch/230/journal.toml
+$ git diff --cached HEAD --stat
+ .doctrine/dispatch/230/journal.toml | 57 -------------------------
+```
+
+Same shape as the second surface: the tree holds the **staged inverse** of the
+write's own commit. The exposure is identical — a pathless commit here reverts
+the journal `prepare-review` just wrote, and the conclude cadence's very next
+beats (worktree removal, `slice status audit`) run against a tree that looks
+dirty for no reason the operator caused.
+
+**So the count is now three, and the generalisation should be stated as the rule
+rather than enumerated as instances:** *every* working-tree-free write on this
+arm — `dispatch_import`, `dispatch_conclude_phase`, `sync --prepare-review` —
+leaves the coord checkout at the pre-write commit and the index holding the
+inverse. Treat `git reset --hard HEAD` (after confirming with `git diff --cached
+HEAD` that nothing local is at risk) as the standing post-condition of the class,
+not as a per-verb workaround. A fix that only patches the two known verbs will be
+overtaken by the fourth.
+
 ## Related
 
 - The same staleness bites `slice verify-vt` indirectly but harmlessly: it reads
@@ -129,7 +158,11 @@ the same concession and would close both surfaces.
   (`src/state.rs:716-722`), which `sync --prepare-review` derives from the coord
   branch's committed ledger — so pre-`prepare-review` every VT row is
   `UNATTRIBUTABLE` by construction. Expected, not a defect, but easy to misread as
-  a coverage gap at handover.
+  a coverage gap at handover. **Now confirmed empirically** (SL-230, 2026-07-27):
+  the same 8 rows read `≈ UNATTRIBUTABLE` before `prepare-review` and `✓ PASS`
+  after it, with no intervening code or plan change. So the pre-`prepare-review`
+  reading carries no signal at all — it should arguably be rendered as "not yet
+  attributable" rather than as a per-row verification outcome.
 - Adjacent wording nit in the same area: `UNATTRIBUTABLE`'s message reads "keyword
   present but `<path>` not modified by this slice", yet `vtgate.rs` step (4)
   short-circuits **before** step (5) matches any keyword — so no keyword was ever
