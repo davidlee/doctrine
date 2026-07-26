@@ -17,9 +17,25 @@ Taken by the user at RV-307 round 8, on the responder's recommendation.
 | Stays in SL-230 | Moves to SL-232 |
 |---|---|
 | Obj 1–2 body-write, CLI + MCP (D1, D2, D7) | Obj 3 corpus-aware verify gate (D3, D9, D10, D11) |
-| Obj 5 invalidation (D4, D8, D5, `claim_snapshot`) | I8, I9, E7–E13, R7, R8, OQ-2/OQ-3/OQ-6 |
-| Obj 6 refusal names `--allow-dirty` | Obj 4 REV-034 — SPEC-007 + REQ-147 |
-| I1–I6, E1–E6, R1–R4, R6 | The claim-surface algorithm (§ 5.2) and its test matrix |
+| Obj 5 invalidation (D4, D8, D5, `claim_snapshot`) | Obj 4 REV-034 — SPEC-007 + REQ-147 |
+| I5, E1, E3, R1–R5 | Obj 6 — the dirty refusal naming `--allow-dirty` |
+| OQ-1 (closed here as D8), OQ-4, OQ-7 | I1–I4, I6–I9; E2, E4–E9, E11–E13; R6–R8; OQ-2/3/5/6 |
+| T1–T6, T12, T12b, T13, T15, T16, T20, T20b, T21, T22, T29 | The claim-surface algorithm (§ 5.2), and T7–T11, T14, T17–T19, T23–T39 |
+
+**Correction (2026-07-26, SL-230's confirming pass).** The four rows above
+replace a first-cut sketch taken before the id-level partition was worked out.
+It read "*I1–I6, E1–E6, R1–R4, R6* stay" and placed **objective 6 in the *Stays*
+column** — both contradicting this record's own prose, which says the gate "and
+everything downstream of it" leaves. Read against the pre-split design text, the
+executed partition is the one above: every id SL-230 moved is gate machinery
+(I1 `capture()` frames, I2 `write-tree`, I3/I4 the dirty refusal and
+`--allow-dirty`, I6/I7 the attested blob and tracked-file surface, E2 masters,
+E4 `memory/`-absent, E5 `scope.commands`, E6 the empty-scope claim surface) and
+every id it kept is body-write (I5 `thread_expiry`, E1 thread-vanish, E3 the `-`
+sentinel). Nothing moved to the wrong slice; this table mis-described what moved.
+Two id notes so they are not re-derived: **E10 was never minted** (the series ran
+E1–E9, E11–E13) and **E12 was withdrawn by DEC-020**, not moved. SL-230's new ids
+begin at I10 / E14 / T40; next free are I14 / E15 / T43.
 
 ## Why — the two halves never converged at the same rate
 
@@ -28,11 +44,21 @@ by half, the two halves are not the same artefact:
 
 | Half | Findings | State |
 |---|---|---|
-| Body-write + invalidation | 7 — F-3, F-8, F-9, F-10, F-12, F-14, F-17 | **all verified**, none contested, quiet since round 4 |
-| Corpus-aware verify gate | 29, incl. every open blocker and all six live contests | still producing decision- and mechanism-level defects at round 8 |
+| Body-write + invalidation | 7 — F-3, F-7, F-8, F-9, F-10, F-12, F-17 | **all verified**, none contested, quiet since round 4 |
+| Corpus-aware verify gate | 30, incl. every open blocker and all six live contests | still producing decision- and mechanism-level defects at round 8 |
 
 (Two more — F-4, F-5 — are the governance/REV-034 axis, verified, and travel
-with the gate.)
+with the gate. 7 + 30 + 2 = 39.)
+
+**Correction (2026-07-26, SL-230's confirming pass).** The membership above was
+wrong in one place and the arithmetic in another; the shape of the argument is
+untouched. **F-14 is not a body-write finding** — it lands on I6 and T24, both
+SL-232's ("*T24 proves only that some blob exists at the path*", not that the
+committed blob equals the attested body). **F-7 is** — it lands on R5, masters
+uncovered by every invalidation path, which SL-230 retains. Because F-14 was named
+local here and appeared in no inherited list, it was an orphan owned by neither
+slice; **SL-232 must pick it up.** The gate half is therefore 30, not 29, which is
+what makes the total reconcile to 39.
 
 The finding rate did not decay: round 7 produced 5 new findings (2 blockers) and
 6 returned contests; round 8 produced 4 new (2 blockers) and 6. Every one of
