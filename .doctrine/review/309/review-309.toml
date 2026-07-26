@@ -1,0 +1,55 @@
+id    = 309
+slug  = "sl-021-conformance-audit-tech-spec-corpus-backfill"
+title = "SL-021 conformance audit: tech-spec corpus backfill"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-021"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "Design §6 example 'memory uses reservation' is factually inaccurate"
+detail = "Design §6 cites 'memory engine uses reservation for id allocation' as an example of a weighty interactions edge. This is incorrect: the memory engine explicitly sidesteps the reservation/id-lifecycle system, taking UUID-identity (a client-minted named entity with no reserved number) instead. SPEC-007 (Memory engine) §Responsibilities states: 'memory avoids the distributed-id-collision risk entirely (no reservation namespace).' The example should be replaced with an accurate one (e.g. install↔skills or id-lifecycle→memory)."
+disposition = "verified"
+response = "Confirmed: the example is inaccurate. SPEC-007 explicitly sidesteps reservation via UUID identity. Fix belongs on the reconciliation brief — design.md para 6 edit to replace the example with an accurate one (e.g. install-skills or id-lifecycle-memory)."
+
+[[finding]]
+id = "F-2"
+status = "withdrawn"
+severity = "minor"
+title = "Conformance registry incomplete — no source-deltas recorded for completed phases"
+detail = """
+SL-021: conformance incomplete — partial coverage
+  - completed phase PHASE-01 has no recorded source-delta row
+  - completed phase PHASE-02 has no recorded source-delta row
+  - completed phase PHASE-03 has no recorded source-delta row
+  - completed phase PHASE-04 has no recorded source-delta row reports incomplete: all 4 completed phases (PHASE-01 through PHASE-04) have no recorded source-delta row. PHASE-03 touched code files (plugins/doctrine/skills/spec-tech/SKILL.md + src/skills.rs embed refresh in commit db82300f). The other phases were data-only (authoring specs and TOML). For PHASE-03: bootstrap with . For the data-only phases: the gap is expected —  wasn't designed to track authored-entity-only changes — but the incomplete signal is a misleading red herring for future auditors."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Conformance registry incomplete — no source-deltas recorded for completed phases"
+detail = "slice conformance reports incomplete: all 4 completed phases have no recorded source-delta. PHASE-03 touched code (plugins/doctrine/skills/spec-tech/SKILL.md + src/skills.rs in commit db82300f). Data-only phases (01/02/04) cannot register deltas. Bootstrap PHASE-03 with 'doctrine slice record-delta 21 PHASE-03 --start BASE --end TIP' to clear the incomplete signal."
+disposition = "tolerated"
+response = "Data-only slice: phases 01/02/04 authored spec entities only with no code delta to record. PHASE-03 touched plugins and src/skills.rs; bootstrapping that one phase would clear the incomplete signal but has no practical impact on audit quality. Tolerated: the misleading incomplete report is a known limitation for data-only slices."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "SPEC-002 parent diverges from plan — parent=SPEC-004 vs planned parent=SPEC-003"
+detail = "Plan PHASE-05 EX-2 prescribed retrofitting SPEC-002 parent to SPEC-003 (the Doctrine root), per design para 6 and F5. SPEC-002 was authored with parent=SPEC-004 (entity engine), c4_level=component. The user confirmed this divergence is architecturally correct — reconciliation is an entity-level operation and belongs under the entity engine, not as a top-level container under the root. The current spine is correct; the plan text is superseded."
+disposition = "aligned"
+response = "Confirmed: the current SPEC-002 parent=SPEC-004 (entity engine) is architecturally correct. Reconciliation is an entity-level operation and belongs under the entity engine as a component. The plan EX-2 direction was over-ambitious; the authored spine is correct. No change needed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
