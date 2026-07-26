@@ -85,6 +85,10 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
   a commit that did not contain the attested body, and would have ignored a
   modified file a memory explicitly scopes. So `verify` asks two questions: is the
   code dirty, and is the claim committed?
+- **That item directory is the canonicalised uid dir** (RV-307 F-15). Keys in
+  `items/` are symlinks and git will not traverse one in a pathspec, so a claim
+  surface built from a key-form reference reads clean against a modified body —
+  the same false attestation, reached through the reference form.
 - **Consequence, stated plainly:** `record` → `verify` now **refuses** until the
   new memory is committed. The friction this slice removes is *unrelated* corpus
   dirt — another agent's uncommitted backlog file, your own unrelated spec edit —

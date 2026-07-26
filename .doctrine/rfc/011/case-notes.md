@@ -1728,3 +1728,60 @@ since entity-creating verbs always produce untracked files plus a symlink.
   files they name. Candidate: a `doctrine doctor` leg that resolves `path:line`
   citations in authored prose and warns on drift. Cheap, high-yield — two of
   RV-307's twelve findings were citation-accuracy defects.
+
+## [phase-plan; SL228-P06-a] No read surface for a phase's authored plan entry
+
+`/phase-plan` needs one thing above all: the phase's authored `objective` /
+`EN-` / `EX-` / `VT-` rows. There is no verb that prints them.
+
+- `doctrine slice phase <ID> <PHASE>` is a **write** verb — `--status` is a
+  required arg, so the read form does not exist.
+- `doctrine slice plan <ID>` is the **authoring** verb; run on a slice that
+  already has a plan it refuses (`Refusing to overwrite existing …/plan.toml`)
+  — and exits **0** while doing so, so a scripted caller reads success.
+- `doctrine slice show <ID>` does not carry the phase table's criteria.
+
+So the only route is `grep -n "PHASE-06" -A 60 .doctrine/slice/NNN/plan.toml` —
+raw-file reading, which the boot snapshot's own guardrail explicitly forbids
+("read entities via `doctrine <kind> show <ID>`, not raw files"). Every
+phase-plan pays this: a failed CLI probe, then a guardrail violation, then a
+60-line raw slurp to get ~15 useful lines.
+
+Cost this session: 2 wasted tool calls + a raw read. Recurs once per phase.
+
+Direct hit on the PHASE-07 memory-blind benchmark: a fresh orchestrator that
+*follows* the guardrail cannot find a phase's exit criteria at all.
+
+Suggested: `doctrine slice phase show <ID> <PHASE>` (or `--json`), and make the
+`slice plan` refusal exit non-zero.
+
+## [phase-plan; SL228-P06-b] `slice selector list` re-prints the shared intent note per row
+
+`slice selector list 228` renders each selector's `note` in full on its own
+line. PHASE-04 declared 8 selectors under one shared intent note (~90 words), so
+that note is emitted **8 times** — ~700 words of pure duplication in a listing
+whose useful content is 8 paths. The full listing is ~40 lines of signal wrapped
+in ~2 KB of repetition, and it is on the hot path: the handover's own rule is
+"derive the prompt's scope list from `slice selector list`, never from memory."
+
+Suggested: dedupe identical notes into a footnote block, or default to a
+path+intent table with `--notes` to expand.
+
+[rigour; SL-230-RV307-round3]
+
+- Pre-handback self-audit of four dispositions found 3 further findings, one a
+  blocker (F-15). All three were caught by *executing* git claims rather than
+  reasoning about them. Cost: ~8 bash probes. The two prior rounds (one internal,
+  one external GPT pass) had both missed F-15 because both reasoned about the
+  pathspec set as a set of strings and never asked what `resolve_show` actually
+  returns for a key.
+- Token-efficiency observation: the expensive part was re-establishing which of
+  the design's claims were already verified vs merely asserted. The design doc
+  marks some claims with a ✓ and cites evidence inline, which worked — every ✓
+  row I spot-checked held. The unmarked prose is where all three findings sat.
+  A convention of marking *every* mechanical claim verified/assumed at authoring
+  time would have made this pass a diff rather than a re-derivation.
+- `doctrine review show RV-307` prints the brief but not the findings; getting
+  finding text needs the toml or `review list`. A `--findings` flag on `show`
+  would save a full-file read per pass. (Related to the earlier note asking for
+  `review list --target`.)

@@ -228,5 +228,90 @@ T24 rewritten to byte equality: 'git show "$verified_sha:<dir>/memory.md"' must 
 
 T24b added for the case the weak assertion was hiding: a memory whose body is TRACKED but MODIFIED (not untracked, so the F-1 probe's untracked leg does not fire, and cat-file -e would have passed on the stale committed blob). It must refuse. That path is the one where an existence check and an equality check give different answers, so it is the test that earns its place."""
 
+[[finding]]
+id = "F-15"
+status = "answered"
+severity = "blocker"
+title = "claim probe is blind when verify is given a key: symlink pathspec matches only the symlink"
+detail = """
+Expected: the claim probe (§ 5.2/§ 5.4, the F-1/F-6 remedy) measures the memory's own item directory, so an uncommitted body always refuses (I6, T24).
+
+Observed: run_verify resolves the item dir via resolve_show(items_root, mref) -> fsutil::safe_join(items_root, name) (src/memory.rs:3380, src/fsutil.rs:20-33). safe_join is a plain tree_root.join(rel) with NO canonicalisation, so when the reference is a KEY the returned dir is .doctrine/memory/items/<key> — which is a SYMLINK to the uid dir (verified: 388 entries in items/ are key symlinks, e.g. mem.concept.backlog.work-intake-membership -> mem_019ea25af18d77e2b0f981473c50753e).
+
+Git does not traverse symlinks in pathspecs. Proven in a scratch repo (git 2.54.0): with a tracked memory whose memory.md is modified, ALL THREE probe legs report clean via the key pathspec and dirty via the uid pathspec —
+  git diff HEAD --name-only -- items/<key>        => (empty)
+  git diff HEAD --name-only -- items/<uid>        => items/<uid>/memory.md
+  git diff-index --quiet --cached HEAD -- <key>   => exit 0 (clean)
+  git diff-index --quiet --cached HEAD -- <uid>   => exit 1 (dirty)
+  git ls-files -- items/<key>                     => 1 entry (the symlink itself)
+  git ls-files -- items/<uid>                     => memory.md, memory.toml
+
+So verify <key> on a tracked memory with an edited-but-uncommitted body stamps verified_sha = HEAD while HEAD does not contain the attested prose. This is F-1 exactly, resurrected through the reference form the design never enumerated.
+
+Blast radius is the MAINSTREAM path, not an edge: D4/D8 clear the axis on every claim edit, so edit -> re-verify is the flow this slice creates, and agents address memories by key (the boot snapshot and /retrieve-memory both emit keys). The fresh-record case (T8) survives by luck — the untracked SYMLINK itself trips the untracked leg (verified) — so T8 passing proves nothing about this hole.
+
+Remedy: claim_pathspecs must be built from the canonicalised uid directory, repo-relative, never from resolve_show's returned path. D5's own-directory drift count (git rev-list ... -- <dir>) has the identical exposure and must take the uid dir too. Pin with a test that verifies BY KEY against a modified tracked body and asserts refusal."""
+disposition = "fix-now"
+response = """
+Sustained. Confirmed against the code and proven in a scratch repo before writing a line of remedy: safe_join is a bare join (src/fsutil.rs:20-33), items/ keys are symlinks (388 of them), and git does not traverse a symlink in a pathspec — diff-index --quiet via the key returns 0 (clean) against a body that diff via the uid reports as modified.
+
+design.md § 5.2 now opens the claim-surface rule by rooting it at the CANONICALISED UID DIRECTORY, with the three-leg key-vs-uid comparison table as evidence rather than assertion, and states plainly that this is F-1 restored through the reference form on the mainstream edit -> re-verify flow. D5's own-directory drift count takes the uid dir for the same reason (§ 5.4). New invariant I7 — the claim surface names real tracked files, never a symlink standing in for them. New test T28 verifies BY KEY against a modified tracked body and requires refusal, with the note that the uid form passes either way, so the test must use the key form to have meaning.
+
+Also recorded: T8's fresh-record case survives only because the untracked symlink itself trips the untracked leg. T8 passing is not evidence about this hole, and the design now says so."""
+
+[[finding]]
+id = "F-16"
+status = "answered"
+severity = "major"
+title = "claim_pathspecs construction table states two git mechanics backwards and drops evidence it should keep"
+detail = """
+The F-6 round-2 remedy (§ 5.2 'claim_pathspecs construction is total') rests on three claims about git. Two are inverted and one is unsafe. Probed on git 2.54.0, this repo + a scratch repo.
+
+ROW 'absolute path inside the repo'. Design says: 'git resolves a leading slash against the repo root, so unnormalised they match NOTHING'. Observed: git resolves absolute pathspecs against the FILESYSTEM and converts them to repo-relative — they match correctly.
+  git ls-files -- /workspace/doctrine/src/git.rs      => src/git.rs
+  git diff HEAD --name-only -- $S/items/<uid>/memory.md => items/<uid>/memory.md   (modified file, reported)
+So the four items carrying absolute scopes (mem.fact.claude.jail-ro-git-is-bwrap-wrap-passthrough-commits, mem.fact.claude.subagentstart-fires-from-child-session, mem_019f36401beb76338b9eda2112f592b1, mem_019f363b08cc7221a624308e3fc24844) are NOT silently narrowed in the primary tree. Normalisation is hygiene, not a correctness fix, and the stated failure mode does not exist.
+
+ROW 'absolute path outside the repo'. Design says: 'dropped — git cannot observe it', which reads as a benign no-match. Observed: git ABORTS.
+  git diff HEAD --stat -- /etc/passwd  => fatal: '/etc/passwd' is outside repository
+  git ls-files --others -- /etc/passwd => fatal: same
+So the drop is MANDATORY, not tidy: pass one through and the whole probe dies and verify fails hard. Right rule, wrong reason — and the reason is what an implementer follows.
+
+These two combine into an interaction the design does not enumerate: THE SAME SCOPE STRING IS INSIDE-REPO IN ONE CHECKOUT AND OUTSIDE IT IN ANOTHER. '/workspace/doctrine/src/worktree/jail.rs' is inside the primary tree and outside a dispatch worktree at any other path. So classification is a property of the checkout location, not the string, and a memory's claim surface silently narrows depending on WHERE it is verified from — in a repo whose whole dispatch model is linked worktrees. E7 makes it audible but the design never says the surface is location-dependent.
+
+ROW 'gitignored path -> dropped'. Unsafe and unnecessary. Ignore rules do not apply to TRACKED files, so a force-added tracked file under an ignored root is real, claim-relevant evidence that the drop discards. Keeping the pathspec costs nothing — it matches nothing in all three legs when genuinely untracked (worktree diff and diff-index see only tracked paths; ls-files --others --exclude-standard skips ignored) — and detecting 'gitignored' at all needs an extra git check-ignore call. Dropping is strictly weaker than keeping, buys nothing, and costs machinery. Verified .doctrine/state/ is ignored (.gitignore:39) with 0 tracked files TODAY, which is a fact about today, not an invariant.
+
+The premise the whole table is built on IS sound and is confirmed: git does not fail an unmatched repo-relative pathspec absent --error-unmatch (git diff HEAD -- src/nope.rs => exit 0, no output). Silent narrowing is real; the table just mislocates where it comes from."""
+disposition = "fix-now"
+response = """
+Sustained on all three rows. The conclusions of the F-6 round-2 table were mostly right and its reasons were mostly wrong, which is the worse failure — a reason is what an implementer follows.
+
+design.md § 5.2 table corrected: absolute-inside is now 'hygiene, not a correctness fix' with the ls-files evidence, since git resolves absolute pathspecs itself; absolute-outside is 'dropped — MANDATORY' with the fatal quoted, since an unfiltered entry kills the probe rather than matching nothing; gitignored flips from dropped to KEPT, because ignore rules do not bind tracked files and keeping is inert otherwise. E7 reworded (it no longer claims gitignored entries are dropped), E8 added for the keep rule.
+
+The interaction the table never enumerated is now E9: the inside/outside split is a property of the CHECKOUT, not the string. The four items scoped /workspace/doctrine/... are inside the primary tree and outside a linked worktree, so a memory's claim surface narrows when verified from a dispatch worktree — in a repo whose dispatch model is linked worktrees. T26 gains the requirement that the absolute-outside case assert verify does not abort.
+
+The premise underneath the table survives and is now cited with its probe: git does not fail an unmatched repo-relative pathspec absent --error-unmatch. Silent narrowing is real; F-6 round 2 just mislocated where it comes from."""
+
+[[finding]]
+id = "F-17"
+status = "answered"
+severity = "minor"
+title = "T20b cannot fail: it pins claim_snapshot on the one field apply_edit already guards"
+detail = """
+Expected (F-8 remedy): T20b — 'set --title to its existing value => does not clear' — demonstrates that claim_snapshot COMPARES rather than counting supplied flags.
+
+Observed: apply_edit already guards title. src/memory.rs:3826-3831 reads the existing value and only assigns when 'existing != trimmed'; summary (:3837-3843), lifespan and review_by do the same. So an idempotent --title yields toml_changed = false regardless of claim_snapshot, and T20b passes even if claim_snapshot were absent, buggy, or wired to flag-presence. A test that cannot fail for the reason it names verifies nothing.
+
+The discriminating case is scope. All three scope arrays are replaced UNCONDITIONALLY with no comparison — src/memory.rs:3944-3978, each arm building a fresh toml_edit::Array and setting 'changed = true' outright. So apply_edit's bool is a CHANGED flag for the scalars and a SUPPLIED flag for the scope arrays, and claim_snapshot's comparison is genuinely load-bearing only there. Retarget T20b at --path-scope set to its existing value.
+
+Consequent behaviour the design should state rather than let an implementer discover: an idempotent --path-scope still stamps 'updated' (apply_edit sets changed, so the terminal block at :3980-3983 fires) while claim_snapshot correctly declines to clear the attestation. Defensible, but it is the only place where 'updated' moves and the verification axis does not, and nothing currently asserts it."""
+disposition = "fix-now"
+response = """
+Sustained. apply_edit guards title/summary/lifespan/review_by by comparison (src/memory.rs:3826-3843) and sets changed unconditionally for all three scope arrays (:3944-3978) — so its bool is a changed flag for the scalars and a supplied flag for the scope arrays, and T20b as written passed with claim_snapshot absent.
+
+T20b retargeted to --path-scope, with the reason stated in the test row so it is not silently reverted to the more readable title case. § 5.4 gains a paragraph naming the asymmetry and the code sites, so the implementer knows WHY the comparison exists rather than inferring that apply_edit is careless.
+
+The divergence that falls out is now stated instead of discovered: an idempotent --path-scope stamps updated while the attestation survives. Defensible — updated tracks the write, the axis tracks the claim — but it is the only place the two move apart, so T29 asserts it."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
