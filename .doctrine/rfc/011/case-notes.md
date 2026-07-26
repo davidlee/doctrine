@@ -1797,3 +1797,17 @@ path+intent table with `--notes` to expand.
   first fixture accidentally committed empty files. A small shipped pathspec
   probe fixture would turn symlink, absolute, unmatched, ignored, and magic
   pathspec claims into one repeatable command.
+
+[canon; friction-observation-exploration-20260726]
+
+- The boot snapshot's model-band floor directive gives
+  `doctrine prompt resolve --band model --model <id>`, but the live CLI requires
+  `--role`. Following the documented command produced a failed call before
+  `prompt resolve --help` exposed the missing axis. Cause dimensions:
+  `surface=boot`, `mode=orchestrator`, `model=gpt-5`, `stage=canon`.
+- `/route` requires an unfiltered `backlog list` before choosing the governing
+  skill. The live backlog is now large enough that the survey produced roughly
+  15k output tokens and was truncated, so it neither established full coverage
+  nor provided a usable prioritisation signal. A later targeted regex query was
+  cheap but depended on already knowing suitable vocabulary. Cause dimensions:
+  `surface=backlog-list`, `mode=orchestrator`, `model=gpt-5`, `stage=route`.
