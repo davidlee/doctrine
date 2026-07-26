@@ -655,6 +655,65 @@ fn artifact_rel(art: &Artifact) -> &Path {
 }
 
 // ---------------------------------------------------------------------------
+// The prose-write seam (SL-230 PHASE-01 — no caller wired yet)
+// ---------------------------------------------------------------------------
+
+/// How `write_body` treats an existing body at `dir/file`. `Copy` — it's a
+/// caller-selected mode flag, not owned state (clippy `needless_pass_by_value`).
+#[derive(Clone, Copy)]
+pub(crate) enum BodyMode {
+    /// Overwrite the body wholesale.
+    Replace,
+    /// Insert after the existing body, owning the separator (see `write_body`).
+    Append,
+}
+
+/// Write an entity's prose tier: `dir/file`. The product's first prose-write
+/// primitive — takes `dir` + `file` rather than a composed path so kind
+/// layout stays with the caller, and reuses `fsutil::write_atomic` unchanged
+/// (the leaf tier is not touched by this slice).
+///
+/// `Append` owns the separator so no kind re-derives it: it inserts exactly
+/// one blank line between existing and new content, but only when the
+/// existing body is non-empty and does not already end in one — an absent or
+/// empty existing body gets `text` alone, and a body that already ends in a
+/// blank line is not given a second one.
+///
+/// Returns a changed-flag mirroring `apply_edit`: `false` when the resulting
+/// content is byte-identical to what's already on disk — a full no-op
+/// (content *and* mtime hold; `write_atomic` is not called at all).
+pub(crate) fn write_body(
+    dir: &Path,
+    file: &str,
+    text: &str,
+    mode: BodyMode,
+) -> anyhow::Result<bool> {
+    let path = dir.join(file);
+    let existing = match fs::read_to_string(&path) {
+        Ok(s) => Some(s),
+        Err(e) if e.kind() == ErrorKind::NotFound => None,
+        Err(e) => return Err(e).with_context(|| format!("Failed to read {}", path.display())),
+    };
+
+    let new_contents = match mode {
+        BodyMode::Replace => text.to_string(),
+        BodyMode::Append => match existing.as_deref() {
+            None | Some("") => text.to_string(),
+            Some(prior) if prior.ends_with("\n\n") => format!("{prior}{text}"),
+            Some(prior) if prior.ends_with('\n') => format!("{prior}\n{text}"),
+            Some(prior) => format!("{prior}\n\n{text}"),
+        },
+    };
+
+    if existing.as_deref() == Some(new_contents.as_str()) {
+        return Ok(false); // byte-identical — no write, mtime holds
+    }
+
+    fsutil::write_atomic(&path, new_contents.as_bytes())?;
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
 // Tests (kind-blind — driven by a test `Kind`)
 // ---------------------------------------------------------------------------
 
@@ -1328,5 +1387,122 @@ mod tests {
     fn scan_named_missing_dir_is_empty() {
         let dir = tempfile::tempdir().unwrap();
         assert!(scan_named(&dir.path().join("nope")).unwrap().is_empty());
+    }
+
+    // --- write_body ---
+
+    #[test]
+    fn write_body_replace_writes_absent_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let changed = write_body(dir.path(), "memory.md", "hello\n", BodyMode::Replace).unwrap();
+        assert!(changed);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("memory.md")).unwrap(),
+            "hello\n"
+        );
+    }
+
+    #[test]
+    fn write_body_replace_overwrites_existing_content() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("memory.md"), "old\n").unwrap();
+        let changed = write_body(dir.path(), "memory.md", "new\n", BodyMode::Replace).unwrap();
+        assert!(changed);
+        assert_eq!(
+            fs::read_to_string(dir.path().join("memory.md")).unwrap(),
+            "new\n"
+        );
+    }
+
+    #[test]
+    fn write_body_replace_identical_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("memory.md");
+        fs::write(&path, "same content\n").unwrap();
+        let before_mtime = fs::metadata(&path).unwrap().modified().unwrap();
+
+        let changed =
+            write_body(dir.path(), "memory.md", "same content\n", BodyMode::Replace).unwrap();
+
+        assert!(!changed, "identical replace returns false");
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "same content\n",
+            "content holds"
+        );
+        assert_eq!(
+            fs::metadata(&path).unwrap().modified().unwrap(),
+            before_mtime,
+            "mtime holds on no-op"
+        );
+    }
+
+    #[test]
+    fn write_body_append_onto_absent_or_empty_file_is_text_alone() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // absent file
+        write_body(dir.path(), "memory.md", "first\n", BodyMode::Append).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("memory.md")).unwrap(),
+            "first\n"
+        );
+
+        // pre-existing but empty file
+        fs::write(dir.path().join("other.md"), "").unwrap();
+        write_body(dir.path(), "other.md", "second\n", BodyMode::Append).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.path().join("other.md")).unwrap(),
+            "second\n"
+        );
+    }
+
+    #[test]
+    fn write_body_append_inserts_one_blank_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("memory.md");
+
+        // No trailing newline at all — separator is inserted wholesale.
+        fs::write(&path, "para one").unwrap();
+        write_body(dir.path(), "memory.md", "para two", BodyMode::Append).unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "para one\n\npara two",
+            "exactly one blank line separates old from new"
+        );
+
+        // A single trailing newline (no blank line yet) still gets exactly one.
+        fs::write(&path, "para one\n").unwrap();
+        write_body(dir.path(), "memory.md", "para two", BodyMode::Append).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "para one\n\npara two");
+
+        // Already ends in a blank line — do not double it.
+        fs::write(&path, "para one\n\n").unwrap();
+        write_body(dir.path(), "memory.md", "para two", BodyMode::Append).unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "para one\n\npara two",
+            "must not double the blank-line separator"
+        );
+    }
+
+    #[test]
+    fn write_body_append_preserves_multi_paragraph_markdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("memory.md");
+        fs::write(&path, "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n").unwrap();
+
+        write_body(
+            dir.path(),
+            "memory.md",
+            "## New section\n\nAppended body.\n",
+            BodyMode::Append,
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n\n## New section\n\nAppended body.\n"
+        );
     }
 }

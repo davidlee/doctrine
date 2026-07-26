@@ -3306,6 +3306,8 @@ weight = {weight}
             globs: &globs,
             commands: &commands,
             global: false,
+            body: None,
+            body_mode: None,
             trust_level: None,
             severity: None,
         };
@@ -3830,6 +3832,8 @@ weight = {weight}
             globs: &globs,
             commands: &commands,
             global: false,
+            body: None,
+            body_mode: None,
             trust_level: Some("low"),
             severity: Some("critical"),
         };
@@ -3854,6 +3858,8 @@ weight = {weight}
             globs: &globs,
             commands: &commands,
             global: false,
+            body: None,
+            body_mode: None,
             trust_level: Some("medium"),
             severity: Some("none"),
         };
