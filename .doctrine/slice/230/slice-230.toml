@@ -34,6 +34,16 @@ intent = "design-target"
 selector = "tests/e2e_mcp_server.rs"
 intent = "design-target"
 
+[[selector]]
+selector = "src/boot.rs"
+intent = "design-target"
+note = "RecordArgs field-addition ripple: pub(crate) struct literals in these test modules must gain body/body_mode (PHASE-02, forced by the plan's Draft/RecordArgs objective)"
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "design-target"
+note = "RecordArgs field-addition ripple: pub(crate) struct literals in these test modules must gain body/body_mode (PHASE-02, forced by the plan's Draft/RecordArgs objective)"
+
 [[relation]]
 label = "governed_by"
 target = "POL-002"
