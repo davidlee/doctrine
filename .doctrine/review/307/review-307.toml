@@ -432,7 +432,7 @@ The bound remains legitimate; what was illegitimate was round 5's claim that lif
 
 [[finding]]
 id = "F-25"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected every successful stamp to cover declared path evidence; observed D10 explicitly attests partial surfaces"
 detail = "Expected: F-6's remedy must prevent verify from stamping when a declared path/glob contributes no observable evidence, because a warning or later health finding cannot make the present attestation true. Observed: .doctrine/slice/230/design.md:345-357 and D10 at :765-777 direct verify to report stale and natively-unobservable entries, then attest anyway; the text itself concedes at :339-340 and :770-771 that a warning does not make an unobservable claim committed. A full CLI-derived scan (, then  for all 417 rows) found 63 memories with at least one nonobservable/nonmatching declaration under the proposed prefixed probes, 59 active and 13 already carrying verified_sha. Thus the remedy restores F-6's false overclaim by policy rather than accident: a changed .mcp.json/.claude workflow may be the memory's declared evidence, yet verify stamps a surface that excludes it. Expected refusal or a content-bearing anchor for uncovered evidence; observed report-now/validate-later followed by a successful false attestation."
@@ -594,7 +594,7 @@ Carried into SL-232: § 5.2 steps 3-4 with the corrected prefix rule and the exi
 
 [[finding]]
 id = "F-33"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "The design states incompatible strong and weak attestation contracts"
 detail = "Expected: one normative definition of verified_sha must govern scope construction, success, and closure. Observed: design.md:433-436 deliberately defines the weak reading (everything git could observe; a proper subset of declared scope may be stamped), but design.md:604-607 says every declared scope path must be committed 'because that is what the stamp asserts'. The arraigned scope repeats the strong contract at slice-230.md:31-36 and :82-87 ('declared scopes are never excluded'; 'is the claim committed?') while only later acknowledging partial coverage at :114-116. The guiding principle at design.md:80-82 also says governance dirt says nothing although 81 memories declare .doctrine/** evidence and T25 makes such dirt claim-relevant. This is not historical wording: these are the guiding principle, mechanism conclusion, and governing scope. A planner can implement either refusal over every declaration or D10's partial attestation and remain textually compliant. The core stamp contract must not ship unreconciled."
@@ -652,7 +652,7 @@ Filed minor by you, and treated across three rounds as the load-bearing structur
 
 [[finding]]
 id = "F-36"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected validate to implement DEC-020's corpus sink; observed D11 expressly leaves it no contribution probe"
 detail = "Expected: DEC-020 and D10 require validate to raise every non-contributing scope entry (design.md:461-464, 841-849, 960-965), and T35 at design.md:1123 requires that result once per entry. Observed: design.md:498-505 places contribution detection in run_verify's surface construction; design.md:695-744 and D11 at :990-1000 say the constructor serves verify alone, validate keeps its existing raw staleness seam, and validate gains only D5's own-directory count. Command rg -n 'validate|non-contributing|constructor serves|gains only' over design.md found no second current-contribution mechanism. The retained commits_touching seam asks a historical question, is gated on scope.paths, and cannot implement T35. Following D11 therefore omits a mandatory consequence of DEC-020; implementing T35 requires an undesigned second per-entry Git path, including the corpus-wide malformed-entry continuation policy F-29 identified. The user ruling was applied normatively but not mechanistically, and this must not ship unreconciled."
@@ -672,7 +672,7 @@ Nothing here is a contest of your charge. The disposition is a routing decision,
 
 [[finding]]
 id = "F-37"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected every contributing entry to be canonicalised; observed unresolved aliases still contribute and read clean"
 detail = "Expected: step 4 at design.md:309-311 says a non-resolving entry is emitted and step 5 finds it matches nothing; I9 at :806-816 says every evidence-bearing entry is resolved and an absent path is inert. Observed on Git 2.54.0 in three scratch repos. In /tmp/rv307-r8-dotdot.0sxN7q, realpath -e missing/../link exited 1, but git ls-files --error-unmatch on :(literal)missing/../link exited 0 and printed link; with the symlink target dirty, git diff --quiet on that alias exited 0 while the target exited 1. In sparse checkout /tmp/rv307-r8-sparse.im2Sd7, the tracked link was absent and realpath exited 1, yet ls-files on :(literal)link exited 0; the link probe exited clean while the retained target was dirty. In /tmp/rv307-r8-literal.g6BVYr, scope.paths-style literal filename foo* was a tracked symlink: the shape rule at design.md:278-290 treats the star as a pattern and skips whole-path resolution, while ls-files on :(literal)foo* exited 0 and its diff exited clean against a dirty target. Resolution failure therefore does not imply non-contribution, and inferring path-vs-pattern from characters rather than scope.paths versus scope.globs creates the same bypass. T33/T36 cover present symlinks only. All three routes restore the false attestation I9 was meant to close."
