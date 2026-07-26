@@ -2099,3 +2099,32 @@ parameter whose name collides with a user-facing flag is a trap — trace the
 caller before asserting where the value comes from.** Related to the corpus's
 existing "verify against source, not recall" entries, but the failure mode is
 narrower: the source *was* read, just not far enough up.
+
+[dispatch/design; SL-228-RV-308-round3-raiser-turn]
+**A finding verified CLOSED came back through a different door, inside a
+different finding.** F-3 (a Class-2 reap reporting success while the row stays
+pending) was verified terminal in round 2. In round 3 the reviewer found the
+same harm — a completed, irreversible act reported as failure/partial — in
+`run_gc_to`'s post-delete report writes: `writeln!(io::stderr(), …)?` at
+`gc.rs:443` and `writeln!(out, …)?` at `:448` both fire AFTER the worktree and
+branch are already deleted, so an I/O error converts a completed reap into an
+`Err`. Different mechanism, same class, and it surfaced under F-4 (residue
+model) rather than F-3.
+
+The generalisable driver for scoped verification passes: **verifying a finding
+closes the instance, not the class.** A repair phrased as "this outcome now
+reports X distinctly" is discharged against the paths the reviewer looked at;
+the class ("no completed irreversible act may surface as a failure") is not
+enumerated anywhere, so the next audit of an adjacent path re-derives it from
+scratch. Cheap habit: when a disposition establishes a *rule* rather than a
+patch, write the rule down as an invariant with its own enumeration of the paths
+it governs — then a later finding tests the enumeration rather than rediscovering
+the rule.
+
+Second-order: three of round 3's four F-4 items were not "the design is wrong"
+but "the design's claim of totality is wider than what it enumerates". Two
+review rounds in a row (F-6, then F-4) were spent on the same defect shape — a
+discharge claim outrunning its discharge. That is cheaper to catch at authoring
+time with one question than at review time with a round: *for every "total",
+"uniform", "every", or "always" in a design, what is the enumeration, and is it
+written here?*
