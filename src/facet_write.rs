@@ -305,13 +305,6 @@ fn edit_in_place(
         reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
     )
 )]
-#[cfg_attr(
-    test,
-    allow(
-        dead_code,
-        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
-    )
-)]
 pub(crate) fn apply_set(path: &Path, table: &str, fields: &[(&str, f64)]) -> anyhow::Result<bool> {
     edit_in_place(path, |doc| set_facet(doc, table, fields))
 }
