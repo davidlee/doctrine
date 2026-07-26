@@ -45,6 +45,13 @@ source `review/230`), coord worktree removed · 2f8b3fbdf
   zero compiler/clippy diagnostics** (the log's 19 `warning:` lines are doctrine's
   own runtime warning strings from tests exercising warning paths — none carries a
   `-->` source pointer). The earlier note that it had never run is no longer true.
+- **I10 and I13 are mutation-verified, not merely asserted** (RV-313 audit). I10 —
+  hoisting `write_body` ahead of `apply_edit` (the pre-RV-307-F-3 order) turns
+  **T40 red** with `clobbered\n` on disk. I13 — widening D5's pathspec from
+  `memory.md` to the item directory turns **T42 red *alone***, the other two
+  validate tests staying green. "Red alone" is what separates a real falsifier from
+  one that fires on any perturbation; both held. Caveat carried forward: a mutation
+  that fails to compile has not been checked.
 - **RV-313** — the reconciliation audit ledger. Done: 6 findings, all terminal, no
   blockers. Carries `## Brief` (surface reviewed + lines of attack), `## Synthesis`
   and `## Reconciliation Brief` (the handoff to `/reconcile`).
@@ -102,8 +109,8 @@ source `review/230`), coord worktree removed · 2f8b3fbdf
   to SL-232; tracked there, not here.
 - PHASE-03/04 inseparable, and no `sync --integrate` between them: § Execution
   constraints.
-- Moved ids never reused. Next free: **I14, E15, T43** — `E15` is now spoken for by
-  the reconcile brief's `clear_verification` edge-case item.
+- Moved ids never reused. Next free: **I14, E16, T43** — `E15` was spent at
+  reconcile on `clear_verification`'s tolerance (RV-313 F-4, design § 5.5).
 - **RV-313 F-6 / SPEC-007 — open, and NOT settled by audit.** Does § "Git-anchored
   staleness"'s explicit-state guarantee bind `memory validate`'s health checks, or
   only the `find`/`retrieve` axis? The sentence does not determine its own scope.

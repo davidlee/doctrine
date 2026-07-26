@@ -292,17 +292,47 @@ memory's own body file** — `<uid-dir>/memory.md` — since `verified_sha`, alo
 the existing scoped-paths count.
 
 **The pathspec is the body file, not the item directory.** *Narrowed by the
-confirming pass; the directory form was unshippable.* Measured over the whole local
-corpus, it fires on **30 of 30** anchored memories, and the cause is structural
+confirming pass; the directory form was unshippable.* The cause is structural
 rather than incidental: `verify` stamps `verified_sha = <HEAD at verify time>`, the
 stamp must then be committed, and that commit necessarily touches the memory's own
-directory. So `rev-list verified_sha..HEAD -- <uid-dir>` is ≥ 1 for every
-verified-then-committed memory, forever — the check would report the *sanctioned*
-flow as drift, which is the opposite of D5's purpose. Narrowing to `memory.md`
-drops it to **11 of 30**, because the stamp lands in `memory.toml` alone. Residual,
-stated rather than left to be found: a hand-edit of a claim field *in the TOML*
-(title / summary / scope) escapes D5. D8 covers those on the verb path, and the
-complete answer is a body digest — OQ-3, which is SL-232's.
+directory. So `rev-list verified_sha..HEAD -- <uid-dir>` is ≥ 1 for every memory
+whose stamp has been committed — the check would report the *sanctioned* flow as
+drift, which is the opposite of D5's purpose. Narrowing to `memory.md` avoids it,
+because the stamp lands in `memory.toml` alone.
+
+*Measured (RV-313 F-1; restated at reconcile).* On the primary tree at HEAD
+`46c4eac83`, 2026-07-27, over the **48 reachable-anchored** memories in the local
+corpus: the shipped `memory.md` form flags **3**, the rejected item-directory form
+flags **25** — an **8.3× discrimination**. Saturation, the falsifier this narrowing
+exists to avoid, is decisively absent. **The property D5 relies on is the
+discrimination ratio, not the absolute count** — the count is a function of corpus
+age and mix, which is why this figure carries its denominator, date and tree.
+The design's original figures (**30 of 30** directory / **11 of 30** shipped) were
+taken against a 30-memory anchored corpus that has since grown past 115; they no
+longer reproduce, in the safe direction. PHASE-06's **VA-1** derives its absolute
+expectation (~11 of 30) from those superseded figures — the criterion id is
+immutable and is **not** edited; this paragraph is the surface carrying the current
+measurement.
+
+Residual, stated rather than left to be found: a hand-edit of a claim field *in the
+TOML* (title / summary / scope) escapes D5. D8 covers those on the verb path, and
+the complete answer is a body digest — OQ-3, which is SL-232's.
+
+**Stated residual — corpus reach is ~42%, not corpus-wide (RV-313 F-2).** § 1's
+closure promise reads corpus-wide; this qualifies it. Both staleness checks — D5's
+and the pre-existing scoped-paths one — compute drift only when the anchor is
+*reachable*: `commits_touching` returns `None` for a `verified_sha` that is not an
+ancestor of HEAD, and both call sites (`let Some(n) = … && n > 0`) let that `None`
+fall out and emit nothing, rendering *cannot determine* identically to *no drift*.
+Measured at audit: **67 of 115** anchored memories carry a non-ancestor
+`verified_sha`, so both checks are silently inert on them and reach is **~42%**.
+The ancestry guard inside `commits_touching` is correct and must stay — the defect
+is at the two call sites, and the conforming shape already exists one module away
+(`src/coverage.rs:150-166`, `IsStale::{Fresh,Stale,Unknown}` with a documented
+`None ⇒ Unknown` contract over the same seam). Pre-existing in the scoped-paths
+check; SL-230 inherited it into D5 rather than introducing it, which is why it does
+not block this slice. Owned by **ISS-257**; whether it is *also* a SPEC-007
+conformance gap is the reconcile REV's question (RV-313 F-6).
 
 *How the path is obtained — by construction, not by resolution.*
 `memory_health_findings` receives `(root, &[Memory], today)` and no directory
@@ -361,10 +391,19 @@ this slice with R7. Pinned by T41.
   (`:3944-3978`) where `claim_snapshot` compares, so this is the one field where
   the two diverge (RV-307 F-17). Stated because it looks like a bug and is not.
   Pinned by T29.
+- **E15** — a missing or non-table `[review]` / `[git]` table is **silently
+  skipped** by `clear_verification`, so a hand-corrupted `memory.toml` keeps a
+  **stale attestation** through a genuine claim change. I12's "cleared iff a claim
+  field genuinely changed" (§ 5.4) therefore holds for well-formed TOML only. The
+  tolerance is **forced, not chosen**: `clear_verification` is step 4, *after* the
+  body write, so a fallible clear would reintroduce exactly the mutation-on-failure
+  that **I10** forbids and that **T40** catches. Refusing here would trade a narrow
+  residual for the one-way door I10 exists to hold shut (RV-313 F-4). Stated rather
+  than left latent; the residual is accepted, not mitigated.
 
 *Criteria ids are immutable.* I1–I4 and I6–I9, and E2, E4–E9, E11–E13, moved to
 SL-232 with the gate; the ids are **not** reused here, which is why this slice's
-new invariants begin at I10 and its new edge case at E14.
+new invariants begin at I10 and its new edge cases at E14.
 
 ## 6. Open Questions & Unknowns
 
