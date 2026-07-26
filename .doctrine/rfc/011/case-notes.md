@@ -1921,3 +1921,11 @@ From the PHASE-06 hand-back, in the worker's own assessment of cost:
 - `doctrine review dispose` takes free-text disposition; the anti-escape vocab
   (aligned/fix-now/design-wrong/follow-up/tolerated) is documented but unenforced.
   A closed enum would make ledger queries reliable.
+
+[route; SL-231-next-20260726]
+
+- The boot snapshot and `/route` guidance name `doctrine reports next`, but the
+  live CLI has no `reports` command group: the current spelling is the root verb
+  `doctrine next`. Following the boot signpost cost one failed call plus a
+  top-level help read. Cause dimensions: `surface=boot/routing`,
+  `mode=orchestrator`, `model=gpt-5`, `stage=route`.
