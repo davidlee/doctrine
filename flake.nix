@@ -198,10 +198,18 @@
         webModules = stdenv.mkDerivation {
           name = "doctrine-web-node-modules";
           src = webSrc;
-          nativeBuildInputs = [pkgs.bun];
+          nativeBuildInputs = [pkgs.bun pkgs.cacert];
           dontConfigure = true;
           buildPhase = ''
             export HOME=$TMPDIR
+            # Nix gives fixed-output builds host network but binds NO CA bundle
+            # into the sandbox — a derivation must bring its own. Without it
+            # bun's registry TLS never completes and it retries with backoff,
+            # which presents as a HANG (version banner printed, then nothing —
+            # no package lines, no error). Diagnosed by the same build passing
+            # under `--option sandbox false`, which exposes the host /etc.
+            export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+            export NIX_SSL_CERT_FILE=$SSL_CERT_FILE
             bun install --frozen-lockfile --no-progress
           '';
           installPhase = ''
