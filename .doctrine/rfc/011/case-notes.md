@@ -154,3 +154,47 @@ pointers*, never missing content.
   and in the RV's outcome section, i.e. exactly the "recorded in prose only" shape
   the slice already flags as a weakness elsewhere. Costs a downstream reader a
   full-text search to answer "which REV settled this finding?".
+
+## [close; SL-230-close-a1]
+
+- **`check gate` piped through `tail` silently forged a green.** Backgrounding
+  `doctrine check gate 2>&1 | tail -40` returns *`tail`'s* exit status, not the
+  gate's, and keeps only the last 40 lines. The harness reported `exit code 0`
+  and the visible tail was all `ok`, so the run looked green; the rollup was
+  3 suites / 23 tests against the audit's 102 / 4928 — the discrepancy is the
+  only thing that gave it away. A gate invocation must be captured whole
+  (`> file 2>&1; echo $?`), never through a truncating filter. Generalises past
+  this skill: any pipeline-wrapped verification beat launders both signals.
+- **Moved trunk is the modal close state, not an exception.** `/close` step 3a
+  reads as though `--integrate` normally just works, with the moved-trunk case a
+  parenthetical ("A moved trunk refuses (admit a superseding close-target
+  candidate on the new base)"). Here — as at SL-227 — trunk had advanced 16
+  commits past the admitted candidate's base while the slice sat in audit and
+  reconcile, so the parenthetical *was* the path. Cost: the whole
+  create → verify → admit → integrate shape had to be reconstructed from a prior
+  slice's `candidates.toml` (SL-227's row is the only statement of the
+  `--source refs/heads/candidate/<N>/<label>` form; the skill's example shows
+  `--source refs/heads/review/<N>`, which RV-313's synthesis explicitly forbids
+  for this slice). Promoting the superseding-candidate recipe to a first-class
+  step, with the source-from-admitted-review-candidate form, would save a
+  precedent hunt every close whose slice did not close the same day it was
+  audited.
+
+## [design; SL-232-design-f37-repro]
+
+- **Ledger findings are not readable through the CLI.** `doctrine review show 307`
+  prints the brief only; charges/responses require hand-parsing
+  `.doctrine/review/307/review-307.toml`. The handover warned about this, so the
+  cost was one script rather than a wrong turn — but every consumer of a ledger
+  pays it. Worth a `review findings <id> [--id F-NN]` verb: the data is already
+  structured, and extracting 8 findings from a 744-line toml cost a python pass
+  plus one failed guess at the array name (`[[findings]]` vs the actual
+  `[[finding]]`). Guessing the shape of a *doctrine-owned* schema is exactly what
+  the CLI-is-source-of-truth rule exists to prevent, and here the CLI has no
+  answer to give.
+- Design-stage reproduction of three review routes cost ~4 scratch scripts. That
+  is the work, not overhead — but note the scripts are the durable artefact and
+  there is no sink for them: `.doctrine/slice/NNN/research/raw/` exists for the
+  `/research` round only. Probe scripts authored during `/design` have nowhere to
+  land, so the evidence behind a design assertion is re-derived by the next
+  reviewer instead of re-run.
