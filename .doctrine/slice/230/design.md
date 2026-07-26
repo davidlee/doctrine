@@ -226,9 +226,27 @@ let claim_dirty = dirty_under(root, &claim_pathspecs)?;
 | Set | Contents | Why |
 |---|---|---|
 | `corpus_excludes` | `:(exclude)` + `DOCTRINE_PATHSPEC`; plus `:(exclude)memory` (`MEMORY_MASTERS_DIR`) **only when that directory exists** | dirt in doctrine's own authored trees says nothing about whether a claim about the code still holds |
-| `claim_pathspecs` | the memory's **own item directory**, plus its declared `scope.paths` and `scope.globs` (globs as `:(glob)…`) | this *is* the claim's evidence surface — the prose being attested, and the code it is attested against |
+| `claim_pathspecs` | the memory's **own item directory**, plus its declared `scope.paths` and `scope.globs`, per the construction rule below | this *is* the claim's evidence surface — the prose being attested, and the code it is attested against |
 
-`scope.commands` is not path-shaped and contributes nothing (E5).
+**`claim_pathspecs` construction is total** (RV-307 F-6, second round). Scope
+arrays are free text and this corpus proves they are not uniformly repo-relative,
+so the rule is stated rather than left to the implementation:
+
+| Scope entry | Contributes | Why |
+|---|---|---|
+| repo-relative path or glob | as-is (globs via `:(glob)…`) | the normal case |
+| absolute path **inside** the repo | normalised to repo-relative | 4 items carry these, e.g. `"/workspace/doctrine/src/worktree/jail.rs"` — git resolves a leading slash against the repo root, so unnormalised they match **nothing** |
+| absolute path **outside** the repo | **dropped** | git cannot observe it |
+| gitignored path | **dropped** | carries no tracked evidence; `.doctrine/state/` is scoped by several items and is ignored at `.gitignore:39` |
+| `scope.commands` | **dropped** | not path-shaped (E5) |
+| nothing left | item directory alone (E6) | the body must still be committed |
+
+**Every drop is announced** (E7). Git does not fail a pathspec that matches
+nothing (absent `--error-unmatch`), so an unnormalised or ignored scope entry
+would otherwise shrink the claim surface *silently* — reaching a false attestation
+by a quieter road than the one F-1 found. `verify` reports on stderr which scope
+entries did not contribute and why, so a memory whose evidence surface is narrower
+than its declared scope says so at the moment of attestation.
 
 This is the correction for RV-307 F-1 and F-6. Excluding `.doctrine/**` wholesale
 excluded the memory *being verified* — items live at
@@ -267,14 +285,35 @@ files and is no longer atomic across them. **Every fallible step precedes every
 disk write**, and the body still lands before the TOML:
 
 ```
+let before = claim_snapshot(&doc);                     // 0. pure read, pre-edit
 toml_changed = apply_edit(&mut doc, fields, today)?    // 1. VALIDATES; mutates in memory only
 body_changed = write_body(dir, "memory.md", text, mode)?  // 2. first disk write
-if body_changed {                                      // 3. D4/D8
-    clear_verification(&mut doc);
-    doc["updated"] = today;                            //    re-stamp — see below
-}
-if body_changed || toml_changed { write_atomic(toml_path) }  // 4. TOML last
+claim_changed = body_changed || claim_snapshot(&doc) != before;   // 3.
+if claim_changed { clear_verification(&mut doc) }      // 4. D8
+if body_changed  { doc["updated"] = today }            // 5. re-stamp — see below
+if body_changed || toml_changed { write_atomic(toml_path) }  // 6. TOML last
 ```
+
+**The claim-change signal** (RV-307 F-8, second round). `claim_snapshot` is a
+pure read of the four claim-bearing fields — `title`, `summary`,
+`scope.paths`/`globs`/`commands` — compared before and after `apply_edit`:
+
+```rust
+fn claim_snapshot(doc: &toml_edit::DocumentMut) -> ClaimSnapshot
+```
+
+Computed at the caller by comparison rather than by widening `apply_edit`'s
+return type, because `apply_edit` returns one bool that cannot distinguish claim
+fields from record fields, and changing its signature would break its existing
+suite — which R3 forbids. Compared rather than inferred from *which flags were
+supplied*, because supplied is not changed: setting `--title` to its existing
+value must not clear a valid attestation (the T12b discipline, generalised).
+Step 5 stays gated on `body_changed` alone, since `apply_edit` already stamps
+`updated` for any metadata change.
+
+The first round of this design named the claim fields in D8 and in a table, and
+wired only `body_changed` into the operation — a decision recorded in two places
+and implemented in none.
 
 *Revised by RV-307 F-3.* The previous order put `write_body` first, on the reading
 that the TOML content depends on `body_changed`. But `apply_edit` is fallible at
@@ -309,14 +348,32 @@ window this narrow. Stated, not buried.
 **Verify.** The gate is **two questions, both of which must pass**:
 
 ```
-source = capture_with(root, corpus_excludes)?   // 1. is the code dirty?
-claim_dirty = dirty_under(root, claim_pathspecs)?  // 2. is the claim committed?
-
-match (source.anchor_kind, claim_dirty) {
-    (Commit, false) => attest against source.commit,       // the only success
-    _               => refuse unless --allow-dirty,
+if allow_dirty {
+    let full = capture(root)?;      // UNEXCLUDED — the real state of the tree
+    stamp(full);                    // Commit if genuinely clean, else CheckoutState
+} else {
+    let source = capture_with(root, corpus_excludes)?;   // 1. is the code dirty?
+    let claim_dirty = dirty_under(root, claim_pathspecs)?;  // 2. is the claim committed?
+    match (source.anchor_kind, claim_dirty) {
+        (Commit, false) => attest against source.commit,    // the only success
+        _               => refuse, naming which question failed,
+    }
 }
 ```
+
+**Why `--allow-dirty` re-captures unexcluded** (RV-307 F-13). Both `Commit`
+branches of `capture` set `checkout_state_id: String::new()` (`src/git.rs:2036`,
+`:2048`) — only the dirty branch computes one. So a claim-only-dirty tree yields a
+`Commit`-anchored `source` frame carrying no `checkout_state_id`, and the claim
+leg is deliberately a bool (I2 — it must not compute one, or it takes the index
+lock). The escape hatch would have had nothing to stamp, and would have recorded a
+clean-looking attestation for a tree the operator explicitly flagged as dirty.
+Taking the anchor from an unmodified `capture(root)` makes I4 literally true: the
+escape hatch uses today's function, unchanged. The extra capture is confined to
+that path, where the index lock is already acceptable — today's `--allow-dirty` on
+a dirty tree takes it anyway. Same root cause as F-1: the default path was
+reasoned about and the escape hatch left to inherit machinery built for a
+different question.
 
 Dirt in doctrine's authored corpus that the memory does not claim against no
 longer blocks, and the anchor is a real addressable commit rather than a
@@ -389,8 +446,11 @@ stashing. The refusal names its own flag.
   *claim* probe never reaches `write_tree_with_retry` (`src/git.rs:1924`) even when
   the claim surface is dirty. Pinned by T23.
 - **I3** — a genuinely dirty *source* tree still refuses without `--allow-dirty`.
-- **I4** — `--allow-dirty` semantics unchanged (attest anyway, stamp
-  `checkout_state_id`). It overrides **both** gate questions.
+- **I4** — `--allow-dirty` semantics unchanged: it bypasses **both** gate
+  questions and stamps the frame from an **unexcluded** `capture(root)` — today's
+  function, called as today (RV-307 F-13). Stated explicitly rather than inferred,
+  because inferring it from the exclusion-aware frame gave an empty
+  `checkout_state_id`.
 - **I5** — `thread_expiry` untouched.
 - **I6** — a successful attestation's `verified_sha` **contains the attested
   body**. The point of the claim probe; pinned by T24 (`git cat-file -e
@@ -408,6 +468,11 @@ stashing. The refusal names its own flag.
   in the claim surface.
 - **E6** — a memory with an empty scope has a claim surface of exactly its own
   item directory. Still meaningful: the body must be committed.
+- **E7** — a scope entry that contributes no pathspec (absolute-outside-repo,
+  gitignored, `commands`) is **reported on stderr at verify time**, never dropped
+  silently. Silent narrowing of the claim surface is a false attestation reached
+  quietly; the operator is told when the evidence surface is smaller than the
+  declared scope.
 
 ## 6. Open Questions & Unknowns
 
@@ -541,7 +606,8 @@ fixture: `GitScratch` (`:5617`); MCP e2e: `tests/e2e_mcp_server.rs:963-1110`.
 | T7 | verify, unrelated `.doctrine/**` dirty, memory committed | succeeds, stamps **HEAD commit** (not `checkout_state_id`) |
 | T8 | verify, memory dir untracked (`record` → `verify`) | **refuses** (D9); message names both the cause and `git commit` |
 | T9 | verify, source tree dirty | still refuses; message names `--allow-dirty` |
-| T10 | `--allow-dirty` | unchanged, stamps `checkout_state_id`; overrides **both** gate questions |
+| T10 | `--allow-dirty`, source tree dirty | unchanged, stamps `checkout_state_id` |
+| T10b | `--allow-dirty`, **only the claim** dirty (source clean after exclusion) | stamps a real `checkout_state_id` from the unexcluded capture — **not** empty, not a bare commit (I4, F-13) |
 | T11 | `capture(root)` == `capture_with(root, &[])` | I1 — identical frames on clean, dirty, unborn, non-repo |
 | T12 | body edit via the verb | clears `verification_state`/`reviewed`/`verified_sha` |
 | T12b | `--body` replacing content with itself | full no-op: `updated` **not** stamped, verification **not** cleared |
@@ -553,11 +619,15 @@ fixture: `GitScratch` (`:5617`); MCP e2e: `tests/e2e_mcp_server.rs:963-1110`.
 | T18 | verify, **unstaged/binary** corpus change | excluded; succeeds (worktree diff leg) |
 | T19 | verify, **untracked** corpus file outside the memory | excluded; succeeds (untracked leg) |
 | T20 | edit `title` / `summary` / `scope.*`, each alone | clears the verification axis (D8) |
+| T20b | set `--title` to its **existing** value | does **not** clear — `claim_snapshot` compares, it does not count flags (F-8) |
 | T21 | edit `status` / `lifespan` / `review_by` / `trust` / `severity`, each alone | does **not** clear (D8's other half) |
 | T22 | `body_mode` without `body`, CLI **and** MCP | rejected on both, same message (F-10) |
 | T23 | verify on the clean-after-exclusion path while `.git/index.lock` is held | completes — I2 canary; fails if `write-tree` creeps back in |
-| T24 | after a successful verify | `git cat-file -e "$verified_sha:<dir>/memory.md"` succeeds — I6, the attested body is *in* the stamped commit |
+| T24 | after a successful verify | `git show "$verified_sha:<dir>/memory.md"` equals the on-disk body **byte-for-byte** — I6. Existence (`cat-file -e`) would pass against any stale ancestor blob (F-14) |
+| T24b | body **tracked but modified** (not untracked), verify | **refuses** — the case where existence and equality disagree, and the untracked leg does not fire |
 | T25 | verify, memory scopes `.doctrine/adr/**`, an ADR under it modified | **refuses** — scoped corpus dirt is claim-relevant (F-6) |
+| T26 | claim pathspec construction: absolute-inside-repo, absolute-outside-repo, gitignored, unmatched | normalised / dropped / dropped / no-op, per the § 5.2 rule (F-6 round 2) |
+| T27 | verify with a non-contributing scope entry | stderr names the entry and the reason (E7) |
 
 Closure: **every test in § 9 green** (stated as a set, not a numeric range, so a
 test added by a later review cannot fall outside the gate by omission — RV-307
@@ -676,3 +746,45 @@ composed a flag over a step that does not exist. The lesson is recorded in the
 closure criterion (a set, not a range) and is worth carrying beyond this slice:
 **integrating a finding means sweeping every section it touches, not the one where
 the decision is recorded.**
+
+#### Round 2 — confirmatory pass (same raiser)
+
+Ten of the twelve verified. **Two contested, and both contests were correct** —
+including, pointedly, one instance of the very pattern the paragraph above had
+just diagnosed.
+
+- **F-8 contested and sustained (design changed).** D8 was written as a decision
+  *and* a table naming four claim fields, while § 5.4 step 3 still read
+  `if body_changed`. A decision recorded twice and implemented nowhere. Now wired
+  through `claim_snapshot`, compared before/after `apply_edit` — comparison rather
+  than flag-counting, so an idempotent `--title` does not clear a valid stamp
+  (T20b).
+- **F-6 contested and sustained (design changed).** The claim surface was
+  under-specified in a way this corpus falsifies: four items carry **absolute**
+  scope paths, which git resolves against the repo root and which therefore match
+  nothing; several scope `.doctrine/state/`, which is gitignored. Neither errors —
+  git does not fail an unmatched pathspec — so both shrink the claim surface
+  *silently*. § 5.2 gains a total construction rule, and E7 makes every drop
+  audible on stderr. **Same defect class as the original F-1, reached by a quieter
+  road.**
+
+Two new findings, both sustained:
+
+- **F-13 (blocker).** `--allow-dirty` had nothing to stamp. Both `Commit` branches
+  of `capture` leave `checkout_state_id` empty (`src/git.rs:2036`, `:2048`), and
+  the claim leg is a bool by design (I2). A claim-only-dirty tree would have
+  recorded a clean-looking attestation for a tree the operator flagged as dirty.
+  Fixed by taking the escape hatch's anchor from an unexcluded `capture(root)`.
+  **Same root cause as F-1** — the default path reasoned about, the escape hatch
+  left to inherit machinery built for a different question.
+- **F-14 (minor).** T24's `cat-file -e` proved a blob existed at the path, which
+  any stale ancestor body would satisfy. Now byte equality, plus T24b for the
+  tracked-but-modified case where existence and equality disagree.
+
+**What the two rounds together say about this design.** The recurring failure was
+never the mechanism — it was reasoning about the principal path and letting
+adjacent paths inherit assumptions that no longer held: the escape hatch (F-13),
+the bypass path (A4), the hand-edit path (D5), the no-op write (A2), the scope
+entry that isn't repo-relative (F-6 round 2). Five instances of one habit. The
+design is now specified at those edges rather than at the centre alone, which is
+why the test matrix roughly doubled.
