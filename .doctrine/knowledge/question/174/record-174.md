@@ -24,3 +24,15 @@ Before SL-231 design locks, determine whether friction-observation collection:
 The answer must preserve the semantic boundary between raw occurrence evidence,
 consolidated reusable knowledge, and actionable work, while avoiding a parallel
 identity/storage implementation.
+
+## Answer
+
+Friction-observation collection requires a new product/technical specification
+pair: PRD-018 governs observations as a raw-signal capability, and SPEC-028
+governs the observation ledger that stores, corrects, resolves, and queries
+them. SPEC-028 is a container under the whole-system context, SPEC-003.
+
+The capability is deliberately not placed under memory, backlog, knowledge
+records, comparisons, or the entity engine. Nor is a generic reusable
+evidence-ledger abstraction authored yet. The observation ledger supplies the
+first concrete case; extraction should wait for another conforming consumer.

@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 405
+slug = "encode-observations-in-a-typed-versioned-wire-contract"
+title = "Encode observations in a typed versioned wire contract"
+status = "pending"
+kind = "functional"
+description = "The ledger encodes every observation through a versioned typed envelope, kind payload, registered facets with origins, and typed correction controls."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "wire", "schema", "facet"]
+acceptance_criteria = [
+  "The envelope carries the schema discriminator plus schema version, UUID identity, kind, and recorded time, with the path and envelope agreeing.",
+  "Friction, measurement, supersession, and retraction use registered typed payloads; unknown payload fields are not accepted on write.",
+  "Each optional facet declares its schema version and field origins, and no generic metadata bag or Markdown companion is part of the wire contract.",
+]

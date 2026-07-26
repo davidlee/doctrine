@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 402
+slug = "preserve-merge-safe-identity-and-idempotent-retry"
+title = "Preserve merge-safe identity and idempotent retry"
+status = "pending"
+kind = "quality"
+description = "Observation identity and persistence remain merge-safe under concurrent capture and idempotent under a caller-stable retry."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "identity", "concurrency", "idempotency"]
+acceptance_criteria = [
+  "Concurrent distinct observations do not contend on a shared record or overwrite one another.",
+  "A retry with the same identity and caller intent returns the existing observation without rewriting first-write facts.",
+  "Different caller intent under an existing identity is refused, and different identities are never content-deduplicated.",
+]

@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 411
+slug = "validate-writes-strictly-while-tolerating-bad-records-on-reads"
+title = "Validate writes strictly while tolerating bad records on reads"
+status = "pending"
+kind = "quality"
+description = "Observation writes validate the complete contract strictly while reads diagnose malformed or unsupported records and continue with the valid corpus."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "validation", "compatibility", "diagnostic"]
+acceptance_criteria = [
+  "Unsupported kinds or schemas, unknown fields, invalid identifiers or timestamps, invalid facets, and empty required payloads fail before write.",
+  "A malformed or unsupported stored file yields a diagnostic carrying its path and recoverable identity.",
+  "One bad record cannot prevent exact or collection reads of unrelated valid observations.",
+]

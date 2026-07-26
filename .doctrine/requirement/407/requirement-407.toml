@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 407
+slug = "resolve-append-only-corrections-into-active-and-historical-projections"
+title = "Resolve append-only corrections into active and historical projections"
+status = "pending"
+kind = "functional"
+description = "The resolver derives exact, active, and historical projections from append-only correction controls without mutating source observations."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "resolve", "supersession", "retraction"]
+acceptance_criteria = [
+  "A valid supersession selects its existing compatible replacement and a valid retraction removes only its exact target from the active projection.",
+  "History retains every public observation and correction control.",
+  "A correction component containing a dangling target, cycle, multiple successors, incompatible replacement, conflicting terminal controls, or malformed control is diagnostic and inert while valid components still resolve.",
+]

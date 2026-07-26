@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 410
+slug = "enrich-observations-through-an-allowlisted-precedence-contract"
+title = "Enrich observations through an allowlisted precedence contract"
+status = "pending"
+kind = "functional"
+description = "The creation service assembles optional context from allowlisted enrichment inputs under explicit-over-automatic precedence."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "enrichment", "origin", "privacy"]
+acceptance_criteria = [
+  "Only named bounded non-secret enrichment sources are eligible; environment dumps, prompt bodies, arbitrary process metadata, and repository content are excluded.",
+  "Supplying an explicit facet replaces automatic assembly for that facet and records explicit origin.",
+  "Automatic failure warns and proceeds, while invalid explicit input fails before any file is created.",
+]

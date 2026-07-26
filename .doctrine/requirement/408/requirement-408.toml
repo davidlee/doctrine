@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 408
+slug = "query-observations-by-identity-facets-time-and-text"
+title = "Query observations by identity facets time and text"
+status = "pending"
+kind = "functional"
+description = "The query engine supports exact UUID lookup and stable filtering, lexical search, ordering, and pagination over active or historical projections."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "query", "search", "pagination"]
+acceptance_criteria = [
+  "Exact UUID lookup can return raw identity or explicitly resolved state regardless of lifecycle.",
+  "Filters cover kind, time, and registered facet fields, and lexical search covers only defined text fields.",
+  "Results order by recorded time newest-first and UUID with stable pagination, without aggregation or relevance-ranking semantics.",
+]

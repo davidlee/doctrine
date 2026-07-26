@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 403
+slug = "keep-capture-cheap-and-enrichment-failure-tolerant"
+title = "Keep capture cheap and enrichment failure-tolerant"
+status = "pending"
+kind = "quality"
+description = "Ordinary observation capture remains cheap, permissive, and tolerant of unavailable automatic enrichment."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "capture-cost", "enrichment", "reliability"]
+acceptance_criteria = [
+  "Capture performs no preamble to find duplicates, classify root cause, or choose downstream work.",
+  "Unavailable or failed automatic enrichment is surfaced without preventing an otherwise valid capture.",
+  "Invalid explicit data fails clearly rather than being silently dropped or rewritten.",
+]

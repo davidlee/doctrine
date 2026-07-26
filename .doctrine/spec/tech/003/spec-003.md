@@ -22,6 +22,8 @@ The system decomposes into these containers:
   reassembly, and corpus validation.
 - **Memory** (SPEC-007) — the scope-aware durable-knowledge store, recorded and retrieved
   out-of-band of any one task.
+- **Observation ledger** (SPEC-028) — the append-only raw-signal store and
+  inspection boundary for cheap, structured occurrence capture.
 - **Id lifecycle** (SPEC-008) — next-id allocation, corpus-wide integrity, and reseat repair.
 - **Install & distribution** (SPEC-009) — the embedded sources, manifest, and templates the
   installer lays into a target repo.

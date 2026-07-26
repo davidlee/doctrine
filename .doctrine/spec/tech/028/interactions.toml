@@ -1,0 +1,15 @@
+[[edge]]
+target = "SPEC-013"
+type = "uses"
+notes = "Observation CLI adapters follow the uniform command and rendering contract."
+
+[[edge]]
+target = "SPEC-012"
+type = "extends"
+notes = "Bounded observation_record capture crosses the confined worker filesystem wall without broadening general worker writes."
+# Interactions — outbound spec -> spec edges (tech specs only).
+# Seeded empty; authored via `doctrine spec interactions add`:
+#   [[edge]]
+#   target = "SPEC-002"       # canonical FK into .doctrine/spec/tech/NNN
+#   type = "uses"             # free-text edge kind (calls / extends / uses / …)
+#   notes = "…"               # optional

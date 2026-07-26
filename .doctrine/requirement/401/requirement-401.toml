@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 401
+slug = "capture-observations-from-constrained-agent-execution"
+title = "Capture observations from constrained agent execution"
+status = "pending"
+kind = "functional"
+description = "A supported constrained agent can record approved primary observation kinds in the registered collection without receiving general repository-write or correction authority."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "agent", "confinement", "mcp"]
+acceptance_criteria = [
+  "The constrained caller can create approved primary signal observations despite lacking direct write access to the collection root.",
+  "The caller cannot select an arbitrary filesystem path.",
+  "The caller cannot create supersession or retraction controls through the bounded capture capability.",
+]

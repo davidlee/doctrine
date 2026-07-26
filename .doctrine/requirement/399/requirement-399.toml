@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 399
+slug = "correct-observations-without-erasing-history"
+title = "Correct observations without erasing history"
+status = "pending"
+kind = "functional"
+description = "A trusted operator can supersede or retract an exact observation without editing or deleting any existing observation."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "supersession", "retraction", "history"]
+acceptance_criteria = [
+  "Supersession names an existing compatible replacement and records a separate correction.",
+  "Retraction records a separate correction targeting exact identity.",
+  "Every original observation and correction remains inspectable in history.",
+]

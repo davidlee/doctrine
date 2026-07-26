@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 400
+slug = "attach-optional-typed-context-and-trustworthy-measurements"
+title = "Attach optional typed context and trustworthy measurements"
+status = "pending"
+kind = "functional"
+description = "A caller can attach registered optional context and trustworthy machine measurements without making any optional field a prerequisite for capture."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "facet", "context", "usage"]
+acceptance_criteria = [
+  "Execution, work, correlation, provenance, and usage context is represented through registered typed facets rather than an untyped bag.",
+  "Absent optional context remains unknown and is never inferred as a value or measured zero.",
+  "A usage measurement identifies its machine source, scope, units, and completeness and is never an agent estimate or derived efficiency score.",
+]

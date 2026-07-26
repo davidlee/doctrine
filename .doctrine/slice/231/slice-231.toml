@@ -121,6 +121,16 @@ role = "concerns"
 descriptor = "immutable attributed session-of-one ledger precedent"
 target = "SPEC-024"
 
+[[relation]]
+label = "references"
+role = "implements"
+target = "PRD-018"
+
+[[relation]]
+label = "references"
+role = "implements"
+target = "SPEC-028"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload

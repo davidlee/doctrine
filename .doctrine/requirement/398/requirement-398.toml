@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 398
+slug = "inspect-and-search-current-and-historical-observations"
+title = "Inspect and search current and historical observations"
+status = "pending"
+kind = "functional"
+description = "A caller can inspect an exact observation and list, filter, or lexically search the current resolved collection or its complete correction history."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "query", "search", "history"]
+acceptance_criteria = [
+  "Exact identity lookup remains available regardless of whether an observation is current, superseded, or retracted.",
+  "Collection reads default to current resolved observations and expose history only when requested.",
+  "Filtering and lexical search do not deduplicate, cluster, prioritise, or infer meaning from the returned observations.",
+]

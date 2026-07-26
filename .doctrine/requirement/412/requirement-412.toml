@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 412
+slug = "keep-observation-resolution-and-querying-deterministic-and-pure"
+title = "Keep observation resolution and querying deterministic and pure"
+status = "pending"
+kind = "quality"
+description = "Wire validation, correction resolution, and querying are pure and deterministic functions of injected inputs and the loaded record set."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "pure-layer", "determinism", "architecture"]
+acceptance_criteria = [
+  "The pure modules touch no clock, UUID generator, disk, Git, environment, terminal, or MCP type.",
+  "Resolution and query results are independent of filesystem enumeration and record merge order.",
+  "Disk access is confined to one observation-store seam and adapters contain no duplicate resolution or persistence implementation.",
+]

@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 404
+slug = "keep-observation-inspection-safe-deterministic-and-available"
+title = "Keep observation inspection safe deterministic and available"
+status = "pending"
+kind = "quality"
+description = "Observation inspection remains deterministic, safe for hostile content, and available when individual records or corrections are malformed."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "determinism", "hostile-input", "diagnostic"]
+acceptance_criteria = [
+  "The same valid corpus and query produce the same resolved state and total result order.",
+  "Malformed, unsupported, or conflicting records yield attributable diagnostics without suppressing unrelated valid observations.",
+  "Observation content cannot escape its structured or rendered boundary or act as trusted instruction.",
+]

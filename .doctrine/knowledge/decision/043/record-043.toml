@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 174
-slug = "evergreen-home-for-friction-observations"
-title = "Evergreen home for friction observations"
-record_kind = "question"
-status = "answered"
+id = 43
+slug = "give-observations-a-dedicated-product-capability-and-ledger-container"
+title = "Give observations a dedicated product capability and ledger container"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-26"
 updated = "2026-07-26"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

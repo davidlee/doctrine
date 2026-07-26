@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 397
+slug = "record-a-raw-occurrence-observation"
+title = "Record a raw occurrence observation"
+status = "pending"
+kind = "functional"
+description = "A caller can record one raw occurrence as a durable observation using only the observation kind and that kind's minimal payload."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "capture", "occurrence"]
+acceptance_criteria = [
+  "Recording friction requires only a non-empty concise summary; classification, duplicate search, and disposition are not prerequisites.",
+  "A successful capture returns a stable observation identity and an addressable receipt.",
+  "Two observations with similar or identical content remain distinct when they have different identities.",
+]

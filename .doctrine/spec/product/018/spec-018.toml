@@ -1,0 +1,25 @@
+schema = "doctrine.spec.product"
+version = 1
+
+id = 18
+slug = "observations"
+title = "Observations"
+status = "draft"
+kind = "product"
+product_level = "capability"
+category = "signal-collection"
+tags = ["observation", "signal", "occurrence", "capture", "ledger", "search", "correction"]
+responsibilities = [
+  "Give raw occurrence signals a durable home before they become interpreted knowledge, actionable work, or an aggregate pattern.",
+  "Make an observation cheap to record with stable identity and minimal required content, while admitting typed optional context without making classification a precondition.",
+  "Let operators and agents inspect, filter, and search current and historical observations without collapsing repeated occurrences into one record.",
+  "Preserve correction history through explicit supersession and retraction rather than destructive mutation.",
+  "Keep observation collection separate from consumer-owned analysis, triage, aggregation, promotion, retention, and reporting state.",
+  "Permit bounded capture from constrained execution environments without granting a general repository-write capability.",
+]
+
+# product_level — closed product ladder: domain | capability | feature | story. Add as:
+#   product_level = "capability"
+# parent — single decomposition parent (PRD-NNN, product→product); the tree must
+#   stay acyclic. Add as:
+#   parent = "PRD-001"

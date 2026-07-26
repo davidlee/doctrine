@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 406
+slug = "create-one-immutable-observation-atomically"
+title = "Create one immutable observation atomically"
+status = "pending"
+kind = "functional"
+description = "The store creates each observation atomically as one immutable partitioned file and implements caller-intent replay without overwrite."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "store", "atomic", "idempotency"]
+acceptance_criteria = [
+  "One self-contained TOML file is created under kind, UTC year, UTC month, and UUID partitions using create-new semantics.",
+  "The same UUID plus the same kind, typed payload, and explicit facets returns a replay receipt and retains the first write's time and enrichment.",
+  "Different intent at the same UUID, path-envelope disagreement, symlink squatting, or containment escape is refused without a partial visible record.",
+]

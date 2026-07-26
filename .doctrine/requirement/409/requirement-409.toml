@@ -1,0 +1,20 @@
+schema = "doctrine.requirement"
+version = 1
+
+id = 409
+slug = "serve-cli-and-mcp-capture-through-one-engine-contract"
+title = "Serve CLI and MCP capture through one engine contract"
+status = "pending"
+kind = "functional"
+description = "Trusted CLI adapters and the bounded MCP capture adapter invoke one shared observation service and return the same creation receipt contract."
+
+# description — the requirement statement (structured, queryable; `show` renders
+# it as the statement line — the storage rule forbids deriving it from prose).
+# Rationale and extended discussion stay in the sister `.md`. Add as:
+#   description = "…"
+tags = ["observation", "cli", "mcp", "service"]
+acceptance_criteria = [
+  "Equivalent CLI and MCP creation requests produce equivalent stored records and receipts.",
+  "The trusted CLI exposes record, show, list, search, supersede, and retract semantics without duplicating store or resolver logic.",
+  "The MCP adapter exposes structured primary-kind capture only and refuses correction controls and arbitrary path input.",
+]
