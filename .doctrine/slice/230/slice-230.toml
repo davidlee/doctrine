@@ -15,10 +15,6 @@ selector = "src/memory.rs"
 intent = "design-target"
 
 [[selector]]
-selector = "src/git.rs"
-intent = "design-target"
-
-[[selector]]
 selector = "src/mcp_server/tools.rs"
 intent = "design-target"
 
@@ -32,10 +28,6 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/entity.rs"
-intent = "design-target"
-
-[[selector]]
-selector = "src/corpus_guard.rs"
 intent = "design-target"
 
 [[selector]]

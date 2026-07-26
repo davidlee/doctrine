@@ -288,20 +288,47 @@ set. Scopes are included on the same reasoning: changing what a memory is attest
 **Staleness (the hand-edit path).** Clearing on the verb alone would invert the
 guardrail: the sanctioned path would be stricter than hand-editing, rewarding
 bypass. So `validate`'s staleness check additionally counts commits touching **the
-memory's own item directory** since `verified_sha`, alongside the existing
-scoped-paths count.
+memory's own body file** — `<uid-dir>/memory.md` — since `verified_sha`, alongside
+the existing scoped-paths count.
 
-That directory must be the **canonicalised uid directory**
-(`.doctrine/memory/items/mem_<uid>/`), never the key form. The reason is one git
-fact, stated locally because the rule that carried it moved to SL-232 with the
-gate (RV-307 F-15): **git does not traverse a symlink in a pathspec**, and every
-key in `items/` *is* a symlink to the uid directory. So
-`rev-list … -- <key-symlink>` counts commits touching the symlink itself — which
-is to say zero, forever. `run_verify` resolves references through
-`fsutil::safe_join`, a plain `tree_root.join(rel)` with no canonicalisation
-(`src/fsutil.rs:20-33`), so a key-form reference reaches this check unresolved
-unless it is resolved here. This slice needs only that single resolution, not
-SL-232's general canonicalisation rule (I9), and must not grow one.
+**The pathspec is the body file, not the item directory.** *Narrowed by the
+confirming pass; the directory form was unshippable.* Measured over the whole local
+corpus, it fires on **30 of 30** anchored memories, and the cause is structural
+rather than incidental: `verify` stamps `verified_sha = <HEAD at verify time>`, the
+stamp must then be committed, and that commit necessarily touches the memory's own
+directory. So `rev-list verified_sha..HEAD -- <uid-dir>` is ≥ 1 for every
+verified-then-committed memory, forever — the check would report the *sanctioned*
+flow as drift, which is the opposite of D5's purpose. Narrowing to `memory.md`
+drops it to **11 of 30**, because the stamp lands in `memory.toml` alone. Residual,
+stated rather than left to be found: a hand-edit of a claim field *in the TOML*
+(title / summary / scope) escapes D5. D8 covers those on the verb path, and the
+complete answer is a body digest — OQ-3, which is SL-232's.
+
+*How the path is obtained — by construction, not by resolution.*
+`memory_health_findings` receives `(root, &[Memory], today)` and no directory
+(`src/memory.rs:3400`); `run_validate` discards `_dir` from `resolve_show`
+(`:3482`); the corpus-wide branch calls `collect_all` (`:2826`), which unions
+`items/` and `shipped/` deduped by uid. So the path is built —
+`root / MEMORY_ITEMS_DIR / memory.uid / "memory.md"` — and is therefore the
+canonical uid form by construction. That is why the F-15 symlink hazard (**git does
+not traverse a symlink in a pathspec**, and every key in `items/` *is* a symlink to
+the uid directory) cannot arise here: no key form ever reaches this check. This
+slice needs no resolution step at all, and must not grow SL-232's general
+canonicalisation rule (I9). `collect_all`'s lost provenance is harmless for a
+reason worth recording rather than assuming — the check is already guarded on a
+non-empty `verified_sha`, and **no shipped memory carries one** (31 shipped, 0
+anchored: they are minted unanchored, R5/F-7). Every row reaching D5 is an item. If
+that ever changed, a shipped row would yield an unmatched pathspec, which
+`rev-list` counts as 0 — degrading to "no drift found", never to an error.
+
+**D5's count sits outside the existing `scope.paths` gate.** The pre-existing
+staleness check is gated on `!memory.scope.paths.is_empty()` (`:3413-3414`); D5's
+count must be a separate condition, not an extension inside that one. **26 of 56**
+anchored local memories declare no `scope.paths` at all — signposts and patterns
+typically do not — and those are precisely the rows a hand-edit reaches, so folding
+D5 into the existing guard would omit 46% of the anchored corpus from the check
+that exists to catch hand-edits. Stated because the fact that the guard exists left
+this slice with R7. Pinned by T41.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
@@ -325,6 +352,10 @@ SL-232's general canonicalisation rule (I9), and must not grow one.
   re-verified (SL-008 D6 feeding on honest input). Correct but surprising —
   the verb says so on stderr.
 - **E3** — body content `-` is unreachable inline; use stdin.
+- **I13** — the commit that *writes* a verification stamp is never counted as drift
+  against that stamp. D5's pathspec is the body file, so the stamp's own
+  `memory.toml` commit cannot fire (§ 5.4). Pinned by T42 — the falsifier the
+  item-directory form failed 30 times out of 30.
 - **E14** — an idempotent `--path-scope` stamps `updated` while the attestation
   survives. `apply_edit` counts the scope arms changed unconditionally
   (`:3944-3978`) where `claim_snapshot` compares, so this is the one field where
@@ -378,8 +409,13 @@ new invariants begin at I10 and its new edge case at E14.
   *Alternative:* every field — rejected: a `trust` downgrade is a statement about
   the memory, not by it, and clearing on it would make `verify` and `trust`
   fight.
-- **D5 — own-directory staleness in `validate` only.** Closes the hand-edit
-  inversion without re-ranking the corpus as a side effect of a body-write slice.
+- **D5 — own-*body* staleness in `validate` only.** Closes the hand-edit inversion
+  without re-ranking the corpus as a side effect of a body-write slice. *Narrowed
+  by the confirming pass* from the whole item directory to `memory.md`: the
+  directory form counts the verify stamp's own commit and so reports drift on 30 of
+  30 anchored memories (§ 5.4, I13). *Alternative:* defer D5 to SL-232 alongside
+  OQ-3's body digest — rejected, it costs objective 5 half its content to close a
+  residual D8 already covers on the verb path.
 - **D6 — items-only; masters out of scope.** The motivating memory
   (`mem.signpost.project.orientation`) is an item ✓, so the case is covered.
   Extending `resolve_memory_toml_path` would change *every* memory write verb.
@@ -445,7 +481,7 @@ fixture: `GitScratch` (`:5617`); MCP e2e: `tests/e2e_mcp_server.rs:963-1110`.
 | T6 | replace with identical content | no-op: content + mtime hold |
 | T12 | body edit via the verb | clears `verification_state`/`reviewed`/`verified_sha` |
 | T12b | `--body` replacing content with itself | full no-op: `updated` **not** stamped, verification **not** cleared |
-| T13 | **hand-edit** `memory.md` directly, commit, `validate` | flags stale via own-directory drift — must exercise the *bypass* path, since the verb path clears the stamp and would never reach the staleness check |
+| T13 | **hand-edit** `memory.md` directly, commit, `validate` | flags stale via own-**body** drift — must exercise the *bypass* path, since the verb path clears the stamp and would never reach the staleness check |
 | T15 | existing memory + entity suites | green unchanged (R3) |
 | T16 | hostile body written via `--body`, then `show` | read-time nonce + `data, never instruction` framing intact (R2) |
 | T20 | edit `title` / `summary` / `scope.*`, each alone | clears the verification axis (D8) |
@@ -454,11 +490,13 @@ fixture: `GitScratch` (`:5617`); MCP e2e: `tests/e2e_mcp_server.rs:963-1110`.
 | T22 | `body_mode` without `body`, CLI **and** MCP | rejected on both, same message (F-10) |
 | T29 | idempotent `--path-scope` | `updated` **is** stamped (`apply_edit` counts it changed) while the verification axis is **not** cleared — the one place the two diverge (F-17) |
 | T40 | `edit --body - --trust bogus` — a valid body alongside metadata that fails *inside* `apply_edit` | rejected, and **both** tiers byte-identical: `memory.md` and `memory.toml` unchanged (I10, F-3). The step order is the only thing that makes this pass |
+| T41 | hand-edit + commit a memory declaring **no `scope.paths`** | still flagged — D5's count sits outside the pre-existing `!scope.paths.is_empty()` guard (§ 5.4; 26 of 56 anchored memories are this shape) |
+| T42 | `verify`, **commit the stamp**, then `validate` | **not** flagged — the stamp's own commit touches `memory.toml`, not `memory.md` (I13). The registered falsifier for D5's pathspec: the item-directory form fails this 30/30 |
 
 *The gate's tests — T7–T11, T14, T17–T19, T23–T28, T30–T39 — moved to SL-232.
-Ids are not reused; a test added here starts at T41.*
+Ids are not reused; a test added here starts at T43.*
 
-**T13 note.** It exercises `validate`'s own-directory staleness (D5) via the
+**T13 note.** It exercises `validate`'s own-body staleness (D5) via the
 **hand-edit bypass**, which is the only path where it has meaning: under D4 a verb
 edit clears the stamp, so there would be no `verified_sha` left to compare and the
 staleness check would never run (§ 10, A4).

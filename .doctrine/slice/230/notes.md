@@ -58,16 +58,30 @@ fresh-as-of: 2026-07-26 · design (round 8 disposed; slice split by DEC-027) · 
 **This slice.** Nothing blocking. Design narrowed to the body-write seam and
 attestation invalidation; scope doc reconciled; RV-307 fully disposed.
 
-- **Design is NOT locked.** It was locked-pending-review until round 8; the split
-  rewrote it, so the retained half needs a confirming pass before `/plan`. The 7
-  findings on this half (F-3, F-8, F-9, F-10, F-12, F-14, F-17) are all verified
-  and quiet since round 4, so the pass is a coherence check, not a re-review.
+- **Confirming pass DONE** (2026-07-26). Ten mechanical defects fixed; three
+  substantive findings on D5 resolved by user ruling. The 7 local findings are
+  F-3, **F-7**, F-8, F-9, F-10, F-12, F-17 — not F-14, which lands on I6/T24 and
+  is SL-232's (it was an orphan; corrected above).
+- **D5 narrowed to `memory.md`** by the pass, on the user's ruling. The item-
+  directory pathspec reported drift on **30 of 30** anchored memories: `verify`
+  stamps `verified_sha`, the stamp is then committed, and that commit touches the
+  memory's own directory — so the check flagged the sanctioned flow. Body-file form
+  fires on 11/30. Registered as I13, falsified by T42. Also fixed: D5's count sits
+  outside the pre-existing `!scope.paths.is_empty()` guard (26 of 56 anchored
+  memories declare no path scope), and § 5.4's canonicalisation justification named
+  `run_verify`'s `safe_join` when the path is in fact *constructed* from `uid`.
+- **Lesson, generalisable** — the defect above survived eight review rounds because
+  § 10's live-data check read a count of 3 as confirmation the plumbing worked; the
+  3 was partly the stamp commit itself. That is F-17/F-23's defect ("a probe that
+  cannot distinguish the two outcomes proves nothing") committed a third time, in
+  the document that names it twice. When a design states a concrete query, **run
+  the query**. `/record-memory` candidate alongside the F-25→F-31 entry.
 - **R4 runs unmitigated** until SL-232 lands. D4's affordability argument depended
   on the gate relaxation; the split removed that support. Accepted by DEC-027 —
   friction, not incorrectness — and the reason to sequence SL-232 next.
-- New ids this slice: I10, I11, I12, E14, OQ-7, T40. Moved ids are **not** reused.
-  (**OQ-4 is not new** — it pre-dates the split verbatim, so it is reviewed text,
-  not reassembly. Next free: I13, E15, T41.)
+- New ids this slice: I10, I11, I12, I13, E14, OQ-7, T40, T41, T42. Moved ids are
+  **not** reused. (**OQ-4 is not new** — it pre-dates the split verbatim, so it is
+  reviewed text, not reassembly. Next free: I14, E15, T43.)
 - OQ-4 — when do other kinds adopt `write_body`? Not here.
 
 **Moved to SL-232 (do not track here).** OQ-2/3/5/6, D3/D9/D10/D11, I1-I4/I6-I9,

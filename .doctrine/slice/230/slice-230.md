@@ -87,8 +87,10 @@ RV-307 F-8). Record fields — `status`, `lifespan`, `review_by`, `trust`,
 `severity` — do not clear; they are judgements *about* the record.
 
 `validate`'s staleness check additionally counts commits touching the memory's
-**own item directory** since `verified_sha`, catching the hand-edit bypass and
-other agents. It does **not** catch masters: they are unanchored and `collect_all`
+**own body file** (`memory.md`) since `verified_sha`, catching the hand-edit bypass
+and other agents. The pathspec is the body file rather than the whole item
+directory because the verify stamp's own commit touches the directory, so the
+broader form reports the sanctioned flow as drift (design § 5.4, I13). It does **not** catch masters: they are unanchored and `collect_all`
 never scans them (RV-307 F-7; design R5). Advisory surface only; retrieve-side
 ranking is deliberately untouched (design D5).
 
