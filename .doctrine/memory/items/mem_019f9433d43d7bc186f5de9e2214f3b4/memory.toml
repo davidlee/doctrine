@@ -6,7 +6,7 @@ status = "active"
 title = "Landing a dispatched slice: admit the close_target BEFORE the one integrate, or a candidate-less integrate bakes a sticky code-only trunk row"
 summary = "dispatch integrate --trunk without an admitted close_target projects the code-class phase chain (strips authored .doctrine/) and bakes a sticky verified trunk row that later replays; re-prepare regenerates the journal (no trunk row), then admit close_target BEFORE the single integrate"
 created = "2026-07-24"
-updated = "2026-07-24"
+updated = "2026-07-26"
 
 [scope]
 paths = []
@@ -25,12 +25,12 @@ tree = "1578e39ae4ce246b060ebd3f178283999fbb6d2e"
 ref_name = "refs/heads/main"
 checkout_state_id = ""
 base_commit = "adfa991b493a3843af4a22479f0f0295fbd01db8"
-verified_sha = ""
+verified_sha = "51a5ab6b33ff7da6bbd2bf34380061006c4a271e"
 normalizer = ""
 
 [review]
-verification_state = "unverified"
-reviewed = ""
+verification_state = "verified"
+reviewed = "2026-07-26"
 review_by = ""
 
 [trust]
