@@ -1,7 +1,7 @@
 id = 21
 slug = "tech-spec-backfill"
 title = "Backfill Doctrine technical-spec corpus"
-status = "reconcile"
+status = "done"
 created = "2026-06-08"
 updated = "2026-07-26"
 [relationships]
