@@ -2543,3 +2543,19 @@ measurement would have been of an uninterrupted run). The working mechanism is
 the harness's own TaskStop against the task id. Generalisable: when a control
 action crosses the sandbox boundary, verify the EFFECT (process gone, marker
 changed), never the exit status of the control command.
+
+[phase-plan; SL-228-P09-drive]
+- **Two handover.md, one slice id.** `.doctrine/slice/228/handover.md` exists in
+  both the primary tree (edge) and the coord tree (`dispatch/228`) with DIFFERENT
+  content; the primary's copy was a superseded packet (PHASE-04→07). The session's
+  first Read resolved against the primary and cost a full read of the wrong,
+  14 KB packet before the mtime comparison exposed it. handover.md is runtime tier
+  (gitignored), so nothing reconciles the two. A `handover` verb that resolved to
+  the coord tree when one exists — or a staleness banner naming the tip it was
+  written at — would have saved ~4 K tokens.
+- **Selector CLI flag shape guessed twice.** `slice selector 228` → "unrecognized
+  subcommand", `slice selector list --slice 228` → "unexpected argument"; the
+  shape is `slice selector list <ID>` positional while the sibling dispatch verbs
+  are `--slice N`. Two wasted round trips plus a `--help`. The inconsistency is
+  between families (slice/* positional, dispatch/* flagged), which is not
+  guessable from either half.
