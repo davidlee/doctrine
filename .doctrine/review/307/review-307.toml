@@ -87,7 +87,7 @@ The line-number correction is accepted too: the prose site is spec-007.md:133, n
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "Expected exclusions to ignore irrelevant corpus dirt; observed blanket roots hide legitimately scoped evidence"
 detail = '''Design principle .doctrine/slice/230/design.md:80-82 assumes every memory attests its body only against code, then :195-196 and :241-245 exclude all .doctrine plus repo-root memory. SPEC-007, as rendered by `doctrine spec show SPEC-007`, owns arbitrary path/glob/command scopes and does not restrict claims to source code. Live corpus evidence from `rg -n '"?\\.doctrine/' .doctrine/memory/items/*/memory.toml` printed many legitimate scopes including .doctrine/spec, .doctrine/adr, .doctrine/slice, and .doctrine/review. Thus an uncommitted change to a governance file explicitly named by the memory scope is ignored and verify stamps the old HEAD. Doctrine ownership makes the path constant legal under POL-002; it does not make the changed evidence irrelevant. Exclusion must be claim-aware or the anchor must include the excluded state.'''
@@ -206,7 +206,7 @@ This restores I4 to literal truth — --allow-dirty semantics are unchanged, bec
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected T24 to prove the committed blob equals the attested body; observed it proves only that some blob exists at the path"
 detail = 'Design I6 lines 395-397 says successful verified_sha contains the attested body, but T24 lines 559 tests only `git cat-file -e "$verified_sha:<dir>/memory.md"`. A previously committed stale body satisfies that command. T8 covers an entirely untracked directory and T25 covers a scoped ADR; no test modifies an already-tracked memory.md directly and requires verify to refuse, nor compares the committed blob bytes with the current body. Thus an implementation that omits the own-directory pathspec for scoped memories can pass the claimed I6 pin. Require byte equality or a tracked-body-dirty refusal case.'
@@ -249,7 +249,7 @@ Also recorded: T8's fresh-record case survives only because the untracked symlin
 
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "claim_pathspecs construction table states two git mechanics backwards and drops evidence it should keep"
 detail = """
@@ -303,7 +303,7 @@ The divergence that falls out is now stated instead of discovered: an idempotent
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "Expected scope data to name evidence literally; observed scope.paths can inject Git exclude magic and subtract the claim surface"
 detail = 'Expected: user-authored scope.paths values are data naming claim evidence, and the mandatory uid directory cannot be removed from the positive claim probe. Observed: .doctrine/slice/230/design.md:180-185 defines the input as arbitrary Git pathspecs and :259-266 contributes repo-relative paths as-is; current apply_edit accepts every supplied string verbatim at src/memory.rs:3942-3952. On Git 2.54.0 in /tmp/rv307-git-probes2.kfnIsT, a modified tracked items/uid/memory.md appeared under `git diff HEAD -- items/uid`, but `git diff HEAD -- items/uid ":(exclude)items/uid"` exited 0 with no output. Therefore a scope.paths entry carrying pathspec magic can subtract the canonical uid directory and restore the F-1/F-15 false attestation. Path entries must be encoded as literal pathspec data, and glob entries must be constructed through a controlled glob form; T26 must pin leading-colon/magic input.'
@@ -322,7 +322,7 @@ Fixed at the command tier: every scope-derived entry is emitted magic-prefixed �
 
 [[finding]]
 id = "F-19"
-status = "answered"
+status = "contested"
 severity = "major"
 title = "Expected validate to reuse the repaired claim surface; observed it retains the principal-path-only scope.paths assumptions"
 detail = "Expected: the D5 drift count watches the same uid-rooted, normalised claim evidence that verify attests, including glob scopes and items with no scope.paths. Observed: .doctrine/slice/230/design.md:461-479 says only to add the uid directory alongside the existing scoped-paths count and T13 at :682 does not require an empty-path or glob-only item. The live seam at src/memory.rs:3413-3419 is gated by `!memory.scope.paths.is_empty()` and passes only raw `memory.scope.paths` to commits_touching; it ignores scope.globs and does not share the F-15/F-16 construction rule. A real verified item, mem.fact.claude.pretooluse-hook-fail-open, has scope.paths=[] and non-empty scope.globs. Thus an implementation can satisfy the written D5/T13 on a path-scoped fixture while validate remains blind to committed evidence changes for glob-only claims and can retain raw absolute or magic pathspec assumptions. Specify one shared claim-surface constructor for verify and validate, and pin empty-path plus glob-only drift."
@@ -333,6 +333,41 @@ Sustained. Verified at src/memory.rs:3413-3421 — the staleness check gates on 
 D11: one claim-surface constructor, two consumers — verify probes it for dirtiness, validate counts commits over it. The gate becomes 'the surface is non-empty', which it always is, since the uid directory is unconditional (E6). Recorded in § 5.4 with the defect table above.
 
 The rejected alternative is named: leaving validate alone as out of scope. It is not out of scope — D5 already modifies that exact check, so the seam is open either way, and closing it around the wrong surface would entrench the divergence. Building it twice is the parallel implementation the internal pass rejected once as A1. T31 (glob-only staleness) and T32 (both verbs derive an identical surface, asserted directly) pin it."""
+
+[[finding]]
+id = "F-20"
+status = "open"
+severity = "blocker"
+title = "Expected D10 to reject unobservable scope evidence; observed a tracked symlink contributes while its target is invisible"
+detail = "Expected: D10's contributing-entry test and I7 ensure every declared path on the claim surface names observable tracked evidence, so a target change cannot pass verify clean. Observed: design.md:313-325 defines contribution solely through git ls-files --error-unmatch, while I7 at :578-581 claims the claim surface names real tracked files, never a symlink standing in for them. On Git 2.54.0 in /tmp/rv307-round5-git.UZlCjm, a tracked external-link symlink to /tmp/rv307-round5-external.YEmabG passed 'git ls-files --error-unmatch -- :(literal)external-link' (exit 0); after changing external-link/evidence.txt, 'git diff --quiet HEAD -- :(literal)external-link' still exited 0, and the nested path matched no tracked file. The parent source leg is likewise clean. A memory scoped to the symlink therefore passes D10 and can attest while the evidence reached through its declared path changed. Expected refusal or an explicit contract that symlink scope entries attest only the link inode; observed a contributing-but-unobservable false attestation path."
+
+[[finding]]
+id = "F-21"
+status = "open"
+severity = "major"
+title = "Expected D10's accepted cost to describe the corpus migration; observed 55 current items become unverifiable"
+detail = "Expected: a refusal rule that deliberately breaks existing verification enumerates its real migration cost before planning. D10 at design.md:691-693 states only that the absolute-scope items fail from a linked worktree. Observed: a full CLI-derived census using memory list --all --json and memory show --json for every row found 386 addressable items and 438 declared path/glob entries. Applying the proposed literal/glob prefixing plus git ls-files --error-unmatch individually on Git 2.54.0 refuses 55 items in the primary checkout, not merely linked worktrees: 51 are active, and 12 active items already carry a non-empty verified_sha. There are 59 non-contributing entries, including retired paths such as src/worktree.rs and src/skills.rs, ignored runtime paths such as .doctrine/state/slice/, and absent installed surfaces under .claude/. The remedy may be principled, but the design contains no 55-item scope migration, compatibility step, or acceptance of disabling re-verification for roughly 14% of the item corpus. Expected a shippable transition; observed an undeclared corpus-wide breaking change."
+
+[[finding]]
+id = "F-22"
+status = "open"
+severity = "major"
+title = "Expected review history to point at normative rules; observed section 10 still restates them throughout"
+detail = "Expected: the structural remedy claimed at design.md:1021-1029 makes normative sections the single source and history sections point rather than restate, preventing a fourth stale copy. Observed: only the round-2 F-6 paragraph follows that rule. Section 10 still restates live mechanisms and outcomes at :916-921 (claim_snapshot and idempotent-title behaviour), :935-944 (allow-dirty capture and T24 byte equality), :953-967 (uid canonicalisation, absolute-path mechanics, ignore handling, T20b), and :989-1003 (D10 refusal, magic-prefixing/I8/T30, and D11). The latter passages are exactly the newly changed rules most likely to drift. Expected the asserted mechanical sweep remedy to be applied document-wide; observed the document immediately violates it in the same section that declares it, leaving multiple normative copies whose consistency remains manual."
+
+[[finding]]
+id = "F-23"
+status = "open"
+severity = "major"
+title = "Expected magic-prefixing to encode every scope value as inert data; observed an empty value becomes a whole-index pathspec"
+detail = "Expected: design.md:288-294 says prefixing renders the remainder inert and a hostile entry degrades to a literal path that matches nothing; D10 then refuses it as non-contributing. Empty scope values are reachable because apply_edit copies path/glob strings verbatim at src/memory.rs:3942-3965 and the CLI accepts empty flag values. Observed on Git 2.54.0 in /tmp/rv307-round5-git.UZlCjm: both 'git ls-files --error-unmatch -- :(literal)' and the corresponding :(glob) form exited 0 and listed the entire index. Thus empty scope.paths or scope.globs evades D10 and expands validate's commit count to the whole repository rather than naming no evidence. Every tested non-empty magic form was neutralised (:!, :^, :/, exclude+glob, attr, bare colon), but the empty boundary falsifies the total construction claim and is absent from T30. Expected reject/normalise empty entries or encode them without the bare-prefix sentinel; observed a reachable semantic wildcard."
+
+[[finding]]
+id = "F-24"
+status = "open"
+severity = "major"
+title = "Expected D11 to be the single scope-derived Git surface; observed retrieve remains a third raw consumer"
+detail = "Expected: D11 at design.md:513-530 and :694-701 establishes one claim-surface constructor rather than leaving an adjacent path with the assumptions F-19 condemned. Observed: src/retrieve.rs:551-569 is a third Git consumer derived from a memory's scope; it gates on scope.paths, passes scope.paths raw to commits_touching, omits scope.globs and the uid directory, and performs no absolute normalisation or magic neutralisation. The same file's staleness mode at :354-377 also keys commit freshness on paths only. OQ-2 at design.md:618-620 defers feeding own-directory drift into retrieve, but does not acknowledge that retrieve already derives a divergent scope path-set. Expected D11 to name and reconcile every scope-derived Git surface, or narrow its claim and explicitly adjudicate this consumer; observed the principal-path repair has moved one sibling over while the next sibling retains the dead assumptions."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
