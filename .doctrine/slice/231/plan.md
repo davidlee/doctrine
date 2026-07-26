@@ -29,6 +29,8 @@ PHASE-05 distributes the narrow temporary-file ignore rule and activates
 dogfooding last. Until both capture routes and worker refusal diagnostics are
 green, governance continues to point at the historical case-note mechanism.
 Activation retains that historical corpus; it does not migrate or delete it.
+Because project governance is boot input, the phase also regenerates the
+runtime boot snapshot and verifies it is current.
 
 ## Scope guards
 
@@ -38,8 +40,12 @@ instruction, and IDE-005 owns future harness detection. Reporting,
 aggregation, retention, consumer cursors, chronological symlink views, and
 numbered promotion remain outside SL-231.
 
+The plan's review pass strengthened two load-bearing checks: PHASE-02 now binds
+the shared parent-walk extraction to the existing entity rollback/materialise
+tests and an explicit macOS/Linux portability review; PHASE-05 binds governance
+activation to boot regeneration.
+
 Observations are authored and review-visible by default. Projects may ignore
 the authoritative record tree, or developers may exclude it locally, but the
 documentation must state that this trades away shared durability, correlation,
 and audit history unless another transport replaces Git.
-

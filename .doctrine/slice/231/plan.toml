@@ -82,6 +82,8 @@ verification = [
   { id = "VT-2", expects = "Publication accepts complete closed content, creates the destination only by no-clobber hard link, cleans collision temps, and leaves no partial authoritative file", test_file = "src/fsutil.rs", keywords = ["publish_complete_new", "publication_never_opens_destination_for_write", "publication_cleans_temp_after_collision"], waived = false },
   { id = "VT-3", expects = "Store tests cover direct UUID sharding, distinct and same-UUID concurrency, month/kind-independent identity, replay, collision refusal, path mismatch, temp ignoring, and first-write metadata retention", test_file = "src/observation/store.rs", keywords = ["uuid_path_is_kind_and_time_blind", "same_intent_replays_without_rewrite", "different_intent_collides_without_overwrite", "concurrent_distinct_uuids_survive"], waived = false },
   { id = "VT-4", expects = "The façade refuses public measurements while an injected registered source admits a valid machine measurement and caller-asserted source metadata cannot open the gate", test_file = "src/observation/mod.rs", keywords = ["public_capture_refuses_measurement", "registered_machine_source_admits_measurement", "asserted_source_cannot_open_measurement_gate"], waived = false },
+  { id = "VT-5", expects = "The pre-existing entity rollback and nested-parent materialisation tests remain green unchanged after the parent-walk extraction", test_file = "src/entity.rs", keywords = ["create_in_existing_rolls_back_partial_fileset_leaving_parent_intact", "materialise_named_write_failure_cleans_up_the_won_dir"], waived = false },
+  { id = "VA-1", expects = "Agent verifies the complete-content publication implementation uses only macOS/Linux-portable standard-library hard-link and same-directory filesystem operations and makes no stronger crash or adversarial-swap claim than design §3.2" },
 ]
 specs        = ["SPEC-028"]
 requirements = ["REQ-405", "REQ-406", "REQ-409", "REQ-410", "REQ-411", "REQ-413"]
@@ -170,7 +172,7 @@ verification = [
   { id = "VT-2", expects = "Black-box observation tests retain authored records and ignore only reserved temps under the repository's own git disposition", test_file = "tests/e2e_observation.rs", keywords = ["authored_records_are_visible_to_git", "reserved_publication_temp_is_ignored"], waived = false },
   { id = "VA-1", expects = "Agent verifies governance, RFC-011, using-doctrine, install manifest, and shipped worker guidance describe one capability-aware contract and retain the historical case-note corpus" },
   { id = "VA-2", expects = "Agent confirms the implementation diff contains no reporting, aggregation, retention, by-month generation, subprocess broker, doctrine.toml boot option, ENV harness detection, or concrete measurement adapter" },
+  { id = "VA-3", expects = "Agent regenerates the runtime boot snapshot after governance activation and `doctrine boot --check` reports current" },
 ]
 specs        = ["SPEC-028"]
 requirements = ["REQ-406", "REQ-409", "REQ-410", "REQ-413"]
-
