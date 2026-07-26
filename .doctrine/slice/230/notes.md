@@ -65,12 +65,19 @@ attestation invalidation; scope doc reconciled; RV-307 fully disposed.
 - **R4 runs unmitigated** until SL-232 lands. D4's affordability argument depended
   on the gate relaxation; the split removed that support. Accepted by DEC-027 —
   friction, not incorrectness — and the reason to sequence SL-232 next.
-- New ids this slice: I10, I11, I12, E14, OQ-4, OQ-7. Moved ids are **not** reused.
+- New ids this slice: I10, I11, I12, E14, OQ-7, T40. Moved ids are **not** reused.
+  (**OQ-4 is not new** — it pre-dates the split verbatim, so it is reviewed text,
+  not reassembly. Next free: I13, E15, T41.)
 - OQ-4 — when do other kinds adopt `write_body`? Not here.
 
 **Moved to SL-232 (do not track here).** OQ-2/3/5/6, D3/D9/D10/D11, I1-I4/I6-I9,
 E2/E4-E9/E11-E13, R6/R7/R8, REV-034, QUE-173, QUE-175, IMP-317, IMP-318, and
-RV-307 F-25/F-26/F-32/F-36/F-37/F-38 + F-39's first limb.
+RV-307 F-14/F-25/F-26/F-32/F-36/F-37/F-38 + F-39's first limb.
+
+**F-14 added to that list by the confirming pass.** DEC-027 and this harvest both
+counted it among the seven body-write findings, but it lands on I6 and T24 — both
+SL-232's — so it was an orphan: named local by SL-230 and absent from SL-232's
+inherited set. F-7 (→ R5) is the seventh local finding. Count unchanged.
 
 ### Next
 

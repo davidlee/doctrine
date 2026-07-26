@@ -61,10 +61,12 @@ Two facts establish that no seam is being duplicated:
   — status/resolution, `src/backlog.rs:1873`; `adr` has no edit verb; the rest
   scaffold from templates). `seed_by_key` (`:1785`) is the sole body-write seam
   and is internal to install seeding.
-- **`capture()` has exactly three callers** — `src/retrieve.rs:532` (read path),
-  `src/memory.rs:1708` (`record`), `src/memory.rs:3382` (`verify`). Relevant here
-  because `record`'s born anchor must not move (I1 is SL-232's, but the
-  constraint binds this slice's scaffold change too).
+- **This slice adds no git call.** `capture()`'s three callers —
+  `src/retrieve.rs:532` (read path), `src/memory.rs:1708` (`record`),
+  `src/memory.rs:3382` (`verify`) — are all left alone. The body affordance
+  changes what `memory_scaffold` *writes*, not how `record` *anchors*, so the born
+  anchor cannot move. (I1 made that guarantee normative for the gate's
+  `capture_with` and is SL-232's; nothing here calls for it.)
 
 ### 2.1 Observed defect — attestation survives claim change
 
@@ -87,7 +89,7 @@ lexical score, so a false stamp reaches agent context with extra weight.
 | **ADR-001** ✓ | `entity` = engine ("the hub — kind-agnostic directory-entity scaffold", imports `fsutil` only), `memory` = command, `fsutil` = leaf. Downward edges only. |
 | **SPEC-007** | Owns the memory system, including arbitrary path/glob/command scopes. Its retired clean-tree contract is **SL-232's** to amend (REV-034); nothing in this slice's scope touches it. |
 | **SL-008 D6** | `thread_expiry` is reviewed canon — not loosened. This slice only feeds it honest input (E1). |
-| **STD-001** | Named constants, not path literals. |
+| **STD-001** | Named constants, not path literals. The only new string this slice introduces is the body filename passed to `write_body`, which follows the established `dir.join("memory.md")` idiom (12+ existing call sites; no constant exists today) rather than minting a single-use one. Stated because the doc's previous STD-001 discharge — reusing `DOCTRINE_PATHSPEC` (§ 10) — left with the gate. |
 | **SL-232** | Owns the gate. This slice must not specify exclusion sets, claim surfaces, or pathspec construction. Where invalidation needs a git fact that the gate also needs, it is stated locally (§ 5.4 staleness) rather than cross-referenced. |
 
 ## 4. Guiding Principles
@@ -238,14 +240,14 @@ while mutating only an in-memory `DocumentMut`. So `memory edit --body - --trust
 bogus` would have rewritten `memory.md` and *then* errored — mutation on an
 argument-validation failure, a new failure mode rather than the acknowledged crash
 window. The fix is free: what must follow the body write is the TOML **write**, not
-the TOML **computation**. Step 3 applies the body-dependent mutation to the same
+the TOML **computation**. Steps 3–5 apply the body-dependent mutations to the same
 in-memory document, after validation has already passed.
 
 *Why the explicit re-stamp (RV-307 F-12).* There is no separate `stamp_updated`
 helper to compose — `apply_edit` stamps `updated` itself, in a terminal block
 gated on its own internal `changed` flag, which counts metadata fields only and
 cannot see the body. Left as drafted, a body-only edit would never stamp
-`updated`, falsifying T5. Step 3 re-stamps explicitly; the write is idempotent when
+`updated`, falsifying T5. Step 5 re-stamps explicitly; the write is idempotent when
 `apply_edit` already stamped (identical date), and `apply_edit`'s signature is
 untouched — which matters under R3, since its existing suite must stay green
 unchanged.
@@ -253,8 +255,9 @@ unchanged.
 So `updated` is stamped, and the verification axis cleared, **iff the body
 genuinely changed** — a `--body` that replaces content with itself is a full
 no-op on both tiers (content and mtime hold), consistent with the existing
-`apply_edit` no-op guard. A crash between steps 2 and 4 leaves a changed body with
-a stale `updated`, never the reverse (R1).
+`apply_edit` no-op guard. A crash between step 2 (the body write) and step 6 (the
+TOML write) leaves a changed body with a stale `updated`, never the reverse (R1) —
+steps 3–5 are in-memory, so the whole window is that one gap.
 
 Full two-tier atomicity would mean routing `edit` through the fileset/rollback
 machinery — a large refactor of a shared write path, disproportionate to a crash
@@ -303,15 +306,20 @@ SL-232's general canonicalisation rule (I9), and must not grow one.
 ### 5.5 Invariants, Assumptions & Edge Cases
 
 - **I10** — a rejected `edit` leaves **both** tiers byte-identical. Every fallible
-  step precedes every disk write (§ 5.4, RV-307 F-3). Pinned by T22 and by the
-  ordering in § 5.4.
+  step precedes every disk write (§ 5.4, RV-307 F-3). Pinned by **T40** and by the
+  ordering in § 5.4. *Not* by T22: T22 pins the `body_mode`-without-`body` totality
+  rule (F-10), which rejects before any write is contemplated, so it passes
+  whatever the step order is — the invariant F-3 actually raised needs a failure
+  *inside* `apply_edit` alongside a valid body, which is T40.
 - **I11** — a `--body` that replaces content with itself is a **full no-op**:
   content and mtime hold, `updated` is not stamped, and the verification axis is
   **not** cleared. The one-way door this protects is destructive — a no-op write
-  that cleared a valid attestation (§ 10, A2). Pinned by T12b.
+  that cleared a valid attestation (§ 10, A2). Pinned by T6 (content + mtime) and
+  T12b (`updated`, verification axis).
 - **I12** — the verification axis is cleared **iff a claim field genuinely
   changed**, by comparison and never by which flags were supplied (§ 5.4
-  `claim_snapshot`, RV-307 F-8/F-17). Pinned by T20, T20b, T21, T29.
+  `claim_snapshot`, RV-307 F-8/F-17). Pinned by T12 and T12b (body), T20 and T21
+  (the field split), T20b and T29 (comparison, not flag-counting).
 - **I5** — `thread_expiry` untouched.
 - **E1** — thread memories vanish from `find`/`retrieve` after a body edit until
   re-verified (SL-008 D6 feeding on honest input). Correct but surprising —
@@ -351,8 +359,13 @@ new invariants begin at I10 and its new edge case at E14.
   `--replace-body`/`--append-body` (IMP-221's original — reads better but
   diverges from MCP's single `body_mode` and scales badly to a third mode);
   `--body` + explicit `--body-file` (a flag stdin already covers).
-- **D4 — body edit clears the verification axis.** Affordable only because the
-  gate relaxation makes re-verifying cheap; the halves pay for each other.
+- **D4 — body edit clears the verification axis.** *Its original rationale is
+  superseded:* the draft read "affordable only because the gate relaxation makes
+  re-verifying cheap; the halves pay for each other", and D3's relaxation left with
+  the gate, so the cost now stands unoffset (R4, § 0, DEC-027). The decision
+  survives the loss of its affordability argument, because the alternative is a
+  stamp that lies — but it is no longer a cheap decision, and § 0 is where that is
+  accounted for.
   *Alternative:* leave it (status quo) — rejected, the stamp would lie by
   one command. *Alternative:* a third "stale" state — rejected, new vocabulary
   for no gain over `unverified`.
@@ -399,15 +412,21 @@ unmitigated — see § 0.
 - **R3 — behaviour preservation on shared machinery.** `entity.rs` and
   `validate` are shared. Existing suites must stay green unchanged.
 - **R4 — mass re-verification.** D4/D8 mean every claim-field edit costs a verify.
-  Mitigated by the gate relaxation; if it still bites, that is evidence for OQ-3.
-  D8 widens the trigger set, so this risk grows — accepted, because the
-  alternative is a stamp that lies.
+  **Carried unmitigated** until SL-232 lands — the gate relaxation that made it
+  affordable left with D3 (§ 0, DEC-027). D8 widens the trigger set, so this risk
+  grows — accepted, because the alternative is a stamp that lies. Friction, not
+  incorrectness: the state it replaces has the same friction *plus* a stamp that
+  survives a claim change. SL-232 is the mitigation, and the reason to sequence it
+  next.
 - **R5 — masters remain uncovered by every invalidation path** (RV-307 F-7).
   They are unanchored (no `verified_sha`) and `collect_all` does not scan them, so
   neither D5's own-directory drift nor D8's field-clearing reaches a master edit.
   D6 puts them out of scope; the only standing mitigation is the
   `mem.system.memory.global-master-authoring` guard memory (glob `memory/**`,
-  severity high). Stated as a known gap, not a solved problem; OQ-3 would close it.
+  severity high — both confirmed live). Stated as a known gap, not a solved
+  problem. Closing it needs an anchor for masters, which D6 puts out of scope; no
+  open question in *this* slice carries it, and the body-digest route that would
+  have (OQ-3) is SL-232's.
 
 *R6, R7 and R8 moved to SL-232.*
 
@@ -434,9 +453,10 @@ fixture: `GitScratch` (`:5617`); MCP e2e: `tests/e2e_mcp_server.rs:963-1110`.
 | T21 | edit `status` / `lifespan` / `review_by` / `trust` / `severity`, each alone | does **not** clear (D8's other half) |
 | T22 | `body_mode` without `body`, CLI **and** MCP | rejected on both, same message (F-10) |
 | T29 | idempotent `--path-scope` | `updated` **is** stamped (`apply_edit` counts it changed) while the verification axis is **not** cleared — the one place the two diverge (F-17) |
+| T40 | `edit --body - --trust bogus` — a valid body alongside metadata that fails *inside* `apply_edit` | rejected, and **both** tiers byte-identical: `memory.md` and `memory.toml` unchanged (I10, F-3). The step order is the only thing that makes this pass |
 
 *The gate's tests — T7–T11, T14, T17–T19, T23–T28, T30–T39 — moved to SL-232.
-Ids are not reused; a test added here starts at T40.*
+Ids are not reused; a test added here starts at T41.*
 
 **T13 note.** It exercises `validate`'s own-directory staleness (D5) via the
 **hand-edit bypass**, which is the only path where it has meaning: under D4 a verb
@@ -511,14 +531,21 @@ F-35) because a round updates the ledger and not the prose. Prefer
 slice because it is append-only and it reviewed *this* document across eight
 rounds. But at round 8 the gate was split out into **SL-232**, so roughly
 two-thirds of the rows below land in sections that are no longer here: any row
-whose home is **D3, D9, D10, D11, I1–I4, I6–I9, E2, E4–E9, E11–E13, R6–R8, § 5.2,
-or T7–T39** now resolves against `.doctrine/slice/232/design.md`, not this file.
-The rows are kept, unedited, because deleting them would falsify the record of
-what this document was reviewed for. SL-232 § 10 carries the inherited-findings
-view organised by *state* rather than by round.
+whose home is **D3, D9, D10, D11, I1–I4, I6–I9, E2, E4–E9, E11–E13, R6–R8, the
+claim-surface algorithm (SL-232's § 5.2), or T7–T39** now resolves against
+`.doctrine/slice/232/design.md`, not this file. **Read that "§ 5.2" as SL-232's
+section, not as a bare number** — *this* file's § 5.2 is Interfaces & Contracts,
+and F-10's rule lives there, locally. The rows are kept, unedited, because
+deleting them would falsify the record of what this document was reviewed for.
+SL-232 § 10 carries the inherited-findings view organised by *state* rather than
+by round.
 
-Rows that remain local to this slice: F-3, F-8, F-9, F-10, F-12, F-14, F-17, and
-the internal pass A1–A4.
+Rows that remain local to this slice: F-3, **F-7**, F-8, F-9, F-10, F-12, F-17,
+and the internal pass A1–A4. Two corrections to the membership DEC-027 recorded,
+which had the count right and the names wrong: **F-14 is not local** — it lands on
+I6 and T24, both SL-232's ("*T24 proves only that some blob exists at the path*"),
+so SL-232's inherited set must pick it up. **F-7 is local** and was missing — it
+lands on R5, which is retained here. Seven either way.
 
 **This section points; it does not restate** (RV-307 F-22). Every mechanism below
 has a normative home, and that home is authoritative. History that re-describes a

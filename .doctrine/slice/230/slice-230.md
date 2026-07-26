@@ -42,13 +42,15 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
 
 ### 1. Body-write on the CLI (`record` and `edit`)
 
-- `memory edit` gains body-replace and body-append, sourced from stdin or a
-  file.
+- `memory edit` gains body-replace and body-append, sourced inline or from stdin
+  (`--body -`); a file is `--body - < file`. There is no `--body-file` flag —
+  stdin already covers it (design D2).
 - `memory record` gains the same body affordance, so a memory can be born with
   its content instead of requiring a follow-up edit.
-- Both ride the existing `seed_by_key` / `memory_scaffold` fileset seam. No
-  second body-write path — the transactional write already exists and must be
-  reused, not paralleled.
+- `record` rides the existing `seed_by_key` / `memory_scaffold` fileset seam;
+  `edit` goes through the new kind-agnostic `write_body` at engine tier (design
+  D1), since `edit` has no fileset to substitute into. One path per verb and no
+  third — nothing is paralleled.
 - `updated` stamping and the edit-preserving `memory.toml` contract behave
   exactly as they do for metadata edits.
 
@@ -88,7 +90,7 @@ RV-307 F-8). Record fields — `status`, `lifespan`, `review_by`, `trust`,
 **own item directory** since `verified_sha`, catching the hand-edit bypass and
 other agents. It does **not** catch masters: they are unanchored and `collect_all`
 never scans them (RV-307 F-7; design R5). Advisory surface only; retrieve-side
-ranking is deliberately untouched (design OQ-2).
+ranking is deliberately untouched (design D5).
 
 ### 6. Verify refusal names its escape hatch — MOVED to SL-232
 
@@ -127,10 +129,13 @@ are in `design.md` § 6 (OQ-4, OQ-7).
   containing title + summary only — no editor, no stdin, no `--body`. *Richer
   body capture is a later mutation verb.*" A deferral, not a prohibition — this
   slice is that verb. No governance step needed before objectives 1-2.
-- **OQ-2 — RESOLVED.** Replace + append, via `--body-mode`. Revisit on evidence.
-- **OQ-1, OQ-3, R1 — MOVED to SL-232** (DEC-027). All three were scoping-stage
-  questions about the exclusion set and `capture_with`; they were resolved, and
-  their resolutions travel with the gate rather than being restated here.
+- **Body mode — RESOLVED** as design **D2**: replace + append, via `--body-mode`.
+  Revisit on evidence. (Recorded here as "OQ-2" until the split; that id now means
+  a gate question and belongs to SL-232, so cite D2.)
+- **OQ-1 — CLOSED here as D8**, forced by RV-307 F-8: claim fields (body, title,
+  summary, scope) clear the verification axis; record fields do not.
+- **R1 — CARRIED locally** (design § 8 R1): `edit` is no longer two-tier atomic.
+- **OQ-3 — MOVED to SL-232** (DEC-027) with the gate.
 - **R2 — CARRIED, sharpened.** Stored memory text is untrusted (SPEC-007
   § Concerns). Review finding A3 corrected the framing: there is no write-time
   escaping on the `.md` tier to bypass; the defence is read-time (nonce +
