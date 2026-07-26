@@ -15,7 +15,7 @@ different questions:
   (`record-delta` resolves here even from linked worktrees), review-ledger
   verbs (they refuse worktree roots), lifecycle transitions.
 
-Three wrinkles:
+Four wrinkles:
 
 1. The authoritative **selector registry** may ride the impl bundle's
    `slice-NNN.toml` (workers run `selector add` mid-flight) while the primary
@@ -29,3 +29,19 @@ Three wrinkles:
 3. The candidate worktree checks out **detached**. After committing a repair,
    advance the branch ref (`git update-ref refs/heads/candidate/NNN/… <new>
    <old>`) or the commit dangles and `candidate admit` pins the stale tip.
+4. **Wrinkle 1 generalises to EVERY slice artefact, and it bites at `/reconcile`,
+   not just at audit** (observed SL-228 / RV-312, a *coordination* worktree —
+   `.dispatch/SL-NNN` — so this is not candidate-specific). `design.md`,
+   `notes.md` and `slice-NNN.toml` all exist in both roots and **disagree**: the
+   drive's phases commit them on `dispatch/<N>`, so the coord copy is canonical
+   and the primary's is however stale the fork made it. At SL-228 that was 763
+   lines vs 1056 — and the primary's is what a bare relative path resolves to,
+   so section numbers and line anchors gathered there are silently worthless.
+   **Check `wc -l` on both before trusting any anchor.**
+
+   Correction to wrinkle 1's advice: the rule is not "defer selector edits to
+   post-integration", it is **"edit the canonical copy"**. Running
+   `slice selector rm` in the coord tree pre-integration is safe and was the
+   right move — the file it writes is the one the bundle carries, so nothing
+   forks and `dispatch refresh-base` merged 181 trunk commits over it clean.
+   What forks is editing the **primary's** copy while the bundle carries its own.
