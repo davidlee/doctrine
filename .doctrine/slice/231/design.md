@@ -156,9 +156,13 @@ corpus file.
 
 If a caller-supplied UUID already exists:
 
-- byte-equivalent canonical content returns a replay receipt without rewriting;
-- different content fails as a collision; and
+- the same caller intent—kind, typed payload, and explicit facets—returns a
+  replay receipt without rewriting;
+- different caller intent fails as an identity collision; and
 - no content-based duplicate detection is attempted across different UUIDs.
+
+Automatically generated time and enrichment are fixed by the first successful
+write and are not regenerated or included in replay-intent comparison.
 
 Parent partition creation must reject symlink or non-directory path squatters.
 A failed or interrupted write must not expose a partial observation.
@@ -200,7 +204,7 @@ The trusted CLI supplies:
 doctrine observation show <uuid>
 doctrine observation list [filters]
 doctrine observation search <text> [filters]
-doctrine observation supersede <uuid> <replacement-request>
+doctrine observation supersede <old-uuid> <replacement-uuid> [reason]
 doctrine observation retract <uuid> [reason]
 ```
 
@@ -208,14 +212,22 @@ doctrine observation retract <uuid> [reason]
 resolved state. `list` and `search` default to the resolved active projection;
 an explicit history mode includes inactive records and controls. Filters cover
 kind, time range, and typed facet fields. Search is lexical over defined text
-fields and makes no clustering or ranking claim. Results use a stable total
-order and stable pagination.
+fields and makes no clustering or relevance-ranking claim. Results order by
+`recorded_at` newest-first and then UUID, with stable pagination.
 
-Supersession creates a new replacement observation and one supersession control
-linking old and new UUIDs. Retraction creates one retraction control targeting
-an exact UUID. Neither operation edits or deletes an existing record.
+Supersession requires an existing public, kind-compatible replacement and
+creates one supersession control linking the old and replacement UUIDs.
+Retraction creates one retraction control targeting an exact UUID. Each command
+therefore performs one atomic create-new write. Neither operation edits or
+deletes an existing record.
 Dangling targets, cycles, multiple terminal controls, malformed controls, and
 unsupported schemas remain inspectable and produce deterministic diagnostics.
+Resolution partitions the correction graph into weakly connected components.
+If a component contains an invalid control—such as a dangling target, cycle,
+multiple successors, kind-incompatible replacement, or conflicting terminal
+control—all controls in that component are inert and every parseable public
+observation in it remains independently active. Valid components elsewhere
+resolve normally. History always exposes the invalid controls and diagnostics.
 Hard redaction, if ever required, is a manual operational exercise outside this
 slice.
 
@@ -270,8 +282,9 @@ resolution implementation.
 ### Store and concurrency
 
 - Concurrent distinct UUIDs both survive.
-- Identical caller-UUID replay returns the existing receipt.
-- Different content at the same UUID fails without overwrite.
+- Replay with identical caller intent returns the existing receipt and retains
+  the first write's time and enrichment.
+- Different caller intent at the same UUID fails without overwrite.
 - Kind, date, UUID, and path disagreement fails containment validation.
 - Symlink and non-directory partition squatters are refused.
 - Failure cannot leave a visible partial record.
@@ -280,9 +293,13 @@ resolution implementation.
 
 - Supersession selects the replacement while history retains both records and
   the control.
+- Supersession refuses a missing, control-kind, or kind-incompatible
+  replacement without creating a control.
 - Retraction removes the target from active views while history retains it.
 - Dangling, cyclic, conflicting, and malformed controls yield deterministic
-  diagnostics.
+  diagnostics and are inert by connected component.
+- An invalid control component leaves its public observations independently
+  active and does not affect valid components.
 - Exact UUID lookup works regardless of active state.
 - Default queries use the resolved projection; history mode exposes controls
   and inactive records.
