@@ -2184,3 +2184,45 @@ the next agent to trust the exit code is a trap, since the conclude ritual says
 contribute FAILs to an exit code at all, or the summary should separate
 landed-phase verdicts from unlanded ones. Corrected in the new packet by telling
 the reader to read per-phase lines and ignore the exit code mid-drive.
+
+[design; SL-230 DEC-020 application, session dec020-apply]
+
+- **Handover asserted a ledger state that the ledger contradicted.** The packet
+  and `notes.md ## Harvest` both said "F-34/F-35 are done"; both findings were
+  `status = open` with no disposition and no response. The *fixes* had landed —
+  QUE-175's body was corrected, § 10's counts line rewritten — so the prior agent
+  plausibly conflated "remediated" with "disposed". Cost: the whole task was
+  scoped as "nine findings" and was actually eleven. Caught only by scripting the
+  toml rather than trusting the prose. Generalisation: a disposition that exists
+  only in a prose summary is the F-8 pattern (recorded in two places, implemented
+  in neither) applied to the ledger itself. **A handover's claims about queryable
+  state should be re-queried, not inherited** — it costs one command.
+
+- **`review show` prints the brief only, never the findings.** Getting charges +
+  statuses out needed a python pass over `review-307.toml`. The handover flagged
+  this, which saved a round-trip — but it is a recurring tax: every responder
+  session re-invents an ad-hoc parser to answer "what is still open?".
+  `review status <ID>` gives counts (`findings 35 · await=responder`) but not the
+  per-finding breakdown, so it cannot answer it either. A `review list <ID>
+  --status open` (or `--json`) would remove the parser from every one of these
+  sessions. Est. 3-5k tokens per responder turn, recurring.
+
+- **Where the token spend actually went.** Reading was cheap and well-directed:
+  the handover's numbered reading list meant ~5 targeted reads instead of a
+  1378-line document. The spend was in *editing* — 14 `Edit` calls across two
+  files for one decision, because the shrunk rule had 14 textual homes (algorithm,
+  class table, weak-reading paragraph, seam, guiding principle, I9, E7, E12, E13,
+  OQ, D10, R8, 5 test rows, pointer table, 2 narrative sections, 4 scope-doc
+  sites). That is not incidental complexity in the tooling — it is the real cost
+  of a design document that states one rule in many registers. The mitigation the
+  document itself already names (§ 10: normative sections are the single source;
+  history points) is the right one and was under-applied.
+
+- **The falsifier-first discipline paid, measurably.** One scratch-repo probe (9
+  pathspec cases, one bash call) settled the entire shape of the rewrite: it
+  showed non-resolving-inside returns a verdict (exit 1) while non-resolving-
+  outside aborts (exit 128), which collapsed what would have been a new class
+  into the existing E13. Without it the rewrite would have invented a fourth
+  class and F-32's second limb would have survived. Cheap probes before prose,
+  not after, is the pattern — and it is the direct application of this slice's
+  own dominant-cost-driver lesson.

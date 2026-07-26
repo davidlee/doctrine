@@ -6,14 +6,16 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-26 · design (RV-307 round 7 raised; DEC-020 taken) · 171a482a
+fresh-as-of: 2026-07-26 · design (DEC-020 applied; RV-307 fully disposed) · 8a625cb5
 
 ### Produced
 
 - RV-307 — round-7 raiser adjudication accepted F-19/F-20/F-27/F-29/F-30,
   returned F-6/F-22/F-24/F-25/F-26/F-28, and raised F-31–F-35. All five new
-  charges reproduced by the responder. F-34/F-35 disposed; F-31/F-32/F-33 and
-  the six contests are **undisposed pending DEC-020's application**.
+  charges reproduced by the responder. **All 35 findings now disposed
+  `fix-now`; `await=raiser`.** Corrects a prior harvest: F-34/F-35 were recorded
+  here as disposed when their *fixes* had landed but their ledger entries had
+  not — they carried no disposition and no response until 8a625cb5.
 - **DEC-020** — non-contribution classification leaves SL-230. User ruling at
   round 7. The governing record for the D10 shrink; read it before editing D10.
 - REV-034 — SPEC-007 + REQ-147 amendment. Proposed, applied at close.
@@ -42,22 +44,32 @@ fresh-as-of: 2026-07-26 · design (RV-307 round 7 raised; DEC-020 taken) · 171a
 
 ### Open
 
-- **DEC-020 not yet applied to the design.** D10, § 5.2's ordered algorithm,
-  § 5.4, § 7, § 9's test matrix and `slice-230.md` all still describe the
-  round-6 four-class cut. This is the next agent's whole task.
-- RV-307 — `await=responder`, 35 findings. F-31/F-33 (blockers) and F-32 plus
-  the six contests are undisposed; their responses depend on DEC-020's
-  application, which is why they were held.
-- **F-32 survives DEC-020** — the wildcard-free prefix is split at the first
-  wildcard *character* rather than the last path separator before it, so
-  `foo*/bar` misses tracked `foobar/bar`. Independent of the classification
-  question; must still be fixed.
-- **F-33's fix direction** — delete the strong reading (`design.md:606`,
-  `slice-230.md`), keep the weak one. Not the reverse.
-- QUE-175 — still open as a question; body corrected.
-- QUE-173 — digest-based invalidation question. Scope with IMP-318 and DEC-020's
-  deferred declared-boundary question; all three are the same schema change.
+- RV-307 — **`await=raiser`**, 35 findings, all disposed. Round 8 is the raiser's
+  confirmatory pass on the DEC-020 remediation.
+- QUE-175 / **OQ-2** — still open as a question; body corrected (F-34) and
+  re-verified at round 7. Gates IMP-317.
+- **OQ-6 (new)** — should non-contribution ever refuse, and on which entries?
+  Deferred out of the slice by DEC-020. The answer that survives cloning is a
+  *declared* boundary, not a derived one — a schema change. Scope with QUE-173
+  (digest) and IMP-318 (persist attested coverage); all three are the same
+  change, each making an attestation say more than a sha.
 - REV-034 — governance amendment reserved for close.
 - R5 — masters remain outside every invalidation path.
 - R7 — `validate` and `retrieve::git_facts` retain raw historical scope seams.
-- R8 — the stamp does not persist the covered surface; routed as IMP-318.
+  Untouched by DEC-020 and slightly sharpened by it: with `verify` no longer
+  refusing on non-contribution, the two weaker notions of scoped drift are the
+  only signal for a moved source path.
+- R8 — **widened by DEC-020**: the stamp does not record its covered surface,
+  and the residual now spans all non-contribution rather than only the
+  never-tracked. Routed as IMP-318.
+
+### Decision awaiting the user
+
+Seven rounds, 35 findings, nine blockers, and the finding rate had not decayed
+through round 7. DEC-020 removed the surface that generated F-21/F-25/F-31, so
+round 8 should be markedly quieter — **hypothesis, not promise**. If it returns
+near-clean, lock. If it produces another decision-level refutation, the honest
+read is that the claim-probe design is past the point where more rounds buy
+correctness, and the alternative is a deliberate lock carrying named residual
+risk into `/plan`. That is the user's call; surface it with the result rather
+than opening round 9.
