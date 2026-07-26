@@ -2160,3 +2160,27 @@ state could print which root they resolved when it is not the cwd's nearest
 marker, the same way the not-found error should name the other worktree
 (see the round-2 note above). Two case notes now point at the same missing
 signal — *which corpus am I talking to*.
+
+[phase-plan; SL-228-PHASE-08-replan]
+**A VT keyword mandate that passes before the phase starts.** `slice verify-vt 228`
+reports PHASE-08 `VT-2 ✓ PASS` with zero work done — its keyword floor
+(`Refused` / `not-landed` in `src/mcp_server/dispatch.rs`) is already satisfied by
+pre-existing code. So the gate will read green for VT-2 whether or not the phase
+delivers ISS-246's refusal reshape. Same family as ISS-241 (a skipped
+`record-delta` making the close gate exit 0 proving nothing), but the mechanism is
+different and cheaper to prevent: **a keyword floor chosen at plan time, before the
+file shapes exist, can be satisfied by the very code the phase is meant to
+replace.** The plan-phase note "VT keyword floors deliberately minimal where naming
+is free — `/phase-plan` appends stronger mandates once file shapes exist" is
+exactly the right instinct; it just wasn't applied to VT-2. Cheap habit for
+`/phase-plan`: run `verify-vt` for the phase you are planning *before* writing the
+sheet, and treat any already-PASS cell as an unwritten criterion.
+
+Secondary, same run: `verify-vt` **exits 1** mid-drive when an unlanded phase's VT
+fails — the previous handover packet asserted it "exits 0 mid-drive". One of the
+two observations is wrong or the behaviour changed; either way a packet that tells
+the next agent to trust the exit code is a trap, since the conclude ritual says
+"HALT on Fail". The durable fix is at the verb: unlanded phases should not
+contribute FAILs to an exit code at all, or the summary should separate
+landed-phase verdicts from unlanded ones. Corrected in the new packet by telling
+the reader to read per-phase lines and ignore the exit code mid-drive.
