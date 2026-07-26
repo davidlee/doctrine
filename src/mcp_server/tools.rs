@@ -284,7 +284,7 @@ fn tools() -> Vec<McpTool> {
         },
         McpTool {
             name: "memory_record".to_owned(),
-            description: "Record a new memory. High-frequency write verb — captures git anchor, mints a v7 uid, scaffolds item dir. `--global` suppresses the anchor capture (repo-empty orientation master). Returns confirmation with uid and path.\n\nReturns: {\"Recorded\": { uid: \"mem_...\", canonical_path: string }}".to_owned(),
+            description: "Record a new memory. High-frequency write verb — captures git anchor, mints a v7 uid, scaffolds item dir. `--global` suppresses the anchor capture (repo-empty orientation master). Pass `body` to set the memory's prose (`memory.md`) in the same call — otherwise the item is scaffolded with an empty body. Returns confirmation with uid and path.\n\nReturns: {\"Recorded\": { uid: \"mem_...\", canonical_path: string }}".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -301,14 +301,15 @@ fn tools() -> Vec<McpTool> {
                     "lifespan":    { "type": "string", "enum": ["semantic","episodic","procedural","working","identity"], "description": "Lifespan threshold" },
                     "status":      { "type": "string", "enum": ["active","draft","superseded","retracted","archived","quarantined"], "description": "Initial status (default: active)" },
                     "repo":        { "type": "string", "description": "Explicit repo identity override" },
-                    "global":      { "type": "boolean", "description": "Record as global orientation master" }
+                    "global":      { "type": "boolean", "description": "Record as global orientation master" },
+                    "body":        { "type": "string", "description": "Initial memory prose (memory.md), passed verbatim. There is no body mode on record — a new memory has nothing to append to" }
                 },
                 "required": ["title", "memory_type"]
             }),
         },
         McpTool {
             name: "memory_edit".to_owned(),
-            description: "Edit a memory's mutable fields (title, summary, status, lifespan, review_by, trust, severity, key if unset, and scopes). `reference` resolves by uid or key. At least one field must be provided beyond `reference`.\n\nReturns: {\"Edited\": string }".to_owned(),
+            description: "Edit a memory's mutable fields (title, summary, status, lifespan, review_by, trust, severity, key if unset, and scopes) and/or its prose via `body`. `reference` resolves by uid or key. At least one field must be provided beyond `reference`. `body_mode` selects how `body` meets the existing prose — `replace` (default) or `append` — and is only meaningful together with `body`.\n\nReturns: {\"Edited\": string }".to_owned(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -323,7 +324,9 @@ fn tools() -> Vec<McpTool> {
                     "key":        { "type": "string", "description": "Set key (only if none exists — immutable once set)" },
                     "path_scope": { "type": "array", "items": { "type": "string" } },
                     "glob":       { "type": "array", "items": { "type": "string" } },
-                    "command":    { "type": "array", "items": { "type": "string" } }
+                    "command":    { "type": "array", "items": { "type": "string" } },
+                    "body":       { "type": "string", "description": "New memory prose (memory.md), passed verbatim" },
+                    "body_mode":  { "type": "string", "enum": ["replace","append"], "description": "How `body` meets the existing prose (default: replace). Requires `body`" }
                 },
                 "required": ["reference"]
             }),
@@ -916,9 +919,11 @@ fn call_tool(
                 status: Option<String>,
                 repo: Option<String>,
                 global: Option<bool>,
+                body: Option<String>,
             }
             let p: RecordParams = serde_json::from_value(arguments)
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            reject_stdin_sentinel(p.body.as_deref())?;
             let memory_type = crate::memory::MemoryType::parse(&p.memory_type)
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))?;
             let args = crate::memory::RecordArgs {
@@ -949,6 +954,14 @@ fn call_tool(
                 global: p.global.unwrap_or(false),
                 review_by: None,
                 sources: &[],
+                // SL-230 PHASE-05: `body` maps straight through, raw —
+                // `run_record` resolves it and lands it in the one
+                // transactional scaffold write. `body_mode` is deliberately
+                // NOT exposed on `record` (EX-1): a freshly-minted memory has
+                // no prose to append to or replace, and not offering the param
+                // is a stronger refusal than `run_record`'s worded one.
+                body: p.body.as_deref(),
+                body_mode: None,
             };
             let mut buf = Vec::new();
             crate::memory::run_record(Some(root.to_path_buf()), &args, &mut buf)
@@ -979,9 +992,12 @@ fn call_tool(
                 path_scope: Option<Vec<String>>,
                 glob: Option<Vec<String>>,
                 command: Option<Vec<String>>,
+                body: Option<String>,
+                body_mode: Option<String>,
             }
             let p: EditParams = serde_json::from_value(arguments)
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
+            reject_stdin_sentinel(p.body.as_deref())?;
             let fields = crate::memory::EditFields {
                 title: p.title,
                 summary: p.summary,
@@ -994,6 +1010,13 @@ fn call_tool(
                 path_scope: p.path_scope,
                 glob: p.glob,
                 command: p.command,
+                // SL-230 PHASE-05: both raw, mapped straight through. Every
+                // rule about them — `-` resolution, mode parsing, the
+                // `body_mode`-without-`body` refusal, the body-before-TOML
+                // write order — lives in `run_edit`, so this surface inherits
+                // them by delegation and cannot drift from the CLI (EX-5).
+                body: p.body,
+                body_mode: p.body_mode,
             };
             let mut buf = Vec::new();
             crate::memory::run_edit(Some(root.to_path_buf()), &p.reference, &fields, &mut buf)
@@ -1177,6 +1200,30 @@ fn parse_lifespan(s: Option<String>) -> anyhow::Result<Option<crate::memory::Lif
         crate::memory::Lifespan::from_str(&v).map_err(|e| anyhow::anyhow!("invalid arguments: {e}"))
     })
     .transpose()
+}
+
+/// The refusal wording for a `-` body arriving over MCP (SL-230 PHASE-05
+/// D-P5-1, STD-001) — shared by [`reject_stdin_sentinel`] and its test.
+const MCP_BODY_STDIN_SENTINEL: &str = "invalid arguments: a body of \"-\" is the CLI stdin \
+     sentinel and has no meaning over MCP; pass the body text directly";
+
+/// Refuse `body: "-"` at the MCP boundary (SL-230 PHASE-05 D-P5-1).
+///
+/// On the CLI `-` means *read the body from stdin*. Over MCP, stdin **is** the
+/// JSON-RPC transport: honouring the sentinel would make the server block
+/// reading its own protocol stream — a hang plus stream corruption. So the
+/// sentinel has no meaning on this surface and is rejected here, exactly like
+/// the `parse_memory_type` / `parse_lifespan` / `parse_status` boundary checks
+/// above.
+///
+/// This is argument validation, not body policy: the body is still resolved and
+/// written by `memory::run_record` / `memory::run_edit` (EX-5 — the adapter
+/// never calls `resolve_body`, `parse_body_mode`, or `write_body`).
+fn reject_stdin_sentinel(body: Option<&str>) -> anyhow::Result<()> {
+    if body == Some("-") {
+        anyhow::bail!("{MCP_BODY_STDIN_SENTINEL}");
+    }
+    Ok(())
 }
 
 /// Trim a `Showed` output to its summary projection (IMP-113 #2): blank the brief
@@ -1925,6 +1972,38 @@ mod tests {
         let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let err = resp.error.expect("should have error");
         assert_eq!(err.code, -32602);
+    }
+
+    // SL-230 PHASE-05 D-P5-1: `-` is the CLI's read-from-stdin sentinel, but
+    // over MCP stdin IS the JSON-RPC transport — honouring it would block the
+    // server on its own protocol stream. Both body-bearing tools refuse it at
+    // the boundary. Deliberately unit-shaped, NOT e2e: an e2e test that got
+    // this wrong would hang the harness rather than fail it.
+    #[test]
+    fn body_stdin_sentinel_is_refused_on_mcp() {
+        let (_dir, root) = temp_root();
+        for (tool, args) in [
+            (
+                "memory_record",
+                json!({"title": "t", "memory_type": "fact", "body": "-"}),
+            ),
+            ("memory_edit", json!({"reference": MEM_A, "body": "-"})),
+        ] {
+            let req = tools_call_req(tool, args);
+            let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
+            let err = resp.error.expect("sentinel body must be refused");
+            assert_eq!(err.code, -32602, "{tool}");
+            // The worded refusal rides `data.parse_error`; `message` is the
+            // generic "Invalid params" for every -32602.
+            let detail = err
+                .data
+                .as_ref()
+                .and_then(|d| d.get("parse_error"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            assert!(detail.contains(MCP_BODY_STDIN_SENTINEL), "{tool}: {detail}");
+        }
     }
 
     // ── Memory MCP handler tests (PHASE-04) ──────────────────────────────
