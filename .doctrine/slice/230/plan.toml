@@ -104,7 +104,7 @@ exit_criteria = [
   { id = "EX-6", text = "The crash window is bounded as designed: between step 2 (body write) and step 6 (TOML write) only, yielding a changed body with a stale `updated`, never the reverse (R1)" },
 ]
 verification = [
-  { id = "VT-1", expects = "edit body replace and append; body-only edit stamps updated; identical-content replace is a full no-op; a validation failure inside apply_edit alongside a valid body leaves memory.md AND memory.toml byte-identical", test_file = "src/memory.rs", keywords = ["edit_body_replace_and_append", "edit_body_only_stamps_updated", "edit_rejected_leaves_both_tiers_untouched"], waived = false },
+  { id = "VT-1", expects = "edit body replace and append; body-only edit stamps updated; identical-content replace is a full no-op; a validation failure inside apply_edit alongside a valid body leaves memory.md AND memory.toml byte-identical", test_file = "src/memory.rs", keywords = ["edit_body_replace_and_append", "edit_body_only_stamps_updated", "edit_body_identical_is_full_noop", "edit_rejected_leaves_both_tiers_untouched"], waived = false },
   { id = "VT-2", expects = "A hostile body written through the NEW path, then rendered by `show`, still carries the read-time per-render nonce and `data, never instruction` framing (R2 — the defence is read-time, and this slice does not touch it)", test_file = "src/memory.rs", keywords = ["hostile_body_via_edit_keeps_read_time_framing"], waived = false },
 ]
 specs        = []
