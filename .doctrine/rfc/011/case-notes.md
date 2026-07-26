@@ -2059,3 +2059,43 @@ Secondary, mechanical: `review dispose` remains one-finding-per-invocation
 (third case note on this — see the round-7-dispositions entry above). Eleven
 dispositions last round, eleven this round pending; each rewrites the same
 `review-307.toml`.
+
+[dispatch/design; SL-228-RV-308-round2-raiser-turn]
+**A review ledger and its subject lived on different branches, and nothing said
+so.** RV-308 reviews SL-228's design. The design lives on `dispatch/228` in the
+coord worktree; the ledger was filed on the `edge` line. The handover packet's
+own "next actions" block prescribed `./target/debug/doctrine review show RV-308`
+from the coord tree, which fails — the corpus there has no review 308. Three
+calls to discover it, plus a corrected instruction for the external reviewer
+(`-p /workspace/doctrine` while cwd stays the coord tree, because the reviewer
+simultaneously needs `git show <design-commit>` and the source seams, which only
+resolve there).
+
+The generalisable driver: under dispatch, a slice's *authored* artefacts and the
+*review of* those artefacts routinely land on different refs, and no entity
+carries which tree it belongs to. The error surfaces as a bare "not found at
+<path>", which reads like a bad id rather than a wrong root. Cheap fix at the
+CLI altitude: when `<kind> show` misses, say whether the id exists under another
+worktree's root before reporting not-found.
+
+**`review show` does not show the findings.** The table rendering prints derived
+status, the `reviews` edge, and the brief — for a 7-finding ledger mid-round that
+is the one thing it omits. `review status` prints a single summary line. Reading
+the dispositions took `--json` piped through a python one-liner to unpack
+`review.finding[]`. Four calls to arrive at the obvious read. A `--findings` (or
+just including them in the default table, which is what a reader mid-review
+wants) would collapse that to one.
+
+**A parameter name impersonated a CLI flag.** Mid-turn I read
+`landed_cell(root, role, rec, slice: Option<u32>)` and concluded the false
+`NotLanded` was only reachable under `worktree list --slice N` — because the
+parameter is spelled `slice` and the verb has a `--slice` flag. It is not the
+flag: `resolve_row` derives it per row from the fork's nested path via
+`slice_of`, while the flag is a separate `slice_filter` applied upstream. Caught
+only by reading the caller before writing the claim into the design. Cost was one
+extra read; the counterfactual cost was a false load-bearing premise in an
+authored artefact justifying an irreversible `branch -D`. Generalisable: **a
+parameter whose name collides with a user-facing flag is a trap — trace the
+caller before asserting where the value comes from.** Related to the corpus's
+existing "verify against source, not recall" entries, but the failure mode is
+narrower: the source *was* read, just not far enough up.
