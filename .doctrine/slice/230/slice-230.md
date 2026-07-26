@@ -93,17 +93,27 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
   Memory text is untrusted (SPEC-007 § Concerns); interpolated raw, a
   `:(exclude)` scope value subtracts the memory's own directory from the surface
   it is measured against. Every entry is magic-prefixed.
-- **Non-contribution is classified, not treated alike** (design D10). Malformed or
-  probe-aborting scope entries refuse; *stale* and *natively unobservable* ones are
-  reported and raised by `validate` as corpus-health findings; observable ones must
-  be clean. A blanket refusal was measured against the real corpus first and
-  rejected: it disables 55 of 386 items (51 active), including memories that scope
-  harness paths git can never see.
-- **One claim-surface constructor, adopted by `verify` and `validate`** (D11).
-  `retrieve`'s staleness ranking is a *third* consumer and is deliberately **not**
-  converted here — that shifts retrieval ordering corpus-wide, which is OQ-2's
-  deferred decision. Bounded, not conceded: adoption is a call-site swap, the gap
-  is design R7, and IMP-317 routes it gated on OQ-2.
+- **Non-contribution is classified, and refusal follows actionability** (design
+  D10). Malformed entries refuse; *stale* ones — the path does not resolve but git
+  tracked it once — refuse, because the fix is a path correction; *unobservable*
+  ones — never tracked — are reported, raised by `validate`, and attested over;
+  observable ones must be clean. Both a blanket refusal and a filesystem-existence
+  split were measured against the real corpus and rejected: the first disables 36
+  active items, the second refuses a protected class of harness memory in a source
+  checkout while admitting it in an installed one. The line is drawn on git
+  history, which is checkout-stable. Cost of the chosen cut: **4** currently-stamped
+  active memories, each a moved-source-path correction.
+- **The claim-surface constructor serves `verify` alone** (D11). `validate`'s
+  staleness check and `retrieve`'s ranking both keep the raw scope seam. Not
+  bounded for convenience: they ask a *historical* question, and the
+  canonicalisation `verify` requires erases a committed symlink retarget from a
+  commit count. A correct shared surface is a second, history-stable constructor —
+  a change to corpus-wide staleness ranking, which is OQ-2's deferred decision.
+  The gap is design R7, routed as IMP-317; adoption needs a dataflow change, not a
+  call-site swap.
+- **An attestation does not record what it covered** (design R8). Under D10's
+  unobservable class a stamp may cover a proper subset of the declared scope, and
+  a consumer cannot tell. Needs a persisted field; routed as IMP-318.
 - **Consequence, stated plainly:** `record` → `verify` now **refuses** until the
   new memory is committed. The friction this slice removes is *unrelated* corpus
   dirt — another agent's uncommitted backlog file, your own unrelated spec edit —

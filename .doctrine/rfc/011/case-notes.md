@@ -1998,3 +1998,27 @@ a probe round. `doctrine memory list --all --json` is the only trustworthy
 enumeration; the boot guardrail's "read via `show`, not raw files" should extend
 to an explicit "do not glob `items/`" — the directory is a trap for exactly the
 scripted-census move an agent reaches for when a review asks for a blast radius.
+
+[inquisition; SL-230-RV-307-round7-dispositions]
+Two costs in this round, both from measurement rather than from the CLI.
+
+1. **A proxy classification propagated into a user-facing recommendation before
+   it was checked against the rule it stood in for.** I split the corpus's
+   non-contributing scope entries by "does the path exist on disk", recommended a
+   design cut on that basis (cost: 3 stamps), and only found on implementing the
+   ordered algorithm that the real rule classifies by *resolution outcome* — which
+   moves `.claude/skills/**` from unobservable into stale and would have refused
+   the exact class the user had protected. The correction (discriminate on git
+   history, not the filesystem) is better than the original and cost ~2 extra
+   census passes, but the recommendation should not have gone out ahead of it.
+   Cheap general rule: when a census stands in for a rule not yet written, say so,
+   or write the rule first.
+
+2. **`review dispose` takes one finding per invocation.** Eleven dispositions
+   were eleven separate CLI calls, each re-parsing and rewriting the same
+   `review-307.toml`, with the response prose passed as a shell-quoted `--response`
+   argument. Long responses containing backticks, `:(literal)` and `=>` had to be
+   hand-audited for shell-safety on every call. A `--response -` stdin sentinel
+   (the shape `memory record --body -` already uses) or a batch form would remove
+   both the quoting hazard and 10 redundant read-modify-writes. This is the third
+   case note against per-finding dispose cost (see the SL-306 entry ~line 1715).
