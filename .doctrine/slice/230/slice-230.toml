@@ -7,7 +7,7 @@ updated = "2026-07-25"
 tags = ["area:cli", "area:mcp", "area:memory"]
 
 [relationships]
-needs = ["REV-034"]                      # slice→work hard prerequisite
+needs = []                      # slice→work hard prerequisite; REV-034 moved to SL-232 (DEC-027) — hand-edited, no removal verb exists (ISS-247)
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
@@ -77,6 +77,12 @@ label = "references"
 role = "concerns"
 descriptor = "retrieve-side adoption of the claim-surface constructor"
 target = "QUE-175"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "verify gate split out by DEC-027"
+target = "SL-232"
 
 [[relation]]
 label = "related"
