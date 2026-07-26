@@ -1,0 +1,29 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 2
+slug = "claude-p-exposes-token-usage-metrics-without-usage-billing"
+title = "claude -p exposes token usage metrics without usage billing"
+record_kind = "evidence"
+status = "captured"
+created = "2026-07-26"
+updated = "2026-07-26"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+datum        = ""
+provenance   = ""               # inspection | experiment | reproduction | citation
+confidence   = ""               # low | medium | high
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "supports"
+target = "DEC-048"
