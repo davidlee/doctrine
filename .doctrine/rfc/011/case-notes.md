@@ -1709,3 +1709,22 @@ since entity-creating verbs always produce untracked files plus a symlink.
    `#[cfg(test)]` wrapper over the shared production core — a reasonable call, but an
    unreviewed one). **Lesson: a phase-plan that reroutes a call path should name what
    the old path's callers become.**
+
+[design/feedback disposition; SL-230-external-rv307]
+
+- Disposing 12 findings cost 12 separate `review dispose` invocations, each
+  carrying a multi-paragraph `--response` as a shell-quoted argument. Two
+  hazards: (a) apostrophes in the rationale terminate the heredoc-free quoting,
+  so prose has to be self-censored for shell syntax rather than written plainly;
+  (b) no batch/stdin form exists (`--response -` would mirror the `--body -`
+  sentinel SL-230 is itself designing). Est. 3-4k tokens of pure quoting
+  overhead across the round.
+- `doctrine review dispose` has no dry-run/preview, and the ledger is
+  append-only, so a mis-typed disposition is permanent. This raises the cost of
+  every response — they get over-drafted defensively.
+- Cross-tier line citations in a design doc (`src/memory.rs:3817-3827`) went
+  stale-by-inspection twice during this round: the design cited `:132` where the
+  real site was `:133`. Nothing validates prose line-citations against the
+  files they name. Candidate: a `doctrine doctor` leg that resolves `path:line`
+  citations in authored prose and warns on drift. Cheap, high-yield — two of
+  RV-307's twelve findings were citation-accuracy defects.
