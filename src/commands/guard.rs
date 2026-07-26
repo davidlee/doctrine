@@ -331,9 +331,34 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             },
             // plan-next / status — read plan + phase sheets; never mutates a
             // ref or ledger row — Read-classed so it works under worker-mode.
+            //
+            // tree-state / delta / whereami / history / ignored — the SL-228
+            // PHASE-01 Move-E funnel READ surface (design §8): each composes the
+            // git.rs read primitives and mutates nothing, so all are Read-classed.
+            //
+            // hook-check inspects the staged index / HEAD and mutates nothing — the
+            // installed hook invokes it during a commit — so it is Read-classed
+            // (worker-safe). The `commit` verb writes a coord commit (sole-writer
+            // authored writes, SL-228 PHASE-02) — Orchestrator-classed like sync.
             DispatchCommand::PlanNext { .. }
             | DispatchCommand::Status { .. }
-            | DispatchCommand::DeliverTo { .. } => Read,
+            | DispatchCommand::DeliverTo { .. }
+            | DispatchCommand::TreeState { .. }
+            | DispatchCommand::Delta { .. }
+            | DispatchCommand::Whereami { .. }
+            | DispatchCommand::History { .. }
+            // next is the SL-228 PHASE-06 funnel ORACLE: it reads the committed funnel
+            // record and prescribes — strictly read-only, it never heals and lands
+            // nothing — so it is Read-classed (worker-safe) like the rest of the read
+            // surface.
+            | DispatchCommand::Ignored { .. }
+            | DispatchCommand::Next { .. }
+            | DispatchCommand::HookCheck { .. } => Read,
+            DispatchCommand::Commit { .. } => Orchestrator("dispatch-commit"),
+            // verify runs the phase suite in the coordination worktree, fast-forwards
+            // that checkout, and lands funnel evidence as a coord commit (SL-228
+            // PHASE-05) — a coordination WRITE, so Orchestrator-classed like commit.
+            DispatchCommand::Verify { .. } => Orchestrator("dispatch-verify"),
         },
         // The coverage group splits per inner verb (SL-057 D2a): `show` is the
         // read-only drift view; `record`/`forget` mutate the observed store, and

@@ -28,6 +28,7 @@ const CATEGORY_NAME_TOML_PARSE: &str = "TOML Parse";
 const CATEGORY_NAME_PROSE_CITE: &str = "Prose Citation";
 const CATEGORY_NAME_AGENT_CONFORMANCE: &str = "Agent Conformance";
 const CATEGORY_NAME_SPAWN_SEAM_SYMMETRY: &str = "Spawn Seam Symmetry";
+const CATEGORY_NAME_COORD_HOOK: &str = "Coord Hook";
 
 const SEVERITY_ERROR: &str = "error";
 const SEVERITY_WARNING: &str = "warning";
@@ -78,6 +79,7 @@ pub(crate) enum Category {
     ProseCite,
     AgentConformance,
     SpawnSeamSymmetry,
+    CoordHook,
 }
 
 impl Category {
@@ -95,9 +97,11 @@ impl Category {
             | Self::MemoryHealth
             | Self::AgentConformance
             | Self::SpawnSeamSymmetry => Severity::Error,
-            Self::Lifecycle | Self::RawLabel | Self::TomlParse | Self::ProseCite => {
-                Severity::Warning
-            }
+            Self::Lifecycle
+            | Self::RawLabel
+            | Self::TomlParse
+            | Self::ProseCite
+            | Self::CoordHook => Severity::Warning,
         }
     }
 
@@ -114,6 +118,7 @@ impl Category {
             Self::ProseCite => 7,
             Self::AgentConformance => 8,
             Self::SpawnSeamSymmetry => 9,
+            Self::CoordHook => 10,
         }
     }
 
@@ -130,6 +135,7 @@ impl Category {
             Self::ProseCite => CATEGORY_NAME_PROSE_CITE,
             Self::AgentConformance => CATEGORY_NAME_AGENT_CONFORMANCE,
             Self::SpawnSeamSymmetry => CATEGORY_NAME_SPAWN_SEAM_SYMMETRY,
+            Self::CoordHook => CATEGORY_NAME_COORD_HOOK,
         }
     }
 }
@@ -150,7 +156,7 @@ impl Serialize for Category {
 }
 
 /// All categories in ordinal order.
-const CATEGORIES_BY_ORDINAL: [Category; 10] = [
+const CATEGORIES_BY_ORDINAL: [Category; 11] = [
     Category::IdIntegrity,
     Category::RelationIntegrity,
     Category::SpecFk,
@@ -161,6 +167,7 @@ const CATEGORIES_BY_ORDINAL: [Category; 10] = [
     Category::ProseCite,
     Category::AgentConformance,
     Category::SpawnSeamSymmetry,
+    Category::CoordHook,
 ];
 
 #[derive(Debug, Clone)]
@@ -210,7 +217,8 @@ impl Finding {
 /// When `verbose` is false, `RawLabel` findings are aggregated into a single
 /// informational count line rather than rendered per-item.
 pub(crate) fn render_findings(findings: &[Finding], verbose: bool) -> String {
-    let mut by_category: [Vec<&Finding>; 10] = [
+    let mut by_category: [Vec<&Finding>; 11] = [
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -292,6 +300,7 @@ mod tests {
         assert_eq!(Category::ProseCite.severity(), Severity::Warning);
         assert_eq!(Category::AgentConformance.severity(), Severity::Error);
         assert_eq!(Category::SpawnSeamSymmetry.severity(), Severity::Error);
+        assert_eq!(Category::CoordHook.severity(), Severity::Warning);
     }
 
     #[test]

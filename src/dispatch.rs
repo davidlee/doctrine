@@ -28,6 +28,7 @@ use crate::worktree::JailPolicy;
 
 use crate::boundary::{BoundaryRow, Provenance as BoundaryProvenance};
 use crate::corpus_guard;
+use crate::funnel_machine::Position;
 use crate::git::{self, MergeTree, RefCas, ZERO_OID};
 use crate::kinds::{
     CANDIDATE_REF_PREFIX, DISPATCH_REF_PREFIX, PHASE_REF_PREFIX, REVIEW_REF_PREFIX,
@@ -233,10 +234,19 @@ pub(crate) enum DispatchCommand {
         #[arg(long)]
         base: Option<String>,
 
-        /// The slice being dispatched (bare number) — diagnostic only; the arming dir
-        /// is per-coord-tree, not per-slice (cross-slice partition is by coord tree).
+        /// The slice being dispatched (bare number). PERSISTED into the arming dir as
+        /// half of the DURABLE FORK BINDING (SL-228 PHASE-04, D2) — with `--phase` it
+        /// tells the fork which funnel row its commits belong to. The arming dir is
+        /// still per-coord-tree, not per-slice (cross-slice partition is by coord tree).
         #[arg(long, value_parser = parse_cli_id)]
         slice: Option<u32>,
+
+        /// The phase being dispatched (`PHASE-NN`) — the other half of the durable fork
+        /// binding. Persisted beside `slice`, consumed ONE-SHOT at the fork point
+        /// exactly as `base` is, so a stale arm cannot mis-bind the next spawn. Both
+        /// halves are needed: a half-arm binds nothing.
+        #[arg(long)]
+        phase: Option<String>,
 
         /// Per-arming jail widening (objective 3): absolute paths granted rw inside the
         /// worker jail beyond its worktree. Repeatable. Empty (+ default network) ⇒ no
@@ -249,6 +259,155 @@ pub(crate) enum DispatchCommand {
         #[arg(long = "no-network")]
         no_network: bool,
 
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Report the coordination worktree's tree state (SL-228 PHASE-01, design §8).
+    /// UNTRACKED-AWARE clean detection plus reverse-diff / staged anomalies — the
+    /// funnel read that replaces a raw post-write `git status` (CLI + MCP). Emits a
+    /// typed payload; read-only.
+    TreeState {
+        /// The slice id (bare number) keying the coordination worktree.
+        #[arg(long, value_parser = parse_cli_id)]
+        slice: u32,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Three-dot diff `A...B` (SL-228 PHASE-01, design §8). The changes on `--to`
+    /// since the merge-base of the two refs, names-only or full content. Read-only.
+    Delta {
+        /// The `A` ref of the three-dot range.
+        #[arg(long)]
+        from: String,
+
+        /// The `B` ref of the three-dot range.
+        #[arg(long)]
+        to: String,
+
+        /// Emit changed path NAMES only.
+        #[arg(long, group = "delta_mode")]
+        names: bool,
+
+        /// Emit the full unified CONTENT diff (the default).
+        #[arg(long, group = "delta_mode")]
+        content: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Report the invoking worktree's branch, isolation, and primary/coord/fork
+    /// classification (SL-228 PHASE-01, design §8). Read-only.
+    Whereami {
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Bounded oneline history of the coordination branch (SL-228 PHASE-01). Newest
+    /// first, capped at `-n`. Read-only.
+    History {
+        /// The slice id (bare number) keying the coordination worktree.
+        #[arg(long, value_parser = parse_cli_id)]
+        slice: u32,
+
+        /// The ref to log (default: the resolved `dispatch/<slice>` tip).
+        #[arg(long = "ref")]
+        reference: Option<String>,
+
+        /// Maximum commits to report (bounded).
+        #[arg(short = 'n', long, default_value_t = 20)]
+        limit: usize,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Report which of the given paths git ignores (SL-228 PHASE-01, design §8).
+    /// Read-only.
+    Ignored {
+        /// Paths to check against the active gitignore rules (≥1 required).
+        #[arg(required = true)]
+        paths: Vec<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Safe path-limited commit of the orchestrator's authored coord-tree writes
+    /// (SL-228 PHASE-02, design §7). The pathspec is STRUCTURALLY mandatory (≥1 path
+    /// after `--`; a pathless commit is unrepresentable); refuses an undeclared path /
+    /// unnamed deletion (ISS-234) BEFORE touching the index. Orchestrator-classed —
+    /// refused under worker-mode.
+    Commit {
+        /// The slice id (bare number) keying the coordination worktree.
+        #[arg(long, value_parser = parse_cli_id)]
+        slice: u32,
+
+        /// The commit message.
+        #[arg(short = 'm', long)]
+        message: String,
+
+        /// The declared pathspec — at least one path, given after `--`.
+        #[arg(last = true, required = true, num_args = 1..)]
+        paths: Vec<String>,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// Run a phase's verify suite and land the verdict as funnel evidence (SL-228
+    /// PHASE-05, design §5). Fast-forwards the coordination checkout over paths it has
+    /// PROVEN unedited (never a reset/stash/discard — an operator edit refuses
+    /// `verify-tree-dirty`), runs the `[dispatch] verify-suite` cadence, re-proves the
+    /// tree, and lands pass/fail evidence in ONE commit. Orchestrator-classed.
+    Verify {
+        /// The slice id (bare number) keying the coordination worktree.
+        #[arg(long, value_parser = parse_cli_id)]
+        slice: u32,
+
+        /// The `PHASE-NN` id whose funnel row the evidence belongs to.
+        #[arg(long)]
+        phase: String,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// The single-prescription funnel oracle (SL-228 PHASE-06, design §6): read the
+    /// committed funnel record and print the ONE thing to do next for this slice's
+    /// phases. Strictly read-only — it never heals, lands nothing, and ALWAYS exits 0
+    /// (a triage prescription is information, not a process failure). Answers the phase
+    /// funnel only; `dispatch status` answers the slice lifecycle beyond it.
+    Next {
+        /// The slice id (bare number) keying the coordination worktree.
+        #[arg(long, value_parser = parse_cli_id)]
+        slice: u32,
+
+        /// Emit the JSON payload instead of the human-readable prescription.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect from CWD).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
+    /// The coord pre-commit backstop's funnel-reversion check (SL-228 PHASE-02, design
+    /// §7): refuses the deletion + modification-reversion signature in the staged set.
+    /// Invoked by the installed hook; reads `DOCTRINE_ALLOWED_DELETIONS` /
+    /// `DOCTRINE_ALLOW_DELETE`. Read-only (inspects index/HEAD); worker-safe.
+    HookCheck {
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
@@ -479,10 +638,51 @@ pub(crate) fn dispatch(cmd: DispatchCommand, _color: bool) -> anyhow::Result<()>
         DispatchCommand::ArmSpawn {
             base,
             slice,
+            phase,
             extra_rw,
             no_network,
             path,
-        } => run_arm_spawn(path, base.as_deref(), slice, extra_rw, no_network),
+        } => run_arm_spawn(
+            path,
+            base.as_deref(),
+            slice,
+            phase.as_deref(),
+            extra_rw,
+            no_network,
+        ),
+        DispatchCommand::TreeState { slice, path } => run_tree_state(path, slice),
+        DispatchCommand::Delta {
+            from,
+            to,
+            names,
+            content: _content,
+            path,
+        } => {
+            // The `delta_mode` group is single-choice; absent both ⇒ content default.
+            let mode = if names {
+                git::DiffMode::Names
+            } else {
+                git::DiffMode::Content
+            };
+            run_delta(path, &from, &to, mode)
+        }
+        DispatchCommand::Whereami { path } => run_whereami(path),
+        DispatchCommand::History {
+            slice,
+            reference,
+            limit,
+            path,
+        } => run_history(path, slice, reference.as_deref(), limit),
+        DispatchCommand::Ignored { paths, path } => run_ignored(path, &paths),
+        DispatchCommand::Commit {
+            slice,
+            message,
+            paths,
+            path,
+        } => run_commit(path, slice, &message, &paths),
+        DispatchCommand::Verify { slice, phase, path } => run_verify(path, slice, &phase),
+        DispatchCommand::Next { slice, json, path } => run_next(path, slice, json),
+        DispatchCommand::HookCheck { path } => run_hook_check(path),
     }
 }
 
@@ -502,6 +702,7 @@ fn run_arm_spawn(
     path: Option<PathBuf>,
     base: Option<&str>,
     slice: Option<u32>,
+    phase: Option<&str>,
     extra_rw: Vec<PathBuf>,
     no_network: bool,
 ) -> anyhow::Result<()> {
@@ -532,8 +733,12 @@ fn run_arm_spawn(
     let spawn = root.join(crate::worktree::ARMING_SUBPATH);
     std::fs::create_dir_all(&spawn)
         .with_context(|| format!("create arming dir {}", spawn.display()))?;
-    crate::fsutil::write_atomic(&spawn.join("base"), format!("{b}\n").as_bytes())
-        .with_context(|| format!("write arming base in {}", spawn.display()))?;
+    crate::fsutil::write_atomic(
+        &spawn.join(crate::worktree::ARMING_BASE_FILE),
+        format!("{b}\n").as_bytes(),
+    )
+    .with_context(|| format!("write arming base in {}", spawn.display()))?;
+    write_arming_binding(&spawn, slice, phase)?;
     write_arming_jail_policy(&spawn, extra_rw, no_network)?;
 
     let spawn_canon = std::fs::canonicalize(&spawn)
@@ -543,6 +748,42 @@ fn run_arm_spawn(
     }
     writeln!(io::stdout(), "{}", spawn_canon.display())?;
     Ok(())
+}
+
+/// Write (or clear) the arming DURABLE FORK BINDING slots beside `base` in `spawn`
+/// (SL-228 PHASE-04, D2). Same pairing hygiene as the jail declaration: an arm that
+/// declares no `--slice`/`--phase` REMOVES any stale slot, so a leftover binding from
+/// an earlier arm can never ride a fresh `base` and mis-bind the next spawn. The fork
+/// point consumes both slots one-shot, exactly as it consumes `base`.
+fn write_arming_binding(
+    spawn: &Path,
+    slice: Option<u32>,
+    phase: Option<&str>,
+) -> anyhow::Result<()> {
+    let write_slot = |slot: &str, value: Option<String>| -> anyhow::Result<()> {
+        let path = spawn.join(slot);
+        match value {
+            Some(v) => crate::fsutil::write_atomic(&path, format!("{v}\n").as_bytes())
+                .with_context(|| format!("write arming {slot} in {}", spawn.display())),
+            None => match std::fs::remove_file(&path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e)
+                    .with_context(|| format!("clear stale arming {slot} in {}", spawn.display())),
+            },
+        }
+    };
+    write_slot(
+        crate::worktree::ARMING_SLICE_FILE,
+        slice.map(|s| s.to_string()),
+    )?;
+    write_slot(
+        crate::worktree::ARMING_PHASE_FILE,
+        phase
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned),
+    )
 }
 
 /// Write (or clear) the arming jail-policy DECLARATION beside `base` in `spawn`
@@ -651,6 +892,10 @@ pub(crate) fn run_setup(
         .dispatch
         .authoring_branch;
     let outcome = crate::worktree::coordinate(&root, slice, dir, authoring.as_deref())?;
+
+    // Install the coord-worktree safe-commit backstop (design §7). Fatal on failure —
+    // a coord tree without the pre-commit hook silently reopens ISS-234.
+    install_coord_hook(dir)?;
 
     // Emit the dispatch env contract on stdout (4 KEY=value lines).
     let dispatch_ref = format!("{DISPATCH_REF_PREFIX}{slice:03}");
@@ -818,6 +1063,699 @@ pub(crate) fn run_deliver_to(path: Option<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
+// --- SL-228 PHASE-01: the funnel read verbs (design §8) -----------------------
+// Each verb emits a typed JSON payload and composes ONLY the `git.rs` primitives —
+// no verb handler shells raw git for a funnel read (VA-1). `tree-state` shares its
+// authority with the MCP tool (one function, CLI + MCP); the other four are
+// CLI-only.
+
+/// The `dispatch tree-state` payload — the coord worktree's UNTRACKED-AWARE
+/// cleanliness split into the [`git::TreeState`] axes. Single-sourced HERE (the
+/// funnel authority home, design D6) and shared by the MCP `dispatch_tree_state`
+/// tool via [`tree_state_core`], so CLI and MCP never re-derive the shape (STD-001 /
+/// no parallel implementation). `clean` is the all-axes-empty summary; each vector
+/// is present only when non-empty (a clean tree is just `{slice, clean: true}`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct TreeStateCore {
+    pub(crate) slice: u32,
+    /// Every axis empty — untracked-aware clean (contrast the tracked-only `tree_clean`).
+    pub(crate) clean: bool,
+    /// Paths staged in the index against HEAD (the reverse-diff / staged-anomaly axis).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) staged: Vec<String>,
+    /// Tracked paths whose worktree bytes differ from the index.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) tracked_dirty: Vec<String>,
+    /// Unignored untracked paths.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) untracked: Vec<String>,
+}
+
+/// Assemble a [`TreeStateCore`] from a gathered [`git::TreeState`] — PURE, the ONE
+/// place the payload shape is built. Both the CLI verb and the MCP
+/// `dispatch_tree_state` tool call it (the shared authority reached along the
+/// existing `mcp_server → dispatch` edge; the CLI never reverses it).
+pub(crate) fn tree_state_core(slice: u32, state: git::TreeState) -> TreeStateCore {
+    TreeStateCore {
+        slice,
+        clean: state.is_clean(),
+        staged: state.staged,
+        tracked_dirty: state.tracked_dirty,
+        untracked: state.untracked,
+    }
+}
+
+/// `dispatch tree-state --slice N` — the UNTRACKED-AWARE tree state of the invoking
+/// coordination worktree via [`git::tree_clean_untracked`] (design §8 gap 1). Like
+/// `dispatch status`, it reads the LOCAL root (the coord tree the orchestrator
+/// invokes from); the MCP tool resolves the coord by slice server-side instead.
+/// Read-only; never shells raw git.
+fn run_tree_state(path: Option<PathBuf>, slice: u32) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let core = tree_state_core(slice, git::tree_clean_untracked(&root)?);
+    writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&core)?)?;
+    Ok(())
+}
+
+/// `dispatch delta` payload — the three-dot `from...to` diff in the requested mode.
+#[derive(serde::Serialize)]
+struct DeltaCore {
+    from: String,
+    to: String,
+    mode: &'static str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    names: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+}
+
+/// `dispatch delta --from A --to B [--names|--content]` — the three-dot diff over
+/// [`git::three_dot_diff`] (design §8 gap 2). Read-only; never shells raw git.
+fn run_delta(
+    path: Option<PathBuf>,
+    from: &str,
+    to: &str,
+    mode: git::DiffMode,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let raw = git::three_dot_diff(&root, from, to, mode)?;
+    let core = match mode {
+        git::DiffMode::Names => DeltaCore {
+            from: from.to_owned(),
+            to: to.to_owned(),
+            mode: "names",
+            names: raw.lines().map(str::to_owned).collect(),
+            content: None,
+        },
+        git::DiffMode::Content => DeltaCore {
+            from: from.to_owned(),
+            to: to.to_owned(),
+            mode: "content",
+            names: Vec::new(),
+            content: Some(raw),
+        },
+    };
+    writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&core)?)?;
+    Ok(())
+}
+
+/// `dispatch whereami` payload — the invoking worktree's branch, isolation, and role.
+#[derive(serde::Serialize)]
+struct WhereamiCore {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    branch: Option<String>,
+    detached: bool,
+    linked_worktree: bool,
+    role: &'static str,
+}
+
+/// The coordination branch's SHORT-ref prefix (`dispatch/<NNN>`, as
+/// [`git::current_branch`] returns it) — [`DISPATCH_REF_PREFIX`] sans the
+/// `refs/heads/` qualifier. Single-sourced here (STD-001) for the `whereami` role
+/// classifier.
+const COORD_BRANCH_SHORT_PREFIX: &str = "dispatch/";
+
+/// PURE classification of a worktree into the funnel's three roles from its branch +
+/// isolation (design §8): the primary tree ⇒ `primary`; a linked worktree on a
+/// `dispatch/<NNN>` coordination branch (NUMERIC slice suffix) ⇒ `coord`; any other
+/// linked worktree — including a worker fork's `dispatch/<agent>` (non-numeric
+/// suffix), a `review/*`, or a detached HEAD ⇒ `fork`. The numeric-suffix test is
+/// load-bearing: coord and worker-fork branches SHARE the `dispatch/` prefix, so a
+/// bare prefix match would misread every worker fork as a coord. No git/disk — the
+/// shell gathers `branch`/`linked` and hands them in (pure/imperative split).
+fn classify_worktree_role(branch: Option<&str>, linked: bool) -> &'static str {
+    if !linked {
+        return "primary";
+    }
+    match branch.and_then(|b| b.strip_prefix(COORD_BRANCH_SHORT_PREFIX)) {
+        Some(suffix) if !suffix.is_empty() && suffix.bytes().all(|c| c.is_ascii_digit()) => "coord",
+        _ => "fork",
+    }
+}
+
+/// `dispatch whereami` — the invoking worktree's branch (via the relocated
+/// [`git::current_branch`]), isolation (via the wrapped
+/// [`crate::worktree::is_linked_worktree`]), and pure [`classify_worktree_role`]
+/// (design §8 gap 3). Read-only; never shells raw git.
+fn run_whereami(path: Option<PathBuf>) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let branch = git::current_branch(&root)?;
+    let linked = crate::worktree::is_linked_worktree(&root)?;
+    let role = classify_worktree_role(branch.as_deref(), linked);
+    let core = WhereamiCore {
+        detached: branch.is_none(),
+        linked_worktree: linked,
+        role,
+        branch,
+    };
+    writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&core)?)?;
+    Ok(())
+}
+
+/// `dispatch history` payload — the bounded oneline log of the coord branch.
+#[derive(serde::Serialize)]
+struct HistoryCore {
+    slice: u32,
+    reference: String,
+    limit: usize,
+    commits: Vec<String>,
+}
+
+/// `dispatch history --slice N [--ref R] [-n]` — a bounded oneline log over
+/// [`git::log_oneline`] (design §8 gap 4). Reads the LOCAL root (like `dispatch
+/// status`); the ref defaults to the slice's coordination branch ([`dispatch_ref`],
+/// resolvable from any worktree in the repo). Read-only; never shells raw git.
+fn run_history(
+    path: Option<PathBuf>,
+    slice: u32,
+    reference: Option<&str>,
+    limit: usize,
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let reference = reference.map_or_else(|| dispatch_ref(slice), str::to_owned);
+    let commits = git::log_oneline(&root, &reference, limit)?;
+    let core = HistoryCore {
+        slice,
+        reference,
+        limit,
+        commits,
+    };
+    writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&core)?)?;
+    Ok(())
+}
+
+/// `dispatch ignored` payload — the subset of the queried paths git ignores.
+#[derive(serde::Serialize)]
+struct IgnoredCore {
+    queried: Vec<String>,
+    ignored: Vec<String>,
+}
+
+/// `dispatch ignored <path>…` — the gitignore check over [`git::check_ignore`]
+/// (design §8 gap 5). Read-only; never shells raw git.
+fn run_ignored(path: Option<PathBuf>, paths: &[String]) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let ignored = git::check_ignore(&root, paths)?;
+    let core = IgnoredCore {
+        queried: paths.to_vec(),
+        ignored,
+    };
+    writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&core)?)?;
+    Ok(())
+}
+
+// ===================================================================================
+// Safe-commit guard (SL-228 PHASE-02, REQ-389 write side, design §7). The `dispatch
+// commit` verb + the coord-worktree pre-commit hook (`dispatch hook-check` + the
+// embedded script) close ISS-234: a bad import that mass-deletes files, or reverts
+// funnel-advanced ones, can never land as a coord commit.
+// ===================================================================================
+
+/// Env var handed to the CHILD `git commit` naming the EXACT validated deletions the
+/// coord hook's deletion arm may skip — separator-joined, child-scoped (STD-001).
+pub(crate) const ENV_ALLOWED_DELETIONS: &str = "DOCTRINE_ALLOWED_DELETIONS";
+/// Env var: the operator's MANUAL both-arms escape hatch (deletion + reversion). The
+/// `dispatch commit` verb NEVER sets this — only a deliberate human does (STD-001).
+pub(crate) const ENV_ALLOW_DELETE: &str = "DOCTRINE_ALLOW_DELETE";
+/// Refusal token: the to-be-committed set escapes the declared pathspec (STD-001).
+const REFUSE_UNDECLARED_PATH: &str = "commit-undeclared-path";
+/// Refusal token: a deletion in the commit set was not explicitly named (STD-001).
+const REFUSE_UNDECLARED_DELETION: &str = "commit-undeclared-deletion";
+/// The doctrine-owned per-worktree hooks dir, under the coord's PRIVATE gitdir (STD-001).
+const COORD_HOOKS_DIR: &str = "doctrine-hooks";
+/// The embedded pre-commit hook asset key, relative to the `install/` embed root
+/// (STD-001). Rides the EXISTING install `RustEmbed` root — NO new `flake.nix` graft (R2).
+pub(crate) const HOOK_ASSET_KEY: &str = "git-hooks/pre-commit";
+/// The `DOCTRINE_ALLOWED_DELETIONS` path-list separator — a newline, so a path with a
+/// space never splits (STD-001; mirrored by the shipped hook script).
+const ALLOWED_DELETIONS_SEP: char = '\n';
+
+/// A single entry of a to-be-committed diff (`git diff --cached --name-status`) — the
+/// pure input both the safe-commit guard and the hook's arms classify.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChangeKind {
+    Added,
+    Modified,
+    Deleted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StagedChange {
+    pub(crate) kind: ChangeKind,
+    pub(crate) path: String,
+}
+
+/// Why the safe-commit guard refuses (design §7), each with its distinct STD-001 token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CommitGuardRefusal {
+    /// A change lands outside the declared pathspec.
+    UndeclaredPath(Vec<String>),
+    /// A deletion in the commit set was not EXPLICITLY named (merely covered by a
+    /// declared directory is not enough — a mass delete under a dir is the ISS-234 shape).
+    UndeclaredDeletion(Vec<String>),
+}
+
+impl CommitGuardRefusal {
+    pub(crate) fn token(&self) -> &'static str {
+        match self {
+            CommitGuardRefusal::UndeclaredPath(_) => REFUSE_UNDECLARED_PATH,
+            CommitGuardRefusal::UndeclaredDeletion(_) => REFUSE_UNDECLARED_DELETION,
+        }
+    }
+
+    pub(crate) fn paths(&self) -> &[String] {
+        match self {
+            CommitGuardRefusal::UndeclaredPath(p) | CommitGuardRefusal::UndeclaredDeletion(p) => p,
+        }
+    }
+}
+
+/// PURE — is `path` covered by a declared pathspec entry? Component-anchored: a
+/// declared directory `d` covers `d/child` but NEVER a sibling `d-other` (a bare
+/// substring match would over-cover — path scoping matches components, not substrings).
+/// `"."` covers the whole tree.
+fn path_covered(path: &str, declared: &[String]) -> bool {
+    declared.iter().any(|d| {
+        d == "."
+            || d == path
+            || path
+                .strip_prefix(d.as_str())
+                .is_some_and(|r| r.starts_with('/'))
+    })
+}
+
+/// PURE — THE safe-commit guard (design §7). Validates the to-be-committed `changes`
+/// against the `declared` pathspec: every change must be covered, and every DELETION
+/// must be EXPLICITLY named. On success returns the validated deletion path-set, sorted
+/// — the child-scoped-env payload the coord hook's deletion arm may skip.
+pub(crate) fn classify_commit(
+    declared: &[String],
+    changes: &[StagedChange],
+) -> Result<Vec<String>, CommitGuardRefusal> {
+    let mut undeclared: Vec<String> = changes
+        .iter()
+        .filter(|c| !path_covered(&c.path, declared))
+        .map(|c| c.path.clone())
+        .collect();
+    if !undeclared.is_empty() {
+        undeclared.sort();
+        undeclared.dedup();
+        return Err(CommitGuardRefusal::UndeclaredPath(undeclared));
+    }
+    let mut unnamed_del: Vec<String> = changes
+        .iter()
+        .filter(|c| c.kind == ChangeKind::Deleted && !declared.iter().any(|d| d == &c.path))
+        .map(|c| c.path.clone())
+        .collect();
+    if !unnamed_del.is_empty() {
+        unnamed_del.sort();
+        unnamed_del.dedup();
+        return Err(CommitGuardRefusal::UndeclaredDeletion(unnamed_del));
+    }
+    let mut dels: Vec<String> = changes
+        .iter()
+        .filter(|c| c.kind == ChangeKind::Deleted)
+        .map(|c| c.path.clone())
+        .collect();
+    dels.sort();
+    dels.dedup();
+    Ok(dels)
+}
+
+/// PURE — parse `git diff --cached --no-renames --name-status <ref>` into
+/// [`StagedChange`]s. `--no-renames` guarantees only `A`/`M`/`D`/`T`; an unknown letter
+/// (e.g. `U` unmerged) maps to Modified — conservative, it still rides the covered check.
+fn parse_name_status(out: &str) -> Vec<StagedChange> {
+    out.lines()
+        .filter_map(|line| {
+            let mut it = line.splitn(2, '\t');
+            let status = it.next()?.trim();
+            let path = it.next()?.trim();
+            let letter = status.chars().next()?;
+            if path.is_empty() {
+                return None;
+            }
+            let kind = match letter {
+                'A' => ChangeKind::Added,
+                'D' => ChangeKind::Deleted,
+                _ => ChangeKind::Modified,
+            };
+            Some(StagedChange {
+                kind,
+                path: path.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// Compute the to-be-committed set for `declared` in a THROWAWAY index — exactly the
+/// temporary index git builds for a pathspec commit (read HEAD → stage the declared
+/// pathspec → diff vs HEAD), WITHOUT disturbing the shared real index (so a refusal
+/// leaves the index byte-clean). Impure shell.
+fn compute_declared_changes(root: &Path, declared: &[String]) -> anyhow::Result<Vec<StagedChange>> {
+    let git_dir = git::git_text(root, &["rev-parse", "--absolute-git-dir"])?;
+    let tmp = Path::new(&git_dir).join(format!("doctrine-commit-idx-{}", std::process::id()));
+    let run = |args: &[&str]| -> anyhow::Result<std::process::Output> {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .env("GIT_INDEX_FILE", &tmp)
+            .args(args)
+            .output()
+            .context("git (throwaway index)")
+    };
+    let result = (|| -> anyhow::Result<Vec<StagedChange>> {
+        let seed = run(&["read-tree", "HEAD"])?;
+        if !seed.status.success() {
+            bail!(
+                "dispatch commit: seed throwaway index from HEAD: {}",
+                String::from_utf8_lossy(&seed.stderr).trim()
+            );
+        }
+        let mut add: Vec<&str> = vec!["add", "-A", "--"];
+        add.extend(declared.iter().map(String::as_str));
+        let staged = run(&add)?;
+        if !staged.status.success() {
+            bail!(
+                "dispatch commit: stage declared pathspec: {}",
+                String::from_utf8_lossy(&staged.stderr).trim()
+            );
+        }
+        let mut diff: Vec<&str> = vec![
+            "diff",
+            "--cached",
+            "--no-renames",
+            "--name-status",
+            "HEAD",
+            "--",
+        ];
+        diff.extend(declared.iter().map(String::as_str));
+        let out = run(&diff)?;
+        if !out.status.success() {
+            bail!(
+                "dispatch commit: diff throwaway index: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            );
+        }
+        Ok(parse_name_status(&String::from_utf8_lossy(&out.stdout)))
+    })();
+    let _unused = std::fs::remove_file(&tmp); // best-effort cleanup on both paths
+    result
+}
+
+/// `dispatch commit --slice N -m <msg> -- <path>…` (design §7). The orchestrator's safe
+/// path-limited commit for its authored coord-tree writes. Refuses an undeclared path /
+/// unnamed deletion (ISS-234) BEFORE touching the real index; on pass it path-limits
+/// BOTH the stage and the commit (another agent's staged file never rides along —
+/// AGENTS.md) and hands the child the VALIDATED deletion set via a child-only scoped
+/// env, so the coord hook's deletion arm skips exactly those — the reversion arm still
+/// runs (RV-304 F-5). It NEVER sets the blanket `DOCTRINE_ALLOW_DELETE`.
+fn run_commit(
+    path: Option<PathBuf>,
+    slice: u32,
+    message: &str,
+    declared: &[String],
+) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let changes = compute_declared_changes(&root, declared)?;
+    let deletions = match classify_commit(declared, &changes) {
+        Ok(dels) => dels,
+        Err(refusal) => {
+            let what = match refusal {
+                CommitGuardRefusal::UndeclaredPath(_) => "escapes the declared pathspec",
+                CommitGuardRefusal::UndeclaredDeletion(_) => {
+                    "deletes a path not EXPLICITLY named in the declared pathspec"
+                }
+            };
+            bail!(
+                "{}: for SL-{slice:03} the to-be-committed set {what}: {}. Re-run \
+                 `dispatch commit` naming those paths explicitly; a DELIBERATE deletion \
+                 bypasses BOTH hook arms with {}=1.",
+                refusal.token(),
+                refusal.paths().join(", "),
+                ENV_ALLOW_DELETE,
+            );
+        }
+    };
+
+    // Validated: stage + commit path-limited (the shared index's other entries are
+    // excluded by the pathspec, AGENTS.md). Only now is the real index touched.
+    let mut add: Vec<&str> = vec!["add", "-A", "--"];
+    add.extend(declared.iter().map(String::as_str));
+    git::git_text(&root, &add).context("dispatch commit: stage declared pathspec")?;
+
+    let mut cmd = std::process::Command::new("git");
+    cmd.arg("-C")
+        .arg(&root)
+        .args(["commit", "-m", message, "--"]);
+    for d in declared {
+        cmd.arg(d);
+    }
+    if !deletions.is_empty() {
+        // Child-scoped ONLY: the verb's own process never carries it (proven in VT-1).
+        cmd.env(
+            ENV_ALLOWED_DELETIONS,
+            deletions.join(&ALLOWED_DELETIONS_SEP.to_string()),
+        );
+    }
+    let status = cmd
+        .status()
+        .context("dispatch commit: child `git commit`")?;
+    if !status.success() {
+        bail!(
+            "dispatch commit: the coord pre-commit hook refused, or git errored, for \
+             SL-{slice:03} — nothing landed. See the hook's message above."
+        );
+    }
+    let oid = git::git_text(&root, &["rev-parse", "HEAD"])?;
+    writeln!(io::stdout(), "{oid}")?;
+    Ok(())
+}
+
+/// The hook-check verdict — Pass, or Refuse naming each arm's offending paths.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum HookOutcome {
+    Pass,
+    Refuse {
+        deletions: Vec<String>,
+        reversions: Vec<String>,
+    },
+}
+
+/// PURE — the funnel-reversion signature for ONE path (design §7 reversion arm): HEAD
+/// carries a funnel-advanced blob (`head != base`) AND the staged blob reverts it to the
+/// pre-advance baseline (`staged == base`). ISS-234's modification-only reverse-diff.
+fn is_funnel_reversion(base: Option<&str>, head: Option<&str>, staged: Option<&str>) -> bool {
+    head != base && staged.is_some() && staged == base
+}
+
+/// One bounded first-parent walk of a funnel RUN — the contiguous `FUNNEL_MARKER`
+/// prefix at a tip, plus the one non-funnel commit that terminates it. The single
+/// walk implementation behind BOTH consumers: the pre-commit backstop's baseline
+/// ([`funnel_run_base`]) and verify's forward-sync candidate bound (D2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FunnelRun {
+    /// The candidate sync points, NEWEST FIRST: every funnel commit in the prefix,
+    /// then the terminating non-funnel commit when the walk found one.
+    candidates: Vec<String>,
+    /// The terminating non-funnel commit — the pre-advance baseline. `None` when the
+    /// walk ran off the root without meeting one.
+    base: Option<String>,
+}
+
+/// Walk `start`'s first-parent chain across the contiguous `FUNNEL_MARKER` prefix
+/// and one commit further. If `start` itself is non-funnel the run is just `start`
+/// (⇒ it is its own base, and no path can read as reverted). Bounded by the run.
+fn funnel_run(root: &Path, start: &str) -> anyhow::Result<FunnelRun> {
+    let Some(mut cur) = git::git_opt(
+        root,
+        &["rev-parse", "--verify", &format!("{start}^{{commit}}")],
+    )?
+    else {
+        return Ok(FunnelRun {
+            candidates: Vec::new(),
+            base: None,
+        });
+    };
+    let mut candidates = Vec::new();
+    loop {
+        let subject = git::git_text(root, &["log", "-1", "--format=%s", &cur])?;
+        candidates.push(cur.clone());
+        if !subject.starts_with(FUNNEL_MARKER) {
+            return Ok(FunnelRun {
+                base: Some(cur),
+                candidates,
+            });
+        }
+        match git::parents(root, &cur)?.into_iter().next() {
+            Some(parent) => cur = parent,
+            None => {
+                return Ok(FunnelRun {
+                    candidates,
+                    base: None,
+                });
+            }
+        }
+    }
+}
+
+/// The pre-advance baseline commit: the first NON-funnel ancestor walking HEAD's
+/// contiguous `FUNNEL_MARKER` prefix (the funnel run at the coord tip — the bounded
+/// provenance walk). If HEAD itself is non-funnel the base IS HEAD (⇒ no path can read
+/// as reverted); `None` only if the walk runs off the root without a non-funnel commit.
+fn funnel_run_base(root: &Path) -> anyhow::Result<Option<String>> {
+    Ok(funnel_run(root, "HEAD")?.base)
+}
+
+/// The staged/HEAD/base blob oid at `path` (`None` ⇔ path absent from that tree/index).
+fn blob_at(root: &Path, spec: &str) -> anyhow::Result<Option<String>> {
+    Ok(git::git_opt(
+        root,
+        &["rev-parse", "--verify", "--quiet", spec],
+    )?)
+}
+
+/// The coord pre-commit backstop's Rust core (design §7): evaluate the staged set for
+/// the funnel-reversion signature. `allow_delete` (the operator's `DOCTRINE_ALLOW_DELETE`
+/// escape hatch) short-circuits BOTH arms; `allowed_deletions` (a `dispatch commit`'s
+/// validated set) skips exactly those in the deletion arm — the reversion arm ALWAYS
+/// runs (RV-304 F-5). Impure shell (reads the index/HEAD); the per-path decision is the
+/// pure [`is_funnel_reversion`].
+fn evaluate_hook(
+    root: &Path,
+    allow_delete: bool,
+    allowed_deletions: &BTreeSet<String>,
+) -> anyhow::Result<HookOutcome> {
+    if allow_delete {
+        return Ok(HookOutcome::Pass);
+    }
+    let raw = git::git_text(
+        root,
+        &["diff", "--cached", "--no-renames", "--name-status", "HEAD"],
+    )?;
+    let changes = parse_name_status(&raw);
+
+    // Deletion arm — any staged deletion refuses, except the child-scoped allow-list.
+    let mut deletions: Vec<String> = changes
+        .iter()
+        .filter(|c| c.kind == ChangeKind::Deleted && !allowed_deletions.contains(&c.path))
+        .map(|c| c.path.clone())
+        .collect();
+    deletions.sort();
+    deletions.dedup();
+
+    // Reversion arm — ALWAYS runs. A funnel-advanced path staged back to its
+    // pre-advance blob is a reverse-diff import (the modification-only ISS-234 hole).
+    let mut reversions: Vec<String> = Vec::new();
+    if let Some(base) = funnel_run_base(root)? {
+        for c in changes.iter().filter(|c| c.kind == ChangeKind::Modified) {
+            let base_b = blob_at(root, &format!("{base}:{}", c.path))?;
+            let head_b = blob_at(root, &format!("HEAD:{}", c.path))?;
+            let staged_b = blob_at(root, &format!(":{}", c.path))?;
+            if is_funnel_reversion(base_b.as_deref(), head_b.as_deref(), staged_b.as_deref()) {
+                reversions.push(c.path.clone());
+            }
+        }
+    }
+    reversions.sort();
+    reversions.dedup();
+
+    if deletions.is_empty() && reversions.is_empty() {
+        Ok(HookOutcome::Pass)
+    } else {
+        Ok(HookOutcome::Refuse {
+            deletions,
+            reversions,
+        })
+    }
+}
+
+/// `dispatch hook-check` — the coord pre-commit backstop's Rust leg (design §7). Reads
+/// `DOCTRINE_ALLOW_DELETE` / `DOCTRINE_ALLOWED_DELETIONS` from the child commit's env,
+/// evaluates the funnel-reversion signature, and refuses (naming paths + the escape
+/// hatch + `dispatch commit`) so the shipped hook script propagates a non-zero exit.
+fn run_hook_check(path: Option<PathBuf>) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let allow_delete =
+        std::env::var_os(ENV_ALLOW_DELETE).is_some_and(|v| v == std::ffi::OsStr::new("1"));
+    let allowed: BTreeSet<String> = std::env::var_os(ENV_ALLOWED_DELETIONS)
+        .and_then(|v| v.into_string().ok())
+        .map(|v| {
+            v.split(ALLOWED_DELETIONS_SEP)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    match evaluate_hook(&root, allow_delete, &allowed)? {
+        HookOutcome::Pass => Ok(()),
+        HookOutcome::Refuse {
+            deletions,
+            reversions,
+        } => {
+            let del_line = if deletions.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "\n  deletion arm — staged deletion(s): {}",
+                    deletions.join(", ")
+                )
+            };
+            let rev_line = if reversions.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "\n  reversion arm — staged revert(s) of funnel-advanced file(s): {}",
+                    reversions.join(", ")
+                )
+            };
+            bail!(
+                "dispatch hook-check: refusing the funnel-reversion signature \
+                 (ISS-234).{del_line}{rev_line}\n  Route authored writes through \
+                 `dispatch commit`; a DELIBERATE act bypasses BOTH arms with {ENV_ALLOW_DELETE}=1."
+            );
+        }
+    }
+}
+
+/// Install the coord-worktree pre-commit backstop (design §7): enable
+/// `extensions.worktreeConfig` (repo-local, one-time), extract the EMBEDDED hook into a
+/// doctrine-owned dir under the coord's PRIVATE gitdir, and point THIS worktree's
+/// `core.hooksPath` at it (worktree-scoped — never the primary tree, POL-002). Idempotent
+/// (re-`setup` overwrites). A missing embed is fatal — a coord tree without the hook
+/// silently reopens ISS-234.
+fn install_coord_hook(coord: &Path) -> anyhow::Result<()> {
+    git::git_text(coord, &["config", "extensions.worktreeConfig", "true"])
+        .context("enable extensions.worktreeConfig for the coord hook")?;
+    let git_dir = git::git_text(coord, &["rev-parse", "--absolute-git-dir"])?;
+    let hooks_dir = Path::new(&git_dir).join(COORD_HOOKS_DIR);
+    std::fs::create_dir_all(&hooks_dir)
+        .with_context(|| format!("create coord hooks dir {}", hooks_dir.display()))?;
+    let bytes = crate::asset_source::read_bytes(HOOK_ASSET_KEY).with_context(|| {
+        format!("embedded hook asset '{HOOK_ASSET_KEY}' is missing (hollow binary?)")
+    })?;
+    let hook_path = hooks_dir.join("pre-commit");
+    crate::fsutil::write_atomic(&hook_path, bytes.as_ref())
+        .with_context(|| format!("write coord pre-commit hook {}", hook_path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&hook_path, std::fs::Permissions::from_mode(0o755))
+            .with_context(|| format!("chmod +x {}", hook_path.display()))?;
+    }
+    git::git_text(
+        coord,
+        &[
+            "config",
+            "--worktree",
+            "core.hooksPath",
+            &hooks_dir.to_string_lossy(),
+        ],
+    )
+    .context("set the coord worktree's core.hooksPath")?;
+    Ok(())
+}
+
 /// CLI entry — resolve the root and run stage-2 integrate for `slice`. `trunk`
 /// names the ref the code units project onto (ff-only); `edge` names an optional
 /// aggregate ref. Both default off ⇒ a pure idempotent journal replay (EX-1).
@@ -840,7 +1778,7 @@ pub(crate) fn run_integrate(
 
 /// g1 (SL-166 design §5.2, EX-1..3) — refuse a trunk-mutating dispatch verb
 /// invoked while HEAD sits on the integration buffer (`deliver_to`). The HEAD read
-/// is worktree-local (`symbolic-ref --short HEAD` via [`current_branch`], the
+/// is worktree-local (`symbolic-ref --short HEAD` via [`git::current_branch`], the
 /// invoking cwd worktree's branch — EX-2), the same seam the raw-evidence-ref
 /// guard uses. Inert unless the buffered-trunk posture is on (`authoring-branch`
 /// set and ≠ `deliver_to`, EX-3); the decision is the pure
@@ -850,7 +1788,7 @@ fn guard_not_on_integration_ref(
     root: &Path,
     cfg: &crate::dispatch_config::DispatchConfig,
 ) -> anyhow::Result<()> {
-    let current = current_branch(root)?;
+    let current = git::current_branch(root)?;
     if corpus_guard::on_integration_buffer(
         current.as_deref(),
         cfg.authoring_branch.as_deref(),
@@ -901,24 +1839,52 @@ pub(crate) fn run_record_boundary(
     // (1) The committed claude-arm ledger (`.doctrine/dispatch/<N>/boundaries.toml`)
     // — the phase-cut input prepare-review tree-reads. SL-221 PHASE-03 (ISS-225):
     // land it WORKING-TREE-FREE on the `dispatch/<slice>` ref, exactly as the
-    // conclude path does (`conclude_boundary_commit`), collapsing the split write
-    // seam. The row keeps its `Funnel` attribution; the commit identity is the
-    // shared dispatch identity under a `Conclude`-shaped provenance (OQ-1 default).
+    // conclude path does, collapsing the split write seam. The row keeps its
+    // `Funnel` attribution; the commit identity is the shared dispatch identity
+    // under a `Conclude`-shaped provenance (OQ-1 default).
+    //
+    // SL-228 PHASE-05 (T7/D3): when the phase HAS a funnel row, this escape hatch is
+    // not an escape from the machine — it routes through the SAME
+    // [`land_conclude`] the MCP conclude tool uses, so the boundary and the position
+    // that authorises it land together and under the same gate. There is no bypass.
+    // With NO row the phase is solo / pre-funnel / legacy: routing it through the
+    // machine could only refuse it `not-spawned`, so today's boundary-only commit is
+    // kept, unchanged. Neither route bypasses anything — the second has no funnel
+    // authority to bypass.
     let dref = dispatch_ref(slice);
     let tip = resolve_commit(&root, &dref)?
         .with_context(|| format!("record-boundary: {dref} does not resolve to a commit"))?;
-    match land_boundary_row(
-        &root,
-        &dref,
-        &tip,
-        slice,
-        row.clone(),
-        &Provenance::Conclude {
-            who: dispatch_identity(),
+    let funnel_record = funnel::read_funnel_at(&root, &tip, slice)?;
+    match funnel_record.row(phase) {
+        Some(funnel_row) => {
+            match land_conclude(
+                &root,
+                &tip,
+                slice,
+                funnel_row,
+                row.clone(),
+                &crate::clock::now_timestamp()?,
+            )? {
+                funnel::FunnelLanding::Landed { .. } | funnel::FunnelLanding::Replayed { .. } => {}
+                funnel::FunnelLanding::Illegal(illegal) => bail!("record-boundary: {illegal}"),
+                funnel::FunnelLanding::CommitRefused(refusal) => {
+                    bail!("record-boundary: {}", refusal.token())
+                }
+            }
+        }
+        None => match land_boundary_row(
+            &root,
+            &dref,
+            &tip,
+            slice,
+            row.clone(),
+            &Provenance::Conclude {
+                who: dispatch_identity(),
+            },
+        )? {
+            CommitOutcome::Landed { .. } => {}
+            CommitOutcome::Refused(refusal) => bail!("record-boundary: {}", refusal.token()),
         },
-    )? {
-        CommitOutcome::Landed { .. } => {}
-        CommitOutcome::Refused(refusal) => bail!("record-boundary: {}", refusal.token()),
     }
     // (2) ALONGSIDE it (SL-147 PHASE-04, T3): the arm-NEUTRAL recorded source-delta
     // registry. The funnel runs this same `record-boundary` beat for BOTH arms with
@@ -1347,7 +2313,7 @@ fn candidate_create(root: &Path, req: &CreateRequest) -> anyhow::Result<()> {
     //     evidence ref, before ANY durable write. The candidate workflow never
     //     edits the raw evidence refs in place (design §5.3). Pure string check
     //     on the branch the shell resolved. --------------------------------------
-    if let Some(branch) = current_branch(root)?
+    if let Some(branch) = git::current_branch(root)?
         && is_raw_evidence_ref(&branch)
     {
         bail!(
@@ -1755,16 +2721,6 @@ fn rollback_conflict_worktree(
     rollback_ref(root, target_ref, base_oid);
 }
 
-/// The branch the worktree at `root` is checked out on, short form (e.g.
-/// `review/064`), or `None` for a detached HEAD. The raw-evidence-ref guard
-/// (EX-2) keys on this. Impure shell.
-fn current_branch(root: &Path) -> anyhow::Result<Option<String>> {
-    Ok(git::git_opt(
-        root,
-        &["symbolic-ref", "--quiet", "--short", "HEAD"],
-    )?)
-}
-
 /// Whether `branch` is a raw evidence ref the candidate workflow must never edit
 /// in place (invariant I9): the `review/<slice>` impl bundle or a
 /// `phase/<slice>-NN` per-phase cut. Pure.
@@ -2027,7 +2983,7 @@ fn candidate_admit(root: &Path, req: &AdmitRequest) -> anyhow::Result<()> {
     // --- I9 raw-evidence-ref write guard FIRST (before any read/write) — refuse
     //     an admit driven from a worktree checked out on a `review/*` / `phase/*`
     //     evidence ref. Mirrors create's guard. -----------------------------------
-    if let Some(branch) = current_branch(root)?
+    if let Some(branch) = git::current_branch(root)?
         && is_raw_evidence_ref(&branch)
     {
         bail!(
@@ -2194,7 +3150,7 @@ fn candidate_status(root: &Path, slice: u32) -> anyhow::Result<()> {
 
     // EX-3: read-only — a raw-evidence-ref worktree only WARNS (never refuses,
     // unlike create's I9 guard) since status mutates nothing.
-    if let Some(branch) = current_branch(root)?
+    if let Some(branch) = git::current_branch(root)?
         && is_raw_evidence_ref(&branch)
     {
         writeln!(
@@ -3581,13 +4537,187 @@ pub(crate) struct PhaseProjection {
     pub legacy_status: String,
 }
 
-/// Derive a phase's [`ReceiptStatus`] from its runtime-sheet read and whether a
-/// committed boundary row backs it. `Completed` is boundary-sourced; a
-/// sheet-"completed" with no boundary is `ConcludeIncomplete`. A read *error* is
-/// `Unknown` (fail-loud), never `NotStarted`. The `planned` skeleton (a phase
-/// materialised but not yet started) has no recorded progress ⇒ `NotStarted`; an
-/// unrecognised status string ⇒ `Unknown`. Pure over its two inputs.
+/// The sheet tier's contribution to the funnel receipt matrix, classified ONCE from
+/// the raw read (SL-228 PHASE-05 §9). `Unreadable` folds BOTH the IO error and an
+/// unrecognised status string — both mean "the disposable tier told us nothing we
+/// can act on", which is fail-loud, never a silent `NotStarted`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SheetClass {
+    Unreadable,
+    /// Absent, or the `planned` skeleton — materialised, no recorded progress.
+    Started,
+    InProgress,
+    Blocked,
+    Completed,
+}
+
+/// Classify a runtime-sheet read into its [`SheetClass`]. Pure.
+fn classify_sheet(sheet: &anyhow::Result<Option<String>>) -> SheetClass {
+    use crate::state::PhaseStatus;
+    let Ok(read) = sheet else {
+        return SheetClass::Unreadable;
+    };
+    let Some(s) = read.as_deref() else {
+        return SheetClass::Started;
+    };
+    if s == PhaseStatus::InProgress.as_str() {
+        SheetClass::InProgress
+    } else if s == PhaseStatus::Blocked.as_str() {
+        SheetClass::Blocked
+    } else if s == PhaseStatus::Completed.as_str() {
+        SheetClass::Completed
+    } else if s == PhaseStatus::Planned.as_str() {
+        SheetClass::Started
+    } else {
+        SheetClass::Unreadable
+    }
+}
+
+/// A matrix cell's position predicate: at/past `concluded`, or before it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Band {
+    /// `position >= Concluded` — the funnel says the phase's authority is landed.
+    Concluded,
+    /// `position < Concluded` — the funnel has NOT authorised completion.
+    Running,
+}
+
+/// A matrix cell's sheet predicate — a specific class, or "any" (the wildcard the
+/// position-dominant rows use).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SheetPat {
+    Any,
+    Is(SheetClass),
+}
+
+impl SheetPat {
+    /// Whether this cell's sheet predicate admits `got`.
+    fn admits(self, got: SheetClass) -> bool {
+        match self {
+            SheetPat::Any => true,
+            SheetPat::Is(want) => want == got,
+        }
+    }
+}
+
+/// A matrix cell's boundary predicate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BoundaryPat {
+    Present,
+    Absent,
+}
+
+/// THE funnel receipt matrix (design §9), ordered — FIRST MATCH WINS, top to bottom.
+/// Consulted ONLY when a funnel position exists; `position = None` keeps the
+/// pre-funnel derivation verbatim (R1).
+///
+/// Row 1 is deliberate: a lagging or unreadable sheet NEVER masks durable
+/// completion. Position ⊕ boundary are the committed truth, and the disposable
+/// runtime tier may not overrule them — which is exactly what makes conclude's
+/// "CAS first, flip the sheet after" ordering crash-safe (a kill in that window
+/// leaves sheet-behind-position and still reads `Completed`).
+const RECEIPT_MATRIX: &[(Band, SheetPat, BoundaryPat, ReceiptStatus)] = &[
+    // 1. authority landed AND the boundary backs it ⇒ done, whatever the sheet says.
+    (
+        Band::Concluded,
+        SheetPat::Any,
+        BoundaryPat::Present,
+        ReceiptStatus::Completed,
+    ),
+    // 2. authority landed but NO boundary ⇒ an integrity alarm, not a completion.
+    (
+        Band::Concluded,
+        SheetPat::Any,
+        BoundaryPat::Absent,
+        ReceiptStatus::ConcludeIncomplete,
+    ),
+    // 3. a boundary AHEAD of the authority ⇒ the same alarm from the other side.
+    (
+        Band::Running,
+        SheetPat::Any,
+        BoundaryPat::Present,
+        ReceiptStatus::ConcludeIncomplete,
+    ),
+    // 4. unreadable sheet, nothing durable to fall back on ⇒ fail loud.
+    (
+        Band::Running,
+        SheetPat::Is(SheetClass::Unreadable),
+        BoundaryPat::Absent,
+        ReceiptStatus::Unknown,
+    ),
+    // 5. the sheet claims completed, the funnel has not authorised it ⇒ alarm.
+    (
+        Band::Running,
+        SheetPat::Is(SheetClass::Completed),
+        BoundaryPat::Absent,
+        ReceiptStatus::ConcludeIncomplete,
+    ),
+    // 6. the sheet's own live states pass through.
+    (
+        Band::Running,
+        SheetPat::Is(SheetClass::InProgress),
+        BoundaryPat::Absent,
+        ReceiptStatus::InProgress,
+    ),
+    (
+        Band::Running,
+        SheetPat::Is(SheetClass::Blocked),
+        BoundaryPat::Absent,
+        ReceiptStatus::Blocked,
+    ),
+    // 7. absent / planned sheet but funnel activity HAS started ⇒ in progress.
+    (
+        Band::Running,
+        SheetPat::Is(SheetClass::Started),
+        BoundaryPat::Absent,
+        ReceiptStatus::InProgress,
+    ),
+];
+
+/// Derive a phase's [`ReceiptStatus`] from its runtime-sheet read, whether a
+/// committed boundary row backs it, and — when the phase is funnel-managed — its
+/// durable funnel `position`.
+///
+/// `position = None` (a solo / pre-funnel / legacy phase, and every `run_status`
+/// projection) is the PRE-FUNNEL derivation, byte-identical to before R1:
+/// `Completed` is boundary-sourced; a sheet-"completed" with no boundary is
+/// `ConcludeIncomplete`; a read *error* is `Unknown` (fail-loud), never
+/// `NotStarted`; the `planned` skeleton ⇒ `NotStarted`; an unrecognised status
+/// string ⇒ `Unknown`.
+///
+/// `Some(position)` consults [`RECEIPT_MATRIX`] instead, where the COMMITTED tiers
+/// (position ⊕ boundary) outrank the disposable sheet. Pure over its three inputs.
 fn derive_receipt_status(
+    sheet: anyhow::Result<Option<String>>,
+    has_boundary: bool,
+    position: Option<Position>,
+) -> ReceiptStatus {
+    let Some(position) = position else {
+        return derive_receipt_status_pre_funnel(sheet, has_boundary);
+    };
+    let band = if position >= Position::Concluded {
+        Band::Concluded
+    } else {
+        Band::Running
+    };
+    let sheet = classify_sheet(&sheet);
+    let boundary = if has_boundary {
+        BoundaryPat::Present
+    } else {
+        BoundaryPat::Absent
+    };
+    RECEIPT_MATRIX
+        .iter()
+        .find(|(b, s, bd, _)| *b == band && *bd == boundary && s.admits(sheet))
+        // Unreachable: the matrix is total over (band × sheet × boundary). `Unknown`
+        // is the honest fail-loud fallback rather than a panic.
+        .map_or(ReceiptStatus::Unknown, |(_, _, _, status)| *status)
+}
+
+/// The PRE-FUNNEL derivation — [`derive_receipt_status`]'s `position = None` arm,
+/// kept as its own function so R1 behaviour preservation is readable as one body
+/// rather than an arm buried in the matrix path.
+fn derive_receipt_status_pre_funnel(
     sheet: anyhow::Result<Option<String>>,
     has_boundary: bool,
 ) -> ReceiptStatus {
@@ -3668,7 +4798,9 @@ fn phase_projection(
             PhaseProjection {
                 id: ph.id.clone(),
                 name: ph.name.clone(),
-                status: derive_receipt_status(sheet, has_boundary),
+                // The rollup projection carries NO funnel position (R1): `run_status`
+                // renders the verbatim legacy string and must stay byte-identical.
+                status: derive_receipt_status(sheet, has_boundary, None),
                 legacy_status,
             }
         })
@@ -3681,15 +4813,18 @@ fn phase_projection(
 /// (whether a committed boundary row backs it) through [`derive_receipt_status`].
 /// The single-phase seam the `dispatch_phase_receipt` MCP tool consumes — no
 /// parallel status derivation. The caller supplies `has_boundary` from the
-/// committed ledger read (the git touch stays in the caller, as in `run_status`).
+/// committed ledger read AND `position` from the committed funnel record (both git
+/// touches stay in the caller, as in `run_status`). `position = None` ⇔ the phase is
+/// not funnel-managed, which keeps the pre-funnel derivation verbatim (R1).
 pub(crate) fn phase_receipt_status(
     state_dir: &Path,
     phase: &str,
     has_boundary: bool,
+    position: Option<Position>,
 ) -> ReceiptStatus {
     let stem = phase.to_lowercase();
     let sheet = crate::state::read_phase_status(state_dir, &stem);
-    derive_receipt_status(sheet, has_boundary)
+    derive_receipt_status(sheet, has_boundary, position)
 }
 
 /// `doctrine dispatch status` — read-only full dispatch rollup: coordination
@@ -4362,15 +5497,8 @@ pub(crate) fn land_boundary_row(
     row: BoundaryRow,
     prov: &Provenance,
 ) -> anyhow::Result<CommitOutcome> {
-    let path = format!(".doctrine/dispatch/{slice:03}/boundaries.toml");
     let phase = row.phase.clone(); // captured before the UPSERT consumes `row`
-    let mut b =
-        read_ledger::<Boundaries>(git_root, tip, &format!("{slice:03}"), "boundaries.toml")?;
-    match b.rows.iter_mut().find(|r| r.phase == row.phase) {
-        Some(existing) => *existing = row, // UPSERT by phase (funnel + escape hatch alike)
-        None => b.rows.push(row),
-    }
-    let tree = git::tree_with_file(git_root, &tree_of(git_root, tip)?, &path, &b.to_toml()?)?;
+    let tree = compose_boundary_tree(git_root, tip, slice, row)?;
     commit_on_behalf(
         git_root,
         coord_ref,
@@ -4379,6 +5507,1368 @@ pub(crate) fn land_boundary_row(
         &funnel_message(slice, &phase),
         prov,
     )
+}
+
+/// The COMPOSE half of [`land_boundary_row`]: UPSERT `row` (by phase) into the
+/// committed boundaries at `tip` and splice the result into `tip`'s tree, returning
+/// the composed TREE oid. Working-tree-free (object-db only) and commit-free, so a
+/// caller that must land the boundary in the SAME commit as something else — the
+/// funnel's Class-1 conclude, which carries `boundaries.toml ⊕ funnel.toml` in ONE
+/// CAS commit (SL-228 PHASE-05, D1) — passes this tree as the splice base instead
+/// of minting a second commit. `land_boundary_row` is now compose + commit, so the
+/// two callers share ONE upsert/splice.
+pub(crate) fn compose_boundary_tree(
+    git_root: &Path,
+    tip: &str,
+    slice: u32,
+    row: BoundaryRow,
+) -> anyhow::Result<String> {
+    let path = format!(".doctrine/dispatch/{slice:03}/boundaries.toml");
+    let mut b =
+        read_ledger::<Boundaries>(git_root, tip, &format!("{slice:03}"), "boundaries.toml")?;
+    match b.rows.iter_mut().find(|r| r.phase == row.phase) {
+        Some(existing) => *existing = row, // UPSERT by phase (funnel + escape hatch alike)
+        None => b.rows.push(row),
+    }
+    Ok(git::tree_with_file(
+        git_root,
+        &tree_of(git_root, tip)?,
+        &path,
+        &b.to_toml()?,
+    )?)
+}
+
+// ======================================================================================
+// The funnel run-state record + THE sole writer (SL-228 PHASE-03, design §3).
+//
+// `funnel.toml` is "where each phase stands and how we know" — the committed sibling
+// of `boundaries.toml` ("what was delivered"), landed by the SAME splice-into-tree +
+// `commit_on_behalf` CAS machinery. Home: `dispatch.rs` (command tier per ADR-001's
+// map, RV-304 F-6) — a WRITER ROLE, not an engine tier; the legality it consults is
+// the pure `funnel_machine` leaf.
+//
+// INVARIANT I1 — no code path lands a position the machine did not approve. Enforced
+// by MODULE BOUNDARY, not convention: the tree-splice helper below is private to this
+// module, so `land_funnel_transition` is the only door to the record.
+// ======================================================================================
+pub(crate) mod funnel {
+    use std::path::Path;
+
+    use anyhow::{Context as _, bail};
+    use serde::{Deserialize, Serialize};
+
+    use crate::funnel_machine::{self, IllegalTransition, PhaseRow, Position, Transition};
+    use crate::git;
+
+    use super::{
+        CommitOutcome, CommitRefusal, Provenance, commit_on_behalf, funnel_message, tree_of,
+    };
+
+    /// The record's schema version (design §3).
+    const SCHEMA: u32 = 1;
+
+    /// The schema a record read back without one is assumed to carry.
+    fn current_schema() -> u32 {
+        SCHEMA
+    }
+
+    /// `.doctrine/dispatch/<NNN>/funnel.toml` — the per-phase funnel run-state,
+    /// committed on `dispatch/<NNN>` alongside `boundaries.toml`.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    pub(crate) struct FunnelRecord {
+        #[serde(default = "current_schema")]
+        pub schema: u32,
+        #[serde(default, rename = "phase")]
+        pub rows: Vec<PhaseRow>,
+    }
+
+    impl Default for FunnelRecord {
+        fn default() -> Self {
+            Self {
+                schema: SCHEMA,
+                rows: Vec::new(),
+            }
+        }
+    }
+
+    impl FunnelRecord {
+        /// Parse a `funnel.toml` body.
+        pub(crate) fn parse(text: &str) -> anyhow::Result<FunnelRecord> {
+            Ok(toml::from_str(text)?)
+        }
+
+        /// Serialize to a `funnel.toml` body (serde-escaped — no raw splicing).
+        pub(crate) fn render(&self) -> anyhow::Result<String> {
+            Ok(toml::to_string(self)?)
+        }
+
+        /// This phase's row, if the record carries one.
+        pub(crate) fn row(&self, phase: &str) -> Option<&PhaseRow> {
+            self.rows.iter().find(|r| r.id == phase)
+        }
+
+        /// Where this phase stands; `None` ⇔ no row (pre-spawn).
+        pub(crate) fn position(&self, phase: &str) -> Option<Position> {
+            self.row(phase).map(|r| r.position)
+        }
+
+        /// Every row whose recorded `spawn.fork` is `fork` — THE one fork⇄row matcher
+        /// (SL-228 PHASE-08 T3). A caller that needs a single row takes `.next()`;
+        /// [`resolve_landing`] needs the COUNT, because two rows naming one branch
+        /// prove nothing about which import certified it. Kept as ONE predicate on
+        /// purpose: a second copy is how two landing oracles drift apart permanently.
+        pub(crate) fn rows_for_fork<'a>(
+            &'a self,
+            fork: &'a str,
+        ) -> impl Iterator<Item = &'a PhaseRow> {
+            self.rows
+                .iter()
+                .filter(move |r| r.spawn.as_ref().is_some_and(|s| s.fork == fork))
+        }
+
+        /// UPSERT `row` by phase id — in place if the phase is already recorded,
+        /// appended at the tail otherwise (the `land_boundary_row` precedent).
+        fn upsert(&mut self, row: PhaseRow) {
+            match self.rows.iter_mut().find(|r| r.id == row.id) {
+                Some(existing) => *existing = row,
+                None => self.rows.push(row),
+            }
+        }
+    }
+
+    /// Read the committed funnel record at `tip` — an object-db read (the live coord
+    /// index/worktree are never touched). Absent ⇒ the empty record. Mirrors
+    /// `read_boundaries_at`, keyed on a resolved tip.
+    pub(crate) fn read_funnel_at(
+        root: &Path,
+        tip: &str,
+        slice: u32,
+    ) -> anyhow::Result<FunnelRecord> {
+        let path = funnel_machine::funnel_record_path(slice);
+        match git::read_path_at(root, tip, &path)? {
+            Some(text) => {
+                FunnelRecord::parse(&text).with_context(|| format!("parse {path} at {tip}"))
+            }
+            None => Ok(FunnelRecord::default()),
+        }
+    }
+
+    /// Whether the funnel record itself PROVES a fork branch landed (SL-228 PHASE-08,
+    /// ISS-245). Not a position test and not git archaeology — the verdict of the
+    /// three-check conjunction in [`resolve_landing`].
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum LandingVerdict {
+        /// All three checks hold: the record certifies this branch's commit landed.
+        Landed,
+        /// A row exists but the conjunction does not hold (too early a position, or a
+        /// branch tip that has moved off the imported commit). Injects NO fact — the
+        /// caller's own oracle decides, unchanged.
+        NotProven,
+        /// TWO OR MORE rows record this same branch, so no single `import.fork_tip`
+        /// speaks for it. Fails closed: never bind the first row.
+        Ambiguous,
+        /// No funnel row records this branch: it is not funnel-managed (solo /
+        /// pre-funnel / legacy) and there is no funnel authority to read.
+        NoRow,
+    }
+
+    /// THE landing-authority resolver (SL-228 PHASE-08, ISS-245): does the COMMITTED
+    /// funnel record at `tip` prove that branch `fork` has landed?
+    ///
+    /// A conjunction of three checks, in order — any one failing yields a verdict that
+    /// injects no fact, so the caller's `git cherry` oracle decides unchanged
+    /// (fail-closed):
+    ///
+    /// 1. **exactly one** row's `spawn.fork` matches `fork` (two ⇒ `Ambiguous`, none
+    ///    ⇒ `NoRow`);
+    /// 2. that row stands at `concluded` or beyond (`reaped` is the replay case);
+    /// 3. the **live branch OID** still equals that row's `import.fork_tip` — the
+    ///    commit the funnel actually imported. A branch advanced past it carries work
+    ///    nothing has certified, so it is `NotProven` and MUST NOT be deleted.
+    ///
+    /// # Why this is sound where the "import receipt" was not
+    ///
+    /// `dispatch-mechanics.md` rejects a runtime-tier import receipt on two grounds:
+    /// it lives in **disposable** state, and it is born **before** the commit — so it
+    /// survives a crash-before-commit and reads "landed" when nothing landed, which
+    /// would reap the only copy of unmerged work. The funnel record inverts BOTH:
+    ///
+    /// * it is **durable committed state** on the coordination ref, not disposable
+    ///   runtime state; and the ref is append-only under CAS (`commit_on_behalf`
+    ///   constructs each commit with `expected_old` as its parent), so a recorded row
+    ///   cannot be silently rewritten;
+    /// * since PHASE-05 the `Import` row lands in the **same CAS commit** as the
+    ///   worker delta, so there is no window in which `imported` is recorded and the
+    ///   delta is not committed. A crash mid-import lands NOTHING.
+    ///
+    /// Therefore `imported` ⇒ the delta is committed, and positions only advance
+    /// (invariant I3) ⇒ `concluded` ⇒ the delta is committed. Check 3 then pins the
+    /// proof to the exact commit that was imported, so the certificate can never be
+    /// stretched over work added to the branch afterwards.
+    ///
+    /// A row at `concluded` with NO `[phase.import]` is machine-impossible (conclude
+    /// is reachable only through `Verify`, which is reachable only through `Import`),
+    /// so it is a record-integrity fault, not a fall-through case: it raises rather
+    /// than silently degrading to the git oracle.
+    pub(crate) fn resolve_landing(
+        root: &Path,
+        tip: &str,
+        slice: u32,
+        fork: &str,
+    ) -> anyhow::Result<LandingVerdict> {
+        let record = read_funnel_at(root, tip, slice)?;
+
+        // Check 1 — EXACTLY one row recorded this fork.
+        let mut rows = record.rows_for_fork(fork);
+        let Some(row) = rows.next() else {
+            return Ok(LandingVerdict::NoRow);
+        };
+        if rows.next().is_some() {
+            return Ok(LandingVerdict::Ambiguous);
+        }
+
+        // Check 2 — that row is at `concluded` or beyond (`Ord` IS the advance order).
+        if row.position < Position::Concluded {
+            return Ok(LandingVerdict::NotProven);
+        }
+
+        // Check 3 — the live branch is STILL the commit the import landed.
+        let Some(import) = row.import.as_ref() else {
+            bail!(
+                "funnel-record integrity: SL-{slice:03} {} stands at {} with no [phase.import] — \
+                 a position past `imported` cannot exist without the import it records",
+                row.id,
+                row.position.as_str()
+            );
+        };
+        let live = git::git_opt(
+            root,
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("{fork}^{{commit}}"),
+            ],
+        )?;
+        // Both sides are full `rev-parse` oids (the import records one, this read
+        // resolves one), so plain equality is the whole comparison. An absent branch
+        // proves nothing — there is no tip to certify and nothing left to delete.
+        Ok(match live {
+            Some(live) if live == import.fork_tip => LandingVerdict::Landed,
+            _ => LandingVerdict::NotProven,
+        })
+    }
+
+    /// The outcome of a funnel transition attempt — one shape covering the machine's
+    /// refusal, the idempotent replay, and the CAS's own typed refusals.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) enum FunnelLanding {
+        /// The transition landed as ONE non-merge commit on the coord ref.
+        Landed { oid: String, position: Position },
+        /// An idempotent replay: the transition was already recorded with the same
+        /// input facts, so NOTHING was written (design §2 — crash-retry safety).
+        Replayed { position: Position },
+        /// The machine refused; the payload IS the recovery procedure.
+        Illegal(IllegalTransition),
+        /// `commit_on_behalf` refused. `lost-ref-race` means another transition
+        /// landed first: re-read the tip and re-attempt — the replay rule makes the
+        /// retry safe.
+        CommitRefused(CommitRefusal),
+    }
+
+    /// THE sole writer (design §3, generalised in PHASE-05 by D1): read the record
+    /// at `tip` → fold `ts` IN ORDER through [`funnel_machine::fold_transitions`],
+    /// each element gated against the RUNNING position → on an approved act, splice
+    /// the updated record ONCE and land it with ONE `commit_on_behalf` CAS.
+    ///
+    /// Two axes generalise beyond PHASE-04's single-transition writer, because three
+    /// callers need exactly them:
+    ///
+    /// * **`ts` — several transitions, one commit.** Import's heal-forward lands a
+    ///   provable PREFIX (`[Spawn, RecordWorkerCommit, Import]`) so position never
+    ///   durably rests mid-prefix. ALL-OR-NONE: any refusal aborts the whole fold and
+    ///   lands NOTHING; if every element replays the result is `Replayed`.
+    /// * **`base_tree` — whose tree to splice into.** `None` ⇒ `tip`'s tree (PHASE-04
+    ///   behaviour). `Some(t)` lets conclude splice onto `boundaries.toml`'s composed
+    ///   tree and import onto its own merge tree, so `boundaries.toml ⊕ funnel.toml`
+    ///   (and delta ⊕ funnel.toml) land in ONE commit rather than two.
+    ///
+    /// `message` is caller-owned (import names the fork it imported). A replay writes
+    /// nothing. Workers never reach here — position is landed by the doctrine process
+    /// (CLI or MCP server) alone.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one call = the full transition context (target ref, tip, phase, facts, splice base, message, clock, provenance); bundling it would only move the arity behind a struct built at each call site"
+    )]
+    pub(crate) fn land_funnel_transitions(
+        git_root: &Path,
+        coord_ref: &str,
+        tip: &str,
+        slice: u32,
+        phase: &str,
+        ts: &[Transition],
+        paths_since_verify: Option<&[String]>,
+        base_tree: Option<&str>,
+        message: &str,
+        at: &str,
+        prov: &Provenance,
+    ) -> anyhow::Result<FunnelLanding> {
+        let mut record = read_funnel_at(git_root, tip, slice)?;
+        let stored = record.row(phase).cloned();
+        let fold = match funnel_machine::fold_transitions(
+            stored.as_ref(),
+            phase,
+            ts,
+            tip,
+            paths_since_verify,
+            at,
+        ) {
+            Ok(Some(fold)) => fold,
+            // An empty list names no transition: a caller bug, not a funnel state.
+            Ok(None) => bail!("land_funnel_transitions: no transitions supplied"),
+            Err(illegal) => return Ok(FunnelLanding::Illegal(illegal)),
+        };
+        if fold.replay {
+            return Ok(FunnelLanding::Replayed {
+                position: fold.position,
+            });
+        }
+        if let Some(row) = fold.row {
+            record.upsert(row);
+        }
+        let base = match base_tree {
+            Some(tree) => tree.to_owned(),
+            None => tree_of(git_root, tip)?,
+        };
+        let tree = splice_record(git_root, &base, slice, &record)?;
+        match commit_on_behalf(git_root, coord_ref, tip, &tree, message, prov)? {
+            CommitOutcome::Landed { oid } => Ok(FunnelLanding::Landed {
+                oid,
+                position: fold.position,
+            }),
+            CommitOutcome::Refused(refusal) => Ok(FunnelLanding::CommitRefused(refusal)),
+        }
+    }
+
+    /// The ONE-element projection of [`land_funnel_transitions`] — PHASE-04's
+    /// signature, unchanged for its call sites: `tip`'s own tree as the splice base
+    /// and the standard `<marker>: SL-<NNN> <phase>` message.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the projection mirrors PHASE-04's published seam; see `land_funnel_transitions`"
+    )]
+    pub(crate) fn land_funnel_transition(
+        git_root: &Path,
+        coord_ref: &str,
+        tip: &str,
+        slice: u32,
+        phase: &str,
+        t: &Transition,
+        paths_since_verify: Option<&[String]>,
+        at: &str,
+        prov: &Provenance,
+    ) -> anyhow::Result<FunnelLanding> {
+        land_funnel_transitions(
+            git_root,
+            coord_ref,
+            tip,
+            slice,
+            phase,
+            std::slice::from_ref(t),
+            paths_since_verify,
+            None,
+            &funnel_message(slice, phase),
+            at,
+            prov,
+        )
+    }
+
+    /// Splice the rendered record into `base_tree` (working-tree-free). PRIVATE:
+    /// this is the only way a `funnel.toml` blob reaches a tree, and only
+    /// [`land_funnel_transitions`] can call it — invariant I1 as a module boundary.
+    /// `base_tree` is a TREE-ISH: `tip`'s own tree by default, or a caller-composed
+    /// tree when the record must ride the same commit as another payload (D1).
+    fn splice_record(
+        git_root: &Path,
+        base_tree: &str,
+        slice: u32,
+        record: &FunnelRecord,
+    ) -> anyhow::Result<String> {
+        Ok(git::tree_with_file(
+            git_root,
+            base_tree,
+            &funnel_machine::funnel_record_path(slice),
+            &record.render()?,
+        )?)
+    }
+}
+
+/// THE funnel-managed conclude (SL-228 PHASE-05, T3/T4/T7) — shared verbatim by the
+/// `dispatch_conclude_phase` MCP tool and the `dispatch record-boundary` CLI escape
+/// hatch, so the escape hatch carries the SAME authority and bypasses nothing.
+///
+/// Gate the `Conclude` transition against the stored `row`, then land the boundary row
+/// and the position in ONE CAS commit: `boundaries.toml` is composed into the tip's
+/// tree and THAT tree is handed to the sole writer as its splice base (D1).
+///
+/// The gate's `paths_since_verify` is gathered here (T4): the paths changed between the
+/// stored `verified_oid` and the live tip. With NO stored evidence there is nothing to
+/// diff, so `None` is passed and the machine fails closed (`conclude-unverified` /
+/// `conclude-verify-stale`) rather than assuming identity.
+pub(crate) fn land_conclude(
+    coord_root: &Path,
+    coord_tip: &str,
+    slice: u32,
+    row: &crate::funnel_machine::PhaseRow,
+    boundary: BoundaryRow,
+    at: &str,
+) -> anyhow::Result<funnel::FunnelLanding> {
+    let phase = row.id.clone();
+    let paths = match row.verify.as_ref() {
+        Some(evidence) => Some(changed_paths_utf8(
+            coord_root,
+            &evidence.verified_oid,
+            coord_tip,
+        )?),
+        None => None,
+    };
+    let facts = crate::funnel_machine::TransitionFacts {
+        row: Some(row),
+        coord_tip,
+        paths_since_verify: paths.as_deref(),
+    };
+    // The GATE runs BEFORE the boundary compose, so an illegal conclude composes
+    // nothing at all. (The sole writer re-gates identically at landing; this only
+    // moves the verdict earlier.)
+    if let Err(illegal) = crate::funnel_machine::attempt_advance(
+        Some(row.position),
+        &crate::funnel_machine::Transition::Conclude,
+        &facts,
+    ) {
+        return Ok(funnel::FunnelLanding::Illegal(illegal));
+    }
+    let tree = compose_boundary_tree(coord_root, coord_tip, slice, boundary)?;
+    funnel::land_funnel_transitions(
+        coord_root,
+        &dispatch_ref(slice),
+        coord_tip,
+        slice,
+        &phase,
+        &[crate::funnel_machine::Transition::Conclude],
+        paths.as_deref(),
+        Some(&tree),
+        &funnel_message(slice, &phase),
+        at,
+        &Provenance::Conclude {
+            who: dispatch_identity(),
+        },
+    )
+}
+
+// ======================================================================================
+// `dispatch verify` — the funnel's evidence-producing verb (SL-228 PHASE-05, design §5).
+//
+// ONE engine core shared by the CLI verb and the `dispatch_verify` MCP tool (the
+// `mcp_server → dispatch` edge; no forked logic). Five beats, in order:
+//
+//   1. PRE-ACT GATE   — `preflight(position, Verify)`. An illegal verify refuses HERE,
+//                       before any sync or suite runs.
+//   2. FORWARD-SYNC   — conditional, and PROOF-GATED (D2/I2). The funnel advances the
+//                       coord ref working-tree-free, so the checkout lags its own HEAD.
+//                       Verify fast-forwards it — but only over paths it has proven
+//                       byte-identical to the stale baseline. Anything else refuses
+//                       `verify-tree-dirty` and touches NOTHING. Never a reset, never a
+//                       stash, never a discard.
+//   3. SUITE          — the configured `[dispatch] verify-suite` cadence. "The suite did
+//                       not run" is a REFUSAL, not red evidence (D5).
+//   4. POST-SUITE     — re-prove the tree still describes the tip. Pass evidence may
+//                       NEVER be landed on bytes `verified_oid` does not describe.
+//   5. LAND           — ONE CAS commit through the sole writer.
+//
+// Self-consistency: the evidence commit is a funnel-record-ONLY child of the tested
+// tree, and conclude's gate is "identical modulo the funnel record" — so a fresh pass
+// can always conclude, and the evidence never self-stales.
+// ======================================================================================
+
+/// Refuse: the coord index/worktree cannot be PROVEN to describe a known commit, so
+/// verify will neither run a suite against it nor touch a byte of it (STD-001).
+const VERIFY_TREE_DIRTY: &str = "verify-tree-dirty";
+
+/// Refuse: the configured `[dispatch] verify-suite` yields no runnable verdict — an
+/// unknown cadence key, an owned no-op, an empty override, or a spawn that never
+/// completed. NO evidence is landed: absence of a verdict is not a red verdict (D5).
+const VERIFY_SUITE_UNRESOLVED: &str = "verify-suite-unresolved";
+
+/// The detail a green-but-MUTATING suite fails with: the tree it left behind is not
+/// the tree it was asked about, so its pass describes bytes nobody committed.
+const SUITE_MUTATED_TREE: &str = "suite-mutated-tree";
+
+/// The outcome of [`verify_phase`] — the shared shape both surfaces render. A refusal
+/// is a normal value carrying its token, never an error (the funnel convention).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) enum VerifyOutcome {
+    /// The suite passed and PASS evidence landed; `coord_tip` is the resulting tip
+    /// (unchanged on an idempotent replay).
+    Verified { coord_tip: String, suite: String },
+    /// The suite ran and did not pass (or mutated the tree). FAIL evidence is landed
+    /// — the phase keeps its position and the funnel prescribes triage.
+    VerifyFailed { suite: String, detail: String },
+    /// A gate refused; NOTHING ran and NOTHING landed.
+    Refused { reason: String, detail: String },
+}
+
+fn verify_refused(reason: &str, detail: String) -> VerifyOutcome {
+    VerifyOutcome::Refused {
+        reason: reason.to_owned(),
+        detail,
+    }
+}
+
+/// The paths changed between two tree-ishes as UTF-8, sorted (the byte-safe
+/// [`git::changed_paths`] set decoded). A non-UTF-8 path FAILS CLOSED with an error
+/// rather than being silently dropped — a dropped path would weaken exactly the two
+/// gates that consume this set (conclude's tree-identity gate and verify's reverse
+/// set), so it must never degrade quietly.
+pub(crate) fn changed_paths_utf8(root: &Path, a: &str, b: &str) -> anyhow::Result<Vec<String>> {
+    git::changed_paths(root, a, b)?
+        .into_iter()
+        .map(|raw| {
+            String::from_utf8(raw).map_err(|e| {
+                anyhow::anyhow!(
+                    "non-utf8 path in {a}..{b} ({:?}) — refusing to reason about it",
+                    e.as_bytes()
+                )
+            })
+        })
+        .collect()
+}
+
+/// Whether the index AND the working tree describe `tip` exactly — index equal to
+/// `tip`'s tree, no tracked modification, no unignored untracked file. The single
+/// predicate verify uses BOTH to close the forward-sync and to re-prove the tree
+/// after the suite ran.
+fn tree_describes(root: &Path, tip: &str) -> anyhow::Result<bool> {
+    Ok(git::index_matches(root, tip)? && git::tree_clean_untracked(root)?.is_clean())
+}
+
+/// Verify's conditional forward-sync (D2 / invariant I2). `Ok(None)` ⇒ the index and
+/// worktree now describe `tip`; `Ok(Some(detail))` ⇒ refuse `verify-tree-dirty` with
+/// that detail, having touched NOTHING.
+///
+/// **The stale baseline is derived EMPIRICALLY, not inferred from marker topology.**
+/// A commit is *materialized* iff the index carries its tree, so `S` is the newest
+/// commit on the tip's first-parent chain whose tree the index matches. The marker
+/// walk ([`funnel_run`]) supplies only the candidate BOUND. Inferring `S` from the
+/// topology alone ("the parent of the oldest funnel commit") overshoots whenever the
+/// operator's own sync point is itself a funnel commit, and then every path
+/// materialized at that commit reads as operator divergence ⇒ a FALSE refusal.
+///
+/// The empirical derivation also discharges the per-path INDEX leg wholesale: proving
+/// `diff-index --cached S` empty proves the entire index equals `S`. Only the
+/// WORKTREE leg remains per-path.
+fn forward_sync(root: &Path, tip: &str) -> anyhow::Result<Option<String>> {
+    // (1) S — the newest materialized candidate. No match ⇒ fail closed: we cannot
+    //     name what the tree currently describes, so we may not overwrite it.
+    let run = funnel_run(root, tip)?;
+    let mut stale = None;
+    for candidate in &run.candidates {
+        if git::index_matches(root, candidate)? {
+            stale = Some(candidate.clone());
+            break;
+        }
+    }
+    let Some(stale) = stale else {
+        return Ok(Some(format!(
+            "the coord index matches no commit in the funnel run at {tip} \
+             ({} candidate(s) probed) — refusing to guess a baseline",
+            run.candidates.len()
+        )));
+    };
+
+    // (2) R — the reverse set: exactly the paths a fast-forward would rewrite.
+    let reverse = changed_paths_utf8(root, &stale, tip)?;
+
+    // (3) Untracked-aware dirt. An unignored untracked path is never ours to move.
+    let state = git::tree_clean_untracked(root)?;
+    if !state.untracked.is_empty() {
+        return Ok(Some(format!(
+            "unignored untracked path(s) in the coord tree: {}",
+            state.untracked.join(", ")
+        )));
+    }
+    // Any staged/tracked-dirty path OUTSIDE R is operator work the sync would not
+    // even touch — but its presence means the tree is not the funnel's to reason
+    // about, so refuse rather than half-sync around it.
+    let mut outside: Vec<String> = state
+        .staged
+        .iter()
+        .chain(state.tracked_dirty.iter())
+        .filter(|p| !reverse.contains(p))
+        .cloned()
+        .collect();
+    outside.sort();
+    outside.dedup();
+    if !outside.is_empty() {
+        return Ok(Some(format!(
+            "modified path(s) outside the funnel's reverse set: {}",
+            outside.join(", ")
+        )));
+    }
+
+    // (4) The WORKTREE leg, per path: every p ∈ R must still carry the stale
+    //     baseline's bytes. Absent on both sides is identical, not a mismatch.
+    let mut edited = Vec::new();
+    for path in &reverse {
+        if git::worktree_blob_oid(root, path)? != git::blob_oid_at(root, &stale, path)? {
+            edited.push(path.clone());
+        }
+    }
+    if !edited.is_empty() {
+        return Ok(Some(format!(
+            "path(s) carry an edit against the stale baseline {stale}: {}",
+            edited.join(", ")
+        )));
+    }
+
+    // (5) Only now: fast-forward exactly R, then PROVE the identity we claimed.
+    git::restore_paths(root, tip, &reverse)?;
+    if !tree_describes(root, tip)? {
+        return Ok(Some(format!(
+            "the coord tree still does not describe {tip} after restoring \
+             {} path(s) — refusing to proceed",
+            reverse.len()
+        )));
+    }
+    Ok(None)
+}
+
+/// What the configured verify suite produced.
+enum SuiteVerdict {
+    /// The suite RAN to completion; `code` is its terminal status.
+    Ran { code: i32 },
+    /// No verdict exists — refuse `verify-suite-unresolved` with this detail (D5).
+    Unresolved { detail: String },
+}
+
+/// Resolve `[dispatch] verify-suite` to a cadence and run it in `root`. The key is
+/// mapped through [`crate::verify::CheckKind::from_key`] (the exact inverse of the
+/// resolver's own key column — one string table, STD-001) and the argv through the
+/// SHARED [`crate::verify::resolve_check`]; there is no second cadence table here.
+///
+/// Every non-`Completed` shape — an unknown key, the owned no-op, an empty override,
+/// a missing program, a failed spawn, an empty argv — is `Unresolved`, NOT a red
+/// verdict (D5): red evidence means the suite ran and failed.
+fn run_verify_suite(root: &Path, cfg: &crate::dtoml::DoctrineToml) -> SuiteVerdict {
+    let key = cfg.dispatch.verify_suite.as_str();
+    let unresolved = |why: String| SuiteVerdict::Unresolved {
+        detail: format!("[dispatch] verify-suite = `{key}`: {why}"),
+    };
+    let Some(kind) = crate::verify::CheckKind::from_key(key) else {
+        return unresolved("names no `[verification]` cadence".to_owned());
+    };
+    let argv = match crate::verify::resolve_check(&cfg.verification, kind) {
+        crate::verify::CheckPlan::Run(argv) => argv,
+        crate::verify::CheckPlan::Noop(note) => return unresolved(note.to_owned()),
+        crate::verify::CheckPlan::Empty(kind) => {
+            return unresolved(format!("`[verification].{}` is empty", kind.key()));
+        }
+    };
+    match crate::verify::run_suite(root, &argv) {
+        crate::verify::SuiteStatus::Completed { code } => SuiteVerdict::Ran { code },
+        crate::verify::SuiteStatus::NotFound { program } => {
+            unresolved(format!("program `{program}` not found"))
+        }
+        crate::verify::SuiteStatus::SpawnFailed { program, detail } => {
+            unresolved(format!("spawning `{program}` failed: {detail}"))
+        }
+        crate::verify::SuiteStatus::EmptyArgv => unresolved("resolved to an empty argv".to_owned()),
+    }
+}
+
+/// THE `dispatch verify` engine (design §5) — shared verbatim by the CLI verb and the
+/// `dispatch_verify` MCP tool. `coord_tip` is the resolved `dispatch/<NNN>` tip, which
+/// is both the CAS parent and the tree the suite is asked about.
+pub(crate) fn verify_phase(
+    coord_root: &Path,
+    coord_tip: &str,
+    slice: u32,
+    phase: &str,
+) -> anyhow::Result<VerifyOutcome> {
+    // 1. The PRE-ACT gate. `preflight`, not `attempt`, because the evidence this
+    //    transition carries does not exist until the suite has run (RV-304 F-3).
+    let record = funnel::read_funnel_at(coord_root, coord_tip, slice)?;
+    if let Err(illegal) = crate::funnel_machine::preflight(
+        record.position(phase),
+        crate::funnel_machine::TransitionKind::Verify,
+    ) {
+        return Ok(verify_refused(illegal.reason, illegal.to_string()));
+    }
+
+    // 2. The proof-gated forward-sync — refuses without touching anything.
+    if let Some(detail) = forward_sync(coord_root, coord_tip)? {
+        return Ok(verify_refused(VERIFY_TREE_DIRTY, detail));
+    }
+
+    // 3. The suite. No verdict ⇒ refuse; land NOTHING.
+    let cfg = crate::dtoml::load_doctrine_toml(coord_root)?;
+    let suite = cfg.dispatch.verify_suite.clone();
+    let code = match run_verify_suite(coord_root, &cfg) {
+        SuiteVerdict::Ran { code } => code,
+        SuiteVerdict::Unresolved { detail } => {
+            return Ok(verify_refused(VERIFY_SUITE_UNRESOLVED, detail));
+        }
+    };
+
+    // 4. Re-prove the tree. A suite that formatted, regenerated, or littered the
+    //    coord tree has moved the bytes out from under `verified_oid`, so its pass is
+    //    not evidence about `coord_tip` — it is downgraded to a FAIL, recorded as such.
+    let mut detail = if code == 0 {
+        String::new()
+    } else {
+        format!("suite `{suite}` exited {code}")
+    };
+    let mut status = if code == 0 {
+        crate::funnel_machine::VerifyStatus::Pass
+    } else {
+        crate::funnel_machine::VerifyStatus::Fail
+    };
+    if !tree_describes(coord_root, coord_tip)? {
+        let state = git::tree_clean_untracked(coord_root)?;
+        status = crate::funnel_machine::VerifyStatus::Fail;
+        detail = format!(
+            "{SUITE_MUTATED_TREE}: suite `{suite}` left the coord tree different from \
+             {coord_tip} (staged: [{}]; modified: [{}]; untracked: [{}])",
+            state.staged.join(", "),
+            state.tracked_dirty.join(", "),
+            state.untracked.join(", ")
+        );
+    }
+
+    // 5. ONE CAS commit through the sole writer. `paths_since_verify` is `None`:
+    //    only conclude's gate consumes it.
+    let evidence = crate::funnel_machine::VerifyEvidence {
+        status,
+        verified_oid: coord_tip.to_owned(),
+        suite: suite.clone(),
+        at: crate::clock::now_timestamp()?,
+    };
+    let at = evidence.at.clone();
+    match funnel::land_funnel_transition(
+        coord_root,
+        &dispatch_ref(slice),
+        coord_tip,
+        slice,
+        phase,
+        &crate::funnel_machine::Transition::Verify { evidence },
+        None,
+        &at,
+        &Provenance::Conclude {
+            who: dispatch_identity(),
+        },
+    )? {
+        funnel::FunnelLanding::Landed { oid, .. } => {
+            Ok(verdict_outcome(status, suite, detail, oid))
+        }
+        // An identical verdict at the same tip is already recorded: nothing written,
+        // and the tip the caller already holds is still the answer.
+        funnel::FunnelLanding::Replayed { .. } => {
+            Ok(verdict_outcome(status, suite, detail, coord_tip.to_owned()))
+        }
+        funnel::FunnelLanding::Illegal(illegal) => {
+            Ok(verify_refused(illegal.reason, illegal.to_string()))
+        }
+        funnel::FunnelLanding::CommitRefused(refusal) => {
+            Ok(verify_refused(refusal.token(), String::new()))
+        }
+    }
+}
+
+/// Fold a landed verdict into the caller-facing outcome.
+fn verdict_outcome(
+    status: crate::funnel_machine::VerifyStatus,
+    suite: String,
+    detail: String,
+    coord_tip: String,
+) -> VerifyOutcome {
+    match status {
+        crate::funnel_machine::VerifyStatus::Pass => VerifyOutcome::Verified { coord_tip, suite },
+        crate::funnel_machine::VerifyStatus::Fail => VerifyOutcome::VerifyFailed { suite, detail },
+    }
+}
+
+/// `dispatch verify --slice N --phase PHASE-NN` — run the phase's verify suite in the
+/// INVOKING coordination worktree and land the verdict as funnel evidence. Like
+/// `dispatch tree-state`, the CLI reads the LOCAL root (the coord tree the
+/// orchestrator invokes from); the MCP tool resolves the coord by slice server-side.
+/// Both share [`verify_phase`] verbatim.
+fn run_verify(path: Option<PathBuf>, slice: u32, phase: &str) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let dref = dispatch_ref(slice);
+    let tip = resolve_commit(&root, &dref)?
+        .with_context(|| format!("verify: {dref} does not resolve to a commit"))?;
+    let out = verify_phase(&root, &tip, slice, phase)?;
+    writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&out)?)?;
+    // The payload is the report; the exit code is the verdict, so a scripted caller
+    // does not have to parse JSON to know whether the phase verified.
+    match out {
+        VerifyOutcome::Verified { .. } => Ok(()),
+        VerifyOutcome::VerifyFailed { suite, .. } => bail!("verify: suite `{suite}` did not pass"),
+        VerifyOutcome::Refused { reason, .. } => bail!("verify: {reason}"),
+    }
+}
+
+// ======================================================================================
+// `dispatch next` — THE single-prescription funnel oracle (SL-228 PHASE-06, design §6).
+//
+// **Home (ADR-001).** The oracle lives in the ENGINE tier, beside the rest of the funnel
+// (design D6). Not the leaf: `funnel_machine` must stay git/disk-free, and `next` reads
+// the committed record, a changed-path set, and the on-disk plan. Not the command tier:
+// `mcp_server` and `cli.rs` only adapt, and a ladder there would fork between the CLI
+// verb and the MCP tool. Both surfaces call [`next_core`] verbatim.
+//
+// **A projection, never a second machine (EX-1).** Every prescription comes from
+// `funnel_machine::expected_next` — the SAME function the refusals use — and
+// [`next_kind`] is a total map from its `Expected` onto the wire vocabulary. There is
+// deliberately NO `match position { … }` here and no restatement of the transition
+// table: that second oracle is exactly the drift this phase exists to prevent.
+//
+// **Two altitudes (R5).** `next` answers the SUB-FUNNEL question — where ONE phase
+// stands between spawn and reap. Its sibling [`select_guidance`] (rendered by `dispatch
+// status`) answers the SLICE-LIFECYCLE question — phases remaining, bundle staleness,
+// admission, close. Neither subsumes the other; `next`'s terminal rung hands off to
+// `dispatch status` by name.
+// ======================================================================================
+
+/// The `dispatch_import` MCP tool name. It lives HERE, in the engine, because the oracle
+/// renders it into a runnable `command` literal and an engine module may not import the
+/// command tier (ADR-001 — the layering gate flags the upward edge). `mcp_server`
+/// re-exports it for the registry, so the tool is spelled exactly once (STD-001).
+pub(crate) const TOOL_DISPATCH_IMPORT: &str = "dispatch_import";
+/// The `dispatch_conclude_phase` MCP tool name — see [`TOOL_DISPATCH_IMPORT`].
+pub(crate) const TOOL_DISPATCH_CONCLUDE_PHASE: &str = "dispatch_conclude_phase";
+/// The `dispatch_reap` MCP tool name — see [`TOOL_DISPATCH_IMPORT`].
+pub(crate) const TOOL_DISPATCH_REAP: &str = "dispatch_reap";
+
+/// The CLI verb the oracle prescribes for verify. The CLI, NOT the MCP tool: the two
+/// surfaces are not interchangeable for this verb (ISS-243 — `dispatch_verify` runs the
+/// suite with inherited stdout and corrupts the JSON-RPC stream). Filed, out of scope
+/// here; the oracle routes around it rather than widening that fix into this phase.
+const VERIFY_CLI: &str = "doctrine dispatch verify";
+
+/// The verb the terminal rung hands off to — the OTHER altitude (R5).
+const STATUS_CLI: &str = "doctrine dispatch status";
+
+/// The `spawn` record field every command literal but verify is parameterised from;
+/// named so an unrenderable command can say precisely what is missing.
+const MISSING_SPAWN: &str = "spawn record";
+
+/// The ONE action `dispatch next` prescribes — the oracle's wire vocabulary (design §6).
+/// A PROJECTION of [`crate::funnel_machine::Expected`], never a parallel state space:
+/// see [`next_kind`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NextKind {
+    /// No funnel row: arm and spawn the phase's worker (arm-routed, D-P6-5).
+    Spawn,
+    /// The fork is armed; the next event is the worker's own commit.
+    AwaitWorker,
+    Import,
+    /// The delta is on the tip with no verify evidence yet.
+    Verify,
+    /// Red stored evidence: re-running the suite unchanged is not the next move.
+    TriageVerifyFailure,
+    /// Pass evidence that no longer describes the tip — re-run the suite.
+    ReverifyStale,
+    Conclude,
+    Reap,
+    /// Every phase is reaped and none remains to spawn — the sub-funnel is complete.
+    AllReaped,
+}
+
+impl NextKind {
+    /// The kebab token this prescription is rendered and serialised with (STD-001
+    /// single-source — the `Serialize` impl below defers to it, so the wire form and
+    /// the human form can never drift).
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            NextKind::Spawn => "spawn",
+            NextKind::AwaitWorker => "await-worker",
+            NextKind::Import => "import",
+            NextKind::Verify => "verify",
+            NextKind::TriageVerifyFailure => "triage-verify-failure",
+            NextKind::ReverifyStale => "reverify-stale",
+            NextKind::Conclude => "conclude",
+            NextKind::Reap => "reap",
+            NextKind::AllReaped => "all-reaped",
+        }
+    }
+}
+
+impl serde::Serialize for NextKind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+/// The `dispatch next` payload — ONE prescribed action, total over the domain (design
+/// §6). `command` is the runnable literal in the surface that OWNS the verb, absent
+/// where the rung deliberately carries none (or where a required fact is missing, in
+/// which case `detail` says which — never a half-rendered literal).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct NextCore {
+    pub(crate) kind: NextKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) phase: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) command: Option<String>,
+    pub(crate) detail: String,
+}
+
+/// Project the machine's prescription onto the oracle's vocabulary (D-P6-1).
+///
+/// TOTAL, and expected-driven: every arm but one reads `expected` ALONE. The single
+/// position-derived discriminator is `Expected::Verify`, which the machine returns both
+/// for "the imported delta has never been verified" and for "the verified tree went
+/// stale under new commits" — one prescription, two operator-facing stories, and the
+/// position is the only thing that separates them. No other arm may read `at`: doing so
+/// would re-derive the transition table here, which is precisely the second oracle EX-1
+/// forbids.
+const fn next_kind(expected: crate::funnel_machine::Expected, at: Option<Position>) -> NextKind {
+    use crate::funnel_machine::Expected;
+    match expected {
+        Expected::Spawn => NextKind::Spawn,
+        Expected::AwaitWorker => NextKind::AwaitWorker,
+        Expected::Import => NextKind::Import,
+        // The ONE arm allowed to read the position.
+        Expected::Verify => match at {
+            Some(Position::Verified) => NextKind::ReverifyStale,
+            _ => NextKind::Verify,
+        },
+        Expected::Triage => NextKind::TriageVerifyFailure,
+        Expected::Conclude => NextKind::Conclude,
+        Expected::Reap => NextKind::Reap,
+        Expected::Terminal => NextKind::AllReaped,
+    }
+}
+
+/// One mid-funnel phase paired with the machine's prescription for it. The shell gathers
+/// the facts (the committed row, the coord tip, the changed-path set), the LEAF judges,
+/// and the ladder below only RANKS. Keeping the pair explicit is what lets VT-1 drive
+/// the ladder with constructed rows and no git at all (the pure/imperative split).
+#[derive(Debug)]
+pub(crate) struct PhasePrescription<'a> {
+    pub(crate) row: &'a crate::funnel_machine::PhaseRow,
+    pub(crate) expected: crate::funnel_machine::Expected,
+}
+
+/// Which rung of the ladder fired, and what it selected.
+#[derive(Debug)]
+pub(crate) enum NextSelection<'a> {
+    /// A mid-funnel phase won (rungs 1–3); `kind` is the projection of its `expected`.
+    Prescribed {
+        kind: NextKind,
+        row: &'a crate::funnel_machine::PhaseRow,
+    },
+    /// Nothing mid-funnel; the readiness authority named a phase with no row (rung 4).
+    Spawn { phase: &'a str },
+    /// Nothing mid-funnel and nothing left to spawn — the sub-funnel is complete.
+    AllReaped,
+}
+
+/// The four prescriptions naming a verb the ORCHESTRATOR can run right now. `AwaitWorker`
+/// waits on someone else and `Triage` is a judgment beat, so neither is runnable;
+/// `Spawn`/`Terminal` cannot occur mid-funnel (see [`select_next`]).
+const fn is_runnable(expected: crate::funnel_machine::Expected) -> bool {
+    use crate::funnel_machine::Expected;
+    matches!(
+        expected,
+        Expected::Import | Expected::Verify | Expected::Conclude | Expected::Reap
+    )
+}
+
+/// THE actionability ladder (design §6, D-P6-2) — pure, total, single-prescription.
+///
+/// `mid` is every phase whose position is NOT `reaped`, in phase-id order (`PHASE-NN`
+/// sorts lexicographically, which for a fixed width IS numerically). `recorded` is every
+/// phase id the funnel record carries at all — mid-funnel AND reaped. `readiness` is the
+/// readiness authority's output, consulted at rung 4 only.
+///
+/// **Totality is a theorem, not a fallback arm.** For a mid-funnel row `expected_next`
+/// can only return `Triage | Import | Verify | Conclude | Reap | AwaitWorker`:
+/// `Expected::Spawn` is prescribed only for `current == None` (no row at all, hence not
+/// in `mid`) and `Expected::Terminal` only at `Reaped` (excluded by construction). Rung 1
+/// takes `Triage`, rung 2 takes the four runnable verbs, so every row surviving to rung 3
+/// is `AwaitWorker` — and rung 3 cannot be empty while `mid` is non-empty. When `mid` IS
+/// empty, rung 4 is total by case split on `readiness`. Hence exactly one prescription,
+/// always, with no `_ =>` arm papering over a state nobody enumerated.
+///
+/// Rung 1 outranks rung 2 REGARDLESS of phase id: the verify suite is coord-tree-global,
+/// so red evidence is a global condition and the judgment halt deliberately outranks
+/// further mechanical progress (RV-304 F-4). Rung 2 outranks rung 3 so an awaiting phase
+/// can never starve a runnable one.
+fn select_next<'a>(
+    mid: &'a [PhasePrescription<'a>],
+    recorded: &BTreeSet<&str>,
+    readiness: &'a [String],
+) -> NextSelection<'a> {
+    let prescribed = |p: &'a PhasePrescription<'a>| NextSelection::Prescribed {
+        kind: next_kind(p.expected, Some(p.row.position)),
+        row: p.row,
+    };
+    // 1. Red evidence anywhere ⇒ triage the LOWEST such phase.
+    if let Some(p) = mid
+        .iter()
+        .find(|p| p.expected == crate::funnel_machine::Expected::Triage)
+    {
+        return prescribed(p);
+    }
+    // 2. The lowest-id runnable verb.
+    if let Some(p) = mid.iter().find(|p| is_runnable(p.expected)) {
+        return prescribed(p);
+    }
+    // 3. Everything left awaits its worker (see the totality argument above); `detail`
+    //    names them all.
+    if let Some(p) = mid.first() {
+        return prescribed(p);
+    }
+    // 4. Nothing mid-funnel: THE readiness authority, filtered to phases with no funnel
+    //    row (a reaped phase is never re-spawned; a mid-funnel one was caught above).
+    match readiness.iter().find(|id| !recorded.contains(id.as_str())) {
+        Some(phase) => NextSelection::Spawn { phase },
+        None => NextSelection::AllReaped,
+    }
+}
+
+/// The runnable literal for `kind`, fully parameterised from `(slice, coord_tip, row)`
+/// (D-P6-4). `Ok(None)` is a rung that deliberately carries no literal; `Err(field)`
+/// names the absent row field that made one unrenderable — a half-rendered command is
+/// never emitted.
+fn next_command(
+    kind: NextKind,
+    slice: u32,
+    coord_tip: &str,
+    row: Option<&crate::funnel_machine::PhaseRow>,
+) -> Result<Option<String>, &'static str> {
+    let phase = row.map_or("", |r| r.id.as_str());
+    let spawn = || row.and_then(|r| r.spawn.as_ref()).ok_or(MISSING_SPAWN);
+    Ok(Some(match kind {
+        // `spawn` is ARM-ROUTED (D-P6-5) — resolving the arm inside a read oracle would
+        // couple it to harness detection for no gain; the other three wait, judge, or
+        // terminate. All four hand off in `detail` instead.
+        NextKind::Spawn
+        | NextKind::AwaitWorker
+        | NextKind::TriageVerifyFailure
+        | NextKind::AllReaped => return Ok(None),
+        NextKind::Import => format!(
+            "{TOOL_DISPATCH_IMPORT}{{slice: {slice}, name: \"{}\"}}",
+            spawn()?.fork
+        ),
+        NextKind::Verify | NextKind::ReverifyStale => {
+            format!("{VERIFY_CLI} --slice {slice} --phase {phase}")
+        }
+        NextKind::Conclude => format!(
+            "{TOOL_DISPATCH_CONCLUDE_PHASE}{{slice: {slice}, phase: \"{phase}\", \
+             code_start: \"{}\", code_end: \"{coord_tip}\"}}",
+            spawn()?.base_oid
+        ),
+        NextKind::Reap => format!(
+            "{TOOL_DISPATCH_REAP}{{slice: {slice}, name: \"{}\"}}",
+            spawn()?.fork
+        ),
+    }))
+}
+
+/// Why this rung fired, and which SURFACE owns its verb — the CLI line and the MCP tool
+/// call are not interchangeable, so the prose says which one the literal is.
+fn rung_detail(
+    kind: NextKind,
+    phase: Option<&str>,
+    row: Option<&crate::funnel_machine::PhaseRow>,
+) -> String {
+    let p = phase.unwrap_or("(no phase)");
+    let at = row.map_or_else(String::new, |r| format!(" at `{}`", r.position.as_str()));
+    match kind {
+        NextKind::Spawn => format!(
+            "{p} has no funnel row yet — spawn its worker. No command literal: spawn \
+             mechanics are ARM-SPECIFIC (claude: `dispatch arm-spawn` then the `Agent` \
+             tool; codex/pi: `worktree fork --worker` then a subprocess) and this oracle \
+             is deliberately arm-agnostic. Hand off to the arm skill."
+        ),
+        NextKind::AwaitWorker => format!(
+            "{p}{at} — the fork is armed; the next event is the worker's own commit, not \
+             an orchestrator verb. Wait for the worker to return."
+        ),
+        NextKind::Import => format!(
+            "{p}{at} — the worker's commit is not on the coordination tip yet. MCP owns \
+             this verb; there is no CLI equivalent."
+        ),
+        NextKind::Verify => format!(
+            "{p}{at} — the delta is on the tip with no verify evidence. The CLI owns this \
+             verb: run the line in a shell."
+        ),
+        NextKind::ReverifyStale => format!(
+            "{p}{at} — the stored pass evidence no longer describes the tip \
+             (non-funnel-record paths changed since `verified_oid`). Re-run the suite; \
+             the CLI owns this verb."
+        ),
+        NextKind::TriageVerifyFailure => format!(
+            "{p}{at} — the stored verify evidence is RED. Re-running the suite unchanged \
+             is not the next move: triage the failure. This is a judgment beat, so it \
+             carries no command, and it outranks every runnable phase because the verify \
+             suite is coord-tree-global."
+        ),
+        NextKind::Conclude => format!(
+            "{p}{at} — pass evidence describes the tip modulo the funnel record. MCP owns \
+             this verb."
+        ),
+        NextKind::Reap => format!(
+            "{p}{at} — the phase boundary is recorded and the fork is spent. MCP owns this \
+             verb; never a raw `git worktree remove`."
+        ),
+        NextKind::AllReaped => format!(
+            "every phase in the funnel is reaped and none remains to spawn — the phase \
+             funnel is complete. `next` answers the phase funnel only; for the slice \
+             lifecycle beyond it (prepare-review, audit, admission, close) run \
+             `{STATUS_CLI} --slice <N>`."
+        ),
+    }
+}
+
+/// The OTHER in-flight phases, surfaced at EVERY rung (design §6) — a
+/// single-prescription oracle must never hide a parallel batch.
+fn in_flight(mid: &[PhasePrescription<'_>], chosen: Option<&str>) -> String {
+    let others: Vec<String> = mid
+        .iter()
+        .filter(|p| Some(p.row.id.as_str()) != chosen)
+        .map(|p| {
+            format!(
+                "{} at `{}` ({})",
+                p.row.id,
+                p.row.position.as_str(),
+                p.expected.as_str()
+            )
+        })
+        .collect();
+    if others.is_empty() {
+        String::new()
+    } else {
+        format!(" In flight: {}.", others.join("; "))
+    }
+}
+
+/// Render the ladder's verdict into the payload. PURE — every git/disk fact was already
+/// resolved into `mid`/`selection` by [`next_core`].
+fn render_next(
+    slice: u32,
+    coord_tip: &str,
+    selection: &NextSelection<'_>,
+    mid: &[PhasePrescription<'_>],
+) -> NextCore {
+    let (kind, phase, row) = match *selection {
+        NextSelection::Prescribed { kind, row } => (kind, Some(row.id.clone()), Some(row)),
+        NextSelection::Spawn { phase } => (NextKind::Spawn, Some(phase.to_owned()), None),
+        NextSelection::AllReaped => (NextKind::AllReaped, None, None),
+    };
+    let (command, missing) = match next_command(kind, slice, coord_tip, row) {
+        Ok(command) => (command, String::new()),
+        Err(field) => (
+            None,
+            format!(
+                " No command: the funnel row carries no {field}, so the literal cannot be \
+                 parameterised — heal the row (re-drive the import) before acting."
+            ),
+        ),
+    };
+    let detail = format!(
+        "{}{missing}{}",
+        rung_detail(kind, phase.as_deref(), row),
+        in_flight(mid, phase.as_deref())
+    );
+    NextCore {
+        kind,
+        phase,
+        command,
+        detail,
+    }
+}
+
+/// THE oracle (design §6, EX-1) — one prescription for a slice's phase funnel.
+///
+/// STRICTLY READ-ONLY, and it NEVER heals. It makes object-db reads (the committed funnel
+/// record at `coord_tip`, and the changed-path set behind each row's evidence) plus the
+/// on-disk plan/sheet reads the readiness authority already performs. It writes no
+/// `funnel.toml`, lands no transition, forward-syncs nothing, and touches neither the
+/// index nor the working tree. A `triage-verify-failure` prescription is INFORMATION, not
+/// a process failure, so the verb around it always exits 0.
+///
+/// The prescription itself comes from `funnel_machine::expected_next` per phase — the
+/// same function the refusals use — ranked by [`select_next`]. Rung 4 consults THE
+/// readiness authority ([`compute_next_phases`] over [`plan_next_rows`], the seam
+/// `dispatch_next_ready` also wraps); there is no second readiness rule here.
+///
+/// See the module-level R5 note: this is the SUB-FUNNEL altitude; [`select_guidance`]
+/// (via `dispatch status`) is the slice-lifecycle one, and the terminal rung hands off
+/// to it by name.
+pub(crate) fn next_core(root: &Path, coord_tip: &str, slice: u32) -> anyhow::Result<NextCore> {
+    let mut record = funnel::read_funnel_at(root, coord_tip, slice)?;
+    // Phase-id order IS the ladder's order; the record's row order is write order.
+    record.rows.sort_by(|a, b| a.id.cmp(&b.id));
+    let recorded: BTreeSet<&str> = record.rows.iter().map(|r| r.id.as_str()).collect();
+
+    // The changed-path set per row, gathered exactly as `land_conclude` gathers it
+    // (`verified_oid‥coord_tip`); with no stored evidence there is nothing to diff, so
+    // `None` is passed and the machine's conclude gate fails closed.
+    let mut paths: Vec<Option<Vec<String>>> = Vec::new();
+    for row in &record.rows {
+        if row.position == Position::Reaped {
+            continue;
+        }
+        paths.push(match row.verify.as_ref() {
+            Some(evidence) => Some(changed_paths_utf8(root, &evidence.verified_oid, coord_tip)?),
+            None => None,
+        });
+    }
+    let mid: Vec<PhasePrescription<'_>> = record
+        .rows
+        .iter()
+        .filter(|row| row.position != Position::Reaped)
+        .zip(paths.iter())
+        .map(|(row, paths)| {
+            let facts = crate::funnel_machine::TransitionFacts {
+                row: Some(row),
+                coord_tip,
+                paths_since_verify: paths.as_deref(),
+            };
+            PhasePrescription {
+                expected: crate::funnel_machine::expected_next(Some(row.position), &facts),
+                row,
+            }
+        })
+        .collect();
+
+    // Rung 4 ONLY (D-P6-3). Reading it lazily also keeps a mid-funnel slice answerable
+    // when the plan is unreadable — rungs 1–3 never need it.
+    let readiness = if mid.is_empty() {
+        compute_next_phases(&plan_next_rows(root, slice)?)
+    } else {
+        Vec::new()
+    };
+    let selection = select_next(&mid, &recorded, &readiness);
+    Ok(render_next(slice, coord_tip, &selection, &mid))
+}
+
+/// The human-readable rendering — the default CLI surface (`--json` emits [`NextCore`]).
+fn render_next_human(core: &NextCore) -> String {
+    let phase = core
+        .phase
+        .as_deref()
+        .map_or_else(String::new, |p| format!(" — {p}"));
+    let run = core
+        .command
+        .as_deref()
+        .map_or_else(String::new, |c| format!("run:  {c}\n"));
+    format!(
+        "next: {}{phase}\n{run}why:  {}\n",
+        core.kind.as_str(),
+        core.detail.trim()
+    )
+}
+
+/// `dispatch next --slice N` — print the ONE prescribed action. Like `dispatch verify`
+/// and `dispatch tree-state`, the CLI reads the LOCAL root (the coord tree the
+/// orchestrator invokes from); the MCP tool resolves the coord by slice server-side.
+/// Both share [`next_core`] verbatim.
+///
+/// **Exit code is ALWAYS 0** (D-P6-6): a `triage-verify-failure` prescription is
+/// information, not a process failure, and a non-zero exit would break scripted use and
+/// mislead an orchestrator into treating the oracle itself as broken.
+fn run_next(path: Option<PathBuf>, slice: u32, json: bool) -> anyhow::Result<()> {
+    let root = root::find(path, &root::default_markers())?;
+    let dref = dispatch_ref(slice);
+    let tip = resolve_commit(&root, &dref)?
+        .with_context(|| format!("next: {dref} does not resolve to a commit"))?;
+    let core = next_core(&root, &tip, slice)?;
+    if json {
+        writeln!(io::stdout(), "{}", serde_json::to_string_pretty(&core)?)?;
+    } else {
+        write!(io::stdout(), "{}", render_next_human(&core))?;
+    }
+    Ok(())
+}
+
+// ======================================================================================
+// `worktree create-fork` ⊕ the Class-2 `Spawn` row (SL-228 PHASE-04, D1/D3, design §4).
+// ======================================================================================
+
+/// `doctrine worktree create-fork`, PLUS the `Spawn` funnel row it is the recorder for.
+///
+/// **Why the row lands here and not in `arm-spawn` (D1/D3).** `Spawn` is a Class-2
+/// transition: the record lands STRICTLY AFTER the act (D8). `arm-spawn` runs BEFORE the
+/// fork exists and cannot know the harness-assigned fork name, so it could only ever
+/// pre-record a guess. The create-fork path is the only place that knows both, so it is
+/// the recorder. It cannot land the row itself — `worktree` must not import `dispatch`
+/// (that command-tier back-cycle is what SL-204 removed; ADR-001's gate would not even
+/// flag it, because it only flags UPWARD edges) — so `create-fork` hands its facts up
+/// and this thin command-tier entry lands them. `cli.rs` routes the `CreateFork` arm
+/// here; every other `worktree` arm is untouched.
+///
+/// **A failed landing is NON-FATAL (D4).** The fork is real and the created path is
+/// already on stdout by the time we get here. Aborting a good spawn over a bookkeeping
+/// write would destroy work to protect a record; instead we warn on stderr and exit 0,
+/// leaving exactly the heal-forward window `dispatch_import` already owns (it heals the
+/// full provable prefix from the durable fork binding). Never abort, never suppress the
+/// path.
+pub(crate) fn run_create_fork_and_record() -> anyhow::Result<()> {
+    // `run_create_fork` has already printed the created path by the time it returns, so
+    // the stdout contract is discharged before the row is ever attempted.
+    record_spawn(&crate::worktree::run_create_fork()?);
+    Ok(())
+}
+
+/// Land the created fork's `Spawn` row. Returns NOTHING — non-fatality is enforced by
+/// the signature, not by a caller remembering to swallow an error (D4).
+fn record_spawn(created: &crate::worktree::CreatedFork) {
+    let Some(spawn) = created.spawn.as_ref() else {
+        // A passthrough spawn, or a fork with no durable binding: neither names a
+        // funnel row, and we never invent one.
+        return;
+    };
+    if let Err(cause) = land_spawn_row(spawn) {
+        // stderr only: stdout carries the created path and nothing else (G1/D11).
+        drop(writeln!(
+            io::stderr(),
+            "warning: spawn row not landed for {} ({cause:#}) — the fork is live; import heals the row forward",
+            spawn.fork
+        ));
+    }
+}
+
+/// Land ONE `Spawn` transition for a just-created fork, through the sole writer.
+fn land_spawn_row(spawn: &crate::worktree::SpawnFacts) -> anyhow::Result<()> {
+    let coord_ref = dispatch_ref(spawn.slice);
+    let tip = resolve_commit(&spawn.coord, &coord_ref)?
+        .with_context(|| format!("spawn row: {coord_ref} does not resolve to a commit"))?;
+    let t = crate::funnel_machine::Transition::Spawn {
+        fork: spawn.fork.clone(),
+        base_oid: spawn.base_oid.clone(),
+    };
+    match funnel::land_funnel_transition(
+        &spawn.coord,
+        &coord_ref,
+        &tip,
+        spawn.slice,
+        &spawn.phase,
+        &t,
+        None,
+        &crate::clock::now_timestamp()?,
+        &Provenance::Conclude {
+            who: dispatch_identity(),
+        },
+    )? {
+        // Landed, or already recorded with the same fork+base (an idempotent re-drive).
+        funnel::FunnelLanding::Landed { .. } | funnel::FunnelLanding::Replayed { .. } => Ok(()),
+        funnel::FunnelLanding::Illegal(illegal) => bail!("{illegal}"),
+        funnel::FunnelLanding::CommitRefused(refusal) => bail!("spawn row: {}", refusal.token()),
+    }
 }
 
 #[cfg(test)]
@@ -4516,6 +7006,681 @@ mod tests {
         );
         assert_eq!(rows3[1].phase, "PHASE-02", "sibling preserved, order kept");
         assert_eq!(rows3[1].code_end_oid, "ddd");
+    }
+
+    // --- VT-3: the funnel record + THE sole writer (SL-228 PHASE-03, design §3) -------
+
+    mod funnel_record {
+        use super::super::funnel::{
+            FunnelLanding, FunnelRecord, LandingVerdict, land_funnel_transition, read_funnel_at,
+            resolve_landing,
+        };
+        use super::{disp, git_run, primary_with_coord};
+        use crate::dispatch::{CommitRefusal, dispatch_ref};
+        use crate::funnel_machine::{
+            self, PhaseRow, Position, StampRecord, Transition, VerifyEvidence, VerifyStatus,
+        };
+        use std::path::Path;
+
+        const SLICE: u32 = 199;
+        const PHASE: &str = "PHASE-01";
+        const AT: &str = "2026-07-25T09:00:00Z";
+
+        fn spawn(fork_tip: &str) -> Transition {
+            Transition::Spawn {
+                fork: "dispatch/worker-a".to_owned(),
+                base_oid: fork_tip.to_owned(),
+            }
+        }
+
+        /// Land one transition against `tip`, asserting it was a real landing, and
+        /// return the new tip.
+        fn land(coord: &Path, tip: &str, t: &Transition) -> String {
+            match land_funnel_transition(
+                coord,
+                &dispatch_ref(SLICE),
+                tip,
+                SLICE,
+                PHASE,
+                t,
+                None,
+                AT,
+                &disp(),
+            )
+            .unwrap()
+            {
+                FunnelLanding::Landed { oid, .. } => oid,
+                other => panic!("expected Landed, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn funnel_record_round_trips_the_full_row_shape() {
+            let row = PhaseRow {
+                id: PHASE.to_owned(),
+                position: Position::Verified,
+                updated_at: AT.to_owned(),
+                spawn: None,
+                worker_commit: None,
+                import: Some(funnel_machine::ImportRecord {
+                    fork_tip: "deadbeef".to_owned(),
+                    onto: "cafe".to_owned(),
+                    at: AT.to_owned(),
+                }),
+                verify: Some(VerifyEvidence {
+                    status: VerifyStatus::Pass,
+                    verified_oid: "cafe".to_owned(),
+                    suite: "gate".to_owned(),
+                    at: AT.to_owned(),
+                }),
+                conclude: Some(StampRecord { at: AT.to_owned() }),
+                reap: None,
+            };
+            let record = FunnelRecord {
+                schema: 1,
+                rows: vec![row.clone()],
+            };
+            let text = record.render().unwrap();
+            assert!(text.contains("schema = 1"), "{text}");
+            assert!(text.contains("[[phase]]"), "{text}");
+            assert!(text.contains("position = \"verified\""), "{text}");
+            assert!(text.contains("[phase.import]"), "{text}");
+            assert!(
+                !text.contains("import_oid"),
+                "no import_oid: the row rides the import commit's own tree ({text})"
+            );
+            let back = FunnelRecord::parse(&text).unwrap();
+            assert_eq!(back, record);
+            assert_eq!(back.row(PHASE), Some(&row));
+            assert_eq!(back.position(PHASE), Some(Position::Verified));
+        }
+
+        // --- SL-228 PHASE-08 (T1/VT-1): the landing-authority resolver ----------------
+        //
+        // Five cells, one per branch of the three-check conjunction. The record is the
+        // INPUT here (built through the real serializer and committed), so each cell
+        // pins the conjunction itself rather than the ladder that produced the row.
+
+        /// A funnel row naming `fork` at `position`, carrying an `[phase.import]` of
+        /// `fork_tip` when the position needs one.
+        fn fork_row(
+            phase: &str,
+            fork: &str,
+            position: Position,
+            fork_tip: Option<&str>,
+        ) -> PhaseRow {
+            PhaseRow {
+                id: phase.to_owned(),
+                position,
+                updated_at: AT.to_owned(),
+                spawn: Some(funnel_machine::SpawnRecord {
+                    fork: fork.to_owned(),
+                    base_oid: "base".to_owned(),
+                    at: AT.to_owned(),
+                }),
+                worker_commit: None,
+                import: fork_tip.map(|tip| funnel_machine::ImportRecord {
+                    fork_tip: tip.to_owned(),
+                    onto: "onto".to_owned(),
+                    at: AT.to_owned(),
+                }),
+                verify: None,
+                conclude: None,
+                reap: None,
+            }
+        }
+
+        /// Commit `rows` as the slice's funnel record on the coord branch; return the tip.
+        fn commit_record(coord: &Path, rows: Vec<PhaseRow>) -> String {
+            let record = FunnelRecord { schema: 1, rows };
+            let path = funnel_machine::funnel_record_path(SLICE);
+            let file = coord.join(&path);
+            std::fs::create_dir_all(file.parent().expect("record dir")).unwrap();
+            std::fs::write(&file, record.render().unwrap()).unwrap();
+            git_run(coord, &["add", &path]);
+            git_run(coord, &["commit", "-q", "-m", "funnel record fixture"]);
+            git_run(coord, &["rev-parse", "HEAD"])
+        }
+
+        const RESOLVER_FORK: &str = "dispatch/agent-r";
+
+        #[test]
+        fn a_concluded_row_at_the_imported_tip_proves_the_fork_landed() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            git_run(&coord, &["branch", RESOLVER_FORK, &base]);
+            let tip = commit_record(
+                &coord,
+                vec![fork_row(
+                    PHASE,
+                    RESOLVER_FORK,
+                    Position::Concluded,
+                    Some(&base),
+                )],
+            );
+            assert_eq!(
+                resolve_landing(&coord, &tip, SLICE, RESOLVER_FORK).unwrap(),
+                LandingVerdict::Landed
+            );
+            // `reaped` is the replay case — the same proof, one milestone later.
+            let replay = commit_record(
+                &coord,
+                vec![fork_row(
+                    PHASE,
+                    RESOLVER_FORK,
+                    Position::Reaped,
+                    Some(&base),
+                )],
+            );
+            assert_eq!(
+                resolve_landing(&coord, &replay, SLICE, RESOLVER_FORK).unwrap(),
+                LandingVerdict::Landed
+            );
+        }
+
+        #[test]
+        fn a_branch_advanced_past_the_imported_tip_is_not_proven() {
+            // The regression this check exists for: work added AFTER the import is
+            // certified by nothing, so the certificate may not stretch over it.
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            let advanced = git_run(
+                &coord,
+                &[
+                    "commit-tree",
+                    &format!("{base}^{{tree}}"),
+                    "-p",
+                    &base,
+                    "-m",
+                    "later work",
+                ],
+            );
+            git_run(&coord, &["branch", RESOLVER_FORK, &advanced]);
+            let tip = commit_record(
+                &coord,
+                vec![fork_row(
+                    PHASE,
+                    RESOLVER_FORK,
+                    Position::Concluded,
+                    Some(&base),
+                )],
+            );
+            assert_eq!(
+                resolve_landing(&coord, &tip, SLICE, RESOLVER_FORK).unwrap(),
+                LandingVerdict::NotProven
+            );
+        }
+
+        #[test]
+        fn two_rows_naming_one_fork_are_ambiguous_and_never_bind_the_first() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            git_run(&coord, &["branch", RESOLVER_FORK, &base]);
+            // The FIRST row would prove `Landed` on its own — the count outranks it.
+            let tip = commit_record(
+                &coord,
+                vec![
+                    fork_row(PHASE, RESOLVER_FORK, Position::Concluded, Some(&base)),
+                    fork_row("PHASE-02", RESOLVER_FORK, Position::Spawned, None),
+                ],
+            );
+            assert_eq!(
+                resolve_landing(&coord, &tip, SLICE, RESOLVER_FORK).unwrap(),
+                LandingVerdict::Ambiguous
+            );
+        }
+
+        #[test]
+        fn a_row_still_at_imported_is_not_proven() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            git_run(&coord, &["branch", RESOLVER_FORK, &base]);
+            let tip = commit_record(
+                &coord,
+                vec![fork_row(
+                    PHASE,
+                    RESOLVER_FORK,
+                    Position::Imported,
+                    Some(&base),
+                )],
+            );
+            assert_eq!(
+                resolve_landing(&coord, &tip, SLICE, RESOLVER_FORK).unwrap(),
+                LandingVerdict::NotProven
+            );
+        }
+
+        #[test]
+        fn a_fork_no_row_records_is_no_row() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            git_run(&coord, &["branch", RESOLVER_FORK, &base]);
+            let tip = commit_record(
+                &coord,
+                vec![fork_row(
+                    PHASE,
+                    "dispatch/agent-other",
+                    Position::Concluded,
+                    Some(&base),
+                )],
+            );
+            assert_eq!(
+                resolve_landing(&coord, &tip, SLICE, RESOLVER_FORK).unwrap(),
+                LandingVerdict::NoRow
+            );
+            // …and an absent record is the same answer, not an error.
+            assert_eq!(
+                resolve_landing(&coord, &base, SLICE, RESOLVER_FORK).unwrap(),
+                LandingVerdict::NoRow
+            );
+        }
+
+        #[test]
+        fn read_funnel_at_yields_the_empty_record_when_absent() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            let record = read_funnel_at(&coord, &base, SLICE).unwrap();
+            assert_eq!(record, FunnelRecord::default());
+            assert_eq!(
+                record.schema, 1,
+                "an absent record still carries the schema"
+            );
+            assert!(record.rows.is_empty());
+            assert_eq!(record.position(PHASE), None, "no row ⇔ pre-spawn");
+        }
+
+        #[test]
+        fn the_sole_writer_lands_approved_transitions_and_refuses_illegal_ones() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+
+            // Illegal from the start: import before the phase was ever spawned.
+            let refused = land_funnel_transition(
+                &coord,
+                &dispatch_ref(SLICE),
+                &base,
+                SLICE,
+                PHASE,
+                &Transition::Import {
+                    fork_tip: "aaa".to_owned(),
+                    onto: base.clone(),
+                },
+                None,
+                AT,
+                &disp(),
+            )
+            .unwrap();
+            match refused {
+                FunnelLanding::Illegal(illegal) => assert_eq!(illegal.reason, "not-spawned"),
+                other => panic!("expected Illegal, got {other:?}"),
+            }
+            assert_eq!(
+                git_run(&coord, &["rev-parse", "HEAD"]),
+                base,
+                "a refusal leaves the coord tip byte-unchanged"
+            );
+
+            // The legal ladder lands one commit per transition.
+            let tip1 = land(&coord, &base, &spawn(&base));
+            let tip2 = land(
+                &coord,
+                &tip1,
+                &Transition::RecordWorkerCommit {
+                    fork_tip: "forktip".to_owned(),
+                },
+            );
+            let record = read_funnel_at(&coord, &tip2, SLICE).unwrap();
+            assert_eq!(record.position(PHASE), Some(Position::WorkerCommitted));
+            let row = record.row(PHASE).unwrap();
+            assert_eq!(row.spawn.as_ref().unwrap().base_oid, base, "spawn survives");
+            assert_eq!(row.worker_commit.as_ref().unwrap().fork_tip, "forktip");
+            assert_eq!(
+                git_run(&coord, &["rev-list", "--count", &format!("{base}..{tip2}")]),
+                "2",
+                "exactly one commit per landed transition"
+            );
+        }
+
+        #[test]
+        fn a_replay_lands_nothing() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            let tip1 = land(&coord, &base, &spawn(&base));
+            // The identical transition again: an idempotent replay, no commit.
+            let outcome = land_funnel_transition(
+                &coord,
+                &dispatch_ref(SLICE),
+                &tip1,
+                SLICE,
+                PHASE,
+                &spawn(&base),
+                None,
+                AT,
+                &disp(),
+            )
+            .unwrap();
+            assert_eq!(
+                outcome,
+                FunnelLanding::Replayed {
+                    position: Position::Spawned
+                }
+            );
+            assert_eq!(
+                git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]),
+                tip1,
+                "a replay leaves the ref where it was"
+            );
+        }
+
+        #[test]
+        fn a_lost_ref_race_retry_lands_exactly_one_transition() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            // The transition lands against `base`…
+            let tip1 = land(&coord, &base, &spawn(&base));
+            // …and a caller holding the STALE tip retries the same transition. The CAS
+            // refuses (another transition landed first).
+            let raced = land_funnel_transition(
+                &coord,
+                &dispatch_ref(SLICE),
+                &base,
+                SLICE,
+                PHASE,
+                &spawn(&base),
+                None,
+                AT,
+                &disp(),
+            )
+            .unwrap();
+            assert_eq!(
+                raced,
+                FunnelLanding::CommitRefused(CommitRefusal::LostRefRace)
+            );
+            assert_eq!(
+                git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]),
+                tip1,
+                "the refused race leaves the tip untouched"
+            );
+
+            // Recovery is: re-read the tip, re-attempt. The replay rule makes it safe —
+            // the retry lands NOTHING, so exactly one transition exists on the branch.
+            let recovered = land_funnel_transition(
+                &coord,
+                &dispatch_ref(SLICE),
+                &tip1,
+                SLICE,
+                PHASE,
+                &spawn(&base),
+                None,
+                AT,
+                &disp(),
+            )
+            .unwrap();
+            assert_eq!(
+                recovered,
+                FunnelLanding::Replayed {
+                    position: Position::Spawned
+                }
+            );
+            assert_eq!(
+                git_run(&coord, &["rev-list", "--count", &format!("{base}..{tip1}")]),
+                "1",
+                "exactly one transition landed across the race + retry"
+            );
+            let record = read_funnel_at(&coord, &tip1, SLICE).unwrap();
+            assert_eq!(record.rows.len(), 1, "one row, not a duplicate");
+        }
+
+        #[test]
+        fn the_landed_record_lives_at_the_single_sourced_path() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            let tip = land(&coord, &base, &spawn(&base));
+            let listed = git_run(&coord, &["ls-tree", "-r", "--name-only", &tip]);
+            let path = funnel_machine::funnel_record_path(SLICE);
+            assert!(listed.contains(&path), "{path} not in {listed}");
+            assert!(listed.contains("seed"), "the base tree is preserved");
+        }
+
+        // --- SL-228 PHASE-05 D1: the sole writer's TWO generalisation axes -------------
+
+        use super::super::funnel::land_funnel_transitions;
+        use crate::boundary::{BoundaryRow, Provenance as BoundaryProvenance};
+        use crate::dispatch::{compose_boundary_tree, funnel_message};
+
+        /// The heal-forward ladder a fresh import folds from no row at all.
+        fn heal_ladder(base: &str, fork_tip: &str, onto: &str) -> Vec<Transition> {
+            vec![
+                spawn(base),
+                Transition::RecordWorkerCommit {
+                    fork_tip: fork_tip.to_owned(),
+                },
+                Transition::Import {
+                    fork_tip: fork_tip.to_owned(),
+                    onto: onto.to_owned(),
+                },
+            ]
+        }
+
+        /// Fold `ts` through the multi-transition writer against `tip`.
+        fn land_many(
+            coord: &Path,
+            tip: &str,
+            ts: &[Transition],
+            base_tree: Option<&str>,
+        ) -> FunnelLanding {
+            land_funnel_transitions(
+                coord,
+                &dispatch_ref(SLICE),
+                tip,
+                SLICE,
+                PHASE,
+                ts,
+                None,
+                base_tree,
+                &funnel_message(SLICE, PHASE),
+                AT,
+                &disp(),
+            )
+            .unwrap()
+        }
+
+        #[test]
+        fn a_multi_transition_fold_lands_exactly_one_commit() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            let ladder = heal_ladder(&base, "forktip", &base);
+            let tip = match land_many(&coord, &base, &ladder, None) {
+                FunnelLanding::Landed { oid, position } => {
+                    assert_eq!(position, Position::Imported, "the fold's LAST position");
+                    oid
+                }
+                other => panic!("expected Landed, got {other:?}"),
+            };
+            // THREE transitions, ONE commit — the property that makes a kill mid-heal
+            // land nothing at all rather than a partial prefix.
+            assert_eq!(
+                git_run(&coord, &["rev-list", "--count", &format!("{base}..{tip}")]),
+                "1",
+                "one commit for the whole healed prefix"
+            );
+            // And the ONE row carries EVERY element's provenance.
+            let row = read_funnel_at(&coord, &tip, SLICE)
+                .unwrap()
+                .row(PHASE)
+                .cloned()
+                .expect("the healed row");
+            assert_eq!(row.position, Position::Imported);
+            assert_eq!(row.spawn.expect("spawn").base_oid, base);
+            assert_eq!(
+                row.worker_commit.expect("worker commit").fork_tip,
+                "forktip"
+            );
+            assert_eq!(row.import.expect("import").fork_tip, "forktip");
+        }
+
+        #[test]
+        fn a_mid_fold_refusal_lands_nothing_at_all() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            // The second element is illegal (conclude with no verify evidence), so the
+            // legal FIRST element must not land either — all-or-none.
+            let ts = vec![spawn(&base), Transition::Conclude];
+            match land_many(&coord, &base, &ts, None) {
+                FunnelLanding::Illegal(illegal) => {
+                    assert_eq!(illegal.attempted, funnel_machine::TransitionKind::Conclude);
+                    assert_eq!(illegal.current, Some(Position::Spawned));
+                }
+                other => panic!("expected Illegal, got {other:?}"),
+            }
+            assert_eq!(
+                git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]),
+                base,
+                "the tip is byte-unmoved"
+            );
+            assert!(
+                read_funnel_at(&coord, &base, SLICE)
+                    .unwrap()
+                    .rows
+                    .is_empty(),
+                "not even the legal prefix was written"
+            );
+        }
+
+        #[test]
+        fn an_all_replay_fold_lands_nothing_and_reports_replayed() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            let ladder = heal_ladder(&base, "forktip", &base);
+            let tip = match land_many(&coord, &base, &ladder, None) {
+                FunnelLanding::Landed { oid, .. } => oid,
+                other => panic!("expected Landed, got {other:?}"),
+            };
+            // The lost-response retry re-drives the ladder FOR THE NEW POSITION —
+            // `[Import]` alone, with a FRESHLY resolved `onto` (excluded from replay
+            // identity, RV-304 F-1). Nothing is written.
+            let retry = vec![Transition::Import {
+                fork_tip: "forktip".to_owned(),
+                onto: "a-freshly-resolved-tip".to_owned(),
+            }];
+            assert_eq!(
+                land_many(&coord, &tip, &retry, None),
+                FunnelLanding::Replayed {
+                    position: Position::Imported
+                }
+            );
+            assert_eq!(
+                git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]),
+                tip,
+                "a replay leaves the ref where it was"
+            );
+        }
+
+        #[test]
+        fn a_caller_supplied_base_tree_carries_a_second_payload_in_the_same_commit() {
+            // Conclude's shape (D1): `boundaries.toml` is composed into the tip's tree
+            // and handed to the sole writer as the splice base, so ONE commit carries
+            // the boundary AND the position that authorises it.
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            let row = BoundaryRow {
+                phase: PHASE.to_owned(),
+                code_start_oid: base.clone(),
+                code_end_oid: base.clone(),
+                provenance: BoundaryProvenance::Funnel,
+            };
+            let tree = compose_boundary_tree(&coord, &base, SLICE, row).unwrap();
+            let tip = match land_many(&coord, &base, &[spawn(&base)], Some(&tree)) {
+                FunnelLanding::Landed { oid, .. } => oid,
+                other => panic!("expected Landed, got {other:?}"),
+            };
+            assert_eq!(
+                git_run(&coord, &["rev-list", "--count", &format!("{base}..{tip}")]),
+                "1",
+                "boundary ⊕ position in ONE commit"
+            );
+            let listed = git_run(&coord, &["ls-tree", "-r", "--name-only", &tip]);
+            assert!(
+                listed.contains(&funnel_machine::funnel_record_path(SLICE)),
+                "the funnel record rode the commit: {listed}"
+            );
+            assert!(
+                listed.contains(".doctrine/dispatch/199/boundaries.toml"),
+                "so did the boundary: {listed}"
+            );
+        }
+
+        // --- VT-7: the Class-2 `Spawn` row lands via the create-fork path -------------
+
+        use crate::dispatch::{land_spawn_row, record_spawn};
+        use crate::worktree::{CreatedFork, SpawnFacts};
+        use std::path::PathBuf;
+
+        fn facts(coord: &Path, base: &str) -> SpawnFacts {
+            SpawnFacts {
+                coord: coord.to_path_buf(),
+                slice: SLICE,
+                phase: PHASE.to_owned(),
+                fork: "dispatch/agent-real".to_owned(),
+                base_oid: base.to_owned(),
+            }
+        }
+
+        #[test]
+        fn the_spawn_row_lands_post_act_with_the_real_fork_name_and_base_oid() {
+            // D8 order: the fork is already created by the time this runs, and the row
+            // records THAT fork — the harness-assigned name `arm-spawn` never knew.
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            land_spawn_row(&facts(&coord, &base)).expect("the row lands");
+
+            let tip = git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]);
+            let row = read_funnel_at(&coord, &tip, SLICE)
+                .unwrap()
+                .row(PHASE)
+                .cloned()
+                .expect("a row was landed");
+            assert_eq!(row.position, Position::Spawned);
+            let spawn = row.spawn.expect("the spawn provenance");
+            assert_eq!(spawn.fork, "dispatch/agent-real", "the REAL fork name");
+            assert_eq!(spawn.base_oid, base, "the base it actually forked at");
+
+            // Idempotent re-drive on identical facts: a replay writes nothing.
+            land_spawn_row(&facts(&coord, &base)).expect("a re-drive replays");
+            assert_eq!(
+                git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]),
+                tip,
+                "the replay landed no second commit"
+            );
+        }
+
+        #[test]
+        fn a_failed_spawn_landing_never_aborts_the_spawn() {
+            // D4: the fork is REAL and its path is already on stdout by the time the row
+            // is attempted. A landing failure leaves the heal-forward window import
+            // already owns — it must never turn a good spawn into a failure. Enforced by
+            // the SIGNATURE: `record_spawn` returns nothing, so there is no error for a
+            // caller to mishandle.
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            // Point the facts at a slice with NO coordination ref ⇒ the landing fails.
+            let mut broken = facts(&coord, &base);
+            broken.slice = 998;
+            assert!(
+                land_spawn_row(&broken).is_err(),
+                "the fixture really does fail to land"
+            );
+
+            // ...and folding it through `record_spawn` is a warn, not a failure.
+            record_spawn(&CreatedFork {
+                dir: PathBuf::from("/created/path"),
+                spawn: Some(broken),
+            });
+
+            // No row was invented for the unlandable slice, and the real slice's ref is
+            // untouched — the failure is inert, exactly the window import heals.
+            let tip = git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]);
+            assert_eq!(tip, base, "nothing was landed anywhere");
+        }
+
+        #[test]
+        fn a_passthrough_or_unbound_fork_gets_no_row() {
+            // A benign spawn names no funnel row, and none is invented for it.
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            record_spawn(&CreatedFork {
+                dir: PathBuf::from("/created/path"),
+                spawn: None,
+            });
+            assert_eq!(
+                git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]),
+                base,
+                "no row, no commit"
+            );
+        }
     }
 
     // --- plan_phases ordering (SL-221 PHASE-04, D-B4) ---------------------------------
@@ -4908,6 +8073,7 @@ mod tests {
             Some(repo.path().to_path_buf()),
             Some("68250bcd"),
             None,
+            None,
             vec![PathBuf::from("/nix/store")],
             true, // --no-network
         )
@@ -4935,6 +8101,7 @@ mod tests {
             Some(repo.path().to_path_buf()),
             Some("68250bcd"),
             None,
+            None,
             vec![PathBuf::from("/nix/store")],
             false,
         )
@@ -4946,6 +8113,7 @@ mod tests {
         run_arm_spawn(
             Some(repo.path().to_path_buf()),
             Some("abcd1234"),
+            None,
             None,
             vec![],
             false,
@@ -4967,7 +8135,15 @@ mod tests {
         let spawn = repo.path().join(crate::worktree::ARMING_SUBPATH);
 
         // base = None ⇒ the arming `base` file equals the repo's `git rev-parse HEAD`.
-        run_arm_spawn(Some(repo.path().to_path_buf()), None, None, vec![], false).unwrap();
+        run_arm_spawn(
+            Some(repo.path().to_path_buf()),
+            None,
+            None,
+            None,
+            vec![],
+            false,
+        )
+        .unwrap();
         let head = git(repo.path(), &["rev-parse", "HEAD"]);
         let written = std::fs::read_to_string(spawn.join("base")).unwrap();
         assert_eq!(
@@ -4980,6 +8156,7 @@ mod tests {
         run_arm_spawn(
             Some(repo.path().to_path_buf()),
             Some("abcd1234"),
+            None,
             None,
             vec![],
             false,
@@ -5074,6 +8251,30 @@ mod tests {
             classify_coord_placement(false, true),
             Err("coord-outside-root-under-claude")
         );
+    }
+
+    // --- SL-228 PHASE-01: whereami role classifier (pure — design §8) ---
+
+    #[test]
+    fn classify_worktree_role_maps_branch_and_isolation() {
+        // The primary tree is `primary` regardless of branch.
+        assert_eq!(classify_worktree_role(Some("main"), false), "primary");
+        assert_eq!(classify_worktree_role(None, false), "primary");
+        assert_eq!(
+            classify_worktree_role(Some("dispatch/228"), false),
+            "primary"
+        );
+        // A linked worktree on a NUMERIC-suffix coordination branch is `coord`.
+        assert_eq!(classify_worktree_role(Some("dispatch/228"), true), "coord");
+        // A worker fork shares the `dispatch/` prefix but has a NON-numeric agent
+        // suffix — it must classify as `fork`, not `coord` (the load-bearing case).
+        assert_eq!(
+            classify_worktree_role(Some("dispatch/agent-abc"), true),
+            "fork"
+        );
+        // Any other linked worktree is a `fork` — a `review/*` ref or a detached HEAD.
+        assert_eq!(classify_worktree_role(Some("review/064"), true), "fork");
+        assert_eq!(classify_worktree_role(None, true), "fork");
     }
 
     #[test]
@@ -5551,6 +8752,493 @@ mod tests {
                 ("PHASE-06", ReceiptStatus::NotStarted),
             ]
         );
+    }
+
+    // ==================================================================================
+    // SL-228 PHASE-05 T5 / VT-1: the `dispatch verify` pipeline (design §5).
+    // ==================================================================================
+
+    mod verify_verb {
+        use super::super::funnel::{FunnelLanding, land_funnel_transitions, read_funnel_at};
+        use super::super::{VerifyOutcome, dispatch_ref, funnel_message, verify_phase};
+        use super::{disp, git_run, primary_with_coord};
+        use crate::funnel_machine::{Position, Transition, VerifyStatus};
+        use std::path::{Path, PathBuf};
+
+        const SLICE: u32 = 199;
+        const PHASE: &str = "PHASE-01";
+        const AT: &str = "2026-07-25T09:00:00Z";
+
+        /// The committed config the fixture's coord tree carries: `gate` is the argv
+        /// under test, and `[dispatch] verify-suite` selects that cadence.
+        fn config_body(gate: &str) -> String {
+            format!("[verification]\ngate = {gate}\n\n[dispatch]\nverify-suite = \"gate\"\n")
+        }
+
+        /// A coord tree carrying a COMMITTED `doctrine.toml` (so it is not untracked
+        /// dirt) whose funnel row was then healed to `imported` WORKING-TREE-FREE —
+        /// which is precisely the state verify meets: a checkout lagging its own tip.
+        /// Returns `(tmp, coord, configured, tip)`.
+        fn coord_at_imported(gate: &str) -> (tempfile::TempDir, PathBuf, String, String) {
+            let (tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            std::fs::create_dir_all(coord.join(".doctrine")).unwrap();
+            std::fs::write(coord.join(".doctrine/doctrine.toml"), config_body(gate)).unwrap();
+            git_run(&coord, &["add", "."]);
+            git_run(&coord, &["commit", "-q", "-m", "config"]);
+            let configured = git_run(&coord, &["rev-parse", "HEAD"]);
+            let ladder = vec![
+                Transition::Spawn {
+                    fork: "dispatch/worker-a".to_owned(),
+                    base_oid: base.clone(),
+                },
+                Transition::RecordWorkerCommit {
+                    fork_tip: "forktip".to_owned(),
+                },
+                Transition::Import {
+                    fork_tip: "forktip".to_owned(),
+                    onto: configured.clone(),
+                },
+            ];
+            let tip = match land_funnel_transitions(
+                &coord,
+                &dispatch_ref(SLICE),
+                &configured,
+                SLICE,
+                PHASE,
+                &ladder,
+                None,
+                None,
+                &funnel_message(SLICE, PHASE),
+                AT,
+                &disp(),
+            )
+            .unwrap()
+            {
+                FunnelLanding::Landed { oid, .. } => oid,
+                other => panic!("expected Landed, got {other:?}"),
+            };
+            (tmp, coord, configured, tip)
+        }
+
+        /// The phase's stored verify evidence at `oid`, if any.
+        fn evidence_at(coord: &Path, oid: &str) -> Option<crate::funnel_machine::VerifyEvidence> {
+            read_funnel_at(coord, oid, SLICE)
+                .unwrap()
+                .row(PHASE)
+                .and_then(|r| r.verify.clone())
+        }
+
+        fn tip(coord: &Path) -> String {
+            git_run(coord, &["rev-parse", &dispatch_ref(SLICE)])
+        }
+
+        #[test]
+        fn a_green_suite_syncs_the_lagging_checkout_and_lands_pass_evidence() {
+            let (_tmp, coord, _configured, imported) = coord_at_imported("[\"true\"]");
+            // Precondition: the funnel record is COMMITTED but not materialized — the
+            // checkout genuinely lags, which is what the forward-sync exists for.
+            assert!(
+                !coord
+                    .join(crate::funnel_machine::funnel_record_path(SLICE))
+                    .exists(),
+                "the record is committed but not yet checked out"
+            );
+
+            let out = verify_phase(&coord, &imported, SLICE, PHASE).unwrap();
+            let landed = tip(&coord);
+            assert_eq!(
+                out,
+                VerifyOutcome::Verified {
+                    coord_tip: landed.clone(),
+                    suite: "gate".to_owned()
+                }
+            );
+            // The sync materialized the record it had proven safe to fast-forward.
+            assert!(
+                coord
+                    .join(crate::funnel_machine::funnel_record_path(SLICE))
+                    .exists(),
+                "the forward-sync materialized the reverse set"
+            );
+            // PASS evidence, pinned to the tip the suite actually ran against.
+            let stored = evidence_at(&coord, &landed).expect("evidence landed");
+            assert_eq!(stored.status, VerifyStatus::Pass);
+            assert_eq!(
+                stored.verified_oid, imported,
+                "evidence names the tested tip"
+            );
+            assert_eq!(stored.suite, "gate");
+            let record = read_funnel_at(&coord, &landed, SLICE).unwrap();
+            assert_eq!(record.position(PHASE), Some(Position::Verified));
+            // ONE commit, and it touches ONLY the funnel record — which is exactly why
+            // conclude's "identical modulo the funnel record" gate cannot self-stale.
+            assert_eq!(
+                git_run(
+                    &coord,
+                    &["rev-list", "--count", &format!("{imported}..{landed}")]
+                ),
+                "1"
+            );
+            let changed = super::super::changed_paths_utf8(&coord, &imported, &landed).unwrap();
+            assert_eq!(
+                changed,
+                vec![crate::funnel_machine::funnel_record_path(SLICE)]
+            );
+        }
+
+        #[test]
+        fn a_red_suite_lands_fail_evidence_and_keeps_the_position() {
+            let (_tmp, coord, _configured, imported) = coord_at_imported("[\"false\"]");
+            let out = verify_phase(&coord, &imported, SLICE, PHASE).unwrap();
+            match out {
+                VerifyOutcome::VerifyFailed { suite, detail } => {
+                    assert_eq!(suite, "gate");
+                    assert!(
+                        detail.contains("exited 1"),
+                        "detail names the code: {detail}"
+                    );
+                }
+                other => panic!("expected VerifyFailed, got {other:?}"),
+            }
+            let landed = tip(&coord);
+            let stored = evidence_at(&coord, &landed).expect("red evidence IS recorded");
+            assert_eq!(stored.status, VerifyStatus::Fail);
+            assert_eq!(
+                read_funnel_at(&coord, &landed, SLICE)
+                    .unwrap()
+                    .position(PHASE),
+                Some(Position::Imported),
+                "a failed verify keeps the position and updates the evidence"
+            );
+        }
+
+        #[test]
+        fn a_green_but_mutating_suite_is_recorded_as_a_failure() {
+            // The suite passes but rewrites a TRACKED file: its verdict describes bytes
+            // `verified_oid` does not, so pass evidence would be a lie.
+            let (_tmp, coord, _configured, imported) =
+                coord_at_imported("[\"sh\", \"-c\", \"echo mutated >> seed\"]");
+            match verify_phase(&coord, &imported, SLICE, PHASE).unwrap() {
+                VerifyOutcome::VerifyFailed { detail, .. } => {
+                    assert!(
+                        detail.contains("suite-mutated-tree"),
+                        "named token: {detail}"
+                    );
+                    assert!(detail.contains("seed"), "detail names the path: {detail}");
+                }
+                other => panic!("expected VerifyFailed, got {other:?}"),
+            }
+            let stored = evidence_at(&coord, &tip(&coord)).expect("evidence landed");
+            assert_eq!(
+                stored.status,
+                VerifyStatus::Fail,
+                "a green-but-mutating suite is FAIL evidence, never pass"
+            );
+        }
+
+        #[test]
+        fn a_green_untracked_creating_suite_is_recorded_as_a_failure() {
+            // Same rule from the other side: a suite that LITTERS the coord tree with
+            // unignored untracked files has also moved the tree out from under the tip.
+            let (_tmp, coord, _configured, imported) =
+                coord_at_imported("[\"sh\", \"-c\", \"echo x > litter.txt\"]");
+            match verify_phase(&coord, &imported, SLICE, PHASE).unwrap() {
+                VerifyOutcome::VerifyFailed { detail, .. } => {
+                    assert!(detail.contains("suite-mutated-tree"), "{detail}");
+                    assert!(detail.contains("litter.txt"), "{detail}");
+                }
+                other => panic!("expected VerifyFailed, got {other:?}"),
+            }
+            assert_eq!(
+                evidence_at(&coord, &tip(&coord)).expect("evidence").status,
+                VerifyStatus::Fail
+            );
+        }
+
+        #[test]
+        fn a_suite_that_cannot_run_refuses_and_lands_no_evidence() {
+            // D5 — "the suite did not run" is a REFUSAL, not red evidence.
+            let (_tmp, coord, _configured, imported) =
+                coord_at_imported("[\"doctrine-no-such-program-xyzzy\"]");
+            match verify_phase(&coord, &imported, SLICE, PHASE).unwrap() {
+                VerifyOutcome::Refused { reason, detail } => {
+                    assert_eq!(reason, "verify-suite-unresolved");
+                    assert!(detail.contains("verify-suite"), "names the key: {detail}");
+                    assert!(
+                        detail.contains("doctrine-no-such-program-xyzzy"),
+                        "names the program: {detail}"
+                    );
+                }
+                other => panic!("expected Refused, got {other:?}"),
+            }
+            assert_eq!(tip(&coord), imported, "nothing landed");
+            assert!(
+                evidence_at(&coord, &imported).is_none(),
+                "no verdict exists, so no evidence may be recorded"
+            );
+        }
+
+        #[test]
+        fn an_illegal_verify_refuses_before_any_sync_or_suite() {
+            // No funnel row at all ⇒ `preflight` refuses `not-spawned` at beat 1. A
+            // suite that would have poisoned the tree never runs, and the lagging
+            // checkout is left exactly as found (nothing synced).
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            std::fs::write(coord.join("scratch.txt"), "operator work\n").unwrap();
+            match verify_phase(&coord, &base, SLICE, PHASE).unwrap() {
+                VerifyOutcome::Refused { reason, detail } => {
+                    assert_eq!(reason, "not-spawned");
+                    assert!(detail.contains("expected: spawn"), "{detail}");
+                }
+                other => panic!("expected Refused, got {other:?}"),
+            }
+            assert_eq!(
+                std::fs::read_to_string(coord.join("scratch.txt")).unwrap(),
+                "operator work\n",
+                "the gate refused BEFORE the sync — the tree is untouched"
+            );
+        }
+
+        #[test]
+        fn an_operator_edit_in_the_reverse_set_refuses_and_restores_nothing() {
+            // I2 / the no-discard invariant. Advance the branch working-tree-free over
+            // a TRACKED path (so the reverse set is not just the funnel record), then
+            // let the operator edit that path. Verify must refuse and touch NOTHING.
+            let (_tmp, coord, _configured, imported) = coord_at_imported("[\"true\"]");
+            let advanced_tree = crate::git::tree_with_file(
+                &coord,
+                &format!("{imported}^{{tree}}"),
+                "seed",
+                "advanced\n",
+            )
+            .unwrap();
+            let advanced = git_run(
+                &coord,
+                &[
+                    "commit-tree",
+                    &advanced_tree,
+                    "-p",
+                    &imported,
+                    "-m",
+                    &funnel_message(SLICE, PHASE),
+                ],
+            );
+            git_run(&coord, &["update-ref", &dispatch_ref(SLICE), &advanced]);
+
+            // The operator's own edit to a path the fast-forward WOULD have rewritten.
+            std::fs::write(coord.join("seed"), "operator work\n").unwrap();
+
+            match verify_phase(&coord, &advanced, SLICE, PHASE).unwrap() {
+                VerifyOutcome::Refused { reason, detail } => {
+                    assert_eq!(reason, "verify-tree-dirty");
+                    assert!(
+                        detail.contains("seed"),
+                        "names the offending path: {detail}"
+                    );
+                }
+                other => panic!("expected Refused, got {other:?}"),
+            }
+            assert_eq!(
+                std::fs::read_to_string(coord.join("seed")).unwrap(),
+                "operator work\n",
+                "the restore was NOT performed — no discard, ever"
+            );
+            assert!(
+                !coord
+                    .join(crate::funnel_machine::funnel_record_path(SLICE))
+                    .exists(),
+                "no partial sync either: the refusal is all-or-none"
+            );
+            assert_eq!(tip(&coord), advanced, "and nothing was landed");
+        }
+
+        #[test]
+        fn an_unignored_untracked_file_refuses_the_sync() {
+            let (_tmp, coord, _configured, imported) = coord_at_imported("[\"true\"]");
+            std::fs::write(coord.join("notes.txt"), "operator scratch\n").unwrap();
+            match verify_phase(&coord, &imported, SLICE, PHASE).unwrap() {
+                VerifyOutcome::Refused { reason, detail } => {
+                    assert_eq!(reason, "verify-tree-dirty");
+                    assert!(detail.contains("notes.txt"), "{detail}");
+                }
+                other => panic!("expected Refused, got {other:?}"),
+            }
+            assert_eq!(tip(&coord), imported, "nothing landed");
+        }
+
+        #[test]
+        fn an_already_synced_checkout_needs_no_restore_at_all() {
+            // S == tip: the checkout ALREADY describes the tip, so the reverse set is
+            // empty, the sync is a pure no-op, and verify proceeds straight to the
+            // suite. (Materialize the record by hand first, exactly as a prior verify's
+            // own forward-sync would have left it.)
+            let (_tmp, coord, _configured, imported) = coord_at_imported("[\"true\"]");
+            git_run(
+                &coord,
+                &[
+                    "restore",
+                    &format!("--source={imported}"),
+                    "--staged",
+                    "--worktree",
+                    "--",
+                    ".",
+                ],
+            );
+            assert!(
+                git_run(&coord, &["status", "--porcelain"]).is_empty(),
+                "precondition: the checkout is in sync with its tip"
+            );
+            let out = verify_phase(&coord, &imported, SLICE, PHASE).unwrap();
+            let landed = tip(&coord);
+            assert_eq!(
+                out,
+                VerifyOutcome::Verified {
+                    coord_tip: landed.clone(),
+                    suite: "gate".to_owned()
+                }
+            );
+            assert_eq!(
+                evidence_at(&coord, &landed).expect("evidence").verified_oid,
+                imported
+            );
+        }
+
+        #[test]
+        fn re_verifying_at_a_moved_tip_records_fresh_evidence_for_that_tip() {
+            // Evidence identity is `(status, verified_oid)`: once the tip has moved
+            // (here, by the previous evidence commit itself), a re-run is a FRESH act,
+            // not a replay — the stored evidence is re-pinned to the new tip.
+            let (_tmp, coord, _configured, imported) = coord_at_imported("[\"true\"]");
+            verify_phase(&coord, &imported, SLICE, PHASE).unwrap();
+            let first = tip(&coord);
+            verify_phase(&coord, &first, SLICE, PHASE).unwrap();
+            let second = tip(&coord);
+            assert_ne!(second, first, "a moved tip is fresh evidence, not a replay");
+            assert_eq!(
+                evidence_at(&coord, &second).expect("evidence").verified_oid,
+                first,
+                "the evidence re-pins to the tip the suite just ran against"
+            );
+            // Still exactly one commit per run — the record is the only payload.
+            assert_eq!(
+                git_run(
+                    &coord,
+                    &["rev-list", "--count", &format!("{first}..{second}")]
+                ),
+                "1"
+            );
+        }
+    }
+
+    // --- SL-228 PHASE-05 T8/R1: the funnel receipt matrix (design §9) -----------------
+
+    /// The four sheet READS the matrix distinguishes, as inputs to
+    /// `derive_receipt_status` (a `Result`, so a read error is representable).
+    fn sheet_read(kind: &str) -> anyhow::Result<Option<String>> {
+        match kind {
+            "err" => Err(anyhow::anyhow!("sheet unreadable")),
+            "absent" => Ok(None),
+            other => Ok(Some(other.to_owned())),
+        }
+    }
+
+    /// Every sheet input the matrix's row axis must cover — the four recognised
+    /// statuses plus absent, an IO error, and an UNRECOGNISED string.
+    const ALL_SHEETS: &[&str] = &[
+        "err",
+        "absent",
+        "planned",
+        "in_progress",
+        "blocked",
+        "completed",
+        "wat",
+    ];
+
+    #[test]
+    fn receipt_status_with_no_position_is_byte_identical_to_the_pre_funnel_derivation() {
+        // R1 — the behaviour-preservation proof, stated as an explicit fixture rather
+        // than inferred from the callers: over the WHOLE (sheet × boundary) space,
+        // `position = None` must answer exactly what the pre-funnel rules say.
+        for sheet in ALL_SHEETS {
+            for has_boundary in [false, true] {
+                let expected = match (*sheet, has_boundary) {
+                    ("err" | "wat", _) => ReceiptStatus::Unknown,
+                    ("absent" | "planned", _) => ReceiptStatus::NotStarted,
+                    ("in_progress", _) => ReceiptStatus::InProgress,
+                    ("blocked", _) => ReceiptStatus::Blocked,
+                    ("completed", true) => ReceiptStatus::Completed,
+                    ("completed", false) => ReceiptStatus::ConcludeIncomplete,
+                    other => panic!("unhandled fixture {other:?}"),
+                };
+                assert_eq!(
+                    derive_receipt_status(sheet_read(sheet), has_boundary, None),
+                    expected,
+                    "sheet={sheet} boundary={has_boundary} (position = None)"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn receipt_status_with_a_position_follows_the_ordered_matrix() {
+        use ReceiptStatus as R;
+        // The §9 matrix, restated INDEPENDENTLY of the implementation and driven over
+        // the full (position × sheet × boundary) product. `Concluded`/`Reaped` are the
+        // at-or-past band; everything below is the running band.
+        let expected = |position: Position, sheet: &str, boundary: bool| -> R {
+            if position >= Position::Concluded {
+                // Rows 1-2: the committed tiers decide; the sheet cannot overrule them.
+                return if boundary {
+                    R::Completed
+                } else {
+                    R::ConcludeIncomplete
+                };
+            }
+            if boundary {
+                return R::ConcludeIncomplete; // row 3: boundary ahead of authority
+            }
+            match sheet {
+                "err" | "wat" => R::Unknown,           // row 4: fail loud
+                "completed" => R::ConcludeIncomplete,  // row 5: sheet ahead of authority
+                "in_progress" => R::InProgress,        // row 6
+                "blocked" => R::Blocked,               // row 6
+                "absent" | "planned" => R::InProgress, // row 7: funnel activity started
+                other => panic!("unhandled fixture {other:?}"),
+            }
+        };
+        let positions = [
+            Position::Spawned,
+            Position::WorkerCommitted,
+            Position::Imported,
+            Position::Verified,
+            Position::Concluded,
+            Position::Reaped,
+        ];
+        for position in positions {
+            for sheet in ALL_SHEETS {
+                for has_boundary in [false, true] {
+                    assert_eq!(
+                        derive_receipt_status(sheet_read(sheet), has_boundary, Some(position)),
+                        expected(position, sheet, has_boundary),
+                        "position={position:?} sheet={sheet} boundary={has_boundary}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_lagging_or_unreadable_sheet_never_masks_durable_completion() {
+        // Row 1, called out on its own because it IS the conclude kill-window
+        // guarantee (T3): the CAS lands boundary ⊕ position, the sheet flip is a
+        // trailing projection, and a crash in between must still read `Completed`.
+        for sheet in ["err", "absent", "in_progress", "planned", "wat"] {
+            assert_eq!(
+                derive_receipt_status(sheet_read(sheet), true, Some(Position::Concluded)),
+                ReceiptStatus::Completed,
+                "a {sheet} sheet must not mask a concluded + bounded phase"
+            );
+        }
     }
 
     /// VT-2 (SL-206 PHASE-02): `run_status` delegates its per-phase rows to
@@ -7468,6 +11156,940 @@ mod tests {
                 .expect_err("an ambiguous label refuses")
                 .to_string();
             assert!(err.contains("ambiguous"), "{err}");
+        }
+    }
+
+    // ==============================================================================
+    // Safe-commit guard (SL-228 PHASE-02) — design §7. VT-1 (guard), VT-2 (hook-check),
+    // VA-1 (embed + chained-hook fixture).
+    // ==============================================================================
+
+    fn commit_repo() -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = std::fs::canonicalize(tmp.path()).unwrap();
+        init_repo(&dir);
+        (tmp, dir)
+    }
+
+    fn mk(kind: ChangeKind, p: &str) -> StagedChange {
+        StagedChange {
+            kind,
+            path: p.to_string(),
+        }
+    }
+
+    // ---- VT-1: the pure safe-commit guard ---------------------------------------
+
+    #[test]
+    fn classify_commit_refuses_undeclared_path() {
+        let err = classify_commit(&["a.txt".into()], &[mk(ChangeKind::Modified, "b.txt")])
+            .expect_err("b.txt is outside the declared pathspec");
+        assert_eq!(err.token(), "commit-undeclared-path");
+        assert_eq!(err.paths(), ["b.txt"]);
+    }
+
+    #[test]
+    fn classify_commit_refuses_undeclared_deletion_under_declared_dir() {
+        // A declared DIRECTORY covers the path, but a deletion must be EXPLICITLY named.
+        let err = classify_commit(&["dir".into()], &[mk(ChangeKind::Deleted, "dir/gone.txt")])
+            .expect_err("a deletion under a declared dir must be explicitly named");
+        assert_eq!(err.token(), "commit-undeclared-deletion");
+        assert_eq!(err.paths(), ["dir/gone.txt"]);
+    }
+
+    #[test]
+    fn classify_commit_passes_and_returns_named_deletion_set() {
+        let changes = [
+            mk(ChangeKind::Deleted, "del.txt"),
+            mk(ChangeKind::Modified, "mod.txt"),
+            mk(ChangeKind::Added, "new.txt"),
+        ];
+        let dels = classify_commit(
+            &["del.txt".into(), "mod.txt".into(), "new.txt".into()],
+            &changes,
+        )
+        .expect("all changes declared, the deletion explicitly named");
+        assert_eq!(dels, ["del.txt"], "the validated scoped-env deletion set");
+    }
+
+    #[test]
+    fn path_covered_is_component_anchored_not_substring() {
+        assert!(path_covered("dir/child.txt", &["dir".into()]));
+        assert!(
+            !path_covered("dir-other/x", &["dir".into()]),
+            "a sibling sharing a substring prefix is NOT covered"
+        );
+        assert!(
+            path_covered("anything/here", &[".".into()]),
+            "`.` covers the tree"
+        );
+    }
+
+    #[test]
+    fn env_token_names_are_single_sourced() {
+        assert_eq!(ENV_ALLOWED_DELETIONS, "DOCTRINE_ALLOWED_DELETIONS");
+        assert_eq!(ENV_ALLOW_DELETE, "DOCTRINE_ALLOW_DELETE");
+    }
+
+    /// A FAKE pre-commit at the coord's default hooks dir that records
+    /// `$DOCTRINE_ALLOWED_DELETIONS` and passes — makes the child-env handoff observable
+    /// without a real doctrine binary on PATH.
+    fn install_recording_hook(coord: &Path, sentinel: &Path) {
+        let git_dir = git(coord, &["rev-parse", "--absolute-git-dir"]);
+        let hooks = Path::new(&git_dir).join("hooks");
+        std::fs::create_dir_all(&hooks).unwrap();
+        let hp = hooks.join("pre-commit");
+        std::fs::write(
+            &hp,
+            format!(
+                "#!/bin/sh\nprintf '%s' \"$DOCTRINE_ALLOWED_DELETIONS\" > '{}'\nexit 0\n",
+                sentinel.display()
+            ),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&hp, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    #[test]
+    fn run_commit_declared_deletion_lands_and_scopes_allowed_deletions_to_child() {
+        let (_tmp, dir) = commit_repo();
+        std::fs::write(dir.join("del.txt"), "d\n").unwrap();
+        std::fs::write(dir.join("mod.txt"), "m0\n").unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "seed files"]);
+        std::fs::remove_file(dir.join("del.txt")).unwrap();
+        std::fs::write(dir.join("mod.txt"), "m1\n").unwrap();
+
+        let sentinel = dir.join("sentinel");
+        install_recording_hook(&dir, &sentinel);
+        assert!(std::env::var(ENV_ALLOWED_DELETIONS).is_err());
+
+        run_commit(
+            Some(dir.clone()),
+            228,
+            "msg",
+            &["del.txt".into(), "mod.txt".into()],
+        )
+        .expect("declared deletion + modification commits cleanly");
+
+        let recorded = git(&dir, &["show", "--name-status", "--format=", "HEAD"]);
+        assert!(recorded.contains("D\tdel.txt"), "recorded: {recorded}");
+        assert!(recorded.contains("M\tmod.txt"), "recorded: {recorded}");
+        // The CHILD saw exactly the validated deletion set…
+        assert_eq!(std::fs::read_to_string(&sentinel).unwrap(), "del.txt");
+        // …and the verb's OWN process never carried the var (child-scoped only).
+        assert!(std::env::var(ENV_ALLOWED_DELETIONS).is_err());
+    }
+
+    #[test]
+    fn run_commit_refuses_unnamed_deletion_without_touching_the_real_index() {
+        let (_tmp, dir) = commit_repo();
+        std::fs::create_dir_all(dir.join("d")).unwrap();
+        std::fs::write(dir.join("d/x.txt"), "x\n").unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "seed d"]);
+        let head_before = git(&dir, &["rev-parse", "HEAD"]);
+        std::fs::remove_file(dir.join("d/x.txt")).unwrap();
+
+        let err = run_commit(Some(dir.clone()), 228, "m", &["d".into()])
+            .expect_err("a deletion under the declared dir was not explicitly named")
+            .to_string();
+        assert!(err.contains("commit-undeclared-deletion"), "{err}");
+        assert_eq!(
+            git(&dir, &["rev-parse", "HEAD"]),
+            head_before,
+            "no commit landed"
+        );
+        assert!(
+            git(&dir, &["diff", "--cached", "--name-status"]).is_empty(),
+            "the throwaway-index validation left the real index byte-clean"
+        );
+    }
+
+    // ---- VT-2: hook-check (deletion + reversion arms) ---------------------------
+
+    /// A repo whose file `path` was funnel-advanced `v0`→`v1` (HEAD is the funnel commit).
+    fn repo_with_funnel_advance(path: &str, v0: &str, v1: &str) -> (tempfile::TempDir, PathBuf) {
+        let (tmp, dir) = commit_repo();
+        std::fs::write(dir.join(path), v0).unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "pre-advance"]);
+        std::fs::write(dir.join(path), v1).unwrap();
+        git(&dir, &["add", "-A"]);
+        git(
+            &dir,
+            &["commit", "-q", "-m", &funnel_message(228, "PHASE-01")],
+        );
+        (tmp, dir)
+    }
+
+    #[test]
+    fn is_funnel_reversion_only_when_head_advanced_and_staged_reverts() {
+        assert!(is_funnel_reversion(
+            Some("base"),
+            Some("head"),
+            Some("base")
+        ));
+        assert!(!is_funnel_reversion(
+            Some("base"),
+            Some("head"),
+            Some("fwd")
+        ));
+        assert!(!is_funnel_reversion(Some("b"), Some("b"), Some("b")));
+        assert!(!is_funnel_reversion(None, Some("head"), None));
+    }
+
+    #[test]
+    fn hook_check_deletion_arm_refuses_staged_deletion() {
+        let (_tmp, dir) = commit_repo();
+        std::fs::write(dir.join("f.txt"), "x\n").unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "seed"]);
+        git(&dir, &["rm", "-q", "f.txt"]); // the classic ISS-234 mass-deletion shape
+
+        match evaluate_hook(&dir, false, &BTreeSet::new()).unwrap() {
+            HookOutcome::Refuse {
+                deletions,
+                reversions,
+            } => {
+                assert_eq!(deletions, ["f.txt"]);
+                assert!(reversions.is_empty());
+            }
+            other => panic!("expected Refuse, got {other:?}"),
+        }
+        // The scoped allow-list skips exactly that path → Pass.
+        let allow: BTreeSet<String> = ["f.txt".to_string()].into_iter().collect();
+        assert_eq!(
+            evaluate_hook(&dir, false, &allow).unwrap(),
+            HookOutcome::Pass
+        );
+        // DOCTRINE_ALLOW_DELETE bypasses → Pass.
+        assert_eq!(
+            evaluate_hook(&dir, true, &BTreeSet::new()).unwrap(),
+            HookOutcome::Pass
+        );
+    }
+
+    #[test]
+    fn hook_check_reversion_arm_refuses_modification_only_reverse_diff() {
+        let (_tmp, dir) = repo_with_funnel_advance("x.txt", "v0\n", "v1\n");
+        // Stage a revert of x.txt to its pre-advance blob — a modification, NO deletion.
+        std::fs::write(dir.join("x.txt"), "v0\n").unwrap();
+        git(&dir, &["add", "x.txt"]);
+        match evaluate_hook(&dir, false, &BTreeSet::new()).unwrap() {
+            HookOutcome::Refuse {
+                deletions,
+                reversions,
+            } => {
+                assert!(
+                    deletions.is_empty(),
+                    "no deletion — the deletion arm alone would wave this reversion through"
+                );
+                assert_eq!(reversions, ["x.txt"]);
+            }
+            other => panic!("expected Refuse, got {other:?}"),
+        }
+        // A FORWARD edit (staged ≠ pre-advance) is NOT a reversion.
+        std::fs::write(dir.join("x.txt"), "v2\n").unwrap();
+        git(&dir, &["add", "x.txt"]);
+        assert_eq!(
+            evaluate_hook(&dir, false, &BTreeSet::new()).unwrap(),
+            HookOutcome::Pass
+        );
+    }
+
+    #[test]
+    fn hook_check_mixed_add_modify_delete_refuses_both_arms() {
+        let (_tmp, dir) = repo_with_funnel_advance("x.txt", "v0\n", "v1\n");
+        std::fs::write(dir.join("new.txt"), "n\n").unwrap(); // A — inert
+        std::fs::write(dir.join("x.txt"), "v0\n").unwrap(); // M — reversion
+        git(&dir, &["rm", "-q", "a.txt"]); // D
+        git(&dir, &["add", "-A"]);
+        match evaluate_hook(&dir, false, &BTreeSet::new()).unwrap() {
+            HookOutcome::Refuse {
+                deletions,
+                reversions,
+            } => {
+                assert_eq!(deletions, ["a.txt"]);
+                assert_eq!(reversions, ["x.txt"], "the Added new.txt is inert");
+            }
+            other => panic!("expected Refuse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn hook_check_allowed_deletion_still_refuses_sibling_reversion() {
+        let (_tmp, dir) = repo_with_funnel_advance("x.txt", "v0\n", "v1\n");
+        git(&dir, &["rm", "-q", "a.txt"]); // declared deletion — allow-listed below
+        std::fs::write(dir.join("x.txt"), "v0\n").unwrap(); // reversion — never allow-listed
+        git(&dir, &["add", "-A"]);
+        let allow: BTreeSet<String> = ["a.txt".to_string()].into_iter().collect();
+        match evaluate_hook(&dir, false, &allow).unwrap() {
+            HookOutcome::Refuse {
+                deletions,
+                reversions,
+            } => {
+                assert!(deletions.is_empty(), "the declared deletion is allowed…");
+                assert_eq!(
+                    reversions,
+                    ["x.txt"],
+                    "…but the reversion arm never sleeps (RV-304 F-5)"
+                );
+            }
+            other => panic!("expected Refuse, got {other:?}"),
+        }
+        // Only the operator's DOCTRINE_ALLOW_DELETE bypasses BOTH arms.
+        assert_eq!(
+            evaluate_hook(&dir, true, &allow).unwrap(),
+            HookOutcome::Pass
+        );
+    }
+
+    // ---- VA-1: embed + chained-hook fixture -------------------------------------
+
+    #[test]
+    fn hook_asset_is_embedded_via_install_root() {
+        let bytes = crate::asset_source::read_bytes(HOOK_ASSET_KEY)
+            .expect("git-hooks/pre-commit is embedded via the existing install/ root");
+        assert!(!bytes.is_empty());
+        assert!(
+            std::str::from_utf8(&bytes)
+                .unwrap()
+                .contains("dispatch hook-check"),
+            "the shipped script delegates the reversion arm to `doctrine dispatch hook-check`"
+        );
+    }
+
+    #[test]
+    fn install_coord_hook_installs_and_chains_the_operator_hook() {
+        let (_tmp, _primary, coord, _base, _bt) = primary_with_coord(228);
+        install_coord_hook(&coord).unwrap();
+
+        assert_eq!(
+            git(&coord, &["config", "--bool", "extensions.worktreeConfig"]),
+            "true"
+        );
+        let wt_hooks = git(&coord, &["config", "--worktree", "core.hooksPath"]);
+        assert!(wt_hooks.contains(COORD_HOOKS_DIR), "hooks dir: {wt_hooks}");
+        assert!(Path::new(&wt_hooks).join("pre-commit").exists());
+
+        // An operator hook at LOCAL scope must keep firing via the runtime chain.
+        let op = coord.join("op-hooks");
+        std::fs::create_dir_all(&op).unwrap();
+        let sentinel = coord.join("op-fired");
+        std::fs::write(
+            op.join("pre-commit"),
+            format!("#!/bin/sh\ntouch '{}'\nexit 0\n", sentinel.display()),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(
+                op.join("pre-commit"),
+                std::fs::Permissions::from_mode(0o755),
+            )
+            .unwrap();
+        }
+        git(
+            &coord,
+            &["config", "--local", "core.hooksPath", op.to_str().unwrap()],
+        );
+
+        // Commit a benign add. DOCTRINE_ALLOW_DELETE=1 lets the shipped script skip the
+        // (absent) doctrine binary and exercise the CHAIN leg to the operator hook.
+        std::fs::write(coord.join("benign.txt"), "hi\n").unwrap();
+        git(&coord, &["add", "benign.txt"]);
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&coord)
+            .args(["commit", "-m", "benign"])
+            .env("DOCTRINE_ALLOW_DELETE", "1")
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "commit failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            sentinel.exists(),
+            "the operator's LOCAL-scope pre-commit fired via the chain"
+        );
+    }
+
+    /// SL-228 PHASE-09 (ISS-249) — the ABSENT-chain cell REQ-389 never had.
+    ///
+    /// The shipped hook runs under `set -eu` and resolved its chain target with
+    /// `next_real="$(resolve "$next")"`. `resolve` exits non-zero when the target does
+    /// not exist, and an assignment from a command substitution carries that status, so
+    /// the hook DIED there — before the `[ -x "$next" ]` guard written for exactly that
+    /// case. Git then refused every commit in a coordination worktree with no
+    /// diagnostic, and "no chained hook anywhere" is the DEFAULT shape a client project
+    /// installs into.
+    ///
+    /// The absence is PINNED, not assumed: the fixture does not isolate the developer's
+    /// real `--global` config, so `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` are aimed at
+    /// `/dev/null`. The chain then falls back to the common gitdir's `hooks/`, which
+    /// holds only `*.sample` — no `pre-commit`.
+    #[test]
+    fn install_coord_hook_permits_commit_when_no_chained_hook_exists() {
+        let (tmp, primary, coord, _base, _bt) = primary_with_coord(228);
+        install_coord_hook(&coord).unwrap();
+        assert!(
+            !primary
+                .join(".git")
+                .join("hooks")
+                .join("pre-commit")
+                .exists(),
+            "fixture precondition: the chain fallback holds no pre-commit"
+        );
+
+        // A stub stands in for the `dispatch hook-check` leg: a unit test inside src/
+        // has no CARGO_BIN_EXE_doctrine, and the pass path must run THROUGH the check
+        // rather than around it (DOCTRINE_ALLOW_DELETE would skip the leg entirely).
+        let stub = |name: &str, code: i32| -> PathBuf {
+            let p = tmp.path().join(name);
+            std::fs::write(&p, format!("#!/bin/sh\nexit {code}\n")).unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt as _;
+                std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            p
+        };
+        let commit = |file: &str, bin: &Path| -> std::process::Output {
+            std::fs::write(coord.join(file), "x\n").unwrap();
+            git(&coord, &["add", file]);
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&coord)
+                .args(["commit", "-m", file])
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                .env("DOCTRINE_BIN", bin)
+                .env_remove("DOCTRINE_ALLOW_DELETE")
+                .output()
+                .unwrap()
+        };
+
+        // (a) the regression: hook-check PASSES, no chain exists ⇒ the commit lands.
+        let out = commit("benign.txt", &stub("hook-check-pass", 0));
+        assert!(
+            out.status.success(),
+            "an absent chain target must not abort the hook: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+
+        // (b) the refusal is preserved: same absent chain, hook-check REFUSES.
+        let out = commit("refused.txt", &stub("hook-check-refuse", 1));
+        assert!(
+            !out.status.success(),
+            "a refusing hook-check must still block the commit"
+        );
+
+        // (c) fail-closed is preserved: the binary is absent, chain still absent.
+        let out = commit("failclosed.txt", &tmp.path().join("no-such-doctrine"));
+        assert!(
+            !out.status.success(),
+            "a missing doctrine binary must still refuse"
+        );
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("fail-closed"),
+            "the fail-closed refusal keeps its diagnostic: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    // ==================================================================================
+    // SL-228 PHASE-06 T8 / VT-1: the `dispatch next` oracle (design §6).
+    //
+    // The oracle's contract is that it is a READ PROJECTION of the state machine, so
+    // these tests drive the projection (`next_kind`) and the ladder (`select_next`)
+    // PURELY, with constructed rows and no git at all — then one shell test proves the
+    // wiring. Keywords VT-1 mandates: `triage-verify-failure`, `await-worker`,
+    // `all-reaped`.
+    // ==================================================================================
+
+    mod next_oracle {
+        use super::super::funnel::{FunnelLanding, land_funnel_transitions};
+        use super::super::{
+            NextKind, NextSelection, PhasePrescription, dispatch_ref, next_command, next_core,
+            next_kind, render_next, select_next,
+        };
+        use super::{disp, primary_with_coord};
+        use crate::funnel_machine::{
+            Expected, PhaseRow, Position, SpawnRecord, StampRecord, Transition, TransitionFacts,
+            VerifyEvidence, VerifyStatus, expected_next,
+        };
+        use std::collections::BTreeSet;
+        use std::path::Path;
+
+        const SLICE: u32 = 228;
+        const TIP: &str = "c0ffee00";
+        const OTHER: &str = "deadbeef";
+        const AT: &str = "2026-07-26T09:00:00Z";
+        const FORK: &str = "dispatch/agent-a";
+        const BASE: &str = "ba5e0000";
+
+        /// A fully provisioned row at `position` — the spawn record is present, so the
+        /// command renderer has every fact D-P6-4 needs.
+        fn row(id: &str, position: Position) -> PhaseRow {
+            PhaseRow {
+                id: id.to_owned(),
+                position,
+                updated_at: AT.to_owned(),
+                spawn: Some(SpawnRecord {
+                    fork: FORK.to_owned(),
+                    base_oid: BASE.to_owned(),
+                    at: AT.to_owned(),
+                }),
+                worker_commit: None,
+                import: None,
+                verify: None,
+                conclude: Some(StampRecord { at: AT.to_owned() }),
+                reap: None,
+            }
+        }
+
+        /// The same row carrying stored verify evidence.
+        fn with_evidence(mut r: PhaseRow, status: VerifyStatus, verified_oid: &str) -> PhaseRow {
+            r.verify = Some(VerifyEvidence {
+                status,
+                verified_oid: verified_oid.to_owned(),
+                suite: "gate".to_owned(),
+                at: AT.to_owned(),
+            });
+            r
+        }
+
+        /// The machine's prescription for `r` at the fixture tip, with no changed-path
+        /// set established (the shell's `None` — conclude then fails closed).
+        fn prescribe(r: &PhaseRow) -> PhasePrescription<'_> {
+            let facts = TransitionFacts {
+                row: Some(r),
+                coord_tip: TIP,
+                paths_since_verify: None,
+            };
+            PhasePrescription {
+                expected: expected_next(Some(r.position), &facts),
+                row: r,
+            }
+        }
+
+        /// The prescription with an explicit changed-path set (conclude's D3 gate).
+        fn prescribe_with<'a>(r: &'a PhaseRow, paths: &'a [String]) -> PhasePrescription<'a> {
+            let facts = TransitionFacts {
+                row: Some(r),
+                coord_tip: TIP,
+                paths_since_verify: Some(paths),
+            };
+            PhasePrescription {
+                expected: expected_next(Some(r.position), &facts),
+                row: r,
+            }
+        }
+
+        fn recorded<'a>(rows: &[&'a PhaseRow]) -> BTreeSet<&'a str> {
+            rows.iter().map(|r| r.id.as_str()).collect()
+        }
+
+        /// The rendered prescription for a ladder run — the whole oracle minus the git
+        /// reads, which is exactly what VT-1 drives.
+        fn oracle(
+            mid: &[PhasePrescription<'_>],
+            known: &BTreeSet<&str>,
+            ready: &[String],
+        ) -> super::super::NextCore {
+            let selection = select_next(mid, known, ready);
+            render_next(SLICE, TIP, &selection, mid)
+        }
+
+        // --- (a) totality ------------------------------------------------------------
+
+        /// EX-1 — the oracle is TOTAL over its domain and agrees with `expected_next`
+        /// BY CONSTRUCTION. Drives the full cross product of position × stored evidence
+        /// × changed-path set: every cell must yield EXACTLY ONE prescription, never
+        /// panic, and carry the kind `next_kind` projects from the machine's own
+        /// `expected_next`. A second oracle (a fresh `match position`) could not pass
+        /// this without reproducing the table, which is the point.
+        #[test]
+        fn the_oracle_is_total_and_agrees_with_expected_next() {
+            let positions = [
+                Position::Spawned,
+                Position::WorkerCommitted,
+                Position::Imported,
+                Position::Verified,
+                Position::Concluded,
+                Position::Reaped,
+            ];
+            let evidence = [
+                None,
+                Some((VerifyStatus::Pass, TIP)),
+                Some((VerifyStatus::Pass, OTHER)),
+                Some((VerifyStatus::Fail, TIP)),
+                Some((VerifyStatus::Fail, OTHER)),
+            ];
+            let funnel_only = vec![format!(".doctrine/dispatch/{SLICE:03}/funnel.toml")];
+            let code = vec!["src/dispatch.rs".to_owned()];
+            let path_sets: [Option<&[String]>; 4] =
+                [None, Some(&[]), Some(&funnel_only), Some(&code)];
+
+            let mut seen = BTreeSet::new();
+            for position in positions {
+                for ev in &evidence {
+                    for paths in path_sets {
+                        let r = match ev {
+                            Some((status, oid)) => {
+                                with_evidence(row("PHASE-02", position), *status, oid)
+                            }
+                            None => row("PHASE-02", position),
+                        };
+                        let facts = TransitionFacts {
+                            row: Some(&r),
+                            coord_tip: TIP,
+                            paths_since_verify: paths,
+                        };
+                        let expected = expected_next(Some(position), &facts);
+                        let want = next_kind(expected, Some(position));
+                        seen.insert(want.as_str());
+
+                        let mid: Vec<PhasePrescription<'_>> = if position == Position::Reaped {
+                            Vec::new()
+                        } else {
+                            vec![PhasePrescription { expected, row: &r }]
+                        };
+                        let known = recorded(&[&r]);
+                        let core = oracle(&mid, &known, &[]);
+                        assert_eq!(
+                            core.kind, want,
+                            "position {position:?} / evidence {ev:?} / paths {paths:?} \
+                             must project the machine's own prescription {expected:?}"
+                        );
+                        if position == Position::Reaped {
+                            assert_eq!(core.kind, NextKind::AllReaped);
+                            assert_eq!(core.phase, None);
+                        } else {
+                            assert_eq!(core.phase.as_deref(), Some("PHASE-02"));
+                        }
+                        assert!(!core.detail.is_empty(), "every rung explains itself");
+                    }
+                }
+            }
+            // The cross product must actually exercise the funnel-shaped kinds, not
+            // just one corner of the table.
+            for want in [
+                "await-worker",
+                "import",
+                "verify",
+                "reverify-stale",
+                "triage-verify-failure",
+                "conclude",
+                "reap",
+                "all-reaped",
+            ] {
+                assert!(seen.contains(want), "totality sweep never reached {want}");
+            }
+        }
+
+        /// D-P6-1 — `next_kind` is expected-driven; the ONLY arm permitted to read the
+        /// position is `Expected::Verify` (verify-first vs re-verify-stale).
+        #[test]
+        fn only_the_verify_arm_reads_the_position() {
+            assert_eq!(
+                next_kind(Expected::Verify, Some(Position::Imported)),
+                NextKind::Verify
+            );
+            assert_eq!(
+                next_kind(Expected::Verify, Some(Position::Verified)),
+                NextKind::ReverifyStale
+            );
+            for expected in [
+                Expected::Spawn,
+                Expected::AwaitWorker,
+                Expected::Import,
+                Expected::Triage,
+                Expected::Conclude,
+                Expected::Reap,
+                Expected::Terminal,
+            ] {
+                let at_none = next_kind(expected, None);
+                for position in [
+                    Position::Spawned,
+                    Position::WorkerCommitted,
+                    Position::Imported,
+                    Position::Verified,
+                    Position::Concluded,
+                    Position::Reaped,
+                ] {
+                    assert_eq!(
+                        next_kind(expected, Some(position)),
+                        at_none,
+                        "{expected:?} must not read the position"
+                    );
+                }
+            }
+        }
+
+        // --- (b) the actionability ladder --------------------------------------------
+
+        /// Rung 1 — red evidence is a GLOBAL condition, so a red at a HIGHER phase id
+        /// outranks a runnable import at a LOWER one (RV-304 F-4).
+        #[test]
+        fn red_evidence_triages_globally_over_a_lower_id_runnable() {
+            let runnable = row("PHASE-02", Position::WorkerCommitted);
+            let red = with_evidence(row("PHASE-04", Position::Imported), VerifyStatus::Fail, TIP);
+            let mid = vec![prescribe(&runnable), prescribe(&red)];
+            let known = recorded(&[&runnable, &red]);
+            let core = oracle(&mid, &known, &[]);
+            assert_eq!(core.kind, NextKind::TriageVerifyFailure);
+            assert_eq!(core.kind.as_str(), "triage-verify-failure");
+            assert_eq!(core.phase.as_deref(), Some("PHASE-04"));
+            assert_eq!(core.command, None, "a judgment beat carries no command");
+            assert!(
+                core.detail.contains("PHASE-02"),
+                "the other in-flight phase is surfaced at every rung: {}",
+                core.detail
+            );
+        }
+
+        /// Rung 2 — an awaiting phase never suppresses runnable work, even at a lower
+        /// phase id.
+        #[test]
+        fn await_worker_never_starves_a_runnable_import() {
+            let awaiting = row("PHASE-01", Position::Spawned);
+            let importable = row("PHASE-03", Position::WorkerCommitted);
+            let mid = vec![prescribe(&awaiting), prescribe(&importable)];
+            let known = recorded(&[&awaiting, &importable]);
+            let core = oracle(&mid, &known, &[]);
+            assert_eq!(core.kind, NextKind::Import);
+            assert_eq!(core.phase.as_deref(), Some("PHASE-03"));
+            assert_eq!(
+                core.command.as_deref(),
+                Some(format!("dispatch_import{{slice: {SLICE}, name: \"{FORK}\"}}").as_str())
+            );
+            assert!(
+                core.detail.contains("PHASE-01") && core.detail.contains("await-worker"),
+                "the awaited sibling is surfaced: {}",
+                core.detail
+            );
+        }
+
+        /// Rung 2 — mixed mid-funnel positions pick the LOWEST-id runnable verb.
+        #[test]
+        fn mixed_positions_pick_the_lowest_id_runnable() {
+            let awaiting = row("PHASE-01", Position::Spawned);
+            let concludable =
+                with_evidence(row("PHASE-02", Position::Verified), VerifyStatus::Pass, TIP);
+            let reapable = row("PHASE-03", Position::Concluded);
+            let paths: Vec<String> = Vec::new();
+            let mid = vec![
+                prescribe(&awaiting),
+                prescribe_with(&concludable, &paths),
+                prescribe(&reapable),
+            ];
+            let known = recorded(&[&awaiting, &concludable, &reapable]);
+            let core = oracle(&mid, &known, &[]);
+            assert_eq!(core.kind, NextKind::Conclude);
+            assert_eq!(core.phase.as_deref(), Some("PHASE-02"));
+            assert_eq!(
+                core.command.as_deref(),
+                Some(
+                    format!(
+                        "dispatch_conclude_phase{{slice: {SLICE}, phase: \"PHASE-02\", \
+                         code_start: \"{BASE}\", code_end: \"{TIP}\"}}"
+                    )
+                    .as_str()
+                )
+            );
+            assert!(core.detail.contains("PHASE-03"), "{}", core.detail);
+        }
+
+        /// Rung 3 — every mid-funnel phase awaiting yields `await-worker`, naming ALL
+        /// awaited phases.
+        #[test]
+        fn all_awaiting_yields_await_worker_naming_every_awaited_phase() {
+            let a = row("PHASE-01", Position::Spawned);
+            let b = row("PHASE-02", Position::Spawned);
+            let mid = vec![prescribe(&a), prescribe(&b)];
+            let known = recorded(&[&a, &b]);
+            let core = oracle(&mid, &known, &["PHASE-09".to_owned()]);
+            assert_eq!(core.kind, NextKind::AwaitWorker);
+            assert_eq!(core.kind.as_str(), "await-worker");
+            assert_eq!(core.phase.as_deref(), Some("PHASE-01"));
+            assert_eq!(core.command, None, "waiting is not a verb");
+            assert!(core.detail.contains("PHASE-02"), "{}", core.detail);
+            assert!(
+                !core.detail.contains("PHASE-09"),
+                "readiness is rung 4 only — a mid-funnel batch never reads it: {}",
+                core.detail
+            );
+        }
+
+        /// Rung 4 — nothing mid-funnel: the readiness authority, FILTERED to phases the
+        /// funnel record does not already carry (a reaped phase is never re-spawned).
+        #[test]
+        fn spawn_takes_the_first_ready_phase_with_no_funnel_row() {
+            let reaped = row("PHASE-01", Position::Reaped);
+            let known = recorded(&[&reaped]);
+            let ready = vec!["PHASE-01".to_owned(), "PHASE-02".to_owned()];
+            let core = oracle(&[], &known, &ready);
+            assert_eq!(core.kind, NextKind::Spawn);
+            assert_eq!(core.phase.as_deref(), Some("PHASE-02"));
+            assert_eq!(
+                core.command, None,
+                "spawn is ARM-ROUTED — the oracle stays arm-agnostic (D-P6-5)"
+            );
+            assert!(
+                core.detail.contains("arm"),
+                "spawn hands off to the arm skill: {}",
+                core.detail
+            );
+        }
+
+        /// Rung 4 terminal — nothing mid-funnel and nothing left to spawn.
+        #[test]
+        fn all_reaped_is_terminal_and_hands_off_to_dispatch_status() {
+            let reaped = row("PHASE-01", Position::Reaped);
+            let known = recorded(&[&reaped]);
+            let core = oracle(&[], &known, &["PHASE-01".to_owned()]);
+            assert_eq!(core.kind, NextKind::AllReaped);
+            assert_eq!(core.kind.as_str(), "all-reaped");
+            assert_eq!(core.phase, None);
+            assert_eq!(core.command, None);
+            assert!(
+                core.detail.contains("dispatch status"),
+                "the terminal beat hands off to the OTHER altitude (R5): {}",
+                core.detail
+            );
+        }
+
+        /// The day-one shape: no `funnel.toml` at all AND no rows — the empty record
+        /// falls straight through to the readiness authority.
+        #[test]
+        fn an_empty_funnel_record_spawns_the_first_ready_phase() {
+            let core = oracle(&[], &BTreeSet::new(), &["PHASE-01".to_owned()]);
+            assert_eq!(core.kind, NextKind::Spawn);
+            assert_eq!(core.phase.as_deref(), Some("PHASE-01"));
+        }
+
+        /// D-P6-4 — a required fact absent ⇒ NO command at all (never half-rendered),
+        /// and `detail` says which fact is missing.
+        #[test]
+        fn a_row_without_a_spawn_record_renders_no_command() {
+            let mut r = row("PHASE-01", Position::WorkerCommitted);
+            r.spawn = None;
+            let mid = vec![prescribe(&r)];
+            let known = recorded(&[&r]);
+            let core = oracle(&mid, &known, &[]);
+            assert_eq!(core.kind, NextKind::Import);
+            assert_eq!(core.command, None);
+            assert!(core.detail.contains("spawn record"), "{}", core.detail);
+        }
+
+        /// D-P6-4 — verify is prescribed as the CLI literal, reap as the MCP literal;
+        /// each is fully parameterised from `(slice, coord_tip, row)`.
+        #[test]
+        fn commands_name_the_surface_that_owns_the_verb() {
+            let importable = row("PHASE-01", Position::Imported);
+            assert_eq!(
+                next_command(NextKind::Verify, SLICE, TIP, Some(&importable)).unwrap(),
+                Some(format!(
+                    "doctrine dispatch verify --slice {SLICE} --phase PHASE-01"
+                ))
+            );
+            let concluded = row("PHASE-01", Position::Concluded);
+            assert_eq!(
+                next_command(NextKind::Reap, SLICE, TIP, Some(&concluded)).unwrap(),
+                Some(format!("dispatch_reap{{slice: {SLICE}, name: \"{FORK}\"}}"))
+            );
+            for kind in [
+                NextKind::Spawn,
+                NextKind::AwaitWorker,
+                NextKind::TriageVerifyFailure,
+                NextKind::AllReaped,
+            ] {
+                assert_eq!(
+                    next_command(kind, SLICE, TIP, Some(&concluded)).unwrap(),
+                    None,
+                    "{kind:?} carries no command literal"
+                );
+            }
+        }
+
+        /// The ladder never picks two phases: a `Prescribed` selection names exactly one
+        /// row, and that row is the one the rung's own rule selects.
+        #[test]
+        fn the_ladder_selects_exactly_one_phase() {
+            let a = row("PHASE-01", Position::Spawned);
+            let b = row("PHASE-02", Position::WorkerCommitted);
+            let c = row("PHASE-03", Position::Concluded);
+            let mid = vec![prescribe(&a), prescribe(&b), prescribe(&c)];
+            let known = recorded(&[&a, &b, &c]);
+            match select_next(&mid, &known, &[]) {
+                NextSelection::Prescribed { kind, row } => {
+                    assert_eq!(kind, NextKind::Import);
+                    assert_eq!(row.id, "PHASE-02");
+                }
+                other => panic!("expected a mid-funnel prescription, got {other:?}"),
+            }
+        }
+
+        // --- the shell ---------------------------------------------------------------
+
+        /// T5 wiring: `next_core` reads the COMMITTED record at the tip and prescribes
+        /// off it. The fixture carries NO `plan.toml` at all, which also proves the
+        /// readiness authority is consulted at rung 4 ONLY — a mid-funnel slice never
+        /// reads the plan.
+        #[test]
+        fn next_core_prescribes_import_from_the_committed_record() {
+            let (_tmp, _primary, coord, base, _bt) = primary_with_coord(SLICE);
+            let tip = land(
+                &coord,
+                &base,
+                &[
+                    Transition::Spawn {
+                        fork: FORK.to_owned(),
+                        base_oid: base.clone(),
+                    },
+                    Transition::RecordWorkerCommit {
+                        fork_tip: OTHER.to_owned(),
+                    },
+                ],
+            );
+            let core = next_core(&coord, &tip, SLICE).unwrap();
+            assert_eq!(core.kind, NextKind::Import);
+            assert_eq!(core.phase.as_deref(), Some("PHASE-01"));
+            assert_eq!(
+                core.command.as_deref(),
+                Some(format!("dispatch_import{{slice: {SLICE}, name: \"{FORK}\"}}").as_str())
+            );
+        }
+
+        /// Land an ordered transition prefix on the coord ref, returning the new tip.
+        fn land(coord: &Path, tip: &str, ts: &[Transition]) -> String {
+            match land_funnel_transitions(
+                coord,
+                &dispatch_ref(SLICE),
+                tip,
+                SLICE,
+                "PHASE-01",
+                ts,
+                None,
+                None,
+                "dispatch-funnel: SL-228 PHASE-01",
+                AT,
+                &disp(),
+            )
+            .unwrap()
+            {
+                FunnelLanding::Landed { oid, .. } => oid,
+                other => panic!("expected Landed, got {other:?}"),
+            }
         }
     }
 }

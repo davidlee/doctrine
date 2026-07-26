@@ -35,6 +35,16 @@ fn default_deliver_to() -> String {
     DEFAULT_DELIVER_TO.to_string()
 }
 
+/// The `[verification]` cadence key `dispatch verify` runs when `[dispatch]
+/// verify-suite` is absent — the strictest shipped cadence, so a project that
+/// says nothing gets the strongest evidence (SL-228 PHASE-05, design §5).
+/// STD-001 single-source; the value is resolved through
+/// [`crate::verify::CheckKind::from_key`], never a second string table.
+const DEFAULT_VERIFY_SUITE: &str = "gate";
+fn default_verify_suite() -> String {
+    DEFAULT_VERIFY_SUITE.to_string()
+}
+
 /// The `[dispatch]` table from `doctrine.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
@@ -82,6 +92,14 @@ pub(crate) struct DispatchConfig {
     /// extends entries as legitimate writes require.
     #[serde(rename = "worker-forbidden-writes", default)]
     pub(crate) worker_forbidden_writes: Vec<String>,
+    /// Which `[verification]` cadence `dispatch verify` runs as the phase's
+    /// evidence-producing suite (SL-228 PHASE-05, design §5). One of the
+    /// [`crate::verify::CheckKind`] keys (`quick` | `commit` | `gate` | `prove`);
+    /// absent ⇒ [`DEFAULT_VERIFY_SUITE`]. A value that names no cadence — or a
+    /// cadence that resolves to no runnable argv — is NOT a red verdict: verify
+    /// refuses `verify-suite-unresolved` and lands NO evidence (D5).
+    #[serde(default = "default_verify_suite")]
+    pub(crate) verify_suite: String,
 }
 
 impl Default for DispatchConfig {
@@ -92,6 +110,7 @@ impl Default for DispatchConfig {
             deliver_to: default_deliver_to(),
             authoring_branch: None,
             worker_forbidden_writes: Vec::new(),
+            verify_suite: default_verify_suite(),
         }
     }
 }
@@ -245,6 +264,28 @@ mod tests {
     fn deliver_to_default_matches_serde_absent() {
         let absent: DispatchConfig = toml::from_str("").unwrap();
         assert_eq!(DispatchConfig::default().deliver_to, absent.deliver_to);
+    }
+
+    // --- verify-suite (SL-228 PHASE-05, T9) ---
+
+    #[test]
+    fn verify_suite_defaults_to_gate() {
+        assert_eq!(DispatchConfig::default().verify_suite, "gate");
+        let doc: DispatchConfig = toml::from_str("").unwrap();
+        assert_eq!(doc.verify_suite, "gate");
+    }
+
+    #[test]
+    fn parse_verify_suite_override() {
+        let doc: DispatchConfig = toml::from_str("verify-suite = \"commit\"\n").unwrap();
+        assert_eq!(doc.verify_suite, "commit");
+    }
+
+    #[test]
+    fn verify_suite_default_matches_serde_absent() {
+        // [dispatch] present but the key absent must agree with the Rust Default.
+        let absent: DispatchConfig = toml::from_str("deliver-to = \"refs/heads/main\"\n").unwrap();
+        assert_eq!(DispatchConfig::default().verify_suite, absent.verify_suite);
     }
 
     // --- authoring-branch / posture (SL-166 PHASE-01) ---

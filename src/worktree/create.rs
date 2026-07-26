@@ -13,6 +13,7 @@
 //! absolute path ALONE on stdout (D11/G1), routes everything else to stderr, and
 //! fails closed (non-zero exit, never a panic) on any malformed input or failure.
 
+use super::dispatch_record::ForkBinding;
 use super::fork::{fork_core, remove_worktree_dir};
 use super::provision::run_provision;
 use crate::git;
@@ -237,6 +238,15 @@ pub(crate) fn classify_create(
 /// before a dispatch-worker spawn, and writes `base` inside it (design §5.3). The
 /// payload cwd BEING this dir is the positional Fork discriminator (D3/D4).
 pub(crate) const ARMING_SUBPATH: &str = ".doctrine/state/dispatch/spawn";
+/// The arming `base` slot: B, the commit every spawn in this batch forks at.
+pub(crate) const ARMING_BASE_FILE: &str = "base";
+/// The arming `slice` slot — half of the DURABLE FORK BINDING (SL-228 PHASE-04, D2).
+/// Written by `dispatch arm-spawn` in the same arming step as `base`, and consumed
+/// one-shot at the fork point exactly as `base` is, so a stale arm can never mis-bind
+/// the next spawn.
+pub(crate) const ARMING_SLICE_FILE: &str = "slice";
+/// The arming `phase` slot — the other half of the durable fork binding.
+pub(crate) const ARMING_PHASE_FILE: &str = "phase";
 /// The arming jail-policy DECLARATION, written beside `base` in [`ARMING_SUBPATH`] by
 /// `dispatch arm-spawn` in the SAME arming step (F-4 pairing) and read here to
 /// provision. Absent ⇒ no provision ⇒ the pretooluse Default floor (design §5.3).
@@ -250,6 +260,42 @@ pub(crate) const JAIL_SUBPATH: &str = ".doctrine/state/dispatch/jail";
 /// `pub(crate)` so the `pretooluse` reader recovers the coord root by stripping this
 /// same layout (design §5.3 — one owner of the `.worktrees/<name>` shape, no re-spell).
 pub(crate) const WORKTREES_SUBDIR: &str = ".worktrees";
+
+/// What `create-fork` created, handed UP to the command tier (SL-228 PHASE-04, D1/D3).
+///
+/// The `Spawn` funnel row is a Class-2 record: it lands STRICTLY AFTER the act (D8),
+/// and only the create-fork path knows the harness-assigned fork name, so `arm-spawn`
+/// (which runs PRE-fork) cannot land it. But this module must not call the funnel
+/// writer either — a `worktree → dispatch` import would re-introduce the command-tier
+/// back-cycle SL-204 removed (it would pass ADR-001's gate, which only flags UPWARD
+/// edges, and still be the wrong shape). So the facts travel UP as data and `cli.rs`
+/// routes the `CreateFork` arm through a thin `dispatch::`-tier entry that lands the row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CreatedFork {
+    /// The CANONICALISED created dir (stable for the harness to adopt as the session
+    /// cwd and for the `basename(worktreePath)` derivation).
+    pub(crate) dir: PathBuf,
+    /// The Class-2 `Spawn` facts — present ONLY for a dispatch Fork carrying a durable
+    /// binding. `None` for a passthrough spawn or an unbound fork: neither names a
+    /// funnel row, and a row is never invented for one.
+    pub(crate) spawn: Option<SpawnFacts>,
+}
+
+/// The gathered facts for one `Spawn` funnel transition (design §4 line 377).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SpawnFacts {
+    /// The coordination root whose `dispatch/<slice>` ref carries the funnel record.
+    pub(crate) coord: PathBuf,
+    /// The bound slice.
+    pub(crate) slice: u32,
+    /// The bound phase id.
+    pub(crate) phase: String,
+    /// The fork branch actually created (`dispatch/<name>`) — the REAL, harness-assigned
+    /// name, which is exactly what `arm-spawn` could not have known.
+    pub(crate) fork: String,
+    /// The RESOLVED base commit the fork was cut at.
+    pub(crate) base_oid: String,
+}
 
 /// The `WorktreeCreate` payload subset we read (tolerate extra fields). JSON on
 /// stdin: `{ "cwd": "<orchestrator cwd at spawn>", "name": "<unique slug>" }`. The
@@ -302,44 +348,88 @@ fn provision_jail_policy(root: &Path, name: &str) -> anyhow::Result<()> {
 }
 
 /// Act on the pure verdict — the only worktree-mutating step (design §5.2 step 4).
-/// Returns the CANONICALISED created dir (stable for the harness to adopt as the
-/// session cwd and for PHASE-05's `basename(worktreePath)` derivation).
+/// Returns the CANONICALISED created dir plus, for a dispatch Fork, the facts the
+/// command tier needs to land the Class-2 `Spawn` funnel row (D8: record strictly
+/// AFTER the act; see [`CreatedFork`]).
 ///
-/// * `Fork` — delegate the live-`dir`/`branch` collision refusal AND the
-///   add+provision+mark to [`fork_core`] (the byte-identical core, worker=true,
-///   provision source = `root`); no parallel pre-check.
+/// * `Fork` — take the per-name CLAIM LOCK, then delegate the live-`dir`/`branch`
+///   collision refusal AND the claim→bind→act sequence to [`fork_core`] (the
+///   byte-identical core, worker=true, provision source = `root`); no parallel
+///   pre-check. The lock is held across the WHOLE window and released on return, so
+///   gc's sweep cannot mistake this live claimant's branch for crash residue.
 /// * `Passthrough` — a benign DETACHED tree at the coord tree's HEAD, provisioned by
 ///   the SAME copier ([`run_provision`], source = `root` not the fresh tree — the
 ///   ISS-011 trap), NOT worker-marked. Owns its own `dir`-collision refusal (no
 ///   branch to check), and COMPENSATES (G3) — removes the half-created tree before
 ///   the fail-closed bail so an abort leaks nothing.
-fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<PathBuf> {
+fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<CreatedFork> {
     match action {
         CreateAction::Fork { base, name } => {
             let dir = root.join(WORKTREES_SUBDIR).join(&name);
             let branch = format!("dispatch/{name}");
-            // One-shot consume (SL-199 EX-3): unlink the arming `base` slot at the fork
-            // point, BEFORE `fork_core`, so a crash between fork and return cannot leave a
-            // stale base that mis-forks the NEXT benign spawn. After consumption a second
-            // WorktreeCreate with no re-arm reads no base ⇒ classifies Passthrough.
-            consume_arming_base(root)?;
-            // fork_core owns the dir/branch collision refusal (`fork-refused: …`) —
-            // do NOT re-check here (no parallel impl against shared machinery).
-            fork_core(root, &base, &branch, &dir, true)?;
-            // NET-NEW (PHASE-04): provision the arming jail declaration to the
-            // per-worktree policy BEFORE the worker's first tool call — outside the
-            // fork, ro to the worker (design §5.3). Absent declaration ⇒ no-op.
-            provision_jail_policy(root, &name)
-                .with_context(|| format!("provision jail policy for {name}"))?;
-            // NET-NEW (SL-198 PHASE-01): write the per-worktree dispatch record beside
-            // the jail policy at the fork point — the trust anchor `worker_commit`
-            // (PHASE-02) resolves. `base` is B snapshotted HERE (not re-read from the
-            // mutable arming slot); `dir`/`branch`/`root(=coord)` are all in scope.
-            // Fail-closed, exactly like the jail-policy write (design §5.2 EX-1).
-            super::dispatch_record::provision_dispatch_record(root, &name, &base, &dir, &branch)
-                .with_context(|| format!("provision dispatch record for {name}"))?;
-            fs::canonicalize(&dir)
-                .with_context(|| format!("canonicalize fork dir {}", dir.display()))
+            // Hold the per-name CLAIM LOCK across the whole claim→bind→act window
+            // (design §3). It serialises this spawn against a same-name spawn AND
+            // against gc's residue sweep, and is released by drop on EVERY exit path
+            // (including a `?` below) — and by the kernel if this process dies.
+            let _claim = super::claim_lock::acquire(root, &name)
+                .with_context(|| format!("claim lock for {name}"))?;
+
+            // Both one-shot consumes sit INSIDE the claim (RV-312 F-1). They are still
+            // before `fork_core`, which is all SL-199 EX-3 requires; taking them before
+            // the lock instead let a same-name race split one arming across two spawns —
+            // the loser consumed the binding and refused, the winner read an empty slot
+            // and forked UNBOUND, which surfaces only as `unprovable-fork` after a whole
+            // worker run is spent. The lock is what makes consume→bind indivisible.
+            //
+            // Unlink the arming `base` slot at the fork point so a crash between fork and
+            // return cannot leave a stale base that mis-forks the NEXT benign spawn. After
+            // consumption a second WorktreeCreate with no re-arm reads no base ⇒ Passthrough.
+            consume_arming_slot(root, ARMING_BASE_FILE)?;
+            // The DURABLE FORK BINDING, snapshotted and consumed the SAME one-shot way
+            // (SL-228 PHASE-04, VT-6): from here it travels by value into the record.
+            let binding = consume_arming_binding(root)?;
+
+            // fork_core owns the dir/branch collision refusal (`fork-refused: …`) and
+            // the claim→bind→act ORDER — do NOT re-check or re-order here (no parallel
+            // impl against shared machinery). The bind below runs UNDER the held claim,
+            // BEFORE the worktree exists, so a live fork implies its binding.
+            let mut bind = || -> anyhow::Result<()> {
+                // Provision the arming jail declaration to the per-worktree policy —
+                // outside the fork, ro to the worker (design §5.3). Absent ⇒ no-op.
+                provision_jail_policy(root, &name)
+                    .with_context(|| format!("provision jail policy for {name}"))?;
+                // Write the per-worktree dispatch record — the trust anchor
+                // `worker_commit` resolves, now carrying the durable `(slice, phase)`
+                // binding alongside `base`. `base` is B snapshotted at the fork point
+                // (never re-read from the mutable arming slot). Fail-closed: a failed
+                // bind rolls the claim back, so no half-bound fork survives.
+                super::dispatch_record::bind_dispatch_record(
+                    root,
+                    &name,
+                    &base,
+                    &dir,
+                    &branch,
+                    binding.as_ref(),
+                )
+                .with_context(|| format!("bind dispatch record for {name}"))
+            };
+            fork_core(root, &base, &branch, &dir, true, &mut bind)?;
+
+            let canon = fs::canonicalize(&dir)
+                .with_context(|| format!("canonicalize fork dir {}", dir.display()))?;
+            // The Class-2 `Spawn` facts, gathered POST-ACT and handed UP to the command
+            // tier — this module must not reach into `dispatch::` to land the row (that
+            // edge is the ADR-001 command-tier back-cycle SL-204 removed). `base_oid` is
+            // the RESOLVED commit, not the possibly-abbreviated arming sha.
+            let spawn = binding.map(|binding| SpawnFacts {
+                coord: root.to_path_buf(),
+                slice: binding.slice,
+                phase: binding.phase,
+                fork: branch.clone(),
+                base_oid: git::git_text(root, &["rev-parse", &format!("{base}^{{commit}}")])
+                    .map_or(base, |oid| oid.trim().to_owned()),
+            });
+            Ok(CreatedFork { dir: canon, spawn })
         }
         CreateAction::Passthrough { name } => {
             let dir = root.join(WORKTREES_SUBDIR).join(&name);
@@ -375,25 +465,57 @@ fn act_on_create(root: &Path, action: CreateAction) -> anyhow::Result<PathBuf> {
                     debris.join(", ")
                 );
             }
-            fs::canonicalize(&dir)
-                .with_context(|| format!("canonicalize passthrough dir {}", dir.display()))
+            let canon = fs::canonicalize(&dir)
+                .with_context(|| format!("canonicalize passthrough dir {}", dir.display()))?;
+            // A benign spawn is not a dispatch phase fork — it has no funnel row.
+            Ok(CreatedFork {
+                dir: canon,
+                spawn: None,
+            })
         }
     }
 }
 
-/// One-shot consume of the arming `base` slot (SL-199 EX-3): unlink
-/// `<root>/`⟨[`ARMING_SUBPATH`]⟩`/base` so exactly ONE Fork can fire per arm. Absent ⇒
+/// One-shot consume of ONE arming slot (SL-199 EX-3): unlink
+/// `<root>/`⟨[`ARMING_SUBPATH`]⟩`/<slot>` so exactly ONE Fork can fire per arm. Absent ⇒
 /// no-op (a benign re-spawn with no re-arm, or a direct `act_on_create` fork whose
-/// coord tree was never armed). Any OTHER io error propagates: leaving a stale base in
-/// place would let the NEXT benign spawn mis-fork, so a failed consume aborts the spawn
-/// fail-closed (called BEFORE `fork_core`, so the abort leaves no partial fork). Impure.
-fn consume_arming_base(root: &Path) -> anyhow::Result<()> {
-    let base = root.join(ARMING_SUBPATH).join("base");
-    match fs::remove_file(&base) {
+/// coord tree was never armed). Any OTHER io error propagates: leaving a stale slot in
+/// place would let the NEXT benign spawn mis-fork or mis-BIND, so a failed consume
+/// aborts the spawn fail-closed (called BEFORE `fork_core`, so the abort leaves no
+/// partial fork). Impure.
+fn consume_arming_slot(root: &Path, slot: &str) -> anyhow::Result<()> {
+    let path = root.join(ARMING_SUBPATH).join(slot);
+    match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e).with_context(|| format!("consume arming base {}", base.display())),
+        Err(e) => Err(e).with_context(|| format!("consume arming slot {}", path.display())),
     }
+}
+
+/// Read the arming DURABLE FORK BINDING slots and consume them one-shot, mirroring
+/// [`consume_arming_slot`]'s treatment of `base` (SL-228 PHASE-04 / D2, VT-6). The
+/// returned value is a SNAPSHOT: from here on the fork's `(slice, phase)` is carried by
+/// value and never re-read from the (now-unlinked, and in any case mutable) arming
+/// state — which is what makes a stale arm unable to mis-bind the next spawn.
+///
+/// A HALF-armed pair (slice without phase, or vice versa) yields `None`: it names no
+/// funnel row, so it is not a binding, and pretending otherwise would forge provenance.
+/// Both slots are consumed either way, so a half-arm cannot linger into the next spawn.
+fn consume_arming_binding(root: &Path) -> anyhow::Result<Option<ForkBinding>> {
+    let arming = root.join(ARMING_SUBPATH);
+    let read = |slot: &str| {
+        fs::read_to_string(arming.join(slot))
+            .ok()
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty())
+    };
+    let slice = read(ARMING_SLICE_FILE).and_then(|s| s.parse::<u32>().ok());
+    let phase = read(ARMING_PHASE_FILE);
+    consume_arming_slot(root, ARMING_SLICE_FILE)?;
+    consume_arming_slot(root, ARMING_PHASE_FILE)?;
+    Ok(slice
+        .zip(phase)
+        .map(|(slice, phase)| ForkBinding { slice, phase }))
 }
 
 /// The impure Fork-trigger facts the classifier consumes, gathered from disk + git.
@@ -453,7 +575,12 @@ fn gather_fork_facts(root: &Path, cwd: &Path) -> ForkFacts {
 ///
 /// No `-p` override: the root is ALWAYS the payload cwd's `--show-toplevel` (G2/I5),
 /// never the process cwd. Malformed/empty stdin folds to a named refusal, never a panic.
-pub(crate) fn run_create_fork() -> anyhow::Result<()> {
+///
+/// Returns the [`CreatedFork`] facts so the command tier can land the Class-2 `Spawn`
+/// row AFTER the act (D1/D3/D8). The stdout contract is unchanged and is honoured HERE:
+/// the created path is printed before returning, so no caller can forget it and a
+/// failure to land the row downstream can never suppress it (D4).
+pub(crate) fn run_create_fork() -> anyhow::Result<CreatedFork> {
     let mut raw = String::new();
     io::stdin()
         .read_to_string(&mut raw)
@@ -510,10 +637,10 @@ pub(crate) fn run_create_fork() -> anyhow::Result<()> {
                 writeln!(io::stderr(), "create-refused: no-root")?;
                 bail!("create-refused: no-root");
             };
-            let dir = act_on_create(&root, action)?;
+            let created = act_on_create(&root, action)?;
             // stdout = EXACTLY the created path, one line, nothing else (G1/D11).
-            writeln!(io::stdout(), "{}", dir.display())?;
-            Ok(())
+            writeln!(io::stdout(), "{}", created.dir.display())?;
+            Ok(created)
         }
     }
 }
@@ -781,7 +908,7 @@ mod tests {
     // e2e create-fork suite uses, in-process.
 
     use crate::worktree::dispatch_record::{
-        DispatchRecord, RECORD_SUBPATH, ResolveFacts, ResolveRefusal, classify_resolve,
+        DispatchRecord, ForkExpect, RECORD_SUBPATH, ResolveFacts, ResolveRefusal, classify_resolve,
         resolve_agent,
     };
 
@@ -860,14 +987,14 @@ mod tests {
 
         // unknown-agent: a name that was never forked ⇒ 0 live worktree hits.
         assert_eq!(
-            resolve_agent(&root, "agent-never"),
+            resolve_agent(&root, "agent-never", ForkExpect::AtBase),
             Err(ResolveRefusal::UnknownAgent)
         );
         // The agent is sanitised via `sanitise_name` BEFORE any path join — a traversal
         // id is rejected up front and folds to unknown-agent (never joins a hostile path).
         assert!(sanitise_name("../evil").is_err());
         assert_eq!(
-            resolve_agent(&root, "../evil"),
+            resolve_agent(&root, "../evil", ForkExpect::AtBase),
             Err(ResolveRefusal::UnknownAgent)
         );
 
@@ -881,7 +1008,8 @@ mod tests {
             },
         )
         .expect("fork the live worker");
-        let record = resolve_agent(&root, name).expect("a live, consistent worker resolves");
+        let record = resolve_agent(&root, name, ForkExpect::AtBase)
+            .expect("a live, consistent worker resolves");
         assert_eq!(record.name, name);
         assert_eq!(record.branch, format!("dispatch/{name}"));
         assert_eq!(record.base, base);
@@ -889,7 +1017,10 @@ mod tests {
         // stale-record: advance the worker HEAD past base ⇒ HEAD != record.base.
         let dir = root.join(WORKTREES_SUBDIR).join(name);
         commit_in(&dir, "work.txt", "c", "worker advances HEAD");
-        assert_eq!(resolve_agent(&root, name), Err(ResolveRefusal::StaleRecord));
+        assert_eq!(
+            resolve_agent(&root, name, ForkExpect::AtBase),
+            Err(ResolveRefusal::StaleRecord)
+        );
 
         // ambiguous-agent: unreachable through `worktree_for_ref` (git ≤1 worktree per
         // branch), so pin it at the pure classifier — >1 live hits refuses defensively.
@@ -900,6 +1031,8 @@ mod tests {
                 dir_exists: false,
                 branch_head: None,
                 base_commit: None,
+                head_parents: Vec::new(),
+                expect: ForkExpect::AtBase,
             }),
             Err(ResolveRefusal::AmbiguousAgent)
         );
@@ -1029,5 +1162,317 @@ mod tests {
             decl,
             "verbatim declaration for the confined trigger, exactly as positional"
         );
+    }
+
+    // ==========================================================================
+    // SL-228 PHASE-04 — the branch-as-claim fork sequence (VT-1 / VT-5 / VT-6).
+    // ==========================================================================
+
+    /// `git -C <root> <args>`, returning success (never asserting) — for probes.
+    fn git_ok(root: &Path, args: &[&str]) -> bool {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .status()
+            .expect("spawn git")
+            .success()
+    }
+
+    fn branch_exists(root: &Path, branch: &str) -> bool {
+        git_ok(root, &["rev-parse", "--verify", "--quiet", branch])
+    }
+
+    /// Arm the coord tree's slots exactly as `dispatch arm-spawn` does.
+    fn arm(root: &Path, base: &str, binding: Option<(u32, &str)>) {
+        let arming = root.join(ARMING_SUBPATH);
+        fs::create_dir_all(&arming).unwrap();
+        fs::write(arming.join(ARMING_BASE_FILE), format!("{base}\n")).unwrap();
+        if let Some((slice, phase)) = binding {
+            fs::write(arming.join(ARMING_SLICE_FILE), format!("{slice}\n")).unwrap();
+            fs::write(arming.join(ARMING_PHASE_FILE), format!("{phase}\n")).unwrap();
+        }
+    }
+
+    // VT-5: the ORDER is claim → bind → act. Proven from INSIDE the bind step, which is
+    // the only place that can observe the intermediate state: when bind runs, the branch
+    // claim must already exist and the worktree must NOT. That is what makes "a live
+    // fork implies its binding" true by construction rather than by timing.
+    #[test]
+    fn bind_runs_after_the_claim_and_before_the_worktree_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        let dir = root.join(WORKTREES_SUBDIR).join("agent-order");
+        let branch = "dispatch/agent-order";
+
+        let mut observed = None;
+        let mut bind = || -> anyhow::Result<()> {
+            observed = Some((branch_exists(&root, branch), dir.exists()));
+            Ok(())
+        };
+        super::super::fork::fork_core(&root, &base, branch, &dir, true, &mut bind)
+            .expect("the fork completes");
+
+        assert_eq!(
+            observed,
+            Some((true, false)),
+            "at bind time the CLAIM is held and the worktree does not exist yet"
+        );
+        // ...and once the act completes, both exist.
+        assert!(branch_exists(&root, branch) && dir.exists());
+    }
+
+    // VT-5: a failure AFTER the claim reverses the claim too — no branch residue, no
+    // worktree, and no record left behind by a rolled-back fork.
+    #[test]
+    fn a_failed_bind_rolls_the_claim_back_leaving_no_residue() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        let name = "agent-rollback";
+        let dir = root.join(WORKTREES_SUBDIR).join(name);
+        let branch = format!("dispatch/{name}");
+
+        // A bind that writes its record and THEN fails — the worst case for residue.
+        let mut bind = || -> anyhow::Result<()> {
+            super::super::dispatch_record::bind_dispatch_record(
+                &root, name, &base, &dir, &branch, None,
+            )?;
+            anyhow::bail!("bind blew up")
+        };
+        let err = super::super::fork::fork_core(&root, &base, &branch, &dir, true, &mut bind)
+            .expect_err("a failed bind fails the fork");
+        assert!(
+            format!("{err:#}").contains("bind blew up"),
+            "the original cause survives: {err:#}"
+        );
+
+        assert!(
+            !branch_exists(&root, &branch),
+            "the CLAIM is reversed — no branch residue from a rolled-back fork"
+        );
+        assert!(!dir.exists(), "no worktree dir");
+        assert!(
+            !root
+                .join(crate::worktree::dispatch_record::RECORD_SUBPATH)
+                .join(format!("{name}.toml"))
+                .exists(),
+            "the bind is reversed too — no record survives a rolled-back fork"
+        );
+    }
+
+    // VT-1: TWO CONCURRENT same-name spawns ⇒ exactly ONE wins. Real threads against a
+    // real git repo and a real flock — a mocked lock would prove nothing about the
+    // property the design bought. The loser refuses AT THE CLAIM, and the winner's
+    // binding is exactly what a solo spawn would have written (never cross-paired).
+    #[test]
+    fn two_concurrent_same_name_spawns_leave_exactly_one_winner() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        let name = "agent-race";
+        arm(&root, &base, Some((228, "PHASE-04")));
+
+        let outcomes: Vec<anyhow::Result<CreatedFork>> = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..2)
+                .map(|_| {
+                    let root = root.clone();
+                    let base = base.clone();
+                    scope.spawn(move || {
+                        act_on_create(
+                            &root,
+                            CreateAction::Fork {
+                                base,
+                                name: name.to_string(),
+                            },
+                        )
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+
+        let winners = outcomes.iter().filter(|o| o.is_ok()).count();
+        assert_eq!(winners, 1, "exactly one concurrent same-name spawn wins");
+        let loser = outcomes
+            .iter()
+            .find_map(|o| o.as_ref().err())
+            .expect("one loser");
+        assert!(
+            format!("{loser:#}").contains("fork-refused"),
+            "the loser refuses AT THE CLAIM: {loser:#}"
+        );
+
+        // The winner's binding is the solo-spawn binding, whole and uncrossed.
+        let record = crate::worktree::dispatch_record::resolve_agent(
+            &root,
+            name,
+            crate::worktree::dispatch_record::ForkExpect::AtBase,
+        )
+        .expect("the winner resolves");
+        assert_eq!(record.base, base);
+        assert_eq!(record.branch, format!("dispatch/{name}"));
+        assert_eq!(
+            record.binding(),
+            Some(crate::worktree::dispatch_record::ForkBinding {
+                slice: 228,
+                phase: "PHASE-04".to_string(),
+            })
+        );
+    }
+
+    // VT-1: a crash between the claim/bind and the act leaves INERT residue (a branch,
+    // and maybe a record, with no worktree). A same-name retry refuses AT THE CLAIM, the
+    // refusal prescribes the gc sweep, and after the sweep the name is re-claimable.
+    #[test]
+    fn crash_residue_is_inert_refuses_a_retry_and_sweeps_clean() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        let name = "agent-residue";
+        let branch = format!("dispatch/{name}");
+        let dir = root.join(WORKTREES_SUBDIR).join(name);
+
+        // The residue a crash between bind and act leaves: branch ⊕ record, NO worktree.
+        assert!(git_ok(&root, &["branch", &branch, &base]));
+        super::super::dispatch_record::bind_dispatch_record(
+            &root, name, &base, &dir, &branch, None,
+        )
+        .unwrap();
+        assert!(!dir.exists(), "the residue has no worktree — it is inert");
+
+        // A same-name retry refuses at the claim rather than adopting the branch.
+        let err = act_on_create(
+            &root,
+            CreateAction::Fork {
+                base: base.clone(),
+                name: name.to_string(),
+            },
+        )
+        .expect_err("a same-name retry refuses at the claim");
+        assert!(
+            format!("{err:#}").contains("fork-refused: branch"),
+            "refused at the claim: {err:#}"
+        );
+
+        // gc sweeps the residue (--force: an unlanded residue is not a landed fork).
+        super::super::gc::run_gc(Some(root.clone()), &branch, None, true, false)
+            .expect("gc sweeps the residue");
+        assert!(!branch_exists(&root, &branch), "branch residue swept");
+
+        // ...and the name is re-claimable afterwards.
+        act_on_create(
+            &root,
+            CreateAction::Fork {
+                base,
+                name: name.to_string(),
+            },
+        )
+        .expect("the swept name is re-claimable");
+    }
+
+    // VT-6: `slice`/`phase` are SNAPSHOTTED at the fork point from the arming dir and
+    // consumed one-shot exactly as `base` is — so a stale arm cannot mis-bind the NEXT
+    // spawn, and nothing is ever re-read from mutable arming state afterwards.
+    #[test]
+    fn the_arming_binding_is_snapshotted_at_fork_time_and_consumed_one_shot() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        arm(&root, &base, Some((228, "PHASE-04")));
+
+        act_on_create(
+            &root,
+            CreateAction::Fork {
+                base: base.clone(),
+                name: "agent-bound".to_string(),
+            },
+        )
+        .expect("the bound fork");
+
+        let arming = root.join(ARMING_SUBPATH);
+        for slot in [ARMING_BASE_FILE, ARMING_SLICE_FILE, ARMING_PHASE_FILE] {
+            assert!(
+                !arming.join(slot).exists(),
+                "the `{slot}` slot is consumed one-shot at the fork point"
+            );
+        }
+        let bound = crate::worktree::dispatch_record::resolve_agent(
+            &root,
+            "agent-bound",
+            crate::worktree::dispatch_record::ForkExpect::AtBase,
+        )
+        .unwrap();
+        assert_eq!(
+            bound.binding(),
+            Some(crate::worktree::dispatch_record::ForkBinding {
+                slice: 228,
+                phase: "PHASE-04".to_string(),
+            })
+        );
+
+        // A SECOND spawn, re-armed with a base ONLY: the consumed binding cannot linger
+        // into it, so the new fork is unbound rather than wearing its predecessor's row.
+        arm(&root, &base, None);
+        act_on_create(
+            &root,
+            CreateAction::Fork {
+                base,
+                name: "agent-next".to_string(),
+            },
+        )
+        .expect("the next fork");
+        let next = crate::worktree::dispatch_record::resolve_agent(
+            &root,
+            "agent-next",
+            crate::worktree::dispatch_record::ForkExpect::AtBase,
+        )
+        .unwrap();
+        assert_eq!(
+            next.binding(),
+            None,
+            "a consumed binding cannot mis-bind the next spawn"
+        );
+    }
+
+    // VT-7 (facts half): the created-fork facts carry the REAL fork name and the RESOLVED
+    // base oid — the two things `arm-spawn` could not have known pre-fork (D1/D3).
+    #[test]
+    fn a_bound_fork_hands_up_the_real_fork_name_and_resolved_base_oid() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = crate::worktree::test_helpers::init_repo(&tmp.path().join("coord"));
+        let base = head_sha(&root);
+        // Arm with an ABBREVIATED base to prove the facts carry the RESOLVED oid.
+        let short = base.get(..8).unwrap().to_string();
+        arm(&root, &short, Some((228, "PHASE-04")));
+
+        let created = act_on_create(
+            &root,
+            CreateAction::Fork {
+                base: short,
+                name: "agent-facts".to_string(),
+            },
+        )
+        .expect("the bound fork");
+
+        let spawn = created.spawn.expect("a bound fork carries Spawn facts");
+        assert_eq!(spawn.fork, "dispatch/agent-facts", "the REAL fork name");
+        assert_eq!(spawn.base_oid, base, "the RESOLVED base oid, not the arm's");
+        assert_eq!(spawn.slice, 228);
+        assert_eq!(spawn.phase, "PHASE-04");
+        assert_eq!(spawn.coord, root);
+
+        // An UNBOUND fork carries no facts — a row is never invented for one.
+        arm(&root, &base, None);
+        let unbound = act_on_create(
+            &root,
+            CreateAction::Fork {
+                base,
+                name: "agent-unbound".to_string(),
+            },
+        )
+        .expect("the unbound fork");
+        assert!(unbound.spawn.is_none(), "no binding ⇒ no funnel row");
     }
 }

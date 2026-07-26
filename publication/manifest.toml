@@ -216,6 +216,15 @@ provenance    = "declared"
 customization = "customizable"
 
 [[entry]]
+address       = "integration/git-hooks/pre-commit"
+backing       = "git-hooks/pre-commit"
+kind          = "integration"
+title         = "Coordination-worktree safe-commit pre-commit hook"
+licence       = "MIT"
+provenance    = "declared"
+customization = "customizable"
+
+[[entry]]
 address       = "reference/model-band.md"
 backing       = "model-band.md"
 kind          = "reference"

@@ -119,6 +119,27 @@ impl LandedCell {
     }
 }
 
+/// An INJECTED landing authority (SL-228 PHASE-08 T10, D-P8-10): given
+/// `(root, slice, fork-branch)` it answers whether some authority ABOVE this tier
+/// proves the fork landed.
+///
+/// * `Some(true)` — PROVEN landed; the shared `git cherry` oracle is not consulted.
+/// * `Some(false)` — the authority exists but cannot decide (an ambiguous record):
+///   render [`LandedCell::Unknown`] rather than pass patch-id archaeology off as an
+///   answer to a question the record already muddied.
+/// * `None` — no authority for this fork; FALL THROUGH to the shared oracle, unchanged.
+///
+/// A bare closure ON PURPOSE, not a trait object owned by `crate::dispatch`: `worktree`
+/// is command tier and `dispatch → worktree` already exists, so no `crate::dispatch`
+/// name may appear in a `worktree` signature (ADR-001 — the reverse edge would close a
+/// same-tier cycle). The proof is computed at the injection point (`commands::cli`,
+/// which already depends on `dispatch`) and handed DOWN, exactly as
+/// `WorktreeCommand::Import` hands `run_import` already-resolved selectors.
+///
+/// A callback rather than a pre-resolved map because the rows are discovered INSIDE
+/// [`run_list`] by `git::list_worktrees`; pre-resolving would duplicate that walk.
+pub(crate) type LandingOracle<'a> = &'a dyn Fn(&Path, u32, &str) -> Option<bool>;
+
 /// One fully-resolved inventory row — the record plus its derived provenance.
 struct InventoryRow {
     path: PathBuf,
@@ -143,6 +164,7 @@ pub(crate) fn run_list(
     slice_filter: Option<u32>,
     json: bool,
     no_landed: bool,
+    landing: LandingOracle<'_>,
 ) -> anyhow::Result<()> {
     let root = root::find(path, &root::default_markers())?;
     let root = std::fs::canonicalize(&root)
@@ -152,7 +174,7 @@ pub(crate) fn run_list(
     let rows: Vec<InventoryRow> = records
         .iter()
         .enumerate()
-        .map(|(i, rec)| resolve_row(&root, rec, i == 0, no_landed))
+        .map(|(i, rec)| resolve_row(&root, rec, i == 0, no_landed, landing))
         .filter(|row| slice_filter.is_none_or(|n| row.slice == Some(n)))
         .collect();
 
@@ -169,6 +191,7 @@ fn resolve_row(
     rec: &WorktreeRecord,
     is_primary: bool,
     no_landed: bool,
+    landing: LandingOracle<'_>,
 ) -> InventoryRow {
     let branch = rec.branch.as_deref();
     // The row's marker signal, via the SHARED marker verdict (env is irrelevant to
@@ -180,7 +203,7 @@ fn resolve_row(
     let landed = if no_landed {
         LandedCell::NotApplicable
     } else {
-        landed_cell(root, role, rec, slice)
+        landed_cell(root, role, rec, slice, landing)
     };
     InventoryRow {
         path: rec.path.clone(),
@@ -218,11 +241,20 @@ fn slice_of(path: &Path, branch: Option<&str>) -> Option<u32> {
 /// A missing/unresolvable target or fork, or an oracle error, degrades to
 /// [`LandedCell::Unknown`] — NEVER a hard error (the caller owns the missing-target
 /// tri-state PHASE-04 deferred to it).
+///
+/// SL-228 PHASE-08 (T10): for a WORKER FORK the INJECTED [`LandingOracle`] is consulted
+/// FIRST, because the funnel's atomic one-commit import severs patch-id as well as
+/// ancestry — `git cherry` reports every funnel-managed fork unlanded (ISS-245), so a
+/// fork `dispatch_reap` legitimately reaps would render `unlanded` here. The oracle
+/// yielding nothing falls through to the shared `landed_against`, unchanged: this is
+/// additive routing, not a rendering change (the `landed`/`unlanded`/`unknown`/`n/a`
+/// vocabulary is untouched).
 fn landed_cell(
     root: &Path,
     role: WorktreeRole,
     rec: &WorktreeRecord,
     slice: Option<u32>,
+    landing: LandingOracle<'_>,
 ) -> LandedCell {
     let (target, fork) = match role {
         WorktreeRole::Primary | WorktreeRole::Benign => return LandedCell::NotApplicable,
@@ -230,6 +262,17 @@ fn landed_cell(
             let Some(n) = slice else {
                 return LandedCell::Unknown;
             };
+            // The injected landing authority, consulted BEFORE git archaeology. The
+            // funnel records a fork by its BRANCH NAME (`dispatch/<agent>`), so the
+            // porcelain `refs/heads/` prefix comes off via the shared [`branch_label`]
+            // — one stripping idiom, not a second spelling.
+            if let Some(branch) = rec.branch.as_deref() {
+                match landing(root, n, &branch_label(Some(branch))) {
+                    Some(true) => return LandedCell::Landed,
+                    Some(false) => return LandedCell::Unknown,
+                    None => {}
+                }
+            }
             (format!("refs/heads/dispatch/{n:03}"), rec.branch.clone())
         }
         WorktreeRole::Coordination => match git::trunk_commit(root).ok().flatten() {
@@ -482,6 +525,81 @@ mod tests {
         assert_eq!(
             slice_of(Path::new("/x/plain"), Some("refs/heads/main")),
             None
+        );
+    }
+
+    // --- SL-228 PHASE-08 (T10): the INJECTED landing authority is consulted first ----
+    //
+    // The funnel's atomic one-commit import severs patch-id as well as ancestry, so
+    // `git cherry` reports every funnel-managed fork unlanded (ISS-245) — a fork
+    // `dispatch_reap` legitimately reaps would render `unlanded` here. The oracle short-
+    // circuits that; yielding nothing falls through to the shared oracle, UNCHANGED.
+
+    /// A worker-fork row on `dispatch/agent-x` whose patch is genuinely NOT in the
+    /// coordination branch, so the shared `git cherry` oracle says `unlanded`.
+    fn unlanded_fork_row(dir: &Path) -> (PathBuf, WorktreeRecord) {
+        use super::super::test_helpers::{git, init_repo};
+        let root = init_repo(dir);
+        git(&root, &["branch", "dispatch/199"]);
+        git(&root, &["checkout", "-q", "-b", "dispatch/agent-x"]);
+        std::fs::write(root.join("fork.rs"), "fn f() {}\n").unwrap();
+        git(&root, &["add", "fork.rs"]);
+        git(&root, &["commit", "-q", "-m", "fork work"]);
+        git(&root, &["checkout", "-q", "main"]);
+        let rec = WorktreeRecord {
+            path: root.join(".dispatch/SL-199/.worktrees/agent-x"),
+            branch: Some("refs/heads/dispatch/agent-x".to_string()),
+            head: None,
+            prunable: false,
+            bare: false,
+            detached: false,
+        };
+        (root, rec)
+    }
+
+    #[test]
+    fn an_injected_landing_proof_renders_landed_where_patch_id_alone_would_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let (root, rec) = unlanded_fork_row(&dir.path().join("repo"));
+
+        // Fall-through (`None`): the shared oracle decides, unchanged.
+        assert_eq!(
+            landed_cell(
+                &root,
+                WorktreeRole::WorkerFork,
+                &rec,
+                Some(199),
+                &|_, _, _| None
+            ),
+            LandedCell::NotLanded,
+            "a fork with no funnel row keeps the `git cherry` verdict"
+        );
+        // PROVEN landed: the very fork `dispatch_reap` reaps renders `landed`.
+        assert_eq!(
+            landed_cell(
+                &root,
+                WorktreeRole::WorkerFork,
+                &rec,
+                Some(199),
+                &|_, slice, fork| {
+                    // The authority is asked about the funnel's own spelling of the fork
+                    // (`dispatch/<agent>`), with the porcelain prefix stripped.
+                    assert_eq!((slice, fork), (199, "dispatch/agent-x"));
+                    Some(true)
+                }
+            ),
+            LandedCell::Landed
+        );
+        // The authority exists but cannot decide ⇒ `unknown`, not patch-id archaeology.
+        assert_eq!(
+            landed_cell(
+                &root,
+                WorktreeRole::WorkerFork,
+                &rec,
+                Some(199),
+                &|_, _, _| Some(false)
+            ),
+            LandedCell::Unknown
         );
     }
 

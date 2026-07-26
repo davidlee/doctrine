@@ -23,15 +23,21 @@
 //! the two belt callers cannot diverge (VT-3). The resolver, gate, and delta-gather are
 //! all reused PHASE-01 / existing seams — no forked copies.
 
+use crate::dispatch::{Provenance, dispatch_identity, dispatch_ref, funnel};
 use crate::dispatch_config::ForbiddenWrites;
+use crate::funnel_machine::{
+    self, IllegalTransition, PhaseRow, Position, Transition, TransitionKind,
+};
 use crate::git;
 use crate::slice::SelectorIntent;
 use crate::verify::{CheckKind, CheckPlan, VerificationConfig, resolve_check};
 use crate::worktree::{
-    CLAUDE_PREFIX, DOCTRINE_PREFIX, DispatchRecord, gather_worktree_delta_paths, resolve_agent,
+    CLAUDE_PREFIX, DOCTRINE_PREFIX, DispatchRecord, ForkBinding, ForkExpect, ResolveRefusal,
+    gather_worktree_delta_paths, require_binding, resolve_agent,
 };
 use anyhow::{Context, bail};
 use serde::Serialize;
+use std::io::Write as _;
 use std::path::Path;
 
 /// Refuse `worker_commit` with no in-scope change — never mint an empty commit (§5.5).
@@ -47,6 +53,12 @@ const NOT_AT_BASE: &str = "not-at-base";
 /// Refuse: the `check commit` gate (fmt + lint/test/build) exited red; the captured
 /// output rides in `detail` (§5.2 step 2).
 const COMMIT_GATE_RED: &str = "commit-gate-red";
+/// Refuse: the fork has advanced past `B` and the worktree is DIRTY (SL-228 design §3).
+/// That is not the retry signature — it is a LATE RE-COMMIT (a second commit attempt on
+/// an already-committed fork), and the one-commit invariant `C^ == B` forbids it. The
+/// worker's lost-response ambiguity always ends in a truthful terminal answer, so this
+/// names itself rather than hiding behind `stale-record`.
+const LATE_RECOMMIT: &str = "late-recommit";
 
 /// The tool result: a landed commit, or a typed refusal (design §5.2). Serialised
 /// externally-tagged (`{"Committed": {…}}` / `{"Refused": {…}}`), matching the other MCP
@@ -190,18 +202,160 @@ fn stage_and_commit(dir: &Path, message: &str, paths: &[String]) -> anyhow::Resu
 }
 
 /// Resolve the slice's `design-target` selectors for the SOFT tier (design §5.2 step 3).
-/// The coordination worktree (`record.coord`) is checked out on `dispatch/<slice>` and
-/// carries the authored slice, so the slice id is recovered from its branch and the
-/// selectors read from it. Best-effort by design: the SOFT tier never blocks, so a
-/// resolution failure degrades to no selectors (every src path reported `undeclared`)
-/// rather than refusing a legitimate commit.
-fn design_target_selectors(record: &DispatchRecord) -> anyhow::Result<Vec<String>> {
-    let branch = git::git_text(&record.coord, &["rev-parse", "--abbrev-ref", "HEAD"])?;
-    let slice_id: u32 = branch
-        .strip_prefix("dispatch/")
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| anyhow::anyhow!("coord HEAD `{branch}` is not a dispatch/<slice> branch"))?;
-    crate::slice::selectors(&record.coord, slice_id, Some(SelectorIntent::DesignTarget))
+/// The slice comes from the DURABLE FORK BINDING (SL-228 PHASE-04) — the very record the
+/// verb already read for its base guard — not from re-parsing the coord's branch: one
+/// read, always available, and no second fork→slice derivation to drift. Best-effort by
+/// design: the SOFT tier never blocks, so a resolution failure degrades to no selectors
+/// (every src path reported `undeclared`) rather than refusing a legitimate commit.
+fn design_target_selectors(coord: &Path, slice: u32) -> anyhow::Result<Vec<String>> {
+    crate::slice::selectors(coord, slice, Some(SelectorIntent::DesignTarget))
+}
+
+// --------------------------------------------------------------------------------------
+// The funnel half (SL-228 PHASE-04, design §3/§4): the pre-act gate and the Class-2
+// `RecordWorkerCommit` record this verb is the ORIGINAL RECORDER for (D8).
+// --------------------------------------------------------------------------------------
+
+/// The coordination-side funnel context for one `worker_commit` call: which row this
+/// fork's commits belong to (from the durable binding), and where that row stands.
+///
+/// Gathered ONCE per call from the coord ref's committed record — an object-db read; the
+/// coord index/worktree are never touched. Position is re-derived from a freshly resolved
+/// tip on each landing attempt, so a lost-ref race re-reads rather than reusing this.
+struct FunnelCtx {
+    /// The coordination root (a git dir the funnel writer runs `-C` in).
+    coord: std::path::PathBuf,
+    /// `refs/heads/dispatch/<NNN>` — the CAS target.
+    coord_ref: String,
+    slice: u32,
+    phase: String,
+    /// The fork branch and the base it forked from — the `Spawn` provenance this
+    /// verb heals when `create-fork`'s non-fatal row never landed (SL-228 PHASE-05).
+    fork: String,
+    base_oid: String,
+    /// The coord tip this context's `position`/`row` were read at.
+    tip: String,
+    row: Option<PhaseRow>,
+}
+
+impl FunnelCtx {
+    /// Open the context for a bound fork. Fails (rather than refusing) on a plumbing
+    /// problem — an unresolvable coord ref is a broken coordination tree, not a
+    /// worker-visible refusal.
+    fn open(record: &DispatchRecord, binding: &ForkBinding) -> anyhow::Result<Self> {
+        let coord_ref = dispatch_ref(binding.slice);
+        let tip = commit_oid(&record.coord, &coord_ref)
+            .with_context(|| format!("resolve the coordination ref {coord_ref}"))?;
+        let funnel_record = funnel::read_funnel_at(&record.coord, &tip, binding.slice)?;
+        Ok(Self {
+            coord: record.coord.clone(),
+            coord_ref,
+            slice: binding.slice,
+            phase: binding.phase.clone(),
+            fork: record.branch.clone(),
+            base_oid: record.base.clone(),
+            row: funnel_record.row(&binding.phase).cloned(),
+            tip,
+        })
+    }
+
+    fn position(&self) -> Option<Position> {
+        self.row.as_ref().map(|r| r.position)
+    }
+
+    /// The ladder this verb's Class-2 record lands (SL-228 PHASE-05, T10). With NO row
+    /// at all, `create-fork`'s `Spawn` row is simply MISSING — that landing is
+    /// deliberately non-fatal (D4), so a live, bound fork can legitimately reach here
+    /// pre-spawn. Rather than refuse a real commit over a bookkeeping gap, this verb
+    /// heals the `Spawn` rung in the SAME splice as its own row: one commit, all-or-
+    /// none, under exactly the belts that already gate the record.
+    ///
+    /// Only the pre-spawn case grows a rung. From `spawned` the ladder is the single
+    /// `RecordWorkerCommit` PHASE-04 landed, so a create-fork-written `Spawn` row is
+    /// never re-stamped (and its `base_oid` spelling never has to match this one).
+    fn ladder(&self, fork_tip: &str) -> Vec<Transition> {
+        let record = Transition::RecordWorkerCommit {
+            fork_tip: fork_tip.to_owned(),
+        };
+        match self.position() {
+            None => vec![
+                Transition::Spawn {
+                    fork: self.fork.clone(),
+                    base_oid: self.base_oid.clone(),
+                },
+                record,
+            ],
+            Some(_) => vec![record],
+        }
+    }
+
+    /// The PRE-ACT gate (design §4): kind-level legality for the FIRST-COMMIT leg. It is
+    /// `preflight`, not `attempt`, because the fork tip this transition records does not
+    /// EXIST yet — the commit has not been made (RV-304 F-3, the same reason `verify`
+    /// preflights). Advisory against races by design; the post-act CAS record below is
+    /// the authority. It is what refuses a late re-commit at `imported`+ with
+    /// `already-<position>`.
+    ///
+    /// The kind asked about is the FIRST rung of the ladder this call would land, so a
+    /// pre-spawn fork is gated on `Spawn` (legal) rather than mis-refused `not-spawned`.
+    fn preflight(&self) -> Result<(), IllegalTransition> {
+        let kind = match self.position() {
+            None => TransitionKind::Spawn,
+            Some(_) => TransitionKind::RecordWorkerCommit,
+        };
+        funnel_machine::preflight(self.position(), kind)
+    }
+
+    /// Land the Class-2 `RecordWorkerCommit` row for `fork_tip` — plus the `Spawn` rung
+    /// when the row is missing entirely — re-reading the tip on a lost-ref race (the
+    /// replay rule makes the retry safe — design §3 CAS contract). The whole ladder is
+    /// ONE splice and ONE commit, so a kill mid-heal lands nothing at all.
+    fn record_worker_commit(&self, fork_tip: &str) -> anyhow::Result<()> {
+        let ts = self.ladder(fork_tip);
+        let at = crate::clock::now_timestamp()?;
+        let prov = Provenance::Conclude {
+            who: dispatch_identity(),
+        };
+        // Bounded: each iteration re-reads the tip a competing transition advanced to.
+        let mut tip = self.tip.clone();
+        for _ in 0..LAND_ATTEMPTS {
+            match funnel::land_funnel_transitions(
+                &self.coord,
+                &self.coord_ref,
+                &tip,
+                self.slice,
+                &self.phase,
+                &ts,
+                None,
+                None,
+                &crate::dispatch::funnel_message(self.slice, &self.phase),
+                &at,
+                &prov,
+            )? {
+                funnel::FunnelLanding::Landed { .. } | funnel::FunnelLanding::Replayed { .. } => {
+                    return Ok(());
+                }
+                funnel::FunnelLanding::Illegal(illegal) => bail!("{illegal}"),
+                funnel::FunnelLanding::CommitRefused(refusal) => {
+                    if refusal != crate::dispatch::CommitRefusal::LostRefRace {
+                        bail!("record worker-commit: {}", refusal.token());
+                    }
+                    tip = commit_oid(&self.coord, &self.coord_ref)?;
+                }
+            }
+        }
+        bail!("record worker-commit: lost the ref race {LAND_ATTEMPTS} times running")
+    }
+}
+
+/// How many times a CAS landing re-reads the tip before giving up.
+const LAND_ATTEMPTS: u32 = 3;
+
+/// Turn a machine refusal into the verb's refusal: the token is the machine's own reason
+/// (`already-imported`, `not-spawned`, …) and the detail is the FULL payload, which IS
+/// the recovery procedure (FR-009 — surfaced verbatim, never paraphrased).
+fn refused_illegal(illegal: &IllegalTransition) -> WorkerCommitOutput {
+    refused(illegal.reason, illegal.to_string())
 }
 
 /// Resolve a commit oid in `dir` (`rev-parse <rev>^{commit}`).
@@ -216,6 +370,19 @@ fn commit_oid(dir: &Path, rev: &str) -> anyhow::Result<String> {
 /// non-merge commit on `dispatch/<agent>`. `root` is the PRIMARY (unconfined) MCP root —
 /// the tamper-proof source of the forbidden-write config + the gate argv (both under the
 /// worker-unwritable `.doctrine/` floor). A belt refusal is a normal `Ok(Refused{…})`.
+///
+/// # Two legs (SL-228 PHASE-04, design §3 / RV-305 F-1)
+///
+/// Its own crash window is healed by its own re-drive. A retry after a lost response, or
+/// after a kill between the fork commit and the coord record, arrives wearing the
+/// **retry signature** — worktree CLEAN, fork advanced by exactly one commit `C` with
+/// `C^ == B`. Before this existed the resolver folded any `HEAD != base` to
+/// `stale-record` and the worker's ambiguity ended in a misdiagnosis. Now:
+///
+/// * `AtBase` resolves ⇒ the **first-commit leg** (belts → commit → record);
+/// * `AtBase` refuses `stale-record` ⇒ re-resolve declaring `Advanced`, and if the retry
+///   signature holds, the **retry legs** (recorded no-op replay, or belt-gated
+///   self-record). Anything else keeps the original `stale-record` diagnosis.
 pub(crate) fn run_worker_commit(
     root: &Path,
     agent: &str,
@@ -223,10 +390,62 @@ pub(crate) fn run_worker_commit(
 ) -> anyhow::Result<WorkerCommitOutput> {
     // 1. Resolve the opaque agent-id → its per-worktree record (PHASE-01). No worker path
     //    enters resolution; a typed resolver refusal maps 1:1 to our refusal token.
-    let record = match resolve_agent(root, agent) {
-        Ok(record) => record,
-        Err(refusal) => return Ok(refused(refusal.token(), String::new())),
+    match resolve_agent(root, agent, ForkExpect::AtBase) {
+        Ok(record) => first_commit_leg(root, &record, message),
+        // The ONE ambiguous refusal: `HEAD != base` is either a genuinely stale record OR
+        // the retry signature. Ask the resolver again, declaring what a retry looks like.
+        Err(ResolveRefusal::StaleRecord) => {
+            match resolve_agent(root, agent, ForkExpect::Advanced) {
+                Ok(record) => retry_leg(root, &record),
+                // Not one-commit-past-base either ⇒ the original diagnosis stands.
+                Err(_) => Ok(refused(ResolveRefusal::StaleRecord.token(), String::new())),
+            }
+        }
+        Err(refusal) => Ok(refused(refusal.token(), String::new())),
+    }
+}
+
+/// The gathered inputs both acting legs share: the tamper-proof config, the scope
+/// selectors, and the forbidden-write matcher. `root` is the PRIMARY MCP root.
+struct Belts {
+    cfg: crate::dtoml::DoctrineToml,
+    forbidden: ForbiddenWrites,
+    selectors: Vec<String>,
+}
+
+impl Belts {
+    fn gather(root: &Path, record: &DispatchRecord, slice: u32) -> anyhow::Result<Self> {
+        let cfg = crate::dtoml::load_doctrine_toml(root)?;
+        Ok(Self {
+            forbidden: cfg.dispatch.forbidden_writes(),
+            selectors: design_target_selectors(&record.coord, slice).unwrap_or_default(),
+            cfg,
+        })
+    }
+}
+
+/// The FIRST-COMMIT leg: the fork is at `B` and the worker's change is the live
+/// working-tree delta. Belt order is unchanged (cheap-first, §10 X4); the funnel
+/// pre-gate is inserted BEFORE the belts (design §4 — one step after resolve), and the
+/// Class-2 record lands strictly AFTER the commit (D8).
+fn first_commit_leg(
+    root: &Path,
+    record: &DispatchRecord,
+    message: &str,
+) -> anyhow::Result<WorkerCommitOutput> {
+    // The durable fork binding — WHICH funnel row this fork's commit belongs to. An
+    // unbound fork is not provable: refuse outright rather than commit into a row nobody
+    // can name. There is no ungated fallback and no "skip and let import heal" arm —
+    // import refuses the same unbound fork, so a skip would promise a heal that never
+    // comes (design §4, RV-303 F-3 plus the F-3/F-4 contests).
+    let binding = match require_binding(record) {
+        Ok(binding) => binding,
+        Err(refusal) => return Ok(refused(refusal.token(), record.branch.clone())),
     };
+    let ctx = FunnelCtx::open(record, &binding)?;
+    if let Err(illegal) = ctx.preflight() {
+        return Ok(refused_illegal(&illegal));
+    }
 
     // 2. Capture the PRE-fmt in-scope delta (tracked diff vs HEAD + untracked adds) — the
     //    worker cannot self-commit, so its change is the live working-tree delta at B.
@@ -235,18 +454,16 @@ pub(crate) fn run_worker_commit(
         return Ok(refused(EMPTY_DELTA, String::new()));
     }
 
-    // Config from the PRIMARY root (tamper-proof; worker-unwritable — §5.3).
-    let cfg = crate::dtoml::load_doctrine_toml(root)?;
-    let forbidden = cfg.dispatch.forbidden_writes();
-    let selectors = design_target_selectors(&record).unwrap_or_default();
+    let belts = Belts::gather(root, record, binding.slice)?;
 
     // 3. Scope belt (cheap-first, over the PRE-fmt delta): HARD refuses, SOFT rides back.
-    let undeclared = match classify_scope(&delta, &forbidden, &selectors) {
+    let undeclared = match classify_scope(&delta, &belts.forbidden, &belts.selectors) {
         Ok(undeclared) => undeclared,
         Err(path) => return Ok(refused(FORBIDDEN_ZONE, path)),
     };
 
-    // 4. Commit invariant — HEAD == B (pre-commit).
+    // 4. Commit invariant — HEAD == B (pre-commit). Belt-and-suspenders against the
+    //    resolver's `AtBase` check, at the commit boundary itself.
     let base = commit_oid(&record.dir, &record.base)?;
     let head = commit_oid(&record.dir, "HEAD")?;
     if !head_at_base(&head, &base) {
@@ -254,7 +471,7 @@ pub(crate) fn run_worker_commit(
     }
 
     // 5. Gate — the mutating `check commit` (fmt first) in the worker worktree.
-    match run_commit_gate(&record.dir, &cfg.verification)? {
+    match run_commit_gate(&record.dir, &belts.cfg.verification)? {
         GateOutcome::Green => {}
         GateOutcome::Red(detail) => return Ok(refused(COMMIT_GATE_RED, detail)),
     }
@@ -263,21 +480,152 @@ pub(crate) fn run_worker_commit(
     stage_and_commit(&record.dir, message, &delta)?;
 
     let oid = commit_oid(&record.dir, "HEAD")?;
-    // Exactly one non-merge commit, C^ == B (INV-1) — no indexing (clippy floor).
-    match git::parents(&record.dir, &oid)?.as_slice() {
-        [parent] if *parent == base => {}
-        [parent] => bail!("worker_commit parent {parent} != base {base} (C^ != B)"),
-        other => bail!(
-            "worker_commit produced a commit with {} parents (expected exactly 1)",
-            other.len()
-        ),
-    }
+    assert_one_commit_past_base(&record.dir, &oid, &base)?;
+
+    // 7. THE ACT IS DONE. Record it (Class 2, D8: strictly after). A failed record is
+    //    NOT a failed commit — the fork ref has advanced and saying otherwise would be a
+    //    lie. Leave the lag; this verb's own re-drive heals it (retry signature), and
+    //    import's heal-forward is the backstop when no retry ever comes.
+    warn_if_unrecorded(&ctx, &oid);
 
     Ok(WorkerCommitOutput::Committed {
         oid,
         base,
         undeclared,
     })
+}
+
+/// The RETRY legs (design §3, RV-305 F-1). The resolver has already PROVEN the retry
+/// signature's git half — the fork is exactly one non-merge commit `C` past `B`. What is
+/// left is to decide which truthful terminal answer this is:
+///
+/// * a DIRTY tree is not a retry at all — it is a late re-commit, and `C^ == B` forbids
+///   a second commit, so it refuses naming itself;
+/// * a row already at `worker-committed` for this very `C` ⇒ a **recorded no-op replay**
+///   naming the landed tip. No belts re-run: a row resting at exactly `worker-committed`
+///   can only have been landed by a belt-running leg (this leg or the first-commit leg —
+///   import's heal lands that row only in the SAME commit as `Import`, so position never
+///   durably rests there via heal), so the stored row IS the belt proof, by induction;
+/// * otherwise ⇒ the **belt-gated self-record**. This verb is the ORIGINAL recorder for
+///   `RecordWorkerCommit` (D8), so it lands its own lagging row now — but only after
+///   re-running the SAME content belts the first-commit leg enforces, against `C`'s
+///   delta. The gate is PROVENANCE-INDIFFERENT: an ungated one-commit fork (a raw-git
+///   bypass wearing the retry signature) either fails a belt and refuses with that belt
+///   NAMED — never adopted, never recorded — or passes them all, in which case adoption
+///   is sound by construction. The belts, not authorship, are the content authority, and
+///   a commit they cannot distinguish from a legitimate one IS legitimate.
+fn retry_leg(root: &Path, record: &DispatchRecord) -> anyhow::Result<WorkerCommitOutput> {
+    let binding = match require_binding(record) {
+        Ok(binding) => binding,
+        Err(refusal) => return Ok(refused(refusal.token(), record.branch.clone())),
+    };
+
+    // A dirty tree on an advanced fork is a LATE RE-COMMIT, not a retry.
+    let dirt = gather_worktree_delta_paths(&record.dir)?;
+    if !dirt.is_empty() {
+        return Ok(refused(LATE_RECOMMIT, dirt.join(", ")));
+    }
+
+    let base = commit_oid(&record.dir, &record.base)?;
+    let c = commit_oid(&record.dir, "HEAD")?;
+    let ctx = FunnelCtx::open(record, &binding)?;
+
+    // The SAME ladder the record lands (SL-228 PHASE-05, T10), asked of the machine as
+    // one all-or-none fold: a pre-spawn row heals its `Spawn` rung here too, rather
+    // than mis-refusing a legitimately-committed fork `not-spawned`.
+    let fold = match funnel_machine::fold_transitions(
+        ctx.row.as_ref(),
+        &ctx.phase,
+        &ctx.ladder(&c),
+        &ctx.tip,
+        None,
+        &crate::clock::now_timestamp()?,
+    ) {
+        Ok(Some(fold)) => fold,
+        // `ladder` always yields at least `RecordWorkerCommit`.
+        Ok(None) => return Ok(refused(EMPTY_DELTA, String::new())),
+        // `already-imported` / `already-verified` / … — the imported tip is already
+        // downstream, so there is no late re-commit to make. A truthful terminal answer.
+        Err(illegal) => return Ok(refused_illegal(&illegal)),
+    };
+
+    if fold.replay {
+        // Recorded no-op replay: nothing written, the landed tip NAMED. This is exactly
+        // the response the worker lost. `undeclared` is empty because a replay
+        // re-classifies nothing — the stored row already carries the belt proof.
+        return Ok(WorkerCommitOutput::Committed {
+            oid: c,
+            base,
+            undeclared: Vec::new(),
+        });
+    }
+
+    // Belt-gated self-record. The delta under scrutiny is `C`'s OWN delta (`B..C`), not a
+    // working-tree diff — the tree is clean by the check above.
+    let delta = commit_delta_paths(&record.dir, &base, &c)?;
+    if delta.is_empty() {
+        return Ok(refused(EMPTY_DELTA, String::new()));
+    }
+    let belts = Belts::gather(root, record, binding.slice)?;
+    let undeclared = match classify_scope(&delta, &belts.forbidden, &belts.selectors) {
+        Ok(undeclared) => undeclared,
+        Err(path) => return Ok(refused(FORBIDDEN_ZONE, path)),
+    };
+    match run_commit_gate(&record.dir, &belts.cfg.verification)? {
+        GateOutcome::Green => {}
+        GateOutcome::Red(detail) => return Ok(refused(COMMIT_GATE_RED, detail)),
+    }
+
+    // Every belt passed ⇒ adoption is sound. Land the lagging Class-2 row now.
+    assert_one_commit_past_base(&record.dir, &c, &base)?;
+    ctx.record_worker_commit(&c)?;
+
+    Ok(WorkerCommitOutput::Committed {
+        oid: c,
+        base,
+        undeclared,
+    })
+}
+
+/// The paths `commit` changed against `base` — the SELF-RECORD leg's belt input, read
+/// from committed trees (the working tree is clean here, so a working-tree diff would
+/// report nothing at all).
+fn commit_delta_paths(dir: &Path, base: &str, commit: &str) -> anyhow::Result<Vec<String>> {
+    let out = git::git_text(dir, &["diff", "--name-only", base, commit])
+        .with_context(|| format!("diff {base}..{commit} in {}", dir.display()))?;
+    Ok(out
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
+/// INV-1 at the commit boundary: exactly one non-merge commit with `C^ == B`.
+fn assert_one_commit_past_base(dir: &Path, oid: &str, base: &str) -> anyhow::Result<()> {
+    // No indexing (clippy floor).
+    match git::parents(dir, oid)?.as_slice() {
+        [parent] if parent == base => Ok(()),
+        [parent] => bail!("worker_commit parent {parent} != base {base} (C^ != B)"),
+        other => bail!(
+            "worker_commit produced a commit with {} parents (expected exactly 1)",
+            other.len()
+        ),
+    }
+}
+
+/// Land the Class-2 record, warning (never failing) if it does not land — the commit is
+/// already durable, so a failed record lags reality rather than undoing it (D8).
+fn warn_if_unrecorded(ctx: &FunnelCtx, oid: &str) {
+    if let Err(cause) = ctx.record_worker_commit(oid) {
+        // stderr, never stdout: stdout is the MCP JSON-RPC wire.
+        drop(writeln!(
+            std::io::stderr(),
+            "warning: worker-commit row not landed for {} {} ({cause:#}) — the commit {oid} IS durable; a re-drive or import heals the row forward",
+            ctx.slice,
+            ctx.phase
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -418,10 +766,28 @@ mod tests {
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     }
 
-    /// Stand up a primary repo at base B with a linked worker worktree on
-    /// `dispatch/<name>` at `<coord>/.worktrees/<name>`, plus its per-worktree record.
+    /// The slice + phase every fixture fork is BOUND to (SL-228 PHASE-04).
+    const SLICE: u32 = 199;
+    const PHASE: &str = "PHASE-01";
+
+    /// The fixture's durable fork binding.
+    fn fixture_binding() -> ForkBinding {
+        ForkBinding {
+            slice: SLICE,
+            phase: PHASE.to_owned(),
+        }
+    }
+
+    /// Stand up a primary repo at base B, a COORDINATION worktree on `dispatch/<SLICE>`,
+    /// and a linked worker worktree on `dispatch/<name>` at `<coord>/.worktrees/<name>`,
+    /// plus its BOUND per-worktree record and a funnel row at `spawned`.
     /// `commit_override` is written into the primary `[verification].commit` (the gate).
-    /// Returns `(tmp, primary, wt, agent, base)`.
+    ///
+    /// The coord tree and the funnel row are net-new here (SL-228 PHASE-04): the verb now
+    /// gates on the funnel machine and records a Class-2 row on the coord ref, so a fork
+    /// with no coordination tree and no binding is no longer a legitimate input — it is
+    /// exactly the `unprovable-fork` case the design refuses. Returns
+    /// `(tmp, primary, wt, agent, base)`.
     fn worker_fixture(
         commit_override: &str,
         seed_files: &[(&str, &str)],
@@ -454,9 +820,25 @@ mod tests {
         )
         .unwrap();
 
-        // The worker worktree + its per-worktree record.
-        let agent = "wk1".to_string();
+        // The COORDINATION worktree on `dispatch/<SLICE>` — the tree whose ref carries
+        // the funnel record the verb gates on and records to.
         let coord = fs::canonicalize(tmp.path()).unwrap().join("coord");
+        git_run(
+            &primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                &format!("dispatch/{SLICE:03}"),
+                coord.to_str().unwrap(),
+                &base,
+            ],
+        );
+        let coord = fs::canonicalize(&coord).unwrap();
+
+        // The worker worktree + its BOUND per-worktree record.
+        let agent = "wk1".to_string();
         let wt = coord.join(".worktrees").join(&agent);
         fs::create_dir_all(coord.join(".worktrees")).unwrap();
         git_run(
@@ -472,10 +854,69 @@ mod tests {
             ],
         );
         let wt = fs::canonicalize(&wt).unwrap();
-        provision_dispatch_record(&coord, &agent, &base, &wt, &format!("dispatch/{agent}"))
-            .unwrap();
+        provision_dispatch_record(
+            &coord,
+            &agent,
+            &base,
+            &wt,
+            &format!("dispatch/{agent}"),
+            Some(&fixture_binding()),
+        )
+        .unwrap();
+
+        // The phase stands at `spawned` — what `create-fork` lands post-act (D8).
+        land(
+            &coord,
+            &Transition::Spawn {
+                fork: format!("dispatch/{agent}"),
+                base_oid: base.clone(),
+            },
+        );
 
         (tmp, primary, wt, agent, base)
+    }
+
+    /// Land one funnel transition on the fixture's coord ref, through the sole writer.
+    fn land(coord: &Path, t: &Transition) {
+        let coord_ref = dispatch_ref(SLICE);
+        let tip = git_run(coord, &["rev-parse", &format!("{coord_ref}^{{commit}}")]);
+        match funnel::land_funnel_transition(
+            coord,
+            &coord_ref,
+            &tip,
+            SLICE,
+            PHASE,
+            t,
+            None,
+            "2026-07-26T00:00:00Z",
+            &Provenance::Conclude {
+                who: dispatch_identity(),
+            },
+        )
+        .unwrap()
+        {
+            funnel::FunnelLanding::Landed { .. } => {}
+            other => panic!("fixture: expected Landed, got {other:?}"),
+        }
+    }
+
+    /// The coordination root for a fixture worker worktree.
+    fn coord_of(wt: &Path) -> PathBuf {
+        wt.parent()
+            .expect("wt has a .worktrees parent")
+            .parent()
+            .expect(".worktrees has a coord parent")
+            .to_path_buf()
+    }
+
+    /// The phase's landed funnel row (read at the coord tip, object-db only).
+    fn funnel_row(coord: &Path) -> Option<PhaseRow> {
+        let coord_ref = dispatch_ref(SLICE);
+        let tip = git_run(coord, &["rev-parse", &format!("{coord_ref}^{{commit}}")]);
+        funnel::read_funnel_at(coord, &tip, SLICE)
+            .unwrap()
+            .row(PHASE)
+            .cloned()
     }
 
     #[test]
@@ -654,12 +1095,7 @@ mod tests {
         // guards every initial commit. No test step here relies on the revive worker
         // "obeying" a fixup prompt; the mismatch alone must refuse.
         let (_tmp, primary, wt, agent, base) = worker_fixture("[\"true\"]", &[]);
-        let coord = wt
-            .parent()
-            .expect("wt has a .worktrees parent")
-            .parent()
-            .expect(".worktrees has a coord parent")
-            .to_path_buf();
+        let coord = coord_of(&wt);
 
         // The PRIOR worker's landed commit — the durable `fork_tip` a revive must
         // resume from.
@@ -680,8 +1116,15 @@ mod tests {
         // The revive's DispatchRecord `base` IS re-stamped to `fork_tip` (what design
         // §5.5 requires) — the enforcement lives entirely in the base-check below, not
         // in trusting that the reset happened.
-        provision_dispatch_record(&coord, &agent, &fork_tip, &wt, &format!("dispatch/{agent}"))
-            .unwrap();
+        provision_dispatch_record(
+            &coord,
+            &agent,
+            &fork_tip,
+            &wt,
+            &format!("dispatch/{agent}"),
+            Some(&fixture_binding()),
+        )
+        .unwrap();
 
         let out = run_worker_commit(&primary, &agent, "revive commit").unwrap();
         match out {
@@ -705,5 +1148,348 @@ mod tests {
             base,
             "no commit landed — HEAD did not advance past the wrong base"
         );
+    }
+
+    // ==================================================================================
+    // SL-228 PHASE-04 — the funnel gate, the Class-2 record, and the retry legs
+    // (VT-3 / VT-8; design §3 RV-305 F-1, §4).
+    // ==================================================================================
+
+    /// Commit `C` on the fork with RAW git — no belt ever ran. This is BOTH the
+    /// "killed between the fork commit and the coord record" state AND the ungated
+    /// raw-git bypass wearing the retry signature; the two are indistinguishable by
+    /// construction, which is exactly the point of a provenance-INDIFFERENT gate.
+    fn raw_commit_on_fork(wt: &Path, files: &[(&str, &str)]) -> String {
+        for (rel, body) in files {
+            let path = wt.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, body).unwrap();
+        }
+        git_run(wt, &["add", "-A"]);
+        git_run(wt, &["commit", "-q", "-m", "raw"]);
+        git_run(wt, &["rev-parse", "HEAD^{commit}"])
+    }
+
+    #[test]
+    fn first_commit_leg_lands_the_class_2_worker_commit_row_after_the_act() {
+        // VT-3 / D8: the record lands STRICTLY AFTER the act, and names the tip that
+        // actually landed. Before this the fork ref advanced with no coord row at all.
+        let (_tmp, primary, wt, agent, _base) = worker_fixture("[\"true\"]", &[]);
+        let coord = coord_of(&wt);
+        assert_eq!(
+            funnel_row(&coord).map(|r| r.position),
+            Some(Position::Spawned),
+            "the phase stands at spawned before the worker commits"
+        );
+
+        fs::write(wt.join("seed"), "worker change\n").unwrap();
+        let oid = match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Committed { oid, .. } => oid,
+            other => panic!("expected Committed, got {other:?}"),
+        };
+
+        let row = funnel_row(&coord).expect("a row was landed");
+        assert_eq!(row.position, Position::WorkerCommitted);
+        assert_eq!(
+            row.worker_commit.map(|w| w.fork_tip),
+            Some(oid),
+            "the row names the tip that actually landed"
+        );
+    }
+
+    // --- SL-228 PHASE-05 (T10): the pre-spawn heal ------------------------------------
+
+    /// Rewind the coord ref past `create-fork`'s `Spawn` row — the landing is
+    /// deliberately NON-FATAL (D4), so a live, bound fork can genuinely reach
+    /// `worker_commit` with no funnel row at all.
+    fn drop_the_spawn_row(coord: &Path, base: &str) {
+        git_run(coord, &["update-ref", &dispatch_ref(SLICE), base]);
+        assert!(funnel_row(coord).is_none(), "fixture: the row is gone");
+    }
+
+    #[test]
+    fn a_pre_spawn_row_is_healed_in_the_same_splice_as_the_worker_commit_row() {
+        // Before PHASE-05 this refused `not-spawned`: the writer took ONE transition, so
+        // a missing (non-fatal) `Spawn` row blocked a perfectly legitimate commit. Now
+        // the verb heals the rung it is already the recorder for — in ONE splice.
+        let (_tmp, primary, wt, agent, base) = worker_fixture("[\"true\"]", &[]);
+        let coord = coord_of(&wt);
+        drop_the_spawn_row(&coord, &base);
+
+        fs::write(wt.join("seed"), "worker change\n").unwrap();
+        let oid = match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Committed { oid, .. } => oid,
+            other => panic!("expected Committed, got {other:?}"),
+        };
+        let row = funnel_row(&coord).expect("the healed row");
+        assert_eq!(row.position, Position::WorkerCommitted);
+        assert_eq!(
+            row.spawn.expect("the Spawn rung healed").fork,
+            format!("dispatch/{agent}"),
+            "the missing create-fork row is filled from the durable record"
+        );
+        assert_eq!(row.worker_commit.map(|w| w.fork_tip), Some(oid));
+        // BOTH rungs in ONE commit — all-or-none, no intermediate position to be
+        // killed at.
+        let tip = git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]);
+        assert_eq!(
+            git_run(&coord, &["rev-list", "--count", &format!("{base}..{tip}")]),
+            "1"
+        );
+    }
+
+    #[test]
+    fn the_retry_leg_also_heals_a_pre_spawn_row_under_the_same_belts() {
+        // The adopt arm meets the same gap: the fork already carries its commit and the
+        // row is missing entirely. The belts still run (this is the self-record leg),
+        // and the heal rides the same splice.
+        let (_tmp, primary, wt, agent, base) = worker_fixture("[\"true\"]", &[]);
+        let coord = coord_of(&wt);
+        let c = raw_commit_on_fork(&wt, &[("seed", "ungated but benign\n")]);
+        drop_the_spawn_row(&coord, &base);
+
+        match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Committed { oid, .. } => {
+                assert_eq!(oid, c, "the landed commit is adopted, not re-made");
+            }
+            other => panic!("expected Committed, got {other:?}"),
+        }
+        let row = funnel_row(&coord).expect("the healed row");
+        assert_eq!(row.position, Position::WorkerCommitted);
+        assert!(
+            row.spawn.is_some(),
+            "the Spawn rung healed on the retry leg too"
+        );
+    }
+
+    #[test]
+    fn an_unbound_fork_refuses_unprovable_fork_and_commits_nothing() {
+        // EX-2 / design §4: no ungated fallback and no "skip and let import heal" arm —
+        // import refuses the same unbound fork, so a skip would promise a heal that
+        // never comes. The refusal NAMES the fork.
+        let (_tmp, primary, wt, agent, base) = worker_fixture("[\"true\"]", &[]);
+        let coord = coord_of(&wt);
+        // Strip the binding: a live, perfectly consistent fork that nothing can place.
+        provision_dispatch_record(
+            &coord,
+            &agent,
+            &base,
+            &wt,
+            &format!("dispatch/{agent}"),
+            None,
+        )
+        .unwrap();
+
+        fs::write(wt.join("seed"), "worker change\n").unwrap();
+        match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Refused { reason, detail } => {
+                assert_eq!(reason, "unprovable-fork");
+                assert_eq!(detail, format!("dispatch/{agent}"), "names the fork");
+            }
+            other => panic!("expected unprovable-fork, got {other:?}"),
+        }
+        assert_eq!(
+            git_run(&wt, &["rev-parse", "HEAD^{commit}"]),
+            base,
+            "nothing committed"
+        );
+    }
+
+    #[test]
+    fn a_lost_response_retry_is_a_recorded_no_op_replay_naming_the_landed_tip() {
+        // VT-3: the response was lost, not the commit. Re-driving must NOT mint a second
+        // commit and must NOT misdiagnose `stale-record` — it answers with the tip that
+        // is already landed and recorded.
+        let (_tmp, primary, wt, agent, base) = worker_fixture("[\"true\"]", &[]);
+        let coord = coord_of(&wt);
+        fs::write(wt.join("seed"), "worker change\n").unwrap();
+        let first = run_worker_commit(&primary, &agent, "msg").unwrap();
+        let oid = match first {
+            WorkerCommitOutput::Committed { ref oid, .. } => oid.clone(),
+            other => panic!("expected Committed, got {other:?}"),
+        };
+        let coord_tip_before = git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]);
+
+        // The worker never saw that reply and re-drives the identical call.
+        match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Committed {
+                oid: again,
+                base: again_base,
+                undeclared,
+            } => {
+                assert_eq!(again, oid, "the replay NAMES the already-landed tip");
+                assert_eq!(again_base, base);
+                assert!(undeclared.is_empty(), "a replay re-classifies nothing");
+            }
+            other => panic!("expected a no-op replay, got {other:?}"),
+        }
+        assert_eq!(
+            git_run(&wt, &["rev-parse", "HEAD^{commit}"]),
+            oid,
+            "no second commit was minted"
+        );
+        assert_eq!(
+            git_run(&coord, &["rev-parse", &dispatch_ref(SLICE)]),
+            coord_tip_before,
+            "a replay writes NOTHING — the coord ref did not move"
+        );
+    }
+
+    #[test]
+    fn a_kill_between_the_fork_commit_and_the_coord_record_self_records_on_re_drive() {
+        // VT-3 / VT-8 (adopt arm): the fork carries exactly one commit whose delta passes
+        // every content belt, but the coord row still says `spawned`. This verb IS the
+        // original recorder (D8), so the re-drive lands its own lagging row — and does so
+        // regardless of authorship, because the belts, not provenance, are the authority.
+        let (_tmp, primary, wt, agent, _base) = worker_fixture("[\"true\"]", &[]);
+        let coord = coord_of(&wt);
+        let c = raw_commit_on_fork(&wt, &[("seed", "ungated but benign\n")]);
+        assert_eq!(
+            funnel_row(&coord).map(|r| r.position),
+            Some(Position::Spawned),
+            "the row lags the act — exactly the crash window"
+        );
+
+        match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Committed { oid, .. } => {
+                assert_eq!(oid, c, "the landed commit is adopted, not re-made");
+            }
+            other => panic!("expected the belt-gated self-record, got {other:?}"),
+        }
+        let row = funnel_row(&coord).expect("the lagging row was landed");
+        assert_eq!(row.position, Position::WorkerCommitted);
+        assert_eq!(row.worker_commit.map(|w| w.fork_tip), Some(c));
+    }
+
+    #[test]
+    fn the_self_record_leg_refuses_naming_the_belt_an_ungated_commit_violates() {
+        // VT-8 (refuse arm): an ungated one-commit fork WEARING the retry signature whose
+        // delta violates a content belt is never adopted and never recorded — it refuses
+        // NAMING that belt. This is the whole security claim of belt-gated adoption.
+        let (_tmp, primary, wt, agent, _base) = worker_fixture("[\"true\"]", &[]);
+        let coord = coord_of(&wt);
+        let c = raw_commit_on_fork(&wt, &[(".doctrine/adr/x", "sneaky\n")]);
+
+        match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Refused { reason, detail } => {
+                assert_eq!(reason, FORBIDDEN_ZONE, "the SCOPE belt is named");
+                assert!(
+                    detail.contains(".doctrine/adr/x"),
+                    "names the path: {detail}"
+                );
+            }
+            other => panic!("expected forbidden-zone, got {other:?}"),
+        }
+        assert_eq!(
+            funnel_row(&coord).map(|r| r.position),
+            Some(Position::Spawned),
+            "never adopted, never recorded — the row still lags"
+        );
+        assert_eq!(
+            git_run(&wt, &["rev-parse", "HEAD^{commit}"]),
+            c,
+            "the fork is left exactly as found (a triage beat, not a rescue)"
+        );
+    }
+
+    #[test]
+    fn the_self_record_leg_refuses_a_gate_red_ungated_commit() {
+        // VT-8: the GATE belt is re-run against `C` too, not just the scope belt — a
+        // one-commit fork that cannot pass `check commit` is not adopted.
+        let (_tmp, primary, wt, agent, _base) = worker_fixture("[\"false\"]", &[]);
+        let coord = coord_of(&wt);
+        raw_commit_on_fork(&wt, &[("seed", "ungated\n")]);
+
+        match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Refused { reason, .. } => assert_eq!(reason, COMMIT_GATE_RED),
+            other => panic!("expected commit-gate-red, got {other:?}"),
+        }
+        assert_eq!(
+            funnel_row(&coord).map(|r| r.position),
+            Some(Position::Spawned),
+            "a red gate adopts nothing"
+        );
+    }
+
+    #[test]
+    fn a_dirty_advanced_fork_is_a_late_recommit_not_a_retry() {
+        // VT-3: the retry signature requires a CLEAN tree. Dirt on an already-committed
+        // fork is a second commit attempt, which `C^ == B` forbids — refuse, naming it,
+        // rather than misdiagnosing `stale-record`.
+        let (_tmp, primary, wt, agent, _base) = worker_fixture("[\"true\"]", &[]);
+        let c = raw_commit_on_fork(&wt, &[("seed", "first\n")]);
+        fs::write(wt.join("seed"), "a second, later edit\n").unwrap();
+
+        match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Refused { reason, detail } => {
+                assert_eq!(reason, LATE_RECOMMIT);
+                assert!(detail.contains("seed"), "names the dirt: {detail}");
+            }
+            other => panic!("expected late-recommit, got {other:?}"),
+        }
+        assert_eq!(
+            git_run(&wt, &["rev-parse", "HEAD^{commit}"]),
+            c,
+            "no second commit"
+        );
+    }
+
+    #[test]
+    fn an_imported_phase_refuses_already_imported_on_both_legs() {
+        // VT-3: past `worker-committed` there is no late re-commit to make. Both the
+        // pre-act gate (clean fork at base) and the retry leg (advanced fork) answer with
+        // the machine's own `already-<position>` payload — a truthful terminal answer,
+        // never `stale-record`.
+        // (a) the PRE-ACT gate on a fork still at base.
+        let (_tmp, primary, wt, agent, _base) = worker_fixture("[\"true\"]", &[]);
+        let coord = coord_of(&wt);
+        let fork = format!("dispatch/{agent}");
+        land(
+            &coord,
+            &Transition::RecordWorkerCommit {
+                fork_tip: "deadbeef".to_owned(),
+            },
+        );
+        land(
+            &coord,
+            &Transition::Import {
+                fork_tip: "deadbeef".to_owned(),
+                onto: "cafe".to_owned(),
+            },
+        );
+        fs::write(wt.join("seed"), "too late\n").unwrap();
+        match run_worker_commit(&primary, &agent, "msg").unwrap() {
+            WorkerCommitOutput::Refused { reason, detail } => {
+                assert_eq!(reason, "already-imported");
+                assert!(
+                    detail.contains("imported"),
+                    "the payload IS the recovery procedure: {detail}"
+                );
+            }
+            other => panic!("expected already-imported, got {other:?}"),
+        }
+
+        // (b) the RETRY leg on an advanced fork at the same position.
+        let (_tmp2, primary2, wt2, agent2, _base2) = worker_fixture("[\"true\"]", &[]);
+        let coord2 = coord_of(&wt2);
+        let c = raw_commit_on_fork(&wt2, &[("seed", "landed\n")]);
+        land(
+            &coord2,
+            &Transition::RecordWorkerCommit {
+                fork_tip: c.clone(),
+            },
+        );
+        land(
+            &coord2,
+            &Transition::Import {
+                fork_tip: c,
+                onto: "cafe".to_owned(),
+            },
+        );
+        match run_worker_commit(&primary2, &agent2, "msg").unwrap() {
+            WorkerCommitOutput::Refused { reason, .. } => assert_eq!(reason, "already-imported"),
+            other => panic!("expected already-imported, got {other:?}"),
+        }
+        drop(fork);
     }
 }

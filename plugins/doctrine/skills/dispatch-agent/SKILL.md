@@ -1,6 +1,6 @@
 ---
 name: dispatch-agent
-description: The claude arm of `/dispatch` — spawn a worker via the `Agent` tool using the dispatch-worker subagent type with worktree isolation. Base is explicit — `dispatch arm-spawn --base B` writes the base file, then cd into the spawn dir before the Agent spawn so the WorktreeCreate hook forks at B. Worker self-commits via the gated `worker_commit` MCP tool; the orchestrator lands via `dispatch_import` → `dispatch_conclude_phase` → `dispatch_reap`. Reached only from the `/dispatch` router on a claude↔env-marker agreement; do not invoke directly.
+description: The claude arm of `/dispatch` — spawn a worker via the `Agent` tool using the dispatch-worker subagent type with worktree isolation. Base is explicit — `dispatch arm-spawn --base B` writes the base file, then cd into the spawn dir before the Agent spawn so the WorktreeCreate hook forks at B. Worker self-commits via the gated `worker_commit` MCP tool; the orchestrator then does whatever `doctrine dispatch next` prescribes, one action at a time. Reached only from the `/dispatch` router on a claude↔env-marker agreement; do not invoke directly.
 ---
 
 # Dispatch — claude arm
@@ -93,49 +93,61 @@ worker reports the reason verbatim and stops; it never retries around a
 gated `worker_commit` tool (belts are the security boundary: non-empty delta →
 forbidden-zone scope → `HEAD == B` → the `check commit` gate). The delta is
 therefore **fork-durable** — it survives the worktree, and a revive/fixup resumes
-from the committed tip. In order:
+from the committed tip.
 
-1. **Footer.** Read the Agent return footer for `worktreePath:`.
-   NO footer / no `worktreePath:` ⇒ no isolated tree was created (hook abort or
-   fallback-to-main) ⇒ ABORT, do NOT enter the funnel. Re-dispatch, or switch to
-   the subprocess arm if the hook is failing.
-2. **Identity.** Derive from `worktreePath` (the normative datum, live-proven):
-   `name = basename(worktreePath)`, `branch = dispatch/<name>`. Do NOT read the
-   footer's `worktreeBranch` field — it is `undefined` for the hook-created tree.
-   Cross-check the worker's reported `fork_tip` against `git rev-parse <branch>`.
-3. **Verify.** `doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <branch>`
-   Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base /
-   branch-mismatch. It accepts the post-commit HEAD (tests
-   `merge-base --is-ancestor B HEAD`, a descendant — not `HEAD == B`); `--branch`
-   binds dir↔branch so both belts verify ONE worker state.
-4. **Land.** `dispatch_import{slice, name: <branch>}` (MCP) — resolves the coord
-   tree server-side by slice, runs the `classify_import` scope belt as a HARD
-   pre-compose gate (`.doctrine/`/`.claude/` reject, undeclared-scope reject —
-   nothing lands on a refusal), composes coord-tip ⊕ worker-tip via `merge-tree`
-   (object-db only, working-tree-free), and lands **ONE non-merge commit**
-   preserving the worker AUTHOR. Import and commit are folded — no separate
-   orchestrator commit step. Any `Refused{reason}` ⇒ report-and-halt
-   (`merge-conflict`, `head-moved`, `undeclared-scope`, … are never
-   auto-resolved). The delta is already commit-gate-green (worker_commit ran the
-   gate), so no separate post-import prove run on this path.
-5. **Conclude.** `dispatch_conclude_phase{slice, phase, code_start: <B>,
-   code_end: <coord_tip from step 4>}` — one call, two tiers: flips the
-   gitignored phase sheet to `completed` AND lands the committed `(B, coord_tip)`
-   boundary row (UPSERT-by-phase, working-tree-free). The flip reaches BOTH the
-   coord sheet (next-ready authority) and the PRIMARY sheet (the tree
-   `prepare-review`'s completeness gate reads its completed-set from) — no manual
-   `slice phase --status completed -p <primary>` re-flip is needed. That
-   coord→primary mirror lives in the single writer `set_phase_status` (ISS-212),
-   so it is not conclude-specific: any `completed` flip in the coord tree under a
-   live `dispatch/<slice>` worktree mirrors down, whether it rode this tool or a
-   raw `slice phase --status`. Idempotent on retry; the only fault outcome is a
-   flipped sheet with no committed boundary, which a retry re-composes.
-6. **Reap.** `dispatch_reap{slice, name: <branch>}` — runs the patch-id
-   landed-oracle (`git cherry`): it REFUSES a fork whose patch is not in coord
-   history, then removes the landed fork's worktree + branch. Reap ONLY through
-   this oracle — never a raw `git worktree remove --force` against an unimported
-   tree (that deletes the sole copy of an unlanded delta; the tool's refusal is
-   the guard a raw remove lacks).
+**Ordering is the oracle's job, not yours.** `doctrine dispatch next --slice <N>`
+prescribes the one action due; the router documents the loop. What follows is the
+*mechanics* of each prescription on this arm, not a sequence to hold.
+
+**Arrival (before the funnel can see the delta at all).**
+
+- **Footer.** Read the Agent return footer for `worktreePath:`.
+  NO footer / no `worktreePath:` ⇒ no isolated tree was created (hook abort or
+  fallback-to-main) ⇒ ABORT, do NOT enter the funnel. Re-dispatch, or switch to
+  the subprocess arm if the hook is failing.
+- **Identity.** Derive from `worktreePath` (the normative datum, live-proven):
+  `name = basename(worktreePath)`, `branch = dispatch/<name>`. Do NOT read the
+  footer's `worktreeBranch` field — it is `undefined` for the hook-created tree.
+- **Verify the worker.** `doctrine worktree verify-worker --base <B> --dir <worktreePath> --branch <branch>`
+  Abort on any refusal: no-worker-head / not-isolated / unstamped / wrong-base /
+  branch-mismatch. It accepts the post-commit HEAD (tests
+  `merge-base --is-ancestor B HEAD`, a descendant — not `HEAD == B`); `--branch`
+  binds dir↔branch so both belts verify ONE worker state.
+
+**`import`** — `dispatch_import{slice, name: <branch>}` (MCP; `next` renders the
+call). Resolves the coord tree server-side by slice, runs the `classify_import`
+scope belt as a HARD pre-compose gate (`.doctrine/`/`.claude/` reject,
+undeclared-scope reject — nothing lands on a refusal), composes coord-tip ⊕
+worker-tip via `merge-tree` (object-db only, working-tree-free), and lands **ONE
+non-merge commit** preserving the worker AUTHOR. Import and commit are folded —
+no separate orchestrator commit step. Any `Refused{reason}` ⇒ report-and-halt
+(`merge-conflict`, `head-moved`, `undeclared-scope`, … are never auto-resolved).
+The delta is already commit-gate-green (worker_commit ran the gate), so no
+separate post-import prove run on this path.
+
+**`verify`** — `doctrine dispatch verify --slice <N> --phase PHASE-NN` (CLI).
+Runs the phase suite in the coordination worktree and lands pass/fail evidence;
+red evidence is what makes the next prescription `triage-verify-failure`.
+
+**`conclude`** — `dispatch_conclude_phase{slice, phase, code_start, code_end}`
+(MCP; `next` renders it fully parameterised from the funnel row). One call, two
+tiers: flips the gitignored phase sheet to `completed` AND lands the committed
+`(code_start, code_end)` boundary row (UPSERT-by-phase, working-tree-free). The
+flip reaches BOTH the coord sheet (next-ready authority) and the PRIMARY sheet
+(the tree `prepare-review`'s completeness gate reads its completed-set from) — no
+manual `slice phase --status completed -p <primary>` re-flip is needed. That
+coord→primary mirror lives in the single writer `set_phase_status` (ISS-212), so
+it is not conclude-specific: any `completed` flip in the coord tree under a live
+`dispatch/<slice>` worktree mirrors down, whether it rode this tool or a raw
+`slice phase --status`. Idempotent on retry; the only fault outcome is a flipped
+sheet with no committed boundary, which a retry re-composes.
+
+**`reap`** — `dispatch_reap{slice, name: <branch>}` (MCP). Runs the patch-id
+landed-oracle (`git cherry`): it REFUSES a fork whose patch is not in coord
+history, then removes the landed fork's worktree + branch. Reap ONLY through this
+oracle — never a raw `git worktree remove --force` against an unimported tree
+(that deletes the sole copy of an unlanded delta; the tool's refusal is the guard
+a raw remove lacks).
 
 ## Fallback (A) — live-worktree import
 
@@ -147,7 +159,7 @@ harness does not auto-reap). NOT a bypass: a `forbidden-zone` /
 `commit-gate-red` / `undeclared-scope` refusal is a worker-delta defect — fix up
 or halt, never import around it.
 
-1. `verify-worker` as above (step 3; HEAD == B in this mode — no commit).
+1. `verify-worker` as above (HEAD == B in this mode — no commit).
 2. `doctrine worktree import --base <B> --from-worktree <worktreePath> --slice <N>`
    — gathers the live tracked+untracked delta, runs the same `classify_import`
    belt, applies onto `B` **NON-committing**, then runs the reject-and-halt prove
@@ -196,11 +208,11 @@ unlanded tree (reap through `dispatch_reap`'s patch-id oracle); claim
 self-commit on the pi arm; point `dispatch setup --dir` at an outside-root
 sibling (ISS-031); spawn with a `subagent_type` other than `dispatch-worker`;
 run `fork` or bwrap here (that's `/dispatch-subprocess`); claim parallel landing
-(v1 lands one per base).
+(v1 lands one per base); hand-sequence the landing verbs from memory or work the
+funnel state out of git by hand (ask `doctrine dispatch next --slice <N>`).
 **Always:** `arm-spawn --base B` then cd into the spawn dir before the spawn, cd
 back to the coord root after; pin `subagent_type` to `dispatch-worker`; embed
 the base-guard block AND the `worker_commit` self-commit instruction in the
 distilled worker prompt; derive `branch` from `worktreePath`; run `verify-worker`
-before landing; land `dispatch_import` → conclude `dispatch_conclude_phase`
-(`code_start = B`, `code_end = coord_tip`) → reap `dispatch_reap`, in that
-order; return to the router for the drive cadence.
+before landing; do the ONE thing `dispatch next` prescribes and ask again; return
+to the router for the drive cadence.

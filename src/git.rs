@@ -1844,6 +1844,238 @@ pub(crate) fn tree_clean(root: &Path) -> Result<bool, CaptureError> {
     Ok(status.is_empty())
 }
 
+// --- SL-228 PHASE-01: the funnel read surface — git primitives (design §8) ----
+// Four orchestrator-facing reads the dispatch funnel needs, each a thin git seam
+// the read verbs (`dispatch tree-state|delta|history|ignored`) compose so the
+// orchestrator never shells raw git for a funnel read (REQ-388). `current_branch`
+// relocates here from `dispatch.rs` (the fifth read — `whereami`'s branch leg).
+
+/// A worktree's cleanliness split into the three axes `dispatch tree-state`
+/// reports — UNTRACKED-AWARE, in deliberate contrast to [`tree_clean`] (which
+/// ignores untracked scratch so an ephemeral close-session file cannot block an
+/// advance). A funnel-owned coordination tree is expected clean on every axis; each
+/// non-empty vector is a distinct dirt signal the verb surfaces BY NAME (verify's
+/// forward-sync refuses on it, never discards).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct TreeState {
+    /// Paths STAGED in the index against HEAD (porcelain X column) — the
+    /// reverse-diff (index vs tip) / staged-anomaly signal: a funnel coord tree
+    /// stages nothing, so any entry here is an anomaly.
+    pub(crate) staged: Vec<String>,
+    /// Tracked paths whose WORKTREE bytes differ from the index (porcelain Y column).
+    pub(crate) tracked_dirty: Vec<String>,
+    /// Unignored UNTRACKED paths (`??`) — the axis [`tree_clean`] deliberately drops.
+    pub(crate) untracked: Vec<String>,
+}
+
+impl TreeState {
+    /// True iff every axis is empty — untracked-aware clean (contrast [`tree_clean`],
+    /// which answers a single tracked-only bool).
+    pub(crate) fn is_clean(&self) -> bool {
+        self.staged.is_empty() && self.tracked_dirty.is_empty() && self.untracked.is_empty()
+    }
+}
+
+/// Parse `git status --porcelain -z` output into the three [`TreeState`] axes. PURE
+/// (byte-slice in, structured out — ADR-001 leaf). Each NUL-terminated entry is
+/// `XY<space>PATH`: X the index column, Y the worktree column; `??` is untracked. A
+/// rename/copy (`R`/`C` in either column) carries an extra NUL-separated ORIGINAL
+/// path, consumed so it is never mistaken for the next entry. Paths are decoded
+/// lossily — a report surface, not a byte-exact ingest predicate.
+fn parse_porcelain_status_z(stdout: &[u8]) -> TreeState {
+    let mut state = TreeState::default();
+    let mut fields = stdout.split(|b| *b == 0u8).filter(|f| !f.is_empty());
+    while let Some(entry) = fields.next() {
+        // `XY<space>PATH`: X at 0, Y at 1, path from 3. A short entry is skipped.
+        let (Some(&x), Some(&y), Some(path_bytes)) = (entry.first(), entry.get(1), entry.get(3..))
+        else {
+            continue;
+        };
+        let path = String::from_utf8_lossy(path_bytes).into_owned();
+        // A rename/copy names its source in the NEXT field — consume it.
+        if x == b'R' || x == b'C' || y == b'R' || y == b'C' {
+            let _orig = fields.next();
+        }
+        if x == b'?' && y == b'?' {
+            state.untracked.push(path);
+            continue;
+        }
+        if x != b' ' && x != b'?' {
+            state.staged.push(path.clone());
+        }
+        if y != b' ' && y != b'?' {
+            state.tracked_dirty.push(path);
+        }
+    }
+    state
+}
+
+/// The UNTRACKED-AWARE tree state at `root` — `git status --porcelain -z
+/// --untracked-files=all` parsed into [`TreeState`]'s staged / tracked-dirty /
+/// untracked axes. Where [`tree_clean`] answers a single tracked-only bool, this
+/// reports every axis BY PATH so `dispatch tree-state` can name the dirt (and
+/// verify's forward-sync can refuse on it). Byte-safe read; the pure parse is
+/// [`parse_porcelain_status_z`]. Impure shell.
+pub(crate) fn tree_clean_untracked(root: &Path) -> Result<TreeState, CaptureError> {
+    let out = git_bytes(
+        root,
+        &["status", "--porcelain", "-z", "--untracked-files=all"],
+    )?;
+    Ok(parse_porcelain_status_z(&out))
+}
+
+// --- SL-228 PHASE-05: verify's conditional forward-sync primitives (design §5) -
+// Three reads/one write the funnel's `dispatch verify` composes to prove — never
+// assume — that the coord index/worktree still describe a known commit before it
+// fast-forwards them. Each keeps the explicit exit-code discipline: an
+// INDETERMINATE answer is an `Err`, never a silently-false one (a false `equal`
+// would let verify restore over an operator's edit).
+
+/// Whether the INDEX at `root` matches `treeish`'s tree (`git diff-index --quiet
+/// --cached <treeish>`). Exit 0 ⇒ equal, exit 1 ⇒ differs, anything else ⇒ `Err`
+/// (a bad tree-ish must never read as "differs" — verify walks candidate sync
+/// points with this and would otherwise skip a real match). Impure shell.
+pub(crate) fn index_matches(root: &Path, treeish: &str) -> Result<bool, CaptureError> {
+    let output = run_git(root, &["diff-index", "--quiet", "--cached", treeish])?;
+    match output.status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        _ => Err(CaptureError::Git(format!(
+            "diff-index --cached {treeish}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
+/// The blob oid the WORKING TREE file at `path` would hash to (`git hash-object`),
+/// or `None` when the file is absent — the worktree-side counterpart of the
+/// tree-side [`blob_oid_at`], so verify can compare worktree bytes against a
+/// baseline commit by oid (both `None` ⇒ absent on both sides ⇒ identical).
+/// A present-but-unhashable path errors rather than folding to `None`.
+pub(crate) fn worktree_blob_oid(root: &Path, path: &str) -> Result<Option<String>, CaptureError> {
+    if !root.join(path).exists() {
+        return Ok(None);
+    }
+    let output = run_git(root, &["hash-object", "--", path])?;
+    match output.status.code() {
+        Some(0) => {
+            let text = String::from_utf8(output.stdout).map_err(|_ignored| {
+                CaptureError::Git(format!("hash-object -- {path}: non-utf8 output"))
+            })?;
+            Ok(Some(text.trim().to_owned()))
+        }
+        _ => Err(CaptureError::Git(format!(
+            "hash-object -- {path}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
+/// Restore the NAMED `paths` in both the index and the working tree from `source`
+/// (`git restore --source=<source> --staged --worktree -- <paths>`). The pathspec is
+/// STRUCTURALLY mandatory: an empty `paths` is a no-op that runs no git at all, so
+/// this can never degenerate into a whole-tree operation (the `checkout <ref> --`
+/// footgun). Callers must have PROVEN each path's current bytes first — this
+/// primitive overwrites. Impure shell.
+pub(crate) fn restore_paths(
+    root: &Path,
+    source: &str,
+    paths: &[String],
+) -> Result<(), CaptureError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let source_arg = format!("--source={source}");
+    let mut args: Vec<&str> = vec!["restore", &source_arg, "--staged", "--worktree", "--"];
+    args.extend(paths.iter().map(String::as_str));
+    git_text(root, &args)?;
+    Ok(())
+}
+
+/// The mode of a [`three_dot_diff`] read: the changed PATH NAMES only, or the full
+/// unified CONTENT diff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DiffMode {
+    /// `--name-only`: one changed path per line.
+    Names,
+    /// The full unified `git diff` content.
+    Content,
+}
+
+/// The THREE-DOT diff `A...B` — the changes on `B` since the merge-base of `A` and
+/// `B` (git's symmetric-difference form, NOT the two-dot `A..B`), names-only or full
+/// content per `mode`. The seam `dispatch delta --from A --to B [--names|--content]`
+/// composes; returns git's stdout verbatim (trimmed). Impure shell.
+pub(crate) fn three_dot_diff(
+    root: &Path,
+    a: &str,
+    b: &str,
+    mode: DiffMode,
+) -> Result<String, CaptureError> {
+    let range = format!("{a}...{b}");
+    let args: Vec<&str> = match mode {
+        DiffMode::Names => vec!["diff", "--name-only", &range],
+        DiffMode::Content => vec!["diff", &range],
+    };
+    git_text(root, &args)
+}
+
+/// A BOUNDED oneline log of `refish` — `git log --oneline --no-decorate -n <max>
+/// <refish>`, one `<short-sha> <subject>` line per commit, newest first, capped at
+/// `max` (the CALLER owns the bound — never an unbounded walk). `max == 0` yields an
+/// empty vec. The seam `dispatch history` composes. Impure shell.
+pub(crate) fn log_oneline(
+    root: &Path,
+    refish: &str,
+    max: usize,
+) -> Result<Vec<String>, CaptureError> {
+    let n = max.to_string();
+    let text = git_text(
+        root,
+        &["log", "--oneline", "--no-decorate", "-n", &n, refish],
+    )?;
+    Ok(text.lines().map(str::to_owned).collect())
+}
+
+/// The subset of `paths` git would IGNORE under the active gitignore rules — `git
+/// check-ignore -- <paths>`, which prints each ignored path and exits 0 (≥1 match)
+/// or 1 (no match); any other code (128, a bad invocation) errors, kept distinct
+/// from the clean "nothing ignored" exit-1 (the [`is_ancestor`] exit-code
+/// discipline). Empty input ⇒ empty result (no spawn). The seam `dispatch ignored
+/// <path>…` composes. Impure shell.
+pub(crate) fn check_ignore(root: &Path, paths: &[String]) -> Result<Vec<String>, CaptureError> {
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut args: Vec<&str> = vec!["check-ignore", "--"];
+    args.extend(paths.iter().map(String::as_str));
+    let output = run_git(root, &args)?;
+    match output.status.code() {
+        Some(0 | 1) => {
+            let text = String::from_utf8(output.stdout).map_err(|_ignored| {
+                CaptureError::Git("check-ignore: non-utf8 output".to_owned())
+            })?;
+            Ok(text.lines().map(str::to_owned).collect())
+        }
+        _ => Err(CaptureError::Git(format!(
+            "check-ignore: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+    }
+}
+
+/// The branch the worktree at `root` is checked out on, short form (e.g.
+/// `review/064`), or `None` for a detached HEAD. The raw-evidence-ref guard keys on
+/// this; `dispatch whereami` reads it for the branch leg. Relocated VERBATIM from
+/// `dispatch.rs` (SL-228 PHASE-01, design §8 gap 3 — one owned branch-read seam, no
+/// parallel implementation). Impure shell.
+pub(crate) fn current_branch(root: &Path) -> anyhow::Result<Option<String>> {
+    Ok(git_opt(
+        root,
+        &["symbolic-ref", "--quiet", "--short", "HEAD"],
+    )?)
+}
+
 /// Outcome of a guarded fast-forward advance of a checked-out ref
 /// ([`ff_advance_in_worktree`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2617,11 +2849,13 @@ mod tests {
     use std::process::Command;
 
     use super::{
-        AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, EMPTY_TREE_OID, Frame,
+        AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, DiffMode, EMPTY_TREE_OID, Frame,
         REMOTE_NORMALIZER, RepoIdKind, RepoIdentity, WorktreeEntry, blob_oid_at, canonical_bytes,
-        capture, checkout_state_id, commits_touching, diff_doctrine_paths, explicit_identity,
-        last_corpus_commit, list_worktrees, live_worktree_for_ref, normalize_remote_url,
-        parse_worktree_for_ref, parse_worktree_records, sha256, worktree_for_ref,
+        capture, check_ignore, checkout_state_id, commits_touching, current_branch,
+        diff_doctrine_paths, explicit_identity, index_matches, last_corpus_commit, list_worktrees,
+        live_worktree_for_ref, log_oneline, normalize_remote_url, parse_worktree_for_ref,
+        parse_worktree_records, restore_paths, sha256, three_dot_diff, tree_clean,
+        tree_clean_untracked, worktree_blob_oid, worktree_for_ref,
     };
 
     use crate::kinds::DISPATCH_REF_PREFIX;
@@ -2930,6 +3164,226 @@ mod tests {
             self.git(&["commit", "-m", message]);
             self.git(&["rev-parse", "HEAD"])
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // SL-228 PHASE-01: the funnel read-surface primitives (VT-1 / VT-2). Fixture
+    // repos over `ScratchRepo` — the four new gap reads + the relocated
+    // `current_branch`.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn tree_clean_untracked_reports_each_dirt_axis() {
+        let repo = ScratchRepo::new();
+        repo.commit("tracked.txt", "one\n", "seed");
+        // A seeded, committed tree is clean on every axis.
+        let clean = tree_clean_untracked(repo.path()).expect("status");
+        assert!(clean.is_clean(), "seeded tree is clean: {clean:?}");
+
+        // An untracked file registers on the untracked axis ONLY — the contrast
+        // with `tree_clean`, which ignores untracked scratch and stays true.
+        repo.write("scratch.txt", "junk\n");
+        let untracked = tree_clean_untracked(repo.path()).expect("status");
+        assert_eq!(untracked.untracked, vec!["scratch.txt".to_owned()]);
+        assert!(untracked.tracked_dirty.is_empty());
+        assert!(untracked.staged.is_empty());
+        assert!(
+            !untracked.is_clean(),
+            "untracked file ⇒ not untracked-aware clean"
+        );
+        assert!(
+            tree_clean(repo.path()).expect("tracked clean"),
+            "tree_clean deliberately ignores untracked"
+        );
+
+        // A tracked worktree modification registers on the tracked-dirty axis.
+        repo.write("tracked.txt", "one\ntwo\n");
+        let dirty = tree_clean_untracked(repo.path()).expect("status");
+        assert_eq!(dirty.tracked_dirty, vec!["tracked.txt".to_owned()]);
+        assert!(dirty.staged.is_empty());
+
+        // Staging that modification moves it to the staged (index-vs-tip) axis.
+        repo.git(&["add", "tracked.txt"]);
+        let staged = tree_clean_untracked(repo.path()).expect("status");
+        assert_eq!(staged.staged, vec!["tracked.txt".to_owned()]);
+        assert!(staged.tracked_dirty.is_empty());
+        assert_eq!(staged.untracked, vec!["scratch.txt".to_owned()]);
+    }
+
+    // -----------------------------------------------------------------------
+    // SL-228 PHASE-05: verify's forward-sync primitives.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn index_matches_tracks_the_index_not_the_worktree() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "alpha\n", "base");
+        assert!(
+            index_matches(repo.path(), &base).expect("clean index"),
+            "a freshly committed index equals its own tree"
+        );
+
+        // An UNSTAGED worktree edit leaves the index alone — still a match. This is
+        // exactly why verify needs the separate worktree leg.
+        repo.write("a.txt", "alpha\nbeta\n");
+        assert!(index_matches(repo.path(), &base).expect("worktree-only edit"));
+
+        // Staging it moves the index off the tree.
+        repo.git(&["add", "a.txt"]);
+        assert!(!index_matches(repo.path(), &base).expect("staged edit"));
+
+        // A bad tree-ish is INDETERMINATE — an Err, never a silent `false`.
+        assert!(index_matches(repo.path(), "not-a-ref").is_err());
+    }
+
+    #[test]
+    fn index_matches_sees_a_ref_advanced_without_a_checkout() {
+        // The funnel's own signature: `update-ref` advances the branch (so HEAD moves)
+        // while the index/worktree stay at the old tree. `index_matches` must report
+        // the OLD commit as the materialized one — that is verify's sync point.
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "alpha\n", "base");
+        let advanced = repo.commit("b.txt", "beta\n", "advance");
+        repo.git(&["reset", "--soft", &base]);
+        repo.git(&["reset", &base]); // index back to base; worktree keeps b.txt untracked
+        repo.git(&["update-ref", "refs/heads/main", &advanced]);
+
+        assert!(
+            index_matches(repo.path(), &base).expect("base"),
+            "the index still carries the pre-advance tree"
+        );
+        assert!(
+            !index_matches(repo.path(), &advanced).expect("advanced"),
+            "HEAD moved, but the index did not"
+        );
+    }
+
+    #[test]
+    fn worktree_blob_oid_mirrors_blob_oid_at_for_present_and_absent() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "alpha\n", "base");
+
+        // Present + unmodified ⇒ the worktree hash EQUALS the committed blob oid.
+        let tree_side = blob_oid_at(repo.path(), &base, "a.txt").expect("tree side");
+        let work_side = worktree_blob_oid(repo.path(), "a.txt").expect("worktree side");
+        assert_eq!(work_side, tree_side, "identical bytes hash identically");
+        assert!(work_side.is_some());
+
+        // Modified ⇒ the oids diverge (the per-path proof verify's gate runs).
+        repo.write("a.txt", "alpha\nbeta\n");
+        assert_ne!(
+            worktree_blob_oid(repo.path(), "a.txt").expect("modified"),
+            tree_side
+        );
+
+        // Absent on BOTH sides ⇒ `None` == `None` ⇒ identical, not an error.
+        assert_eq!(
+            worktree_blob_oid(repo.path(), "gone.txt").expect("absent"),
+            None
+        );
+        assert_eq!(
+            blob_oid_at(repo.path(), &base, "gone.txt").expect("absent"),
+            None
+        );
+    }
+
+    #[test]
+    fn restore_paths_restores_only_the_named_paths_and_no_ops_on_empty() {
+        let repo = ScratchRepo::new();
+        repo.commit("a.txt", "alpha\n", "seed a");
+        let head = repo.commit("b.txt", "beta\n", "seed b");
+
+        // An EMPTY pathspec runs no git at all — it can never degenerate into a
+        // whole-tree checkout. Prove it by dirtying the tree first: nothing changes.
+        repo.write("a.txt", "dirty\n");
+        restore_paths(repo.path(), &head, &[]).expect("empty no-op");
+        assert_eq!(
+            std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+            "dirty\n",
+            "an empty pathspec restores NOTHING"
+        );
+
+        // A named path is restored in both index and worktree; the sibling is untouched.
+        repo.write("b.txt", "also dirty\n");
+        restore_paths(repo.path(), &head, &["a.txt".to_owned()]).expect("restore a");
+        assert_eq!(
+            std::fs::read_to_string(repo.path().join("a.txt")).unwrap(),
+            "alpha\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repo.path().join("b.txt")).unwrap(),
+            "also dirty\n",
+            "an unnamed path is never touched"
+        );
+        assert!(
+            index_matches(repo.path(), &head).expect("index"),
+            "index restored too"
+        );
+    }
+
+    #[test]
+    fn three_dot_diff_names_and_content() {
+        let repo = ScratchRepo::new();
+        let base = repo.commit("a.txt", "alpha\n", "base");
+        let head = repo.commit("b.txt", "beta\n", "add b");
+
+        let names = three_dot_diff(repo.path(), &base, &head, DiffMode::Names).expect("names");
+        assert_eq!(names.lines().collect::<Vec<_>>(), vec!["b.txt"]);
+
+        let content =
+            three_dot_diff(repo.path(), &base, &head, DiffMode::Content).expect("content");
+        assert!(
+            content.contains("+beta"),
+            "content diff carries the added line: {content}"
+        );
+        assert!(content.contains("b.txt"), "content diff names the file");
+    }
+
+    #[test]
+    fn log_oneline_is_bounded_and_newest_first() {
+        let repo = ScratchRepo::new();
+        repo.commit("f.txt", "1\n", "first");
+        repo.commit("f.txt", "2\n", "second");
+        repo.commit("f.txt", "3\n", "third");
+
+        let two = log_oneline(repo.path(), "HEAD", 2).expect("log");
+        assert_eq!(two.len(), 2, "bounded to n: {two:?}");
+        assert!(two[0].contains("third"), "newest first: {}", two[0]);
+        assert!(two[1].contains("second"), "second newest: {}", two[1]);
+
+        let zero = log_oneline(repo.path(), "HEAD", 0).expect("log");
+        assert!(zero.is_empty(), "n=0 ⇒ empty");
+    }
+
+    #[test]
+    fn check_ignore_returns_only_ignored_paths() {
+        let repo = ScratchRepo::new();
+        repo.commit(".gitignore", "*.log\n", "ignore logs");
+
+        let paths = vec!["app.log".to_owned(), "keep.txt".to_owned()];
+        let ignored = check_ignore(repo.path(), &paths).expect("check-ignore");
+        assert_eq!(ignored, vec!["app.log".to_owned()], "only the ignored path");
+
+        // Empty input short-circuits without a spawn.
+        assert!(check_ignore(repo.path(), &[]).expect("empty").is_empty());
+    }
+
+    #[test]
+    fn current_branch_reads_symbolic_head_and_none_when_detached() {
+        let repo = ScratchRepo::new();
+        let head = repo.commit("x.txt", "x\n", "seed");
+        assert_eq!(
+            current_branch(repo.path()).expect("branch").as_deref(),
+            Some("main"),
+            "the initial branch, short form"
+        );
+        // Detaching HEAD ⇒ no symbolic branch ⇒ None.
+        repo.git(&["checkout", "--detach", &head]);
+        assert_eq!(
+            current_branch(repo.path()).expect("detached").as_deref(),
+            None,
+            "detached HEAD ⇒ None"
+        );
     }
 
     // -----------------------------------------------------------------------

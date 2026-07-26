@@ -52,6 +52,7 @@ pub(crate) use marker::{
     run_status, write_marker,
 };
 
+mod claim_lock;
 mod coordinate;
 mod create;
 // SL-198 PHASE-01: per-worktree dispatch record + lifecycle (ENGINE tier, sibling to
@@ -71,12 +72,17 @@ mod provision;
 mod subagent;
 
 pub(crate) use coordinate::{coordinate, run_branch_point_check, run_coordinate};
-pub(crate) use create::{ARMING_JAIL_FILE, ARMING_SUBPATH, run_create_fork};
+pub(crate) use create::{
+    ARMING_BASE_FILE, ARMING_JAIL_FILE, ARMING_PHASE_FILE, ARMING_SLICE_FILE, ARMING_SUBPATH,
+    CreatedFork, SpawnFacts, run_create_fork,
+};
 // SL-198 PHASE-02: the PHASE-01 resolver + the import scope seams `worker_commit`
 // (`crate::mcp_server::worker_commit`) reuses — the resolver maps an opaque agent-id
 // to its record; the prefix consts + delta-gather are the shared scope belt (DRY —
 // no forked copy, so the two callers cannot diverge, design §8 R3 / VT-3).
-pub(crate) use dispatch_record::{DispatchRecord, resolve_agent};
+pub(crate) use dispatch_record::{
+    DispatchRecord, ForkBinding, ForkExpect, ResolveRefusal, require_binding, resolve_agent,
+};
 pub(crate) use fork::run_fork;
 pub(crate) use gc::run_gc;
 pub(crate) use import::{CLAUDE_PREFIX, DOCTRINE_PREFIX, gather_worktree_delta_paths, run_import};
@@ -87,8 +93,13 @@ pub(crate) use subagent::{run_denominate, run_nominate, run_stamp_subagent, run_
 
 #[cfg(test)]
 pub(crate) use coordinate::{CoordAction, CoordRefusal, base_has_slice_plan, classify_coordinate};
+// SL-228 PHASE-08: the typed reap entry point + its outcome vocabulary are a PROD
+// surface (`dispatch_reap` relays them as structured refusals instead of a flattened
+// `-32603`); `GcRefusal` leaves the test island because its single-sourced `remedy()`
+// is consumed by BOTH the CLI message and the MCP `detail` (D-P8-6).
+pub(crate) use gc::{GcOutcome, GcRefusal, reap_fork};
 #[cfg(test)]
-pub(crate) use gc::{GcPlan, GcRefusal, GcState, GcVerdict, classify_gc};
+pub(crate) use gc::{GcPlan, GcState, GcVerdict, classify_gc};
 #[cfg(test)]
 pub(crate) use land::{ForkState, LandRefusal, Merge, classify_land, no_such_fork_message};
 #[cfg(test)]
@@ -183,6 +194,18 @@ pub(crate) enum WorktreeCommand {
         /// Stamp the worker-mode marker so the fork resolves to worker mode.
         #[arg(long)]
         worker: bool,
+
+        /// The slice this fork is dispatched for — half of the DURABLE FORK BINDING
+        /// (SL-228 PHASE-04). With `--phase` and `--worker`, and a `<coord>/.worktrees/
+        /// <name>` dir, the fork is bound to `(slice, phase)` at creation; without it
+        /// the fork is unbound and downstream verbs refuse `unprovable-fork`.
+        #[arg(long, value_parser = crate::slice::parse_cli_id)]
+        slice: Option<u32>,
+
+        /// The phase id (`PHASE-NN`) this fork is dispatched for — the other half of
+        /// the durable fork binding.
+        #[arg(long)]
+        phase: Option<String>,
 
         /// Explicit project root (default: auto-detect from CWD).
         #[arg(short = 'p', long)]
@@ -435,7 +458,19 @@ pub(crate) enum WorktreeCommand {
     },
 }
 
-pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
+/// Route a `worktree` subcommand.
+///
+/// `landing` is the INJECTED landing authority the `List` arm threads to
+/// [`inventory::run_list`] (SL-228 PHASE-08 T10 / D-P8-10). It is a parameter rather
+/// than a local because THIS module may not import `crate::dispatch`: `worktree` is
+/// command tier and `dispatch → worktree` already exists, so the reverse edge would
+/// close a same-tier cycle (ADR-001). The proof is computed at the injection point
+/// (`commands::cli`, which already depends on `dispatch`) and handed down — the same
+/// shape as `WorktreeCommand::Import`'s already-resolved selectors.
+pub(crate) fn dispatch(
+    cmd: WorktreeCommand,
+    landing: inventory::LandingOracle<'_>,
+) -> anyhow::Result<()> {
     match cmd {
         WorktreeCommand::Provision { fork, path } => run_provision(path, &fork),
         WorktreeCommand::CheckAllowlist { path } => run_check_allowlist(path),
@@ -447,9 +482,23 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
             branch,
             dir,
             worker,
+            slice,
+            phase,
             path,
-        } => run_fork(path, &base, &branch, &dir, worker),
-        WorktreeCommand::CreateFork => run_create_fork(),
+        } => {
+            // The durable fork binding, when the caller declared a complete one
+            // (SL-228 PHASE-04, design §3). A half-declared pair names no funnel row,
+            // so it is not a binding — the fork is simply unbound.
+            let binding = slice
+                .zip(phase)
+                .map(|(slice, phase)| dispatch_record::ForkBinding { slice, phase });
+            run_fork(path, &base, &branch, &dir, worker, binding.as_ref())
+        }
+        // NOTE (SL-228 PHASE-04, D1/D3): `cli.rs` routes the `CreateFork` arm through
+        // the `dispatch::` tier instead, so the Class-2 `Spawn` funnel row lands after
+        // the act. This arm stays correct for any direct caller — it just does not land
+        // a row, because this module must not import `dispatch::` (ADR-001 back-cycle).
+        WorktreeCommand::CreateFork => run_create_fork().map(drop),
         WorktreeCommand::Nominate => run_nominate(),
         WorktreeCommand::Denominate => run_denominate(),
         WorktreeCommand::Pretooluse => run_pretooluse(),
@@ -514,7 +563,7 @@ pub(crate) fn dispatch(cmd: WorktreeCommand) -> anyhow::Result<()> {
             json,
             no_landed,
             path,
-        } => run_list(path, slice, json, no_landed),
+        } => run_list(path, slice, json, no_landed, landing),
         WorktreeCommand::VerifyWorker { base, dir, branch } => {
             run_verify_worker(&base, &dir, branch.as_deref())
         }
@@ -652,6 +701,10 @@ mod tests {
 
     // --- SL-056 PHASE-09: classify_gc pure verdict (design §8.2) ---
 
+    /// A gc fact-set with NO injected funnel proof — the pre-SL-228-PHASE-08 shape,
+    /// so every cell below still pins "the `git cherry` verdict decides, unchanged"
+    /// (PHASE-08 T4 cell (b)). The funnel-proof cells live in `gc.rs`, beside the
+    /// `ScratchRepo` fixture the ISS-245 regression witness needs.
     fn gc_state(
         branch_exists: bool,
         worktree_present: bool,
@@ -661,6 +714,7 @@ mod tests {
             branch_exists,
             worktree_present,
             landed_verdict,
+            funnel_landed: false,
         }
     }
 
@@ -689,7 +743,7 @@ mod tests {
     fn classify_gc_landed_reaps_present_things_in_order() {
         // Branch + worktree present, oracle positive ⇒ reap both (the in-tree
         // target/ dies with the worktree dir — SL-156, no separate target leg).
-        let v = classify_gc(gc_state(true, true, Some(true)), false, false, false);
+        let v = classify_gc(gc_state(true, true, Some(true)), false, false);
         assert_eq!(
             v,
             GcVerdict::Reap(GcPlan {
@@ -702,7 +756,7 @@ mod tests {
     #[test]
     fn classify_gc_skips_absent_steps() {
         // Worktree already gone (crash mid-gc) ⇒ only branch -D.
-        let v = classify_gc(gc_state(true, false, Some(true)), false, false, false);
+        let v = classify_gc(gc_state(true, false, Some(true)), false, false);
         assert_eq!(
             v,
             GcVerdict::Reap(GcPlan {
@@ -716,7 +770,7 @@ mod tests {
     fn classify_gc_branch_gone_reaps_nothing() {
         // Branch-gone ⇒ already-certified AND the worktree (with its in-tree
         // target/) is already gone — nothing left to reap (idempotent no-op).
-        let v = classify_gc(gc_state(false, false, None), false, false, false);
+        let v = classify_gc(gc_state(false, false, None), false, false);
         assert_eq!(
             v,
             GcVerdict::Reap(GcPlan {
@@ -732,36 +786,21 @@ mod tests {
         // are indistinguishable), no override ⇒ not-landed.
         let st = gc_state(true, true, Some(false));
         assert_eq!(
-            classify_gc(st, false, false, false),
+            classify_gc(st, false, false),
             GcVerdict::Refuse(GcRefusal::NotLanded)
         );
         // --force bypasses the oracle ⇒ reap.
-        assert!(matches!(
-            classify_gc(st, true, false, false),
-            GcVerdict::Reap(_)
-        ));
+        assert!(matches!(classify_gc(st, true, false), GcVerdict::Reap(_)));
         // --superseded-head match (head == asserted SHA) ⇒ reap.
-        assert!(matches!(
-            classify_gc(st, false, true, false),
-            GcVerdict::Reap(_)
-        ));
+        assert!(matches!(classify_gc(st, false, true), GcVerdict::Reap(_)));
     }
 
-    #[test]
-    fn classify_gc_dry_run_does_not_change_the_verdict() {
-        // dry_run is honoured in the shell; the classifier returns the SAME verdict
-        // a real run would act on (so the dry-run print is truthful).
-        let landed = gc_state(true, true, Some(true));
-        assert_eq!(
-            classify_gc(landed, false, false, true),
-            classify_gc(landed, false, false, false)
-        );
-        let refused = gc_state(true, true, Some(false));
-        assert_eq!(
-            classify_gc(refused, false, false, true),
-            classify_gc(refused, false, false, false)
-        );
-    }
+    // NOTE (SL-228 PHASE-08 T6): `classify_gc_dry_run_does_not_change_the_verdict`
+    // retired here. It asserted that passing `dry_run` did not change the verdict; the
+    // classifier no longer TAKES `dry_run` (it was already `_`-prefixed and unused), so
+    // the property is now structural — unrepresentable as a test, and unbreakable
+    // without changing the signature. `--dry-run` remains honoured in the shell alone,
+    // covered end-to-end by `tests/e2e_worktree_gc.rs`.
 
     #[test]
     fn gc_refusal_token_is_not_landed() {

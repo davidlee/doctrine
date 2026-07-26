@@ -719,6 +719,73 @@ pub(crate) fn spawn_seam_symmetry_findings(root: &Path) -> Vec<Finding> {
 }
 
 // ---------------------------------------------------------------------------
+// CoordHook — #11 live coordination-worktree safe-commit backstop (SL-228 PHASE-02)
+// ---------------------------------------------------------------------------
+
+/// Warn for every LIVE coordination worktree that lacks the safe-commit pre-commit
+/// backstop (design §7): `extensions.worktreeConfig` enabled AND a worktree-scoped
+/// `core.hooksPath` whose `pre-commit` exists. A coordination worktree is a live linked
+/// checkout on a `dispatch/<NNN>` branch with a NUMERIC slice suffix — the same
+/// component-anchored test `whereami` uses, so a worker fork's `dispatch/<agent>` branch
+/// (non-numeric) never trips it. Warning severity — re-running `dispatch setup` heals it.
+pub(crate) fn coord_hook_findings(root: &Path) -> Vec<Finding> {
+    let Ok(worktrees) = crate::git::list_worktrees(root) else {
+        return Vec::new();
+    };
+    let mut findings = Vec::new();
+    for wt in worktrees {
+        if wt.prunable || wt.bare || wt.detached || !wt.path.exists() {
+            continue;
+        }
+        let Some(branch) = wt.branch.as_deref() else {
+            continue;
+        };
+        let Some(suffix) = branch.strip_prefix(crate::kinds::DISPATCH_REF_PREFIX) else {
+            continue;
+        };
+        if suffix.is_empty() || !suffix.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        if !coord_hook_present(&wt.path) {
+            findings.push(Finding {
+                category: Category::CoordHook,
+                entity: Some(branch.to_string()),
+                message: format!(
+                    "coordination worktree {} lacks the safe-commit pre-commit hook \
+                     (worktreeConfig + core.hooksPath) — re-run `dispatch setup --slice {suffix}`",
+                    wt.path.display()
+                ),
+            });
+        }
+    }
+    findings
+}
+
+/// Is the safe-commit backstop live in `coord`? `extensions.worktreeConfig == true` AND
+/// a worktree-scoped `core.hooksPath` whose `pre-commit` file exists.
+fn coord_hook_present(coord: &std::path::Path) -> bool {
+    let wtcfg = crate::git::git_opt(coord, &["config", "--bool", "extensions.worktreeConfig"])
+        .ok()
+        .flatten();
+    if wtcfg.as_deref() != Some("true") {
+        return false;
+    }
+    let Some(hooks_path) = crate::git::git_opt(coord, &["config", "--worktree", "core.hooksPath"])
+        .ok()
+        .flatten()
+    else {
+        return false;
+    };
+    let dir = std::path::Path::new(&hooks_path);
+    let resolved = if dir.is_absolute() {
+        dir.to_path_buf()
+    } else {
+        coord.join(dir)
+    };
+    resolved.join("pre-commit").exists()
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1797,5 +1864,107 @@ mod tests {
         assert!(matcher_covers_seam("Edit|Agent|Write", "Agent"));
         assert!(!matcher_covers_seam("AgentX", "Agent"));
         assert!(!matcher_covers_seam("AgentX|Other", "Agent"));
+    }
+
+    // ------------------------------------------------------------------
+    // CoordHook — #11 (SL-228 PHASE-02)
+    // ------------------------------------------------------------------
+
+    fn g(dir: &Path, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// A primary repo with a linked worktree on `branch` at `<tmp>/c`.
+    fn primary_with_linked(
+        branch: &str,
+    ) -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let primary = std::fs::canonicalize(tmp.path()).unwrap().join("p");
+        std::fs::create_dir_all(&primary).unwrap();
+        g(&primary, &["init", "-q", "-b", "main"]);
+        g(&primary, &["config", "user.email", "t@t"]);
+        g(&primary, &["config", "user.name", "t"]);
+        std::fs::write(primary.join("seed"), "x").unwrap();
+        g(&primary, &["add", "-A"]);
+        g(&primary, &["commit", "-q", "-m", "base"]);
+        let coord = std::fs::canonicalize(tmp.path()).unwrap().join("c");
+        g(
+            &primary,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                branch,
+                coord.to_str().unwrap(),
+            ],
+        );
+        let coord = std::fs::canonicalize(&coord).unwrap();
+        (tmp, primary, coord)
+    }
+
+    #[test]
+    fn coord_hook_findings_flags_a_live_coord_worktree_then_clears_when_installed() {
+        let (_tmp, primary, coord) = primary_with_linked("dispatch/007");
+
+        // No hook → exactly one CoordHook finding naming the coord branch.
+        let findings = coord_hook_findings(&primary);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].category, Category::CoordHook);
+        assert_eq!(
+            findings[0].entity.as_deref(),
+            Some("refs/heads/dispatch/007")
+        );
+
+        // Install the backstop by hand (mirrors `install_coord_hook`) → clean.
+        g(&coord, &["config", "extensions.worktreeConfig", "true"]);
+        let git_dir = String::from_utf8(
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&coord)
+                .args(["rev-parse", "--absolute-git-dir"])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .to_string();
+        let hooks = Path::new(&git_dir).join("doctrine-hooks");
+        std::fs::create_dir_all(&hooks).unwrap();
+        std::fs::write(hooks.join("pre-commit"), "#!/bin/sh\nexit 0\n").unwrap();
+        g(
+            &coord,
+            &[
+                "config",
+                "--worktree",
+                "core.hooksPath",
+                hooks.to_str().unwrap(),
+            ],
+        );
+        assert!(
+            coord_hook_findings(&primary).is_empty(),
+            "worktreeConfig + hooksPath + pre-commit present → no finding"
+        );
+    }
+
+    #[test]
+    fn coord_hook_findings_ignores_non_numeric_dispatch_forks() {
+        // A worker fork's `dispatch/<agent>` (NON-numeric suffix) is not a coord tree.
+        let (_tmp, primary, _fork) = primary_with_linked("dispatch/agent-x");
+        assert!(
+            coord_hook_findings(&primary).is_empty(),
+            "a non-numeric dispatch fork must not be treated as a coordination worktree"
+        );
     }
 }
