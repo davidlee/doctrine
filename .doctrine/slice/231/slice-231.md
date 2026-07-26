@@ -24,7 +24,8 @@ aggregation can then consume a proven wire model in a follow-up.
 ### 1. Friction-observation occurrence model
 
 - Define one typed, immutable occurrence carrying collision-free identity,
-  observation time, concise symptom/detail, and explicit provenance.
+  observation time, and concise symptom/detail. Ordinary provenance may remain
+  implicit; exceptional attribution is an optional facet.
 - Carry structured execution context needed by later analysis: role, harness,
   model, execution mode/arm, lifecycle stage, skill, command or product surface,
   and a session/run correlation id where available.
@@ -40,22 +41,22 @@ aggregation can then consume a proven wire model in a follow-up.
 
 - Persist each capture independently under collision-free identity; no writer
   appends to a shared corpus file.
-- Partition the store so the active write/query surface does not become another
-  ever-growing monolith. The design must settle the exact fileset and partition
-  contract.
+- Store one self-contained TOML record per UUID under kind/year/month
+  partitions.
 - Make retries idempotent where the caller supplies an occurrence identity, and
   refuse clobbering a different occurrence.
 - Keep raw occurrences authoritative and queried indexes derived. Corrections
   use an explicit immutable mechanism such as supersession or tombstoning,
   never an in-place rewrite that obscures provenance.
-- Reuse the shared entity/storage and pure/imperative seams rather than
-  introducing parallel identity, TOML rendering, or disk-write machinery.
+- Reuse shared repository-root and safe-filesystem primitives while keeping the
+  observation lifecycle separate from the numbered authored-entity engine.
 
 ### 3. Capture and basic read interface
 
 - Provide CLI verbs to record, show, list/filter, and text-search occurrences.
-- Provide MCP capture and read parity over the same engine functions so agent
-  execution mode does not determine whether friction is recorded.
+- Provide a bounded MCP capture tool over the same engine functions for
+  confined Claude workers. Trusted reads and correction remain CLI operations;
+  subprocess-worker parity is a follow-up.
 - Auto-populate context that Doctrine can know reliably; accept explicit fields
   for context the caller alone knows. Render absent/unknown distinctly from an
   inferred value.
@@ -74,7 +75,8 @@ aggregation can then consume a proven wire model in a follow-up.
 
 ### Affected surface
 
-- New occurrence model/store and shared-engine integration under `src/**`.
+- New observation model/store and shared-engine integration under
+  `src/observation/**`.
 - CLI and MCP command adapters under their existing command/interface homes.
 - Focused unit, CLI, MCP, concurrency, and hostile-input tests under `src/**`
   and `tests/**`.
@@ -105,24 +107,16 @@ aggregation can then consume a proven wire model in a follow-up.
   auto-populated and optional context must remain distinct.
 - **A1 — collection-first sequencing.** Basic show/filter/search is sufficient
   to validate useful capture before aggregate interpretation is built.
-- **OQ-1 — QUE-174.** Determine the evergreen product and technical
-  specification home before design lock; do not smuggle a new platform
-  primitive in under unrelated memory or comparison canon.
-- **OQ-2.** Settle the public noun and verb family (`observation`, `friction`,
-  or another term) from the generality actually justified by the first caller.
-- **OQ-3.** Settle which optional effort counters can be represented honestly
-  before automatic measurement exists, and whether v1 should omit them rather
-  than ship a misleading manual field.
-- **OQ-4.** Reconcile the live `doctrine link` support for memory sources with
-  the older deferred named-entity relation wording before choosing a future
-  occurrence-to-work association seam.
+- **OQ-1 — QUE-174.** After design completes and before planning, determine the
+  evergreen product and technical specification home; do not smuggle a new
+  platform primitive in under unrelated memory or comparison canon.
 
 ## Summary
 
-Ship a first-class, structured friction-observation ledger whose occurrences
+Ship a first-class, structured observation ledger whose friction occurrences
 are cheap to capture, independent to merge, safe to inspect, and available
-through both CLI and MCP interfaces. Establish the evidence substrate only;
-leave interpretation to a follow-up.
+through the trusted CLI and a bounded MCP capture interface. Establish the
+signal substrate only; leave interpretation to a follow-up.
 
 ## Follow-Ups
 
@@ -135,3 +129,6 @@ leave interpretation to a follow-up.
   boundary becomes available.
 - Define compaction, retention, and external archival policy from observed
   corpus growth.
+- Broker observation capture for subprocess workers (IMP-319).
+- Add default-off `doctrine.toml` activation and conditional boot guidance
+  (IMP-320).

@@ -22,13 +22,78 @@ note = "Collection model/store, CLI+MCP capture/read surfaces, verification, and
 
 [[selector]]
 selector = ".doctrine/governance.md"
-intent = "scope-relevant"
-note = "Collection model/store, CLI+MCP capture/read surfaces, verification, and RFC-011 dogfood activation; exact files settle in design."
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
 
 [[selector]]
 selector = ".doctrine/rfc/011/**"
 intent = "scope-relevant"
 note = "Collection model/store, CLI+MCP capture/read surfaces, verification, and RFC-011 dogfood activation; exact files settle in design."
+
+[[selector]]
+selector = "src/observation/**"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "src/commands/observation.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "src/doctor_checks.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "src/commands/doctor.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "install/agents/claude/dispatch-worker.md"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "tests/e2e_observation.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "tests/e2e_mcp_server.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = "tests/architecture_layering.rs"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
+
+[[selector]]
+selector = ".doctrine/rfc/011/rfc-011.md"
+intent = "design-target"
+note = "Locked SL-231 design section 7 implementation touch-set."
 
 [[relation]]
 label = "governed_by"
