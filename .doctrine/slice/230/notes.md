@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · started, PHASE-02 (2 of 6 landed; coord `dispatch/230` at
-e7e0d42f) · 62b6e008
+fresh-as-of: 2026-07-27 · started, PHASE-03 (3 of 6 landed; coord `dispatch/230` at
+4d8c1e49) · 08274695
 
 ### Produced
 
@@ -16,6 +16,9 @@ e7e0d42f) · 62b6e008
 - **PHASE-02** `record --body` — rides the `memory_scaffold` seam; collapsed
   `seed_by_key`'s duplicate index-1 substitution onto `Draft.body`
   (coord 9a0d7bf→a5a27a403, boundary e7e0d42f).
+- **PHASE-03** `edit --body` + the two-tier write ordering — the first caller of
+  `write_body`; retires PHASE-01's `expect(dead_code)` staging attributes
+  (coord e7e0d42f→232dbd3f, boundary 4d8c1e49).
 - **ISS-248** — selector doctor's redundancy scan is class-blind.
 - **ISS-252** — claude-arm funnel verify beat runs against a stale coord
   checkout; fails open as a false green.
@@ -56,9 +59,10 @@ e7e0d42f) · 62b6e008
 
 ### Next
 
-1. `/phase-plan` PHASE-03, then dispatch it — **opus**; it is the write-ordering
-   phase and half the inseparable pair.
-2. PHASE-04 immediately after 03; no integrate between them.
+1. `/phase-plan` PHASE-04, then dispatch it. Half the inseparable pair — 03's HEAD
+   alone is strictly worse than today, so **do not `sync --integrate` until 04
+   concludes**. Steps 0/3/4 of design § 5.4 land into the shape 03 created.
+2. Then PHASE-05, PHASE-06.
 3. Conclude cadence once 6/6: `slice verify-vt 230` → `dispatch sync
    --prepare-review` → remove coord worktree (keep refs) → `slice status 230
    audit` → `/audit`.
@@ -198,6 +202,85 @@ deliberately does not call it (EX-4: `materialise_named` stays the sole write).
   in place and still PHASE-03's to remove (PHASE-02 wired no caller, as intended).
 
 **Two funnel mechanics learned this phase — see `## Funnel mechanics` below.**
+
+### PHASE-03 — edit --body and the write ordering · landed 2026-07-27
+
+Coord `e7e0d42f (B) → 232dbd3f → 4d8c1e49`. Worker model **opus** — the first
+non-sonnet worker of the drive, and the right call: three files, +301/−17, with
+six declared judgement calls, none of which re-litigated a stated decision. Funnel
+green throughout: base `check prove` clean at B, S1 baseline 0 failures,
+`regression diff` no new/changed — **honestly earned this time**, the coord
+checkout was `git reset --hard HEAD`-refreshed between import and the verify beat
+per ISS-252. R-5 clean; no undeclared scope.
+
+**The three inherited PHASE-02 items are all resolved, and one was cheaper than
+the trail expected.**
+
+- **`--body-mode`'s parser** is `Option<String>` at clap, hand-parsed by a new
+  `parse_body_mode(raw) -> Result<BodyMode>` sited next to `resolve_body`. **Not**
+  `#[derive(clap::ValueEnum)]` on `entity::BodyMode`: `src/entity.rs` is clap-free
+  and is one of the very few `src/*.rs` that is, so a derive there would put the
+  first command-tier dependency at engine tier (ADR-001). Two corroborating
+  reasons: every other enum-ish flag on this verb (`status`/`lifespan`/`trust`/
+  `severity`) is `Option<String>` validated downstream with a worded error whose
+  text its tests assert; and a shared `ValueEnum` would let clap reject
+  `--body-mode bogus` *before* `record`'s landed worded refusal fires, silently
+  changing PHASE-02's behaviour.
+- **`resolve_body` needed neither widening nor lifting.** The trail said "widen or
+  lift it"; in fact it is module-private in `src/memory.rs` and `run_edit` is in
+  the *same module*, so it was already in scope. `run_edit` calls
+  `resolve_body(raw, &mut io::stdin())` exactly as `run_record` does. Zero
+  visibility change — `edit --body -` is stdin-identical to `record --body -` by
+  construction rather than by assertion. **PHASE-05 will not inherit this for
+  free**: the MCP arm is in another module and takes its body as a JSON string
+  with no stdin sentinel, so it needs its own answer.
+- **Both `expect(dead_code)` `cfg_attr` blocks are gone** from `src/entity.rs`
+  (3 `expect(` at B → 1 now; the survivor is pre-existing and unrelated). The
+  self-retiring-by-hard-error mechanism worked exactly as PHASE-01 designed it.
+
+**For PHASE-04**, five carried facts:
+
+- **`run_edit`'s shape is now the design's, minus PHASE-04's steps.** It runs:
+  `has_any()` → `root`/`mref`/`toml_path`/`dir` → `parse_body_mode` → `resolve_body`
+  → read+parse → `apply_edit` (**last** fallible step, in-memory only) →
+  `write_body` (**first** disk write) → explicit `updated` re-stamp on
+  `body_changed` → `write_atomic` TOML last. Steps 0/3/4 are absent and
+  unobstructed — verified, `claim_snapshot`/`clear_verification` appear zero times
+  in the tree. PHASE-04 inserts, not restructures.
+- **Use `doc.insert(key, …)`, not `doc[key] = …`, on the owned `DocumentMut` in
+  `run_edit`.** Index-assign trips this repo's `-D clippy::indexing_slicing` on an
+  *owned* document; it does not fire inside `apply_edit`, whose `&mut DocumentMut`
+  is why the same spelling is clean there. `insert` is `apply_edit`'s own
+  non-indexing idiom for `memory_key`/`review_by`, so no allowance was introduced.
+  PHASE-04's `clear_verification` writes into the same owned document and will
+  meet this immediately.
+  *Observation, not a defect of this phase:* `insert` on a root key shares
+  `apply_edit`'s pre-existing exposure to the F-3 tail-insert hazard
+  (`mem.pattern.entity.edit-preserving-status-transition`) **if `updated` were ever
+  absent**. It never is — it is scaffold-seeded — and `apply_edit`'s index-assign
+  has the identical exposure. Equal to the incumbent, not worse.
+- **Three test helpers now exist in `mod tests`; ride them, do not re-roll.**
+  `recorded_memory(body) -> (TempDir, uid, toml_path, md_path)`,
+  `backdate_updated(toml_path, date)` (necessary because `record` stamps
+  `clock::today()`, which masks a same-day re-stamp), and an `edit_body(root, ref,
+  body, mode)` wrapper over `run_edit`. PHASE-04's clearing tests want all three.
+- **PHASE-05 still owns the `body_mode`-without-`body` totality rule**, both legs.
+  It was deliberately not landed and its keyword
+  (`body_mode_without_body_is_rejected_on_cli`) is **not** claimed — confirmed by
+  grep. Today `edit --body-mode append` with no `--body` falls through to
+  `has_any()` false → "requires at least one flag": a correct pre-write rejection,
+  just not yet the worded one. `has_any()` counts `body` only.
+- **EX-4's test carries an extra leg beyond the mandate.** Alongside the required
+  `--body <text> --trust bogus` (a failure raised *inside* `apply_edit` with a
+  valid body — the only shape that actually exercises the step order), it also
+  asserts `--body <text> --body-mode sideways`. An addition, not a substitution;
+  it covers `parse_body_mode`'s `bail!`, which would otherwise be untested.
+
+**`apply_edit` is provably untouched** (EX-5/R3): the whole phase deletes exactly
+three lines in `src/memory.rs` — the `use crate::entity::{…}` line and the two
+`run_edit` lines it replaced. Its 30+ existing tests are green unedited. Worth
+recording as a technique: `git diff B..S -- <file> | grep '^-'` is a cheaper and
+stronger proof of "suite untouched" than reading the suite.
 
 ## Funnel mechanics (claude arm)
 
