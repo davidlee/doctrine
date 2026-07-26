@@ -6,8 +6,10 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · **audit**, 6 of 6 landed; `dispatch/230` at 8538a2658,
-`review/230` at 66d478cc2, 8 refs projected, coord worktree removed · 6e82cd56e
+fresh-as-of: 2026-07-27 · **reconcile**, 6 of 6 landed, audit closed (RV-313 done);
+`dispatch/230` at 8538a2658, `review/230` at 66d478cc2, **reviewed surface
+`candidate/230/review-001` at 18fc99613** (base `main` c2e9191a2 post-SL-228 +
+source `review/230`), coord worktree removed · 2f8b3fbdf
 
 ### Produced
 
@@ -38,10 +40,23 @@ fresh-as-of: 2026-07-27 · **audit**, 6 of 6 landed; `dispatch/230` at 8538a2658
   operating facts: § Funnel mechanics. Both prose, both committed.
 - `.doctrine/` changes committed promptly and **separately** from code throughout —
   code lands only on `dispatch/230` via the funnel; authored state only on `edge`.
-- Gate: `doctrine check gate` last green at 56520c04b (pre-drive). Since then the
-  standing gates are per-phase — `check prove` at each base + `check regression
-  diff` at each tip, both green for 01 and 02. `check gate` has NOT run against
-  the coord tip; it is the close ritual, not a per-phase beat.
+- Gate: **superseded — `doctrine check gate` has now run against the slice code**,
+  on `candidate/230/review-001` at audit: **4928 passed, 0 failed, 102 suites,
+  zero compiler/clippy diagnostics** (the log's 19 `warning:` lines are doctrine's
+  own runtime warning strings from tests exercising warning paths — none carries a
+  `-->` source pointer). The earlier note that it had never run is no longer true.
+- **RV-313** — the reconciliation audit ledger. Done: 6 findings, all terminal, no
+  blockers. Carries `## Brief` (surface reviewed + lines of attack), `## Synthesis`
+  and `## Reconciliation Brief` (the handoff to `/reconcile`).
+- **ISS-257** — memory staleness checks render an undeterminable stamp as clean
+  (RV-313 F-2). `originates_from` SL-230, `related` RV-313.
+- **F-3 fix-now, landed at `18fc99613`** on `candidate/230/review-001` — MCP
+  `record` now forwards `body_mode` into `run_record` so its worded refusal fires
+  on that surface too; `input_schema` still does not advertise it (EX-1 stands).
+  **This commit is NOT on `review/230`.**
+- **RV-307 F-25 / F-33 / F-36 / F-37 verified terminal** at audit (they were
+  dispositioned `descoped-to-SL-232` but never closed, and the close-gate refused
+  `audit → reconcile` while they sat open). Remediation stays SL-232's per DEC-027.
 
 ### Learned
 
@@ -53,6 +68,27 @@ fresh-as-of: 2026-07-27 · **audit**, 6 of 6 landed; `dispatch/230` at 8538a2658
   restated here.
 - § Funnel mechanics' three items are memory candidates once a second slice
   confirms them; ISS-252 carries the load-bearing one as actionable work.
+- **Memory candidates from the audit** (RV-313; not yet recorded):
+  - **Piping a gate/verifier through `tail` destroys the evidence twice** — the
+    window discards the result lines, AND a pipeline's exit status is the last
+    command's, so `... | tail` always reports success. Redirect to a file, echo
+    `$?` separately. Cost here: one full re-run.
+  - **Grepping `^warning|^error` over a doctrine gate log false-positives** on the
+    product's own runtime warning strings. Real rustc/clippy diagnostics carry a
+    `-->` source pointer; filter on that.
+  - **A silent-drop `None` is invisible to every test that asserts on output.**
+    `let Some(x) = f() && x > 0` renders "cannot determine" identically to "clean".
+    The repo already has the right shape one module over
+    (`src/coverage.rs:150-166`, `IsStale::Unknown`, `None => Unknown`).
+  - **A superseding-candidate re-admit is legal without a fresh candidate**:
+    `admit` requires the recorded merge be an *ancestor of* the admitted tip, not
+    equal to it, so an audit repair committed on the candidate re-admits cleanly.
+    `candidate status`'s DRIFT advisory ("supersede with a fresh candidate") reads
+    stronger than the binary actually enforces.
+- **Confirmed, generalisable, still owed as a memory:** a mutation that fails to
+  compile has not been checked (PHASE-06's lesson, hit again at audit — a
+  `body_mode: None` mutation is rejected by `-D dead-code`; the faithful pre-fix
+  state was the only real check).
 
 ### Open
 
@@ -66,19 +102,34 @@ fresh-as-of: 2026-07-27 · **audit**, 6 of 6 landed; `dispatch/230` at 8538a2658
   to SL-232; tracked there, not here.
 - PHASE-03/04 inseparable, and no `sync --integrate` between them: § Execution
   constraints.
-- Moved ids never reused. Next free: I14, E15, T43.
+- Moved ids never reused. Next free: **I14, E15, T43** — `E15` is now spoken for by
+  the reconcile brief's `clear_verification` edge-case item.
+- **RV-313 F-6 / SPEC-007 — open, and NOT settled by audit.** Does § "Git-anchored
+  staleness"'s explicit-state guarantee bind `memory validate`'s health checks, or
+  only the `find`/`retrieve` axis? The sentence does not determine its own scope.
+  Reconcile's REV to answer; the brief recommends *clarify the scope* over
+  adjudicating conformance, since the code outcome (ISS-257) is identical either way.
+- **The MCP adapter rejects no unknown fields at all** — `deny_unknown_fields`
+  appears zero times in `src/mcp_server/tools.rs`, so every tool silently swallows
+  unknown keys. F-3 closed the one instance that mattered, not the class.
+  **Unfiled by decision** — offer it, do not mint it unasked.
+- **SL-232's inheritance of RV-307 F-25/F-33/F-36/F-37 is recorded in prose only**
+  (DEC-027's table, the finding responses, this file). Those findings are now
+  terminal, so nothing structurally gates SL-232 on them. A `needs` edge was
+  offered and is **not yet accepted** — do not add it unasked.
 
 ### Next
 
-1. **Remove the coordination worktree directory** `.dispatch/SL-230` (KEEP the
-   refs — `dispatch/230`, `review/230`, `phase/230-01..06` are the deliverables),
-   then `slice status 230 audit` → `/audit`.
-2. Carry into audit: the two VA-1 deviations and the corpus-reach finding (§ Phase
-   trail → PHASE-06); the `body_mode`-on-`record` MCP asymmetry (→ PHASE-05); and
-   `clear_verification`'s tolerant-vs-refusing divergence from `stamp_verification`
-   (→ PHASE-04). All three are live, disclosed, and legitimately arguable.
-3. Integration is **stage-2, `/close`'s job, post-audit** — never pre-audit.
-4. `/design` SL-232 from F-37, F-36, and F-14.
+1. **`/reconcile`** — consume RV-313's `## Reconciliation Brief`. Four per-slice
+   direct edits (three in `design.md`: the stale D5 figures, the new `E15` edge
+   case, the reach limit; plus this file) and one governance REV (SPEC-007 § F-6).
+   The brief states "no REQ status changes identified" so it is not re-derived.
+2. **`/close`** — and note the sourcing trap: the `close_target` candidate must
+   **not** be sourced from `review/230` (`66d478cc2`), which does not carry the
+   F-3 fix. Source from `candidate/230/review-001` (`18fc99613`). Expect authored
+   divergence (`slice-230.toml` is `reconcile` on `edge`, `started` on the
+   evidence refs) → primary-wins.
+3. `/design` SL-232 from F-37, F-36, and F-14.
 
 ## Execution constraints (dispatch)
 
