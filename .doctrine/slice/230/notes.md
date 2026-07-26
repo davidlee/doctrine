@@ -222,3 +222,79 @@ separately declaring two additions (the `Clone, Copy` derive on `BodyMode`, the
 verified here. `Deviations: NONE` is a funnel tripwire precisely because of this
 pattern — the mandatory per-phase review it triggered is what confirmed the
 `cfg_attr` idiom was real convention and not invention.
+
+### PHASE-02 — record --body · landed 2026-07-27
+
+Coord `9a0d7bf (M) → a5a27a403 → e7e0d42f`. Worker model **sonnet**. Four files,
++210/−7: `src/memory.rs` (+199/−8) plus mechanical field additions in
+`src/boot.rs`, `src/retrieve.rs`, `src/mcp_server/tools.rs`. Three mandated tests
+green; S1 diff no new/changed; R-5 clean.
+
+**The funnel halted on `undeclared-scope` and the selectors were widened.**
+`RecordArgs` is `pub(crate)`, so the plan's own objective ("`Draft` and
+`RecordArgs` gain `body: Option<&str>`") forces every struct literal to change —
+including 4 in `src/boot.rs` and 3 in `src/retrieve.rs`, both undeclared. All 14
+lines are `body: None, body_mode: None` inside `mod tests`; no behaviour. Ruling:
+widen (`90cc6e67`), not rework — a `Default` impl for `RecordArgs` would be a
+larger change to shared machinery needing its own decision about what
+`MemoryType`/`Status` default to. **The ripple surface is now closed**: `RecordArgs`
+literals live only in `memory.rs` (10), `boot.rs` (4), `retrieve.rs` (3),
+`mcp_server/tools.rs` (1); `src/commands/compare.rs:76` declares an unrelated
+same-named struct. **PHASE-03 will not recur this** — `EditFields` is constructed
+only in `memory.rs` and `mcp_server/tools.rs`, both long-declared.
+
+**`seed_by_key`'s duplication is gone.** Now that `memory_scaffold` honours
+`Draft.body`, `seed_by_key` passes `body: Some(body)` and its post-hoc
+`fileset.get_mut(1)` block is deleted — its three existing tests needed no edit.
+The design's "exactly `seed_by_key`'s existing move" is therefore now one seam, not
+two. A `get_mut(1)` string survives at `:1897` in a *comment* recording the
+collapse, and `write_body` appears once at `:1510` in a *doc comment* saying record
+deliberately does not call it (EX-4: `materialise_named` stays the sole write).
+
+**For PHASE-03**, three carried facts:
+- `--body-mode`'s CLI type is `Option<String>`, not a parsed enum, because
+  `record` refuses it unconditionally whatever its value. PHASE-03 gives the flag
+  meaning on `edit` and so **owns choosing the real value parser**. `entity::BodyMode`
+  is not clap-derivable as it stands.
+- `resolve_body(raw, &mut impl Read)` (`src/memory.rs`) is `record`-local and not
+  `pub(crate)`. `edit --body -` needs identical stdin semantics — widen or lift it,
+  do not reimplement the `raw == "-"` branch.
+- PHASE-01's `expect(dead_code)` attributes on `write_body`/`BodyMode` are still
+  in place and still PHASE-03's to remove (PHASE-02 wired no caller, as intended).
+
+**Two funnel mechanics learned this phase — see `## Funnel mechanics` below.**
+
+## Funnel mechanics (claude arm)
+
+Orchestrator-side operating facts, learned by hitting them. Not slice-specific;
+candidates for `/record-memory` once a second slice confirms them.
+
+**1. `dispatch_import` / `dispatch_conclude_phase` do not touch the coord
+checkout — refresh it before the verify beat.** Both are working-tree-free by
+design (they compose via `merge-tree` into the object DB), so they advance
+`dispatch/<slice>` while leaving the coord index and worktree behind. After
+PHASE-01's import the checkout still had no `write_body`, and `git status` showed
+`M src/entity.rs` / `D boundaries.toml` — the *inverse* of the landed commits.
+Consequence: **the first `check regression diff` ran against the pre-delta tree and
+was vacuous** — it reported green having never compiled the delta. Caught before
+concluding, and re-run honestly. **Ritual: `git reset --hard HEAD` in the coord
+tree between `dispatch_import` and the verify beat.** The router's funnel order
+("Verify — suite @ S") assumes a tree at S; nothing in it says to put the tree
+there.
+
+**2. After `refresh-base`, set the next phase's `code_start` to the post-merge tip,
+not the worker's fork base.** `refresh-base` merges trunk into the coordination
+branch, so a boundary of `(fork_base, post_import_tip)` spans the merge and folds
+every authored commit trunk brought in into the phase's conformance range —
+`.doctrine/**` paths that no design-target selector declares, i.e. a pile of
+spurious undeclared-edit findings at audit. Using the post-merge tip `M` makes
+`M..tip` exactly the worker's delta (verified: 4 files, +210/−7). Safe because
+`classify_import` treats `head_at_base`/`tree_clean` as vacuously true on the
+funnel path (`src/mcp_server/dispatch.rs:296-299`), so moving coord HEAD before
+import is not a precondition breach.
+
+**3. The import belt reads selectors from the COORD tree, not the primary.**
+`crate::slice::selectors(&coord.root, ...)` (`src/mcp_server/dispatch.rs:246`). So
+widening scope mid-drive is a three-step move: edit + commit in the primary tree →
+`git fetch . edge:main` → `dispatch refresh-base --slice <N>`. Editing only the
+primary tree leaves the belt reading stale selectors and the refusal stands.
