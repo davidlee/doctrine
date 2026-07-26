@@ -2226,3 +2226,70 @@ the reader to read per-phase lines and ignore the exit code mid-drive.
   class and F-32's second limb would have survived. Cheap probes before prose,
   not after, is the pattern — and it is the direct application of this slice's
   own dominant-cost-driver lesson.
+
+[backlog; SL-231 subprocess observation egress]
+
+- **`backlog after` cannot sequence a backlog item after a slice.** Creating the
+  subprocess-arm observation-egress follow-up needed the intended ordering
+  `IMP-319 after SL-231`, but the verb rejects `SL-231` before relation validation:
+  `unknown backlog prefix 'SL' (expected ISS/IMP/CHR/RSK/IDE)`. The help text says
+  the predecessor is a ref and the project relation model otherwise admits
+  work-like cross-kind dependencies, so the restriction is easy to discover only
+  after a failed write attempt. Cost was a command round-trip plus replacing the
+  intended structured ordering with a prose statement and a non-ordering
+  `references(concerns)` edge. General fix: either widen `backlog after` to valid
+  work-like predecessors or state the backlog-only target restriction explicitly
+  in help.
+
+## [dispatch; sess-p08-drive]
+
+**1. A phase that fixes an MCP verb cannot use the fix in its own session.**
+The MCP server is launched once at session start from `${DOCTRINE_BIN}` — the
+coord build as it stood *before* the phase. So immediately after PHASE-08 landed
+and passed a full coord-side gate verify, the prescribed `dispatch_reap{228,
+dispatch/agent-a76020385765dae76}` still returned the pre-fix `MCP error -32603:
+Internal error` — a live reproduction of ISS-245 *and* ISS-246 by the very
+session that closed them. Recovery cost 4 extra calls: prove the three checks by
+hand from `funnel.toml` (one matching row, `concluded`, live OID ==
+`import.fork_tip`), reap via CLI `worktree gc --force` (the reflex the phase
+exists to remove — justified here only because the proof was established
+manually), then re-issue `dispatch_reap` on the now-fork-absent path purely to
+advance the row. Structural, not agent error: no in-session remedy exists short
+of a session restart. Worth a documented note on the funnel wherever a phase
+changes an MCP verb's own behaviour — the orchestrator should expect the stale
+arm and be told the workaround rather than deriving it.
+
+**2. Cross-tree LSP diagnostics contradicted a green hand-back.**
+The harness injected 5 `new-diagnostics` entries after the worker returned —
+`cli.rs:1683 this function takes 2 arguments but 1 was supplied`, plus three
+`dead_code` errors on `resolve_landing`/`LandingVerdict`/`rows_for_fork` and an
+`E0433` naming `crate::mcp_server::worker_commit::tests::funnel::LandingVerdict`.
+All phantom: the index had mixed the **worker worktree's** `mod.rs`/`dispatch.rs`
+with the **coord tree's** unmodified `cli.rs`, which is exactly the shape a
+half-applied change would take. It directly contradicted the worker's "clippy
+zero warnings, 4010 passed", and only the coord-side `dispatch verify` (gate)
+settled it. Cost: one reasoning detour and a hedged report to the user. The
+signature — dead_code on brand-new items *plus* an arity mismatch at the single
+injection point — is diagnostic of tree-mixing rather than a real break, and is
+worth naming so the next orchestrator doesn't re-derive it.
+
+**3. A keyword-proxy VT can be falsified by a legitimate design amendment.**
+`VT-1` pins `keywords = ["concluded", "funnel", "landed"]` on
+`src/worktree/gc.rs`. The amended design (D-P8-1, engine tier consumes an
+injected `funnel_landed: bool` and deliberately never learns funnel positions)
+makes `concluded` a word gc.rs has no reason to contain — `funnel` appears 49
+times and `landed` 90, but `concluded` 0. The VT's *substance* (T4 a/b/c) is
+fully delivered and green. Discovered only **after** conclude + reap +
+record-delta, because `verify-vt` is a close-time gate and nothing runs it at
+phase-plan time against the amended design. Two cheap preventions: (a) re-run
+`slice verify-vt` at **phase-plan** time and treat a keyword that the amended
+design has made unreachable as a plan-amendment item then, not at close; (b) when
+a design amendment moves a concept across a tier boundary, sweep the phase's VT
+keywords for words that moved with it.
+
+**4. Worker-arm environment (reported by the worker, cannot self-log).**
+The session scratchpad does not persist between bash invocations in the jail, so
+the back-up-then-mutate idiom for mutation testing silently loses the backup
+(recovered via an inverse patch). And one `python3 - <<'EOF'` heredoc was refused
+by the worktree-isolation guard as "too complex to verify" while structurally
+identical ones ran — an inconsistency that cost a fallback to `Edit` calls.

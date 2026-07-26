@@ -1,4 +1,4 @@
-# Memory body-write verbs and corpus-aware verify gate
+# Memory body-write seam
 
 ## Context
 

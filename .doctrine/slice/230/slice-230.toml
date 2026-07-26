@@ -1,6 +1,6 @@
 id = 230
-slug = "memory-body-write-verbs-and-corpus-aware-verify-gate"
-title = "Memory body-write verbs and corpus-aware verify gate"
+slug = "memory-body-write-seam"
+title = "Memory body-write seam"
 status = "design"
 created = "2026-07-25"
 updated = "2026-07-25"
