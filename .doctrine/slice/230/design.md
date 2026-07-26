@@ -275,7 +275,14 @@ Applied to each entry of `scope.paths` and `scope.globs`:
    anything else is a **concrete path**. They resolve differently, because a
    pattern has no single real path to resolve to.
 3. **Resolve.** A concrete path resolves whole. A pattern resolves its longest
-   wildcard-free prefix and re-appends the wildcard tail. Necessary, not cosmetic:
+   wildcard-free prefix and re-appends the wildcard tail. **A pattern whose
+   wildcard-free prefix is empty resolves to nothing and is emitted unchanged** —
+   `**/.gitignore` (one live corpus entry) is rooted at no directory, so there is
+   no symlink for git to be blind to. This is *not* a bare magic prefix and does
+   not engage E11: the emitted form is `:(glob)**/.gitignore`, which matches
+   exactly the files it names (verified, git 2.54.0: 2 of 3 tracked files, where a
+   bare `:(glob)` returns all 3). Stated because step 3 is otherwise silent on it
+   and the case is reachable today. Resolution is necessary, not cosmetic:
    `:(glob)<slug-symlink>/**` matches **nothing** and reports clean against a
    modified target, exactly as the literal form did in F-20 — verified, git 2.54.0:
    0 files via the link, 1 via the resolved prefix, `diff-index` exit 0 versus
