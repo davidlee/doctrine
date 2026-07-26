@@ -190,17 +190,43 @@ touch. Every non-aligned finding that touches design or governance appears here.
   `.doctrine/spec/tech/007/spec-007.md:106-116` is currently unqualified and names
   "non-ancestor anchor" explicitly, while `memory_health_findings` Checks 2 and 4
   emit nothing in that case. Two mutually exclusive resolutions; the REV must pick
-  one, and audit deliberately did not:
-  - **(b), audit's recommendation** — the guarantee binds any git-anchored
-    staleness computation. The spec text stands unchanged, `validate` is recorded
-    as non-conformant, and **ISS-257 is reclassified from improvement to
-    conformance fix**. Reasoning: the sentence is unqualified, it names the exact
-    failing case, the posture it states ("never a silent over-trust") is
-    surface-independent by nature, and the conforming implementation already
-    exists over the same seam at `src/coverage.rs:150-166`.
-  - **(a), the alternative** — the guarantee is scoped to the `find`/`retrieve`
-    staleness axis only. Then SPEC-007 gains an explicit qualifier saying so,
-    because it does not currently read that way, and ISS-257 stays an improvement.
+  one, and audit deliberately did not.
+
+  **Audit's recommendation, revised on a closer reading: resolve the ambiguity,
+  do not adjudicate conformance.** The first reading of this finding leaned to (b)
+  below on the strength of the sentence being unqualified and naming the exact
+  failing case. Two textual facts weaken that and are recorded here so reconcile
+  weighs them rather than inheriting the stronger claim:
+  - the state vocabulary the sentence promises — `fresh / stale / unknown /
+    **unanchored** / **reference**` — is `retrieve`/render vocabulary. `validate`
+    emits *findings*, not states, and has no `unanchored`/`reference` to render.
+  - "never a silent **hide**" most naturally denotes hiding a memory *from
+    results*, which is a retrieval concern. Only "silent over-trust" is
+    surface-independent.
+
+  What still supports (b) is structural, not lexical: "Git-anchored staleness" is
+  a **peer section under `## Responsibilities`**, not a subsection of "The
+  scope-aware reader" that precedes it — so it reads as an engine-wide
+  responsibility rather than a property of the reader.
+
+  The honest conclusion is that **the sentence does not determine its own scope**,
+  and that ambiguity is the defect worth fixing. Preferred REV: amend SPEC-007 to
+  state explicitly which surfaces the guarantee binds. That is cheap, uncontested,
+  and leaves **ISS-257 standing on its own merits** — a silent "no drift" on 58% of
+  the anchored corpus is worth fixing whether or not it is formally non-conformant.
+
+  The two readings, if the REV prefers to settle rather than clarify:
+  - **(b)** — the guarantee binds any git-anchored staleness computation.
+    `validate` is recorded as non-conformant and **ISS-257 becomes a conformance
+    fix** rather than an improvement. Note the cost: this retro-labels shipped
+    behaviour non-conformant on a contested reading.
+  - **(a)** — the guarantee is scoped to the `find`/`retrieve` axis. SPEC-007
+    gains the qualifier it currently lacks, and ISS-257 stays an improvement.
+
+  Under all three routes the *code* outcome is identical — ISS-257 is the fix, and
+  the conforming shape already exists over the same seam at
+  `src/coverage.rs:150-166`. What actually moves is ISS-257's priority and the
+  spec's clarity, not what gets written.
 
 - **No REQ status changes identified.** No requirement was verified or falsified
   by this slice's evidence; recorded explicitly so reconcile does not re-derive it.
