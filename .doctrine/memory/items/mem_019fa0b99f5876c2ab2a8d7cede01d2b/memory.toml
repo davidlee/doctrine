@@ -1,0 +1,54 @@
+memory_uid = "mem_019fa0b99f5876c2ab2a8d7cede01d2b"
+memory_key = "mem.pattern.dispatch.close-target-sources-the-admitted-review-candidate"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Source the close_target from the admitted review candidate, not review/<slice>"
+summary = ""
+created = "2026-07-26"
+updated = "2026-07-26"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["dispatch", "close", "candidate"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "4e7b26672b4c30585881d8a030066869bb8900fd"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0b63d4bcba4a9fd3d0c546a4dd6e8d947de704ac66e8e8422bea22d95b10c756"
+base_commit = "1c4b69b48b8dc97f21663edeb47a294583b5f1b5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem_019ec912f7fd746284bfaef00717443e"
+
+[[relation]]
+label = "related"
+target = "mem_019f06a18bf97b23bf771740e427b639"
+
+[[relation]]
+label = "related"
+target = "mem_019f73cd077e70209fa08a9d739af0e4"
+
