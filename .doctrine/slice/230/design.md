@@ -293,7 +293,12 @@ Applied to each entry of `scope.paths` and `scope.globs`:
      test; what it does to the probe is. An absolute-outside literal and a tracked
      symlink whose target is outside are therefore **one** class, not two.
    - **Does not resolve** → ask git's *history*, not the filesystem:
-     `git rev-list --all --max-count=1 -- <entry>`.
+     `git rev-list --all --max-count=1 -- <entry>`, asked with the **same
+     magic-prefixed form** the surface would have emitted, never the raw entry.
+     F-18 applies to this probe as much as to the claim probe: an unresolved
+     entry is still untrusted text, and interpolated raw a `:(exclude)…` value
+     matches everything it does not name, so history would report "tracked once"
+     for an entry naming nothing.
      - **Ever tracked** → **stale, refuse** (D10). The memory names evidence that
        once existed and no longer does — a real defect, and a fixable one.
      - **Never tracked** → **unobservable**, reported and attested over (D10).
