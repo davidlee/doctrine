@@ -38,8 +38,8 @@ Every observation is one self-contained TOML document at:
 .doctrine/observations/<kind>/<year>/<month>/<uuid>.toml
 ```
 
-The filename UUID and envelope UUID must agree. The envelope has exactly four
-required core fields:
+The filename UUID and envelope UUID must agree. The envelope has a fixed schema
+discriminator plus exactly four required core fields:
 
 ```toml
 schema = "doctrine.observation"
@@ -220,6 +220,7 @@ creates one supersession control linking the old and replacement UUIDs.
 Retraction creates one retraction control targeting an exact UUID. Each command
 therefore performs one atomic create-new write. Neither operation edits or
 deletes an existing record.
+
 Dangling targets, cycles, multiple terminal controls, malformed controls, and
 unsupported schemas remain inspectable and produce deterministic diagnostics.
 Resolution partitions the correction graph into weakly connected components.
@@ -350,7 +351,7 @@ not introduced.
 
 ## 8. Decisions, constraints, and follow-ups
 
-The accepted decision series DEC-012 through DEC-041 records the interactive
+The accepted decision series DEC-012 through DEC-042 records the interactive
 design choices underlying this document. POL-002 requires Doctrine to own the
 contract rather than relying on harness conventions; STD-001 requires the wire
 vocabulary and paths to be named once; ADR-001 governs layering; ADR-008
