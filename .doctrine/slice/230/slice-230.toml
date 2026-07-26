@@ -1,7 +1,7 @@
 id = 230
 slug = "memory-body-write-seam"
 title = "Memory body-write seam"
-status = "started"
+status = "audit"
 created = "2026-07-25"
 updated = "2026-07-26"
 tags = ["area:cli", "area:mcp", "area:memory"]
