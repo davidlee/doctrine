@@ -14,7 +14,7 @@ ref   = "SL-228"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Funnel proof not bound to the live fork tip — deletion of unimported work"
 detail = "D9 as first written authorised branch -D on branch-name + position alone. row_for_fork (src/mcp_server/dispatch.rs:785) returns the FIRST row whose spawn.fork matches, and nothing compares the live branch OID to the row's recorded import.fork_tip (funnel_machine.rs:244). Failure: a fork that advanced past its imported tip, or a recycled fork name binding a new branch to an older concluded row, is deleted with unimported commits on it. git cherry checks every commit currently reachable from the branch; D9 discarded that protection without replacement. Remedy: require an unambiguous row AND live OID == import.fork_tip before injecting any landing fact."
@@ -23,7 +23,7 @@ response = "Accepted in full — this is the finding that justified the review. 
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "concluded does not prove the current coord tip retains the import commit"
 detail = "D1 proves the delta and Import row coexisted in one commit; I3 proves monotone positions. Neither proves an arbitrary current tip carrying the row descends from that commit. read_funnel_at (src/dispatch.rs:5628) trusts the record tree at the supplied tip with no ancestry proof. A rewritten ancestry carrying the record forward without the introducing commit would let reap destroy the only copy. No sanctioned path rewinds the coordination ref (SPEC-021: CAS projection), so this is an unstated assumption rather than a demonstrated failure."
@@ -32,7 +32,7 @@ response = "Accepted as a real gap in the argument; severity moderated on the re
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Class-2 Reap reports success while the row stays at concluded"
 detail = "gc deletes worktree+branch, then land_funnel_transition(Reap) loses the CAS. Current code (src/mcp_server/dispatch.rs:757) warns on stderr and returns Reaped. The shipped driver (install/workflows/drive-slice.js) proceeds on a non-refusal and prepares the next phase, while dispatch next still prescribes reap. A post-act partial completion hidden behind a success outcome — contradicts D10, and falsifies I4 as written (gate passes, no residue, yet no advance)."
@@ -45,8 +45,8 @@ status = "answered"
 severity = "major"
 title = "Residue model incomplete — busy claim lock and administrative residue"
 detail = "The binary Reaped-vs-gc-incomplete model misses two existing gc outcomes. (a) A busy per-name claim lock prints 'skipped' and returns Ok(()) (src/worktree/gc.rs:276); mapped to success, dispatch_reap advances to reaped while branch and worktree still live. (b) dispatch-record deletion failure (gc.rs:423) folds into gc-incomplete; if that blocks Reap forever the operator is stuck behind a permissions fault retry cannot clear. Remedy: a total typed outcome set separating safety-critical from administrative residue."
-disposition = "fixed"
-response = "Accepted; both cases verified in source. §4.1 replaces the binary model with a total typed outcome table declaring advance-eligibility per case: Reaped and AlreadyAbsent advance; Busy (live claimant holds the per-name lock) refuses and does NOT advance — the claim gate outranks even --force, and mapping its Ok(()) skip to success would advance while branch and worktree live; NotLanded refuses; CriticalResidue{worktree,branch} refuses because reaped asserts the fork is gone; AdministrativeResidue{dispatch_record} advances AND reports the leftover, since the fork itself is gone and blocking would strand the funnel behind a fault retry cannot clear. The admin/critical split is the reviewer's, and it is the right cut."
+disposition = "fixed (round 2) — totality restated over the residue set"
+response = "NOT CLOSED accepted, and independently corroborated before the verdict returned. The round-1 table read as a choice between disjoint variants; gc does not work that way. leftovers is a Vec accumulated across three independent legs — worktree remove (gc.rs:404), branch delete (gc.rs:416), dispatch-record delete (gc.rs:431) — folded into ONE gc-incomplete bail, so a permissions fault that blocks 'worktree remove' will typically also block the record delete beneath it and produce a mixed set. §4.1 now classifies over the set rather than selecting a variant: residue ⊆ {worktree, branch, dispatch_record}; advance iff the set contains neither worktree nor branch; critical membership outranks administrative; a mixed set refuses AND reports every member including the administrative ones, so the operator gets the whole cleanup in one refusal instead of discovering the record leg on a second pass. CriticalResidue/AdministrativeResidue are named as the two verdicts the rule yields, not as mutually-exclusive gc results; empty set ⇒ Reaped. §10's gc row now says the typed outcome carries the residue as a set, and §11 gains the mixed-residue VT cell. Design at 74884577."
 
 [[finding]]
 id = "F-5"
@@ -54,12 +54,12 @@ status = "answered"
 severity = "major"
 title = "NEW-OQ-C misses a second split-brain consumer: worktree inventory"
 detail = "landed_against's only caller outside gc is src/worktree/inventory.rs:249, backing worktree list's landed column. For exactly the strict-superset import D9 calls funnel-landed, a default worktree list still renders NotLanded while the funnel reaps — a published contradiction, not a CLI-gc UX question. (--no-landed suppresses the oracle entirely, so the filter is unaffected; no doctor_checks.rs consumer found.) Remedy: one command-tier landing-authority resolver shared by MCP reap, CLI gc, and inventory; at minimum inventory must not publish a false unlanded."
-disposition = "fixed"
-response = "Accepted; found independently before the review returned, and the reviewer's nuance corrects my own statement — the contradiction is in the DEFAULT worktree list, not the --no-landed filter, which suppresses the oracle entirely. §4.1 now names all three landing consumers (dispatch_reap, CLI worktree gc, worktree::inventory) and calls the disagreement a published contradiction rather than a UX wrinkle. Adopting the reviewer's structural remedy: the landing-authority resolver ships as a named command-tier seam in this phase even though only dispatch_reap wires it, because a second implementation is how two oracles drift apart permanently. Adoption by the other two is deferred (NEW-OQ-C) with the objection recorded that worktree list already takes --slice, so the 'no slice available' argument covers only worktree gc."
+disposition = "fixed (round 2) — inventory adopts the resolver in-phase"
+response = "NOT CLOSED accepted in full. The round-1 disposition adopted the structural remedy (ship the seam) and quietly dropped the finding's stated minimum — that inventory must stop publishing a false unlanded. A shared seam does not un-publish a contradiction; the reviewer is right that these are different claims. worktree::inventory now adopts the resolver in THIS phase, leaving CLI worktree gc as the sole deferral. The evidence that makes this cheap also dissolves the only objection on record: landed_cell's WorkerFork arm already holds the slice, because resolve_row derives it PER ROW via slice_of from the fork's own nested path (.dispatch/SL-<N>/.worktrees/agent-*) — it is not the --slice filter (inventory.rs:179/:200/:230). So adoption is a substitution at one call site: consult the landing-authority resolver, fall through to landed_against when no funnel row certifies the fork, same fail-closed shape as gc's classifier. LandedCell::Unknown already covers an unresolvable resolver read, so no new rendering vocabulary and the cell tokens stay stable (landed_cell_tokens_are_stable, inventory.rs:489, must pass unmodified). CLI worktree gc keeps the patch-id oracle and the deferral now has a real basis rather than an asserted one: it takes no slice and derives none, so adoption needs a cross-slice scan of .doctrine/dispatch/*/funnel.toml — a new mechanism, not wiring. NEW-OQ-C is narrowed to that one consumer and its round-1 'both are just wiring' framing is explicitly corrected. Scope delta declared: src/worktree/inventory.rs added as a design-target selector, plus a §11 oracle-agreement VT. Design at 74884577."
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "D10's uniformity claim is not discharged at design time"
 detail = "Converting not-landed from Err to Ok(Refused) is itself safe — the shipped workflow maps funnel refusals to halt and no production caller treats a serialized Ok as phase success. But D10 claims uniformity across every funnel tool without classifying all fallible paths. Example: dispatch_conclude_phase may land the durable conclusion and then fail the trailing sheet projection via ?, yielding an opaque -32603 for an outcome the caller must retry. Remedy: a design-time fallibility table (internal fault / pre-act refusal / post-act partial completion / retryable CAS loss) rather than deferring to the VA sibling sweep."
@@ -68,7 +68,7 @@ response = "Accepted rather than argued: the honest fix is to stop over-claiming
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Amendment contradicts shipped specs with no requirement mapping"
 detail = "SPEC-012 pins gc's reap to 'provably landed ... via git cherry <coordination-HEAD> <fork-branch>' (spec-012.md:106) — a named mechanism D9 replaces. The D7 golden artifact (.doctrine/spec/tech/021/funnel-machine.md:20) still renders 'landed-oracle ok'. The amendment claimed D9/D10 have 'no REQ of their own', but D9 changes the proof satisfying active PRD-015 REQ-301 ('provably landed in durable git state'). Remedy: map D9 to REQ-301 and the SPEC-012 sentence, route the contract change through the governing Revision, regenerate the artifact with implementation."
