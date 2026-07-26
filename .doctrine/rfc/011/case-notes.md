@@ -2128,3 +2128,35 @@ discharge claim outrunning its discharge. That is cheaper to catch at authoring
 time with one question than at review time with a round: *for every "total",
 "uniform", "every", or "always" in a design, what is the enumeration, and is it
 written here?*
+
+[dispatch/design; SL-228-RV-308-round4-and-phase-plan-entry]
+**Persistent shell cwd across a two-tree layout produced a five-call phantom
+crisis.** The harness's Bash tool keeps the working directory between calls. In
+a dispatch session there are two trees that both contain `.doctrine/slice/228/`
+and both contain `./target/debug/doctrine` — the coord tree (`dispatch/228`,
+fresh binary, PHASE-08 present) and the primary tree (`edge`, older binary,
+PHASE-08 absent because the phase was authored on the dispatch line). After a
+legitimate `cd /workspace/doctrine` to commit the review ledger, every
+subsequent relative-path read silently answered from the wrong tree. Conclusions
+drawn and then discarded: "PHASE-08 does not exist in plan.toml", "no phase-08
+sheet exists", "the coord binary is stale — it has no `dispatch next`". All
+three were artifacts of cwd, all three looked like genuine blockers, and the
+last one directly contradicted a `dispatch commit` that had visibly succeeded
+ten calls earlier — which is what eventually exposed it.
+
+Cost: ~6 tool calls chasing the phantom, plus the near-miss of reporting a
+fabricated blocker to the user.
+
+Generalisable, and specific to dispatch: **in a two-tree session, every path is
+ambiguous and every relative path is a bet on invisible state.** The cheap
+habits are (a) `git -C <tree>` and absolute paths for anything after the first
+`cd`, and (b) treating a *contradiction with an earlier successful call* as the
+first hypothesis rather than the last — the earlier `dispatch commit` was proof
+the binary had the subcommand, so "the binary lacks it" was already refuted
+before it was believed.
+
+Worth considering at the tooling altitude: `doctrine` verbs that read slice
+state could print which root they resolved when it is not the cwd's nearest
+marker, the same way the not-found error should name the other worktree
+(see the round-2 note above). Two case notes now point at the same missing
+signal — *which corpus am I talking to*.
