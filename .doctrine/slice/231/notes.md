@@ -6,14 +6,14 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-26 · design · 6393a93e
+fresh-as-of: 2026-07-26 · design · a0b6c49d
 
 ### Produced
 
 - SL-231 — observation architecture designed and adversarial findings integrated
   (commits 1ff203ad..52e8f654)
-- PRD-018 and SPEC-028 — draft observation capability and ledger-container
-  contracts authored with REQ-397..REQ-413 (commit 6393a93e)
+- PRD-018 and SPEC-028 — approved observation capability and ledger-container
+  contracts with REQ-397..REQ-413 (commits 6393a93e, a0b6c49d)
 - REV-035 — SPEC-003 container inventory revised for SPEC-028 (commit 6393a93e)
 - IMP-319 — subprocess-worker observation capture parity
 - IMP-320 — configurable observation guidance in boot context
