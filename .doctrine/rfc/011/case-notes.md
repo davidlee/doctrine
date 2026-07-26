@@ -53,3 +53,45 @@ anchor, not a line — the same rule the handover already applies to reading lis
 `/dispatch` router routes on `.claude/` presence; from the coord tree `ls -d
 .claude` is a miss (it is untracked in the primary tree, so the fork does not
 carry it). Cost one extra round trip to re-check against the project root.
+
+### [reconcile; SL-228-reconcile-rv312]
+
+Executing an already-written reconciliation brief. Four token sinks, all
+orientation rather than work.
+
+1. **Two trees hold the same authored artefact and disagree — and nothing in the
+   tooling says so.** `.doctrine/slice/228/design.md` is 1056 lines in the coord
+   tree and 763 in the primary. I read the primary's copy first (the working-dir
+   default), derived §-numbers and line anchors from it, then discovered the
+   divergence only because a `grep` run with a different cwd returned different
+   line numbers for the same heading. Every anchor gathered to that point was
+   discarded and re-gathered. The handover *did* warn ("canonical in the coord
+   tree"), and the warning still lost to the default cwd. Cost: a full re-read of
+   §1/§2/§5/§10. A `slice paths` / `show` that resolved to the canonical tree, or
+   any staleness marker on the non-canonical copy, would have cost zero.
+
+2. **The brief's section anchors were wrong and only prose-checkable.** Both the
+   Reconciliation Brief and finding F-3's response direct the selector mirror to
+   `design.md §6`; §6 is `dispatch next`, and the mirror is §10. Nothing detects
+   this — a brief cites sections by prose, so a wrong anchor is found only by
+   opening the target. Two sections read to locate one edit. This is the same
+   family as the item being reconciled (F-5: advice that names the wrong target),
+   which is worth noting: the audit's own handoff artefact exhibits the defect the
+   audit was documenting.
+
+3. **Boot advertises verbs the pinned binary does not have.** `boot.md` names
+   `doctrine reports next` and the `explore` group in its routing/SPINE tables;
+   the coord build (0.31.0, the binary the same boot sector tells you to use)
+   has neither — `error: unrecognized subcommand 'reports'`. Two dead calls before
+   falling back to reading files. The SPINE table is a snapshot of a *different*
+   binary than the one `## Invoking doctrine` pins.
+
+4. **`--slice` is not uniform.** `dispatch commit --slice 228`, but
+   `slice selector list 228` (positional; `--slice` is rejected with a
+   quote-it-as-a-value tip). One wasted round-trip. Small, but it recurs at every
+   selector/conformance beat.
+
+Not a complaint about the brief's substance — it was accurate and complete on
+every load-bearing point, and "do not re-derive" saved far more than these four
+cost. The pattern is that the expensive failures were all *stale or mis-aimed
+pointers*, never missing content.

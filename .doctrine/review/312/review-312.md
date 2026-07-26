@@ -183,3 +183,112 @@ direct-edit surface. Nothing in this audit requires changing a plan criterion.
 **Requirement status.** REQ-387 may remain `pending` at close — subprocess-arm full
 gating was deferred by design, not missed. Do not mark it satisfied to tidy the
 rollup.
+
+## Reconciliation Outcome
+
+Executed 2026-07-27. Every brief item is resolved. Findings keep their audit
+dispositions — remediation is recorded here, not by mutating a disposition.
+
+### Direct edits applied
+
+Slice artefacts are canonical in the **coord tree** (`.dispatch/SL-228`); the
+primary's `design.md` was 293 lines stale and was not the edit target. Landed as
+`f688b0f4` (selectors + design.md) plus the D10 rows below.
+
+- **Selector registry, `slice-228.toml` — F-3, F-4.** `slice selector rm` × 6:
+  `.agents/skills/dispatch/**`, `.agents/skills/dispatch-agent/**`,
+  `.agents/skills/dispatch-subprocess/**`, `.doctrine/spec/tech/021/**` (F-3);
+  `flake.nix`, `src/worktree/shared.rs` (F-4).
+  **Verified by the computed algebra, not by assertion:** `slice conformance 228`
+  moved **8 undelivered → 2**, undeclared and conformant unchanged (6 / 30). The
+  two survivors are exactly F-2's base-beat pair — `.doctrine/adr/001/layering.toml`
+  and `src/main.rs`, delivered in `b8e64e109` but structurally invisible because
+  that commit *is* PHASE-03's boundary `--start`. **SL-228's genuine conformance
+  debt is now zero**; the residue is instrument error owned by IMP-292 defect 3.
+- **`design.md` §10 — F-3, F-4.** Four rows corrected. *The brief and F-3's
+  response both name "§6" for this mirror; §6 is `dispatch next`. The selector
+  mirror is §10, "Code impact summary (→ `design-target` selectors)" — corrected
+  silently would have been the wrong call, so it is recorded.* Rows: the
+  `shared.rs` wrap struck as not delivered; `.agents/skills/` replaced by the real
+  source `plugins/doctrine/skills/{dispatch,dispatch-agent,dispatch-subprocess}/**`;
+  `.doctrine/spec/tech/021/` re-described as orchestrator-authored and *not
+  selectable* (with the `classify_import` cite); and the flake.nix graft struck —
+  **R2 was dissolved at PHASE-02**, the hook script rides the existing `install/`
+  RustEmbed root, so `flake.nix` was never needed rather than merely skipped.
+- **`design.md` §2 — F-7 item 2.** `Advance` + `attempt_advance` documented beside
+  `attempt`, additively. Verified in source before writing: `attempt`
+  (`src/funnel_machine.rs:534`) is a by-value projection over `attempt_advance`
+  (`:547`) and carries an explicit `expect(dead_code)` whose stated reason is that
+  §2 publishes it as the seam — the design's signature was incomplete, not wrong,
+  exactly as the drive classified it.
+- **`design.md` §2 — F-7 item 4.** `already-<position>` widened from a
+  replay-only gloss to the *milestone-already-passed* family: one family, two
+  causes (replay with mismatched facts; a move already passed). Source basis —
+  the replay leg requires `t.target(current) == current`, so a backward attempt
+  falls through to the same tokens (`:1374` pins `already-imported` for it).
+- **`design.md` §5 — F-7 item 3.** The `paths_since_verify: None` case stated: the
+  gate fails **closed** as `conclude-verify-stale`. Source basis — `conclude_allowed`
+  (`:741`) uses `is_some_and`. Framed as the intended reading of I2 (an unanswered
+  identity question is not an attestation), not as an implementation liberty.
+- **`design.md` D7 — F-7 item 1.** Not flattened to a wording tweak, per the
+  finding's own instruction. The row now names the **cause**: the `.doctrine/`
+  hard wall inverts the authoring direction, so the golden is authored first at
+  the orchestrator's phase base and the renderer is pinned to it — the same wall
+  behind F-3's unsatisfiable selector and F-2's invisible base beat.
+
+### REVs completed
+
+- **REV-039 (`reconcile-sl-228`) — done, approved.** One `modify` row against
+  **REQ-385** (`FR-009`), covering **F-5**. Applied; the row surfaced for manual
+  landing and was landed by hand.
+  - **REQ-385 statement**: `with prescription` removed — it read as the strong
+    claim while only the positional claim was earned.
+  - **`requirement-385.md`**: the split recorded as elaboration (storage rule —
+    the TOML statement stays primary): positional guidance normative and proven
+    (memory-blind orchestrator drove a full funnel and a crash recovery unaided);
+    prescription completeness a **goal**, vehicle **IMP-321**.
+  - **`design.md` D10 Refs column** and **§2's `IllegalTransition` doc-comment**:
+    both restated the strong form three lines from where the split is made; both
+    now carry it. Landed under this REV rather than as loose per-slice edits so
+    the traceability stays on the governance record.
+  - Four counter-examples cited, not re-derived. VH-1 not reopened.
+
+### Inspected and found inapplicable
+
+- **The brief's second REV item — `.doctrine/spec/tech/021/`.** It asks that the
+  split be applied "wherever the tech spec restates D10's strong form".
+  **SPEC-021 never restates it.** Searched for `refus` / `prescri` / `remedy` /
+  `recovery`: the only hits are D2's arm-routing mismatch and the coord-worktree
+  and fork refusals — none about prescription sufficiency. SPEC-021's own D1–D7
+  are an unrelated decision set, not SL-228's D1–D10. No row raised; the search is
+  recorded instead of an invented edit. The D7 golden is untouched and correct.
+
+### Routed to the named vehicle, not fixed here
+
+- **Five surviving restatements of the strong form**, appended to **IMP-321** (the
+  vehicle the brief named) rather than filed as a new item: `src/funnel_machine.rs:347`,
+  `src/dispatch.rs:5771`, `src/mcp_server/worker_commit.rs:1466`,
+  `install/dispatch-mechanics.md:51`, `plugins/doctrine/skills/dispatch/SKILL.md:104`.
+  Three are source comments and two are **shipped operator instruction** — none is
+  `/reconcile`'s write surface, and touching them is a code/prose change wanting a
+  gate run. Worth stating plainly: `worker_commit.rs:1466` asserts the claim *to
+  the operator at runtime* (`"the payload IS the recovery procedure: {detail}"`),
+  so in any of the 24 empty-`detail` cases it promises sufficiency in the same
+  breath as supplying nothing. A demoted requirement with five undemoted
+  restatements is a contradiction, not a split — IMP-321 should retire or qualify
+  all five in one pass.
+
+### Follow-up (no reconcile write, per the brief)
+
+- **F-2** → IMP-292 defect 3 (conformance range algebra excludes its own `--start`).
+- **F-6** → ISS-254 (no evidence-only-phase exemption; undiagnosable refusal) and
+  the IDE-028 refinement (an appended phase has no primary sheet to flip).
+- **F-1** → already landed at audit as `707236c0`; absent from the brief by design.
+
+### Off-surface, confirmed untouched
+
+No `plan.toml` edit. No `EN-` / `EX-` / `VT-` / `PHASE-NN` id added, changed, or
+renumbered. **REQ-387 remains `pending`** — deferred by design; marking it
+satisfied to tidy the rollup would be the same over-claim REV-039 exists to remove.
+
+Reconcile pass complete — handoff to `/close`.

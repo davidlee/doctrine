@@ -95,4 +95,31 @@ its terminal gate. The D10 repair should probably land the caller-relative arm
 (single-source the reason *token*, not the *remedy*, because the correct remedy
 differs between the CLI and MCP callers) and this item then verifies it.
 
-Related: ISS-249, ISS-250, ISS-251, ISS-253, SL-228 D10/FR-009.
+## Appended at SL-228 reconcile (REV-039) — the claim is restated in five places
+
+REV-039 split REQ-385 (`FR-009`): positional naming stays normative and proven;
+"a refusal's text IS the recovery procedure" demotes to a goal with this item as
+its vehicle. The split was landed on REQ-385, on `requirement-385.md`, and on
+SL-228's `design.md` (D10's Refs column + §2's `IllegalTransition` doc-comment).
+
+**It was deliberately NOT landed on the five sites below** — three are source
+comments and two are shipped operator prose, none of which is `/reconcile`'s
+write surface, and changing them is a code/prose change that wants a gate run:
+
+- `src/funnel_machine.rs:347` — doc-comment on the refusal payload.
+- `src/dispatch.rs:5771` — "The machine refused; the payload IS the recovery procedure."
+- `src/mcp_server/worker_commit.rs:1466` — emits the claim *to the operator* at
+  runtime: `"the payload IS the recovery procedure: {detail}"`. Note this is the
+  worst of the five: when `detail` is one of the 24 empty-detail cases, the text
+  asserts sufficiency **in the same breath as supplying nothing**.
+- `install/dispatch-mechanics.md:51` — "**A refusal is the recovery procedure.**"
+- `plugins/doctrine/skills/dispatch/SKILL.md:104` — same sentence, shipped to
+  every dispatch orchestrator as instruction.
+
+The last two matter most for this item's purpose: they teach the operator to
+*trust* the refusal text, which is precisely the trust the four counter-examples
+show is not yet earned. Whatever this item lands, it should retire or qualify all
+five in the same pass — a demoted requirement with five undemoted restatements is
+not a split, it is a contradiction.
+
+Related: ISS-249, ISS-250, ISS-251, ISS-253, REV-039, SL-228 D10/REQ-385.
