@@ -104,6 +104,18 @@ Masters stay uncovered by every invalidation path (R5). They are unanchored and
 reaches a master edit. D6 puts them out of scope; PHASE-06 EX-6 exists to stop a
 future reader inferring coverage the slice does not have.
 
+**PHASE-03 and PHASE-04 are an inseparable pair, and this is the plan's one real
+sequencing hazard.** § 1 is explicit that body-write does not *create* the
+attestation defect but "turns a hand-edit-only footgun into a first-class,
+one-command operation". PHASE-03 alone is exactly that state: `edit --body` works
+and does **not** clear the attestation, so at that HEAD the product is *worse* than
+today — today the footgun needs a raw-file write the guardrails forbid, and after
+03 it needs one supported command. Nothing about the phase split is wrong; the
+constraint is that no intermediate HEAD between 03 and 04 may be treated as a
+releasable or landable state. If the slice stalls, it stalls before 03 or after 04,
+never between them. Recorded here because the phase boundary reads innocuous and
+the consequence does not.
+
 Two things this plan must not grow. It must not specify exclusion sets, claim
 surfaces, or pathspec construction — SL-232 owns the gate, and where PHASE-06
 needs a git fact the gate also needs, the design states it locally rather than
