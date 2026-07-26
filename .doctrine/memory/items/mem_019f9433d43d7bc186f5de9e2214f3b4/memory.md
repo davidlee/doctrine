@@ -55,3 +55,25 @@ Canonical sequence: [[mem_019ec912f7fd746284bfaef00717443e]]. Related recoveries
 [[mem_019f06a18bf97b23bf771740e427b639]] (pre-FF trunk),
 [[mem_019f6e3a108b78c1b0da16871feb9a40]] (reconcile-truth-on-edge split-lineage).
 Born SL-204 close, 2026-07-24.
+
+## Recurrence — SL-228 close, 2026-07-27
+
+Happened again, three days after SL-204, on a close that had this memory in the
+corpus and did not retrieve it. Identical signature: `(advanced+pure-ref)`,
+`10 ref(s) replayed`, main `139166dbf..d66180c25` = **7659 files, −424548**. Then
+the documented trap fired exactly as written — admitting a close_target *after*
+the baked row and re-integrating produced byte-identical wrong output.
+
+**The recovery above was executed verbatim and worked.** Confirmations worth
+pinning: re-prepare really does regenerate `journal.toml` with zero trunk rows
+(verified: 9 rows, all review/phase, no `refs/heads/main`); `--payload impl_bundle`
+really is the difference (`.doctrine` on the candidate = 7630 files vs main 7621,
+**0 deletions**, where the `--payload code` attempt had been planned against the
+corpus-less phase chain); and `prepare-review` runs fine from the primary root
+after the coord worktree is removed.
+
+Filed at this occurrence: **ISS-255** (the guard this memory asks for, plus the
+finding that SL-166 `--allow-corpus-clobber` did NOT fire on the pure-FF path
+despite being documented fail-closed) and **IMP-323** (the handover packet
+paraphrased the landing ritual and dropped the candidate step — cite the skill,
+never restate it).
