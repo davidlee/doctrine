@@ -540,6 +540,43 @@ guard tripping e2e tests that shell the binary. Orthogonal to this delta; the
 constraint said to check this on first worker return — it survived all six phases
 without biting, because no phase's own suite shells the CLI.
 
+### Decision records swept from the runtime sheets — RV-313 audit, 2026-07-27
+
+The runtime phase sheets (`.doctrine/state/slice/230/phases/`) are gitignored and
+`rm -rf`-able. `D-P5-1` and `D-P5-2` were already durable above; these four existed
+**only** in the sheets and would have died with them. Swept verbatim in substance,
+compressed in form.
+
+- **D-P5-3 — the refusal wording is a named constant, not a literal.** Per STD-001
+  the shared text is one `const` in `src/memory.rs` (`BODY_MODE_REQUIRES_BODY`),
+  referenced by the `bail!` and by the VT-2 unit assertion. The e2e test lives in
+  an integration crate and cannot see `pub(crate)`, so it asserts a substring
+  literal; that duplication is unavoidable and *is* the drift-detector the pairing
+  exists to be. The rule the constant encodes: the message must read correctly on
+  both surfaces because it is literally one string — never split into two messages.
+  *Audit note:* RV-313 F-3 extended the same discipline to `record` — its refusal
+  also stays authored once, in `run_record`.
+- **D-P6-1 — the pathspec is a repo-relative string, not an absolute path.**
+  `commits_touching` shells `git -C <root> … -- <paths>` and the incumbent Check 2
+  feeds it repo-relative `scope.paths`, so Check 4 builds
+  `format!("{MEMORY_ITEMS_DIR}/{uid}/memory.md")`. The design's
+  `root / MEMORY_ITEMS_DIR / uid / "memory.md"` phrasing describes *where the file
+  is*, not the argument form. **An absolute pathspec matches nothing and returns
+  0** — a false green in exactly the direction that makes the falsifier pass for
+  the wrong reason.
+- **D-P6-2 — the message must distinguish itself from Check 2's, and keep the
+  `"{uid}: "` prefix.** Check 2 says `… behind HEAD on scoped paths`; Check 4 says
+  `… behind HEAD on its own body (memory.md)`. The prefix is load-bearing:
+  `memory_health_findings_native` extracts the entity by matching it, so the new
+  finding rides the doctor surface for free *only* if the shape is preserved. T41
+  asserts it sees this finding and not Check 2's — the wording is what makes that
+  assertion sharp.
+- **D-P6-3 — EX-6 is discharged by an honest comment, not by code.** Global
+  masters stay uncovered by construction (unanchored ⇒ empty `verified_sha` ⇒
+  guarded out). The deliverable was a doc comment recording *why*, plus the
+  standing mitigation (`mem.system.memory.global-master-authoring`), so a later
+  reader cannot mistake silence for coverage. No master handling was added.
+
 ### Conclude cadence — run 2026-07-27
 
 `slice verify-vt 230` → `dispatch sync --prepare-review` → 8 refs projected
