@@ -95,6 +95,28 @@ aggregation can then consume a proven wire model in a follow-up.
 - Destructive retention, compaction, or remote archival policy beyond the
   partitioned local collection contract.
 
+## Risks, assumptions, and open questions
+
+- **R1 — parallel substrate risk.** The collection shape resembles both named
+  memory entities and comparison session ledgers. Design must identify and
+  reuse their proven seams without inheriting the wrong lifecycle semantics.
+- **R2 — capture-friction risk.** A schema rich enough for later analysis can
+  make recording too expensive. Required fields must stay minimal; reliably
+  auto-populated and optional context must remain distinct.
+- **A1 — collection-first sequencing.** Basic show/filter/search is sufficient
+  to validate useful capture before aggregate interpretation is built.
+- **OQ-1 — QUE-174.** Determine the evergreen product and technical
+  specification home before design lock; do not smuggle a new platform
+  primitive in under unrelated memory or comparison canon.
+- **OQ-2.** Settle the public noun and verb family (`observation`, `friction`,
+  or another term) from the generality actually justified by the first caller.
+- **OQ-3.** Settle which optional effort counters can be represented honestly
+  before automatic measurement exists, and whether v1 should omit them rather
+  than ship a misleading manual field.
+- **OQ-4.** Reconcile the live `doctrine link` support for memory sources with
+  the older deferred named-entity relation wording before choosing a future
+  occurrence-to-work association seam.
+
 ## Summary
 
 Ship a first-class, structured friction-observation ledger whose occurrences
