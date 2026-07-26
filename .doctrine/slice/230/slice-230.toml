@@ -73,6 +73,12 @@ descriptor = "residual digest-based invalidation deferred from SL-230"
 target = "QUE-173"
 
 [[relation]]
+label = "references"
+role = "concerns"
+descriptor = "retrieve-side adoption of the claim-surface constructor"
+target = "QUE-175"
+
+[[relation]]
 label = "related"
 target = "CHR-035"
 
