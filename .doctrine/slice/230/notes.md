@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · started, PHASE-03 (3 of 6 landed; coord `dispatch/230` at
-4d8c1e49) · 08274695
+fresh-as-of: 2026-07-27 · started, PHASE-04 (4 of 6 landed; coord `dispatch/230` at
+162aa662) · c691558a
 
 ### Produced
 
@@ -19,6 +19,10 @@ fresh-as-of: 2026-07-27 · started, PHASE-03 (3 of 6 landed; coord `dispatch/230
 - **PHASE-03** `edit --body` + the two-tier write ordering — the first caller of
   `write_body`; retires PHASE-01's `expect(dead_code)` staging attributes
   (coord e7e0d42f→232dbd3f, boundary 4d8c1e49).
+- **PHASE-04** attestation invalidation — `claim_snapshot` + an infallible
+  `clear_verification`; closes § 2.1's observed defect (coord 4d8c1e49→62476d71,
+  boundary 162aa662). **The 03/04 inseparable pair is closed** — no intermediate
+  HEAD hazard remains, so integration is unblocked (still `/close`'s job, post-audit).
 - **ISS-248** — selector doctor's redundancy scan is class-blind.
 - **ISS-252** — claude-arm funnel verify beat runs against a stale coord
   checkout; fails open as a false green.
@@ -59,10 +63,11 @@ fresh-as-of: 2026-07-27 · started, PHASE-03 (3 of 6 landed; coord `dispatch/230
 
 ### Next
 
-1. `/phase-plan` PHASE-04, then dispatch it. Half the inseparable pair — 03's HEAD
-   alone is strictly worse than today, so **do not `sync --integrate` until 04
-   concludes**. Steps 0/3/4 of design § 5.4 land into the shape 03 created.
-2. Then PHASE-05, PHASE-06.
+1. `/phase-plan` PHASE-05 (MCP body fields), then dispatch it. It owns **both**
+   legs of the `body_mode`-without-`body` totality rule — the CLI leg's keyword
+   `body_mode_without_body_is_rejected_on_cli` is deliberately still unclaimed.
+2. Then PHASE-06 — but **its VA-1 runs on the coord/landing tree, never a worker
+   fork** (expects ~11 of 30; 30/30 means the D5 pathspec regressed).
 3. Conclude cadence once 6/6: `slice verify-vt 230` → `dispatch sync
    --prepare-review` → remove coord worktree (keep refs) → `slice status 230
    audit` → `/audit`.
@@ -281,6 +286,73 @@ three lines in `src/memory.rs` — the `use crate::entity::{…}` line and the t
 `run_edit` lines it replaced. Its 30+ existing tests are green unedited. Worth
 recording as a technique: `git diff B..S -- <file> | grep '^-'` is a cheaper and
 stronger proof of "suite untouched" than reading the suite.
+
+### PHASE-04 — Attestation invalidation · landed 2026-07-27
+
+Coord `4d8c1e49 (B) → 62476d71 → 162aa662`. Worker model **opus**. `src/memory.rs`
++332/−0 — a **pure insertion**, which settles "`apply_edit`'s suite is untouched"
+(EX-5/R3) by construction rather than by inspection. Funnel green throughout;
+`git reset --hard HEAD` applied before the verify beat again (ISS-252).
+
+**VA-1 is DISCHARGED** — the read was done here, on the coord tree, not delegated
+to the worker. The composed condition is
+`let claim_changed = body_changed || claim_snapshot(&doc) != before;` — a
+comparison of snapshots taken either side of `apply_edit`, with **no test of
+`fields.*.is_some()` anywhere in it**. That is the thing RV-307 F-8 raised (a
+decision recorded in two places and implemented in none), and it is now
+implemented where it was recorded.
+
+**EX-4 is genuinely load-bearing, and was proven so.** The test re-sets
+`--path-scope` to its identical value and asserts the axis fully intact — and it
+takes the verification stamp *after* the scope is in place, so the stamp really
+attests that scope. Scope is the only field where the comparison and `apply_edit`
+diverge (the scope arms set `changed` unconditionally where the scalars compare),
+so a title-based assertion would have passed with `claim_snapshot` deleted
+entirely. The worker additionally **mutation-checked both directions**: swapping
+the comparison for a flag-presence disjunction fails *only* that test, and
+no-op'ing `clear_verification` fails *only* `edit_claim_field_clears_verification`.
+Worth generalising — a falsifier that is not mutation-checked is a claim, not
+evidence.
+
+**For PHASE-05/06**, five carried facts:
+
+- **`clear_verification` is infallible by force, not by taste.**
+  `fn clear_verification(doc: &mut DocumentMut)` — no `Result`. Step 4 sits *after*
+  step 2's body write, so a fallible clear would put a failure point after a disk
+  write and break PHASE-03's I10 (a rejected edit leaves both tiers byte-identical).
+  Anything later that wants to add a check inside it must not.
+- **Accepted residual: it diverges from `stamp_verification`'s F-1 posture.**
+  `stamp_verification` (`:3417`) *refuses* a malformed file; `clear_verification`
+  no-ops per missing table. So a hand-broken `[review]`/`[git]` silently keeps a
+  stale attestation rather than erroring. Deliberate — the alternative was an
+  unlegislated new failure mode on `edit` mid-slice. Flagged for audit; a
+  legitimate finding if the auditor weighs it differently.
+- **The guard is table-presence, not key-presence** (a real fork the worker named).
+  On a table present but missing a key, `insert` creates it — i.e. it *clears*.
+  Clearing is the fail-safe direction; the key-guarded reading would leave a stale
+  attestation standing. No tail-insert corruption risk: the writes go into
+  `[review]`/`[git]`'s own table bodies, not the root table, so the hazard in
+  `mem.pattern.entity.edit-preserving-status-transition` does not arise.
+- **EX-6's notice fires on `claim_changed`, not on "was previously verified".**
+  So a claim edit to an already-unverified `thread` also emits the nudge — true but
+  redundant. Narrowing it would need the pre-state snapshotted; judged not worth
+  the machinery. Also `MemoryType::parse(..).ok()` degrades an unparseable type to
+  *no notice*: deliberate, because the notice is emitted **after** the atomic write
+  and must never be able to fail an edit that has already landed. Same reasoning
+  that forces the infallible clear.
+- **Test helpers available to PHASE-05/06** (on top of PHASE-03's `recorded_memory`
+  / `backdate_updated` / `edit_body`): `stamp_verified`, `axis`, `cleared_axis`,
+  `verified_axis`, `edit_fields`, `verified_then_edited`, and `VERIFIED_SHA` /
+  `VERIFIED_DAY`. `stamp_verified` drives the fixture through the **real**
+  `stamp_verification` with a synthetic `git::Frame` rather than hand-writing
+  verified TOML, so the fixture cannot drift from what `memory verify` actually
+  writes — reuse it, do not hand-roll a verified fixture.
+
+**PHASE-05's inheritance is not free.** `resolve_body` served `edit` for nothing
+because `run_edit` shares its module; the MCP arm does not, and takes its body as a
+JSON string with no stdin sentinel. Its EX-5 ("the adapter contains argument
+mapping only — no policy, no second body-write path") means delegating to
+`run_edit`, which now carries the clearing for free.
 
 ## Funnel mechanics (claude arm)
 
