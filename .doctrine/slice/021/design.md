@@ -193,8 +193,9 @@ fan-out vs serial `/execute`) decided at `/phase-plan`, not design-locked.
   whole-system root** so the corpus is one tree (mechanical single-field add,
   F5).
 - `interactions.toml` only where weighty — peer `uses`/`calls` distinct from
-  containment (e.g. memory engine *uses* reservation for id allocation;
-  install *uses* skills distribution). No edge for what containment already
+  containment (e.g. install *uses* skills distribution for gitignore negation
+  and confirm prompt; id lifecycle references memory's UUID-identity model).
+  No edge for what containment already
   says.
 
 ## 7. Validation / closure

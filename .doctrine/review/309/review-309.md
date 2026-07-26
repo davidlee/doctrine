@@ -67,3 +67,16 @@ impact but leaves a misleading `incomplete` signal. Tolerated.
 None. The SPEC-002 parent divergence (F-4) is accepted — no governance or spec
 change needed. The plan criteria (EX-2) are immutable-append; document the
 supersession here rather than attempting a plan edit.
+
+## Reconciliation Outcome
+
+### Direct edits applied
+- **design.md §6** (F-1): replaced inaccurate example "memory engine uses
+  reservation for id allocation" with "install uses skills distribution for
+  gitignore negation and confirm prompt" and "id lifecycle references memory's
+  UUID-identity model" — both backed by authored interactions edges.
+
+### Withdrawn / tolerated / aligned
+- F-2: withdrawn (duplicate of F-3)
+- F-3: tolerated — conformance registry incomplete (data-only slice)
+- F-4: aligned — SPEC-002 parent=SPEC-004 is architecturally correct
