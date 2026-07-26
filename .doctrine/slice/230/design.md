@@ -1285,16 +1285,11 @@ F-21, F-22, F-23, F-24. Every contest and every charge was sustained on
 verification.
 
 The round's shape is the same as its predecessors, one layer in. **F-23** is the
-sharpest: the F-18 magic-prefix rule was applied unconditionally, which is correct
-for hostile input and catastrophic for *empty* input — a bare `:(literal)` matches
-the entire index, inverting a narrowed surface into a total one. The responder had
-probed the prefix rule and read `exit=1` as "neutralised" when it meant "the
-surface is now the whole repo and something in it is dirty": **a non-discriminating
-probe, which is F-17's defect committed by the party that raised F-17.** **F-20**
-is F-15 one axis over — canonicalisation was applied to the item directory and not
-to declared scopes, though git's symlink blindness belongs to pathspecs, not to
-item directories. **F-24** found the third scope consumer that D11 had claimed did
-not exist.
+sharpest, and its lesson is below: the responder had probed the prefix rule with a
+check that could not distinguish the two outcomes — **F-17's defect, committed by
+the party that raised F-17.** **F-20** is F-15 one axis over. **F-24** found the
+third scope consumer that D11 had claimed did not exist. Rules at E11, I9 and R7
+respectively.
 
 **F-21 is the one that changed a decision rather than a mechanism.** A census of
 the real corpus — not a sample — established the round-4 blanket refusal's cost,
@@ -1346,13 +1341,10 @@ sustained on independent verification.
 The round moved the failure up a level. Rounds 1–5 found remedies written against
 a finding rather than against the invariant it instantiates; round 6 found the
 opposite error in the fix for that — **an invariant generalised past the domain it
-holds in**. I9 ("nothing reaches the claim surface uncanonicalised") was the
-right rule for `verify` and was promoted to a universal, and D11 then handed that
-universal to `validate`, whose question is historical. Canonicalising resolves
-against today's checkout; a committed symlink retarget then counts 1 through the
-declared path and 0 through the resolved one (F-27). The remedy for
-over-specificity was over-generality, and it produced a false negative in the one
-verb that was supposed to catch what `verify` misses.
+holds in**. A rule that was right for `verify` was promoted to a universal and
+handed to a verb asking a different question, producing a false negative in the
+one place meant to catch what `verify` misses (F-27). The remedy for
+over-specificity was over-generality. Rules at I9 and D11.
 
 **F-25 changed a decision for the second time.** The round-5 cut split
 non-contribution by whether the path exists on disk; the round-6 cut replaced that
