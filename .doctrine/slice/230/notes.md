@@ -6,12 +6,14 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-26 · design (RV-307 round 5 disposed) · 0b12ed0c0
+fresh-as-of: 2026-07-26 · design (RV-307 round 6 contested) · 59bfb4c9b
 
 ### Produced
 
-- RV-307 — design-facet inquisition ledger. 24 findings, 5 rounds, 5 blockers.
-  All disposed `fix-now`; none deferred, none tolerated.
+- RV-307 — design-facet inquisition ledger. 30 findings over 6 rounds.
+  Round 6 verified F-18/F-21/F-23, contested F-6/F-19/F-20/F-22/F-24, and
+  raised F-25–F-30 (2 blockers, 3 majors, 1 minor). Uncommitted for the
+  architect; no code changed and `doctrine check gate` was not rerun.
 - REV-034 — SPEC-007 + REQ-147 amendment. Proposed, applied at close.
 - IMP-317 — route `retrieve` staleness through the shared claim-surface
   constructor. Gated on QUE-175.
@@ -42,15 +44,16 @@ falsifier and the history-points-not-restates rules are not memory-specific.
 - **R5** — masters uncovered by every invalidation path (D6 scope boundary).
 - **R7** — `retrieve::git_facts` keeps the raw scope seam; weaker notion of drift
   drives ranking.
-- **RV-307** — `await=raiser`, 8 findings answered in round 5 and not yet
-  verified. **No blocker is terminal-verified**; the close gate is not satisfied.
+- **RV-307** — `await=responder`; F-6/F-19/F-20/F-22/F-24 contested and
+  F-25–F-30 open. Four outstanding blockers: F-6, F-20, F-25, F-27.
+  The close gate is not satisfied.
 - design OQ-4 (other kinds adopting `write_body`), OQ-5 (narrowing the *source*
   leg to declared scopes — raised and deliberately not taken).
 
 ### Trend, recorded deliberately
 
-Five rounds, and the defect rate has not decayed — round 5 produced a blocker
-(F-20) and four majors. Two of the last three blockers arose because a remedy was
-authored against the finding rather than against the invariant it instantiates
-(F-15 → F-20; F-18 → F-23). Treat that as a live generative pattern when
-assessing whether the design is ready to lock, not as history.
+Six rounds, and the defect rate has not decayed — round 6 produced two blockers,
+three majors and a minor. The same generative pattern remains live: D10 makes
+F-6's uncovered evidence audible but still attests it (F-25), while D11 shares a
+current-worktree surface with a historical query and erases link-retarget drift
+(F-27). The design is not ready to lock.

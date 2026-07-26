@@ -1974,3 +1974,27 @@ Five friction items from a single `/phase-plan` pass (orchestrator, coord tree).
    The error names a path, not the cause; a coord-tree read of an entity that
    exists on the session line could say so ("not on `dispatch/228`; present on
    `edge`").
+
+[inquisition; SL-230-RV-307-round6]
+Parallel `exec_command` calls that launch commands beyond the initial yield can
+return session ids whose output is lost when the orchestration shell exits
+without polling them. The first entity-orientation batch therefore produced
+blank results and had to be repeated serially. Cost: one duplicated entity-read
+round. A composition helper that automatically waits for every returned session,
+or an explicit warning when a parent script exits with live child sessions,
+would make parallel read-only orientation reliable.
+
+[inquisition; SL-230-RV-307-round6-responder]
+Censusing the memory corpus with a shell/Python glob over
+`.doctrine/memory/items/*/memory.toml` double-counts every memory: `items/`
+holds 387 uid directories **and** 344 key symlinks pointing back at them, and
+glob follows the symlinks. My first two corpus figures (580 `scope.paths`
+entries, 50 items with unresolvable entries) were each ~2x inflated; the
+raiser's CLI-derived denominator (417 addressable, 482 declarations) was the
+correct one. The irony is exact — I made the uid-vs-key mistake that F-15/F-20
+are about, while verifying F-15/F-20's remediation. Two costs: the inflated
+figures had to be re-derived and corrected mid-turn, and the correction burned
+a probe round. `doctrine memory list --all --json` is the only trustworthy
+enumeration; the boot guardrail's "read via `show`, not raw files" should extend
+to an explicit "do not glob `items/`" — the directory is a trap for exactly the
+scripted-census move an agent reaches for when a review asks for a blast radius.
