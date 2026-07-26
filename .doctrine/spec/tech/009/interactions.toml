@@ -1,3 +1,7 @@
+[[edge]]
+target = "SPEC-010"
+type = "uses"
+notes = "Install rides skills distribution for the skills gitignore negation and shares the confirm prompt; it does not own the skill symlink tree"
 # Interactions — outbound spec -> spec edges (tech specs only).
 # Seeded empty; hand-authored in v1 (no verb — design §7 D-Q4):
 #   [[edge]]

@@ -1,3 +1,7 @@
+[[edge]]
+target = "SPEC-009"
+type = "uses"
+notes = "Skills distribution rides install's shared project-root walk, the embedded install/ gitignore helper, and the confirm prompt"
 # Interactions — outbound spec -> spec edges (tech specs only).
 # Seeded empty; hand-authored in v1 (no verb — design §7 D-Q4):
 #   [[edge]]

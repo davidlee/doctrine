@@ -1,3 +1,12 @@
+[[edge]]
+target = "SPEC-005"
+type = "uses"
+notes = "Governance kinds (POL/STD) share the ADR entity surface's kind-surface pattern, status vocabulary, and relation model"
+
+[[edge]]
+target = "SPEC-018"
+type = "uses"
+notes = "Governance kinds relations follow the cross-corpus relation contract for tier-1 edges, supersession, and tags"
 # Interactions — outbound spec -> spec edges (tech specs only).
 # Seeded empty; hand-authored in v1 (no verb — design §7 D-Q4):
 #   [[edge]]
