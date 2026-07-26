@@ -1811,3 +1811,92 @@ path+intent table with `--notes` to expand.
   nor provided a usable prioritisation signal. A later targeted regex query was
   cheap but depended on already knowing suitable vocabulary. Cause dimensions:
   `surface=backlog-list`, `mode=orchestrator`, `model=gpt-5`, `stage=route`.
+
+[inquisition; RV307-R5-external]
+
+- The tracked-symlink census accidentally placed `--glob` after ripgrep's `--`,
+  turning options into filenames and emitting thousands of repetitive errors
+  before interruption. Cost: one failed probe and heavily truncated output.
+  Cause dimensions: `surface=rg-cli`, `mode=orchestrator`, `model=gpt-5`,
+  `stage=inquisition`.
+- A first corpus census used a jq array expression that collected every scope
+  value from one memory into a single TSV row. The impossible tab-bearing
+  “entry” output exposed it; the census had to be rerun with `$v` bound per
+  element. Cost: one full 386-item scan plus misleading intermediate counts.
+  A purpose-built `memory list --scope --json` projection would make the
+  operational blast-radius check both cheaper and harder to misparse.
+- A ledger detail was first passed through a double-quoted shell argument with
+  Markdown backticks around CLI examples. The shell executed the backtick
+  contents and expanded the argument until the raise failed with “argument list
+  too long.” Cost: one failed mutation call; the retry used plain text.
+
+## [dispatch; SL228-P06-c] `dispatch next` collapsed the orchestrator's per-beat cost to near zero
+
+The one measurable win of the drive, recorded while it is fresh. From `imported`
+onward every beat was chosen and parameterised by the verb, not by the handover:
+
+```
+next: verify  — run: doctrine dispatch verify --slice 228 --phase PHASE-06
+next: conclude— run: dispatch_conclude_phase{slice: 228, phase: "PHASE-06",
+                     code_start: "fbbe4f28…", code_end: "a278741a…"}
+next: reap    — run: dispatch_reap{slice: 228, name: "dispatch/agent-addd…"}
+next: spawn   — PHASE-07
+```
+
+`code_start` is the standout. The handover devotes a bolded line to it ("always
+capture fresh; never reuse a number from this file") because a stale `B` is a
+silent corruption. The oracle reads it out of the committed `spawn` row, so the
+whole class of error stops being something an orchestrator can make.
+
+Cost per beat went from "re-read the handover's 13-step cadence, find the step,
+reconstruct its arguments" to one read verb. Three of the four beats needed no
+prior knowledge at all. This is the RFC-011 thesis working.
+
+## [dispatch; SL228-P06-d] Three defects clustered on one verb, all invisible until the funnel was armed
+
+`reap` failed three ways in one beat (ISS-245, ISS-246). All three were latent
+through PHASE-01…05 and surfaced the instant PHASE-06 minted slice 228's first
+`funnel.toml` row — because until then every import landed row-absent and stayed
+patch-identical to its fork.
+
+Cost: ~10 tool calls to diagnose, plus the two issue write-ups.
+
+The transferable lesson is about *benchmark design*, and it lands directly on
+PHASE-07: **a mechanism that is exercised only in its degenerate case has not
+been exercised.** Five phases of green told us nothing about the armed funnel.
+PHASE-07's memory-blind run must start from a slice with a populated funnel
+record, or it will re-measure the same degenerate path.
+
+## [dispatch; SL228-P06-e] Worker-reported friction (transcribed — a worker cannot write `.doctrine/`)
+
+From the PHASE-06 hand-back, in the worker's own assessment of cost:
+
+1. **A new `DispatchCommand` variant silently requires a `guard.rs` write-class
+   decision.** The exhaustive match is good design but undiscoverable from a
+   phase brief; the worker learned it only by compiling. One line in the phase
+   sheet would have saved a build cycle.
+2. **The MCP registry count is asserted in THREE places, not two.** The brief
+   named `tests/e2e_mcp_server.rs`; `tools.rs` carries two more
+   (`tool_list_has_27_tools` and `tools_list_response_structure:1931`), and the
+   third only surfaced on a full `--bin doctrine` run. One `EXPECTED_TOOL_COUNT`
+   const, or a name-set golden, collapses a standing three-way tax.
+3. **STD-001 vs ADR-001 collided with no signposted resolution.** Rendering an
+   MCP tool name from the engine tier is either a magic string or an upward
+   edge. The worker inferred the answer from a `TreeStateCore` doc comment.
+   Worth promoting to a stated rule: *shared vocabulary lives at the lowest tier
+   that needs it; the command tier re-exports.*
+4. **`doctrine check commit` is a misleading rehearsal for a worker.** It is
+   red-by-construction in a fork (marker present), while the real `worker_commit`
+   gate clears the marker before running the suite
+   (`src/mcp_server/worker_commit.rs:159-162`). The worker's self-check
+   disagrees with the gate that decides, and it spent a cycle re-running 11 e2e
+   binaries from a marker-free CWD to prove the 44 failures were ISS-028. An
+   opt-in that makes the worker-side check match the gate would delete that
+   cycle — and this is the fourth consecutive phase to pay some version of the
+   ISS-028 false-red tax.
+5. **The seam table gave locations but not shapes.** Even with a good `file:line`
+   table, the worker needed ~7 reads before writing a line, because pure-data
+   structs (`PhaseRow`, `VerifyEvidence`, `SpawnRecord`) had to be opened just to
+   learn their fields. Inlining the *field lists* into the brief would have
+   removed ~3 reads outright. Concrete upgrade to case-note 2's "grep your seams,
+   don't recall them": **grep the seams AND paste the shapes.**

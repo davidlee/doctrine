@@ -70,7 +70,30 @@ patch-id oracle was chosen over delta-emptiness in the first place.
 (1) is preferred: it reuses state the funnel already commits, and it does not
 make the oracle re-derive anything.
 
+## Third facet — the position advance is coupled to gc's success
+
+`worktree gc --force` removes the worktree and branch but lands **no** `Reap`
+transition (that is `dispatch_reap`'s half). So an operator who takes the
+`--force` route strands the funnel row at `concluded` while the fork it names no
+longer exists — the oracle keeps prescribing `dispatch_reap` for a fork that is
+already gone.
+
+The recovery is non-obvious and worth pinning: **call `dispatch_reap` anyway**.
+`run_gc` treats an absent fork as a clean idempotent no-op, so the tool returns
+`{"Reaped": {...}}` and lands the position. Confirmed at PHASE-06:
+
+```
+worktree gc --fork … --force   → reaped (worktree/branch as present)
+dispatch next --slice 228      → still `reap` (position stuck at concluded)
+dispatch_reap{…}               → {"Reaped": …}   # no-op gc, row advances
+dispatch next --slice 228      → spawn PHASE-07  ✓
+```
+
+That the sequence works is luck of idempotence, not design: nothing tells the
+operator to re-issue a verb that just refused. Fix (1) dissolves this facet too.
+
 ## Disposition
 
 Not fixed in SL-228 PHASE-06 (out of that phase's exit criteria). The PHASE-06
-fork was reaped with `--force` under an evidenced landing.
+fork was reaped with `--force` under an evidenced landing, then `dispatch_reap`
+was re-issued to advance the row.
