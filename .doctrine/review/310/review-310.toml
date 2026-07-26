@@ -14,94 +14,120 @@ ref   = "SL-231"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "Expected global UUID identity; observed identity derived from mutable kind/date partitions"
 detail = "The proposed path <kind>/<year>/<month>/<uuid>.toml allows the same UUID to be recreated under another kind or month, so path-scoped create_new cannot enforce REQ-406 global replay and collision semantics or resolve show from identity alone."
+disposition = "design-wrong"
+response = "Integrated in design section 2.1, DEC-044, REV-036, SPEC-028, and REQ-405/406/413: the authoritative path derives only from UUID through a random-tail shard, so exact lookup and global replay/collision use one path without scan or mutable coordination."
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "Expected invalid corrections to be inert; observed component-wide invalidity resurrects validly retracted records"
 detail = "Weakly connected component inertness disables earlier valid controls when a later dangling, conflicting, or duplicate control joins the component. Garbage or retry can therefore undo a valid retraction, contrary to PRD-018 fail-open semantics."
+disposition = "design-wrong"
+response = "Integrated in design section 4, DEC-045, REV-036, SPEC-028, and REQ-407: resolution is per-control; invalid or losing controls are individually inert, repeats are idempotent, retraction dominates, and appended garbage cannot cancel an earlier valid correction."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "Expected dogfood capture coverage; observed blanket activation sends workers into a forbidden doctrine path"
 detail = "The activation wording directs all agents to capture under .doctrine although worker deltas touching that tree are hard-refused. Claude requires the MCP broker and subprocess parity is deferred, so role-blind guidance can brick or drop worker capture."
+disposition = "design-wrong"
+response = "Integrated in design section 3.4, DEC-046, REV-036, SPEC-028, and REQ-413: dogfood guidance is capability-aware, routes confined Claude through MCP, forbids fork-local CLI writes, and leaves subprocess parity to IMP-319 with orchestrator proxy capture."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected atomic create guarantees backed by shared primitives; observed no primitive provides create-new plus complete-content publication"
 detail = "fsutil create_new is no-clobber but can expose a partial file, while write_atomic publishes complete content but clobbers. Squat-rejecting parent creation is private to entity machinery. The design must name and budget the required shared primitive."
+disposition = "design-wrong"
+response = "Integrated in design section 3.2, DEC-047, REV-036, SPEC-028, and REQ-406: SL-231 now owns a shared fsutil component walk plus complete sibling-temp write and hard-link no-clobber publication, with explicit crash and threat-model semantics and code targets."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected trustworthy measurements only; observed generic agent-writable measurement capture"
 detail = "MCP admits measurement while QUE-176 has not identified a trustworthy producer. Declared metadata cannot turn an agent estimate into measured telemetry, contradicting PRD-018 and REQ-400."
+disposition = "design-wrong"
+response = "Integrated in design sections 2.2 and 3, DEC-048, REV-036, SPEC-028, and REQ-409: public CLI and MCP writers are friction-only; measurements require a registered machine-source adapter, and the production registry remains empty pending QUE-176."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected declared SPEC-013 interaction to be implementable; observed an undefined relationship to the entity list spine"
 detail = "The design introduces bespoke filters and pagination without stating whether observations flatten CommonListArgs, use listing.rs, join list-conformance tests, or declare UUID identity as an exception."
+disposition = "design-wrong"
+response = "Integrated for the real ambiguity in design section 4, DEC-051, REV-036, SPEC-028, and REQ-408. Observations explicitly reuse the command grammar and table/JSON conventions but are not entity kinds, so SPEC-013 does not require CommonListArgs or entity list-conformance membership; bare UUID and observation-specific goldens are explicit."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected a named enrichment allowlist; observed only destination fields and prohibitions"
 detail = "REQ-410 requires named bounded sources, but the design lists target execution fields without enumerating which v1 sources populate them. The privacy boundary and reliable-auto versus caller-supplied split are untestable."
+disposition = "design-wrong"
+response = "Integrated in design section 3.1, DEC-049, REV-036, SPEC-028, and REQ-410: the v1 source-to-field allowlist is enumerated and limited to adapter constants, established worker context, and an already-supplied opaque agent id; other execution fields are explicit/trusted-adapter or absent."
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected the storage tier to be explicit; observed untracked records with no declared Git disposition"
 detail = "The design calls the store authored but does not state whether records are committed or ignored, who commits them, or how the path satisfies the three-tier storage rule."
+disposition = "design-wrong"
+response = "Integrated in design section 2.1, DEC-052, REV-036, and SPEC-028: authoritative records are authored and committed by default with no capture-time Git effects; repository/local ignore escape hatches and their loss of shared durability are documented, while derived links and temps are ignored."
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected stable pagination under concurrent capture; observed undefined offset-or-cursor semantics"
 detail = "Newest-first ordering is total, but inserts at the head duplicate rows under offset pagination. Stable pagination needs a keyset cursor or an explicitly fixed-corpus scope."
+disposition = "design-wrong"
+response = "Integrated in design section 4, DEC-051, REV-036, SPEC-028, and REQ-408: pagination is an opaque keyset cursor over recorded_at descending plus uid, with head-insert behaviour specified and no frozen-snapshot claim."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected lexical search semantics and reuse to be named; observed an undefined matcher beside an existing lexical leaf"
 detail = "The design does not enumerate searched fields, case/token semantics, or whether src/lexical.rs is reused; this risks a parallel tokenizer or inconsistent search verbs."
+disposition = "design-wrong"
+response = "Integrated in design section 4, DEC-051, REV-036, SPEC-028, and REQ-408: search reuses the shared tokenizer/case folding, requires every query token, enumerates summary/detail/string facets, and remains deterministic and unranked."
 
 [[finding]]
 id = "F-11"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected hostile write-boundary limits; observed rendering-only controls on a confinement-crossing capability"
 detail = "No field or record size limits, NUL/control policy, or agent-context trust framing are defined. Structured serialization alone does not prevent terminal injection, unbounded writes, or stored text acting as trusted instruction."
+disposition = "design-wrong"
+response = "Integrated in design section 2.4, DEC-050, REV-036, SPEC-028, and REQ-411: named UTF-8 byte limits and NUL refusal apply before publication without truncation; serializers, terminal escaping, and untrusted agent framing are separate contracts."
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected wire vocabulary aligned with its authority; observed boundary instead of scope, missing units, and undefined public"
 detail = "The usage facet diverges from REQ-400 by omitting units and renaming scope, while correction rules rely on the undefined term public observation."
+disposition = "design-wrong"
+response = "Integrated in design sections 2.2/2.3 and REV-036: usage now consistently carries source, scope, units, completeness, and counters, and primary observation is defined as friction or measurement rather than relying on public."
 
 [[finding]]
 id = "F-13"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected ADR-001 tier vocabulary; observed unfalsifiable bespoke layer labels"
 detail = "The architecture table uses leaf-within-umbrella and pure/imperative engine labels rather than the authoritative leaf, engine, command tiers, and does not state the layering.toml classification the gate must enforce."
+disposition = "design-wrong"
+response = "Integrated in design section 5, REV-036, SPEC-028, and REQ-412: the authoritative layering.toml assignment is observation = leaf with no sub-classification; commands and MCP remain command tier, and the gate must refuse upward edges or tangle growth."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

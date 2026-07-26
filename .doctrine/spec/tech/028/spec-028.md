@@ -24,9 +24,10 @@ SL-231 ships.
 ## Responsibilities
 
 Mirrors the structured responsibilities list: own the wire model; immutable
-partitioned store; resolved/history derivation; identity, facet, time, and text
-queries; shared service contract; CLI/MCP capability boundary; enrichment
-precedence; and pure/imperative separation.
+UUID-sharded store; per-control resolved/history derivation; identity, facet,
+time, and text queries; shared service and registered-source contracts;
+CLI/MCP capability boundary; enrichment precedence; and pure/imperative
+separation under ADR-001.
 
 ### Wire model
 
@@ -37,79 +38,130 @@ correlation, and usage—carry their own schema version and field-level origin.
 Unknown facts are omitted. There is no generic metadata bag and no Markdown
 companion.
 
-Primary V1 kinds are `friction` and `measurement`. Friction requires only a
-non-empty summary and may carry detail. Measurement carries trustworthy
-machine-reported values with source, scope, units, and completeness; it never
-stores an estimated counter or derived efficiency score. `supersession` and
-`retraction` are reserved control kinds.
+Primary V1 kinds are `friction` and `measurement`; **primary observation**
+means either non-control kind. Friction requires only a non-empty summary and
+may carry detail. Measurement carries trustworthy machine-reported values with
+source, scope, units, completeness, and supported counters; it never stores an
+estimated counter or derived efficiency score. `supersession` and `retraction`
+are reserved control kinds.
+
+Writes enforce deterministic UTF-8 byte bounds: 1 KiB summary, 32 KiB detail,
+512 bytes per facet string, and 64 KiB per serialized record. NUL and
+over-limit input are refused without silent truncation. Structured serializers
+own TOML/JSON boundaries, terminal controls are escaped on display, and any
+agent-facing observation text is framed as untrusted data.
 
 ### Store and creation
 
 Each record is one TOML file:
 
 ```text
-.doctrine/observations/<kind>/<year>/<month>/<uuid>.toml
+.doctrine/observations/records/<tail-2>/<uuid>.toml
 ```
 
-The path kind, UTC partition, filename UUID, and envelope must agree. Creation is
-atomic and create-only. A caller-stable UUID replays successfully only when kind,
-typed payload, and explicit facets express the same caller intent; first-write time
-and automatic enrichment remain frozen. Different intent at the same UUID is an
-identity collision. Different UUIDs are never content-deduplicated.
+`<tail-2>` is the last two lowercase hexadecimal characters of the canonical
+UUID excluding hyphens. The authoritative path is therefore a function of UUID
+alone; kind and time are envelope data, never identity routing inputs. The
+filename UUID and envelope UUID must agree. Exact lookup and create do not scan
+the corpus or consult a mutable identity index.
+
+Creation uses a shared complete-content atomic no-clobber primitive: validate or
+create parent components without following squatters, write and close a reserved
+sibling temporary file, publish the complete inode through a hard link to the
+create-only destination, then remove the temporary name. A caller-stable UUID
+replays successfully only when kind, typed payload, and explicit facets express
+the same caller intent; first-write time and automatic enrichment remain frozen.
+Different intent at the same UUID is an identity collision. Different UUIDs are
+never content-deduplicated. Reserved temporary names are ignored by loading and
+may be cleaned after interruption.
 
 The create operation returns a receipt and performs no stage, commit, push, index,
-triage, or promotion action.
+triage, or promotion action. Authoritative records are authored collection data
+by default. A project may ignore them to reduce review noise, but then accepts
+local-only durability and loss of shared correlation unless another transport
+exists. Optional `by-month/<year>/<month>/<uuid>.toml` relative symlinks are a
+gitignored, disposable navigation view that capture and query never trust.
 
 ### Resolution and query
 
-Supersession targets an existing public, kind-compatible replacement; retraction
-targets exact identity. Each correction writes one control record and never edits
-its target. Resolution is a pure fold into exact, active, and historical views.
+Supersession targets an existing primary, kind-compatible replacement;
+retraction targets an exact primary identity. Controls cannot target controls.
+Each correction writes one control record and never edits its target. Resolution
+is a pure fold into exact, active, and historical views.
 
-The correction graph is partitioned into weakly connected components. A component
-with a dangling target, cycle, multiple successors, incompatible replacement,
-conflicting terminal controls, or recoverably malformed control is diagnostic and
-inert as a whole; its parseable public observations remain independently active.
-Valid components elsewhere resolve normally.
+Controls are validated and considered independently in canonical
+`(recorded_at, uid)` order. Malformed, dangling, kind-incompatible,
+cycle-introducing, and losing conflicting controls are individually diagnostic
+and inert. Repeated retractions and repeated supersessions to the same
+replacement are idempotent. Retraction dominates supersession for one target;
+among distinct successors, the earliest valid supersession is effective. An
+invalid later control cannot resurrect an observation or cancel an earlier
+valid correction.
 
 Exact lookup addresses any UUID regardless of current state. Collection queries
 default to the active projection and can request history. Filters operate on kind,
-time, and registered facet fields. Search is lexical over defined text fields,
-with no clustering or relevance-ranking claim. Results order by `recorded_at`
-newest-first and UUID, with stable pagination.
+time, and registered facet fields. Search reuses the shared tokenizer and
+case-folding rules; every query token must occur somewhere in summary, detail,
+or string facet values. Matching is Boolean and unranked. Results order by
+`recorded_at` descending and UUID, with an opaque keyset cursor over that pair.
+Head inserts do not duplicate or shift traversed rows; no frozen corpus snapshot
+is promised.
+
+Observations use bare UUID as their canonical identity and are not entity kinds.
+Their CLI follows the shared `<kind> <verb>` and table/JSON conventions but does
+not flatten SPEC-013's entity `CommonListArgs` or join its entity
+list-conformance matrix.
 
 ### Interface and enrichment
 
-The trusted CLI owns capture, exact/resolved reads, list, search, supersession, and
-retraction. Its shell supplies the repository root, clock, default UUID, rendering,
-and allowlisted enrichment inputs to the shared engine service.
+The trusted CLI owns friction capture, exact/resolved reads, list, search,
+supersession, and retraction. Its shell supplies the repository root, clock,
+default UUID, rendering, and allowlisted enrichment inputs to the shared
+observation service.
 
 The MCP server exposes structured `observation_record` capture through the same
-service. For confined workers it accepts only primary signal kinds, resolves the
-registered primary repository root server-side, accepts no arbitrary path, and
-refuses correction controls. It is a bounded broker, not a general filesystem
-capability.
+service. For confined workers it accepts friction only, resolves the registered
+primary repository root server-side, accepts no arbitrary path, and refuses
+measurement and correction controls. It is a bounded broker, not a general
+filesystem capability.
 
-Automatic enrichment considers only named, bounded, non-secret sources. An explicit
-facet replaces automatic assembly for that facet. Missing or failed automatic
-enrichment warns and proceeds; invalid explicit data fails before creation.
+Measurement creation is a closed service operation available only to a
+registered machine-source adapter that supplies source, scope, units,
+completeness, and supported counters. With an empty production registry, no
+measurement can be created. Agent or operator assertion of source metadata does
+not constitute registration.
+
+Automatic enrichment considers only named adapter-known sources: CLI/MCP
+interface, product surface, and command constants; established primary-versus-
+worker context; and an opaque agent identifier already supplied through capture
+context. Explicit values replace automatic values field by field. Missing or
+failed automatic enrichment warns and proceeds; invalid explicit data fails
+before creation. Harness, model, role, arm, stage, skill, and run correlation
+are absent unless explicitly supplied or known by a trusted adapter. General
+environment inspection is excluded.
+
+Dogfood guidance is capability-aware: primary-tree agents use CLI, confined
+Claude workers use MCP, and workers without a broker do not write
+`.doctrine/**` in their fork; an orchestrator may proxy their reported friction.
 
 ## Concerns
 
 - **Capture cost.** Required data must remain minimal. Enrichment failure cannot
   turn incidental recording into a second task.
 - **Hostile content.** Every caller-authored string is untrusted at TOML, JSON,
-  terminal, and MCP boundaries. Rendering must not permit instruction confusion,
-  control-sequence injection, or structural breakout.
+  terminal, agent-context, and MCP boundaries. Bounds, structured serialization,
+  escaped display, and untrusted-data framing prevent structural breakout,
+  control-sequence injection, and instruction confusion.
 - **Confinement.** The MCP adapter crosses a worker filesystem wall. Server-side
   root resolution, closed kinds, strict schemas, and containment checks are the
   security boundary.
 - **Partial corruption.** One malformed or future-schema file must not deny reads
   of the remaining corpus. Diagnostics must remain attached to exact paths and
   identities where recoverable.
-- **Corpus growth.** Date partitioning enables bounded operational handling, but
-  automated retention and aggregate indexes remain outside this container until
-  observed growth justifies them.
+- **Corpus growth and review noise.** Random-tail sharding bounds directory size,
+  while automated retention and aggregate indexes remain outside this container.
+  Committed raw records preserve shared evidence but may crowd reviews; ignoring
+  them is an explicit project/local tradeoff, not the default.
 
 ## Hypotheses
 
@@ -134,8 +186,14 @@ enrichment warns and proceeds; invalid explicit data fails before creation.
 - **D4 — strict writes, tolerant reads.** New invalid state is refused; existing
   bad or unknown state is diagnosed without suppressing valid records.
 - **D5 — correction is append-only and fail-open.** Valid controls derive current
-  state; invalid components are visible and inert.
+  state; each invalid or losing control is visible and inert without cancelling
+  valid controls.
 - **D6 — one service, capability-narrow adapters.** CLI and MCP cannot diverge on
-  creation semantics, while the MCP adapter exposes less authority.
+  friction creation semantics, while measurement creation requires a registered
+  machine-source adapter and MCP exposes less authority.
 - **D7 — pure core, one disk seam.** Wire validation, resolution, and query take
   injected facts; store is the only observation filesystem seam.
+- **D8 — identity routes storage.** The authoritative path derives only from UUID;
+  time and kind never require an index or scan to enforce global identity.
+- **D9 — observation is an ADR-001 leaf.** The umbrella imports only leaves;
+  command and MCP adapters remain in the command tier.

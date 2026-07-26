@@ -14,7 +14,7 @@ description = "The ledger encodes every observation through a versioned typed en
 #   description = "…"
 tags = ["observation", "wire", "schema", "facet"]
 acceptance_criteria = [
-  "The envelope carries the schema discriminator plus schema version, UUID identity, kind, and recorded time, with the path and envelope agreeing.",
-  "Friction, measurement, supersession, and retraction use registered typed payloads; unknown payload fields are not accepted on write.",
-  "Each optional facet declares its schema version and field origins, and no generic metadata bag or Markdown companion is part of the wire contract.",
+  "The envelope carries the schema discriminator plus schema version, UUID identity, kind, and recorded time; the filename and envelope UUID agree while kind and time do not route identity.",
+  "Friction, measurement, supersession, and retraction use registered typed payloads; primary observation means a friction or measurement record, and controls target primary observations only.",
+  "Each optional facet declares its schema version and field origins, the usage facet carries source, scope, units, completeness, and supported counters, and no generic metadata bag or Markdown companion is part of the wire contract.",
 ]

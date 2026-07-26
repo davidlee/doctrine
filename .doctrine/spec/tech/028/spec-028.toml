@@ -13,12 +13,12 @@ descends_from = "PRD-018"
 tags = ["observation", "ledger", "uuid", "facets", "supersession", "search", "mcp", "pure-layer"]
 responsibilities = [
   "Own the versioned observation wire model: a minimal UUID-addressed envelope, typed kind payloads, independently versioned facets with field origins, and typed correction controls.",
-  "Persist every observation as one immutable TOML file partitioned by kind and UTC date, with atomic create-new, caller-intent replay, collision refusal, and no Git side effects.",
-  "Load the corpus tolerantly and derive deterministic active and historical projections through append-only supersession and retraction controls, leaving invalid control components diagnostic and inert.",
-  "Provide exact identity lookup, structured filtering, lexical search, stable ordering, and pagination without embedding aggregation or reporting policy.",
-  "Expose one shared observation service through trusted CLI capture/read/correction adapters and a narrower MCP capture adapter for confined workers.",
-  "Apply allowlisted best-effort enrichment with explicit-over-automatic precedence, omission for unknown values, and strict refusal of invalid explicit data.",
-  "Keep wire validation, resolution, and querying pure; confine disk, clock, UUID generation, environment discovery, terminal rendering, and MCP translation to thin imperative seams.",
+  "Persist every observation as one immutable TOML file at a UUID-only random-tail-sharded path, with complete-content atomic no-clobber publication, caller-intent replay, global collision refusal, authored-by-default disposition, and no Git side effects.",
+  "Load the corpus tolerantly and derive deterministic active and historical projections through append-only per-control supersession and retraction resolution, leaving each invalid or losing control diagnostic and inert without cancelling valid controls.",
+  "Provide exact UUID lookup, structured filtering, shared-tokenizer lexical search, stable ordering, and keyset pagination without embedding aggregation or reporting policy.",
+  "Expose one shared observation service through friction-only public CLI/MCP capture, trusted CLI reads and correction, and a closed registered machine-source seam for measurements.",
+  "Apply a named adapter-known enrichment allowlist with field-level explicit-over-automatic precedence, omission for unknown values, and strict refusal of invalid explicit data.",
+  "Keep wire validation, resolution, and querying pure; classify the observation umbrella as ADR-001 leaf tier; and confine disk, clock, UUID generation, environment discovery, terminal rendering, and MCP translation to explicit imperative seams.",
 ]
 
 # category — OPEN domain vocabulary (a taxonomy that drifts by design). Add as:

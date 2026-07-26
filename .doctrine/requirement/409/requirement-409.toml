@@ -14,7 +14,8 @@ description = "Trusted CLI adapters and the bounded MCP capture adapter invoke o
 #   description = "…"
 tags = ["observation", "cli", "mcp", "service"]
 acceptance_criteria = [
-  "Equivalent CLI and MCP creation requests produce equivalent stored records and receipts.",
-  "The trusted CLI exposes record, show, list, search, supersede, and retract semantics without duplicating store or resolver logic.",
-  "The MCP adapter exposes structured primary-kind capture only and refuses correction controls and arbitrary path input.",
+  "Equivalent CLI and MCP friction requests produce equivalent stored records and receipts.",
+  "The trusted CLI exposes friction record, show, list, search, supersede, and retract semantics without duplicating store or resolver logic.",
+  "The MCP adapter exposes structured friction capture only and refuses measurement, correction controls, and arbitrary path input.",
+  "Measurement creation is unavailable to public CLI/MCP callers and succeeds only through a registered machine-source adapter supplying source, scope, units, completeness, and supported counters.",
 ]

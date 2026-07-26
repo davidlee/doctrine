@@ -14,7 +14,8 @@ description = "Observation writes validate the complete contract strictly while 
 #   description = "…"
 tags = ["observation", "validation", "compatibility", "diagnostic"]
 acceptance_criteria = [
-  "Unsupported kinds or schemas, unknown fields, invalid identifiers or timestamps, invalid facets, and empty required payloads fail before write.",
+  "Unsupported kinds or schemas, unknown fields, invalid identifiers or timestamps, invalid facets, empty required payloads, NUL, or content beyond the named summary, detail, facet-string, and whole-record limits fail before publication without truncation.",
   "A malformed or unsupported stored file yields a diagnostic carrying its path and recoverable identity.",
   "One bad record cannot prevent exact or collection reads of unrelated valid observations.",
+  "TOML and JSON use structured serialization, terminal controls are escaped on display, and any agent-facing observation content is framed as untrusted data.",
 ]

@@ -16,5 +16,5 @@ tags = ["observation", "pure-layer", "determinism", "architecture"]
 acceptance_criteria = [
   "The pure modules touch no clock, UUID generator, disk, Git, environment, terminal, or MCP type.",
   "Resolution and query results are independent of filesystem enumeration and record merge order.",
-  "Disk access is confined to one observation-store seam and adapters contain no duplicate resolution or persistence implementation.",
+  "Disk access is confined to one observation-store seam, adapters contain no duplicate resolution or persistence implementation, and ADR-001 classifies the observation umbrella as leaf tier with no new upward edge or tangle growth.",
 ]

@@ -14,7 +14,7 @@ description = "The ledger confines every filesystem path and narrows worker capt
 #   description = "…"
 tags = ["observation", "security", "containment", "confinement"]
 acceptance_criteria = [
-  "Kind, date, and UUID path components are derived from validated typed values and cannot escape the observation root.",
+  "The authoritative destination and random-tail shard derive only from a validated UUID, parent creation rejects encountered symlink or non-directory squatters, and no path can escape the observation root.",
   "The MCP server resolves the registered primary repository root server-side and accepts no caller path.",
-  "Worker capability conformance admits only the named observation capture tool in addition to explicitly approved worker tools.",
+  "Worker capability conformance admits only the named friction capture tool in addition to explicitly approved worker tools, and guidance forbids fork-local CLI capture when no primary-tree broker exists.",
 ]

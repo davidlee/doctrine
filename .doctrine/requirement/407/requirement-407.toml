@@ -14,7 +14,8 @@ description = "The resolver derives exact, active, and historical projections fr
 #   description = "…"
 tags = ["observation", "resolve", "supersession", "retraction"]
 acceptance_criteria = [
-  "A valid supersession selects its existing compatible replacement and a valid retraction removes only its exact target from the active projection.",
-  "History retains every public observation and correction control.",
-  "A correction component containing a dangling target, cycle, multiple successors, incompatible replacement, conflicting terminal controls, or malformed control is diagnostic and inert while valid components still resolve.",
+  "A valid supersession selects its existing compatible primary replacement and a valid retraction removes only its exact primary target from the active projection; controls cannot target controls.",
+  "History retains every primary observation and correction control.",
+  "Malformed, dangling, kind-incompatible, cycle-introducing, and losing conflicting controls are individually diagnostic and inert without cancelling an earlier valid correction.",
+  "Repeated retractions and same-replacement supersessions are idempotent, retraction dominates supersession for one target, and distinct successors resolve by earliest valid control key.",
 ]

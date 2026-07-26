@@ -6,7 +6,7 @@ slug = "create-one-immutable-observation-atomically"
 title = "Create one immutable observation atomically"
 status = "pending"
 kind = "functional"
-description = "The store creates each observation atomically as one immutable partitioned file and implements caller-intent replay without overwrite."
+description = "The store creates each observation atomically as one immutable UUID-addressed file and implements caller-intent replay without overwrite."
 
 # description — the requirement statement (structured, queryable; `show` renders
 # it as the statement line — the storage rule forbids deriving it from prose).
@@ -14,7 +14,7 @@ description = "The store creates each observation atomically as one immutable pa
 #   description = "…"
 tags = ["observation", "store", "atomic", "idempotency"]
 acceptance_criteria = [
-  "One self-contained TOML file is created under kind, UTC year, UTC month, and UUID partitions using create-new semantics.",
+  "One self-contained TOML file is published at a UUID-only random-tail-sharded path through complete-content atomic no-clobber semantics, enforcing global UUID uniqueness without a scan or mutable index.",
   "The same UUID plus the same kind, typed payload, and explicit facets returns a replay receipt and retains the first write's time and enrichment.",
-  "Different intent at the same UUID, path-envelope disagreement, symlink squatting, or containment escape is refused without a partial visible record.",
+  "Different intent at the same UUID, UUID/path disagreement, symlink or non-directory parent squatting, containment escape, or interrupted publication cannot overwrite or expose a partial authoritative record; reserved temporary names are non-authoritative and safely removable.",
 ]

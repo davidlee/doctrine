@@ -14,7 +14,7 @@ description = "The creation service assembles optional context from allowlisted 
 #   description = "…"
 tags = ["observation", "enrichment", "origin", "privacy"]
 acceptance_criteria = [
-  "Only named bounded non-secret enrichment sources are eligible; environment dumps, prompt bodies, arbitrary process metadata, and repository content are excluded.",
-  "Supplying an explicit facet replaces automatic assembly for that facet and records explicit origin.",
+  "The v1 allowlist contains only CLI/MCP interface-product-command constants, established primary-versus-worker context, and an already-supplied opaque agent identifier; general environment inspection, prompt bodies, arbitrary process metadata, incidental inference, and repository content are excluded.",
+  "Supplying an explicit value overrides the automatic value for that field and records explicit origin; unknown harness, model, role, arm, stage, skill, or correlation values remain absent.",
   "Automatic failure warns and proceeds, while invalid explicit input fails before any file is created.",
 ]
