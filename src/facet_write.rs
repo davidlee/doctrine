@@ -36,13 +36,6 @@ use anyhow::Context;
         reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
     )
 )]
-#[cfg_attr(
-    test,
-    allow(
-        dead_code,
-        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
-    )
-)]
 fn toml_edit_value_as_f64(value: &toml_edit::Value) -> Option<f64> {
     value.as_float().or_else(|| {
         #[expect(
@@ -99,13 +92,6 @@ pub(crate) enum FacetField {
 #[cfg_attr(
     not(test),
     expect(
-        dead_code,
-        reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
-    )
-)]
-#[cfg_attr(
-    test,
-    allow(
         dead_code,
         reason = "transitional facet writer; migration script is the last consumer, deletes at SL-222 deletion phase"
     )
