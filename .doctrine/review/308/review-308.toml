@@ -41,7 +41,7 @@ response = "Defect accepted; remedy shape contested and amended. 'Never return R
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Residue model incomplete — busy claim lock and administrative residue"
 detail = "The binary Reaped-vs-gc-incomplete model misses two existing gc outcomes. (a) A busy per-name claim lock prints 'skipped' and returns Ok(()) (src/worktree/gc.rs:276); mapped to success, dispatch_reap advances to reaped while branch and worktree still live. (b) dispatch-record deletion failure (gc.rs:423) folds into gc-incomplete; if that blocks Reap forever the operator is stuck behind a permissions fault retry cannot clear. Remedy: a total typed outcome set separating safety-critical from administrative residue."
