@@ -69,3 +69,28 @@ Remaining open (this idea's residue): the fuller "mirror **every** transition
 honest mid-drive" enhancement. The `completed`-only mirror keeps the
 completeness gate honest but leaves `in_progress`/`blocked`/reopen flips
 primary-invisible mid-drive.
+
+## Refinement — a mid-drive APPENDED phase has no sheet to flip (SL-228 audit, RV-312 F-6)
+
+This idea, and `slice reconcile-phases` before it, both presume the primary tree's
+`phase-NN.toml` **exists** and is merely stale. For a phase appended mid-drive that
+is false, and no amount of flipping helps.
+
+SL-228 appended PHASE-08 and PHASE-09 to `plan.toml` on `dispatch/228`. The primary
+tree is on `edge`, whose `plan.toml` has neither, so `slice phases` cannot
+materialise their sheets there and the Record beat would have nothing to write to.
+`slice phase --status completed` warns "mirroring … failed" — a warning the drive
+recorded as benign.
+
+It is not benign. `registry_completeness` (`src/state.rs:981`) derives its completed
+set from `completed_phase_ids` (`:959`), which reads the **primary** tree's sheets —
+so at close, `dispatch sync --prepare-review` hard-refused: *"recorded row for
+PHASE-08, which is not a completed phase; recorded row for PHASE-09, …"*, for two
+phases that were fully completed and landed. Repaired by hand-copying both sheet
+pairs into the primary runtime tier.
+
+So the Record-beat write must **create** the sheet when absent, not just flip it —
+or the completeness gate must resolve phase status from the coordination branch's
+`plan.toml` rather than the primary tree's materialised sheets. Note IMP-272 is
+marked `resolved` for the stale-flip case; this appended-phase case is its residual
+and is not covered by that fix.

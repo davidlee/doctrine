@@ -1,0 +1,176 @@
+id    = 312
+slug  = "sl-228-reconciliation-audit-zero-rescue-dispatch-funnel"
+title = "SL-228 reconciliation audit — zero-rescue dispatch funnel"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-228"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected: the claim lock serialises the whole claim→bind→act window (design §3). Observed: the one-shot arming consume runs BEFORE the lock, so a same-name race can produce a live fork with binding=None"
+detail = """
+src/worktree/create.rs:365-410. `consume_arming_slot(root, ARMING_BASE_FILE)` (:374) and `consume_arming_binding(root)` (:377) both execute BEFORE `claim_lock::acquire(root, &name)` (:383). The comment at :379-384 asserts the lock is "held across the whole claim→bind→act window (design §3)" and that "the bind below runs UNDER the held claim ... so a live fork implies its binding" — but the bind's INPUT (`binding`) is consumed outside that window, so the code contradicts its own stated invariant.
+
+Race: with one arming present, thread A consumes and gets Some((228,"PHASE-04")); thread B consumes the now-unlinked slot and gets None. Which thread then wins the claim lock is arbitrary. When B wins, it forks and binds with `binding = None` — a live, correctly-based, correctly-branched fork that NO slice/phase owns. Thread A refuses `fork-refused` at the claim having silently destroyed the arming.
+
+EVIDENCE: `worktree::create::tests::two_concurrent_same_name_spawns_leave_exactly_one_winner` (src/worktree/create.rs:1264) fails at :1310 with `left: None, right: Some(ForkBinding { slice: 228, phase: "PHASE-04" })`. Measured 2 failures / 20 runs (10%) on this coord tree. The earlier `check gate` run passed (exit 0) and the immediate re-run failed (exit 101, 4010 passed / 1 failed) — the slice ships an intermittently red suite, and PHASE-04 VT-5's PASS in `slice verify-vt 228` was luck-dependent.
+
+CONSEQUENCE: an unbound fork is exactly the `unprovable-fork` terminal state — `worker_commit` refuses only AFTER the whole worker run is spent, and there is no re-bind verb. This session hit `unprovable-fork` and attributed it solely to arming `--slice` without `--phase` (mem.pattern.dispatch.half-arm-unprovable-fork, ISS-253). This is a SECOND route to the same dead end that requires no operator error at all.
+
+Candidate fix (minimal): move :374 and :377 to after the `acquire` at :383. Both consumes stay before `fork_core`, so SL-199 EX-3's stated property ("consumed before fork_core so a crash cannot leave a stale base") is preserved; only the race window closes."""
+disposition = "fix-now"
+response = """
+Fixed in 707236c0 on dispatch/228. Both one-shot consumes (`consume_arming_slot`, `consume_arming_binding`) moved below `claim_lock::acquire`, making consume→bind indivisible under the per-name claim. They remain before `fork_core`, so SL-199 EX-3's stated property ("consumed before fork_core so a crash cannot leave a stale base") is preserved unchanged; only the race window closes. The code now matches the invariant its own comment at :379-384 already asserted, so no design change is needed — design §3 was right and the implementation had drifted from it.
+
+Evidence: `worktree::create::tests::two_concurrent_same_name_spawns_leave_exactly_one_winner` failed 2/20 (10%) before and passes 40/40 after. Full `doctrine check gate` exit 0 with 4011 passed / 0 failed / 1 ignored, clippy clean — against 4010 passed / 1 failed immediately prior. No test was added or edited: the criterion that proves this was already PHASE-04's own VT, which is why the defect was catchable at all.
+
+Scope note: this is a code fix inside audit scope (no spec or governance edit), so `fix-now` is the correct route rather than `follow-up`. It also retroactively qualifies PHASE-04 VT-5's earlier PASS in `slice verify-vt 228` as luck-dependent; the re-run at close now proves it deterministically."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected: conformance reflects what the slice delivered. Observed: every path landed in an orchestrator BASE COMMIT is structurally invisible, because the base oid is the phase delta's own --start"
+detail = """
+`doctrine slice conformance 228` reports 8 undelivered, of which 3 were demonstrably delivered:
+  .doctrine/adr/001/layering.toml
+  .doctrine/spec/tech/021/funnel-machine.md
+  src/main.rs
+
+`git log 29e966f9d..dispatch/228 -- <each>` returns exactly one commit for all three: `b8e64e109 base(SL-228): PHASE-03 base — layering row, funnel_machine stub, D7 golden`. And b8e64e10 IS PHASE-03's recorded boundary `--start` (boundaries: PHASE-03 b8e64e10..73f11ccc). A `[start, end]` range excludes the start commit's own patch, so the base beat's content falls outside every phase's recorded delta and can never register as conformant.
+
+This is structural, not a recording mistake: the D-P3-1 base beat exists precisely because ADR-001's layering gate is symmetric (a [tiers] row with no module is StaleEntry; a module with no row is Unclassified), so a new module's row + stub + mod declaration MUST land as an orchestrator commit before the worker can implement into it. Every base-beat phase therefore emits paths that conformance will always report as undelivered. Any slice using the base beat inherits a permanently dirty undelivered cell, which trains readers to discount the signal — the failure mode conformance exists to prevent."""
+disposition = "follow-up"
+response = """
+Observation confirmed and evidenced; remediation captured as IMP-292 defect 3 (appended to that item's body, not filed as a duplicate — IMP-292 already owns "audit-time conformance signal degradation" with a matching acceptance sketch).
+
+`follow-up` is the honest route here and is NOT a size dodge (the anti-escape guardrail): this is a defect in the conformance engine's range algebra, surfaced by SL-228 rather than caused by it. Every base-beat slice past and future inherits it identically, so fixing it inside this slice's audit would be a platform change smuggled through a reconciliation gate — exactly the coupling POL-002 exists to prevent. SL-228's own delivery is unaffected: the three paths WERE delivered, in b8e64e109.
+
+Recorded at the same time on IMP-292: defect 1 reproduces exactly at this audit — all 6 undeclared cells are `.doctrine/**` authored metadata, zero genuine source scope-creep. That is a second independent confirmation of an item previously evidenced only from SL-219."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected: design-target selectors name real, worker-writable source. Observed: the .agents/skills/dispatch*/** selectors name the UNTRACKED installed projection, so they can never be satisfied while the real source is separately conformant"
+detail = """
+Three of the 8 undelivered cells are `.agents/skills/dispatch/**`, `.agents/skills/dispatch-agent/**`, `.agents/skills/dispatch-subprocess/**`. `git diff 29e966f9d..dispatch/228 -- .agents/` returns nothing — the slice never touched that tree, and cannot: `.agents/skills/` is the untracked projection written by `doctrine install`.
+
+The real source IS delivered and already conformant under its own selectors:
+  plugins/doctrine/skills/dispatch/SKILL.md            ⟵ plugins/doctrine/skills/dispatch/**
+  plugins/doctrine/skills/dispatch-agent/SKILL.md      ⟵ plugins/doctrine/skills/dispatch-agent/**
+  plugins/doctrine/skills/dispatch-subprocess/SKILL.md ⟵ plugins/doctrine/skills/dispatch-subprocess/**
+
+So the three `.agents/` selectors are pure duplicates pointing at the wrong tier. Same class: `.doctrine/spec/tech/021/**` is declared as a design-target but `.doctrine/` is a HARD WALL in classify_import (src/worktree/import.rs:146-153 returns doctrine-touch BEFORE the selector leg), so no design-target selector can ever admit a `.doctrine/` path. A selector a worker is structurally incapable of satisfying reads to an agent as PERMISSION to write there, which is the opposite of the truth.
+
+Load-bearing fix is the selector registry (`doctrine slice selector rm/add` against slice-228.toml), which is what conformance reads; the design.md §6 mirror is prose only. Was already on the handover's reconcile queue; this confirms it against the computed algebra rather than recall."""
+disposition = "verified"
+response = """
+Observation confirmed against the computed algebra rather than recall. Delegated to /reconcile as a per-slice direct-edit item; see the Reconciliation Brief.
+
+The load-bearing change is the SELECTOR REGISTRY, not prose: `doctrine slice selector rm` the three `.agents/skills/dispatch*/**` design-targets from slice-228.toml, which is what `slice conformance` reads. The design.md §6 listing is the human mirror and should be corrected in the same pass — but a prose-only edit would leave conformance red, so the verb is the change and §6 follows it.
+
+Also fold in the `.doctrine/spec/tech/021/**` selector under the same rationale: `classify_import` (src/worktree/import.rs:146-153) returns `doctrine-touch` before the selector leg, so no design-target selector can ever admit a `.doctrine/` path. Retaining such a selector reads to an agent as permission to write where the wall forbids it — the reverse of the truth. Remove it; the D7 golden's delivery is recorded by the base-beat commit, not by a selector.
+
+No code change: the real source under `plugins/doctrine/skills/**` is delivered and already conformant under its own three selectors."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Expected: every design-target selector corresponds to intended work. Observed: flake.nix and src/worktree/shared.rs were declared and never touched — genuine undelivered scope"
+detail = """
+After accounting for F-2 (base-beat invisibility, 3 paths) and F-3 (wrong-tier selectors, 3 paths), 2 of the 8 undelivered cells are real: `flake.nix` and `src/worktree/shared.rs`. `git diff 29e966f9d..dispatch/228` touches neither.
+
+These are declared-but-not-delivered: either dropped work the design still promises, or stale declarations that should be withdrawn. Neither is load-bearing for the funnel — the slice's exit criteria are met without them — but leaving them declared misrepresents the design's delivered surface. Decide per path: withdraw the selector (design overreached) or record the drop consciously."""
+disposition = "verified"
+response = """
+Observation confirmed: `flake.nix` and `src/worktree/shared.rs` are the only 2 of 8 undelivered cells that are genuinely undelivered, once F-2 (3 base-beat paths) and F-3 (3 wrong-tier paths) are subtracted. Delegated to /reconcile as a per-slice direct-edit item; see the Reconciliation Brief.
+
+Neither is load-bearing — every exit criterion is met without them, `check gate` is green, and no design decision depends on either file. So the correct remediation is to withdraw the two selectors (`doctrine slice selector rm`), recording that the design's declared surface overreached, rather than to manufacture work to satisfy a declaration.
+
+Worth stating plainly because it is the residue that matters: after this audit's accounting, SL-228's genuine conformance debt is two stale selector declarations. The other six undelivered cells were artefacts of the measuring instrument, not of the work."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "major"
+title = "Expected (D10 / FR-009): a refusal's text IS the recovery procedure. Observed: three counter-examples, and a located mechanical root of 24 structurally-empty refusal details"
+detail = """
+D10 / FR-009 is the design claim the OQ-5 benchmark was built to test, and it does not survive intact. Three independent counter-examples:
+
+1. ISS-250 — `dispatch_reap`'s not-landed refusal prescribes `dispatch_reap`, i.e. the verb that produced it. The only non-circular advice left was the CLI override pair, the blind subject took it, and the commit the guard had just protected was destroyed. benchmark.md §"S5 in full" — the guard fired correctly and its own remedy text walked the operator around it.
+2. The benchmark's `stale-record` refusal carried an empty `detail`.
+3. PHASE-09's `unprovable-fork` refusal whose entire detail was a branch name.
+
+MECHANICAL ROOT (already located, do not re-derive): 24 sites construct a refusal with a structurally empty detail, 14 of them in src/mcp_server/dispatch.rs.
+
+benchmark.md's own verdict concedes this: `next` earns D4's forcing-function claim for POSITIONAL guidance, but "the claim that refusals name the fixing verb does not survive intact". VH-1 was accepted on that record (2026-07-27), so this is accepted evidence, not a contested reading.
+
+Verification vehicle already exists and is structurally sequenced: IMP-321 (`after: SL-228`, `references(originates_from): SL-228`, related to ISS-249/250/251/253). Disposition this on its merits and cite IMP-321 as where the verification lands."""
+disposition = "verified"
+response = """
+Observation confirmed on accepted evidence — VH-1 accepted benchmark.md's verdict on 2026-07-27, and that verdict states the refusal half of D4/D10 does not survive. Delegated to /reconcile as a governance/spec REV item; see the Reconciliation Brief. Do NOT re-derive the evidence: three counter-examples and the 24-site mechanical root are already established.
+
+The disposition is deliberately NOT `design-wrong` in the ledger sense of "reconcile the design so canon tells the truth and move on". D10's *aspiration* is sound and should survive as intent; what is false is its unqualified present-tense claim. The reconcile write should split it: `next` earns the forcing-function claim for POSITIONAL guidance (proven — a memory-blind orchestrator drove a full funnel and a crash recovery unaided), while "a refusal's text IS the recovery procedure" becomes a stated goal with a named verification vehicle rather than a claimed property.
+
+IMP-321 is that vehicle and is already structurally sequenced (`after: SL-228`, `references(originates_from): SL-228`, related to ISS-249/250/251/253). ISS-254, filed at this audit, adds a fourth counter-example from the close ritual itself: two completeness refusals with different causes both prescribing `record-delta`, one of them wrongly. The set is now four, and the pattern is that a refusal names the verb the AUTHOR was thinking about rather than the one the OPERATOR needs."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Expected: the close ritual runs clean. Observed: prepare-review halted twice at the conformance-completeness gate, on two causes the handover had recorded as benign or absent"
+detail = """
+`dispatch sync --prepare-review` (never run for this slice until close) refused twice:
+
+(a) "recorded row for PHASE-08 / PHASE-09, which is not a completed phase". `registry_completeness` (src/state.rs:981) derives the completed set from `completed_phase_ids`, which reads the PRIMARY tree's gitignored phase sheets (src/state.rs:959-973) — NOT plan.toml and NOT the committed ledger. PHASE-08/09 were appended mid-drive on dispatch/228; edge's plan.toml has neither, so `slice phases` cannot materialise their sheets on the primary tree and the mirror silently could not carry them. notes.md/handover recorded this as "benign, but the warning misreads as a defect". It is not benign — it hard-blocks prepare-review at close. Repaired by copying the two sheet pairs into the primary runtime tier (gitignored, no git divergence).
+
+(b) "completed phase PHASE-07 has no recorded source-delta row". PHASE-07 is evidence-only and deliberately non-funnel; the handover asserted "PHASE-07 lands no source delta, so there is nothing to record-delta for it". The gate has NO exemption for a phase whose delta is authored `.doctrine/` artefacts rather than source, so the assertion was false and untested (prepare-review had never been run for this slice). Satisfied with a synthetic Manual-provenance row (`--start 0da787d98 --end a54c05566`); Manual is filtered out of guard (3)'s Funnel|Unknown check (src/dispatch.rs:3409-3424), so it does not falsely claim funnel ownership. Note the projection still cut no phase/228-07 ref — cuts are planned from the COMMITTED ledger, where PHASE-07 correctly has no row — so 8 phase cuts exist for 9 phases.
+
+COMMON ROOT: the gate's inputs span three tiers across two trees (primary runtime sheets + primary registry + committed ledger on the dispatch ref), and its refusal names only the symptom phase. It cannot distinguish "you forgot record-delta" from "this phase's sheet never reached the primary tree" — the operator must read state.rs to tell which. Same family as ISS-241 and F-5's empty-detail root."""
+disposition = "follow-up"
+response = """
+Observation confirmed; both halts were repaired operationally at this close, and the residual engine defects are captured as owned work.
+
+Repairs made (no outstanding action for SL-228): (a) PHASE-08/09 sheet pairs copied into the primary tree's gitignored runtime tier — no git divergence, `prepare-review` then passed; (b) PHASE-07 given a Manual-provenance registry row over its contiguous artefact block (`0da787d98..a54c05566`). `dispatch sync --prepare-review` subsequently created 9 refs (review/228 + 8 phase cuts) with no ref written by either failed attempt — the gate ordering is genuinely halt-before-projection as `src/dispatch.rs:3462-3466` claims.
+
+Residual captured as follow-up, out of this slice's scope: ISS-254 (filed here — the missing evidence-only-phase exemption plus the undiagnosable refusal, related to ISS-241/IMP-292/IDE-028), and an appended to IDE-028 recording that a mid-drive appended phase has no primary sheet to flip, so the Record beat must CREATE it rather than flip it — and that IMP-272, marked `resolved`, does not cover this case.
+
+Method note worth carrying: `slice reconcile-phases` is the sanctioned primary-tree sheet writer and would have been the right seam had the sheets existed; for an appended phase it cannot help, which is precisely the IDE-028 refinement. The hand copy achieved the right effect through the wrong seam and is recorded as such rather than presented as clean."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Expected: design.md describes the as-built. Observed: four specific points where the locked design prose lags what PHASE-03/05 actually built"
+detail = """
+Accumulated on the drive's reconcile queue (notes.md), each a per-slice design.md direct edit, none affecting behaviour:
+
+1. D7's wording implies generate-then-commit. The artifact is actually spec-anchored and golden-pinned — the `.doctrine/` hard wall inverts the authoring direction (the golden is authored, the code is pinned to it). Soften the wording.
+2. Design §2's `attempt` signature should acknowledge the act/replay discriminator. `attempt` returns Result<Position, _> and CANNOT tell the sole writer act-from-replay, so landing a replay would mint a spurious commit per retry; PHASE-03 added `attempt_advance` as the real authority with `attempt` kept verbatim as a thin projection plus a test pinning that the two never disagree. §2 documents only `attempt`.
+3. Design does not state the `paths_since_verify: None` case. PHASE-03 fails it closed as `conclude-verify-stale`; the design is silent, so the fail-closed choice reads as an implementation liberty rather than an intended one.
+4. The D7 gloss for `already-<position>` is narrower than the code, which also covers BACKWARD attempts. Widen the gloss.
+
+Items 2 and 3 were recorded during the drive as "reconcile notes, not defects" — that classification is affirmed here; they are prose-truth gaps, not behaviour gaps."""
+disposition = "verified"
+response = """
+Observation confirmed; all four are prose-truth gaps with no behaviour gap. Delegated to /reconcile as per-slice direct edits to design.md; see the Reconciliation Brief.
+
+Items 2 and 3 were classified during the drive as "reconcile notes, not defects" and that classification is affirmed: `attempt_advance` was ADDED beside `attempt` rather than replacing it, with `attempt` kept verbatim as a thin projection and a test pinning that the two never disagree — the design's §2 signature is not wrong, only incomplete. Likewise `paths_since_verify: None` fails closed as `conclude-verify-stale`, which is the choice the design would have made had it addressed the case.
+
+Item 1 is the most instructive and should not be flattened into a wording tweak when reconciled: D7 reads as generate-then-commit, but the `.doctrine/` hard wall INVERTS the authoring direction — the golden under `.doctrine/spec/tech/021/` is authored first and the renderer is pinned to it by a golden test. That inversion is a consequence of the same wall behind F-3 and the base beat behind F-2, so the corrected wording should name the wall as the cause rather than merely describing the current arrangement.
+
+Constrained to design.md only: no `plan.toml` criterion is touched, per the brief-surface guardrail that EN-/EX-/VT-/PHASE- ids are immutable-append and off the reconcile surface."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
