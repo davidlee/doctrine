@@ -198,3 +198,15 @@ pointers*, never missing content.
   `/research` round only. Probe scripts authored during `/design` have nowhere to
   land, so the evidence behind a design assertion is re-derived by the next
   reviewer instead of re-run.
+- **The verify dirty-tree gate blocked attesting this close's own harvest.**
+  `memory verify` refused the newly-recorded
+  `mem.pattern.dispatch.close-target-sources-the-admitted-review-candidate`
+  because the tree carried *another agent's* uncommitted version bump
+  (`Cargo.toml`, the four plugin manifests). Nothing in that dirt is mine to
+  commit, and stashing is forbidden in a shared tree — so the memory lands
+  `unverified` with no action available to the recording agent. This is IMP-221
+  part C / **SL-232**'s target hit live, and it is worth recording that the gate
+  bites hardest in exactly the multi-agent condition this repo runs in by
+  default: the blocking dirt is uncorrelated with the memory being attested.
+  Under [[mem.pattern.memory.thread-hidden-until-verified]] a `thread` memory in
+  this position would have been *unreachable*, not merely unattested.
