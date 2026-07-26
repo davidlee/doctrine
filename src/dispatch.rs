@@ -11238,6 +11238,19 @@ mod tests {
         let git_dir = git(coord, &["rev-parse", "--absolute-git-dir"]);
         let hooks = Path::new(&git_dir).join("hooks");
         std::fs::create_dir_all(&hooks).unwrap();
+        // Pin the fixture's hook path (ISS-256). Git honours `core.hooksPath` from
+        // ANY scope, so an ambient global/system value — a developer's own commit
+        // hook — silently redirects git away from the hook installed below, and the
+        // sentinel never gets written. Without this the test is not hermetic.
+        git(
+            coord,
+            &[
+                "config",
+                "--local",
+                "core.hooksPath",
+                hooks.to_str().unwrap(),
+            ],
+        );
         let hp = hooks.join("pre-commit");
         std::fs::write(
             &hp,
@@ -11280,7 +11293,15 @@ mod tests {
         assert!(recorded.contains("D\tdel.txt"), "recorded: {recorded}");
         assert!(recorded.contains("M\tmod.txt"), "recorded: {recorded}");
         // The CHILD saw exactly the validated deletion set…
-        assert_eq!(std::fs::read_to_string(&sentinel).unwrap(), "del.txt");
+        let recorded_deletions = std::fs::read_to_string(&sentinel).unwrap_or_else(|e| {
+            panic!(
+                "pre-commit hook never wrote {}: {e}. The hook did not run — check that \
+                 no ambient `core.hooksPath` (global or system) is overriding the \
+                 fixture's pinned one (ISS-256).",
+                sentinel.display()
+            )
+        });
+        assert_eq!(recorded_deletions, "del.txt");
         // …and the verb's OWN process never carried the var (child-scoped only).
         assert!(std::env::var(ENV_ALLOWED_DELETIONS).is_err());
     }
