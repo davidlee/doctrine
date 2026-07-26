@@ -6,12 +6,15 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · ready · 604bae5c
+fresh-as-of: 2026-07-27 · ready · 2baca05d
 
 ### Produced
 
 - SL-231 — five-phase executable plan authored, critically strengthened,
-  materialised, and advanced to ready (commits aee493b2..604bae5c)
+  materialised, reviewed, and advanced to ready (commits aee493b2..2baca05d)
+- post-ready plan review — removed brittle line anchors and broad selectors,
+  aligned scope exclusions, and carried REQ-412 purity verification through
+  store embedding and final-state verification
 - PHASE-01 through PHASE-05 — runtime sheets materialised under
   `.doctrine/state/slice/231/phases/`
 - IMP-322 — make Pi research runners tolerate read-only session homes
