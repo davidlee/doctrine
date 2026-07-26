@@ -6,8 +6,8 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · started, PHASE-04 (4 of 6 landed; coord `dispatch/230` at
-162aa662) · c691558a
+fresh-as-of: 2026-07-27 · started, PHASE-05 (5 of 6 landed; coord `dispatch/230` at
+3cf7c040) · c691558a
 
 ### Produced
 
@@ -23,6 +23,10 @@ fresh-as-of: 2026-07-27 · started, PHASE-04 (4 of 6 landed; coord `dispatch/230
   `clear_verification`; closes § 2.1's observed defect (coord 4d8c1e49→62476d71,
   boundary 162aa662). **The 03/04 inseparable pair is closed** — no intermediate
   HEAD hazard remains, so integration is unblocked (still `/close`'s job, post-audit).
+- **PHASE-05** MCP body fields — `body` on `memory_record`, `body`+`body_mode` on
+  `memory_edit`, both pure argument mapping onto `run_edit`/`run_record`; the
+  `body_mode`-without-`body` totality rule landed as ONE const + ONE bail site
+  (coord aae133bb3→43190de93, boundary 3cf7c040).
 - **ISS-248** — selector doctor's redundancy scan is class-blind.
 - **ISS-252** — claude-arm funnel verify beat runs against a stale coord
   checkout; fails open as a false green.
@@ -63,15 +67,14 @@ fresh-as-of: 2026-07-27 · started, PHASE-04 (4 of 6 landed; coord `dispatch/230
 
 ### Next
 
-1. `/phase-plan` PHASE-05 (MCP body fields), then dispatch it. It owns **both**
-   legs of the `body_mode`-without-`body` totality rule — the CLI leg's keyword
-   `body_mode_without_body_is_rejected_on_cli` is deliberately still unclaimed.
-2. Then PHASE-06 — but **its VA-1 runs on the coord/landing tree, never a worker
-   fork** (expects ~11 of 30; 30/30 means the D5 pathspec regressed).
-3. Conclude cadence once 6/6: `slice verify-vt 230` → `dispatch sync
+1. `/phase-plan` PHASE-06 (validate own-body staleness), then dispatch it — but
+   **its VA-1 runs on the coord/landing tree, never a worker fork** (expects ~11
+   of 30; 30/30 means the D5 pathspec regressed). The worker delivers the VT half
+   only.
+2. Conclude cadence once 6/6: `slice verify-vt 230` → `dispatch sync
    --prepare-review` → remove coord worktree (keep refs) → `slice status 230
    audit` → `/audit`.
-4. `/design` SL-232 from F-37, F-36, and F-14.
+3. `/design` SL-232 from F-37, F-36, and F-14.
 
 ## Execution constraints (dispatch)
 
@@ -353,6 +356,112 @@ because `run_edit` shares its module; the MCP arm does not, and takes its body a
 JSON string with no stdin sentinel. Its EX-5 ("the adapter contains argument
 mapping only — no policy, no second body-write path") means delegating to
 `run_edit`, which now carries the clearing for free.
+
+### PHASE-05 — MCP body fields · landed 2026-07-27
+
+Coord `aae133bb3 (B) → 43190de93 → 3cf7c040`. Worker model **opus**.
+`src/memory.rs` **+73/−0** (pure insertion again — so `has_any()`'s field set and
+`apply_edit` are untouched by construction, EX-4/R3, no inspection needed),
+`src/mcp_server/tools.rs` +82/−10, `tests/e2e_mcp_server.rs` +148/−0. Funnel
+green: base `check prove` clean at B, S1 baseline 0 failures, `regression diff`
+no new/changed with the checkout `git reset --hard HEAD`-refreshed at **both**
+ISS-252 surfaces (post-import and post-conclude). R-5 clean; no undeclared scope.
+
+**B is a post-`refresh-base` tip, and that ordering is the point.** `dispatch
+status` showed trunk **25 commits ahead of fork-point** at pre-spawn. All 25 were
+`.doctrine/**` **authored-only** — zero code files (`git diff --name-only
+$FP..main | grep -v '^\.doctrine/'` empty), so the merge was clean and left
+`src/`/`tests/` byte-identical (`git diff --stat 162aa662 HEAD -- src/ tests/`
+empty). Running `refresh-base` **before** capturing B and arming the spawn
+dissolves § Funnel mechanics #2 / the handover's caveat 4 entirely: the worker
+forks from the post-merge tip, so `B..S` is exactly the worker's delta and no
+authored commit can fold into the boundary range. **Generalise: refresh-base at
+the pre-spawn beat, never between fork and import.**
+
+Two side-effects worth recording:
+
+- **The authored divergence is resolved, in the right direction.** Coord
+  `slice-230.toml` read `status = "ready"` against primary's `"started"`; the
+  merge carried primary's value onto `dispatch/230`, which *is* primary-wins. Do
+  not expect `dispatch_authored_divergence` to surface it at conclude any more.
+- The coord tree's `plan.toml` / `design.md` are now current, so `verify-vt` at
+  the conclude cadence reads today's plan, not the fork-point's.
+
+**The one genuinely new problem, and its answer (D-P5-1).** `run_record` and
+`run_edit` both resolve the raw body via `resolve_body(raw, &mut io::stdin())`,
+where `"-"` means *read stdin*. **Over MCP, stdin IS the JSON-RPC transport** — a
+caller sending `body: "-"` would block the server reading its own protocol
+stream. Not a wrong answer: a hang plus stream corruption. So the adapter refuses
+`body == "-"` outright (`reject_stdin_sentinel`, one const, both handlers), which
+is boundary input validation of the same kind the adapter already does for
+`memory_type` / `lifespan` / `status` — and therefore not the "policy in the
+adapter" EX-5 forbids. The worker sited it in `tools.rs`, **not** `memory.rs`,
+on a directional argument worth keeping: the guard exists *only* because of an
+MCP transport fact, and the engine tier must not know that a transport exists
+(ADR-001). Deliberately covered by a **unit** test, not e2e — an e2e test that got
+it wrong would hang the harness rather than fail it.
+
+**Accepted alternative, flagged for audit:** the principled fix is to plumb a
+*pre-resolved* body through `RecordArgs`/`EditFields` so the core never touches
+stdin at all. Rejected here as a core change inside an adapter phase. A legitimate
+audit finding if weighed differently.
+
+**EX-4 is discharged structurally, not by two assertions agreeing.** One const
+(`memory::BODY_MODE_REQUIRES_BODY`) and one `bail!` site, in `run_edit`, placed
+**ahead of** the `has_any()` gate (D-P5-2) — so a lone `body_mode` gets the worded
+message instead of falling through to the generic "requires at least one flag",
+while `has_any()` itself stays untouched and `memory_edit_no_flags_returns_32602`
+stays green unedited. The MCP surface inherits the identical wording *by
+delegation*. The cross-crate literal in `tests/e2e_mcp_server.rs` (an integration
+crate cannot see `pub(crate)`) is not duplication to be tidied away — it is the
+drift detector the pairing exists to be.
+
+**EX-5's cheap proof:** `git diff B..S -- src/mcp_server/tools.rs | grep -E
+'write_body|resolve_body|parse_body_mode'` returns exactly one hit, and it is a
+doc-comment. Zero call sites. **EX-3:** neither `len(), 25` assertion appears in
+the diff at all. (Their line numbers had drifted from the plan's cited
+`:1488`/`:1870` to `:1535`/`:1917` — the plan pins the *count*, not the line;
+worth remembering before treating a moved number as a finding.)
+
+**Both falsifiers mutation-checked, in both directions** — continuing PHASE-04's
+practice, and it paid: no-op'ing the totality guard reds *exactly* the two
+totality tests; dropping the edit adapter's body mapping reds *exactly* the two
+e2e body tests and leaves the full 3870-test unit suite green, which is what
+proves the e2e pair covers the wiring and the unit test covers the rule. A
+sharpening worth carrying: the *literal* `body: None` form of the second mutation
+**does not compile** (`-D dead-code` rejects the now-unread `EditParams` fields).
+That is a stronger falsifier than a red test, but it yields no runtime signal, so
+the worker used `p.body.filter(|_| false)` — fields read, values dropped — to get
+an observable one. **A mutation that fails to compile has not been checked.**
+
+**One asymmetry left standing, for audit to weigh.** `body_mode` is deliberately
+not exposed on MCP `memory_record` (EX-1 is explicit; not offering the param is a
+stronger refusal than a worded one). But `RecordParams` has no
+`deny_unknown_fields`, so a caller who sends `body_mode` anyway has it **silently
+ignored**, where the CLI *refuses* `--body-mode` on `record` with a worded error.
+The rule the design calls "instanced twice" is the `body_mode`-without-`body` one,
+which is fully symmetric; this second rule is not. Cheap to close if wanted (accept
+the field into `RecordParams` without adding it to `input_schema`, map it to
+`RecordArgs.body_mode`, and `run_record`'s existing rejection fires). Left alone
+because it sits outside PHASE-05's exit criteria and the orchestrator does not
+widen scope mid-funnel.
+
+**Worker-corrected orchestrator error, worth the note:** the distilled prompt
+asserted `memory_show` returns the body at `memory.body`. It does not —
+`show_json` nests only *metadata* under `memory`, and the body sits at the
+**top level** of the envelope (`value["body"]`); the `view`/`include_body` gate
+does `obj.remove("body")` on the root object. A worker that had taken the prompt
+as ground truth would have written a test asserting on a missing key. The
+generalisation is § Funnel mechanics' standing one: the orchestrator's distilled
+terrain is a *claim*, and a worker correcting it is the funnel working.
+
+**For PHASE-06:** the test-helper inventory is unchanged (PHASE-03's
+`recorded_memory` / `backdate_updated` / `edit_body`; PHASE-04's `stamp_verified`
+/ `axis` / `cleared_axis` / `verified_axis` / `edit_fields` / `verified_then_edited`
+/ `VERIFIED_SHA` / `VERIFIED_DAY`). Use `stamp_verified` for any verified fixture —
+it drives the real `stamp_verification`, so the fixture cannot drift from what
+`memory verify` actually writes. **PHASE-06's VA-1 is orchestrator work on the
+coord/landing tree** (§ Execution constraints #2), not the worker's.
 
 ## Funnel mechanics (claude arm)
 
