@@ -2347,3 +2347,146 @@ identical ones ran — an inconsistency that cost a fallback to `Edit` calls.
   about queryable state instead of querying it.** One grep and one python pass over
   the ledger caught them for ~200 tokens each. This is the slice's own
   dominant-cost-driver lesson, and it kept applying to the meta-work.
+
+[phase-plan; SL-228-P07-plan-a7f21]
+Two-trees-one-cwd trap, fired within 6 tool calls of session start despite the
+handover naming it explicitly. A `cd /workspace/doctrine` (to read the PRIMARY
+tree's RFC-011 analysis, which is canonical there) silently re-pointed every
+later relative invocation — including `./target/debug/doctrine dispatch --help`,
+which then reported `next` as an unrecognized subcommand. Diagnosed only because
+the same verb had succeeded four calls earlier. Cost: ~3 wasted calls plus a
+near-miss on concluding that a landed PHASE-06 verb did not exist. Root cause is
+structural, not agent error: the canonical copy of the two artefact families is
+split across the two trees (notes.md canonical in coord, case-notes.md canonical
+in primary), so a drive MUST cd between them, and the binary name is identical in
+both. A `--root` flag on `dispatch next` would have removed the incentive to cd;
+it does not take one.
+
+[phase-plan; SL-228-P07-plan-a7f21]
+Scenario-set staleness confirmed by measurement, not suspicion: 4 of the nominal
+"top-5 quirk scenarios" the PHASE-07 mandate names are already remediated —
+IMP-272 (#1 prepare-review split-brain) resolved/fixed, ISS-218 (#3 worker_commit
+stale-PATH false-red) resolved/fixed via SL-225, IMP-256 (#4 selector
+under-declaration) resolved/fixed, IMP-127+IMP-236 (#5 split-lineage close)
+resolved/fixed with only IMP-201/IMP-174 residue. Only #2 (object-db import
+leaves coord stale) has no backlog item and remains live. A prioritisation
+artefact that outlives its own remediation cycle is a benchmark-integrity hazard:
+running the named set would have produced a flattering number measuring fixes
+made by other slices. Cheap prevention: a ranked-issue artefact should carry the
+backlog ids it derives from, so a status sweep re-dates it in one command.
+
+[design; SL-230-coherence-pass-a]
+
+Mechanically narrowing a design by extracting keep-ranges leaves a defect class
+that no amount of careful prose review inside each block can catch: a *retained*
+paragraph whose justification was rewritten to be local, and now cites the
+dataflow of a verb that left. § 5.4's staleness paragraph names `run_verify`'s
+`safe_join` resolution as the reason `validate` must canonicalise, but
+`validate`'s check (`memory_health_findings`, src/memory.rs:3400) receives
+`&[Memory]` and no reference at all. Cost: the wrong mechanism reads perfectly
+well, so finding it required reading the *code*, not the document.
+
+Cheapest instrument by a wide margin: diffing against the pre-split revision
+(`git show <narrowing-commit>^:<path>`). It settled in one read what the invented
+ids were (I10-I12/E14/OQ-7 new; OQ-4 pre-existing and therefore reviewed), that
+E10 never existed so its absence was not a gap, and that the § 5.4 step-numbering
+errors pre-date the split rather than being splice damage. Handover framing said
+"invented ids include OQ-4" — a fresh agent would have spent effort auditing
+reviewed text. Recommendation for /handover: when an artefact is produced by
+mechanical transformation, name the transforming commit in the prompt. It is one
+token of provenance that converts several audit questions into one diff.
+
+Highest-value single check, and it was not on the handover's list: running the
+design's *own* specified mechanism against the live corpus. D5's own-directory
+drift count fires on 30/30 anchored memories, because the sanctioned verify flow
+commits the stamp into the directory it then measures. Eight review rounds and a
+"verified against live data: returned 3" note missed it — the count of 3 was read
+as confirmation the plumbing worked, which is exactly the F-17/F-23 defect the
+same document names twice ("a probe that cannot distinguish the two outcomes
+proves nothing"). Text-level coherence passes do not surface this; executing the
+spec does. Generalisable: when a design states a concrete query, run the query.
+
+[plan; SL-230-coherence-pass-a]
+
+Two friction points authoring plan.toml.
+
+1. The `/plan` skill's VT-mandate example is a multi-line inline table. TOML 1.0
+   forbids newlines inside `{ }` (that is a 1.1 draft feature), so copying the
+   documented shape produces `invalid inline table` and `verify-vt` fails to parse
+   the whole plan. Cost: one full authoring pass plus a rewrite. The example is in
+   the shipped skill text, so every plan author hits it. Fix is a one-line change
+   to the skill: put the example on one line, or note that it must be collapsed.
+
+2. `design.md` is instructed to load-bear research.md's ✓ rows, but
+   `.doctrine/slice/*/research/` is gitignored (.gitignore:48) — runtime tier. So
+   a locked, committed, reviewed design cites an artefact that is disposable by
+   construction and absent for any fresh clone or worker fork. Not a defect I hit
+   in anger this session, but it means the "load-bearing on ✓ rows only" contract
+   has no durable referent after `rm -rf` of runtime state. Either research.md is
+   authored tier or the design must restate what it load-bears.
+
+[phase-plan/execute; SL-228-P07-plan-a7f21]
+zsh `nomatch` silently voided a multi-target `rm -rf`. A strip step written as
+`rm -rf a b c d-*` where `d-*` matched nothing: zsh aborts the WHOLE command
+before running it, so a/b/c survived — while `git status --porcelain | wc -l`
+reported 1116 changed files (from an unrelated earlier line), which read exactly
+like success. Caught only by explicitly re-testing each path for existence. Same
+family as the known `echo ===` zsh papercut (analysis #13), but with a worse
+failure mode: the papercut is loud, this is silent and inverts the meaning of the
+verification signal you'd naturally reach for. Cheap prevention: verify a
+destructive step by asserting the POST-condition per target, never by counting
+changed files.
+
+[execute; SL-228-P07-plan-a7f21]
+Confinement for a benchmark subject needs three masks nobody would predict from
+the dispatch worker precedent, all found by probing rather than reasoning: (1)
+`--ro-bind / /` leaves /tmp read-only and Claude Code's Bash tool cannot start at
+all (EROFS on `pwd`) — it needs a writable /tmp, so `--tmpfs /tmp` then re-bind
+the work dir into it; (2) the real repo at /workspace is readable by default, and
+for a memory-blind benchmark that is the answer key (SL-228's notes, handover and
+the RFC-011 case notes themselves) — needs `--tmpfs /workspace`, which then also
+hides the doctrine binary, so the binary must be re-bound in separately; (3) the
+jail's PATH `doctrine` is the stock 0.29 build with no `dispatch next`, so a
+subject would have concluded the verb did not exist — masked by ro-binding the
+funnel-capable build over `~/.cargo/bin/doctrine`. Also `~/.claude/projects`
+carries the ORCHESTRATOR's own transcripts and must be tmpfs-masked. A
+first-probe-then-fix loop cost ~4 calls and caught all four; reasoning alone had
+caught none of them.
+
+[knowledge; SL-230-coherence-pass-a]
+
+Correcting DEC-027's boundary table required a raw hand-edit of
+`.doctrine/knowledge/decision/027/record-027.md`. `doctrine knowledge` exposes
+new / list / show / inspect / status / paths — **no `edit`**, so there is no
+supported write path for a knowledge record's prose at all, not even the
+metadata-only one `memory edit` has. The correction was a table in the body, so
+the only route was the raw-file write the guardrails tell agents not to do.
+
+Dogfooding note, not a complaint: this is SL-230's own defect one kind over. The
+slice's § 2 claims "no verb of any entity kind writes a prose tier from user
+input, twelve checked" — DEC-027's correction is that sentence being paid for in
+the same session that authored it. Two consequences worth carrying to SL-230's
+OQ-4 (when do other kinds adopt `write_body`?): knowledge records are a strong
+early candidate because they are *corrected* more often than memories — a decision
+record's boundary table drifts as the decision is executed — and because there is
+no `knowledge edit` to extend, adoption there is a new verb rather than a new flag,
+which is a different-sized job than D1's "adoption is a caller change" implies.
+
+[preflight; sl230-readiness-2026-07-26]
+`slice selector doctor` reports `redundant` across selector *classes*: a
+`design-target` was flagged subsumed by a broader `scope-relevant` peer
+(`tests/e2e_mcp_server.rs` under `tests/**`). But `slice conformance` consults
+design-target selectors ONLY. Acting on the advisory would have converted every
+edit to that file into an audit-time undeclared edit. `run_selector_doctor`
+(src/slice.rs:2758) builds `peers` from all selectors regardless of intent.
+Cost: ~4 tool calls to establish the advisory was unsafe to follow — and the
+advisory is the one check the readiness moment is supposed to lean on.
+
+[preflight; sl230-readiness-2026-07-26]
+`slice verify-vt` UNATTRIBUTABLE is weaker than it reads. vtgate.rs step (4)
+(the "file not in the slice's source-delta" test) short-circuits BEFORE step (5)
+keyword matching, yet the message says "keyword present but `<path>` not
+modified". Pre-execution, no keyword is ever checked, so the wording invites the
+reader to bank signal that does not exist. A handover had recorded "the mandates
+have signal" on exactly that misreading. Cheaper phrasing: "keywords unchecked —
+`<path>` not modified by this slice".

@@ -178,7 +178,7 @@ existing fields; `write_body` owns no state and returns a changed-flag.
 **Body on `record`** rides the existing scaffold seam, not `write_body`: `Draft`
 and `RecordArgs` gain `body: Option<&str>`; `memory_scaffold` substitutes it for
 `render_memory_md`'s output — exactly `seed_by_key`'s existing move
-(`fileset.get_mut(1)` → `body.clone_into(b)`, `:1808-1810`). The transactional
+(`fileset.get_mut(1)` → `body.clone_into(b)`, `:1827-1828`). The transactional
 `materialise_named` write is preserved unchanged.
 
 **Body on `edit`.** `EditFields` gains `body` + `body_mode`; `has_any()` counts
