@@ -18,6 +18,10 @@ if [ ! -x "$bin" ]; then
   echo "smoke: not an executable: $bin" >&2
   exit 2
 fi
+# Absolutise: later checks run with cwd inside the scratch project, so a
+# caller-relative path (release.yml passes `target/<triple>/release/doctrine`)
+# would stop resolving.
+bin="$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")"
 
 # Scratch workspace + teardown. server_pid is reaped by the trap so a failed
 # check never leaks the map server.
@@ -40,13 +44,25 @@ fail() {
 "$bin" --version >/dev/null 2>&1 || fail "--version"
 echo "smoke: --version ok"
 
-# C2 — install/ embed: lay down a fresh project, assert a known templated file
-# from the embedded install/ tree is present and non-empty.
+# C2a — install/ embed, projection leg: lay down a fresh project and assert the
+# eagerly-projected base backings are present and non-empty. Since SL-227 /
+# ADR-019 install projects MINIMALLY (manifest.toml `[base] backings`) — the
+# entity templates are no longer copied, so they cannot serve as the canary here.
 proj="$work/proj"
 mkdir -p "$proj"
 "$bin" install --path "$proj" --yes >/dev/null 2>&1 || fail "install"
-[ -s "$proj/.doctrine/templates/slice.toml" ] || fail "install embed (templates/slice.toml absent)"
+[ -s "$proj/.doctrine/doctrine.toml" ] || fail "install embed (doctrine.toml absent)"
+[ -s "$proj/.doctrine/project-orientation.md" ] \
+  || fail "install embed (project-orientation.md absent)"
 echo "smoke: install embed ok"
+
+# C2b — install/ + publication/ embeds, whole-root leg: everything install no
+# longer projects is reachable on demand via the publication manifest. `publication
+# validate` admits the embedded manifest and resolve+emits EVERY declared entry
+# through the embedded adapter, so a stripped or partially-dropped embed root
+# fails here rather than silently shipping a hollow binary.
+(cd "$proj" && "$bin" publication validate >/dev/null 2>&1) || fail "publication embed"
+echo "smoke: publication embed ok"
 
 # C3 — web/map/dist embed: boot the map server on an ephemeral port, discover the
 # bound URL from its startup line, GET / and require HTTP 200 with a non-empty
