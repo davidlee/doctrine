@@ -432,49 +432,43 @@ The bound remains legitimate; what was illegitimate was round 5's claim that lif
 
 [[finding]]
 id = "F-25"
-status = "contested"
+status = "answered"
 severity = "blocker"
 title = "Expected every successful stamp to cover declared path evidence; observed D10 explicitly attests partial surfaces"
 detail = "Expected: F-6's remedy must prevent verify from stamping when a declared path/glob contributes no observable evidence, because a warning or later health finding cannot make the present attestation true. Observed: .doctrine/slice/230/design.md:345-357 and D10 at :765-777 direct verify to report stale and natively-unobservable entries, then attest anyway; the text itself concedes at :339-340 and :770-771 that a warning does not make an unobservable claim committed. A full CLI-derived scan (, then  for all 417 rows) found 63 memories with at least one nonobservable/nonmatching declaration under the proposed prefixed probes, 59 active and 13 already carrying verified_sha. Thus the remedy restores F-6's false overclaim by policy rather than accident: a changed .mcp.json/.claude workflow may be the memory's declared evidence, yet verify stamps a surface that excludes it. Expected refusal or a content-bearing anchor for uncovered evidence; observed report-now/validate-later followed by a successful false attestation."
-disposition = "fix-now"
+disposition = "descoped-to-SL-232"
 response = """
-Re-answered under **DEC-020**, not with a fourth cut. Round 6's response to you proposed the history discriminator; F-31 refuted it, and the user then ruled the classification question out of the slice entirely. Answering you again with another derived boundary would repeat the error your finding first exposed.
+Contest sustained; **descoped to SL-232** (DEC-027), not resolved and not withdrawn.
 
-WHAT THE RULING CONCEDES TO YOU. Your core charge — that the design condemned the stderr advisory ("a warning does not make an unobservable claim committed") and then relied on it for two of four classes — is sustained and stays sustained. The inconsistency is resolved by ADOPTING THE ADVISORY EXPLICITLY: the weak reading is stated outright as the design's only reading of `verified_sha`, the residual is routed (IMP-318, R8), and the deferred question has a home (OQ-6). Condemning a mechanism and quietly relying on it is an inconsistency; adopting it with the reading stated and the gap named is a position. That distinction is the whole of the remedy, and it does not depend on where any class boundary falls.
+Your charge — that a stamp covering less than the declared evidence is a false attestation by policy rather than by accident — was never fully answered. Round 6 answered it with a class boundary; round 7 replaced that with DEC-020's weak reading plus a routed residual; round 8 you contested that, and the contest stands: adopting the advisory explicitly makes the design *consistent*, but consistency is not the same as making the present stamp true. It does not close what you raised.
 
-WHAT IT DOES NOT CONCEDE. It does not accept that refusal is the right answer for non-contribution. Three instruments for that boundary have now been refuted — blanket (F-21), filesystem existence (yours), `rev-list --all` (F-31) — and each failed the same way: it reads local repository state, so a shallow clone, a pruned repo and a dispatch worktree legitimately disagree. Your F-25 evidence was correct AND your proposed direction (refuse for uncovered evidence) was measured and rejected as the round-4 blanket: 36 active items stop verifying, including a class of harness memory git can never observe, and the remedy it prescribes — edit the scope — is itself a claim edit that clears the axis, guaranteeing the memory is unverified in exchange for making it verifiable.
+**What that residual is now recognised to be.** It is not a wording problem and not a boundary problem — it is a **missing field**. A stamp cannot distinguish full from partial coverage because coverage is not recorded anywhere. DEC-020 established the same conclusion from the other direction: the only boundary that survives cloning is a **declared** one, on the record, not derived from local repository state. Both roads end at a schema change, and SL-230 had "no change to the memory TOML/MD schema" as an explicit non-goal — so inside this slice your finding was **structurally unanswerable**. Three rounds of instruments were, in retrospect, attempts to answer it without the field it requires.
 
-So `verify` now attests over EVERY non-contributing entry, names each on stderr, and `validate` raises them. The only refusal is the probe-aborting entry, where git returns no verdict at all — a mechanical necessity, not a judgement.
+That is the substantive reason for the split rather than a procedural one. SL-232 carries the schema change as **objective 3**, scoped with IMP-318 (persist attested coverage) and QUE-173 (body digest), because all three exist to make an attestation say more than a sha. Your finding is what that objective is for.
 
-CONSEQUENCE, STATED PLAINLY RATHER THAN BURIED: this widens the exposure your finding named. The 4 stamps the round-6 cut would have withheld are now granted. R8 is widened to say so — the residual covers all non-contribution, not only the never-tracked. Cost of the chosen cut is zero stamps lost; the price is paid on the consumer side, and it is paid visibly.
+Inherited explicitly: SL-232 § 6 **OQ-6** (should non-contribution refuse, and the declared-boundary answer), § 8 **R8** (the stamp records no coverage, widened by DEC-020 to span all non-contribution rather than only the never-tracked), and § 10's contested-inherited list, which names this as SL-232's to answer.
 
-If you want to attack the ruling, the thing to attack is the claim that a boundary decidable from LOCAL repository state does not exist — not the absence of a fourth instrument. A candidate must survive `git clone --depth 1`, `branch -D`, and a linked worktree to be worth the round.
-
-Applied at f63c267c: D10, § 5.2 (four-class table → three outcomes; weak reading marked as the only reading), E7 widened, E12 withdrawn, R8 widened, OQ-6 opened, T27c retargeted to prove the two former classes are treated ALIKE."""
+**Not conceded:** that refusal is the right answer. Three derived instruments were refuted on measurement (F-21, F-25, F-31), and a fourth derived one is still not a finding. What is conceded is that "report it and route the residual" is a holding position, not a closure — which is exactly what you charged."""
 
 [[finding]]
 id = "F-26"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "Expected I9 to define a total pre-pathspec transformation; observed two classes cannot be canonicalised and one has contradictory outcomes"
 detail = "Expected: I9 at .doctrine/slice/230/design.md:643-645 and section 5.2 at :323-326 define how every declared entry is symlink-resolved before emission, with a total, disjoint D10 classification. Observed on Git 2.54.0: realpath -e returned exit 1 for both a deleted path and .claude/workflows/**; the former is D10 stale and the latter is a glob pattern with no single real path. The construction table at :265-266 nevertheless emits glob patterns directly, without resolution. A tracked symlink to /tmp/rv307-external-target canonicalised outside: git ls-files --error-unmatch on the link returned 0, while the canonical absolute path aborted with exit 128. Section 5.2:323-325 classifies that result unobservable/report-and-attest, but D10 :347 and :765-769 classifies absolute-outside malformed/refuse. The same entry therefore has two mandated responses, and 21 path declarations in the 417-memory corpus currently fail existence-requiring canonicalisation. Expected an explicit ordered algorithm covering patterns, missing paths, and outside targets; observed an unimplementable universal invariant and a response collision."
-disposition = "fix-now"
+disposition = "descoped-to-SL-232"
 response = """
-Contest sustained; the round-6 remedy stands in structure and was corrected again in mechanics at round 7.
+Contest sustained; **descoped to SL-232** (DEC-027).
 
-WHAT STANDS. Both limbs of your charge remain fixed as described. Totality is achieved by refusing the shape that cannot be answered rather than by finding a resolution that works on it. The response collision is cut in favour of the probe: a resolvable-outside literal and a tracked symlink resolving outside are ONE class (E13), because the test is what the entry does to the probe — git aborts exit 128 instead of returning a verdict — not where it points. The case table is gone; the ordered algorithm replaced it.
+Your contest is vindicated by F-37 in the same round, and that is the honest framing. F-26 charged that I9 was stated past the domain it holds in — an invariant asserting totality over a transformation that cannot be applied to two of its inputs. Round 6 answered with the ordered algorithm and claimed totality by *refusing* the unresolvable shapes. Round 7 narrowed that (DEC-020 removed one refusal, so absent paths were emitted inert instead) and re-asserted totality on new grounds: an absent path carries no evidence, so nothing uncanonicalised bears evidence.
 
-WHAT CHANGED SINCE, both times in the direction your finding pointed:
+F-37 falsified that too, by three routes. So I9 has now been asserted as total **three times** and refuted three times, each time on different grounds. The pattern is the one your finding named at round 6 and it has not been broken: the invariant keeps being stated over a domain that has not been enumerated.
 
-1. **F-32 corrected step 3.** Your charge was that `realpath -e` cannot serve a glob; the round-6 fix answered that with "resolve the longest wildcard-free prefix". F-32 showed the prefix must end at a SEPARATOR, not at the wildcard character: `foo*/bar` yields prefix `foo`, which does not resolve, while the entry itself matches tracked `foobar/bar` (git 2.54.0, exit 0). So the round-6 fix for your finding still sent an observable glob down the non-resolving branch. Now the longest WHOLE-COMPONENT prefix — text up to the last `/` before the first wildcard.
+**What travels to SL-232, and why it is not a patch.** The remaining work is not a third rewording of I9. It is: enumerate the reachable entry shapes — `..` aliases, sparse checkout, `skip-worktree`, literal filenames containing glob metacharacters, case-insensitive collisions, `core.quotePath`, control characters (F-38) — probe each, and only then state a rule over the set that was measured. Plus the structural correction F-37 exposed underneath: path-versus-pattern must come from **which field the entry was declared in** (`scope.paths` vs `scope.globs`), not from sniffing characters, because the schema already carries the distinction and step 2 discards it.
 
-2. **E13 widened, on your own reasoning.** F-32's second limb found non-resolving OUTSIDE-SHAPED strings (`../gone`, `/tmp/no-such`) also abort at exit 128 and were unclassified. Rather than mint a class, the same probe-behaviour test you forced now covers them: E13 is "the EMITTED FORM is outside the repository", whether or not it resolves. Your principle generalised further than the finding that produced it.
+Carried as SL-232 § 8 **R-A** with that shape list as a standing obligation, § 5.5 marking I9 falsified-as-written and retained so the replacement is authored against the reasoning that failed, and § 10's contested-inherited list.
 
-3. **DEC-020 removed step 4's history branch entirely.** The stale/unobservable split your finding's remedy fed into is withdrawn (see F-31). The algorithm now ends at the `--error-unmatch` verdict: observable, non-contributing, or probe-aborting.
-
-I9 is restated accordingly. It is no longer "total because the two unresolvable shapes are refused" — only one is now. It is total over the entries that BEAR EVIDENCE: an outside target is refused, and an absent path is emitted inert, matching nothing, so it carries no evidence to canonicalise. That is a weaker and more accurate claim than the one your finding was originally answered with, which is the correct direction of travel for an invariant that has twice been stated past its domain.
-
-Applied at f63c267c. T36 unchanged and still valid; T38/T39 added for the two limbs above."""
+**What stands from your original finding and should not be re-litigated:** the class collision is cut in favour of the probe — where an entry points is not the test, what it does to the probe is — and that cut survived both DEC-020 and F-32, which widened E13 twice on your own reasoning. That part is settled."""
 
 [[finding]]
 id = "F-27"
@@ -580,131 +574,171 @@ The root cause, recorded because it outlives this slice: a property of a tool �
 
 [[finding]]
 id = "F-32"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "The ordered scope algorithm has reachable unclassified and misclassified patterns"
 detail = "Expected: the §5.2 algorithm must be total and classify by probe outcome, as design.md:267-318 and :333-336 claim; a currently contributing glob must reach observable, and every non-resolving input must have a defined response. Observed under Git 2.54.0: in a scratch repo with tracked foobar/bar, 'git ls-files --error-unmatch -- :(glob)foo*/bar' exited 0 and printed foobar/bar, but step 3's textual 'longest wildcard-free prefix' is foo and 'realpath -e <repo>/foo' exited 1. The written algorithm therefore sends an observable glob to the non-resolving history branch and can refuse it as stale. Separately, non-resolving outside-shaped entries make the prescribed history probe abort, an outcome step 4 does not classify: 'git rev-list --all --max-count=1 -- :(literal)/tmp/rv307-no-such-absolute' exited 128 ('is outside repository'); ':(glob)/tmp/rv307-no-such-*/**' exited 128 ('Invalid path'); and ':(literal)../outside-no-such' exited 128. The ever/never sub-branches at design.md:302-312 omit probe abort. T36 covers a symlink-rooted directory prefix, not a wildcard inside a component; T27 covers resolvable outside targets, not non-resolving outside strings."
-disposition = "fix-now"
+disposition = "descoped-to-SL-232"
 response = """
-Sustained on both limbs, both reproduced. This is the one round-7 finding that SURVIVES DEC-020 — it is a defect in the algorithm's mechanics, independent of the classification question — and it was fixed on its own terms rather than dissolved.
+Contest sustained; **descoped to SL-232** (DEC-027).
 
-LIMB 1 — the prefix is split at the wrong place. Reproduced (git 2.54.0, scratch repo, tracked `foobar/bar`): `ls-files --error-unmatch -- ':(glob)foo*/bar'` exits 0 and prints `foobar/bar`, while the step-3 prefix `foo` does not resolve. Your generalisation is the correct one and is now stated in the design as the rule: A TEXTUAL WILDCARD-FREE PREFIX IS NOT A PATH PREFIX. Under the round-7 text an observable glob was routed to the non-resolving branch and could be refused as stale.
+Round 7 fixed both limbs as stated — the whole-component prefix rule for limb 1, E13 widened to "the emitted form is outside the repository" for limb 2 — and those fixes are carried into SL-232 intact with their measured evidence (`:(glob)foo*/bar` → exit 0, `foobar/bar`; the four-row exit-code table separating a verdict from an abort).
 
-Fixed at step 3: the prefix is the longest WHOLE-COMPONENT prefix — the text up to the last `/` BEFORE the first wildcard character — with the remainder re-appended. For `foo*/bar` that prefix is empty, so the entry is emitted unchanged and matches, which is the pre-existing `**/.gitignore` arm rather than a new one. T36's symlink-rooted case is unaffected: `.doctrine/adr/001-module-layering/**` splits at the separator exactly as before. Pinned by new **T38**, which names T36 as the test that could not have caught this.
+**Why your contest is nevertheless correct.** F-37, raised in the same round, shows limb 1's fix was incomplete in a way I did not see. I corrected *where* the prefix splits while leaving intact the deeper error: **the algorithm infers path-versus-pattern from characters at all.** Your F-37 route 3 is the proof — a `scope.paths` entry whose real filename contains `*` is a concrete path, but step 2 reads the star and classifies it a pattern, so whole-path resolution is skipped and the entry contributes while bypassing canonicalisation. Fixing the split point does not touch that. The rule needs to take the distinction from the field the entry was declared in, which the schema already records and step 2 discards.
 
-LIMB 2 — probe abort was unclassified. Your three exit-128 cases reproduce. This limb does NOT dissolve with the history probe, and saying so was worth checking rather than assuming: with DEC-020 a non-resolving entry is emitted into the claim surface and reaches `ls-files --error-unmatch`, so the abort merely moves from the history probe to the contribution probe. The outcome is the same — `verify` dies instead of answering.
+So limb 1 is *narrower* than I treated it: I answered "the prefix is computed wrongly" when the finding also implied "the shape classification has no business being textual." That is a structural change to step 2, in a document that has moved.
 
-Measured the boundary rather than reasoning about it (git 2.54.0):
+Limb 2's widening of E13 stands and was extended twice on your reasoning, but F-38 then showed even that taxonomy is not total — a NUL-bearing entry produces no git exit code at all, because no git process runs.
 
-  :(literal)nonexistent/inside.txt   exit 1    unmatched — A VERDICT
-  :(literal)/tmp/no-such-absolute    exit 128  is outside repository
-  :(literal)../outside-no-such       exit 128  is outside repository
-  :(glob)/tmp/no-such-*/**           exit 128  Invalid path
-
-So the split is not resolves/does-not-resolve, it is inside/outside — and it is already the malformed class's defining property. E13 is widened to "the EMITTED FORM is outside the repository", covering a resolution that lands outside (F-26) and a non-resolving outside-shaped string (this finding) as ONE class. No new class, no new predicate on the string's shape: the test remains what the entry does to the probe. A non-resolving entry INSIDE the repo is survivable and is simply non-contributing.
-
-Pinned by new **T39**, whose discriminating half is that `verify` must not abort — and which names T27 as covering resolvable outside targets only, per your last sentence.
-
-Applied at f63c267c: § 5.2 steps 3-4, I9 (restated over evidence-bearing entries, since an absent path is now emitted inert rather than refused), E13, T38, T39."""
+Carried into SL-232: § 5.2 steps 3-4 with the corrected prefix rule and the exit-code table, § 5.5 E13, tests **T38** and **T39** (both naming the tests that could not have caught these — T36 covers a symlink-rooted directory prefix, T27 covers resolvable outside targets only), § 8 R-A for the enumerate-then-probe obligation, and § 10's contested-inherited list."""
 
 [[finding]]
 id = "F-33"
-status = "contested"
+status = "answered"
 severity = "blocker"
 title = "The design states incompatible strong and weak attestation contracts"
 detail = "Expected: one normative definition of verified_sha must govern scope construction, success, and closure. Observed: design.md:433-436 deliberately defines the weak reading (everything git could observe; a proper subset of declared scope may be stamped), but design.md:604-607 says every declared scope path must be committed 'because that is what the stamp asserts'. The arraigned scope repeats the strong contract at slice-230.md:31-36 and :82-87 ('declared scopes are never excluded'; 'is the claim committed?') while only later acknowledging partial coverage at :114-116. The guiding principle at design.md:80-82 also says governance dirt says nothing although 81 memories declare .doctrine/** evidence and T25 makes such dirt claim-relevant. This is not historical wording: these are the guiding principle, mechanism conclusion, and governing scope. A planner can implement either refusal over every declaration or D10's partial attestation and remain textually compliant. The core stamp contract must not ship unreconciled."
-disposition = "fix-now"
+disposition = "part-fixed-part-descoped"
 response = """
-Sustained. All three sites confirmed, and the framing — guiding principle, mechanism conclusion, governing scope, not historical wording — is what made this a blocker rather than a tidy-up.
+Contest sustained. Your contest was correct and F-39 is the proof of it: round 7 claimed the strong reading was deleted from every normative site, and four sites survived — `design.md:227`, `:236`, `:624`, and **D9** at `:936`, all framing the first gate question as "is the **code** dirty?" while § 4 asserted the boundary is the *claim*. A decision site and a mechanism conclusion, not historical wording. So the incompatible-contracts charge was still live when you contested it.
 
-FIX DIRECTION: the strong reading is DELETED. The weak one is not softened, hedged, or reconciled with it. Two normative readings of `verified_sha` cannot coexist, and the tempting move — weakening the § 5.2 quote until it no longer contradicts the mechanism conclusion — would have destroyed the one contract the design had actually settled while leaving the ambiguity in place. Your point that a planner could implement either and remain textually compliant is exactly right, and it is a property of HAVING TWO, not of which one is louder.
+**Where it stands now, split by slice.**
 
-Four sites, not three. Your three, plus one you did not cite that carries the same defect:
+**SL-230 (this slice) is clean.** Verified by grep after the split, not asserted: zero occurrences of code-only framing in the narrowed `design.md`. Three of the four sites were gate text and the fourth was D9, a gate decision — all moved to SL-232 with DEC-027. § 4's principle here is now "attestation is about the claim", and the slice no longer contains any statement about what `verified_sha` asserts beyond invalidation semantics, because the stamp contract went with the gate. There is no longer a second reading in this document to conflict with anything.
 
-1. design.md § 5.4 (the mechanism conclusion, ex-:606) — "every path it declares a scope over — must be committed" DELETED. Now: what must be committed is the body and every declared path GIT CAN OBSERVE; a declared path git does not track is reported, not required.
-2. design.md § 4 guiding principle — your last limb, and correct. "A memory attests that its body is true of the CODE. Dirt in the governance corpus says nothing" was both the strong reading's premise and flatly false against 81 items scoping `.doctrine/**` with T25 making such dirt claim-relevant. Rewritten: attestation is about the whole claim and only the claim; governance dirt is not exempt BY BEING GOVERNANCE — what is excluded is unclaimed dirt.
-3. slice-230.md :82-87 — "declared scopes are never excluded" retained but qualified: never-excluded is not always-required. The two questions are now "is the UNCLAIMED tree dirty, and is the OBSERVABLE claim committed?"
-4. slice-230.md :31-36 — "a memory attests a claim against the CODE" — the same defect as (2), in the scope document's Context. Corrected inline rather than silently, since it is the passage the whole slice descends from.
+**SL-232 inherits the unfinished limb**, and it is named rather than left to be rediscovered: § 0 lists it in the open-majors line, and § 7 carries an explicit note after D9 recording that its first gate question is worded "is the code dirty?" at three sites and contradicts § 4 — positioned so the next author cannot edit D9 without meeting it. § 5.2's weak reading is marked as the design's only reading, and § 10's settled-terrain list states the strong one must not be reintroduced.
 
-The R8 bullet at :114-116 now states the weak reading positively rather than only acknowledging partial coverage after the fact, so the scope document leads with the contract instead of conceding it late.
+**What was genuinely fixed at round 7 and stands:** the strong reading is gone from the mechanism conclusion (what must be committed is the body and every declared path *git can observe*), § 4's guiding principle no longer claims governance dirt says nothing — with the 81-item census and T25 as the reason — and `slice-230.md`'s three sites are reconciled. Your finding also surfaced a fourth site you had not cited (§ 4's principle), which was the premise of the whole conflict.
 
-§ 5.2's statement is now marked as the design's ONLY reading, with an explicit prohibition on asserting the strong one elsewhere — stated as a rule because this is the fifth instance of a correction landing in one section while another kept asserting what it replaced, and the first at the level of the core contract.
-
-Interaction with DEC-020, stated because it cuts the other way from what you might expect: the ruling WIDENS this exposure rather than narrowing it. With the stale class no longer refusing, a moved source path is now also attested over, so R8's residual covers every non-contributing entry rather than only never-tracked ones. That is the accepted price of not deriving a boundary from local state, and R8 now says so explicitly rather than carrying a count scoped to the withdrawn class.
-
-Applied at f63c267c."""
+**The lesson, at the altitude your finding was actually about.** F-33 was the first instance of this ledger's stale-text pattern reaching the *core contract* rather than prose, and F-39 then showed the sweep that fixed it was one tier short. The sweep now has three tiers: normative prose, routing-record bodies (F-34), and queried metadata (F-39). Two normative readings of one stamp cannot coexist — but neither can a claim of completeness that was never checked against every tier the claim spans."""
 
 [[finding]]
 id = "F-34"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "QUE-175 still gates IMP-317 on the rejected shared-surface model"
 detail = "Expected: F-24/F-28's sustained remedy must update every durable decision surface, especially the open question that gates IMP-317. Observed: 'doctrine knowledge show QUE-175 --json' and .doctrine/knowledge/question/175/record-175.md:9-12 still say one constructor is adopted by verify and validate; :19-23 routes retrieve through that shared constructor; :33-37 says later adoption is cheap and a call-site swap; :51-53 retains the superseded 236/55 census. In contrast design.md:648-713 and IMP-317 say verify-only, a distinct history-stable construction, and a provenance-threading dataflow change. The live gating question would direct the follow-up to reintroduce F-27 and understate F-28's cost."
 disposition = "fix-now"
 response = """
-Sustained. All four cited sites confirmed against `record-175.md`, and the charge names the real hazard precisely: a gating question is not commentary about the design, it is the instruction the follow-up work will actually read. Left as written, QUE-175 would have directed IMP-317 to reintroduce F-27's false negative and to budget F-28's dataflow change as a call-site swap.
+Contest sustained, and **now actually fixed** — the limb that justified your contest is closed this round.
 
-QUE-175's body rewritten and re-verified this round by reading it back through `knowledge show` rather than trusting the edit:
-  - the shared-constructor model is gone; the record now states `verify`-only, and that a historical consumer needs a SECOND, history-stable surface — with the measured reason (`rev-list -- link` → 1, over the resolved target → 0, git 2.54.0), not just the conclusion.
-  - the retrieve routing no longer passes through `verify`'s constructor.
-  - "cheap call-site swap" replaced by the F-28 correction, including the load-bearing part: `collect_all` (`src/memory.rs:2826-2834`) unions `items/` and `shipped/`, so the row's origin is UNRECOVERABLE from uid, not merely absent.
-  - the superseded 236/55 census replaced by the current figures under the evidence-to-gather heading.
-  - the correction is marked as a correction (`Corrected by RV-307 F-27/F-28/F-34`) rather than silently overwritten, so a reader who saw the old model knows it was withdrawn.
-IMP-317's body carries the matching cost correction and the `wont-do` gate.
+Round 7 claimed the routing-record sweep was complete and I verified QUE-175's body to support that claim. The body *was* corrected. What neither of us checked was the **title**: `backlog-317.toml:6` still read "Route retrieve staleness through the **shared claim-surface constructor**" — the model F-27 rejected and F-28 costed — while the body it heads says adopting `verify`'s constructor is wrong. F-39 caught it, and your contest of F-34 was therefore correct: "routing records now describe the right model" was false of the surface a reader meets first.
 
-THE GENERALISATION, which is why this was worth a major: **routing records are part of the integration sweep, not commentary outside it.** Rounds 1-6 swept `design.md` and `slice-230.md`; the durable records that OUTLIVE the slice were treated as already-filed. They are the surface with the longest half-life and the least review — nobody re-reads a QUE after the slice closes, they just act on it. This round's sweep therefore covered QUE/IMP/DEC bodies, and the same discipline caught DEC-020's own drafting.
+Fixed: IMP-317 is retitled **"History-stable scope surface for validate and retrieve"**, naming the model that survived and both consumers (F-27 put `validate` in the same position as `retrieve`). Slug and slug-symlink moved with it; corpus validates clean. No verb owns a backlog title, so this was a sanctioned TOML hand-edit per `using-doctrine.md`.
 
-A ledger note on this finding's own handling, recorded because it instantiates the same failure one level up: F-34 and F-35 were carried in the slice's harvest and handover as ALREADY DISPOSED. The fixes had landed; the ledger entries had not. Found by reading the ledger rather than the handover. A disposition that exists only in a prose summary is exactly the "recorded in two places and implemented in neither" pattern F-8 named."""
+QUE-175's body re-verified again this round and unchanged: `verify`-only, a second history-stable surface with the measured `rev-list -- link` → 1 / resolved → 0 evidence, adoption as a dataflow change because `collect_all` erases row origin, the correction marked as a correction, and the current census figures.
+
+**What your contest actually taught, recorded because it is the durable part.** F-34's own generalisation was "routing records are part of the integration sweep." That was one tier too narrow. The sweep has **three** tiers: normative prose, routing-record **bodies**, and **queried metadata** — titles, slugs, tags. The third is invisible to a prose sweep and to `grep` over `design.md`, and it has the widest read with the least review. That is now on the record rather than left to be rediscovered a ninth time."""
 
 [[finding]]
 id = "F-35"
-status = "contested"
+status = "answered"
 severity = "minor"
 title = "Section 10 still restates mechanisms while claiming pointer-only history"
 detail = "Expected: F-22's structural remedy at design.md:1111-1115 and :1242-1250 says §10 points to normative homes and states nothing actionable. Observed: §10 still says 'Twenty-four findings over five rounds' at :1107 although its table has F-1..F-30 and the document later says six rounds/thirty findings; :1199-1209 re-explains the empty-magic and scope-symlink mechanisms; and :1258-1281 restates I9/D11/D10, including the current 30/43/4 classifier and validate behavior. These are exactly the duplicated rules the section says it deleted, and the D10 restatement already contains the now-falsified claim that history is checkout-stable (:1274-1277)."
 disposition = "fix-now"
 response = """
-Sustained on all three limbs. Verified each against the current document rather than assuming the round-6 remediation had covered them.
+Contest sustained. Two things changed since, one of which was your point and one of which supersedes the question.
 
-LIMB 1 — the counts. Confirmed wrong, and wrong in a way that compounds: the preamble said "twenty-four findings over five rounds" while its own table ran F-1..F-30 and the narrative below said six rounds. Fixed at round 7 and again now (thirty-five over seven), but the durable repair is the one that matters: the preamble now directs the reader to `doctrine review status RV-307` and states that these counts are a standing staleness hazard, BECAUSE A ROUND UPDATES THE LEDGER AND NOT THE PROSE. A number in a narrative section has no mechanism keeping it true.
+**Your point, honoured.** The two surviving mechanism restatements — the round-5 narrative's empty-magic and scope-symlink explanations, and the round-6 narrative's I9/D11 explanation — were trimmed to pointers before round 8 shipped. They now name what fired and cite E11 / I9 / R7 / D11 as the homes, and state nothing a reader could act on. The lessons blocks are kept deliberately: a *practice* ("a probe that cannot distinguish the two outcomes proves nothing") cannot go stale the way a rule can, which is the distinction that makes this section survivable at all.
 
-LIMB 2 — the empty-magic and scope-symlink mechanisms in the round-5 narrative. Confirmed and trimmed. That paragraph now names what fired and points at E11, I9 and R7; the mechanism explanations are deleted. What it keeps is F-23's LESSON — a probe that cannot distinguish the two outcomes proves nothing — which belongs to the lessons block and cannot go stale the way a rule can.
+**What supersedes it.** DEC-027 split the slice at round 8, and § 10 is now the review record of a document that no longer exists in one piece. Rather than delete rows — which would falsify what this design was actually reviewed for across eight rounds — the section carries an explicit resolution notice: any row whose home is D3, D9, D10, D11, I1-I4, I6-I9, E2, E4-E9, E11-E13, R6-R8, § 5.2 or T7-T39 now resolves against `.doctrine/slice/232/design.md`, and the rows that remain local are named (F-3, F-8, F-9, F-10, F-12, F-14, F-17, A1-A4). That is the pointer discipline applied to a pointer table whose targets moved.
 
-LIMB 3 — the I9/D11/D10 restatement, and the sharpest part of your charge. You noted the D10 restatement "already contains the now-falsified claim that history is checkout-stable". Correct, and it was falsified again by F-31 in this same round: the round-6 narrative asserted the round-6 cut and its 30/43/4 census in the PRESENT TENSE, and DEC-020 then withdrew that cut entirely. So the passage you flagged as duplicated was, one finding later, actively wrong — which is the argument for your finding rather than against its severity. Both the round-6 D10 paragraph and its I9/D11 mechanism explanation are now deleted and replaced with pointers.
+SL-232 § 10 carries the complementary view, organised by **state** rather than by round — open / contested / verified — because a new author needs "what is still true and what is still owed", not a chronology. Chronology stays here, where the ledger is.
 
-THE RULE, now stated structurally rather than as diligence: a historical paragraph that names a NUMBER or a RULE will eventually describe a superseded one. So § 10 may record what fired, where it landed, and what it TAUGHT — and nothing a reader could act on. Practice is the durable exception; mechanism is not. The new Round 7 subsection was written to that constraint from the start: it says the classification attempt ended and defers to D10 and § 5.2 for what replaced it, deliberately saying no more.
+**On the counts limb.** Your original charge included that the preamble's numbers were wrong. They were, twice. The durable fix is not a corrected number: the preamble now says counts written in prose are a standing staleness hazard and directs the reader to `doctrine review status RV-307`, because a round updates the ledger and not the narrative. Any number I write there will eventually be wrong; the pointer will not.
 
-Filed minor by you; treated as the load-bearing structural finding of the round, because it is the sixth instance of one pattern and the pattern has now twice hidden a falsified claim in plain sight.
-
-Applied at f63c267c and the follow-up commit."""
+Filed minor by you, and treated across three rounds as the load-bearing structural finding it is — it is the pattern that hid a falsified claim in plain sight twice (the round-6 D10 rule, and F-39's code-only wording)."""
 
 [[finding]]
 id = "F-36"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected validate to implement DEC-020's corpus sink; observed D11 expressly leaves it no contribution probe"
 detail = "Expected: DEC-020 and D10 require validate to raise every non-contributing scope entry (design.md:461-464, 841-849, 960-965), and T35 at design.md:1123 requires that result once per entry. Observed: design.md:498-505 places contribution detection in run_verify's surface construction; design.md:695-744 and D11 at :990-1000 say the constructor serves verify alone, validate keeps its existing raw staleness seam, and validate gains only D5's own-directory count. Command rg -n 'validate|non-contributing|constructor serves|gains only' over design.md found no second current-contribution mechanism. The retained commits_touching seam asks a historical question, is gated on scope.paths, and cannot implement T35. Following D11 therefore omits a mandatory consequence of DEC-020; implementing T35 requires an undesigned second per-entry Git path, including the corpus-wide malformed-entry continuation policy F-29 identified. The user ruling was applied normatively but not mechanistically, and this must not ship unreconciled."
+disposition = "descoped-to-SL-232"
+response = """
+Sustained, not fixed here, and **not disposed as resolved** — this finding is one of the two that caused the slice to be split. It is inherited by **SL-232** as an open blocker (DEC-027).
+
+The charge is correct and I verified every limb. DEC-020 and D10 do require `validate` to raise every non-contributing scope entry, T35 requires it once per entry, and D11 leaves `validate` with no contribution probe: it keeps the historical `commits_touching` seam, gated on `!scope.paths.is_empty()`, which asks a different question and cannot produce that result. There is no second current-contribution mechanism anywhere in the design — your `rg` sweep matches mine.
+
+The sharpest part is the framing, and I am recording it because it generalises: **the user ruling was applied normatively but not mechanistically.** I widened E7 to cover all non-contribution and retargeted T35 to match, treating DEC-020's "`validate` raises them" as text to conform to rather than as a consequence needing a mechanism. D11 said in the same document that `validate` has no such probe. Two sections of one design, one round apart, and I did not cross-check them — which is this ledger's signature defect committed against a *decision* rather than against prose.
+
+Why it descopes rather than getting fixed. Supplying the mechanism is a second per-entry git path on a corpus-wide verb, plus the continuation policy F-29 identified (what happens to the run when one memory's surface is probe-aborting). That is new design work with its own cost and its own review surface. Doing it inside a body-write slice is what produced eight rounds; SL-232 exists so it can be designed rather than bolted on.
+
+Carried forward explicitly, not silently: SL-232 § 0 names this as one of two open blockers, § 5.5 marks E7 as asserting a consequence with no mechanism, § 8 carries it as R-B, and § 6 OQ-B asks the mechanism-and-continuation-policy question directly. The inherited-findings table in SL-232 § 10 lists it as open, with the note that a descoped finding is unanswered work with a new owner and must not read as a resolved one.
+
+Nothing here is a contest of your charge. The disposition is a routing decision, and the reasoning you supplied is what forced it."""
 
 [[finding]]
 id = "F-37"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected every contributing entry to be canonicalised; observed unresolved aliases still contribute and read clean"
 detail = "Expected: step 4 at design.md:309-311 says a non-resolving entry is emitted and step 5 finds it matches nothing; I9 at :806-816 says every evidence-bearing entry is resolved and an absent path is inert. Observed on Git 2.54.0 in three scratch repos. In /tmp/rv307-r8-dotdot.0sxN7q, realpath -e missing/../link exited 1, but git ls-files --error-unmatch on :(literal)missing/../link exited 0 and printed link; with the symlink target dirty, git diff --quiet on that alias exited 0 while the target exited 1. In sparse checkout /tmp/rv307-r8-sparse.im2Sd7, the tracked link was absent and realpath exited 1, yet ls-files on :(literal)link exited 0; the link probe exited clean while the retained target was dirty. In /tmp/rv307-r8-literal.g6BVYr, scope.paths-style literal filename foo* was a tracked symlink: the shape rule at design.md:278-290 treats the star as a pattern and skips whole-path resolution, while ls-files on :(literal)foo* exited 0 and its diff exited clean against a dirty target. Resolution failure therefore does not imply non-contribution, and inferring path-vs-pattern from characters rather than scope.paths versus scope.globs creates the same bypass. T33/T36 cover present symlinks only. All three routes restore the false attestation I9 was meant to close."
+disposition = "descoped-to-SL-232"
+response = """
+Sustained on all three routes, each reproduced, and **not fixed here** — inherited by **SL-232** as an open blocker (DEC-027). This is the other finding that split the slice.
+
+Your three routes hold, and they are not three instances of one bug:
+
+1. **unresolved `..` alias** — `realpath -e missing/../link` exits 1, but `ls-files --error-unmatch -- ':(literal)missing/../link'` exits 0 and prints `link`; against a dirty target the alias's `diff --quiet` exits 0 while the target exits 1.
+2. **sparse checkout** — the tracked link is absent so resolution fails, yet `ls-files` on it exits 0 and the probe reads clean while the retained target is dirty.
+3. **literal filename containing `*`** — a `scope.paths` entry whose real filename is `foo*` is a tracked symlink; step 2's shape rule reads the star as a wildcard and skips whole-path resolution, so `ls-files` on `:(literal)foo*` exits 0 and its diff reads clean against a dirty target.
+
+**What this falsifies, stated plainly.** § 5.2 step 4 says a non-resolving entry is emitted and step 5 finds it matches nothing. That is the premise, and it is false: resolution failure does not imply non-contribution. I9 is falsified with it. All three routes restore the exact false attestation I9 was written to close.
+
+**I own the error, and it is the error this ledger has now caught three times.** I probed one shape of non-resolving entry — `nonexistent/inside.txt`, exit 1 — and generalised to all of them, then described the probe-first discipline as having paid off in the same turn. That is F-17's non-discriminating probe, and it is the dominant-cost-driver lesson (a tool property is a claim needing a falsifier) applied to everything except my own new premise.
+
+**Your fourth observation is the one with the longest reach**, and it is not merely a bug: inferring path-versus-pattern from *characters* rather than from which field the entry came from (`scope.paths` versus `scope.globs`) is a category error in the algorithm's structure. The schema already carries the distinction; step 2 discards it and re-derives it unreliably. A fix that only handles `..` and sparse checkout would leave that intact.
+
+Why it descopes. This is the **second** failed totality claim over path resolution — F-26 was the first, and the two failed differently: F-26 was about which shapes *can* be resolved, this is about whether resolution failure implies non-contribution. A third attempt written against these three routes alone would very likely fail a fourth way. What it needs is the reachable shapes enumerated and probed as a set — `..` aliases, sparse checkout, `skip-worktree`, literal glob metacharacters, case-insensitive collisions, `core.quotePath` — before any rule is asserted. That is method, and it needs a slice that can hold it.
+
+Carried forward: SL-232 § 0 names it as a blocker with all three routes, § 5.2's steps 4-5 and § 5.5's I9 are marked falsified-as-written and retained deliberately so the replacement is authored against the reasoning that failed, and § 8 R-A carries the enumerate-then-probe obligation as a risk with the shape list. T33/T36 are recorded as covering present symlinks only, per your last sentence."""
 
 [[finding]]
 id = "F-38"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected a total hostile-input contract; observed NUL and newline entries escape E11/E13"
 detail = "Expected: scope entries are free text and hostile input (design.md:263, 381-400), while the ordered algorithm claims total handling and says the only probe-aborting forms are empty or outside (E11/E13 at :853-866). MCP edit accepts paths/globs as arrays of strings (src/mcp_server/tools.rs:911-914), so control-bearing strings are reachable in-process. Observed: executing a Git probe with the argument :(literal)no plus U+0000 plus match failed before Git ran with ValueError: embedded null byte; the OS argv boundary cannot represent NUL, so this is neither exit 0, exit 1, nor E13's exit 128 and the design specifies no refusal. A separate executed probe with an embedded newline reached Git, exited 1, and emitted the entry across two stderr lines. E7 requires naming each entry once, but no escaping/framing rule or test makes that diagnostic unambiguous. Expected explicit rejection and escaped reporting for OS-unrepresentable/control-bearing scope data; observed a reachable command-abort and diagnostic-injection gap outside the supposedly total classes."
+disposition = "descoped-to-SL-232"
+response = """
+Sustained, reproduced, **not fixed here** — inherited by **SL-232** as an open major (DEC-027).
+
+Both limbs verified. NUL: the argv boundary cannot represent it, so the probe fails *before* git runs — `ValueError: embedded null byte`. That is the part of your charge that matters most, and it is worth stating precisely: this outcome is **outside E11/E13's taxonomy entirely**. That taxonomy is built on git exit codes — 0 contributes, 1 does not, 128 aborts — and a NUL-bearing entry produces none of the three because no git process exists. A contract stated as "total over the probe's outcomes" cannot cover an input that prevents the probe. Newline: reaches git, exits 1, and splits E7's report across two stderr lines, so the diagnostic becomes ambiguous exactly where E7 promises each entry is named once.
+
+Reachability is established rather than assumed, and your citation is the right one: MCP `memory_edit` accepts `paths`/`globs` as arrays of strings (`src/mcp_server/tools.rs:911-914`), so control-bearing values arrive in-process without passing a shell. The design already declares scope entries hostile input (SPEC-007 § Concerns, R2) — it just never tested that declaration against characters rather than against pathspec magic. F-18 hardened the *syntax* axis and left the *encoding* axis untouched.
+
+Two distinct obligations, and they should not be conflated in the fix:
+- **rejection** for values the OS cannot represent in argv (NUL), which must be a validation refusal at the write verbs, not a probe outcome;
+- **escaped framing** for values that survive to a report (newline, and by extension any control character), so E7's one-entry-one-line promise holds.
+
+Descoped with F-36 and F-37 because it lands on the same surface — the construction algorithm and E7's reporting contract — and fixing it here would mean specifying a validation and escaping rule for a slice that no longer owns either. Carried as SL-232 § 8 **R-D** with both limbs and the argv-boundary reasoning, and named in § 0's open-majors line.
+
+Filed major by you and accepted as major: it is a real hole in a contract the design calls total, but unlike F-37 it does not produce a false attestation — it produces a crash or an ambiguous diagnostic."""
 
 [[finding]]
 id = "F-39"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected round-7 stale-text sweep to remove rejected models; observed code-only wording and a shared-constructor title remain"
 detail = "Expected: F-33's response says the code-only reading was removed from every normative site, and F-34 says routing records now describe a distinct history-stable constructor rather than the rejected shared surface. Observed: design.md:227 still comments 'Is the CODE dirty?', :236 still says authored-tree dirt says nothing about a code claim, :624 repeats 'is the code dirty?', and D9 at :936 still defines the first gate question that way. These are normative mechanism and decision sites, while design.md:80-86 says the claim—not code—is the boundary. Separately, doctrine backlog show IMP-317 renders the canonical title 'Route retrieve staleness through the shared claim-surface constructor'; backlog-317.toml:6 carries that title while its body says adopting verify's constructor is wrong and a second history-stable surface is required. The exact signature defect survives: corrections landed in prose bodies while other queried/normative surfaces still assert what they replaced."
+disposition = "part-fixed-part-descoped"
+response = """
+Sustained on both limbs. **One is fixed now, one descopes** — and the split is not a convenience, it follows from which surface each limb lives on.
+
+**LIMB 2 — IMP-317's title. FIXED, this round.** You are right that this is the worse of the two, and the reason is the one your charge names: the *title* is a **queried** surface. `doctrine backlog show IMP-317` renders it, `backlog list` renders it, and a reader deciding whether to open the item sees only that line. The body had carried the F-28 correction since round 7 — I verified it again at round 7 and reported that it did — while `backlog-317.toml:6` still advertised "Route retrieve staleness through the **shared claim-surface constructor**", which is precisely the model F-27 rejected and F-28 costed. So the item's headline instructed a reader to do the thing its body forbids.
+
+Retitled to **"History-stable scope surface for validate and retrieve"** — which states the model that survived (a *second*, history-stable surface, not reuse of `verify`'s) and names both consumers, since F-27 established `validate` is in the same position as `retrieve`. Slug and slug-symlink moved with it. No verb owns a backlog title, so this was a sanctioned hand-edit of the TOML per `using-doctrine.md`; corpus validates clean.
+
+**The generalisation, which is the seventh instance of this ledger's signature defect and the first at this altitude.** Rounds 1-8 found corrections landing in one section while another asserted what they replaced. F-34 extended the sweep from `design.md` to **routing-record bodies**. This limb extends it again, to **queried metadata** — titles, slugs, tags. Prose sweeps do not reach them, `grep` over `design.md` does not reach them, and they are the surface with the widest read and the least review. The sweep now has three tiers, not one: normative prose, routing-record bodies, and queried fields.
+
+**LIMB 1 — code-only wording. DESCOPED to SL-232.** All four sites confirmed: `design.md:227`, `:236`, `:624`, and D9 at `:936` all still framed the first gate question as "is the **code** dirty?", contradicting § 4's claim-not-code boundary. Round 7 fixed § 4 and § 5.4's mechanism conclusion and missed these, so your charge that F-33's response overclaimed is correct.
+
+They descope rather than getting fixed because **all four are gate sites** and D9 is a gate decision — every one of them left this slice for SL-232 under DEC-027, along with the § 4 principle they contradict. Correcting them in a document they no longer live in would be a no-op. Carried explicitly: SL-232 § 0 names this limb in its open-majors line, and § 7's note after D9 records that its first gate question is worded "is the code dirty?" at three sites and contradicts § 4 — so the next author cannot miss it while editing D9.
+
+**Not conceded:** that the round-7 sweep was careless in the abstract. It was incomplete in a specific and now-named way — it covered two tiers and there are three. That is a correctable method, and the correction is on the record rather than in a resolution to try harder."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

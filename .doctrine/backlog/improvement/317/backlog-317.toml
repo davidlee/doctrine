@@ -2,8 +2,8 @@ schema = "doctrine.backlog"
 version = 1
 
 id = 317
-slug = "route-retrieve-staleness-through-the-shared-claim-surface-constructor"
-title = "Route retrieve staleness through the shared claim-surface constructor"
+slug = "history-stable-scope-surface-for-validate-and-retrieve"
+title = "History-stable scope surface for validate and retrieve"
 kind = "improvement"
 status = "open"
 resolution = ""                 # seeded empty so `backlog edit` sets it in place
