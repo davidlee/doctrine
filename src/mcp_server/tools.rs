@@ -954,6 +954,9 @@ fn call_tool(
                 repo: Option<String>,
                 global: Option<bool>,
                 body: Option<String>,
+                // Accepted ONLY so it can be refused — see the `body_mode`
+                // mapping below. Deliberately absent from `input_schema`.
+                body_mode: Option<String>,
             }
             let p: RecordParams = serde_json::from_value(arguments)
                 .map_err(|e| anyhow::anyhow!("invalid arguments: {e:#}"))?;
@@ -990,12 +993,23 @@ fn call_tool(
                 sources: &[],
                 // SL-230 PHASE-05: `body` maps straight through, raw —
                 // `run_record` resolves it and lands it in the one
-                // transactional scaffold write. `body_mode` is deliberately
-                // NOT exposed on `record` (EX-1): a freshly-minted memory has
-                // no prose to append to or replace, and not offering the param
-                // is a stronger refusal than `run_record`'s worded one.
+                // transactional scaffold write.
+                //
+                // `body_mode` is NOT advertised in this tool's `input_schema`
+                // (EX-1: a freshly-minted memory has no prose to append to or
+                // replace) but IS accepted here and forwarded, so that
+                // `run_record`'s worded refusal fires on this surface too.
+                //
+                // RV-313 F-3: omitting the field is NOT the stronger refusal it
+                // reads as. `input_schema` is advisory — a JSON-RPC client may
+                // send any key, and serde drops unknown fields silently (no
+                // `deny_unknown_fields` anywhere in this module). So dropping it
+                // meant `record` SILENTLY ignored a mode the CLI refuses aloud,
+                // writing the body in `replace` while the caller asked for
+                // `append`. Forwarding is what makes the two surfaces agree:
+                // the refusal stays authored once, in `run_record`.
                 body: p.body.as_deref(),
-                body_mode: None,
+                body_mode: p.body_mode.as_deref(),
             };
             let mut buf = Vec::new();
             crate::memory::run_record(Some(root.to_path_buf()), &args, &mut buf)

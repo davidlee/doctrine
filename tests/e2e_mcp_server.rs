@@ -1213,6 +1213,48 @@ fn e2e_body_mode_without_body_is_rejected() {
     kill(child);
 }
 
+// RV-313 F-3: `body_mode` on `memory_record` must be REFUSED over the wire, not
+// silently ignored. It is absent from the tool's `input_schema` on purpose, but
+// `input_schema` is advisory — a client can send the key regardless, and serde
+// drops unknown fields silently. So the adapter accepts the field solely to
+// forward it into `run_record`, whose existing refusal is the single authored
+// copy of the rule (the D-P5-3 discipline the `edit` totality guard already
+// follows). The falsifier this pins is the pre-fix behaviour: a caller asking
+// for `append` at birth got a silent `replace`.
+#[test]
+fn e2e_body_mode_on_record_is_rejected() {
+    let dir = tmp();
+    let root = dir.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/memory/shipped")).unwrap();
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let params = tools_call_params(
+        "memory_record",
+        serde_json::json!({
+            "title": "Mode At Birth",
+            "memory_type": "fact",
+            "body": "initial prose\n",
+            "body_mode": "append"
+        }),
+    );
+    let resp = call(&mut stdin, &mut reader, "tools/call", Some(&params));
+    let err = resp.get("error").expect("body_mode on record must error");
+    assert_eq!(err["code"], -32602, "{resp:?}");
+    let detail = parse_error_detail(&resp);
+    assert!(
+        detail.contains("not valid on `record`"),
+        "the MCP refusal must carry `run_record`'s wording: {detail}"
+    );
+
+    kill(child);
+}
+
 #[test]
 fn e2e_onboard_returns_non_empty() {
     let dir = tmp();
