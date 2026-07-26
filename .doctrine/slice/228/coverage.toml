@@ -1,0 +1,79 @@
+[[entry]]
+slice = "SL-228"
+requirement = "REQ-384"
+contributing_change = "SL-228"
+mode = "VT"
+status = "verified"
+git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+
+[entry.check]
+command = ["cargo", "test", "--bin", "doctrine", "dispatch::tests::funnel_record"]
+
+[entry.check.matcher]
+source = "stdout"
+pattern = "[1-9][0-9]* passed; 0 failed"
+regex = true
+
+[[entry]]
+slice = "SL-228"
+requirement = "REQ-385"
+contributing_change = "SL-228"
+mode = "VT"
+status = "verified"
+git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+
+[entry.check]
+command = ["cargo", "test", "--bin", "doctrine", "funnel_machine::"]
+
+[entry.check.matcher]
+source = "stdout"
+pattern = "[1-9][0-9]* passed; 0 failed"
+regex = true
+
+[[entry]]
+slice = "SL-228"
+requirement = "REQ-386"
+contributing_change = "SL-228"
+mode = "VT"
+status = "verified"
+git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+
+[entry.check]
+command = ["cargo", "test", "--bin", "doctrine", "dispatch::tests::next_oracle"]
+
+[entry.check.matcher]
+source = "stdout"
+pattern = "[1-9][0-9]* passed; 0 failed"
+regex = true
+
+[[entry]]
+slice = "SL-228"
+requirement = "REQ-388"
+contributing_change = "SL-228"
+mode = "VT"
+status = "verified"
+git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+
+[entry.check]
+command = ["cargo", "test", "--bin", "doctrine", "git::tests"]
+
+[entry.check.matcher]
+source = "stdout"
+pattern = "[1-9][0-9]* passed; 0 failed"
+regex = true
+
+[[entry]]
+slice = "SL-228"
+requirement = "REQ-389"
+contributing_change = "SL-228"
+mode = "VT"
+status = "verified"
+git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+
+[entry.check]
+command = ["sh", "-lc", "cargo test --bin doctrine dispatch::tests::hook_check >/dev/null 2>&1 && cargo test --bin doctrine commands::guard::tests >/dev/null 2>&1 && echo REQ389-BOTH-GREEN"]
+
+[entry.check.matcher]
+source = "stdout"
+pattern = "REQ389-BOTH-GREEN"
+regex = false
