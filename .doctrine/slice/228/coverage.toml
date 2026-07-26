@@ -4,7 +4,7 @@ requirement = "REQ-384"
 contributing_change = "SL-228"
 mode = "VT"
 status = "verified"
-git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+git_anchor = "8eb2c38eb2ff2931158eb50e2ec783383ec681ac"
 
 [entry.check]
 command = ["cargo", "test", "--bin", "doctrine", "dispatch::tests::funnel_record"]
@@ -20,7 +20,7 @@ requirement = "REQ-385"
 contributing_change = "SL-228"
 mode = "VT"
 status = "verified"
-git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+git_anchor = "8eb2c38eb2ff2931158eb50e2ec783383ec681ac"
 
 [entry.check]
 command = ["cargo", "test", "--bin", "doctrine", "funnel_machine::"]
@@ -36,7 +36,7 @@ requirement = "REQ-386"
 contributing_change = "SL-228"
 mode = "VT"
 status = "verified"
-git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+git_anchor = "8eb2c38eb2ff2931158eb50e2ec783383ec681ac"
 
 [entry.check]
 command = ["cargo", "test", "--bin", "doctrine", "dispatch::tests::next_oracle"]
@@ -52,7 +52,7 @@ requirement = "REQ-388"
 contributing_change = "SL-228"
 mode = "VT"
 status = "verified"
-git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+git_anchor = "8eb2c38eb2ff2931158eb50e2ec783383ec681ac"
 
 [entry.check]
 command = ["cargo", "test", "--bin", "doctrine", "git::tests"]
@@ -68,7 +68,7 @@ requirement = "REQ-389"
 contributing_change = "SL-228"
 mode = "VT"
 status = "verified"
-git_anchor = "46c4eac83692217a1faadb67b0d44df7a3587672"
+git_anchor = "8eb2c38eb2ff2931158eb50e2ec783383ec681ac"
 
 [entry.check]
 command = ["sh", "-lc", "cargo test --bin doctrine dispatch::tests::hook_check >/dev/null 2>&1 && cargo test --bin doctrine commands::guard::tests >/dev/null 2>&1 && echo REQ389-BOTH-GREEN"]

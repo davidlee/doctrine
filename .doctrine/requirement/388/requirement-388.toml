@@ -4,7 +4,7 @@ version = 1
 id = 388
 slug = "every-funnel-git-read-is-a-first-class-read-verb-over-the-object-db-and-ref-primitives-no-funnel"
 title = "Every funnel git read is a first-class read verb over the object-db and ref primitives; no funnel read shells raw git. Existing seams are reused or relocated rather than reimplemented (e.g. is_linked_worktree for isolation detection); only genuinely absent reads are newly built."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — the requirement statement (structured, queryable; `show` renders

@@ -4,7 +4,7 @@ version = 1
 id = 386
 slug = "dispatch-next-emits-the-single-prescribed-next-action-for-the-per-phase-import-verify-conclude-reap"
 title = "dispatch next emits the single prescribed next action for the per-phase import-verify-conclude-reap sub-funnel from the current position; candidate/close/audit sourcing (REQ-317, OQ-4) is outside the oracle scope until a sibling revision settles it."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — the requirement statement (structured, queryable; `show` renders

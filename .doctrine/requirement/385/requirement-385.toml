@@ -4,7 +4,7 @@ version = 1
 id = 385
 slug = "every-funnel-verb-is-legality-gated-on-funnel-position-it-refuses-out-of-order-execution-and-names"
 title = "Every funnel verb is legality-gated on funnel position: it refuses out-of-order execution and names the expected next verb (report-and-halt); conclude refuses after skipped or failed verification."
-status = "pending"
+status = "active"
 kind = "functional"
 
 # description — the requirement statement (structured, queryable; `show` renders
