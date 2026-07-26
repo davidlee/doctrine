@@ -11,24 +11,9 @@ needs = ["QUE-174"]                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
-selector = "src/**"
-intent = "scope-relevant"
-note = "Collection model/store, CLI+MCP capture/read surfaces, verification, and RFC-011 dogfood activation; exact files settle in design."
-
-[[selector]]
-selector = "tests/**"
-intent = "scope-relevant"
-note = "Collection model/store, CLI+MCP capture/read surfaces, verification, and RFC-011 dogfood activation; exact files settle in design."
-
-[[selector]]
 selector = ".doctrine/governance.md"
 intent = "design-target"
 note = "Locked SL-231 design section 7 implementation touch-set."
-
-[[selector]]
-selector = ".doctrine/rfc/011/**"
-intent = "scope-relevant"
-note = "Collection model/store, CLI+MCP capture/read surfaces, verification, and RFC-011 dogfood activation; exact files settle in design."
 
 [[selector]]
 selector = "src/observation/**"

@@ -45,6 +45,11 @@ the shared parent-walk extraction to the existing entity rollback/materialise
 tests and an explicit macOS/Linux portability review; PHASE-05 binds governance
 activation to boot regeneration.
 
+The post-ready review removed brittle source-line anchors, narrowed the selector
+set to the locked design touch-set, made every design §1 exclusion explicit,
+and carries the pure wire/resolution/query import gate through store embedding
+and the final implementation state.
+
 Observations are authored and review-visible by default. Projects may ignore
 the authoritative record tree, or developers may exclude it locally, but the
 documentation must state that this trades away shared durability, correlation,
