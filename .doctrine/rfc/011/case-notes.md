@@ -2559,3 +2559,26 @@ changed), never the exit status of the control command.
   are `--slice N`. Two wasted round trips plus a `--help`. The inconsistency is
   between families (slice/* positional, dispatch/* flagged), which is not
   guessable from either half.
+
+[phase-plan; SL-230-P03-orch]
+- `slice research <id>` run from a **coordination worktree** mints a fresh empty
+  `baseline.toml` rather than reporting the drift advisory: `research/` is
+  gitignored, so the artefact is tree-local and simply absent from the coord tree.
+  The verb reads absence as "never researched" and mints. Cost: one bogus baseline
+  (removed), one re-run in the primary tree, ~3 tool calls to diagnose. This
+  contradicts the standing "run corpus-inspecting verbs from the coord build"
+  guidance — advisory verbs over gitignored per-slice state must be run where the
+  state lives. Either the verb should refuse to mint when it cannot see an
+  artefact it was asked to *advise on*, or `slice research` needs a read-only
+  advisory mode distinct from the minting path.
+- The handover packet's `src/memory.rs` line citations were **~60 lines stale**
+  (PHASE-02 added +199 to that file after the packet's anchors were taken).
+  Re-locating five symbols by grep cost ~4 extra calls. A packet that cites
+  line numbers into a file the drive itself is growing will always stale; grep
+  anchors (`fn run_edit`, `struct EditFields`) would have been free and durable.
+- The runtime phase sheet was **never expanded for PHASE-01 or PHASE-02** — both
+  are the bare scaffold. Under dispatch the sheet is orchestrator-only (the worker
+  gets a distilled prompt and never reads it), so two phases landed green without
+  it. Open question for RFC-011: in dispatch mode the *distilled worker prompt* is
+  the real pre-execution artefact, and `/phase-plan`'s sheet is a second place to
+  write much the same content. That is a duplication cost paid per phase.
