@@ -95,6 +95,36 @@ selector = ".doctrine/rfc/011/rfc-011.md"
 intent = "design-target"
 note = "Locked SL-231 design section 7 implementation touch-set."
 
+[[selector]]
+selector = "src/fsutil.rs"
+intent = "design-target"
+note = "Revised SL-231 design section 7 touch-set after RV-310."
+
+[[selector]]
+selector = "src/entity.rs"
+intent = "design-target"
+note = "Revised SL-231 design section 7 touch-set after RV-310."
+
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+note = "Revised SL-231 design section 7 touch-set after RV-310."
+
+[[selector]]
+selector = ".gitignore"
+intent = "design-target"
+note = "Revised SL-231 design section 7 touch-set after RV-310."
+
+[[selector]]
+selector = "install/manifest.toml"
+intent = "design-target"
+note = "Revised SL-231 design section 7 touch-set after RV-310."
+
+[[selector]]
+selector = "install/using-doctrine.md"
+intent = "design-target"
+note = "Revised SL-231 design section 7 touch-set after RV-310."
+
 [[relation]]
 label = "governed_by"
 target = "POL-002"

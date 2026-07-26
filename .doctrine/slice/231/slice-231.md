@@ -32,24 +32,28 @@ aggregation can then consume a proven wire model in a follow-up.
 - Carry optional canonical context references such as slice, phase, backlog
   item, or change identity without requiring those references at capture time.
 - Admit optional effort/usage counters only with explicit measurement source,
-  boundary, and completeness. Agent estimates must not masquerade as measured
-  token telemetry.
+  scope, units, and completeness through a registered machine-source adapter.
+  Agent estimates must not masquerade as measured token telemetry.
 - Treat every user- or agent-authored string as hostile input at parse, render,
-  and MCP boundaries.
+  agent-context, and MCP boundaries, with bounded record sizes and no silent
+  truncation.
 
 ### 2. Merge-safe authored store
 
 - Persist each capture independently under collision-free identity; no writer
   appends to a shared corpus file.
-- Store one self-contained TOML record per UUID under kind/year/month
-  partitions.
+- Store one self-contained TOML record at a path derived only from its UUID,
+  using a UUID-random-tail shard for bounded directory size.
 - Make retries idempotent where the caller supplies an occurrence identity, and
   refuse clobbering a different occurrence.
 - Keep raw occurrences authoritative and queried indexes derived. Corrections
-  use an explicit immutable mechanism such as supersession or tombstoning,
-  never an in-place rewrite that obscures provenance.
+  use per-control immutable supersession or retraction, never an in-place
+  rewrite or component-wide rollback that obscures provenance.
 - Reuse shared repository-root and safe-filesystem primitives while keeping the
   observation lifecycle separate from the numbered authored-entity engine.
+- Default authoritative records to committed authored collection data while
+  documenting repository-wide and local ignore choices and their durability
+  tradeoffs.
 
 ### 3. Capture and basic read interface
 
@@ -57,6 +61,9 @@ aggregation can then consume a proven wire model in a follow-up.
 - Provide a bounded MCP capture tool over the same engine functions for
   confined Claude workers. Trusted reads and correction remain CLI operations;
   subprocess-worker parity is a follow-up.
+- Keep public CLI/MCP capture friction-only. Define the measurement schema now,
+  but admit measurements only through registered trustworthy machine-source
+  adapters.
 - Auto-populate context that Doctrine can know reliably; accept explicit fields
   for context the caller alone knows. Render absent/unknown distinctly from an
   inferred value.
@@ -65,8 +72,9 @@ aggregation can then consume a proven wire model in a follow-up.
 
 ### 4. Dogfood activation
 
-- Replace RFC-011's shared-file append instruction with the new capture
-  interface once its behaviour is verified.
+- Replace RFC-011's shared-file append instruction with capability-aware
+  guidance once behaviour is verified: primary-tree CLI, confined-Claude MCP,
+  and orchestrator proxy capture where no worker broker exists.
 - Preserve the existing case-note file as historical evidence; do not silently
   parse or rewrite it.
 - Document the capture boundary: record an occurrence at friction time;
@@ -75,8 +83,8 @@ aggregation can then consume a proven wire model in a follow-up.
 
 ### Affected surface
 
-- New observation model/store and shared-engine integration under
-  `src/observation/**`.
+- New observation model/store under `src/observation/**` plus shared
+  complete-content atomic no-clobber filesystem publication.
 - CLI and MCP command adapters under their existing command/interface homes.
 - Focused unit, CLI, MCP, concurrency, and hostile-input tests under `src/**`
   and `tests/**`.
@@ -95,7 +103,7 @@ aggregation can then consume a proven wire model in a follow-up.
   `case-notes.md` corpus.
 - A UI or hosted telemetry service.
 - Destructive retention, compaction, or remote archival policy beyond the
-  partitioned local collection contract.
+  UUID-sharded local collection contract.
 
 ## Risks, assumptions, and open questions
 
@@ -105,11 +113,14 @@ aggregation can then consume a proven wire model in a follow-up.
 - **R2 — capture-friction risk.** A schema rich enough for later analysis can
   make recording too expensive. Required fields must stay minimal; reliably
   auto-populated and optional context must remain distinct.
+- **R3 — review-noise risk.** Authored observations may crowd pull-request
+  review. Projects may ignore them, but then own the resulting loss of shared
+  durability and analysis coverage.
 - **A1 — collection-first sequencing.** Basic show/filter/search is sufficient
   to validate useful capture before aggregate interpretation is built.
-- **OQ-1 — QUE-174.** After design completes and before planning, determine the
-  evergreen product and technical specification home; do not smuggle a new
-  platform primitive in under unrelated memory or comparison canon.
+- **D1 — evergreen home settled.** QUE-174 and DEC-043 place the capability in
+  PRD-018 and SPEC-028; memory, comparisons, and a generic ledger abstraction
+  remain intentionally separate.
 
 ## Summary
 
@@ -127,6 +138,8 @@ signal substrate only; leave interpretation to a follow-up.
 - Measure pre/post impact of fixes using normalized exposure denominators.
 - Integrate authoritative harness/API token usage if a complete measurement
   boundary becomes available.
+- Detect harness identity from individually named environment markers
+  (IDE-005).
 - Define compaction, retention, and external archival policy from observed
   corpus growth.
 - Broker observation capture for subprocess workers (IMP-319).
