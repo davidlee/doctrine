@@ -95,3 +95,24 @@ Not a complaint about the brief's substance — it was accurate and complete on
 every load-bearing point, and "do not re-derive" saved far more than these four
 cost. The pattern is that the expensive failures were all *stale or mis-aimed
 pointers*, never missing content.
+
+[audit; RV-313-SL230-audit]
+- **`| tail -N` on a backgrounded gate masked both the log and the exit code.**
+  Ran `doctrine check gate 2>&1 | tail -40` as a background task. The harness
+  reported "exit code 0", but a pipeline's status is the LAST command's — `tail`
+  always succeeds. The 40-line window also discarded ~4900 test results, so the
+  first summarisation counted "23 tests passed" from the tail fragment and read
+  as a near-empty suite. Cost: one full re-run (~4 min wall) to get real evidence.
+  Rule worth shipping: never pipe a gate/verifier through `tail` — redirect to a
+  file and echo `$?` on its own. Cheaper AND more truthful.
+- **Grepping `^warning|^error` over a gate log is a false-positive generator.**
+  18 hits were doctrine's own runtime warning STRINGS emitted by tests that
+  exercise warning paths, not clippy diagnostics. A naive "18 warnings, gate is
+  dirty" call would have been wrong. Verify the hits before reporting a verdict.
+- **`slice conformance` clean (0/0/6) collapsed a whole evidence branch cheaply** —
+  it is the highest signal-per-token verb at audit; run it before reading prose.
+- **`candidate status` printed the exact next command, flags and all.** Zero guessing,
+  zero `--help` round-trips for `create`. `admit`'s flags did NOT match the shape
+  suggested in the handover (`--id` vs `--candidate`, plus a required `--role`),
+  costing one refused invocation — the self-describing `status` output is the
+  pattern the other verbs should follow.

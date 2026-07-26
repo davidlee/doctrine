@@ -1,0 +1,57 @@
+id    = 313
+slug  = "sl-230-reconciliation-audit-memory-body-tier"
+title = "SL-230 reconciliation audit — memory body tier"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-230"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "minor"
+title = "PHASE-06 VA-1's absolute figure does not reproduce: criterion says ~11 of 30 anchored, shipped check reports 3 of 48"
+detail = "Design § 5.4 measured the memory.md pathspec at 11 of 30 anchored memories and VA-1 carries that figure. Audit re-measured on the primary tree (HEAD 46c4eac83): 3 of 48 reachable-anchored — 6.3%, not 37%. The gap is denominator drift, not a defect: the anchored corpus grew 30 -> 115 between the design measurement and execution, so the mix is not comparable, and the deviation is in the SAFE direction (fewer rows flagged). The property VA-1 was standing in for — that the check discriminates rather than saturating — is independently intact: audit reproduced the shipped memory.md form at 3 flagged vs the rejected item-directory form at 25, an 8.3x discrimination over the same 48-row denominator (slice reported 7.7x over 44). Falsifier decisively absent. But a criterion whose stated number no longer reproduces must be RE-STATED, not silently re-interpreted at read time. Note the surface: VT/VA criteria in plan.toml are immutable-append, so this is not a plan edit — the stale figure to correct is the design § 5.4 prose that VA-1 derives from."
+disposition = "verified"
+response = "Observation confirmed and independently reproduced by audit (3 of 48 vs the criterion's ~11 of 30; 8.3x discrimination vs the rejected form). Remediation is delegated to /reconcile and is recorded in the Reconciliation Brief as a Per-slice (direct edit) item against design.md § 5.4 — restate the measurement with its denominator and date, and record that the discrimination RATIO, not the absolute count, is the property VA-1 stands for. Explicitly NOT a plan.toml edit: VT/VA criteria are immutable-append (boot rule), so the brief names the design prose VA-1 derives from, never the criterion id."
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "major"
+title = "Both staleness checks silently render 'cannot determine' as 'no drift': 67 of 115 anchored memories are exempt, capping corpus reach at ~42%"
+detail = "git::commits_touching (src/git.rs:2493) guards with 'merge-base --is-ancestor since target' and returns None when the stamp is NOT an ancestor of HEAD — deliberate (comment F2: a non-ancestor 'since' would over-count a set difference, 'no over-trust'). The guard is correct. The DEFECT is at the two call sites: Check 2 (:3521) and Check 4 (:3568) both bind with 'let Some(commits_behind) = ...' followed by '&& commits_behind > 0', so None falls out of the if-chain and emits NO finding. An UNKNOWN is thus indistinguishable from a verified-clean row. Audit measured on the primary tree independently: 115 anchored, 48 reachable, 67 NON-ancestor — exactly the 67 the slice disclosed. So ~58% of the anchored corpus is silently exempt from BOTH staleness checks, capping reach at 41.7%. This is a PRE-EXISTING property of the incumbent seam (Check 2 has always had it), NOT a PHASE-06 regression — Check 4 inherits it. It is raised because no criterion in this slice states the reach limit, while § 1's closure promise reads corpus-wide. The honest fix is a tri-state at the call sites (drift / no-drift / undeterminable) rather than removing the ancestry guard, which exists for a good reason."
+
+[[finding]]
+id = "F-3"
+status = "open"
+severity = "minor"
+title = "MCP record silently accepts-and-ignores body_mode where the CLI refuses it with a worded error, inverting the flag's stated reason for existing"
+detail = "src/memory.rs:193-197 declares --body-mode on 'record' with the comment: 'Not valid on record ... Present (not omitted) so the refusal is explicit, worded, and clap-visible', and run_record:1769 bails with a worded message whose comment reads 'refuse explicitly rather than silently ignore it'. The MCP arm does exactly what that comment forbids: RecordParams (src/mcp_server/tools.rs:941-957) has no body_mode field, and serde ignores unknown fields by default — 'deny_unknown_fields' appears 0 times in the whole file — so a client sending body_mode:'append' to memory_record gets a silent no-op and a memory whose body was written in replace mode. The asymmetry is internal, not merely CLI-vs-MCP: EditParams (:1029-1030) DOES carry body_mode, and reject_stdin_sentinel guards BOTH verbs (:960, :1034), so record is the single odd surface. Within PHASE-05 EX-1's letter, which is explicit that record gains 'body' only — so this is a parity gap, not a missed criterion. Cheap and fully specified: add body_mode to RecordParams WITHOUT adding it to input_schema, map it to RecordArgs.body_mode, and run_record's existing bail fires unchanged. Note the root cause is adapter-wide (no MCP tool rejects unknown fields), so a point-fix here does not close the class."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "clear_verification is infallible and tolerant where stamp_verification refuses: a hand-broken [review]/[git] table silently retains a stale attestation"
+detail = "clear_verification (src/memory.rs:4025-4036) navigates with 'if let Some(table) = doc.get_mut(..).and_then(as_table_mut)' per table and returns (). A memory.toml whose [review] or [git] table is missing or is not a table is therefore SKIPPED silently: the edit succeeds, the body is written, and the stale verification_state/verified_sha survive a genuine claim change — precisely the false-stamp path § 1 promises to close. Its sibling stamp_verification refuses the same malformed file with the worded 'malformed memory at {}: missing [git].verified_sha' (:3445). The divergence is FORCED, not an oversight: run_edit step 4 sits AFTER write_body's disk write (:4288), so making the clear fallible would reintroduce exactly the mutation-on-failure that I10 forbids and that T40 pins — audit mutation-checked T40 by hoisting the body write ahead of apply_edit and confirmed it goes red ('clobbered' lands on disk). So the tolerance buys I10. Consequence worth stating rather than burying: the guarantee 'the attestation dies iff a claim field changed' holds only for well-formed TOML, and the code carries no comment saying so at the clear site. The principled fix is to validate both tables' shape BEFORE the body write (a fallible pre-flight, keeping the clear itself infallible), which preserves I10."
+disposition = "tolerated"
+response = "Accepted drift, with a real and forced rationale rather than a normalised one. run_edit step 4 executes AFTER write_body's disk write, so a fallible clear_verification would reintroduce mutation-on-failure — the exact defect I10 forbids and T40 pins. Audit mutation-verified T40 (hoisting the body write ahead of apply_edit turns it red with 'clobbered' on disk), so the tolerance demonstrably buys the stronger invariant. The residual is narrow: it requires a hand-corrupted [review]/[git] table, which is already outside the sanctioned path and which stamp_verification refuses on the next verify. Carried as a documented limit, not a silent one — the brief adds the missing comment at the clear site so the next reader does not re-derive the tradeoff. The principled fix (validate both tables' shape BEFORE the body write, keeping the clear infallible) is recorded for whoever revisits the write ordering."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "nit"
+title = "D-P5-1's rejected alternative (pre-resolved body plumbed through RecordArgs/EditFields) is the principled shape and remains available"
+detail = "PHASE-05 recorded and rejected plumbing an already-resolved body through RecordArgs/EditFields so the core never touches stdin, on the grounds that it is a core-signature change made inside an adapter phase. Audit weighed it rather than inheriting it. The rejection holds for this slice: R3 requires apply_edit's existing suite stay green unchanged, and the chosen shape (a transport-level reject_stdin_sentinel at both MCP entry points, :960/:1034) keeps stdin semantics in exactly one place with no core churn. Recorded so the alternative is not re-litigated from scratch nor silently lost: the current design leaves the '-' sentinel a CLI-transport concept that the MCP arm must remember to reject at every new body-bearing verb, which is a standing (small) parity tax — the same tax F-3 just came due on. If a third body-bearing surface appears, prefer the pre-resolved-body shape over a third sentinel guard."
+disposition = "aligned"
+response = "Alternative weighed on its merits and the original rejection upheld. R3 forbids widening apply_edit's signature (its existing suite must stay green unchanged), and the shipped shape confines stdin semantics to one transport-level guard applied uniformly at both MCP entry points. No change needed in this slice. Recorded so the option is neither re-litigated nor lost; the standing parity tax it predicted is precisely what F-3 came due on, which is the trigger to prefer it if a third body-bearing surface appears."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
