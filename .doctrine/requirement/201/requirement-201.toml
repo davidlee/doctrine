@@ -3,7 +3,7 @@ version = 1
 
 id = 201
 slug = "fix-the-canonical-id-form-as-prefix-zero-padded-three-digit-number-the-single-id-form-authority-for-prefixed-kinds-with-memory-conformant-by-exception"
-title = "Fix the canonical id form as prefix + zero-padded-three-digit number, the single id-form authority for prefixed kinds, with memory conformant-by-exception."
+title = "Fix prefix plus zero-padded-three-digit number as the canonical identity for numbered prefixed kinds, with memory conformant-by-exception and SPEC-028 observations governed by bare UUID."
 status = "active"
 kind = "functional"
 

@@ -38,6 +38,12 @@ correlation, and usage—carry their own schema version and field-level origin.
 Unknown facts are omitted. There is no generic metadata bag and no Markdown
 companion.
 
+The execution facet names `interface`, `product_surface`, `command`,
+`repository_context` (`primary` or `worker`), harness, model, role, execution
+mode or arm, lifecycle stage, and skill. The correlation facet names
+`agent_id`, session, run, request, parent-observation, and related-observation
+identifiers.
+
 Primary V1 kinds are `friction` and `measurement`; **primary observation**
 means either non-control kind. Friction requires only a non-empty summary and
 may carry detail. Measurement carries trustworthy machine-reported values with
@@ -68,9 +74,10 @@ the corpus or consult a mutable identity index.
 Creation uses a shared complete-content atomic no-clobber primitive: validate or
 create parent components without following squatters, write and close a reserved
 sibling temporary file, publish the complete inode through a hard link to the
-create-only destination, then remove the temporary name. A caller-stable UUID
-replays successfully only when kind, typed payload, and explicit facets express
-the same caller intent; first-write time and automatic enrichment remain frozen.
+create-only destination, then remove the temporary name after publication or
+collision. A caller-stable UUID replays successfully only when kind, typed
+payload, and explicit facets express the same caller intent; first-write time
+and automatic enrichment remain frozen.
 Different intent at the same UUID is an identity collision. Different UUIDs are
 never content-deduplicated. Reserved temporary names are ignored by loading and
 may be cleaned after interruption.
@@ -79,8 +86,9 @@ The create operation returns a receipt and performs no stage, commit, push, inde
 triage, or promotion action. Authoritative records are authored collection data
 by default. A project may ignore them to reduce review noise, but then accepts
 local-only durability and loss of shared correlation unless another transport
-exists. Optional `by-month/<year>/<month>/<uuid>.toml` relative symlinks are a
-gitignored, disposable navigation view that capture and query never trust.
+exists. A possible `by-month/<year>/<month>/<uuid>.toml` relative-symlink view
+is reserved follow-up direction: V1 creates and installs no such view or ignore
+pattern, and capture and query never trust it.
 
 ### Resolution and query
 
@@ -107,6 +115,13 @@ or string facet values. Matching is Boolean and unranked. Results order by
 Head inserts do not duplicate or shift traversed rows; no frozen corpus snapshot
 is promised.
 
+Resolved exact lookup follows effective supersession edges transitively to the
+first record without an effective successor. A retracted terminus remains the
+resolved terminus and is rendered as retracted with its correction chain.
+Corrections are intentionally irreversible through the V1 product surface:
+history and exact lookup remain complete, while active-view recovery from a
+mistaken control requires exceptional manual removal outside the capability.
+
 Observations use bare UUID as their canonical identity and are not entity kinds.
 Their CLI follows the shared `<kind> <verb>` and table/JSON conventions but does
 not flatten SPEC-013's entity `CommonListArgs` or join its entity
@@ -126,23 +141,30 @@ measurement and correction controls. It is a bounded broker, not a general
 filesystem capability.
 
 Measurement creation is a closed service operation available only to a
-registered machine-source adapter that supplies source, scope, units,
-completeness, and supported counters. With an empty production registry, no
+registered machine source that supplies source, scope, units, completeness,
+and supported counters. The V1 registry is only the trusted-source admission
+boundary, not a harness extraction API. With an empty production registry, no
 measurement can be created. Agent or operator assertion of source metadata does
-not constitute registration.
+not constitute registration. QUE-176 and the first instrumentation slice own
+the concrete harness adapter interface.
 
 Automatic enrichment considers only named adapter-known sources: CLI/MCP
-interface, product surface, and command constants; established primary-versus-
-worker context; and an opaque agent identifier already supplied through capture
-context. Explicit values replace automatic values field by field. Missing or
-failed automatic enrichment warns and proceeds; invalid explicit data fails
-before creation. Harness, model, role, arm, stage, skill, and run correlation
-are absent unless explicitly supplied or known by a trusted adapter. General
-environment inspection is excluded.
+`interface`, `product_surface`, and `command` constants map to those execution
+fields; established primary-versus-worker context maps to
+`execution.repository_context`; and an opaque agent identifier already supplied
+through capture context maps to `correlation.agent_id`. Explicit values replace
+automatic values field by field. Missing or failed automatic enrichment warns
+and proceeds; invalid explicit data fails before creation. Harness, model, role,
+arm, stage, skill, and run correlation are absent unless explicitly supplied or
+known by a trusted adapter. General environment inspection is excluded.
 
 Dogfood guidance is capability-aware: primary-tree agents use CLI, confined
 Claude workers use MCP, and workers without a broker do not write
 `.doctrine/**` in their fork; an orchestrator may proxy their reported friction.
+The existing worker-mode guard classifies record, supersede, and retract as
+Write, and show, list, and search as Read. A solo agent in a marked worktree
+defers the signal through its runtime phase sheet or handoff and records it
+after returning to the coordination tree.
 
 ## Concerns
 
@@ -190,10 +212,17 @@ Claude workers use MCP, and workers without a broker do not write
   valid controls.
 - **D6 — one service, capability-narrow adapters.** CLI and MCP cannot diverge on
   friction creation semantics, while measurement creation requires a registered
-  machine-source adapter and MCP exposes less authority.
+  machine source and MCP exposes less authority.
 - **D7 — pure core, one disk seam.** Wire validation, resolution, and query take
   injected facts; store is the only observation filesystem seam.
 - **D8 — identity routes storage.** The authoritative path derives only from UUID;
   time and kind never require an index or scan to enforce global identity.
 - **D9 — observation is an ADR-001 leaf.** The umbrella imports only leaves;
   command and MCP adapters remain in the command tier.
+- **D10 — corrections are irreversible in V1.** Controls cannot target controls;
+  exact/history views preserve mistakes, and active-view repair is an exceptional
+  manual operation rather than another ledger control.
+- **D11 — source admission precedes harness adapters.** The versioned
+  measurement wire and closed registered-source check prevent generic writers
+  from becoming a trust API; QUE-176 and the first instrumentation slice own
+  the concrete harness adapter interface.

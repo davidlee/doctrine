@@ -14,7 +14,7 @@ description = "The query engine supports exact UUID lookup and stable filtering,
 #   description = "…"
 tags = ["observation", "query", "search", "pagination"]
 acceptance_criteria = [
-  "Bare UUID is the canonical observation identity, and exact lookup returns raw identity or explicitly resolved state regardless of kind, time, or current-view state.",
+  "Bare UUID is the canonical observation identity; exact lookup returns raw identity or follows effective supersession transitively to its terminus, rendering a retracted terminus as retracted with its chain.",
   "Filters cover kind, time, and registered facet fields; lexical search reuses the shared tokenizer and requires every query token across summary, detail, and string facet values.",
   "Results order by recorded time descending and UUID with opaque keyset pagination that does not duplicate traversed rows after head insertion, without aggregation, relevance ranking, or a frozen-snapshot claim.",
 ]

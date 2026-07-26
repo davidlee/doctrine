@@ -16,5 +16,5 @@ tags = ["observation", "store", "atomic", "idempotency"]
 acceptance_criteria = [
   "One self-contained TOML file is published at a UUID-only random-tail-sharded path through complete-content atomic no-clobber semantics, enforcing global UUID uniqueness without a scan or mutable index.",
   "The same UUID plus the same kind, typed payload, and explicit facets returns a replay receipt and retains the first write's time and enrichment.",
-  "Different intent at the same UUID, UUID/path disagreement, symlink or non-directory parent squatting, containment escape, or interrupted publication cannot overwrite or expose a partial authoritative record; reserved temporary names are non-authoritative and safely removable.",
+  "Different intent at the same UUID, UUID/path disagreement, symlink or non-directory parent squatting, containment escape, or interrupted publication cannot overwrite or expose a partial authoritative record; publication links only a closed complete temporary file, never opens the destination for write, and removes the non-authoritative temporary name after publication or collision.",
 ]

@@ -1,0 +1,97 @@
+id    = 311
+slug  = "sl-231-adversarial-design-re-review"
+title = "SL-231 adversarial design re-review"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "opus"
+responder = "orchestrator"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-231"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "major"
+title = "Worker-mode enforcement seam is undecided"
+detail = "Design section 3.4 prohibits fork-local capture but does not classify observation verbs in commands::guard::write_class, name the refusal behaviour for solo and dispatched forks, or include src/commands/guard.rs in the touch-set."
+disposition = "fixed"
+response = "Integrated. Observation record, supersede, and retract are Write-classed; show, list, and search are Read-classed. The existing worker guard enforces refusal, solo marked forks defer the signal to phase handoff for coordination-tree capture, and src/commands/guard.rs is now a design target."
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Enrichment outputs lack declared facet fields"
+detail = "The v1 allowlist emits interface, primary-versus-worker context, and opaque agent identity, but the strict execution/correlation facet schemas do not name fields that receive those values."
+disposition = "fixed"
+response = "Integrated. Execution now names interface, product_surface, command, and repository_context; correlation names agent_id. The allowlist maps each source explicitly to those fields."
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "minor"
+title = "Resolved show semantics are incomplete"
+detail = "show --resolved does not define whether supersession chains resolve transitively or how a retracted terminal record is rendered."
+disposition = "fixed"
+response = "Integrated. Resolved show follows effective supersession transitively and renders a retracted terminus as retracted with its correction chain."
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Correction irreversibility is unstated"
+detail = "Controls cannot target controls and records cannot be edited or deleted, making mistaken correction effects irreversible through the product surface without an explicit decision."
+disposition = "fixed"
+response = "Integrated as an explicit V1 tradeoff. Corrections are irreversible through the product surface; exact/history remain complete and exceptional manual removal is the only active-view recovery."
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Measurement registry precedes a real adapter"
+detail = "The production registry and measurement payload contract are defined while QUE-176 remains open and the only exerciser is a fake; consider deferring the seam or state why it must precede its first user."
+disposition = "clarified"
+response = "The deferral recommendation is not adopted because it reopens accepted DEC-048. The design now states why admission precedes a producer: the versioned wire and closed source-admission check prevent generic callers becoming the trust API. The registry is not a harness extraction API; QUE-176 and the first instrumentation slice own that concrete adapter interface."
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "minor"
+title = "SPEC-013 lacks the observation carve-out"
+detail = "SPEC-028 excludes observations from CommonListArgs and the entity conformance matrix, but SPEC-013 still claims every kind and records only the memory exception."
+disposition = "fixed"
+response = "Integrated through REV-037. SPEC-013 now records SPEC-028 observations as a UUID-native non-entity exception to its numbered-entity CommonListArgs and canonical-id authority."
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "minor"
+title = "Atomic publication VT reaches for kill-point infrastructure"
+detail = "The partial-record property is constructional; verify that publication links only a closed complete temporary file and never opens the destination for write, rather than requiring process kill-point infrastructure."
+disposition = "fixed"
+response = "Integrated. Verification now pins the constructional seam: only a closed complete temp is linked, destination is never opened for write, and interruption before publication leaves only an ignored temp."
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "nit"
+title = "Temporary cleanup omits collision"
+detail = "The publication sequence removes the sibling temporary name only after success, while the normal already-exists replay/collision path must remove it too."
+disposition = "fixed"
+response = "Integrated. Temporary cleanup is required after publication or already-exists collision, including replay and identity-collision outcomes."
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "nit"
+title = "Derived-view ignore targets precede shipped behaviour"
+detail = "by-month is explicitly deferred and has no creator or VT, yet .gitignore and install/manifest.toml are implementation targets for its patterns."
+disposition = "fixed"
+response = "Integrated. by-month remains reserved follow-up direction with no V1 creator or ignore pattern. Gitignore and install targets now cover reserved publication temporaries only."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

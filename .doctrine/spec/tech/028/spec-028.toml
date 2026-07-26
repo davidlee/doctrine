@@ -14,10 +14,10 @@ tags = ["observation", "ledger", "uuid", "facets", "supersession", "search", "mc
 responsibilities = [
   "Own the versioned observation wire model: a minimal UUID-addressed envelope, typed kind payloads, independently versioned facets with field origins, and typed correction controls.",
   "Persist every observation as one immutable TOML file at a UUID-only random-tail-sharded path, with complete-content atomic no-clobber publication, caller-intent replay, global collision refusal, authored-by-default disposition, and no Git side effects.",
-  "Load the corpus tolerantly and derive deterministic active and historical projections through append-only per-control supersession and retraction resolution, leaving each invalid or losing control diagnostic and inert without cancelling valid controls.",
-  "Provide exact UUID lookup, structured filtering, shared-tokenizer lexical search, stable ordering, and keyset pagination without embedding aggregation or reporting policy.",
-  "Expose one shared observation service through friction-only public CLI/MCP capture, trusted CLI reads and correction, and a closed registered machine-source seam for measurements.",
-  "Apply a named adapter-known enrichment allowlist with field-level explicit-over-automatic precedence, omission for unknown values, and strict refusal of invalid explicit data.",
+  "Load the corpus tolerantly and derive deterministic active and historical projections through append-only per-control supersession and retraction resolution, leaving each invalid or losing control diagnostic and inert without cancelling valid controls; V1 corrections are product-surface irreversible.",
+  "Provide exact UUID lookup with transitive resolved-chain and retracted-terminus semantics, structured filtering, shared-tokenizer lexical search, stable ordering, and keyset pagination without embedding aggregation or reporting policy.",
+  "Expose one shared observation service through friction-only public CLI/MCP capture, trusted CLI reads and correction, a worker-mode Read/Write classification, and a closed registered-source seam for measurements whose concrete harness adapter interface waits for QUE-176.",
+  "Apply a named source-to-field enrichment allowlist covering execution interface/product/command/repository context and correlation agent identity, with field-level explicit-over-automatic precedence, omission for unknown values, and strict refusal of invalid explicit data.",
   "Keep wire validation, resolution, and querying pure; classify the observation umbrella as ADR-001 leaf tier; and confine disk, clock, UUID generation, environment discovery, terminal rendering, and MCP translation to explicit imperative seams.",
 ]
 

@@ -16,8 +16,8 @@ result into one of those authored homes.
 
 The slice provides collection and inspection only:
 
-- public capture of friction plus a typed schema and registered-adapter seam
-  for trustworthy machine measurements;
+- public capture of friction plus a typed schema and closed registered-source
+  admission seam for trustworthy machine measurements;
 - one-file-per-observation storage;
 - resolved and historical reads;
 - lexical search and structured filtering;
@@ -81,9 +81,11 @@ An optional chronological view may later be derived as relative symlinks:
   -> ../../../records/<tail-2>/<uuid>.toml
 ```
 
-`by-month/**` is gitignored, disposable navigation only. Capture and queries do
-not create, enumerate, or trust it. Reserved publication temporary names are
-also gitignored and ignored by corpus loading.
+The chronological view is reserved follow-up direction, not an SL-231 output:
+this slice installs no `by-month/**` ignore pattern or deriving verb. If it is
+later introduced, it is disposable navigation only and capture and queries
+must not enumerate or trust it. Reserved publication temporary names are
+gitignored and ignored by corpus loading.
 
 ### 2.2 Primary kinds
 
@@ -94,10 +96,11 @@ requires classification before writing.
 `measurement` carries a machine-produced measurement that can be correlated
 with another observation or run. It is not a human or agent estimate. V1
 defines and validates the measurement wire schema, but neither the public CLI
-nor MCP capture tool can write it. A measurement is admitted only through a
-registered machine-source adapter whose source contract has been settled under
-QUE-176. The production registry is empty until such an adapter exists; tests
-use an injected fake registry entry. EVD-002 makes `claude -p` the leading
+nor MCP capture tool can write it. A measurement is admitted only for a
+registered machine source whose source contract has been settled under
+QUE-176. The production source registry is empty until such a source exists;
+tests use an injected fake source registration. The registry is an admission
+check, not a harness extraction API. EVD-002 makes `claude -p` the leading
 first adapter candidate, subject to verification of its exact metrics and
 completeness.
 
@@ -112,12 +115,13 @@ V1 defines five optional typed facets:
 
 - `provenance`: exceptional attribution such as a human author, witness, or
   ratifier; ordinary capture may simply omit it;
-- `execution`: harness, model, role, execution mode or arm, lifecycle stage,
-  skill, command, and product surface where known;
+- `execution`: `interface`, `product_surface`, `command`,
+  `repository_context` (`primary` or `worker`), harness, model, role,
+  execution mode or arm, lifecycle stage, and skill where known;
 - `work_context`: canonical slice, phase, backlog, change, or other work
   references;
-- `correlation`: session, run, request, parent-observation, or related
-  observation identifiers; and
+- `correlation`: `agent_id`, session, run, request, parent-observation, or
+  related observation identifiers; and
 - `usage`: trustworthy machine-measured usage with its source, scope, units,
   completeness, and supported counters.
 
@@ -171,8 +175,8 @@ The record command also accepts:
 - an option to disable automatic enrichment.
 
 The public record verb accepts `friction` only. Measurement creation is an
-internal service operation gated by the registered machine-source adapter
-registry; caller-asserted source metadata cannot open that gate.
+internal service operation gated by the registered machine-source admission
+set; caller-asserted source metadata cannot open that gate.
 
 The shell resolves the repository root, current time, and default UUID, gathers
 only allowlisted context, invokes the shared observation service, and prints a
@@ -182,13 +186,14 @@ relative path, and whether the operation created or replayed the record.
 Automatic enrichment is best-effort and safe by construction:
 
 - the CLI adapter supplies the constants `interface=cli`, its Doctrine CLI
-  product surface, and `command=observation record`;
+  product surface, and `command=observation record` to the corresponding
+  `execution` fields;
 - the MCP adapter supplies `interface=mcp`, its Doctrine MCP product surface,
-  and `command=observation_record`;
+  and `command=observation_record` to the corresponding `execution` fields;
 - the established worker marker or server destination-resolution seam may
-  supply primary-tree versus worker context;
-- an opaque agent identifier is used only when already supplied through the
-  capture context;
+  supply `execution.repository_context=primary|worker`;
+- an opaque agent identifier is written to `correlation.agent_id` only when
+  already supplied through the capture context;
 - explicit caller values win;
 - unavailable or failed automatic enrichment warns and capture proceeds;
 - invalid explicit data fails; and
@@ -227,7 +232,8 @@ SL-231 adds a shared `fsutil` atomic no-clobber publication primitive:
    name;
 3. call `std::fs::hard_link(temp, destination)` to publish the complete inode
    or receive an already-exists collision; and
-4. remove the temporary name after successful publication.
+4. remove the temporary name after publication or an already-exists
+   collision, including replay and identity-collision outcomes.
 
 A crash before the link may leave only an ignored temporary file. A crash
 after the link may leave the complete inode under both names. Loading ignores
@@ -273,8 +279,15 @@ instruction:
 
 - trusted agents in the primary tree use the CLI;
 - confined Claude workers use `observation_record`;
-- workers without a brokered primary-tree capture path must not run the CLI in
-  their fork, because `.doctrine/**` in the worker delta is forbidden;
+- `observation record`, `supersede`, and `retract` are Write-classed by the
+  existing worker-mode guard, while `show`, `list`, and `search` are
+  Read-classed;
+- the guard refuses those write verbs in any marked worker fork, with a
+  diagnostic directing a confined worker to `observation_record` and other
+  workers to report the signal for primary-tree capture;
+- a solo agent in a marked worktree likewise does not write an observation
+  there: it carries the signal in its runtime phase sheet or handoff and
+  records it after returning to the coordination tree; and
 - until IMP-319 lands, their orchestrator may capture friction they report.
 
 The historical case-note file remains untouched. This activation preserves the
@@ -294,7 +307,11 @@ doctrine observation retract <uuid> [reason]
 ```
 
 `show` addresses an exact UUID and can render either the raw record or its
-resolved state. `list` and `search` default to the resolved active projection;
+resolved state. Resolved lookup follows effective supersession edges
+transitively to the first record without an effective successor. If that
+terminus is retracted, it remains the resolved terminus and is rendered with
+its retracted state and correction chain; lookup never substitutes an earlier
+active record. `list` and `search` default to the resolved active projection;
 an explicit history mode includes inactive records and controls. Filters cover
 kind, time range, and typed facet fields.
 
@@ -332,9 +349,13 @@ Resolution validates and applies each control independently in canonical
 - a cycle-introducing edge is inert without cancelling earlier valid edges.
 
 Appending invalid material therefore cannot resurrect an observation or cancel
-a valid correction. History always exposes controls and diagnostics. Hard
-redaction, if ever required, is a manual operational exercise outside this
-slice.
+a valid correction. History always exposes controls and diagnostics.
+Corrections are intentionally irreversible through the V1 product surface:
+exact lookup and history remain complete, but a mistaken correction cannot be
+cancelled by another control. Manual removal of the mistaken control is the
+only active-view recovery and is an exceptional operational repair outside
+this slice. Hard redaction, if ever required, is likewise a manual operational
+exercise.
 
 Processing state—analysed, triaged, aggregated, or consumed—does not live on an
 observation. Each future consumer owns its own cursor or materialized state so
@@ -364,7 +385,7 @@ flowchart LR
 | `observation::resolve` | leaf | Pure active/history projection and deterministic per-control diagnostics |
 | `observation::query` | leaf | Pure filtering, shared lexical matching, total ordering, and keyset cursors |
 | `observation::store` | leaf | Imperative filesystem seam: UUID-shard loading, atomic no-clobber publication, replay and collision checks |
-| `observation` façade | leaf | Shared service over injected root, identity, time, enrichment, and measurement-source registry inputs |
+| `observation` façade | leaf | Shared service over injected root, identity, time, enrichment, and registered measurement-source admission inputs |
 | `commands::observation` | command | CLI argument adaptation and rendering |
 | MCP tool adapter | command | Structured request adaptation, capability narrowing, and receipt rendering |
 
@@ -405,9 +426,11 @@ refuse any new upward edge or tangle growth.
 - Different caller intent at the same UUID fails without overwrite.
 - UUID/shard/path disagreement fails validation.
 - Symlink and non-directory parent squatters are refused.
-- Kill-point tests around temporary write and hard-link publication cannot
-  expose a partial authoritative record; stale reserved temporary names are
-  ignored and safely removable.
+- Pin the publication seam: it accepts only a closed complete sibling
+  temporary file, creates the destination only through a no-clobber hard link,
+  never opens the destination for write, removes the temporary name after
+  publication or collision, and leaves only an ignored temporary name if
+  interrupted before publication.
 
 ### Resolution and query
 
@@ -421,6 +444,10 @@ refuse any new upward edge or tangle growth.
 - Repeated retraction and same-replacement supersession are idempotent.
 - Retraction dominates supersession; distinct successors and cycle edges obey
   canonical control ordering without component-wide rollback.
+- Resolved lookup follows supersession chains transitively and reports a
+  retracted terminus as retracted.
+- Corrections cannot be cancelled through the product surface; exact and
+  history views retain the complete correction chain.
 - Exact UUID lookup works regardless of active state.
 - Default queries use the resolved projection; history mode exposes controls
   and inactive records.
@@ -443,6 +470,9 @@ refuse any new upward edge or tangle growth.
   workers without admitting unrelated MCP tools.
 - Dogfood guidance routes primary-tree agents to CLI, confined Claude workers
   to MCP, and workers without a broker away from fork-local CLI capture.
+- Worker-mode guard tests classify observation writes as Write and observation
+  reads as Read, and pin the refusal diagnostic for dispatched and solo marked
+  forks.
 
 ### Regression gates
 
@@ -462,6 +492,7 @@ refuse any new upward edge or tangle growth.
 | `src/entity.rs` | Replace the private parent-walk implementation with the shared `fsutil` primitive without changing entity behaviour |
 | `src/commands/observation.rs` | CLI adapter and rendering |
 | `src/commands/cli.rs` | Register the `observation` command family |
+| `src/commands/guard.rs` | Classify observation capture and corrections as worker-refused writes and observation reads as reads |
 | `src/commands/mod.rs` | Export the command adapter |
 | `src/main.rs` | Register the observation engine and CLI parsing coverage |
 | `src/mcp_server/tools.rs` | Register and dispatch `observation_record` through the shared service |
@@ -472,8 +503,8 @@ refuse any new upward edge or tangle growth.
 | `tests/e2e_mcp_server.rs` | MCP parity, root confinement, and control refusal |
 | `tests/architecture_layering.rs` | Gate the new leaf classification and dependency direction |
 | `.doctrine/adr/001/layering.toml` | Classify the `observation` umbrella as `leaf` |
-| `.gitignore` | Ignore derived month links and reserved publication temporary names in this repository |
-| `install/manifest.toml` | Install the same derived/transient observation ignore patterns into client repositories |
+| `.gitignore` | Ignore reserved publication temporary names in this repository |
+| `install/manifest.toml` | Install the reserved-temporary observation ignore pattern into client repositories |
 | `install/using-doctrine.md` | Document authored-by-default observations, PR-review noise, and repository/local ignore tradeoffs |
 | `.doctrine/governance.md` | Replace the live shared-file append instruction after verification |
 | `.doctrine/rfc/011/rfc-011.md` | Point live instrumentation at the observation interface while retaining the historical corpus |
@@ -491,6 +522,15 @@ ledger abstraction. DEC-044 through DEC-052 record the external-review design
 corrections: UUID-only paths, per-control resolution, capability-aware dogfood,
 shared atomic publication, closed measurement writers, named enrichment,
 content bounds, UUID-native reads, and authored-storage disposition.
+
+DEC-048 deliberately establishes the measurement wire and closed admission
+boundary before the first producer. That keeps measurement unavailable to
+generic callers and lets stored measurements round-trip without freezing a
+harness-specific adapter API. QUE-176 and the first instrumentation slice own
+the concrete adapter interface and may revise the versioned measurement
+payload if real source evidence requires it; SL-231 adds no general adapter
+registry abstraction beyond the closed source-registration check at the
+service boundary.
 
 POL-002 requires Doctrine to own the contract rather than relying on harness
 conventions; STD-001 requires paths, shard rules, source vocabularies, limits,

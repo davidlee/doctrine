@@ -113,17 +113,22 @@ note = "Revised SL-231 design section 7 touch-set after RV-310."
 [[selector]]
 selector = ".gitignore"
 intent = "design-target"
-note = "Revised SL-231 design section 7 touch-set after RV-310."
+note = "RV-311: ignore reserved observation publication temporaries only; by-month remains out of scope."
 
 [[selector]]
 selector = "install/manifest.toml"
 intent = "design-target"
-note = "Revised SL-231 design section 7 touch-set after RV-310."
+note = "RV-311: install the reserved observation temporary ignore pattern only; by-month remains out of scope."
 
 [[selector]]
 selector = "install/using-doctrine.md"
 intent = "design-target"
 note = "Revised SL-231 design section 7 touch-set after RV-310."
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "RV-311: enforce observation worker-mode Read/Write split and refusal diagnostics."
 
 [[relation]]
 label = "governed_by"

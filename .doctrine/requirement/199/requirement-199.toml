@@ -3,7 +3,7 @@ version = 1
 
 id = 199
 slug = "make-the-shared-list-flags-mandatory-by-flattening-commonlistargs-into-every-kinds-list-lowered-onto-the-clap-free-listargs-leaf-at-one-seam"
-title = "Make the shared list flags mandatory by flattening CommonListArgs into every kind's list, lowered onto the clap-free ListArgs leaf at one seam."
+title = "Make the shared list flags mandatory by flattening CommonListArgs into every numbered entity kind's list, lowered onto the clap-free ListArgs leaf at one seam; SPEC-028 observations are an explicit non-entity exception."
 status = "active"
 kind = "functional"
 

@@ -18,4 +18,5 @@ acceptance_criteria = [
   "History retains every primary observation and correction control.",
   "Malformed, dangling, kind-incompatible, cycle-introducing, and losing conflicting controls are individually diagnostic and inert without cancelling an earlier valid correction.",
   "Repeated retractions and same-replacement supersessions are idempotent, retraction dominates supersession for one target, and distinct successors resolve by earliest valid control key.",
+  "Corrections cannot be cancelled through the V1 product surface; exact and history views retain the complete chain while active-view recovery requires exceptional manual repair.",
 ]

@@ -27,8 +27,9 @@ aggregation can then consume a proven wire model in a follow-up.
   observation time, and concise symptom/detail. Ordinary provenance may remain
   implicit; exceptional attribution is an optional facet.
 - Carry structured execution context needed by later analysis: role, harness,
-  model, execution mode/arm, lifecycle stage, skill, command or product surface,
-  and a session/run correlation id where available.
+  model, interface, repository context, execution mode/arm, lifecycle stage,
+  skill, command or product surface, and agent/session/run correlation ids
+  where available.
 - Carry optional canonical context references such as slice, phase, backlog
   item, or change identity without requiring those references at capture time.
 - Admit optional effort/usage counters only with explicit measurement source,
@@ -61,9 +62,13 @@ aggregation can then consume a proven wire model in a follow-up.
 - Provide a bounded MCP capture tool over the same engine functions for
   confined Claude workers. Trusted reads and correction remain CLI operations;
   subprocess-worker parity is a follow-up.
+- Classify observation capture and correction as worker-refused CLI writes and
+  observation inspection as worker-safe reads. Solo agents in marked worktrees
+  defer friction into their phase handoff for capture from the coordination
+  tree.
 - Keep public CLI/MCP capture friction-only. Define the measurement schema now,
-  but admit measurements only through registered trustworthy machine-source
-  adapters.
+  but admit measurements only for registered trustworthy machine sources; the
+  first instrumentation slice owns its concrete harness adapter.
 - Auto-populate context that Doctrine can know reliably; accept explicit fields
   for context the caller alone knows. Render absent/unknown distinctly from an
   inferred value.
@@ -85,7 +90,8 @@ aggregation can then consume a proven wire model in a follow-up.
 
 - New observation model/store under `src/observation/**` plus shared
   complete-content atomic no-clobber filesystem publication.
-- CLI and MCP command adapters under their existing command/interface homes.
+- CLI and MCP command adapters plus the existing worker-mode write-class guard
+  under their existing command/interface homes.
 - Focused unit, CLI, MCP, concurrency, and hostile-input tests under `src/**`
   and `tests/**`.
 - Project-local RFC-011 instrumentation wording for dogfood activation.
@@ -116,6 +122,9 @@ aggregation can then consume a proven wire model in a follow-up.
 - **R3 — review-noise risk.** Authored observations may crowd pull-request
   review. Projects may ignore them, but then own the resulting loss of shared
   durability and analysis coverage.
+- **R4 — correction-recovery risk.** V1 corrections are irreversible through
+  the product surface. Exact/history views preserve the chain, while active-view
+  recovery from an operator mistake requires exceptional manual repair.
 - **A1 — collection-first sequencing.** Basic show/filter/search is sufficient
   to validate useful capture before aggregate interpretation is built.
 - **D1 — evergreen home settled.** QUE-174 and DEC-043 place the capability in

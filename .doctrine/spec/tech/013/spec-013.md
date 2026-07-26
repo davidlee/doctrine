@@ -10,8 +10,9 @@ command line. It sits beneath the whole-system root (SPEC-003) and rides the
 shared entity engine (SPEC-004) for materialisation, identity, and the atomic
 claim — none of which it restates. This container owns only what is specific to
 *the surface*: the `<kind> <verb>` command grammar, the kind-blind read spine
-that every `list` shares (`src/listing.rs`), the `CommonListArgs` flatten that
-makes that spine mandatory, the canonical id form, the `--columns` projection
+that numbered-entity `list` verbs share (`src/listing.rs`), the
+`CommonListArgs` flatten that makes that spine mandatory, the canonical id form
+for numbered entity kinds, the `--columns` projection
 model, and the conformance matrix plus black-box goldens that pin the surface
 byte-exact. The per-kind `show` *content* — which facets render and how a kind
 reassembles its TOML and prose — belongs to each kind's own component; this
@@ -49,12 +50,16 @@ known-set check (`validate_statuses`), the canonical id form (`canonical_id`),
 the generic table layout (`render_table`/`render_columns`), and the JSON
 envelope (`json_envelope`). What stays *per-kind* is the variant axis: the row
 type, the column projection, the ordering, and any kind-specific flags — none
-of which live in the leaf. This is the shared substrate every per-kind `list`
-delegates into.
+of which live in the leaf. This is the shared substrate every numbered entity
+kind's `list` delegates into. UUID-native, non-entity ledger containers may
+follow the uniform command and rendering grammar while owning a
+capability-specific query surface; the observation ledger (SPEC-028) is the
+explicit V1 exception.
 
 ### The CommonListArgs spine flatten
 
-`CommonListArgs` is the clap-facing arg bundle every kind's `list` flattens —
+`CommonListArgs` is the clap-facing arg bundle every numbered entity kind's
+`list` flattens —
 `--filter`/`-f`, `--regexp`/`-r`, `--case-insensitive`/`-i`, `--status`/`-s`,
 `--tag`/`-t`, `--all`/`-a`, `--format`, `--json`, and `--columns`. Flattening
 it is the mechanism that makes the shared semantics *mandatory* rather than
@@ -78,11 +83,14 @@ column model.
 
 ### The canonical id form
 
-`canonical_id(prefix, id)` is the single id-form authority for prefixed kinds:
+`canonical_id(prefix, id)` is the single id-form authority for numbered
+prefixed kinds:
 a kind prefix joined to a zero-padded-to-three-digit number (`SL` + `25` →
 `SL-025`), matching the citation convention. Memory is conformant-by-exception
-— its uid *is* its canonical id, so it does not route through this helper. The
-form is consumed by the regex filter axis (regex matches over canonical-id +
+— its uid *is* its canonical id, so it does not route through this helper.
+Observation is a non-entity UUID ledger and owns bare UUID identity under
+SPEC-028 rather than routing through this helper. The numbered-entity form is
+consumed by the regex filter axis (regex matches over canonical-id +
 slug + title) and by every id column.
 
 ### Conformance and goldens
@@ -108,6 +116,9 @@ net, so any drift in the table layout or JSON envelope turns a golden red.
   filter spine but sits outside the canonical id form and the `--columns` model;
   the exception must be explicit (rejected, not silently ignored) so the
   surface stays predictable rather than quietly inconsistent.
+- **Non-entity ledger boundary.** SPEC-028's observation commands ride the
+  grammar and rendering conventions, but their UUID identity and query axes do
+  not enter the numbered-entity `CommonListArgs` spine or conformance matrix.
 - **Variant/invariant boundary discipline.** The row type, ordering, and
   per-kind flags must stay command-side; leaking any into the pure leaf would
   re-couple it to a kind and erode the kind-blindness the spine exists to

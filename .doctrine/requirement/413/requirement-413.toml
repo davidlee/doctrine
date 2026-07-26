@@ -16,5 +16,5 @@ tags = ["observation", "security", "containment", "confinement"]
 acceptance_criteria = [
   "The authoritative destination and random-tail shard derive only from a validated UUID, parent creation rejects encountered symlink or non-directory squatters, and no path can escape the observation root.",
   "The MCP server resolves the registered primary repository root server-side and accepts no caller path.",
-  "Worker capability conformance admits only the named friction capture tool in addition to explicitly approved worker tools, and guidance forbids fork-local CLI capture when no primary-tree broker exists.",
+  "Worker capability conformance admits only the named friction capture tool in addition to explicitly approved worker tools; the worker-mode guard refuses observation record/supersede/retract in marked forks while allowing show/list/search, and solo forks defer signals for coordination-tree capture.",
 ]
