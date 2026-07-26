@@ -6,7 +6,10 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-26 · plan (design locked after the confirming pass; plan authored, 0/6 phases) · 68bf7f21
+fresh-as-of: 2026-07-26 · ready (design locked; plan approved, 0/6 phases; mode
+dispatch — see § Execution constraints) · 4848a6a3. The Harvest body below is
+fresh as of plan/68bf7f21; only Next and the header were carried forward by the
+readiness pass. A full harvest is `/harvest`'s job, not that pass's.
 
 ### Produced
 
@@ -115,10 +118,63 @@ inherited set. F-7 (→ R5) is the seventh local finding. Count unchanged.
 
 ### Next
 
-1. Readiness check over design / plan / selectors / phase gates before execution
-   (a fresh pass; the pass that produced them should not also clear them).
-2. On approval: `slice status 230 ready` → `/phase-plan` PHASE-01 → `/execute`.
+1. ~~Readiness check over design / plan / selectors / phase gates~~ — **done**
+   2026-07-26. One citation fixed (§ 5.4 `:1808-1810` → `:1827-1828`), T12b
+   pinned with its own VT keyword, selector-doctor advisory refused → ISS-248.
+2. ~~Plan approval → `slice status 230 ready`~~ — **done**; execution mode is
+   **dispatch**, serial. Read `## Execution constraints (dispatch)` below BEFORE
+   `dispatch setup`, then `/phase-plan` PHASE-01.
 3. `/design` on SL-232, starting from F-37 and F-36 — **and F-14**, which this
    slice handed over. Enumerate-then-probe before asserting any replacement rule:
    that is § 8 R-A and the whole lesson of the eight rounds behind the inherited
    text.
+
+## Execution constraints (dispatch)
+
+Settled 2026-07-26 when the user chose dispatch as the execution mode. These are
+constraints on the *orchestrator*, not on any worker — a worker cannot see them
+and none is expressible as a phase criterion. Read before `dispatch setup`.
+
+**Serial, not parallel — and know what that buys.** Five of six phases target
+`src/memory.rs` (02, 03, 04, 06, and 05's VT-2). The chain is 01→03→04→05 with
+04→06. The only file-disjoint pair is PHASE-01 (`src/entity.rs`) ∥ PHASE-02, worth
+one phase of wall-clock out of six against a fork, an import, and a conflict
+surface on the file PHASE-02 owns. So dispatch is being chosen for **context
+isolation and the one-commit-per-phase funnel, not throughput**. Do not let a
+later reader re-derive a parallelism benefit that is not there. Note
+`dispatch plan-next`'s own `⚠ do not assume file-disjointness` warning is
+load-bearing here: `compute_next_phases` (`src/dispatch.rs:3973`) reads status
+and plan order ONLY and never consults entrance criteria, so a parallel spawn
+over `next` would happily violate PHASE-03's EN-1.
+
+**1. Do not `sync --integrate` between PHASE-03 and PHASE-04.** The inseparable
+pair (see § Open) is a *trunk* hazard, not a coordination-branch one: intermediate
+coord HEADs never reach trunk, so the whole exposure is integration **timing**.
+Integrate no earlier than after PHASE-04 concludes; one integration at the end is
+simplest. This is the one place dispatch can actually publish the 03-only state
+that § 1 calls strictly worse than today.
+
+**2. PHASE-06 VA-1 runs on the coord/landing tree, NOT in the worker fork.** It
+re-measures the live corpus and expects ~11 of 30 anchored memories (30/30 means
+the pathspec regressed to the item directory — the registered falsifier). The
+measurement is `rev-list verified_sha..HEAD -- memory.md` against real git
+history, and a worker fork has a different HEAD and flat topology, so a worker
+can false-confirm or false-alarm the single most important check in the slice.
+Same reasoning applies more weakly to PHASE-01 VA-1 (ADR-001 layering) and
+PHASE-04 VA-1 (read the composed condition): all three are read-and-judge checks,
+natural orchestrator work at audit. Workers deliver the VT half.
+
+**3. Watch ISS-028** — worker-marker confinement refuses CLI writes in a stamped
+fork, breaking tests that shell the doctrine CLI. Checked, not assumed, at
+readiness: `src/memory.rs`'s memory tests are in-process (`GitScratch` + direct
+calls), so 02/03/04/06 look clear, and `tests/e2e_mcp_server.rs` spawns the built
+binary against a tempdir rather than the fork. Not a known blocker — the thing to
+check on first worker return.
+
+**4. Promote edge before setup.** `git fetch . edge:main` then
+`dispatch setup --slice 230`, or the worktree forks without the design, plan, and
+readiness fixes. Documented footgun; it bites silently.
+
+**Arm.** Not pre-chosen: `/dispatch` routes on a claude↔env-marker agreement, and
+the funnel cadence is identical either way (claude arm self-commits via
+`worker_commit`; pi arm has the orchestrator import the working-tree diff).
