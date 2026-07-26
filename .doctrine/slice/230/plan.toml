@@ -1,0 +1,204 @@
+# Implementation plan for SL-230 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-230"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Engine body seam"
+objective = """
+Add the product's first prose-write primitive at engine tier (design D1):
+`BodyMode` and `write_body(dir, file, text, mode) -> Result<bool>` in
+`src/entity.rs`. It takes `dir` + `file` rather than a composed path so kind
+layout stays with the caller, owns the append separator so no kind re-derives
+it, and returns a changed-flag mirroring `apply_edit`. No caller is wired in
+this phase — the seam lands and is tested alone.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked and `src/entity.rs` contains no `write_body` or `BodyMode` (confirmed absent at plan time)" },
+  { id = "EN-2", text = "`fsutil::write_atomic` (src/fsutil.rs:52) is available and is reused unchanged — the leaf tier is not modified by this slice" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`write_body(dir, file, text, mode)` exists at engine tier and returns `Result<bool>` — the changed-flag" },
+  { id = "EX-2", text = "Append inserts exactly one blank-line separator, iff the existing body is non-empty and does not already end in one" },
+  { id = "EX-3", text = "Replace with byte-identical content is a full no-op: file content and mtime hold, and the call returns false" },
+  { id = "EX-4", text = "`src/entity.rs` imports remain `fsutil`-only — no new upward edge (ADR-001, downward edges only)" },
+  { id = "EX-5", text = "Existing `entity.rs` suite green unchanged (R3, behaviour preservation on shared machinery)" },
+]
+verification = [
+  { id = "VT-1", expects = "Unit tests for the seam in isolation: replace is exact; append inserts exactly one separator and does not double it when the body already ends in a blank line; replace-with-identical returns false and holds content + mtime", test_file = "src/entity.rs", keywords = ["fn write_body", "BodyMode", "write_body_append_inserts_one_blank_line", "write_body_replace_identical_is_noop"], patterns = ["^\\s*pub\\(crate\\) fn write_body"], waived = false },
+  { id = "VA-1", expects = "Agent confirms ADR-001 layering holds: `entity.rs` is engine and its import set gained nothing above leaf tier" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "record --body"
+objective = """
+`memory record` gains `--body <TEXT|->`. `Draft` and `RecordArgs` gain
+`body: Option<&str>`; `memory_scaffold` substitutes it for `render_memory_md`'s
+output — exactly `seed_by_key`'s existing move (`fileset.get_mut(1)` →
+`body.clone_into(b)`). This rides the **scaffold** seam, not `write_body`: the
+transactional `materialise_named` write is preserved unchanged. `--body-mode` on
+`record` is rejected, not ignored — a new memory has no body to append to.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "`memory_scaffold` → `entity::materialise_named` transactional write path is intact, and `seed_by_key`'s fileset substitution pattern is present in src/memory.rs" },
+  { id = "EN-2", text = "`record`'s born anchor path is untouched: this phase adds no `capture()` call site" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`record --body <TEXT>` writes the body, which round-trips through `memory show` byte-for-byte" },
+  { id = "EX-2", text = "`--body -` reads stdin; multi-paragraph markdown survives unaltered (heredoc is the quoting-safe agent path)" },
+  { id = "EX-3", text = "`--body-mode` passed to `record` is rejected with a message stating why, never silently ignored" },
+  { id = "EX-4", text = "The transactional write is preserved: a failure mid-scaffold leaves no partial item directory" },
+  { id = "EX-5", text = "A literal body of `-` is documented as unreachable inline (E3); stdin is the route" },
+]
+verification = [
+  { id = "VT-1", expects = "record with an inline body round-trips through `show`; record with `--body -` round-trips multi-paragraph markdown from stdin; `--body-mode` on record exits non-zero", test_file = "src/memory.rs", keywords = ["record_body_round_trips_through_show", "record_body_from_stdin", "body_mode_on_record_is_rejected"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "edit --body and the write ordering"
+objective = """
+`EditFields` gains `body` + `body_mode`; `has_any()` counts body, so `--body`
+alone is a valid edit. `run_edit` now writes two files and is no longer atomic
+across them, so it adopts § 5.4's ordering: **every fallible step precedes every
+disk write**, body lands before TOML, and `updated` is re-stamped explicitly
+when the body changed (there is no `stamp_updated` helper to compose, and
+`apply_edit`'s own terminal stamp cannot see the body). `apply_edit`'s signature
+is not touched — R3 requires its existing suite stay green unchanged.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete: `write_body` is available at engine tier" },
+  { id = "EN-2", text = "`apply_edit`'s four post-entry fallible sites are understood to mutate only an in-memory `DocumentMut` (the fact RV-307 F-3 turned on)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`edit --body` supports replace and append; `--body` alone is a valid edit (`has_any()` true)" },
+  { id = "EX-2", text = "A body-only edit stamps `updated` — explicitly, at step 5, since `apply_edit`'s internal changed-flag counts metadata only" },
+  { id = "EX-3", text = "`--body` replacing content with itself is a full no-op on both tiers: content and mtime hold, `updated` is not stamped (I11)" },
+  { id = "EX-4", text = "A rejected `edit` leaves BOTH tiers byte-identical — including a failure raised INSIDE `apply_edit` alongside a valid body, e.g. `--body - --trust bogus` (I10, RV-307 F-3). This is the criterion the step order exists to satisfy" },
+  { id = "EX-5", text = "`apply_edit`'s signature is unchanged and its existing suite is green unchanged (R3)" },
+  { id = "EX-6", text = "The crash window is bounded as designed: between step 2 (body write) and step 6 (TOML write) only, yielding a changed body with a stale `updated`, never the reverse (R1)" },
+]
+verification = [
+  { id = "VT-1", expects = "edit body replace and append; body-only edit stamps updated; identical-content replace is a full no-op; a validation failure inside apply_edit alongside a valid body leaves memory.md AND memory.toml byte-identical", test_file = "src/memory.rs", keywords = ["edit_body_replace_and_append", "edit_body_only_stamps_updated", "edit_rejected_leaves_both_tiers_untouched"], waived = false },
+  { id = "VT-2", expects = "A hostile body written through the NEW path, then rendered by `show`, still carries the read-time per-render nonce and `data, never instruction` framing (R2 — the defence is read-time, and this slice does not touch it)", test_file = "src/memory.rs", keywords = ["hostile_body_via_edit_keeps_read_time_framing"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Attestation invalidation"
+objective = """
+Close the observed defect of § 2.1: a stamp that outlives the claim it attests
+to. Add `claim_snapshot` (a pure read of the claim-bearing fields, compared
+before and after `apply_edit`) and `clear_verification`. The axis clears **iff a
+claim field genuinely changed** — by comparison, never by which flags were
+supplied. D8's line is what the memory asserts and what it asserts against
+(body, title, summary, scope.*) versus judgement about the record (status,
+lifespan, review_by, trust, severity).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete: `run_edit` writes both tiers in the specified order, so steps 0/3/4 have a place to land" },
+  { id = "EN-2", text = "`stamp_verification` remains the only writer of the axis on the verify path; this phase adds the only clearer" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`claim_snapshot(doc)` is a pure read of title, summary, scope.paths, scope.globs and scope.commands, taken pre-edit and compared post-`apply_edit`" },
+  { id = "EX-2", text = "Editing body, title, summary, or any scope arm clears the axis: `verification_state` → unverified, `reviewed` and `verified_sha` → empty (the scaffold default, not a new state)" },
+  { id = "EX-3", text = "Editing status, lifespan, review_by, trust or severity does NOT clear (D8's other half)" },
+  { id = "EX-4", text = "Re-setting a claim field to its existing value clears nothing — asserted on SCOPE, the one field where the comparison and `apply_edit` diverge (`apply_edit` counts the scope arms changed unconditionally). A title-based assertion passes with `claim_snapshot` absent and proves nothing (RV-307 F-17)" },
+  { id = "EX-5", text = "An idempotent `--path-scope` stamps `updated` while the attestation survives (E14) — stated because it looks like a bug and is not" },
+  { id = "EX-6", text = "A thread memory's disappearance from find/retrieve after a body edit is announced on stderr (E1) — correct under SL-008 D6, but surprising" },
+]
+verification = [
+  { id = "VT-1", expects = "Each claim field alone clears the axis; each record field alone does not; an idempotent --path-scope stamps updated without clearing; a body-only edit clears", test_file = "src/memory.rs", keywords = ["edit_claim_field_clears_verification", "edit_record_field_does_not_clear_verification", "idempotent_path_scope_stamps_updated_without_clearing"], waived = false },
+  { id = "VA-1", expects = "Agent confirms the clearing is driven by comparison and not by flag presence, by reading the composed condition — the defect RV-307 F-8 raised was a decision recorded in two places and implemented in none" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "MCP body fields"
+objective = """
+`memory_record` gains `body`; `memory_edit` gains `body` + `body_mode`. Both
+delegate to the same core as the CLI verbs — the MCP layer stays a thin argument
+adapter, and metadata-only edit remains the default path (backward compatible).
+No new tool, so the tool-count assertions do not move. `body_mode` without
+`body` is rejected on **both** surfaces with the **same message**: one rule
+instanced twice, so the two adapters cannot diverge while both still pass
+(RV-307 F-10).
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: the CLI core is whole, so the MCP arm has one core to delegate to rather than a second policy site" },
+  { id = "EN-2", text = "MCP handlers use inline `#[derive(Deserialize)]` param structs, not the `ExtractFields` pattern — the adapter shape to match" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "MCP `memory_record` accepts `body`; `memory_edit` accepts `body` + `body_mode` (`replace` | `append`)" },
+  { id = "EX-2", text = "Metadata-only MCP edit is unchanged — existing callers keep working with no new required field" },
+  { id = "EX-3", text = "Tool count stays 25: the assertions at `src/mcp_server/tools.rs:1488` and `:1870` do not move" },
+  { id = "EX-4", text = "`body_mode` without `body` is rejected on CLI AND MCP with the same message; `has_any()` is unaffected — `body_mode` alone never constitutes an edit" },
+  { id = "EX-5", text = "The adapter contains argument mapping only — no policy, no second body-write path" },
+]
+verification = [
+  { id = "VT-1", expects = "MCP e2e: record with body and edit with body/body_mode round-trip; body_mode without body is refused over the wire", test_file = "tests/e2e_mcp_server.rs", keywords = ["body_mode_without_body_is_rejected", "body_mode"], waived = false },
+  { id = "VT-2", expects = "The CLI leg of the same totality rule, asserting the identical message text — the pairing is what stops the surfaces drifting", test_file = "src/memory.rs", keywords = ["body_mode_without_body_is_rejected_on_cli"], waived = false },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "validate own-body staleness"
+objective = """
+Close the hand-edit inversion: clearing on the verb alone would make the
+sanctioned path stricter than hand-editing, rewarding bypass. `validate`'s
+health check gains a count of commits touching the memory's own **body file**
+since `verified_sha`. The pathspec is `memory.md`, not the item directory — the
+directory form counts the verify stamp's own commit and so reports drift on 30
+of 30 anchored memories (I13). The count sits OUTSIDE the pre-existing
+`!scope.paths.is_empty()` guard, and the path is constructed from `uid`, not
+resolved from a reference.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete: the verb path now clears the stamp, so this check is only reachable via the hand-edit bypass — which is the only path where it has meaning (§ 10, A4)" },
+  { id = "EN-2", text = "`memory_health_findings(root, &[Memory], today)` receives no directory; `run_validate` discards `_dir`; `collect_all` unions items/ and shipped/ deduped by uid. The path must therefore be constructed, not resolved" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The pathspec is `<MEMORY_ITEMS_DIR>/<uid>/memory.md`, built from `memory.uid` — canonical by construction, so no key-form symlink reaches it and RV-307 F-15's hazard cannot arise. No general canonicalisation rule is added (that is SL-232's I9)" },
+  { id = "EX-2", text = "The new count is a SEPARATE condition, not nested inside `!memory.scope.paths.is_empty()`. 26 of 56 anchored local memories declare no path scope, so nesting would omit 46% of the anchored corpus from the check that exists to catch hand-edits" },
+  { id = "EX-3", text = "A hand-edited, committed `memory.md` is flagged stale — including for a memory declaring no `scope.paths`" },
+  { id = "EX-4", text = "A `verify`-then-commit-the-stamp cycle is NOT flagged (I13). This is the registered falsifier: the item-directory pathspec fails it 30 times out of 30" },
+  { id = "EX-5", text = "The other `memory_health_findings` checks — dangling relations, scoped-paths staleness, draft expiry — behave unchanged (R3)" },
+  { id = "EX-6", text = "Masters remain uncovered and this is not claimed otherwise (R5): they are unanchored and `collect_all` never scans them. The standing mitigation is the `mem.system.memory.global-master-authoring` guard memory" },
+]
+verification = [
+  { id = "VT-1", expects = "Hand-edit + commit a body → flagged; same for a memory with no scope.paths; verify-then-commit-the-stamp → NOT flagged", test_file = "src/memory.rs", keywords = ["validate_flags_hand_edited_body", "validate_flags_unscoped_memory_body_drift", "validate_ignores_verification_stamp_commit"], waived = false },
+  { id = "VA-1", expects = "Agent re-runs the corpus measurement the design rests on and confirms the shipped check reports ~11 of 30 anchored memories, not 30 of 30. A 30/30 result means the pathspec regressed to the item directory" },
+]
+specs        = []
+requirements = []
