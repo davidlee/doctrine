@@ -1,9 +1,9 @@
 id = 21
 slug = "tech-spec-backfill"
 title = "Backfill Doctrine technical-spec corpus"
-status = "started"
+status = "reconcile"
 created = "2026-06-08"
-updated = "2026-06-26"
+updated = "2026-07-26"
 [relationships]
 needs = []                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
