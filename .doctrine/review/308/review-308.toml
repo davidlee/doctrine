@@ -1,0 +1,79 @@
+id    = 308
+slug  = "sl-228-design-round-4-d9d10-reap-landing-authority-amendment-external-codex-pass"
+title = "SL-228 design round 4 — D9/D10 reap landing authority amendment (external codex pass)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "design"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "codex"
+responder = "claude"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-228"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "Funnel proof not bound to the live fork tip — deletion of unimported work"
+detail = "D9 as first written authorised branch -D on branch-name + position alone. row_for_fork (src/mcp_server/dispatch.rs:785) returns the FIRST row whose spawn.fork matches, and nothing compares the live branch OID to the row's recorded import.fork_tip (funnel_machine.rs:244). Failure: a fork that advanced past its imported tip, or a recycled fork name binding a new branch to an older concluded row, is deleted with unimported commits on it. git cherry checks every commit currently reachable from the branch; D9 discarded that protection without replacement. Remedy: require an unambiguous row AND live OID == import.fork_tip before injecting any landing fact."
+disposition = "fixed"
+response = "Accepted in full — this is the finding that justified the review. Verified independently: row_for_fork does return the first spawn.fork match, ImportRecord.fork_tip exists and is immutable, and the funnel machine refuses a second Import at imported, which makes an advanced-and-concluded fork an out-of-band state rather than an impossible one — exactly what a safety gate must survive. The name-reuse arm stands on its own. D9 now injects a fact only on the conjunction: exactly one matching row (ambiguous refuses), position concluded/reaped, AND live branch OID == row.import.fork_tip. Any check failing injects nothing and git cherry decides, unchanged. Five VT safety cells added to §11."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "concluded does not prove the current coord tip retains the import commit"
+detail = "D1 proves the delta and Import row coexisted in one commit; I3 proves monotone positions. Neither proves an arbitrary current tip carrying the row descends from that commit. read_funnel_at (src/dispatch.rs:5628) trusts the record tree at the supplied tip with no ancestry proof. A rewritten ancestry carrying the record forward without the introducing commit would let reap destroy the only copy. No sanctioned path rewinds the coordination ref (SPEC-021: CAS projection), so this is an unstated assumption rather than a demonstrated failure."
+disposition = "fixed-as-invariant"
+response = "Accepted as a real gap in the argument; severity moderated on the reviewer's own evidence (no sanctioned path rewinds the coordination ref; SPEC-021 describes CAS projection). §4.1 now states the residual explicitly and distinguishes the cases: a rewound ref rewinds the co-located record with it (read_funnel_at reads the record AT the tip), and a revert leaves the import commit in ancestry — recoverable, and git cherry would agree. Only a rewritten ancestry carrying the record forward without its introducing commit is uncovered. Promoted to invariant I5 (coordination ref is append-only under CAS; if relaxed, D9 must be re-derived, not inherited). Full provenance proof — locate the coord commit that introduced the Import row and prove ancestry — is recorded in §4.1 as the sound-but-expensive alternative, rejected as disproportionate given I5, so a future reader can reverse the call rather than rediscover it."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Class-2 Reap reports success while the row stays at concluded"
+detail = "gc deletes worktree+branch, then land_funnel_transition(Reap) loses the CAS. Current code (src/mcp_server/dispatch.rs:757) warns on stderr and returns Reaped. The shipped driver (install/workflows/drive-slice.js) proceeds on a non-refusal and prepares the next phase, while dispatch next still prescribes reap. A post-act partial completion hidden behind a success outcome — contradicts D10, and falsifies I4 as written (gate passes, no residue, yet no advance)."
+disposition = "fixed, remedy amended"
+response = "Defect accepted; remedy shape contested and amended. 'Never return Reaped until the row lands' contradicts D8: the Reap row is Class-2 by design, recorded strictly post-act, and the existing code's rationale is sound — the fork IS gone, and saying otherwise would lie. The real defect is that the two facts are collapsed into one outcome. §4.1 now requires them reported distinctly (fork destroyed AND row pending, re-drive completes), so a success outcome may never imply a landed row. I4 corrected to include row landing; the drive-slice.js citation is the evidence that this is live, not theoretical."
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "major"
+title = "Residue model incomplete — busy claim lock and administrative residue"
+detail = "The binary Reaped-vs-gc-incomplete model misses two existing gc outcomes. (a) A busy per-name claim lock prints 'skipped' and returns Ok(()) (src/worktree/gc.rs:276); mapped to success, dispatch_reap advances to reaped while branch and worktree still live. (b) dispatch-record deletion failure (gc.rs:423) folds into gc-incomplete; if that blocks Reap forever the operator is stuck behind a permissions fault retry cannot clear. Remedy: a total typed outcome set separating safety-critical from administrative residue."
+disposition = "fixed"
+response = "Accepted; both cases verified in source. §4.1 replaces the binary model with a total typed outcome table declaring advance-eligibility per case: Reaped and AlreadyAbsent advance; Busy (live claimant holds the per-name lock) refuses and does NOT advance — the claim gate outranks even --force, and mapping its Ok(()) skip to success would advance while branch and worktree live; NotLanded refuses; CriticalResidue{worktree,branch} refuses because reaped asserts the fork is gone; AdministrativeResidue{dispatch_record} advances AND reports the leftover, since the fork itself is gone and blocking would strand the funnel behind a fault retry cannot clear. The admin/critical split is the reviewer's, and it is the right cut."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "major"
+title = "NEW-OQ-C misses a second split-brain consumer: worktree inventory"
+detail = "landed_against's only caller outside gc is src/worktree/inventory.rs:249, backing worktree list's landed column. For exactly the strict-superset import D9 calls funnel-landed, a default worktree list still renders NotLanded while the funnel reaps — a published contradiction, not a CLI-gc UX question. (--no-landed suppresses the oracle entirely, so the filter is unaffected; no doctor_checks.rs consumer found.) Remedy: one command-tier landing-authority resolver shared by MCP reap, CLI gc, and inventory; at minimum inventory must not publish a false unlanded."
+disposition = "fixed"
+response = "Accepted; found independently before the review returned, and the reviewer's nuance corrects my own statement — the contradiction is in the DEFAULT worktree list, not the --no-landed filter, which suppresses the oracle entirely. §4.1 now names all three landing consumers (dispatch_reap, CLI worktree gc, worktree::inventory) and calls the disagreement a published contradiction rather than a UX wrinkle. Adopting the reviewer's structural remedy: the landing-authority resolver ships as a named command-tier seam in this phase even though only dispatch_reap wires it, because a second implementation is how two oracles drift apart permanently. Adoption by the other two is deferred (NEW-OQ-C) with the objection recorded that worktree list already takes --slice, so the 'no slice available' argument covers only worktree gc."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "major"
+title = "D10's uniformity claim is not discharged at design time"
+detail = "Converting not-landed from Err to Ok(Refused) is itself safe — the shipped workflow maps funnel refusals to halt and no production caller treats a serialized Ok as phase success. But D10 claims uniformity across every funnel tool without classifying all fallible paths. Example: dispatch_conclude_phase may land the durable conclusion and then fail the trailing sheet projection via ?, yielding an opaque -32603 for an outcome the caller must retry. Remedy: a design-time fallibility table (internal fault / pre-act refusal / post-act partial completion / retryable CAS loss) rather than deferring to the VA sibling sweep."
+disposition = "partially fixed — claim narrowed"
+response = "Accepted rather than argued: the honest fix is to stop over-claiming. D10 previously asserted uniformity across four tools while discharging it for one. It now states the classification (internal fault / pre-act refusal / post-act partial completion / retryable CAS loss), discharges it for dispatch_reap in §4.1's table, names the known sibling instance (conclude's trailing sheet projection failing via ? after the durable conclusion lands), and labels itself a rule with one verb proven rather than a proven invariant across four. The remaining three-tool table is scheduled as VA-1 output landing in this section at reconcile — a residual, and marked as one."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "major"
+title = "Amendment contradicts shipped specs with no requirement mapping"
+detail = "SPEC-012 pins gc's reap to 'provably landed ... via git cherry <coordination-HEAD> <fork-branch>' (spec-012.md:106) — a named mechanism D9 replaces. The D7 golden artifact (.doctrine/spec/tech/021/funnel-machine.md:20) still renders 'landed-oracle ok'. The amendment claimed D9/D10 have 'no REQ of their own', but D9 changes the proof satisfying active PRD-015 REQ-301 ('provably landed in durable git state'). Remedy: map D9 to REQ-301 and the SPEC-012 sentence, route the contract change through the governing Revision, regenerate the artifact with implementation."
+disposition = "fixed, framing contested"
+response = "Governance gap accepted; the requirement framing is contested on evidence. PRD-015's reap requirement reads 'only when its result provably landed in durable git state — never on a disposable receipt that could survive a crash and lie' — that is mechanism-neutral and draws exactly the durable-vs-disposable distinction D9 turns on, so D9 SATISFIES it rather than violating it; likewise SPEC-021:205 ('the landed oracle is durable git state, never a runtime receipt'). What genuinely contradicts is SPEC-012:106, which names git cherry <coordination-HEAD> <fork-branch> as THE mechanism, and the D7 golden artifact still rendering the old gate. §11 now carries the mapping explicitly: artifact regenerates with the code (D7, mechanical); the SPEC-012 sentence rides the slice's already-deferred ship-time sibling REV, recorded so reconcile cannot lose it. Deferring the REV — not the mapping — matches the slice's existing treatment of its four active-REQ modifies."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
