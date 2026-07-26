@@ -1900,3 +1900,24 @@ From the PHASE-06 hand-back, in the worker's own assessment of cost:
    learn their fields. Inlining the *field lists* into the brief would have
    removed ~3 reads outright. Concrete upgrade to case-note 2's "grep your seams,
    don't recall them": **grep the seams AND paste the shapes.**
+
+[rigour/design; SL-230-RV307-round5]
+
+- Five review rounds, 24 findings, 5 blockers, rate not decaying. Rounds 3-5 each
+  found a blocker that rounds 1-2 missed. The cost driver is not the reviewing —
+  it is that each remedy is authored against the finding rather than against the
+  invariant, so the same defect recurs one axis over (F-15 item-dir symlink ->
+  F-20 scope symlink; F-18 hostile input -> F-23 empty input). Cheaper pattern
+  would be: on any finding, ask "what is the general rule this is an instance
+  of?" and fix at that level. F-20/F-23 were both avoidable at F-15/F-18 time.
+- Token sink: § 10 accumulated per-finding narrative that restated normative
+  mechanisms, and then had to be re-read and re-swept every round (F-22). Replaced
+  with a pointer table. Recommend design.md templates carry a "history points,
+  never restates" instruction from the start — the restatement is what made three
+  separate rounds of stale-text findings possible.
+- My own probe error (F-23): read exit=1 as "neutralised" when it meant "surface
+  expanded to the whole repo". A shell probe needs its falsifier registered before
+  running, same as a test. Cost ~1 full round.
+- `doctrine review dispose` takes free-text disposition; the anti-escape vocab
+  (aligned/fix-now/design-wrong/follow-up/tolerated) is documented but unenforced.
+  A closed enum would make ledger queries reliable.

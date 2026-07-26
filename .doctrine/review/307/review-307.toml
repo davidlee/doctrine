@@ -87,19 +87,25 @@ The line-number correction is accepted too: the prose site is spec-007.md:133, n
 
 [[finding]]
 id = "F-6"
-status = "contested"
+status = "answered"
 severity = "blocker"
 title = "Expected exclusions to ignore irrelevant corpus dirt; observed blanket roots hide legitimately scoped evidence"
 detail = '''Design principle .doctrine/slice/230/design.md:80-82 assumes every memory attests its body only against code, then :195-196 and :241-245 exclude all .doctrine plus repo-root memory. SPEC-007, as rendered by `doctrine spec show SPEC-007`, owns arbitrary path/glob/command scopes and does not restrict claims to source code. Live corpus evidence from `rg -n '"?\\.doctrine/' .doctrine/memory/items/*/memory.toml` printed many legitimate scopes including .doctrine/spec, .doctrine/adr, .doctrine/slice, and .doctrine/review. Thus an uncommitted change to a governance file explicitly named by the memory scope is ignored and verify stamps the old HEAD. Doctrine ownership makes the path constant legal under POL-002; it does not make the changed evidence irrelevant. Exclusion must be claim-aware or the anchor must include the excluded state.'''
 disposition = "fix-now"
 response = """
-Contest sustained on both limbs. The stderr advisory was not a remedy — it recorded the attestation anyway, so a memory ended up with a verified_sha asserting less than it declares. F-1's class, one notch quieter.
+Contest sustained on both limbs, and the second limb changed the decision rather than the wording.
 
-Escalated to a REFUSAL as D10 (design.md § 5.2, § 7). verify refuses when any declared scope entry contributes no observable pathspec — absolute-outside-repo, or well-formed but matching nothing — naming the entry and the reason. scope.commands is exempt BY KIND, not by failure: it is structurally non-path (E5), so its absence is a property of the schema rather than of this tree. The remedy for a refusal is to fix the memory's scope, which is a claim edit, which clears the axis and forces a re-verify — the loop closes.
+Limb 1 (E7 contradicted D10): correct, and it is the fourth instance of the sweep failure — I rewrote § 5.2's prose and T27 and left E7's own text at line 599 still saying 'reported on stderr ... never dropped silently' and still listing commands as non-contributing. E7 is rewritten to match, and § 10 is restructured so history points instead of restating (see F-22).
 
-The missing implementation seam is now specified rather than implied: surface construction returns the pathspec set AND the list of non-contributing entries; the command tier refuses on a non-empty second element before probing anything. Detection is git ls-files --error-unmatch over the constructed set — one call, same plumbing. E7 is the wording of that refusal, not a side-channel.
+Limb 2 (the refusal disables 55 items): I ran the census independently before answering and reproduce your number — 59 non-matching entries across 55 memories, of 236 memories that declare any path/glob scope, i.e. 23%. Decision escalated to the user, who chose to re-cut rather than hold the line.
 
-Cost accepted and stated in D10: the four absolute-scope items cannot be verified from a linked worktree until their scopes are repo-relative. That is a defect in those memories which this surfaces rather than creates. The alternative that would avoid it — recording the narrowed surface in the attestation — needs a persisted field, i.e. OQ-3's schema change and its own slice."""
+D10 now CLASSIFIES non-contribution instead of refusing on all of it:
+  - malformed / probe-aborting (absolute-outside, empty) => REFUSE. A defect in the memory, and it can abort the probe (E11).
+  - stale (src/worktree.rs, src/skills.rs — files refactored into directories) => report + validate health finding.
+  - natively unobservable (.claude/workflows/**, .mcp.json, .worktrees/**, .doctrine/state/slice/) => report + validate health finding. Git can never see this evidence; refusing forever would make an entire class of harness memory permanently unattestable.
+  - observable => must be clean or refuse. The claim probe proper.
+
+Your objection to the round-3 advisory is preserved and answered: what the advisory lacked was not severity but ACTIONABILITY. validate now raises the same entries as corpus-health findings alongside D5's staleness check, so the 51 active items get driven to cleanup by the verb that exists to find exactly this, rather than each attestation emitting noise nobody aggregates. Tests T27 (malformed refuses), T27b (commands exempt), T27c (the census case must NOT refuse), T35 (validate raises them)."""
 
 [[finding]]
 id = "F-7"
@@ -303,71 +309,107 @@ The divergence that falls out is now stated instead of discovered: an idempotent
 
 [[finding]]
 id = "F-18"
-status = "contested"
+status = "answered"
 severity = "blocker"
 title = "Expected scope data to name evidence literally; observed scope.paths can inject Git exclude magic and subtract the claim surface"
 detail = 'Expected: user-authored scope.paths values are data naming claim evidence, and the mandatory uid directory cannot be removed from the positive claim probe. Observed: .doctrine/slice/230/design.md:180-185 defines the input as arbitrary Git pathspecs and :259-266 contributes repo-relative paths as-is; current apply_edit accepts every supplied string verbatim at src/memory.rs:3942-3952. On Git 2.54.0 in /tmp/rv307-git-probes2.kfnIsT, a modified tracked items/uid/memory.md appeared under `git diff HEAD -- items/uid`, but `git diff HEAD -- items/uid ":(exclude)items/uid"` exited 0 with no output. Therefore a scope.paths entry carrying pathspec magic can subtract the canonical uid directory and restore the F-1/F-15 false attestation. Path entries must be encoded as literal pathspec data, and glob entries must be constructed through a controlled glob form; T26 must pin leading-colon/magic input.'
 disposition = "fix-now"
 response = """
-Sustained — blocker, and the sharpest finding of the four rounds. Reproduced before remedy (git 2.54.0, scratch repo, body modified):
-  git diff-index --quiet HEAD -- items/<uid>                         => exit 1 (dirty, correct)
-  git diff-index --quiet HEAD -- items/<uid> ':(exclude)items/<uid>' => exit 0 (CLEAN => false attestation)
-  git diff-index --quiet HEAD -- items/<uid> ':(literal):(exclude)…' => exit 1 (dirty, magic neutralised)
+Contest sustained. My round-4 claim of totality was wrong and the way it was wrong matters more than the gap.
 
-The charge is exactly right about why this slipped: the F-15 remedy made the surface CONTAIN the uid directory without making that containment NON-NEGOTIABLE. It also collides with a fact already in this design — R2 records that SPEC-007 treats stored memory text as untrusted — while § 5.2 simultaneously described the set as 'arbitrary git pathspecs'. Untrusted input and arbitrary syntax in the same sentence.
+I probed the prefix rule against every magic form — :(exclude), :!, :^, :(exclude,glob), :(glob,exclude), :/, :(top), :(attr:x), bare colon — and read exit=1 as 'neutralised'. For the EMPTY entry, exit=1 meant 'the surface is now the entire index and something in it is dirty'. The probe could not distinguish neutralisation from total expansion, so it proved nothing about the case it was supposed to cover. That is F-17's defect — a test that cannot fail for the reason it names — committed by the party that raised F-17, one round later. Recorded as a standing lesson in § 10 rather than as a one-off.
 
-Fixed at the command tier: every scope-derived entry is emitted magic-prefixed — :(literal) for scope.paths, :(glob) for scope.globs — as named constants, not inline literals (STD-001). Git parses magic only at the head of a pathspec, so the prefix renders the remainder inert: a hostile entry degrades to a literal path that matches nothing and is then caught by D10's refusal. New invariant I8: nothing a memory DECLARES can subtract from what it is MEASURED AGAINST. T30 pins it with a hostile :(exclude) scope value against a modified body.
+Verified your charge directly: git ls-files -- ':(literal)' returns every tracked file (6/6 in the scratch repo). With an empty scope entry present, the claim probe refuses on unrelated src dirt where the correct answer is clean.
 
-§ 5.2's 'arbitrary pathspecs' sentence is qualified rather than deleted: the latitude is the LEAF's and not the caller's. A primitive that accepts pathspec magic is correct; a policy that forwards memory text into one unfiltered is not."""
+Fixed as E11: an empty or whitespace-only entry is dropped before emission and refused as malformed (D10's first class) — never prefixed, never emitted. NO BARE MAGIC PREFIX IS EVER EMITTED. Note the raw path is not survivable either: git rejects an empty pathspec outright ('fatal: empty string is not a valid pathspec'), so the entry must be filtered whichever way the prefix rule goes. T34 pins the discriminating half — the constructed surface is asserted NOT to contain a bare :(literal)/:(glob), rather than asserting a refusal that would pass for the wrong reason.
+
+The non-empty forms are confirmed neutralised on both arms, including :(glob) — which I re-tested after you flagged the possible asymmetry; it neutralises as reliably as :(literal)."""
 
 [[finding]]
 id = "F-19"
-status = "contested"
+status = "answered"
 severity = "major"
 title = "Expected validate to reuse the repaired claim surface; observed it retains the principal-path-only scope.paths assumptions"
 detail = "Expected: the D5 drift count watches the same uid-rooted, normalised claim evidence that verify attests, including glob scopes and items with no scope.paths. Observed: .doctrine/slice/230/design.md:461-479 says only to add the uid directory alongside the existing scoped-paths count and T13 at :682 does not require an empty-path or glob-only item. The live seam at src/memory.rs:3413-3419 is gated by `!memory.scope.paths.is_empty()` and passes only raw `memory.scope.paths` to commits_touching; it ignores scope.globs and does not share the F-15/F-16 construction rule. A real verified item, mem.fact.claude.pretooluse-hook-fail-open, has scope.paths=[] and non-empty scope.globs. Thus an implementation can satisfy the written D5/T13 on a path-scoped fixture while validate remains blind to committed evidence changes for glob-only claims and can retain raw absolute or magic pathspec assumptions. Specify one shared claim-surface constructor for verify and validate, and pin empty-path plus glob-only drift."
 disposition = "fix-now"
 response = """
-Sustained. Verified at src/memory.rs:3413-3421 — the staleness check gates on !memory.scope.paths.is_empty() and passes memory.scope.paths raw to commits_touching. So the draft would have shipped two claim surfaces in one slice: the repaired one in verify, and this one carrying every defect the review found — glob-only memories never staleness-checked at all, scope.globs invisible to drift, absolute entries matching nothing or aborting the call, and the F-18 injection reaching commits_touching as well.
+Contest sustained — D11 claimed 'one constructor, two consumers' while a third existed. Verified at src/retrieve.rs:556-557: git_facts gates on m.scope.paths.is_empty() and passes scope.paths raw to commits_touching, with no globs, no canonicalisation, no neutralisation.
 
-D11: one claim-surface constructor, two consumers — verify probes it for dirtiness, validate counts commits over it. The gate becomes 'the surface is non-empty', which it always is, since the uid directory is unconditional (E6). Recorded in § 5.4 with the defect table above.
+This went to the user as a scope decision, because the fix is not mechanical: converting git_facts shifts RETRIEVAL RANKING corpus-wide, which is exactly what OQ-2 defers on the stated ground that it would reclassify a large fraction of the corpus at once. Taking it here would smuggle a retrieval-ordering change into a body-write slice under cover of a bug fix, in a design already at five review rounds.
 
-The rejected alternative is named: leaving validate alone as out of scope. It is not out of scope — D5 already modifies that exact check, so the seam is open either way, and closing it around the wrong surface would entrench the divergence. Building it twice is the parallel implementation the internal pass rejected once as A1. T31 (glob-only staleness) and T32 (both verbs derive an identical surface, asserted directly) pin it."""
+User's ruling: do not expand scope, but do not concede eventual correctness for tactical reasons. So the bound is drawn with three things attached rather than a promise:
+  1. D11 states plainly that a third consumer exists and is NOT converted — no claim of totality this time.
+  2. The constructor's signature is chosen so adoption is a CALL-SITE SWAP: (root, memory, dir), borrowing nothing from verify's command context, so git_facts adopts it by replacing two arguments.
+  3. The gap is routed, not narrated: IMP-317 filed, gated explicitly on OQ-2, and instructed to close as wont-do (with R7 restated as intended rather than provisional) if OQ-2 answers 'no'.
+R7 carries the standing risk: two notions of scoped drift coexist and the weaker one drives ranking."""
 
 [[finding]]
 id = "F-20"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected D10 to reject unobservable scope evidence; observed a tracked symlink contributes while its target is invisible"
 detail = "Expected: D10's contributing-entry test and I7 ensure every declared path on the claim surface names observable tracked evidence, so a target change cannot pass verify clean. Observed: design.md:313-325 defines contribution solely through git ls-files --error-unmatch, while I7 at :578-581 claims the claim surface names real tracked files, never a symlink standing in for them. On Git 2.54.0 in /tmp/rv307-round5-git.UZlCjm, a tracked external-link symlink to /tmp/rv307-round5-external.YEmabG passed 'git ls-files --error-unmatch -- :(literal)external-link' (exit 0); after changing external-link/evidence.txt, 'git diff --quiet HEAD -- :(literal)external-link' still exited 0, and the nested path matched no tracked file. The parent source leg is likewise clean. A memory scoped to the symlink therefore passes D10 and can attest while the evidence reached through its declared path changed. Expected refusal or an explicit contract that symlink scope entries attest only the link inode; observed a contributing-but-unobservable false attestation path."
+disposition = "fix-now"
+response = """
+Sustained, and worse in this corpus than the charge states. Reproduced: a tracked symlink scope passes --error-unmatch (it IS tracked, so D10 raises nothing) while diff-index via the symlink returns exit 0 against a modified target and exit 1 via the real path.
+
+Blast radius measured rather than assumed: this repo carries 2,001 tracked symlinks, because doctrine mints a slug symlink per entity. So the READABLE form an agent naturally scopes — .doctrine/adr/001-module-layering — is precisely the blind one, and the uid/slug pairing that made F-15 reachable makes F-20 reachable across the whole entity corpus, not just memories.
+
+Root cause is that I fixed F-15 as a fact about ITEM DIRECTORIES when it is a fact about PATHSPECS. Git's symlink blindness does not care what the path denotes. So the rule is restated once, at the level it actually holds: NOTHING REACHES THE CLAIM SURFACE UNCANONICALISED — the uid directory and every declared scope alike are symlink-resolved before becoming a pathspec (I9). An entry whose target resolves outside the repository falls to D10's unobservable class and is reported. T33 pins it with a tracked symlink whose target content changed."""
 
 [[finding]]
 id = "F-21"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected D10's accepted cost to describe the corpus migration; observed 55 current items become unverifiable"
 detail = "Expected: a refusal rule that deliberately breaks existing verification enumerates its real migration cost before planning. D10 at design.md:691-693 states only that the absolute-scope items fail from a linked worktree. Observed: a full CLI-derived census using memory list --all --json and memory show --json for every row found 386 addressable items and 438 declared path/glob entries. Applying the proposed literal/glob prefixing plus git ls-files --error-unmatch individually on Git 2.54.0 refuses 55 items in the primary checkout, not merely linked worktrees: 51 are active, and 12 active items already carry a non-empty verified_sha. There are 59 non-contributing entries, including retired paths such as src/worktree.rs and src/skills.rs, ignored runtime paths such as .doctrine/state/slice/, and absent installed surfaces under .claude/. The remedy may be principled, but the design contains no 55-item scope migration, compatibility step, or acceptance of disabling re-verification for roughly 14% of the item corpus. Expected a shippable transition; observed an undeclared corpus-wide breaking change."
+disposition = "fix-now"
+response = """
+Sustained. I ran the same census independently before your report landed and reached the same figure — 55 items, 59 non-matching entries — over a denominator of 236 memories that declare any path or glob scope (23%); your 51-active refinement is accepted and is the number that matters, since inactive items are not attestation candidates.
+
+This is the finding that changed a decision rather than a mechanism, so it went to the user rather than being absorbed. D10 is re-cut to classify non-contribution (see F-6's disposition for the four classes). The determining evidence was the composition of the 55, not the count: they split into genuine memory defects (src/worktree.rs, src/skills.rs — files since refactored into directories, where refusal correctly forces a fix) and paths git can never observe (.claude/workflows/**, .mcp.json, .worktrees/**, .doctrine/state/slice/), where refusal would make an entire class of harness memory permanently unattestable. A blanket rule cannot tell those apart, which is why the round-4 answer was wrong rather than merely expensive.
+
+Recorded in D10 as a rejected alternative with the measurement attached, so the reasoning survives: correctness that costs a fifth of the corpus is a decision to take deliberately, and this design declines it."""
 
 [[finding]]
 id = "F-22"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected review history to point at normative rules; observed section 10 still restates them throughout"
 detail = "Expected: the structural remedy claimed at design.md:1021-1029 makes normative sections the single source and history sections point rather than restate, preventing a fourth stale copy. Observed: only the round-2 F-6 paragraph follows that rule. Section 10 still restates live mechanisms and outcomes at :916-921 (claim_snapshot and idempotent-title behaviour), :935-944 (allow-dirty capture and T24 byte equality), :953-967 (uid canonicalisation, absolute-path mechanics, ignore handling, T20b), and :989-1003 (D10 refusal, magic-prefixing/I8/T30, and D11). The latter passages are exactly the newly changed rules most likely to drift. Expected the asserted mechanical sweep remedy to be applied document-wide; observed the document immediately violates it in the same section that declares it, leaving multiple normative copies whose consistency remains manual."
+disposition = "fix-now"
+response = """
+Sustained. § 10 claimed history now points rather than restates, and then went on restating for sixty lines — the claim was made in the same section that falsified it.
+
+§ 10 is restructured rather than trimmed. The per-finding narrative is replaced by a TABLE of what fired and where it landed (24 rows, one line each, pointing at D-numbers, invariants and section references). The round-by-round prose is cut to what is genuinely historical and cannot be read as normative: which findings fired, which contests were sustained, and the root-cause lessons. Every mechanism description is deleted; the normative sections are the single source.
+
+The rule is now stated as structural rather than as diligence — 'history points at them and states nothing a reader could act on' — because three rounds of trying to sweep harder demonstrated that diligence does not work on this failure mode. F-22 is itself the fourth instance and is listed in the table as such."""
 
 [[finding]]
 id = "F-23"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected magic-prefixing to encode every scope value as inert data; observed an empty value becomes a whole-index pathspec"
 detail = "Expected: design.md:288-294 says prefixing renders the remainder inert and a hostile entry degrades to a literal path that matches nothing; D10 then refuses it as non-contributing. Empty scope values are reachable because apply_edit copies path/glob strings verbatim at src/memory.rs:3942-3965 and the CLI accepts empty flag values. Observed on Git 2.54.0 in /tmp/rv307-round5-git.UZlCjm: both 'git ls-files --error-unmatch -- :(literal)' and the corresponding :(glob) form exited 0 and listed the entire index. Thus empty scope.paths or scope.globs evades D10 and expands validate's commit count to the whole repository rather than naming no evidence. Every tested non-empty magic form was neutralised (:!, :^, :/, exclude+glob, attr, bare colon), but the empty boundary falsifies the total construction claim and is absent from T30. Expected reject/normalise empty entries or encode them without the bare-prefix sentinel; observed a reachable semantic wildcard."
+disposition = "fix-now"
+response = """
+Sustained — see F-18's disposition, which carries the full response since the two are one defect: the magic-prefix rule was correct for hostile input and inverted for empty input.
+
+Summary here for the ledger: a bare :(literal)/:(glob) matches the entire index (verified, git ls-files -- ':(literal)' returns every tracked file), so an empty or whitespace-only scope entry expands the claim surface to the whole repository instead of narrowing it, and verify then refuses on unrelated dirt anywhere. Fixed as E11 — empty entries are dropped before emission and refused as malformed (D10 class 1); no bare magic prefix is ever emitted. T34 asserts the constructed surface does not contain one, rather than asserting a refusal that would pass for the wrong reason.
+
+Also recorded: raw, the empty entry aborts the probe outright, so it must be filtered regardless of the prefix rule. The prefix was never the only thing standing between this design and that failure."""
 
 [[finding]]
 id = "F-24"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected D11 to be the single scope-derived Git surface; observed retrieve remains a third raw consumer"
 detail = "Expected: D11 at design.md:513-530 and :694-701 establishes one claim-surface constructor rather than leaving an adjacent path with the assumptions F-19 condemned. Observed: src/retrieve.rs:551-569 is a third Git consumer derived from a memory's scope; it gates on scope.paths, passes scope.paths raw to commits_touching, omits scope.globs and the uid directory, and performs no absolute normalisation or magic neutralisation. The same file's staleness mode at :354-377 also keys commit freshness on paths only. OQ-2 at design.md:618-620 defers feeding own-directory drift into retrieve, but does not acknowledge that retrieve already derives a divergent scope path-set. Expected D11 to name and reconcile every scope-derived Git surface, or narrow its claim and explicitly adjudicate this consumer; observed the principal-path repair has moved one sibling over while the next sibling retains the dead assumptions."
+disposition = "fix-now"
+response = """
+Sustained — see F-19's disposition, which carries the full response. F-24 is the evidence and F-19 the claim it falsified.
+
+For the ledger: retrieve::git_facts (src/retrieve.rs:556-557) verified as a third raw scope-derived consumer — gates on scope.paths.is_empty(), omits globs, no canonicalisation, no neutralisation, and does not build the uid path at all. D11 no longer claims to be total; it states the third consumer exists, is not converted here, and why. IMP-317 routes the adoption, gated on OQ-2. R7 carries the standing risk."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

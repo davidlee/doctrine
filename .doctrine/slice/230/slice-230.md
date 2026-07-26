@@ -93,10 +93,17 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
   Memory text is untrusted (SPEC-007 § Concerns); interpolated raw, a
   `:(exclude)` scope value subtracts the memory's own directory from the surface
   it is measured against. Every entry is magic-prefixed.
-- **A declared scope that cannot be observed makes `verify` refuse** (design D10),
-  rather than warn and attest anyway. And `validate` measures the *same*
-  constructed surface as `verify` (D11) — one notion of the claim's evidence, not
-  two.
+- **Non-contribution is classified, not treated alike** (design D10). Malformed or
+  probe-aborting scope entries refuse; *stale* and *natively unobservable* ones are
+  reported and raised by `validate` as corpus-health findings; observable ones must
+  be clean. A blanket refusal was measured against the real corpus first and
+  rejected: it disables 55 of 386 items (51 active), including memories that scope
+  harness paths git can never see.
+- **One claim-surface constructor, adopted by `verify` and `validate`** (D11).
+  `retrieve`'s staleness ranking is a *third* consumer and is deliberately **not**
+  converted here — that shifts retrieval ordering corpus-wide, which is OQ-2's
+  deferred decision. Bounded, not conceded: adoption is a call-site swap, the gap
+  is design R7, and IMP-317 routes it gated on OQ-2.
 - **Consequence, stated plainly:** `record` → `verify` now **refuses** until the
   new memory is committed. The friction this slice removes is *unrelated* corpus
   dirt — another agent's uncommitted backlog file, your own unrelated spec edit —
