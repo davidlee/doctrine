@@ -1929,3 +1929,48 @@ From the PHASE-06 hand-back, in the worker's own assessment of cost:
   `doctrine next`. Following the boot signpost cost one failed call plus a
   top-level help read. Cause dimensions: `surface=boot/routing`,
   `mode=orchestrator`, `model=gpt-5`, `stage=route`.
+
+---
+
+[phase-plan; SL-228 PHASE-08 plan, sess-p8-plan]
+
+Five friction items from a single `/phase-plan` pass (orchestrator, coord tree).
+
+1. **`memory retrieve` flag guess costs a round trip.** The skill step says "run
+   `/retrieve-memory`"; the CLI takes `--path-scope` / `--query` / `--tag`. I
+   guessed `--task` and burned a call on the clap error. The skill names a skill,
+   not a command shape, so there is nothing to copy verbatim — the retrieval beat
+   in `phase-plan` should carry the literal (`memory retrieve --path-scope <f>
+   --query "<task>"`), the way the dispatch skills now carry runnable literals.
+
+2. **`memory retrieve` has no compact form.** `--format table` is explicitly
+   "ignored by retrieve", so every probe dumps full bodies + frames. Getting a
+   key list to triage from meant `| grep '^memory_key:'`. Two calls and a large
+   output where one `--format table` would have done. The retrieve surface is the
+   single highest-volume read in a planning turn; it is the one that most wants a
+   headline mode.
+
+3. **`slice research <id>` is a write disguised as a check.** The skill says
+   "check the research advisory — `doctrine slice research <id>`". On a slice
+   whose research dir is absent the verb *mints* `research/` + `baseline.toml`.
+   SL-228 is at PHASE-08 with six phases landed; a pre-design research baseline
+   minted at execution time is noise (gitignored, so harmless — but I had to
+   check `git check-ignore` to establish that, which is the actual cost). A
+   read-only advisory form, or a skip when the slice is past design, would remove
+   the beat entirely for late phases.
+
+4. **`slice phase` is write-only; there is no phase `show`.** Reading PHASE-08's
+   authored entry — the skill's own input #2 — has no read verb: `doctrine slice
+   phase 228 PHASE-08` errors with "required argument --status". I fell back to
+   `awk` over `plan.toml`, which is exactly the raw-file read the boot guardrail
+   tells agents not to do. One failed call, plus a guardrail violation with no
+   compliant alternative.
+
+5. **Cross-line entity reads fail silently-ish from the coord tree.** `backlog
+   show ISS-245` from `.dispatch/SL-228` (branch `dispatch/228`) errors
+   file-not-found: the items were filed on the edge line and the coord tree's
+   working copy has no `.doctrine/backlog/issue/245/`. The phase's whole remit is
+   those two issues. Recovering meant re-invoking with the primary tree as cwd.
+   The error names a path, not the cause; a coord-tree read of an entity that
+   exists on the session line could say so ("not on `dispatch/228`; present on
+   `edge`").
