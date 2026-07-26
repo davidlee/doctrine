@@ -6,17 +6,24 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-26 · scope · fa467add
+fresh-as-of: 2026-07-26 · design · 6393a93e
 
 ### Produced
 
-- SL-231 — collection/interface scope, selector fence, and design gate authored;
-  quick check passed, full gate not run for this governance-only unit
-  (commits a43b5eba..fa467add)
+- SL-231 — observation architecture designed and adversarial findings integrated
+  (commits 1ff203ad..52e8f654)
+- PRD-018 and SPEC-028 — draft observation capability and ledger-container
+  contracts authored with REQ-397..REQ-413 (commit 6393a93e)
+- REV-035 — SPEC-003 container inventory revised for SPEC-028 (commit 6393a93e)
+- IMP-319 — subprocess-worker observation capture parity
+- IMP-320 — configurable observation guidance in boot context
+- quick check passed; full gate not run for this governance-only unit
 
 ### Learned
 
+- DEC-043 — observations use a dedicated capability and container pending
+  evidence for a reusable ledger abstraction
+
 ### Open
 
-- QUE-174 — evergreen product/technical specification home must be settled
-  before design lock
+- QUE-176 — trustworthy per-harness token instrumentation boundaries
