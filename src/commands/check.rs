@@ -3,20 +3,21 @@
 //!
 //! Resolves a project-declared check command from the OWNED `[verification]`
 //! contract and proxy-executes it: inherit stdio, no timeout, forward the exit
-//! code (incl. `128+signo` on signal death). The pure cadence resolution lives in
-//! the `verify` leaf ([`crate::verify::resolve_check`]); this module is the impure
-//! shell (ADR-001) — root detection, the config read, spawn, and exit forwarding.
+//! code (incl. `128+signo` on signal death). Both halves live in `verify`: the pure
+//! cadence resolution ([`crate::verify::resolve_check`]) and the status-returning
+//! runner ([`crate::verify::run_suite`]). This module is the command shell
+//! (ADR-001) — root detection, the config read, and the one thing it cannot share:
+//! forwarding the child's status as the process's own.
 //!
 //! The OPPOSITE posture to `coverage_verify::run_argv` (pipe + capture + cap): a
 //! dev gate streams live and may legitimately run long (design §5.4 / D5).
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
 
 use anyhow::bail;
 use clap::Subcommand;
 
-use crate::verify::{CheckKind, CheckPlan};
+use crate::verify::{CheckKind, CheckPlan, SuiteStatus};
 
 /// The three check cadences as a clap subcommand. Each carries `-p/--path` (CR-F6),
 /// threaded to root detection (aids e2e temp-root). clap-owned (ADR-001 / A2) —
@@ -283,55 +284,35 @@ fn plan_check_report(root: &Path, id: u32) -> anyhow::Result<(String, bool)> {
     Ok((out, fail))
 }
 
-/// Proxy-spawn `argv` with `cwd == root`, INHERITING stdio (live stream; not piped)
-/// and NO timeout (design §5.4 / D5). Reached only with a non-empty `argv` (INV-2).
-/// Diverges via [`std::process::exit`] on a completed child — safe, stdio is
-/// inherited so nothing is buffered/owned to flush (R2). A missing program
-/// (`ENOENT`) yields an actionable error naming the owned config key (D3).
+/// Proxy-run `argv` through the shared runner ([`crate::verify::run_suite`]: `cwd
+/// == root`, inherited stdio, no timeout — design §5.4 / D5) and FORWARD its exit
+/// (CR-F5). Reached only with a non-empty `argv` (INV-2). Diverging via
+/// [`std::process::exit`] on a completed child is safe — stdio is inherited, so
+/// nothing is buffered/owned to flush (R2). A missing program (`ENOENT`) yields an
+/// actionable error naming the owned config key (D3): the runner reports the
+/// condition, this shell names the key it belongs to.
 fn run_proxy(root: &Path, argv: &[String], kind: CheckKind) -> anyhow::Result<()> {
-    let Some((program, args)) = argv.split_first() else {
+    let code = match crate::verify::run_suite(root, argv) {
+        SuiteStatus::Completed { code } => code,
         // INV-2: resolve_check never yields Run([]) — defend rather than panic.
-        bail!("internal: empty check argv (resolve_check INV-2 violated)");
+        SuiteStatus::EmptyArgv => {
+            bail!("internal: empty check argv (resolve_check INV-2 violated)")
+        }
+        SuiteStatus::NotFound { program } => bail!(
+            "`{program}` not found — set [verification].{} in {}",
+            kind.key(),
+            crate::dtoml::DOCTRINE_TOML
+        ),
+        SuiteStatus::SpawnFailed { program, detail } => {
+            bail!("failed to spawn `{program}`: {detail}")
+        }
     };
-    let status = Command::new(program)
-        .args(args)
-        .current_dir(root)
-        .status()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                anyhow::anyhow!(
-                    "`{program}` not found — set [verification].{} in {}",
-                    kind.key(),
-                    crate::dtoml::DOCTRINE_TOML
-                )
-            } else {
-                anyhow::Error::new(e).context(format!("failed to spawn `{program}`"))
-            }
-        })?;
     #[expect(
         clippy::disallowed_methods,
         reason = "true exit forwarding (CR-F5): the proxied child's code/signal is the verb's terminal status (design §5.4)"
     )]
     {
-        std::process::exit(exit_code(status));
-    }
-}
-
-/// True exit forwarding (CR-F5): a normal exit yields its code; a signal-killed
-/// child re-exits `128 + signo` (shell convention), not a flattened `1`. Unix-only
-/// branch; doctrine targets linux/nixos.
-fn exit_code(status: ExitStatus) -> i32 {
-    if let Some(code) = status.code() {
-        return code;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::ExitStatusExt;
-        status.signal().map_or(1, |s| 128 + s)
-    }
-    #[cfg(not(unix))]
-    {
-        1
+        std::process::exit(code);
     }
 }
 

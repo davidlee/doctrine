@@ -188,7 +188,7 @@ fn vt2_tools_list() {
         "tools/list should not error: {resp:?}"
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 25, "expected 25 tools, got {tools:?}");
+    assert_eq!(tools.len(), 28, "expected 28 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -219,6 +219,13 @@ fn vt2_tools_list() {
         "dispatch_phase_receipt",
         "dispatch_next_ready",
         "dispatch_authored_divergence",
+        // SL-228 PHASE-01 Move-E read surface (only tree-state gets an MCP tool).
+        "dispatch_tree_state",
+        // SL-228 PHASE-05 — the funnel's evidence-producing write verb.
+        "dispatch_verify",
+        // SL-228 PHASE-06 — the single-prescription funnel oracle (distinct from
+        // `dispatch_next_ready`, the readiness authority's wrapper).
+        "dispatch_next",
     ] {
         assert!(
             names.contains(expected),

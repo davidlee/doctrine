@@ -1,0 +1,67 @@
+#!/bin/sh
+# doctrine coordination-worktree pre-commit backstop (SL-228 PHASE-02, design §7).
+#
+# Installed per-worktree by `dispatch setup` (via a worktree-scoped `core.hooksPath`).
+# Runs on ANY `git commit` in a coordination worktree, any harness — parity by
+# construction. It refuses the ISS-234 funnel-reversion signature (mass deletions +
+# modification-only reverse-diffs), then CHAINS to the operator's effective non-worktree
+# hook so a global/local pre-commit keeps firing.
+#
+# The signature check lives in Rust (`doctrine dispatch hook-check`) — unit-testable,
+# bounded by the FUNNEL_MARKER provenance walk. Binary absent ⇒ fail-closed REFUSE
+# (never degrade to deletion-only), UNLESS the operator's deliberate escape hatch is set.
+set -eu
+
+# The operator's manual both-arms escape hatch (deliberate acts are not ISS-234). Set
+# BEFORE the binary check so a deliberate commit is never blocked by a missing binary.
+if [ "${DOCTRINE_ALLOW_DELETE:-}" = "1" ]; then
+	:
+else
+	DOCTRINE="${DOCTRINE_BIN:-doctrine}"
+	if ! command -v "$DOCTRINE" >/dev/null 2>&1; then
+		echo "doctrine coord hook: '$DOCTRINE' not found — REFUSING (fail-closed)." >&2
+		echo "  A coordination worktree needs doctrine to enforce the safe-commit guard;" >&2
+		echo "  degrading to a deletion-only check would reopen the ISS-234 reversion hole." >&2
+		echo "  Fix: put doctrine on PATH (or set DOCTRINE_BIN). Route authored writes" >&2
+		echo "  through 'dispatch commit'. A DELIBERATE act may set DOCTRINE_ALLOW_DELETE=1." >&2
+		exit 1
+	fi
+	# hook-check prints its own refusal (paths, escape hatch, dispatch commit) on failure.
+	if ! "$DOCTRINE" dispatch hook-check; then
+		exit 1
+	fi
+fi
+
+# On pass, CHAIN to the effective NON-worktree hooksPath's pre-commit (resolved at
+# RUNTIME, never baked at install) so the operator's global/local hook keeps firing.
+# Precedence: local > global > system (the effective value ignoring OUR worktree scope);
+# fall back to the common gitdir's hooks/ when none is set.
+chained=""
+for scope in --local --global --system; do
+	hp="$(git config "$scope" --get core.hooksPath 2>/dev/null || true)"
+	if [ -n "$hp" ]; then
+		chained="$hp"
+		break
+	fi
+done
+if [ -z "$chained" ]; then
+	chained="$(git rev-parse --git-common-dir)/hooks"
+fi
+# Resolve a relative hooksPath against the worktree top-level (git's own rule).
+case "$chained" in
+/*) : ;;
+*) chained="$(git rev-parse --show-toplevel)/$chained" ;;
+esac
+
+next="$chained/pre-commit"
+# Self-reference guard: never chain to THIS script (a degenerate install where the
+# resolved hooksPath is our own dir would otherwise recurse forever). The sanctioned
+# install is worktree-scoped + chain reads non-worktree scopes, so this cannot fire
+# there — it is belt-and-braces against a misconfiguration.
+resolve() { [ -e "$1" ] && printf '%s' "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; }
+self="$(resolve "$0")"
+next_real="$(resolve "$next" || true)"
+if [ -x "$next" ] && [ "$next_real" != "$self" ]; then
+	exec "$next" "$@"
+fi
+exit 0

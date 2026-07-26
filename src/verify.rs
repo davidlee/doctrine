@@ -9,16 +9,22 @@
 //! [`resolve`] that folds a config + a single check into the runnable [`Resolved`]
 //! (base argv ++ extra args, and the effective match source).
 //!
-//! **Pure leaf (ADR-001).** No clock / disk / rng / git / process here — the
-//! `doctrine.toml` *read* lives in the shell (PHASE-04+), and *running* the
-//! resolved argv is the verifier's job. [`resolve`] takes owned/borrowed data
-//! only and is total over its inputs.
+//! **Resolution is pure** — no clock / disk / rng / git there; the `doctrine.toml`
+//! *read* lives in the shell. [`resolve`] takes owned/borrowed data only and is
+//! total over its inputs.
+//!
+//! The module's one impure seam is [`run_suite`] (SL-228 PHASE-03): the
+//! status-RETURNING suite runner, lifted out of `commands::check` so callers below
+//! the command tier can run a project's configured suite and read the verdict.
+//! ADR-001 tier: **engine** — it spawns, but knows nothing of the CLI.
 
 // The base-resolution config + fold are now consumed by the PHASE-04 verifier and
 // the PHASE-05 record handler (through `coverage_store::load_config` + `resolve`),
 // so the PHASE-02 leaf-ahead-of-consumer dead_code blanket is retired.
 
 use std::collections::BTreeMap;
+use std::path::Path;
+use std::process::{Command, ExitStatus};
 
 use serde::Deserialize;
 
@@ -181,6 +187,24 @@ impl CheckKind {
             CheckKind::Prove => "prove",
         }
     }
+
+    /// The exact INVERSE of [`CheckKind::key`] — a configured cadence name back to
+    /// its kind, `None` when the string names no cadence (SL-228 PHASE-05: the
+    /// `[dispatch] verify-suite` reader). Implemented by SEARCHING [`ALL`] with
+    /// [`CheckKind::key`] rather than re-spelling the four tokens, so there is
+    /// exactly ONE string table for the cadence vocabulary (STD-001) and the two
+    /// directions cannot drift.
+    pub(crate) fn from_key(key: &str) -> Option<CheckKind> {
+        CheckKind::ALL.iter().copied().find(|k| k.key() == key)
+    }
+
+    /// Every cadence, once — the enumeration [`CheckKind::from_key`] searches.
+    const ALL: [CheckKind; 4] = [
+        CheckKind::Quick,
+        CheckKind::Commit,
+        CheckKind::Gate,
+        CheckKind::Prove,
+    ];
 }
 
 /// What the shell should do for a cadence. The `Noop` arm keeps the unconfigured
@@ -227,6 +251,68 @@ pub(crate) fn resolve_check(cfg: &VerificationConfig, kind: CheckKind) -> CheckP
 /// `&[&str]` default literal → an owned argv.
 fn owned(argv: &[&str]) -> Vec<String> {
     argv.iter().map(|s| (*s).to_owned()).collect()
+}
+
+// --- the suite runner (SL-228 PHASE-03) --------------------------------------
+//
+// The status-RETURNING half of `doctrine check`'s proxy, lifted out of the command
+// tier so callers BELOW it can run a project's configured suite and read the
+// verdict (the funnel's `dispatch verify` lands that verdict as evidence). The
+// command shell keeps the only thing it cannot share: process-exit forwarding.
+
+/// The outcome of running a project suite — total over the ways a spawn can end,
+/// so the caller decides what is fatal (the `check` verb forwards the code; the
+/// funnel records it as evidence).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SuiteStatus {
+    /// The suite ran to completion. `code` is the terminal status, already folded
+    /// per the shell convention: a signal-killed child yields `128 + signo`.
+    Completed { code: i32 },
+    /// The program does not exist (`ENOENT`) — the caller names its own config key.
+    NotFound { program: String },
+    /// The spawn failed for any other reason.
+    SpawnFailed { program: String, detail: String },
+    /// `argv` was empty: there was nothing to spawn (never an empty spawn).
+    EmptyArgv,
+}
+
+/// Run `argv` with `cwd == root`, INHERITING stdio (live stream, not piped) and NO
+/// timeout — a dev gate streams and may legitimately run long. Returns the verdict
+/// rather than diverging, so it is callable below the command tier.
+pub(crate) fn run_suite(root: &Path, argv: &[String]) -> SuiteStatus {
+    let Some((program, args)) = argv.split_first() else {
+        return SuiteStatus::EmptyArgv;
+    };
+    match Command::new(program).args(args).current_dir(root).status() {
+        Ok(status) => SuiteStatus::Completed {
+            code: exit_code(status),
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => SuiteStatus::NotFound {
+            program: program.clone(),
+        },
+        Err(e) => SuiteStatus::SpawnFailed {
+            program: program.clone(),
+            detail: e.to_string(),
+        },
+    }
+}
+
+/// True exit forwarding (CR-F5): a normal exit yields its code; a signal-killed
+/// child yields `128 + signo` (shell convention), not a flattened `1`. Unix-only
+/// branch; doctrine targets linux/nixos.
+fn exit_code(status: ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        status.signal().map_or(1, |s| 128 + s)
+    }
+    #[cfg(not(unix))]
+    {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -512,6 +598,23 @@ mod tests {
     }
 
     #[test]
+    fn check_kind_from_key_is_the_exact_inverse_of_key() {
+        // Round-trip every cadence: `from_key(key(k)) == Some(k)`, so a config value
+        // and the resolver's key column cannot drift (STD-001, one table).
+        for kind in CheckKind::ALL {
+            assert_eq!(CheckKind::from_key(kind.key()), Some(kind));
+        }
+        // Anything else names no cadence — a refusal input, never a silent default.
+        for miss in ["", "Gate", "gate ", "verify", "regression"] {
+            assert_eq!(
+                CheckKind::from_key(miss),
+                None,
+                "unexpected hit for {miss:?}"
+            );
+        }
+    }
+
+    #[test]
     fn resolve_check_override_present_runs_it_verbatim() {
         let cfg = cfg_with(
             Some(vec!["cargo", "test"]),
@@ -593,6 +696,68 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(resolve_check(&cfg, CheckKind::Prove), run(&["x"]));
+    }
+
+    // --- SL-228 PHASE-03 VT-4: the status-returning suite runner ---------------
+
+    fn argv(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn run_suite_reports_the_childs_exit_code() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            run_suite(dir.path(), &argv(&["sh", "-c", "exit 0"])),
+            SuiteStatus::Completed { code: 0 }
+        );
+        assert_eq!(
+            run_suite(dir.path(), &argv(&["sh", "-c", "exit 7"])),
+            SuiteStatus::Completed { code: 7 }
+        );
+    }
+
+    #[test]
+    fn run_suite_folds_signal_death_to_128_plus_signo() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            run_suite(dir.path(), &argv(&["sh", "-c", "kill -TERM $$"])),
+            SuiteStatus::Completed { code: 143 },
+            "SIGTERM ⇒ 128 + 15, not a flattened 1"
+        );
+    }
+
+    #[test]
+    fn run_suite_runs_in_root_not_the_processs_cwd() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("marker"), "x").unwrap();
+        assert_eq!(
+            run_suite(dir.path(), &argv(&["sh", "-c", "test -f marker"])),
+            SuiteStatus::Completed { code: 0 }
+        );
+        let empty = tempfile::tempdir().unwrap();
+        assert_eq!(
+            run_suite(empty.path(), &argv(&["sh", "-c", "test -f marker"])),
+            SuiteStatus::Completed { code: 1 }
+        );
+    }
+
+    #[test]
+    fn run_suite_reports_a_missing_program_rather_than_erroring() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            run_suite(dir.path(), &argv(&["doctrine-no-such-binary-xyz"])),
+            SuiteStatus::NotFound {
+                program: "doctrine-no-such-binary-xyz".to_owned()
+            },
+            "the runner reports the condition; the caller names its own config key"
+        );
+    }
+
+    #[test]
+    fn run_suite_refuses_an_empty_argv_instead_of_spawning_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(run_suite(dir.path(), &[]), SuiteStatus::EmptyArgv);
     }
 
     #[test]

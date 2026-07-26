@@ -1672,7 +1672,37 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
             crate::boot::dispatch(command, check, emit_mode, path, color, render_boot_map)
         }
         Command::Catalog { command } => crate::catalog::dispatch(command, color),
-        Command::Worktree { command } => crate::worktree::dispatch(command),
+        // SL-228 PHASE-04 (D1/D3): the create-fork path is the Class-2 recorder for the
+        // `Spawn` funnel row, but `worktree` must not import `dispatch` (the command-tier
+        // back-cycle SL-204 removed). So THIS arm — and only this arm — is routed through
+        // the `dispatch::` tier, which calls `worktree::run_create_fork` and lands the row
+        // after the act. Every other worktree verb dispatches unchanged.
+        Command::Worktree {
+            command: crate::worktree::WorktreeCommand::CreateFork,
+        } => crate::dispatch::run_create_fork_and_record(),
+        // SL-228 PHASE-08 (T10 / D-P8-10): the funnel's landing authority is INJECTED
+        // here, the one place that already depends on `crate::dispatch`. `worktree` is
+        // command tier and `dispatch → worktree` already exists, so no `worktree`
+        // signature may name `dispatch` — the proof is computed above and handed down as
+        // a bare closure. Read-only and FAIL-SOFT: an unreadable record yields `None`
+        // (fall through to the shared `git cherry` oracle), an AMBIGUOUS record yields
+        // `Some(false)` (render `unknown` — never pass patch-id archaeology off as an
+        // answer to a question the record already muddied).
+        Command::Worktree { command } => {
+            crate::worktree::dispatch(command, &|root, slice, fork| {
+                use crate::dispatch::funnel::LandingVerdict;
+                match crate::dispatch::funnel::resolve_landing(
+                    root,
+                    &crate::dispatch::dispatch_ref(slice),
+                    slice,
+                    fork,
+                ) {
+                    Ok(LandingVerdict::Landed) => Some(true),
+                    Ok(LandingVerdict::Ambiguous) => Some(false),
+                    Ok(LandingVerdict::NotProven | LandingVerdict::NoRow) | Err(_) => None,
+                }
+            })
+        }
         Command::Dispatch { command } => crate::dispatch::dispatch(command, color),
         Command::Validate { path } => crate::commands::validate::run_validate(path),
         Command::Doctor {

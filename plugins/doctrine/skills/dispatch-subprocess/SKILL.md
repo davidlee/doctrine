@@ -40,18 +40,18 @@ Same confinement as codex arm; fifo keeps stdin open (pi RPC exits on EOF).
 `extension_ui_request` widget events from installed packages.
 
 ## Boundary recording
-At the funnel **Record** beat (router step 8), after the code commit:
-`doctrine slice record-delta <SL> PHASE-NN --commit <S>` — the safe-default
-single-commit mode. It derives `[S^, S]` and writes the per-phase boundary into the
-primary-tree conformance registry (F-5 resolves it from the coord tree; F-6 guard;
-upsert).
+At the `conclude` prescription (`doctrine dispatch next --slice <N>`), after the
+code commit: `doctrine slice record-delta <SL> PHASE-NN --commit <S>` — the
+safe-default single-commit mode. It derives `[S^, S]` and writes the per-phase
+boundary into the primary-tree conformance registry (F-5 resolves it from the
+coord tree; F-6 guard; upsert).
 
-**Pin `S` at step 7, do not read `HEAD` at step 8.** Step 8 *also* trails knowledge
-commits; if a knowledge commit lands before the record call, `HEAD` is no longer the
-code commit. So capture `S=$(git rev-parse HEAD)` immediately after the step-7 code
-commit and record `--commit "$S"` **before** trailing knowledge (or with the pinned
-oid regardless of order). `git diff S^..S` is exactly `S`'s own patch — trailed
-knowledge and any refresh-base merge (which sits in `S^`) are excluded by
+**Pin `S` at the code commit; never read `HEAD` at record time.** Knowledge
+commits trail the code commit, so by the time you record, `HEAD` may no longer be
+the code commit. Capture `S=$(git rev-parse HEAD)` immediately after the code
+commit lands and record `--commit "$S"` **before** trailing knowledge (or with the
+pinned oid regardless of order). `git diff S^..S` is exactly `S`'s own patch —
+trailed knowledge and any refresh-base merge (which sits in `S^`) are excluded by
 construction; this is what the old `--start/--end` range failed to do.
 
 This arm has no `record-boundary` and the codex/pi symmetric ledger derive is
@@ -66,6 +66,7 @@ manual escape hatch — `--start/--end` remains for a range / bootstrap. Its inc
 
 ## Red Flags
 **Never:** `eval`; spawn outside `env -C "$D"`; omit `timeout`; use a heredoc
-for RPC mode (stdin EOF kills pi).
+for RPC mode (stdin EOF kills pi); hand-sequence the funnel from memory (ask
+`doctrine dispatch next --slice <N>`).
 **Always:** halt on fork failure; carry `DOCTRINE_WORKER=1`; use a fifo for RPC
 stdin; `rm -f` the fifo after exit; return to the router for the funnel cadence.

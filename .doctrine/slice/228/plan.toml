@@ -103,6 +103,11 @@ verification = [
   { id = "VT-2", expects = "resolver expected-state split: AtBase accepts HEAD==base only; Advanced accepts exactly-one-commit C^==base; all other consistency checks preserved", test_file = "src/worktree/dispatch_record.rs", keywords = ["AtBase", "Advanced"], waived = false },
   { id = "VT-3", expects = "worker_commit retry signature: lost-response retry => recorded no-op replay naming landed tip; kill between fork commit and coord record + re-drive => verb lands its own lagging row; dirty advanced fork refuses; imported+ refuses already-<position>; ungated one-commit fork with belt-violating delta refuses naming the belt, belt-passing delta adopts", test_file = "src/mcp_server/worker_commit.rs", keywords = ["RecordWorkerCommit"], waived = false },
   { id = "VT-4", expects = "gc lock-gated sweep: non-blocking acquire before classify/delete; crashed spawn's residue sweeps freely (kernel-released lock)", test_file = "src/worktree/gc.rs", keywords = ["lock"], waived = false },
+  { id = "VT-5", expects = "claim->bind->act ORDER: a live fork implies its binding by construction (no observable window where the worktree exists without a DispatchRecord); a failure after the claim reverses the claim too (no branch residue from a rolled-back fork)", test_file = "src/worktree/create.rs", keywords = ["bind_dispatch_record", "fork_core"], waived = false },
+  { id = "VT-6", expects = "DispatchRecord slice+phase snapshotted at fork creation: round-trip through provision/resolve; values come from the arming snapshot at fork time and are never re-read from mutable arming state afterwards; a stale arming slice/phase cannot mis-bind the next spawn (one-shot consume, mirroring base)", test_file = "src/worktree/dispatch_record.rs", keywords = ["slice", "phase"], waived = false },
+  { id = "VT-7", expects = "Spawn row lands post-act via the create-fork path with the real fork name and base_oid (D8 order: fork, then record); a failed landing leaves a live fork with no row -- the heal-forward window -- and never aborts the spawn or suppresses the created-path stdout", test_file = "src/dispatch.rs", keywords = ["Spawn", "land_funnel_transition"], waived = false },
+  { id = "VT-8", expects = "belt-gated, provenance-indifferent self-record: an ungated one-commit fork wearing the retry signature whose delta violates a content belt refuses NAMING that belt (never adopted, never recorded); a belt-passing delta is adopted and recorded regardless of authorship", test_file = "src/mcp_server/worker_commit.rs", keywords = ["classify_scope", "run_commit_gate"], waived = false },
+  { id = "VA-1", expects = "code-shape review: land_funnel_transition remains the only funnel.toml writer; splice_record still module-private (invariant I1); no `worktree -> dispatch` import introduced (ADR-001 command-tier back-cycle)" },
 ]
 specs        = []
 requirements = []
@@ -150,11 +155,33 @@ specs        = []
 requirements = []
 
 [[phase]]
+id        = "PHASE-08"
+name      = "Reap oracle + refusal shape — ISS-245, ISS-246"
+objective = "Close the two zero-rescue regressions PHASE-06 surfaced on the reap beat, before the OQ-5 benchmark measures them instead of the design. (a) ISS-245: the funnel's atomic one-commit import composes the funnel.toml Import row into the same commit as the worker delta, so the import commit's patch-id differs from the fork's and worktree gc's `git cherry` landed-oracle reports EVERY funnel-managed fork unlanded — reap becomes unreachable on its own prescribed path and the operator learns a --force reflex (the exact failure dispatch-mechanics.md cites as the reason patch-id was chosen over delta-emptiness). Fix by asking the funnel, not git: a phase at `concluded` whose spawn.fork names the branch is landed BY DEFINITION; git cherry survives only for forks with no funnel row (the legacy path). (b) ISS-246: dispatch_reap models not-landed as a hard Err, which MCP flattens to -32603 Internal error, dropping both the diagnosis and the remedy — reshape to the Refused{reason, detail} data payload its siblings dispatch_import / dispatch_conclude_phase already use. Sequenced BEFORE PHASE-07 in plan order (ids are immutable; order is plan order, never renumbered)."
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 landed; ISS-245 / ISS-246 reproduced and their causes confirmed empirically (done — see notes.md PHASE-06 block)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "The landed-oracle consults the funnel record first: a phase at concluded whose spawn.fork names the branch reaps without --force; git cherry remains the oracle only for a fork with no funnel row" },
+  { id = "EX-2", text = "gc --force no longer strands the position: reaching reaped is not contingent on gc finding the fork present, so no recovery depends on re-issuing a verb that just refused" },
+  { id = "EX-3", text = "dispatch_reap returns Refused{reason, detail} data for every verdict a caller is expected to act on, carrying the CLI's remedy text; Err is reserved for genuine internal faults" },
+  { id = "EX-4", text = "The full funnel spawn->reap completes with zero --force and zero CLI fallback on a slice whose funnel record is populated" },
+]
+verification = [
+  { id = "VT-1", expects = "reap landed-oracle cells: funnel-row-present at concluded reaps clean (no --force); row-absent falls back to git cherry unchanged (behaviour preservation); an import commit whose patch is a strict superset of the fork's is still recognised as landed", test_file = "src/worktree/gc.rs", keywords = ["concluded", "funnel", "landed"], waived = false },
+  { id = "VT-2", expects = "dispatch_reap refusal shape: every actionable verdict surfaces as Refused{reason, detail} with an enumerated reason, never a bare Err; detail carries the remedy", test_file = "src/mcp_server/dispatch.rs", keywords = ["Refused", "not-landed"], waived = false },
+  { id = "VA-1", expects = "audit every dispatch MCP tool for an Err path a caller is expected to act on; report the survivors (sibling sweep prompted by ISS-246)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
 id        = "PHASE-07"
 name      = "Benchmark — OQ-5 memory-blind acceptance"
 objective = "Terminal acceptance (scope OQ-5): build the memory-blind benchmark harness; run a fresh orchestrator with zero dispatch memories through a standard run plus the top-5 quirk scenarios (RFC-011 case-notes prioritisation) driven by next/refusal output alone; measure token cost + completion against the SL-224/225 cleaned baseline; produce the OQ-6 dispatch-memory retirement list."
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-06 landed; a full dispatch funnel is drivable end-to-end by verbs alone" },
+  { id = "EN-2", text = "PHASE-08 landed (ISS-245/ISS-246 closed) — else the benchmark measures the reap defects rather than the design; appended, never renumbered" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "Benchmark executed: standard run + top-5 quirk scenarios completed by a memory-blind orchestrator following verb output" },
@@ -164,6 +191,43 @@ exit_criteria = [
 verification = [
   { id = "VA-1", expects = "benchmark protocol followed as designed (zero dispatch memories confirmed in the fresh context; scenarios from the RFC-011 prioritisation); results internally consistent" },
   { id = "VH-1", expects = "User accepts the benchmark result as satisfying the OQ-5 terminal-acceptance bar for the cluster" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-09"
+name      = "Coord hook: the absent-chain cell (ISS-249)"
+objective = """
+Close ISS-249, found by PHASE-07's memory-blind benchmark in a fresh coordination \
+worktree: the shipped coord pre-commit hook (`install/git-hooks/pre-commit`, \
+SL-228 PHASE-02) runs under `set -eu`, and its chain-resolution line \
+`next_real="$(resolve "$next")"` exits non-zero when the resolved chain target does \
+not exist — so `set -e` terminates the hook before the `[ -x "$next" ]` guard that \
+exists to handle exactly that case, and git refuses EVERY commit in the worktree \
+with no diagnostic. Appended after PHASE-07 because the benchmark is what found it; \
+ids are immutable and order is plan order, never renumbered. PHASE-02 is `reaped` and \
+the machine makes `reaped` terminal bar its own replay, so there is no funnel re-drive \
+path for the phase that shipped the asset — the fix lands as its own phase. The \
+substance is one line; the phase exists for the missing TEST CELL. §11 REQ-389 pins \
+the chained-global case (R4's operator-gotcha) but never the degenerate ABSENCE, which \
+is the configuration that ships by default to every client project with no global or \
+local pre-commit — so the one path with no coverage was the default one. Name the new \
+test beside its sibling `install_coord_hook_installs_and_chains_the_operator_hook` \
+(`src/dispatch.rs`) as `install_coord_hook_permits_commit_when_no_chained_hook_exists`.
+"""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-07 landed the benchmark evidence; ISS-249 reproduced and its cause confirmed (`.doctrine/slice/228/benchmark.md`; reproduction in the issue)" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "With NO chained pre-commit at the resolved non-worktree hooksPath, a legitimate commit in a coordination worktree SUCCEEDS" },
+  { id = "EX-2", text = "With a chained hook present it still fires — behaviour preservation, existing chain test green UNMODIFIED" },
+  { id = "EX-3", text = "The fail-closed arms are unchanged: binary-absent still REFUSES (no degrade to deletion-only), the ISS-234 deletion and reversion arms still refuse, DOCTRINE_ALLOW_DELETE still escapes" },
+]
+verification = [
+  { id = "VT-1", expects = "the absent-chain cell: a coord worktree whose resolved chain target does not exist accepts a legitimate commit and still refuses the ISS-234 signature", test_file = "src/dispatch.rs", keywords = ["no_chained_hook"], waived = false },
+  { id = "VT-2", expects = "behaviour preservation — install_coord_hook_installs_and_chains_the_operator_hook and the four hook_check_* arms stay green UNMODIFIED", test_file = "src/dispatch.rs", keywords = ["install_coord_hook_installs_and_chains_the_operator_hook"], waived = false },
+  { id = "VA-1", expects = "the shipped asset and any installed instances agree; no OTHER `set -e`-fragile command substitution survives in the hook (sweep, report)" },
 ]
 specs        = []
 requirements = []
