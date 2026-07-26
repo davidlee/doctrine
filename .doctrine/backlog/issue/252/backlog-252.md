@@ -77,6 +77,51 @@ Options, roughly in order of preference:
 
 (1) plus (3) is the belt-and-braces combination.
 
+## Second surface — `conclude_phase` leaves the tree DIRTY, not merely stale
+
+*Added 2026-07-27 from the SL-230 PHASE-03→04 boundary.* The observed section above
+is the pre-verify case. In a **serial multi-phase drive** the same root cause has a
+second, sharper surface at the *other* end of the funnel.
+
+`dispatch_conclude_phase` commits the boundary row working-tree-free too, so after
+it returns the coord checkout holds the **inverse of its own commit** — staged:
+
+```
+$ git status --porcelain                       # coord tree, after conclude
+M  .doctrine/dispatch/230/boundaries.toml
+$ git diff --cached HEAD -- .doctrine/dispatch/230/boundaries.toml
+-[[boundary]]
+-phase = "PHASE-03"
+-code_start_oid = "e7e0d42f…"
+-code_end_oid  = "232dbd3f…"
+-provenance = "funnel"
+```
+
+Two consequences the import case does not have:
+
+1. **It fails the next phase's base-clean precondition.** The funnel's step 1 is
+   "worktree/index clean, HEAD == B". After a conclude the tree is never clean, so
+   every phase after the first begins on a precondition violation that is entirely
+   an artefact of the previous phase's own bookkeeping. Unlike the verify beat this
+   at least fails *closed* — but it reads as a defect and invites the operator to
+   "fix" it the wrong way.
+2. **A pathless commit at that moment silently reverts the boundary row.** The
+   staged content is a deletion of the row `conclude_phase` just landed. The
+   repo-wide "path-limit the commit itself" rule (AGENTS.md) is what stands between
+   this and a lost ledger entry — which `prepare-review`'s completeness gate would
+   later report as a missing row for a completed phase, at the worst possible time.
+
+So the ritual under fix (3) is not "reset between import and verify". It is **reset
+after every working-tree-free write** — import *and* conclude. That the correct
+ritual is broader than the one place the router could name it is itself an argument
+for fix (1) or (2): a documented beat whose scope the documentation gets wrong is
+weaker than it looks.
+
+Fix (2) reconsidered in this light: refreshing the checkout after a successful
+compose gives up the working-tree-free property, but the property is only load-
+bearing *during* the compose. A post-success `reset --hard` to the new tip is not
+the same concession and would close both surfaces.
+
 ## Related
 
 - The same staleness bites `slice verify-vt` indirectly but harmlessly: it reads
