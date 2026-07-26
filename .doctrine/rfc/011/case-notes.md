@@ -175,6 +175,15 @@ a mild "read via show, not raw files" tension, since the structured
 disposition tier has no `show` surface. A `review show --findings` (or the
 dispositions inlined into `show`) would have saved one raw-file read.
 
+[inquisition; SL-230-RV307-round7]
+`doctrine memory retrieve --path .doctrine/slice/230/design.md` treated the
+file path as a directory/root and attempted to read
+`.doctrine/slice/230/design.md/.doctrine/memory/items`, rather than retrieving
+memories scoped to that path. The command failed before returning context and
+the review proceeded from explicit entity/canon reads. The `--path` help should
+distinguish a project-root override from a scope-path query (or the latter
+needs its own flag); the current spelling invites exactly this wasted probe.
+
 [inquisition; SL-225-RV-292-memory-dedup]
 Before recording the reusable `git-common-dir` topology fact, two scoped
 `memory find` queries failed to surface the already-existing near-exact memory
@@ -2022,3 +2031,31 @@ Two costs in this round, both from measurement rather than from the CLI.
    (the shape `memory record --body -` already uses) or a batch form would remove
    both the quoting hazard and 10 redundant read-modify-writes. This is the third
    case note against per-finding dispose cost (see the SL-306 entry ~line 1715).
+
+[inquisition; SL-230-RV-307-round7-responder]
+**An unverified stability claim cost two review rounds.** The expensive pattern
+this slice keeps paying for is not a missing probe — it is a probe run on the
+wrong proposition. Round 6 I measured that `git rev-list --all` *discriminates*
+the corpus correctly (30/13 split, reproduced independently by the raiser), and
+then told the user history was "checkout-stable" as the reason to prefer it over
+filesystem existence. I never probed the stability claim. F-31 falsified it in
+one command: delete a branch and a once-tracked path flips from stale/refuse to
+unobservable/attest while its commit object survives.
+
+So round 6 replaced one locally-varying instrument (does the file exist here)
+with another (what refs does this clone have), and the review had to run a whole
+extra round to find it. Two rounds of the seven were spent on successive wrong
+instruments for one class boundary.
+
+The generalisable cost driver, distinct from the "register the falsifier" rule
+already in this corpus: **when a decision rests on a property of a tool
+(stable, total, deterministic, idempotent), that property is itself a claim
+needing a falsifier — not a premise.** The measurement that the discriminator
+*works* is not evidence that it is *stable*. Cheap habit that would have caught
+it: before recommending an instrument, ask "what local state does this read?"
+and vary that state once.
+
+Secondary, mechanical: `review dispose` remains one-finding-per-invocation
+(third case note on this — see the round-7-dispositions entry above). Eleven
+dispositions last round, eleven this round pending; each rewrites the same
+`review-307.toml`.

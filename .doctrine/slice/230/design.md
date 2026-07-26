@@ -1104,9 +1104,12 @@ existence rather than assuming it. STD-001 is satisfied by reusing
 
 ### External review — RV-307 (codex/GPT, inquisitor posture)
 
-Twenty-four findings over five rounds. **All disposed `fix-now`; none deferred,
-none tolerated.** Full charges, evidence and responses are on the ledger
-(`doctrine review show RV-307` / `review-307.toml`).
+Thirty-five findings over seven rounds, nine of them blockers. **All disposed
+`fix-now`; none deferred, none tolerated.** Full charges, evidence and responses
+are on the ledger (`review-307.toml` — `review show` prints the brief only).
+Counts in this section are a standing staleness hazard: they were wrong at round 7
+(RV-307 F-35) because a round updates the ledger and not the prose. Prefer
+`doctrine review status RV-307` over this line.
 
 **This section points; it does not restate** (RV-307 F-22). Every mechanism below
 has a normative home, and that home is authoritative. History that re-describes a
