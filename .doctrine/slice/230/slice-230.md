@@ -19,26 +19,12 @@ carcass. On edit, correcting a stale body means bypassing the CLI entirely,
 which is how IMP-221 was surfaced in the first place (a stale spec reference in
 `mem.signpost.project.orientation` during RFC-012).
 
-The verify half of IMP-221 was filed on a stale premise. It asserts that
-`memory verify` refuses a dirty working tree, full stop; `--allow-dirty` had
-already shipped 2026-06-18/21, roughly ten days before the item was written.
-But the friction is real and still recurring — the flag is undiscoverable, and
-in practice agents hit the refusal and reach for `git stash` rather than for
-`--help`. Worse, the common case is self-inflicted: doing doctrine work means
-the authored corpus is essentially always dirty, so verifying a memory you just
-edited is blocked *by your own edit*.
-
-The fix is to make the cleanliness test measure the thing the attestation is
-actually about: a memory attests a claim against **what it declares**. Dirt the
-memory does not declare says nothing about whether that claim still holds. So the
-dirty check should ignore doctrine's own authored trees by default, and keep
-refusing on a genuinely dirty source tree — where the attestation truly cannot
-be pinned to a commit.
-
-*Sharpened during design (RV-307 F-6/F-33).* "Against the **code**" was too narrow
-and is not the contract: **81 items in this corpus scope `.doctrine/**`**, so an
-ADR or spec a memory explicitly names is claim evidence exactly as `src/` is. What
-is excluded is unclaimed dirt, not governance dirt.
+*The verify half of this slice was split out.* IMP-221 also asked for relief from
+`verify`'s dirty-tree refusal, and this slice originally carried it as objective 3.
+At RV-307 round 8 the user split that work into **SL-232** (see **DEC-027**): the
+gate proved to be a substantially larger problem than the body-write seam, and the
+two halves were not converging at the same rate. What remains here is the seam and
+the invalidation that a writable body makes necessary.
 
 Two prior decisions bear on this and neither is recorded in IMP-221:
 
@@ -74,76 +60,18 @@ Two prior decisions bear on this and neither is recorded in IMP-221:
 - Both delegate to the same core as the CLI verbs; the MCP layer stays a thin
   argument adapter.
 
-### 3. Corpus-aware verify dirty-tree gate
+### 3–4. Corpus-aware verify gate + SPEC-007 reconciliation — MOVED to SL-232
 
-- The clean/dirty decision for `verify` ignores modifications confined to
-  doctrine's **own authored trees** — `.doctrine/**` and the repo-root `memory/`
-  corpus-authoring tree that `record --global` writes into (SL-018).
-- The exclusion set is computed from **doctrine-owned path constants**, not a
-  hardcoded literal list. POL-002 forbids load-bearing on host layout; STD-001
-  forbids the magic strings. These are owned platform paths — the engine already
-  defines them — so the exclusion is grounded on an owned contract, which is
-  precisely what makes it legal.
-- **The exclusion is claim-aware, not blanket** (revised by RV-307 F-1/F-6). The
-  memory's own item directory and its declared scopes are *never* excluded — they
-  are the evidence the attestation is about. Blanket exclusion would have stamped
-  a commit that did not contain the attested body, and would have ignored a
-  modified file a memory explicitly scopes. So `verify` asks two questions: is the
-  unclaimed tree dirty, and is the **observable** claim committed? Never-excluded
-  is not the same as always-required: an entry git does not track contributes no
-  evidence and is reported rather than demanded (design D10, R8; RV-307 F-33).
-- **That item directory is the canonicalised uid dir** (RV-307 F-15). Keys in
-  `items/` are symlinks and git will not traverse one in a pathspec, so a claim
-  surface built from a key-form reference reads clean against a modified body —
-  the same false attestation, reached through the reference form.
-- **Scope entries are treated as data, never as pathspec syntax** (RV-307 F-18).
-  Memory text is untrusted (SPEC-007 § Concerns); interpolated raw, a
-  `:(exclude)` scope value subtracts the memory's own directory from the surface
-  it is measured against. Every entry is magic-prefixed.
-- **Non-contribution is reported, not classified** (design D10, **DEC-020**).
-  `verify` attests over every declared entry that contributes no tracked file,
-  names each on stderr, and `validate` raises them. The only refusal is the entry
-  git cannot answer for at all — empty, or an emitted form outside the repository,
-  where the probe *aborts* rather than returning a verdict. That is a mechanical
-  necessity, not a judgement about the memory. Three derived boundaries were
-  measured against the real corpus and rejected in turn — blanket refusal (36
-  active items stop verifying), filesystem existence (checkout-dependent), and
-  `git rev-list --all` history (ref-set-dependent: deleting a branch flips the
-  verdict). All three read *local repository state*, which is why a fourth was not
-  attempted. Cost of the chosen cut: **zero** — no memory loses a stamp. The
-  deferred question, and the declared-boundary answer it needs, is design OQ-6.
-- **The claim-surface constructor serves `verify` alone** (D11). `validate`'s
-  staleness check and `retrieve`'s ranking both keep the raw scope seam. Not
-  bounded for convenience: they ask a *historical* question, and the
-  canonicalisation `verify` requires erases a committed symlink retarget from a
-  commit count. A correct shared surface is a second, history-stable constructor —
-  a change to corpus-wide staleness ranking, which is OQ-2's deferred decision.
-  The gap is design R7, routed as IMP-317; adoption needs a dataflow change, not a
-  call-site swap.
-- **An attestation does not record what it covered** (design R8). A stamp may
-  cover a proper subset of the declared scope, and a consumer cannot tell — the
-  shortfall lives on stderr and in `validate`, not on the record. This is the
-  **weak reading** of `verified_sha`, and it is the only reading the design
-  carries: *everything git could observe about the claim was committed and
-  unchanged at that commit*, not *every declared entry was observed*. Needs a
-  persisted field to close; routed as IMP-318.
-- **Consequence, stated plainly:** `record` → `verify` now **refuses** until the
-  new memory is committed. The friction this slice removes is *unrelated* corpus
-  dirt — another agent's uncommitted backlog file, your own unrelated spec edit —
-  not the requirement that the claim you are attesting exist in a commit.
-- A dirty **source** tree still refuses, and `--allow-dirty` remains the escape
-  hatch for that case with its `checkout_state_id` stamping unchanged.
-- The `thread_expiry` gate (SL-008 D6) is not touched.
+Both objectives left this slice by **DEC-027** at RV-307 round 8.
 
-### 4. SPEC-007 reconciliation — REV-034
+The gate (claim-aware exclusion, the claim-surface constructor, non-contribution
+reporting under DEC-020, and the historical-consumer question) is **SL-232**'s,
+along with **REV-034** — the SPEC-007 + REQ-147 amendment — because the retired
+"clean working tree" contract is changed by the gate and not by body-write. The
+`needs` edge moved with it, so this slice is no longer gated on that revision.
 
-The retired "clean working tree, refusing a dirty one" contract lives at **three**
-sites, not two: `spec-007.toml:22`, `spec-007.md:132-133`, and **REQ-147**, an
-active member of SPEC-007 whose *title is that contract verbatim* (found by
-RV-307 F-5; a two-site amendment would have left the requirement asserting the
-opposite of the code). The implementation already diverged when `--allow-dirty`
-shipped; this slice changes it further. Corrected through **REV-034**
-(`SL-230 needs REV-034`), applied at close so spec and code turn over together.
+Read `.doctrine/slice/232/design.md` for the inherited design; it carries two open
+blockers (RV-307 F-36, F-37) and is not locked.
 
 ### 5. Attestation invalidation
 
@@ -162,15 +90,15 @@ other agents. It does **not** catch masters: they are unanchored and `collect_al
 never scans them (RV-307 F-7; design R5). Advisory surface only; retrieve-side
 ranking is deliberately untouched (design OQ-2).
 
-### 6. Verify refusal names its escape hatch
+### 6. Verify refusal names its escape hatch — MOVED to SL-232
 
-The dirty-tree refusal names `--allow-dirty` instead of prescribing a commit.
+The dirty-tree refusal message is part of the gate; it goes with it (DEC-027).
 
 ## Non-Goals
 
-- **An MCP `memory_verify` tool.** SL-164's stated reason for excluding it
-  dissolves here, but re-litigating that exclusion is its own decision with its
-  own scope. Captured as a follow-up, not smuggled in.
+- **An MCP `memory_verify` tool.** SL-164's stated reason for excluding it is
+  dissolved by SL-232's gate, not by this slice; re-litigating the exclusion is
+  its own decision. Captured as a follow-up, not smuggled in.
 - **`--edit-body` / `$EDITOR` interactive body editing.** Floated in IMP-221 as
   a nice-to-have; an interactive editor is unusable from a jailed or MCP agent
   context, which is the whole audience. Dropped, not deferred.
@@ -180,36 +108,35 @@ The dirty-tree refusal names `--allow-dirty` instead of prescribing a commit.
   `memory sync` → `doctrine install`). Untouched.
 - **Filling CHR-035's empty body.** This slice supplies the verb; using it is
   that item's job.
-- **Any change to the memory TOML/MD schema.**
+- **Any change to the memory TOML/MD schema.** (SL-232 *does* expect one — the
+  declared boundary and attested-coverage field. That is a reason it is a separate
+  slice, not a reason to pre-empt it here.)
+- **The corpus-aware `verify` gate** and everything downstream of it — claim
+  surfaces, exclusion sets, pathspec construction, non-contribution reporting.
+  **SL-232**'s by DEC-027. Where this slice needs a git fact the gate also needs,
+  it states it locally rather than depending on the gate's rules.
 
 ## Risks, assumptions, open questions
 
-**Status: design locked-pending-review (`design.md`). All scoping-stage unknowns
-below are resolved; live open questions now live in `design.md` § 6.**
+**Status: design NOT locked.** It was locked-pending-review until RV-307 round 8;
+DEC-027 then narrowed the slice, so `design.md` has been rewritten to the new
+boundary and needs a confirming pass over the retained half. Live open questions
+are in `design.md` § 6 (OQ-4, OQ-7).
 
 - **A1 — RESOLVED ✓.** SL-005 § 5.2 (review #7) reads: "v1 scaffolds a template
   containing title + summary only — no editor, no stdin, no `--body`. *Richer
   body capture is a later mutation verb.*" A deferral, not a prohibition — this
   slice is that verb. No governance step needed before objectives 1-2.
-- **OQ-1 — RESOLVED.** Narrowed to a single path: `MEMORY_SHIPPED_DIR` and
-  `MEMORY_ITEMS_DIR` are both *under* `.doctrine`, so one exclusion root covers
-  them; only repo-root `MEMORY_MASTERS_DIR` sits outside. Excluded, guarded on
-  the directory's existence — POL-002-legal (an owned constant) without carrying
-  dead weight into client projects that have no such tree.
-- **OQ-3 — RESOLVED ✓.** Exclusion applies at verify only. `capture()` has
-  exactly three callers (verified: `retrieve.rs:532`, `memory.rs:1708`,
-  `memory.rs:3382`); two would be damaged by unconditional leniency. Implemented
-  as `capture_with(root, excludes)` with `capture()` delegating — see design D3
-  and review finding A1 (the first draft's parallel probe was rejected).
 - **OQ-2 — RESOLVED.** Replace + append, via `--body-mode`. Revisit on evidence.
-- **R1 — RESOLVED.** Corpus-dirty stamps the **HEAD commit**, which is *stronger*
-  evidence than today's `checkout_state_id` hash, not weaker. See design D3.
+- **OQ-1, OQ-3, R1 — MOVED to SL-232** (DEC-027). All three were scoping-stage
+  questions about the exclusion set and `capture_with`; they were resolved, and
+  their resolutions travel with the gate rather than being restated here.
 - **R2 — CARRIED, sharpened.** Stored memory text is untrusted (SPEC-007
   § Concerns). Review finding A3 corrected the framing: there is no write-time
   escaping on the `.md` tier to bypass; the defence is read-time (nonce +
   data-framing), untouched here. Pinned by T16.
 
-### Discovered during design — scope grew from 4 objectives to 6
+### Discovered during design — then narrowed by the split
 
 - **Attestation survives claim change (new objective 5).** Observed live: a
   memory verified at `933b747c` kept `verification_state = "verified"` through a
@@ -217,28 +144,35 @@ below are resolved; live open questions now live in `design.md` § 6.**
   turns a hand-edit-only footgun into a one-command operation, so this slice
   closes it: the verb clears the axis (D4), and `validate` gains an
   own-directory staleness check to catch the hand-edit bypass (D5).
-- **The dirty refusal hides its own escape hatch (new objective 6).** The message
+- **The dirty refusal hides its own escape hatch (was objective 6).** The message
   prescribes committing and never mentions `--allow-dirty` — which is why, in
-  practice, agents reach for `git stash` instead. The refusal now names the flag.
+  practice, agents reach for `git stash` instead. Still true, now **SL-232**'s to
+  fix (DEC-027).
+- **Scope grew from 4 objectives to 6 during design, then split.** The growth was
+  real and the review found it load-bearing; the split is the correction, not a
+  retreat. DEC-027 records why.
 
 ## Verification / closure intent
 
 - Body written via `record` and via `edit` (both modes, both surfaces) round-
   trips through `memory show` byte-for-byte.
-- Verify succeeds with only **unclaimed** `.doctrine/**` dirty — and refuses when
-  the dirty governance file is one the memory declares (design T25); still refuses with a dirty
-  source tree; `--allow-dirty` behaviour unchanged.
-- Exclusion set derives from named constants — no path literals at the call
-  site.
-- Existing memory suites stay green unchanged (behaviour-preservation gate on
-  shared machinery).
-- SPEC-007 text and implementation agree.
+- Editing a claim field through `edit` clears the verification axis; editing a
+  record field does not; re-setting a field to its existing value clears nothing.
+- `validate` flags staleness after a **hand-edit** of `memory.md` (the bypass
+  path — the verb path clears the stamp, so it never reaches the check).
+- Existing memory and entity suites stay green unchanged (behaviour-preservation
+  gate on shared machinery).
+- A rejected `edit` argument leaves **both** tiers untouched.
+
+*Gate-side closure intent — dirty-tree behaviour, exclusion constants, and
+SPEC-007 agreement — moved to SL-232 (DEC-027).*
 
 ## Summary
 
 ## Follow-Ups
 
-- Reopen SL-164's MCP `memory_verify` exclusion now that its stated rationale
-  no longer holds.
+- Reopen SL-164's MCP `memory_verify` exclusion once SL-232 lands — its stated
+  rationale ("clean-tree precondition makes it fragile as a tool anyway") is
+  dissolved by the gate, not by this slice, so the follow-up belongs after SL-232.
 - Correct IMP-221's body: sub-item C's premise is stale (`--allow-dirty` predates
   the filing).
