@@ -4,10 +4,10 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-> **Status: internal adversarial review integrated; awaiting formal-review
-> choice and explicit lock.** Sections 1–9 preserve the substance aligned
-> during the design interview and were reconciled against the original session
-> transcript after compaction.
+> **Status: locked.** Formal adversarial review discharged on RV-315 — twenty
+> findings across five rounds, all terminal. Sections 1–9 preserve the substance
+> aligned during the design interview and were reconciled against the original
+> session transcript after compaction.
 
 ## 1. Design Problem
 
@@ -777,5 +777,5 @@ use it, whether it disambiguates acceptance, and its interaction/token cost.
   edge preserves provenance.
 - The implementation homes and current selectors are reconciled, including
   manifest sealing, publication addresses, asset-distribution tests,
-  architecture indexing, and the deferred exact spec paths. RV-315 remains the
-  formal review gate; the design cannot lock until its ledger is resolved.
+  architecture indexing, and the deferred exact spec paths. RV-315 was the
+  formal review gate; its ledger is resolved and the design is locked.
