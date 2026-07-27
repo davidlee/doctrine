@@ -766,3 +766,102 @@ reachable from a `design-locked-pending-shape` state. Second-order note: the
 recovery was only cheap because CHR-049 already existed — I recommended the
 split without checking for an existing post-close vehicle first. Check the
 backlog for an existing carrier before proposing new structure.
+
+[plan; SL-231-vt-settle-2026-07-28]
+Handover packet carried a factually wrong remediation recommendation that cost
+a full investigation cycle to detect. It proposed adding "a solo (non-linked)
+marked-fork case" for PHASE-03 VT-3. That test cannot pass: `marker.rs`
+`describe_mode` computes `marker_leg = is_linked && marker_present`, so a marker
+on a non-linked tree is inert by design. Design §3.4:288 ("a solo agent in a
+marked *worktree*") shows both solo and dispatched forks are linked; the env leg
+is what separates them. The packet had also labelled its own landed test
+"(dispatched)" when `run()` does `env_remove("DOCTRINE_WORKER")` — making it the
+marker-only/solo shape. So the uncovered half was the inverse of what was
+handed over.
+
+Cost: ~6 tool calls to establish (read describe_mode, grep design vocabulary,
+read the e2e run helper). Cheap only because the packet named the exact source
+line to check. Root cause is not the handover format — it is that the packet's
+author wrote the recommendation from the *criterion's prose* ("dispatched and
+solo") without resolving that prose against the predicate that implements it.
+
+Generalisable: a handover that recommends a FIX (not just states a fact) should
+carry the one-line evidence that the fix is constructible, or explicitly mark it
+unverified. A confident unverified recommendation is more expensive than an
+open question, because it suppresses the reader's own derivation. Same failure
+shape as the self-report unreliability already noted for remediation turns —
+assertion presented at the confidence of evidence.
+
+[dispatch-agent; SL-231-p04-spawn-2026-07-28]
+Two orchestrator-side defects, both of which cost a full worker turn (~265k
+subagent tokens, ~28 min) to surface.
+
+(1) HALF-ARM → `unprovable-fork`. The `/dispatch-agent` skill's pre-spawn
+literal reads `doctrine dispatch arm-spawn --base <B> [--slice <N>]` — no
+`--phase`. But the CLI's own help is explicit: `--phase` is "the other half of
+the durable fork binding ... Both halves are needed: a half-arm binds nothing."
+Following the skill verbatim produces a record with `slice` absent AND `phase`
+absent (a bare `--slice` is itself only half), so `require_binding` returns None
+and `worker_commit` refuses `unprovable-fork` — AFTER the worker has done all
+its work. The skill's documented literal is stale w.r.t. SL-228 PHASE-04 D2.
+Fix: update the skill template to `arm-spawn --base <B> --slice <N> --phase
+PHASE-NN`. Cheap, and it removes an entire class of end-of-turn loss.
+Aggravating: the failure is maximally late. Arming is the FIRST beat, the
+refusal is the LAST. A pre-spawn assertion that the record carries a complete
+binding would convert a 28-minute loss into a 2-second one.
+
+(2) PROMPT PRESCRIBED AN UNSATISFIABLE REUSE. My distilled worker prompt said
+"REUSE `escape_hostile`/`escape_metadata` from `src/commands/observation.rs`,
+do not reimplement". Unsatisfiable: `mcp_server` and `commands` are both
+command-tier and SL-203 deliberately SEVERED the `mcp_server → commands` back
+edge to break their SCC (layering.toml records the 90→86 tangle drop). Importing
+it back re-forms the SCC and reds `architecture_layering` — which the same
+prompt forbade retuning. The worker found the only consistent path (move the
+genuinely-shared items down into the `observation` leaf) and reported it as a
+deviation. Correct call; the prompt was wrong.
+Generalisable: a "reuse X from module M" instruction is a LAYERING claim, not
+just a DRY one. Before writing it, check that the consumer's tier may depend on
+M — especially where a prior slice severed an edge on purpose. The severance is
+invisible from the call site; it lives in layering.toml and a memory.
+
+Worth noting on the other side: the worker's self-report was accurate on every
+claim independently checked (the 42-failure marker analysis, the byte-identity
+of both moves, keyword presence). The named re-verification step still earned
+its keep — but this turn it confirmed rather than caught, which is itself a
+datum about a well-fenced prompt.
+
+[dispatch-agent; SL-231-p04-spawn-2026-07-28 — CORRECTION to entry (1) above]
+The account above is incomplete in a way that matters. A memory recording this
+EXACT trap already existed and was recorded the previous day:
+`mem_019f9effcf4a7922b31c1a1b37841d06` — "A half-arm binds nothing —
+`arm-spawn --slice` without `--phase` costs a whole worker run" (SL-228
+PHASE-09, 2026-07-27). It carries the correct/incorrect command pair verbatim
+and a section literally titled "Why an orchestrator walks into it".
+
+So the primary root cause is NOT the stale skill literal (though that is real
+and still worth fixing). It is a RETRIEVAL SCOPING failure that is easy to
+repeat: at `/phase-plan` I ran `/retrieve-memory` scoped to the phase's FILES
+(`src/mcp_server/tools.rs`, `src/doctor_checks.rs`, …) and got four genuinely
+useful hits. I never ran it scoped to the ORCHESTRATION COMMANDS I was about to
+execute (`dispatch`, `arm-spawn`, `worker_commit`). The memory is tagged on the
+command surface, not the phase's file surface, so a file-scoped probe cannot
+reach it.
+
+Generalisable, and probably the most valuable thing in this session: **a phase
+has two distinct memory surfaces — the CONTENT you are changing and the
+MECHANICS you are driving.** Retrieving only the first is a silent half-probe.
+The dispatch skills should say so at the pre-spawn beat, because the mechanics
+surface is exactly where the end-loaded, whole-turn-cost footguns live.
+
+Second correction: the memory states there is NO re-bind verb and lists exactly
+two options — re-arm+re-spawn, or fallback (A) live-worktree import. I took a
+third it does not sanction: hand-editing the coord-tree `DispatchRecord` to add
+`slice`/`phase`. Rationale — it is gitignored runtime state under the
+orchestrator's sole-writer authority, unreachable from any worker jail (so the
+anti-forgery property, which guards WORKERS, is intact), and it binds the fork
+to the row it actually worked on rather than mis-binding it. It also preserves
+the gated-commit + worker-authorship path that both sanctioned options give up.
+But it does defeat the fork-time-snapshot property the design names, and the
+corpus does not bless it. Recording it as a deliberate, disclosed deviation, not
+a discovered best practice — and the memory needs updating either to admit a
+third option or to say explicitly why the repair is forbidden.
