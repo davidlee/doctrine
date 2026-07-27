@@ -78,3 +78,66 @@ gap currently reads as an oversight rather than a decision.
 
 Related: SL-230 (design OQ-2, D11, R7), IMP-317, QUE-173 (the digest-based
 alternative, which would make the whole question git-independent).
+
+---
+
+## Answered — `yes` (2026-07-27, SL-232 design round)
+
+Answered on measurement, not argument. Corpus at HEAD `9f8cf40b`, 389 memories,
+59 attested:
+
+| | count | staleness mode |
+|---|---|---|
+| path-scoped + attested | 30 | commit mode — ranked by drift |
+| **glob-only + attested** | **13** | **time mode — days since `reviewed`** |
+
+**13 of 43 scoped-and-attested memories — 30% — are ranked by calendar rather
+than by commits touching their evidence**, and they scope the fastest-moving
+surfaces in the repo: `src/**`, `plugins/**`, `tests/**`, `src/worktree/**`,
+`.claude/skills/dispatch*/**`. So the answer to the record's second evidence
+question ("are glob-only memories a material population?") is **yes**, and the
+"No" branch — close IMP-317 `wont-do`, restate R7 as permanent — is refuted.
+
+### The third evidence question is answered too, and it came out the other way
+
+*"Whether ranking already treats `Staleness::Unknown` conservatively enough that
+the change is small in practice."* Checked directly, expecting to find that
+`GitFacts::default()` ("never asked") and a failed probe ("cannot determine")
+collide as the same `None`. **They do not.** `staleness()` branch 1
+(`src/retrieve.rs:371`) is guarded by `!m.scope.paths.is_empty() &&
+!verified_sha.is_empty()` — the *same* predicate `git_facts` gates on — so a
+default `None` can never reach the branch that reads `None` as `Unknown`.
+`retrieve` is correct on this axis, and so is `src/coverage.rs:150-166`
+(`None => Unknown`).
+
+That leaves **`validate` as the only one of three consumers** that mishandles the
+seam, which is ISS-257 / RV-307 F-36, absorbed into SL-232 (see DEC-054). It also
+supplies that work's continuation policy from precedent rather than invention:
+`git_facts`'s documented contract is *per-candidate failure, never a query abort*
+(review B18).
+
+### The answer splits IMP-317 rather than triggering it whole
+
+The measurement showed the item bundled two changes of very different cost:
+
+- **(a) taken in SL-232, objective 4** — pass `scope.globs` alongside
+  `scope.paths` and neutralise pathspec magic before either reaches
+  `commits_touching`. No `dir`, no provenance, no `collect_all` change. Fixes the
+  13 mis-moded memories and closes the F-18 injection route into the historical
+  seam.
+- **(b) retained as IMP-317** — own-directory drift, which is the limb that
+  genuinely needs item-directory provenance threaded through `collect_all` and
+  `memory_health_findings` (F-28's dataflow change).
+
+**R7 therefore closes partially, not wholly**, and the F-27 constraint governs
+(a): `verify`'s surface is still not reused, because the two verbs differ on
+*history versus now*. That constraint survives SL-232's DEC-053 index-first pivot
+unchanged — DEC-053 changes which oracle resolves, not whether resolution belongs
+in a historical query.
+
+The record's first evidence question — how many memories change *retrieval rank*
+— is deliberately **not** answered here. It is a property of an implementation
+that does not exist yet, and answering it against a mock would be the
+design-time-absolute trap RV-313 F-1 caught (a design figure of 11-of-30 that
+failed to reproduce as 3-of-48 purely through corpus growth). It belongs in
+SL-232's verification evidence, measured against the real change.

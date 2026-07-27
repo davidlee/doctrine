@@ -5,9 +5,9 @@ id = 175
 slug = "should-claim-surface-drift-feed-retrieve-side-staleness-ranking"
 title = "Should claim-surface drift feed retrieve-side staleness ranking"
 record_kind = "question"
-status = "open"
+status = "answered"
 created = "2026-07-26"
-updated = "2026-07-26"
+updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
