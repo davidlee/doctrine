@@ -32,7 +32,19 @@ ln -sfn target-main link; $G add link; $G commit -qm main
 $G merge other >/dev/null 2>&1
 echo "  ls-files -s -z -- link:"; $G ls-files -s -- link | sed 's/^/    /'
 echo "  ls-files -v -- link:";    $G "${NORM[@]}" ls-files -v -- link | sed 's/^/    /'
-printf '  cat-file blob :link -> '; $G cat-file blob :link 2>&1 | head -2 | tr '\n' ' '; echo "(rc=$?)"
+# RV-314 F-41: `$?` after a pipeline is the LAST element's status, so the
+# original form here reported `tr`'s rc (always 0) for a command that exits 128 —
+# pinning DEC-090's load-bearing fact backwards. Capture the rc directly rather
+# than reaching for `set -o pipefail`, which would change `$?` semantics for the
+# `grep -v` above (it legitimately exits 1 when every row reads H).
+um_out=$($G cat-file blob :link 2>&1); um_rc=$?
+printf '  cat-file blob :link -> %s (rc=%s)\n' \
+  "$(printf '%s' "$um_out" | head -2 | tr '\n' ' ')" "$um_rc"
+# FALSIFIER: rc MUST be non-zero (128 on git 2.54.0). A zero rc here means either
+# the entry is not actually unmerged or the rc is being read from the wrong
+# command — in both cases DEC-090's "closed by ordering, not classification"
+# claim is unsupported by this probe.
+if [ "$um_rc" -eq 0 ]; then echo "  !! FALSIFIED: expected non-zero rc"; fi
 echo
 echo "=== does ls-files -v flag a sparse-checkout entry?"
 rm -rf /tmp/fourth-sp; mkdir -p /tmp/fourth-sp; cd /tmp/fourth-sp

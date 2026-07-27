@@ -61,14 +61,31 @@ done
 
 echo
 echo "=== is info/attributes in the common dir or the per-worktree dir?"
-d=/tmp/attrprobe-wt; mk "$d" info
-( cd "$d" && $G worktree add -q ../attrprobe-wt-linked -b wt 2>/dev/null
-  echo "  main   git-dir        = $($G rev-parse --git-dir)"
-  echo "  main   git-common-dir = $($G rev-parse --git-common-dir)" )
-( cd /tmp/attrprobe-wt-linked 2>/dev/null && \
-  echo "  linked git-dir        = $($G rev-parse --git-dir)" && \
-  echo "  linked git-common-dir = $($G rev-parse --git-common-dir)" && \
-  printf '  linked check-attr    = %s\n' "$($G "${NORM[@]}" check-attr filter -- f 2>&1)" )
+# RV-314 F-41: `mk` clears the main dir but NOT the linked worktree, and the
+# `worktree add` failure was suppressed. On a second run the stale linked dir
+# survived, its .git file pointed at a git-dir that `mk` had just deleted, and
+# every line below printed `fatal: not a git repository: (null)` — silently
+# replacing the measurement with nothing. Clear it, and fail loudly.
+d=/tmp/attrprobe-wt; wtl=/tmp/attrprobe-wt-linked
+mk "$d" info
+rm -rf "$wtl"
+( cd "$d" && $G worktree prune )
+if ! ( cd "$d" && $G worktree add -q "$wtl" -B wt ); then
+  echo "  !! worktree add FAILED — the linked-worktree row below proves nothing"
+else
+  ( cd "$d" && \
+    echo "  main   git-dir        = $($G rev-parse --git-dir)" && \
+    echo "  main   git-common-dir = $($G rev-parse --git-common-dir)" )
+  ( cd "$wtl" && \
+    echo "  linked git-dir        = $($G rev-parse --git-dir)" && \
+    echo "  linked git-common-dir = $($G rev-parse --git-common-dir)" && \
+    printf '  linked check-attr    = %s\n' "$($G "${NORM[@]}" check-attr filter -- f 2>&1)" )
+  # FALSIFIER: the linked worktree must report a DIFFERENT git-dir but the SAME
+  # git-common-dir, and check-attr must still see `canon` — that is what makes
+  # DEC-089's "a linked worktree inherits the main repository's info/attributes"
+  # claim (E9's dispatch case) hold. Empty output falsifies nothing; it measures
+  # nothing.
+fi
 
 echo
 echo "=== F-23: does scoping the flag off check_attr_merge_z preserve the guard?"

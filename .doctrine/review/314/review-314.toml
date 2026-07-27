@@ -976,5 +976,35 @@ Bounded repairs: `set -o pipefail` (or capture rc directly) in `index-tags.sh`; 
 
 Note for the disposition: this does **not** falsify DEC-090's mechanisms. Both the unmerged-stage ordering and the non-UTF-8 refusal boundary were independently reproduced and hold. What fails is the evidence layer, and the handover for round 5 already flagged F-30/F-31 as "accepted on the reviewer's transcript, not reproduced independently" with T83/T84 named as the falsifiable artefacts — this finding is that flag coming due.'''
 
+[[finding]]
+id = "F-42"
+status = "open"
+severity = "blocker"
+title = "The stat-cache blindness needs no config at all — F-33's repair would close one route and leave a worse one open"
+detail = """
+F-33 raised the stat-cache route as a **machine-local config** hazard, attributing the blinding to `core.trustctime=false` / `core.checkStat=minimal` and placing the remedy in DEC-089's config row (`-c core.trustctime=true -c core.checkStat=default` on `observe_dirt`'s argv). That attribution is **incomplete in the consequential direction**: there is a second, independent route that requires **no configuration at all**, so pinning the keys would close one route and leave a worse one open while appearing to answer the finding.
+
+Persisted probe: `probes/stat-cache.sh` (new; the round-4 limb had none). All rows git 2.54.0, identical fixture — a tracked file rewritten to the **same size** with **mtime restored**:
+
+    CONTROL   busy-default        tracked=101  untracked=0  cached_rc=0  tag=H
+    ROUTE A   boundary-default    tracked=0    untracked=0  cached_rc=0  tag=H
+    ROUTE B   busy-trustctime     tracked=0    untracked=0  cached_rc=0  tag=H
+    ROUTE B   busy-checkstat      tracked=0    untracked=0  cached_rc=0  tag=H
+              boundary-trustctime tracked=0    untracked=0  cached_rc=0  tag=H
+              boundary-checkstat  tracked=0    untracked=0  cached_rc=0  tag=H
+
+**Route B is F-33 as raised and it stands** — either key alone blinds all three legs even with the control's timing.
+
+**Route A is new and is not reachable by any config pin.** Stock git, no configuration touched, all three legs read clean. The only difference from the control is **elapsed time between the index write and the modification**: the control burns ~1–2s of CPU first, Route A waits only for the wall-clock second to tick over. mtime and size are byte-identical across both arms, and `ls-files -v` reads `H` throughout, so DEC-090's tag detector cannot see it either.
+
+**Honestly unresolved, and recorded rather than smoothed:** the exact predicate inside git that makes elapsed time matter is *not* characterised. The index stores ctime at nanosecond precision and both arms present a ctime difference, so a ctime comparison should separate them in both arms — it does not. The probe states this as unexplained. What is established is the **discrimination and its direction**, which is what the design must answer for; a mechanism story would be speculation.
+
+**Two corrections to the record this finding carries:**
+
+1. **Round 4's README counter-result is wrong.** It states F-22's stat-cache limb "did NOT reproduce — the tracked leg reported 101 bytes under both the default config and the reviewer's weakened `core.trustctime=false` + `core.checkStat=minimal`", and narrowed F-22 to its fsmonitor limb on that basis. No probe was ever persisted, so it could not be re-run or reviewed. It is falsified above on both halves.
+2. **My own responder verification note on F-33 is wrong.** It reported that my first control also read clean, attributed that to a same-second ctime artefact in the fixture, and concluded the config was the discriminator. The control failure was real signal — Route A — and I explained it away. That is the third instance on this slice of the standing lesson, committed this time by the responder while writing the note that cites it.
+
+**Consequence for the repair.** DEC-089's partition places this in "machine-local config → neutralise". Route A does not live there — it lives in the **stat cache itself**, which is not config, not committed content, not index state, and not environment. The partition needs a row it does not have, or the byte-comparison direction (which consults no stat cache at all) makes the row unnecessary. The latter is why this is worth knowing before the spike rather than after."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

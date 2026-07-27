@@ -76,6 +76,44 @@ All on git 2.54.0. Each script carries its falsifier in-header.
 | `raw-bytes.sh` | is `untracked_fingerprint`'s `hash-object` filter-sensitive? | **yes** — two different untracked files collide to one oid under a `clean` filter. This falsified a claim in this design's own first draft |
 | `no-filters.sh` | is `--no-filters` sufficient, or does eol conversion survive it? | sufficient for **both** the filter and the `text eol=crlf` routes |
 
+## Round 5 additions and repairs (RV-314 F-33…F-42)
+
+Round 5 raised nine findings, three of which (F-41) were against these artefacts
+themselves. Repaired here, plus the two probes round 4 claimed and never wrote.
+
+| script | question | headline result |
+|---|---|---|
+| `stat-cache.sh` | **new.** does a same-size, mtime-preserving edit stay invisible? | **yes, by two independent routes.** Route B: either `core.trustctime=false` or `core.checkStat=minimal` alone blinds all three legs. Route A (worse): the same blindness on **stock config**, separated from the control only by elapsed time. `ls-files -v` reads `H` throughout, so DEC-090 cannot see it. The git-internal predicate behind Route A is **unexplained and says so** |
+| `non-utf8.sh` | **new** (T84's missing artefact, F-41 limb 2). is the non-UTF-8 symlink-target member reachable? | yes — a `120000` entry whose blob is `ff 74 61 72 67 65 74` returns **exit 0** from `cat-file blob`, so the rc carries no signal and the discrimination is the UTF-8 conversion, which is where DEC-090 puts the refusal |
+
+**Repairs to existing probes (F-41):**
+
+- `index-tags.sh` — `$?` after a pipeline read `tr`'s status, reporting `rc=0`
+  for a `cat-file` that exits **128**, i.e. pinning DEC-090's load-bearing fact
+  backwards. Now captures the rc from a non-pipelined invocation and asserts it.
+- `attr-sources.sh` — the linked worktree was never cleared and the `worktree
+  add` failure was suppressed, so every rerun printed `fatal: not a git
+  repository: (null)` and silently measured nothing. Now cleared, `-B`, and
+  loud on failure.
+- Exec bits normalised across all scripts (by explicit filename — a previous
+  `chmod +x probes/*.sh` flipped modes on six probes another agent authored).
+
+**Re-run status:** all 18 scripts execute green as of this round, and the three
+repaired ones were checked for **idempotence** (run twice, byte-identical output)
+— which is the property `attr-sources.sh` had lost.
+
+**Two instrument failures caught by controls, recorded because both are the
+standing lesson recurring:**
+
+- `non-utf8.sh` first used `iconv`, which is **absent in this jail**. It returned
+  127 for every input, so the fixture *and* the control both read "INVALID UTF-8"
+  and the probe appeared to confirm the design while measuring nothing. The
+  control caught it; the checker is now verified against known-valid and
+  known-invalid input before it is trusted.
+- `stat-cache.sh`'s first fixture failed its own control, and the responder
+  explained the failure away as a same-second artefact rather than following it.
+  It was real signal — Route A above.
+
 **The absolute-byte-count rule above applies to these too**, and round 4's
 figures are likewise fixture-local. What reproduces is the discrimination and the
 exact oids — `3c79cdb822b0…` (the collision), `81920715…` / `d004ceee…` (raw,
@@ -87,10 +125,20 @@ separated), `126799cc…` (raw CRLF) versus `0eabd516…` (LF-normalised).
   approach closes this. Detectable via `ls-files -v`". Both halves were right;
   the conclusion drawn from them was wrong. `ls-files -v` costs nothing where the
   expander already runs, and DEC-090 turns the detection into a refusal.
-- **F-22's stat-cache limb did NOT reproduce.** The tracked leg reported 101
+- ~~**F-22's stat-cache limb did NOT reproduce.** The tracked leg reported 101
   bytes under both the default config and the reviewer's weakened
   `core.trustctime=false` + `core.checkStat=minimal`. Recorded inside the finding
-  rather than dropped; F-22 rests on its fsmonitor limb alone.
+  rather than dropped; F-22 rests on its fsmonitor limb alone.~~
+  **STRUCK — this counter-result is false (RV-314 F-33 / F-42).** No probe was
+  ever persisted for it, so it could never be re-run or reviewed; it was a README
+  assertion standing where evidence was claimed to be. `stat-cache.sh` now
+  falsifies both halves: either config key alone blinds all three legs, **and** a
+  second route needs no configuration at all. The likely cause of the original
+  non-reproduction is a fixture that let mtime move — `core.checkStat=minimal`
+  still compares mtime and size, so such a fixture cannot observe the blinding and
+  reports a false negative. Kept visible rather than deleted, because the lesson
+  is that an unpersisted counter-result silently narrowed a live finding for a
+  full round.
 - **`GIT_ATTR_NOSYSTEM` is the one unmeasured neutralisation.** `/etc/gitattributes`
   does not exist in this jail and constructing it means writing to a shared
   `/etc`. Declared unverified rather than assumed measured.
