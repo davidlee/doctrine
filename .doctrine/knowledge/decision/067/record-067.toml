@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 185
-slug = "minimum-mechanically-enforced-design-stage-gates"
-title = "Minimum mechanically enforced design-stage gates"
-record_kind = "question"
-status = "answered"
+id = 67
+slug = "regress-directly-and-revalidate-forward-gates-cumulatively"
+title = "Regress directly and revalidate forward gates cumulatively"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

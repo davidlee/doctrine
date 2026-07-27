@@ -9,3 +9,8 @@ Which transitions among `exploring`, `inquiring`, `drafting`, `reviewing`, and
 judgement? In particular, where do current research, accepted design basis,
 section alignment, materialised design, integrated review, and explicit user
 approval gate forward movement without creating an accidental hierarchical FSM?
+
+Answered by DEC-066 and DEC-067: only the four forward stage boundaries carry
+mechanical gates; within-stage sequencing remains model judgement. Regressions
+revalidate those same gates from freshness-aware evidence rather than creating
+new transition-specific ceremony.

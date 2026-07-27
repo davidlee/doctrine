@@ -9,3 +9,7 @@ When a run regresses directly from a later stage such as `reviewing` to
 stale? On returning, must it advance through each intervening boundary, may it
 jump after cumulatively proving every gate, or can still-fresh evidence be
 reused without ceremonial re-approval?
+
+Answered by DEC-067: regress directly with a reason; evaluate all intervening
+forward gates cumulatively; reuse still-fresh evidence; stop at the first gate
+whose input fingerprint changed.
