@@ -693,3 +693,28 @@ finding, exactly as the same findings do for `spec-003.md:50` and
 - Minor: `for cmd in "supersede X Y"` word-splitting bit again (the handover
   warned Bash `$VAR` splitting misbehaves in this harness shell) — the whole
   string arrived as one subcommand. Literal args only.
+
+[harvest/park; sl232-park]
+- **An unpersisted counter-result cost a full round.** Round 4 wrote "the
+  stat-cache limb did NOT reproduce" into `probes/README.md` with no script
+  behind it, and narrowed a live blocker on that basis. It was false. Findings
+  are held to "reproduce before you raise"; **counter-results are held to
+  nothing** — and they are more dangerous, because a finding invites scrutiny
+  while a counter-result stops people looking. Cheap fix worth generalising: a
+  README claim that something did NOT reproduce should be refused unless it cites
+  a committed script, exactly as a finding is.
+- **Parking cost ~4 tool calls because the sinks already existed.** notes.md
+  § Harvest was single-copy and current, `handover.md` is gitignored and
+  rewritable in place, CON-003/RFC-022 already held the reasoning. The expensive
+  part of a park is deciding *what is settled vs open*, and that had already been
+  written down incrementally rather than reconstructed at the end. Argues for
+  harvesting continuously rather than at wrap.
+- **`doctrine link` flag discovery cost two failed calls** — `CON` may not author
+  `related` (legal: references / shapes / spawns / governed_by), and `references`
+  then requires `--role`. Both errors were legible and self-correcting, but the
+  legal-label set is per-source-kind and is not discoverable from `link --help`,
+  which lists roles but not which kinds may use which labels.
+- **The RFC scaffolder mints no slug symlink** where `knowledge new` does
+  (CON-003 got one, RFC-022 did not). Left alone rather than hand-created, since
+  the convention says the *command* mints them. Possible inconsistency; not
+  chased.

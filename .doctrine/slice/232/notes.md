@@ -6,11 +6,90 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · design (**RV-314 round 5 RAISED; 41 findings,
-9 open of which 6 blockers, `await=responder`; 21 older findings still
-answered-but-UNVERIFIED**) · 1795b5c5
+fresh-as-of: 2026-07-27 · **PARKED FOR INCUBATION** · design (**RV-314
+`active · await=responder · 42 findings · 10 OPEN of which 7 blockers`; 21 older
+findings answered-but-UNVERIFIED**) · ae3b275e
 
-### Produced — RV-314 round 5 (this sweep)
+> **Parked deliberately, not stalled.** Five review rounds each refuted the one
+> before and the refutation rate was not decaying (14 → 3 → 3 → 12 → 9 findings;
+> rounds 4 and 5 both found blockers in decisions written that same round). The
+> diagnosis is in **RFC-022** and **CON-003**: there was no stated adversary, so
+> there was no completeness criterion, so no repair could ever be shown
+> sufficient. **Do not open round 6.** The next move is a design decision, not a
+> review round.
+
+### Parked state — what is settled, what is open (read this first)
+
+**Settled and durable — do not re-derive:**
+
+- **CON-003** — the threat model. Adversary is a compromised / misaligned /
+  catastrophically-stupid *agent*; goal is blast-radius containment. Out of
+  model: hostile human operator, confidentiality. **Not** narrowed to "ordinary
+  authoring" — the agent holds a shell, so git config, `.git` writes, index flags
+  and spawned-process environment are all in model.
+- **RFC-022** — the trust-model design space (independence over crypto, 1:n
+  testimony, the interchange lock, cross-repo transit). Asserts no canon.
+- **`probes/`** — 18 scripts, all green, three verified idempotent. This is the
+  instrument any future work uses; it was defective and is now not.
+
+**The three decisions that gate everything, none taken:**
+
+1. **Does the anchor question survive at all?** Under containment, "is the rest
+   of the tree clean?" may not be the memory's business. If it goes, F-34
+   dissolves rather than needing a whole-index scan.
+2. **What happens to `--allow-dirty`?** CON-003 says a control the adversary can
+   invoke is not a control. Options: drop it; keep it but make its output
+   structurally unable to read as an attestation; keep it and accept it is
+   outside the model.
+3. **Does byte-comparison replace the three legs?** Compare worktree bytes
+   against the HEAD blob per claim path — attribute-immune, stat-cache-immune,
+   index-free. Collapses F-19/21/22/33/35/37/38 and F-42 in one move, and would
+   likely **delete** CON-002's git floor rather than amend it. **Not validated** —
+   this is the spike, and it is unrun.
+
+**The open question CON-003 deliberately did not settle:** whether it is worth
+defending a route the adversary could equally reach by editing the memory file
+directly. That lever decides how much of the open ledger survives.
+
+### Produced — post-round-5 sweep (harness + governance)
+
+- **`probes/` repaired (F-41).** `index-tags.sh` read `tr`'s rc instead of
+  `cat-file`'s (recorded `rc=0` for a 128 — DEC-090's load-bearing fact,
+  backwards). `attr-sources.sh` never cleared its linked worktree and suppressed
+  the `worktree add` failure, so reruns measured nothing. Exec bits normalised by
+  explicit filename.
+- **`non-utf8.sh`** — T84's missing artefact, written. The member is reachable:
+  `cat-file blob` returns **exit 0** on an invalid-UTF-8 target, so the rc carries
+  no signal and the discrimination is the conversion boundary.
+- **`stat-cache.sh`** — the round-4 limb that never had a probe. **F-42
+  (blocker)** raised from it.
+- **CON-003, RFC-022** created and linked.
+
+### Learned — post-round-5 sweep
+
+- **An unpersisted counter-result silently narrowed a live finding for a full
+  round.** Round 4's README said the stat-cache limb "did NOT reproduce" and cut
+  F-22 down to its fsmonitor limb on that basis. No probe backed it. It was
+  false on both halves. **A counter-result needs an artefact exactly as much as a
+  finding does** — arguably more, because it *stops* people looking.
+- **Both instrument failures this sweep were caught by controls, and one was
+  caught only after I explained it away.** `non-utf8.sh` first used `iconv`,
+  absent in this jail, returning 127 for every input — fixture and control both
+  read "INVALID" and the probe appeared to confirm the design while measuring
+  nothing. `stat-cache.sh`'s first fixture failed its own control and I attributed
+  it to a same-second ctime artefact; it was real signal (F-42 Route A). **The
+  reflex to explain away a failing control is the thing to distrust.**
+- **A finding can be right and its mechanism wrong, and the repair follows the
+  mechanism.** F-33 correctly identified the stat-cache route and attributed it
+  to two config keys. Pinning those keys would have closed one route and left a
+  worse, config-free one open — while looking like an answer.
+- **Writing the threat model down nearly scoped three blockers out by accident.**
+  The first CON-003 draft excluded git-config and `.git` write access on the
+  reasoning that anyone holding those has already won. But the adversary *is* the
+  agent and the agent has a shell. **When authoring a boundary, check who the
+  adversary actually is before deciding what they can't do.**
+
+### Produced — RV-314 round 5 (previous sweep)
 
 Round 5 on the warm codex thread, posture **disprove**, with an explicit mandate
 to **re-derive its own acquittals** rather than inherit them. **F-33–F-41 raised;
