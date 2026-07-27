@@ -40,5 +40,14 @@ Doctrine-resolved obligation. Candidate work should test a concise boot or
 harness-level authority contract before adding more prompt prose or workflow
 enforcement.
 
+A cheap Doctrine-repository experiment is available before a product change:
+`.doctrine/governance.md` is user-owned and dynamically incorporated into the
+privileged boot snapshot. With user approval, a concise rule can tell agents
+that a Doctrine-resolved behaviour envelope is the active repository process
+instruction, subordinate to system/developer/user authority and current until
+Doctrine refreshes it. This is a dogfood mitigation and experimental arm, not
+the general harness contract RFC-021 calls for; it must not be shipped as if it
+resolved client-project authority.
+
 This record originates from SL-233 and is governed directionally by RFC-021;
 it should be resolved from observed adherence evidence rather than assumption.
