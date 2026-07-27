@@ -504,3 +504,45 @@ it. The argument for doing it anyway is that the external round is expensive
 (three exchanges, a content-classifier rewrite, a 120s MCP timeout into a
 background task), so spending cheap tokens to remove the findings a reviewer
 would otherwise spend expensive ones on is straightforwardly positive.
+
+[preflight; sl233-plan-research-20260727]
+`./scripts/pi-{scout,research}` prepend ~30 lines of Bun stack trace to EVERY
+thread's stdout before any content. Cause: `.pi/extensions/doctrine/index.ts:8`
+(`resolveBoot`) shells a hardcoded/stale nix-store path
+`/nix/store/…-doctrine-0.31.1/bin/doctrine prompt resolve --role orchestrator`,
+which no longer exists in the jail. The extension fails open (research still
+runs) but the trace lands in the artefact, so it is re-read by the consuming
+agent on every `Read` of `research/raw/*.md` — pure waste, multiplied by thread
+count (5 threads × ~30 lines here). Fix is either resolving the binary through
+`${DOCTRINE_BIN:-doctrine}` like `.mcp.json` already does, or suppressing the
+extension's stderr in the wrapper scripts.
+
+[dispatch; SL-231-p02-fork-binding]
+IMP-328 cost PHASE-01 a re-fork + cherry-pick recovery. For PHASE-02 the
+orchestrator side-stepped it for ~0 tokens: mint the fork bound by hand
+(`worktree fork --base B --branch dispatch/<agent> --dir <coord>/.worktrees/<agent>
+--worker --slice N --phase PHASE-NN`), then spawn with `PI_REUSE_FORK=1` so
+`pi-spawn-confined.sh` attaches instead of re-forking unbound. Import resolved
+first try. Worth folding into the script (accept --slice/--phase and pass them
+through) — the workaround is two extra lines but has to be REDISCOVERED each
+phase, which is the expensive part.
+
+Note the funnel oracle still prints `spawn` for a phase whose bound fork already
+exists and whose worker is mid-run, because the pi arm records no spawn beat.
+That is a misleading prescription on the ONLY arm that needs it most: an
+orchestrator obeying it literally would destroy live work (the script's
+non-reuse path does `rm -rf "$D"`). A `fork-armed` rung between `spawn` and
+`await-worker`, derivable from the durable fork binding the funnel already has,
+would close it.
+
+[dispatch; SL-231-p02-review-placement]
+Two defects were found by orchestrator inspection, not by the gate and not by a
+review pass: an STD-001 magic-string split across a module boundary, and a
+near-verbatim duplicate of the function the phase existed to extract. Both pass
+every automated check. Both were fixed in the fork BEFORE the delta commit —
+because `record-delta --commit S` records exactly one commit's patch, a defect
+fixed after import lands outside the phase's boundary row and silently leaves
+the conformance registry describing something other than what shipped. The
+skill's cadence puts per-phase review AFTER import; for the pi arm, where the
+orchestrator commits the delta by hand anyway, review before the commit is
+strictly cheaper and keeps the boundary row honest.

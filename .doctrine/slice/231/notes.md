@@ -6,9 +6,31 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · PHASE-01 landed and reaped · addc6d17
+fresh-as-of: 2026-07-27 · PHASE-01 + PHASE-02 landed and reaped · 7e6f7c0b
 
 ### Produced
+
+- PHASE-02 — no-clobber publication and store delivered on the pi/deepseek arm,
+  then driven through the funnel: imported (`70f131d43`), verified green
+  (`c699fd99b`), concluded (`7e6f7c0b`), fork reaped. Boundary row
+  `[da66aa111, 70f131d43]`. Conformance 4/4 declared source paths; the single
+  `--strict` failure is the ISS-264 machinery false positive.
+- PHASE-02's fork was minted FUNNEL-BOUND up front
+  (`worktree fork --slice 231 --phase PHASE-02 --worker` into
+  `<coord>/.worktrees/SL-231-p02`) and the worker attached via `PI_REUSE_FORK=1`,
+  so IMP-328 cost nothing this phase — no re-fork, no cherry-pick, and the
+  import resolved first try.
+- Orchestrator-directed cleanup turn on the PHASE-02 fork BEFORE the delta
+  commit, fixing two defects a green gate cannot catch: (a) STD-001 — the
+  reserved publication-temp prefix was a literal in `fsutil` and an independent
+  private const in `store`, a silent corpus-corruption path if either drifted;
+  now one `fsutil::PUBLICATION_TEMP_PREFIX` with a test crossing both code
+  paths. (b) parallel implementation — `ensure_dir_components` was a near-verbatim
+  copy of the extracted `ensure_parent_dirs`; both now route through one
+  `create_dir_component` helper whose bool return preserves entity.rs's
+  rollback contract. Fixed pre-commit deliberately: `record-delta --commit S`
+  pins ONE commit's patch, so a post-import fix would fall outside the phase's
+  boundary row.
 
 - PHASE-01 — typed observation core delivered on the pi/deepseek arm and driven
   through the full funnel: imported (`1d8cc08ae`), verified green on the `gate`
