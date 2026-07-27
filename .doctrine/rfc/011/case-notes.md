@@ -458,3 +458,49 @@ Two fixes, both cheap:
    tried — the refusal family already exists and is documented as "the recovery
    procedure"; this path escapes it.
 Token-efficiency: a one-line refusal would have replaced ~2 sessions of work.
+
+## [feedback + rigour; sl232-rv314-round4-disposal]
+
+**A negative grep read as a clean result — nearly shipped a blocker.** Sweeping
+`capture()` for attribute-sensitive git calls, I grepped for
+`run_git|git_stdin|Command::new` and got an empty result, which presents
+identically to "nothing to fix". `capture()` actually calls the wrappers
+`git_bytes`/`git_opt`/`git_text` (65 occurrences in the file), so the query could
+not have returned a positive on any input. The defect it missed —
+`untracked_fingerprint` hashing through a filter-sensitive `hash-object` —
+falsified a claim already written into a decision record. Cost to catch: one
+probe. Cost to miss: a false `checkout_state_id` identity on the `--allow-dirty`
+path, which is 24 of 59 attestations. Generalisation now recorded in the slice:
+**before trusting a negative, confirm the query can produce a positive.** Same
+family as the earlier ugrep binary-skip note, and the second time on this slice.
+
+**`review show` does not print the finding roll.** The sanctioned read path for a
+review cannot show finding state, so three artefacts (design § 10, notes §
+Harvest, a handover packet) recorded F-1/F-10 as "answered" while the ledger held
+them `open` with no disposition — each having copied the last. Recovering it took
+a raw `grep` over `review-314.toml`. A `review show --findings` (or a roll in the
+default output) would have made this unconstructible. Worth a backlog item on the
+doctrine CLI itself; noted here rather than filed because it is RFC-011's
+territory.
+
+**zsh word-splitting broke a `--include` glob again.** `grep -rn 'x' src/
+--include=*.rs` → `(eval):3: no matches found`. The interactive shell does not
+word-split *and* globs the unquoted pattern. Second occurrence this slice; the
+handover packet had warned about it and I still hit it. The durable fix is to
+stop reaching for `--include` and path-limit instead.
+
+**`chmod +x $DIR/*.sh` touched six files I did not author.** Copying five new
+probes into `probes/` and then chmod-ing the glob flipped the mode on every
+pre-existing probe, showing up as six spurious `M` entries. Caught by
+`git status --porcelain` before staging, reverted with a path-limited
+`git checkout --`. Cheap here; in a shared tree with another agent mid-edit it
+would have been someone else's diff. Name the files, not the glob.
+
+**Cost shape of a self-attack round.** Five probe scripts, ~15 min, before
+opening round 5. It falsified one of three new decisions and produced two backlog
+items in another subsystem. The round-3 note said self-probing "narrows but does
+not close" — that held: the same session both wrote the false claim and caught
+it. The argument for doing it anyway is that the external round is expensive
+(three exchanges, a content-classifier rewrite, a 120s MCP timeout into a
+background task), so spending cheap tokens to remove the findings a reviewer
+would otherwise spend expensive ones on is straightforwardly positive.

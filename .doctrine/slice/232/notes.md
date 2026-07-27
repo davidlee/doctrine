@@ -6,9 +6,73 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · design (**RV-314 round 4; 32 findings; four new
-blockers; F-1/F-10 still formally OPEN, six more answered-but-UNVERIFIED**) ·
-7b6b66b4
+fresh-as-of: 2026-07-27 · design (**RV-314 round 4 DISPOSED; 32 findings,
+0 open, `await=raiser`; only F-3 verified — 21 answered-but-UNVERIFIED**) ·
+ce8cb114
+
+### Produced — RV-314 round 4 disposal (this sweep)
+
+All 14 open findings disposed `fix-now` (F-1, F-10, F-21–F-32). Every finding
+reproduced or re-derived before disposal; **three new decisions, all
+unattacked**.
+
+- **F-1/F-10 disposed at last.** Their remedy landed in round 1; `review dispose`
+  was never run, so design § 10, § Harvest and a handover packet all read
+  "answered" while the ledger held them `open`. § 10 now carries a standing note
+  that the ledger is the sole authority, with the grep that reads it.
+- **DEC-089** *(supersedes DEC-087)* — neutralise at the **observation**, not the
+  runner. Coverage stated as a **partition by where the mechanism lives**;
+  `info/attributes` is **refused**, not neutralised; `CHECKOUT_NORMALIZER` →
+  `forget.checkout.v2`. Closes F-19's diagnosis properly plus F-21/F-23/F-24/F-28.
+- **DEC-090** *(supersedes DEC-082's bound)* — **`unmeasurable` as a third gate
+  outcome**, absorbing F-7, F-8, F-22, F-30, F-31. I9′ becomes *"holds, or the
+  verb refuses"*. Costs **no new git invocation** (`ls-files -s -v -z` carries tag
+  + stage). **T64 inverts**; **R-E is discharged** and leaves the known-open list.
+- **DEC-091** *(replaces F-18's repair)* — the claim base is the directory
+  `resolve_show` already returned. **Deletes** the `memory_uid` equality check
+  rather than extending it to three routes.
+- **CON-002 amended** — the floor binds by **what the caller persists**: `verify`
+  and `record` refuse legibly, `retrieve` degrades per B18/B19 (F-25).
+- **§ 5.3** — the MCP surface has **two** joints, `tools()` and `EditParams`
+  (F-27); the fourth `apply_edit` arm **compares before writing** (F-32).
+- **§ 5.4** — F-29's surviving `not already covered` row struck; swept for a third
+  copy, none found.
+- **T78–T91** added; T64 inverted; T71 rewritten to a three-route test.
+- **ISS-261, ISS-262** — two pre-existing git-layer defects found in the sweep and
+  routed out rather than absorbed.
+- **`probes/`** — `attr-sources.sh`, `freshness.sh`, `index-tags.sh`,
+  `raw-bytes.sh`, `no-filters.sh`, README section with round-4 counter-results.
+- **RFC-011 case notes** — five entries.
+
+### Learned — RV-314 round 4
+
+- **A negative search result is evidence only if the query could have gone
+  positive.** Grepping `capture()` for `run_git|git_stdin|Command::new` returned
+  empty — it calls the `git_bytes`/`git_opt`/`git_text` wrappers, so the query was
+  incapable of a positive. It hid a real defect (`untracked_fingerprint` hashing
+  through a filter-sensitive `hash-object`, colliding two different untracked
+  files to one oid) that had already been written into a decision record as
+  closed. Second instance of this family on this slice after the ugrep
+  binary-skip.
+- **Self-attack before external review is cheap and does not substitute for it.**
+  Five probes, one falsified claim of my own, two backlog items — all before
+  spending a codex round. But the same session wrote the false claim it caught, so
+  round 3's "narrows but does not close" still holds.
+- **A repair at the wrong altitude is simultaneously too wide and too narrow.**
+  DEC-087 in `NORMATIVE_FLAGS` reached a guard in another slice and inverted it
+  (F-23) *and* closed one of four attribute sources (F-21). One cause, one fix —
+  which is why the three round-4 blockers were one repair, not three.
+- **A bound list cannot be completed; a refusal does not need to be.** DEC-082
+  enumerated two index flags and was falsified one round later by a third
+  mechanism carrying neither. Converting the bound to an outcome (`unmeasurable`)
+  is what makes I9′ answerable for a suppressor nobody has found yet.
+- **When a repair needs a rule that two derivations agree, delete one derivation.**
+  F-18 bound the parsed uid to a `read_link`; F-26 showed the link exists on one of
+  three routes. Carrying the already-resolved value is less machinery and total by
+  construction.
+- **Name files, not globs, when changing modes.** `chmod +x probes/*.sh` flipped
+  the mode on six probes another agent authored; caught by `git status
+  --porcelain` before staging.
 
 ### Produced — RV-314 rounds 2 & 3 (this sweep)
 
