@@ -23,3 +23,12 @@ invalidate stale approval. The design must decide:
 Avoid turning v1 into a generic approval-policy language or producing one
 closure-grade RV ledger per iterative section review unless that durability is
 actually required.
+
+## Answer
+
+DEC-073 chooses lightweight runtime attestations bound to each section's
+content fingerprint. A run declares whether human review, adversarial review,
+or both are required and, for both, their intended order. Section findings stay
+runtime by default, with consequential findings promoted to durable knowledge
+or the RV ledger. The existing integrated adversarial review remains a
+separate, authored closure gate.

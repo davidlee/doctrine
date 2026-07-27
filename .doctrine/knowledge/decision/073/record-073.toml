@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 188
-slug = "section-level-human-and-adversarial-review-policy"
-title = "Section-level human and adversarial review policy"
-record_kind = "question"
-status = "answered"
+id = 73
+slug = "section-review-uses-content-bound-runtime-attestations"
+title = "Section review uses content-bound runtime attestations"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
