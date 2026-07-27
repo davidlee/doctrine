@@ -437,3 +437,24 @@ an extra round-trip that a non-empty error would not have. Then the follow-up
 "proceed" reply ran past the 120s MCP timeout into a background task, which is
 the correct behaviour but means a long external review always costs at least
 three exchanges: prompt, liveness/ack, execute.
+
+[dispatch; SL-231-p01-import-restart]
+`dispatch_import` returned bare `MCP error -32603: Internal error` for
+`name="SL-231-p01"`. The real cause was a **wrong argument**: `name` is the fork
+BRANCH (`dispatch/SL-231-p01`), not the agent basename. The tool's own doc says
+so ("e.g. `dispatch/<agent>`"), but an unresolvable ref is raised as an internal
+FAULT rather than a structured `Refused{reason: unknown-fork}`, so the surfaced
+error carried zero diagnostic content.
+
+Cost: the previous session misattributed it to a stale MCP binary on PATH,
+wrote a handover, and burned a full session restart + re-orientation — then the
+same error reproduced immediately. Recovery took driving `serve --mcp` by hand
+over stdio to read `data.message: "resolve fork tip SL-231-p01"`.
+
+Two fixes, both cheap:
+1. `import` should resolve a bare agent name as `dispatch/<agent>` (the reap
+   tool already speaks in `dispatch/<agent>` terms), OR
+2. an unresolvable `name` should be a structured refusal naming the ref it
+   tried — the refusal family already exists and is documented as "the recovery
+   procedure"; this path escapes it.
+Token-efficiency: a one-line refusal would have replaced ~2 sessions of work.

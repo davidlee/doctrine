@@ -6,13 +6,24 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · PHASE-01 delivered, pending import · 3e2733b0
+fresh-as-of: 2026-07-27 · PHASE-01 landed and reaped · addc6d17
 
 ### Produced
 
-- PHASE-01 — typed observation core delivered on the pi/deepseek arm; committed
-  on `dispatch/SL-231-p01` @ e009c0f7b (duplicate `w/SL-231-p01` @ 6936a3ab5,
-  trees provably identical). NOT yet imported, verified, or VT-gated.
+- PHASE-01 — typed observation core delivered on the pi/deepseek arm and driven
+  through the full funnel: imported (`1d8cc08ae`), verified green on the `gate`
+  cadence (`02da8ebf4`), concluded (`addc6d178`), fork reaped. Boundary row
+  `[0d2cb5671, 1d8cc08ae]` recorded.
+- PHASE-01's green is now INDEPENDENTLY established, discharging the delivery
+  caveat: the unmarked coord-tree gate passed, and `check regression diff`
+  against the B baseline showed no new or changed failures. The single baseline
+  failure at B — `architecture_layering_gate` raising `StaleEntry("observation")`
+  because the ADR-001 leaf entry was pre-seeded ahead of the module — flipped to
+  `fixed` by the import, which is the mechanical proof that EX-5's leaf
+  classification is live.
+- ISS-263, ISS-264 — two dispatch-funnel defects found while landing PHASE-01
+  (opaque import fault on a bad fork name; conformance `--strict` false positive
+  on the import-landed funnel row).
 - ISS-260 — ADR golden worker-marker skip read only the env leg; fixed on edge
   (9cd0e7706) and merged into `dispatch/231`
 - IMP-328 — pi spawn fork is unbound to slice/phase, so a pi-arm fork is
@@ -60,6 +71,15 @@ fresh-as-of: 2026-07-27 · PHASE-01 delivered, pending import · 3e2733b0
 - IDE-005 — harness identification through bounded environment enrichment
 - IMP-328 — pi spawn fork unbound to slice/phase (blocks funnel import on the pi
   arm until the script derives branch/dir from `(slice, phase)`)
-- PHASE-01 import → verify → verify-vt → conformance not yet run; the phase's
-  green claim rests on its own suite (42/42 observation) plus a worker-tree gate
-  that carried the then-unfixed ISS-260 reds
+- `slice verify-vt 231` is a SLICE-level conclude-cadence gate and remains
+  pending until all five phases land — not a PHASE-01 gap.
+- PHASE-01 conformance is substantively clean (6/6 declared source paths hit);
+  its one `--strict` failure is the ISS-264 machinery false positive, not a
+  worker scope violation.
+- No ledgered code review exists for the PHASE-01 delta. The informal deepseek
+  pass produced one confidently-wrong finding and silently skipped the check
+  flagged as most important, so it is not sufficient evidence on its own. VT-4
+  was adjudicated against the landed code instead: all six purity categories are
+  pinned and the leaf classification is enforced by the real gate. The residual
+  is that no observation-SPECIFIC upward-dependency negative test exists — the
+  gate's generic rejection tests cover the mechanism.
