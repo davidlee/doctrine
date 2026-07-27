@@ -11,6 +11,11 @@ needs = ["REV-034"]                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[relation]]
+label = "fulfils"
+degree = "full"
+target = "ISS-257"
+
+[[relation]]
 label = "governed_by"
 target = "POL-002"
 

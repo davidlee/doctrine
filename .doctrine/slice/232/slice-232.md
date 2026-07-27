@@ -47,7 +47,31 @@ is a larger problem than a body-write slice could carry:
   contributes while bypassing canonicalisation and reads clean against a dirty
   target, restoring the false attestation I9 exists to close.
 
-Both are open and inherited by this slice.
+Both were open at the split. **F-37 is now answered** (see objective 2); F-36 is
+answered in shape by objective 7 and remains open in detail.
+
+### What changed after the split
+
+Three facts postdate DEC-027 and this scope's first draft. They are recorded here
+because the inherited `design.md` predates all three:
+
+- **REV-041 amended SPEC-007** (approved, done), on RV-313 F-6 from SL-230's
+  reconciliation audit. The five-state resolution is now explicitly the *render
+  contract*, binding `find`/`retrieve`; and the **prohibition on silent
+  over-trust is surface-independent**, binding any git-anchored staleness
+  computation "including `memory validate`'s health checks" — a surface emitting
+  findings "discharges this by emitting a finding, not by falling silent."
+- **ISS-257** (RV-313 F-2) — `memory_health_findings` Checks 2 and 4 bind
+  `commits_touching` in a let-chain, so a non-ancestor `verified_sha` yields
+  `None`, falls out, and emits nothing. *Cannot determine* renders as *no drift*
+  on **67 of 115 anchored memories**, capping corpus reach at 41.7%. Pre-existing
+  in Check 2; SL-230's Check 4 inherited it. **Absorbed into this slice** —
+  `SL-232 fulfils ISS-257` — because it and F-36 are the same defect: `validate`
+  not knowing something and saying nothing. See objective 7.
+- **The census re-measured** (HEAD `9f8cf40b`), which retires several inherited
+  assumptions. Figures are stamped with their HEAD deliberately: RV-313 F-1 was a
+  denominator-drift finding, where a design-time absolute (11 of 30) failed to
+  reproduce at execution (3 of 48) purely because the corpus grew.
 
 ## Scope & Objectives
 
@@ -65,17 +89,45 @@ Both are open and inherited by this slice.
   with its `checkout_state_id` stamping unchanged, taken from an *unexcluded*
   capture (RV-307 F-13).
 
-### 2. The claim-surface constructor
+### 2. The claim-surface constructor — index-first
 
-- One ordered algorithm turning a memory's declared `scope.paths` / `scope.globs`
-  into git pathspecs, rooted at the **canonicalised uid directory** (F-15: keys
-  in `items/` are symlinks and git will not traverse one in a pathspec).
-- Scope entries are **untrusted data, never pathspec syntax** (F-18): every entry
-  is magic-prefixed so nothing a memory declares can subtract from what it is
-  measured against.
-- **Resolution must be total over contributing entries** — the open problem.
-  F-37 shows resolution failure does not imply non-contribution, so the current
-  algorithm's step 4/5 premise needs replacing, not patching.
+The inherited ordered algorithm is **replaced, not patched**. It classified an
+entry's shape from its *characters*, canonicalised it with `realpath`, and then
+asked git a question about the index. F-37's three routes are all one defect:
+**a filesystem oracle answering an index question.** Reproduced on git 2.54.0,
+and the shape matrix shows the two instruments are uncorrelated in both
+directions — `missing/../link` and a sparse-checkout entry fail `realpath -e` and
+still contribute; `linkdir/target.txt` resolves cleanly and contributes nothing.
+
+The replacement never leaves the index:
+
+- **Emit by field of origin, never by character.** `scope.paths` → `:(literal)`,
+  `scope.globs` → `:(glob)`. The schema already records the distinction that
+  step 2 was re-deriving unreliably; this is F-37's structural correction and
+  F-32's contest answered at the root rather than at the split point.
+- **Expand against the index** — `git ls-files -s -z`. Non-empty match set →
+  contributes; empty → non-contributing (objective 7's sink). `-z` is required,
+  not stylistic: `core.quotePath=true` renders `ünï.txt` as `"\303\274n\303\257.txt"`
+  and corrupts any parsed output.
+- **Resolve symlinks from the index blob, not the filesystem** — every match of
+  mode `120000` has its target read via `cat-file`, joined lexically, and
+  re-expanded, bounded and cycle-checked. This is what closes the sparse-checkout
+  route: `cat-file blob :<path>` returns the target *while the file is absent
+  from the working tree*.
+- **Guard aborts lexically, before emission.** Escaping and absolute-outside
+  entries are rejected without git ever seeing them, so `exit 128` becomes
+  unreachable rather than handled. This dissolves E13's stated basis — its
+  justification was mechanical necessity, and the mechanism is now preventable.
+- Scope entries remain **untrusted data, never pathspec syntax** (F-18); the
+  magic prefix rule is unchanged and I8 is untouched.
+
+**Stated honestly:** on this corpus the symlink-resolution step adds **zero**
+coverage for declared scopes (25 entries match symlinks, all self-covering; 0
+entries are symlink-*rooted*). It is insurance against a reproduced-but-not-live
+hazard. It *is* live and load-bearing for the **uid directory base**, which is
+reached through one of 347 key symlinks (F-15). The whole resolve pass over
+`.doctrine/**` — 7,670 matches, 2,071 symlinks — costs **7ms**, so scale is not
+a constraint.
 
 ### 3. Non-contribution reporting, and the declared-boundary question
 
@@ -83,21 +135,66 @@ Both are open and inherited by this slice.
   each on stderr; `validate` raises them as corpus-health findings. No
   classification: three derived instruments were refuted because each reads local
   repository state (F-21, F-25, F-31).
-- **`validate` needs a contribution mechanism it does not have** (F-36). This is
-  new design work, not a wiring change.
+- **`validate` needs a contribution mechanism it does not have** (F-36). Designed
+  under objective 7, unified with ISS-257.
 - **The declared boundary** — a persisted signal marking evidence git is not
-  expected to observe — is the stable answer DEC-020 deferred. Scope it here with
-  **IMP-318** (persist attested coverage) and **QUE-173** (body digest): all
-  three are the same schema change, each making an attestation say more than a
-  sha. This is the objective SL-230 structurally could not hold.
+  expected to observe — is the stable answer DEC-020 deferred. This is the
+  objective SL-230 structurally could not hold, and it is why this slice exists.
+
+**The census gives it a measured population** (HEAD `9f8cf40b`): of 440 scope
+entries across 389 memories, **59 are non-contributing**, and they sort exactly
+along the boundary DEC-020 refuted three instruments for —
+
+| bucket | count |
+|---|---|
+| ordinary path — moved, deleted, or never existed | 39 |
+| harness / installed-tree (`.claude/**`, `.harness/**`) — git can never see these in a source checkout | 18 |
+| runtime state, gitignored by design | 2 |
+
+So the boundary is real and stable; it simply cannot be *derived* from local
+repository state. Declaring it turns 59 undifferentiated reports into **39
+actionable findings**.
+
+**Shape:** a parallel assertion — entries stay in `scope.paths` / `scope.globs`
+and are additionally named as expected-unobservable. Rejected: a sigil inside the
+entry string (character-sniffing, the exact error objective 2 deletes, and it
+collides with real filenames); a per-memory flag (too coarse — the typical
+memory here declares several paths and one unobservable); a separate `external`
+list (answers "is this part of the claim?" with *no*, which is wrong — if the
+path ever becomes tracked it should be measured). The chosen shape is
+**falsifiable**: a declaration that git then contradicts is itself a stale
+declaration and a finding, so the boundary is self-policing rather than a
+permanent silence. It never subtracts from the claim surface, so I8 holds.
+
+**OQ-A is answered `no`.** DEC-020 argued the declared boundary, IMP-318's
+attested coverage and QUE-173's body digest are one schema change. Having seen
+the field shapes: the boundary is an **authored input**, the other two are
+**machine-written outputs of a verify run**. Different writers, different
+lifecycles, different validation. Sharing a TOML file is not sharing a change.
+IMP-318 and QUE-173 stay routed and are **not** built here.
 
 ### 4. Historical scope consumers — decide, don't inherit
+
+**Three `validate` concerns are distinct and the inherited text blurs them.**
+Only the first two unify (objective 7); this objective is the third alone:
+
+| concern | question | owner |
+|---|---|---|
+| ISS-257 — non-ancestor anchor renders as clean | *can I determine drift?* | objective 7 |
+| F-36 — no contribution probe | *can I observe this evidence?* | objective 7 |
+| R7 / IMP-317 — raw, `paths`-gated scope seam | *which paths do I ask about?* | here |
 
 - `validate`'s staleness check and `retrieve::git_facts` both keep a raw
   `scope.paths`-gated seam (R7, F-19/F-24/F-27/F-28). They ask a *historical*
   question where canonicalising against today's checkout erases a committed
   symlink retarget (measured 1 → 0), so they need a **second, history-stable**
   surface rather than reuse of `verify`'s.
+- **D11 and R7 are falsified as written.** D11 says `validate` "keeps its
+  existing raw seam"; that cannot survive objective 7, which must touch the same
+  two call sites. R7's four-defect enumeration is incomplete — the `None`-swallow
+  is a fifth, the largest by population, and the only one that is
+  **non-conformant** against amended SPEC-007 rather than merely weak. Both are
+  restated in the design, not silently inherited.
 - Adoption is a **dataflow change**, not a call-site swap: `collect_all` unions
   `items/` and `shipped/`, so a row's origin is unrecoverable from its uid (F-28).
 - Gated on **QUE-175 / OQ-2**: does claim-surface drift feed retrieve-side
@@ -113,9 +210,49 @@ that contract verbatim (RV-307 F-5). The implementation already diverged when
 and code turn over together. Moved here from SL-230 by DEC-027 — the contract is
 changed by the gate, not by body-write.
 
+**The inventory was drawn before objective 7 existed and must be re-taken.**
+`validate` appears in SPEC-007 exactly **once** — the sentence REV-041 added.
+This slice gives the verb a contribution probe, a reporting contract and a
+continuation policy against a spec surface that barely names it. Whether that is
+an added REV-034 change row or a second revision is settled during design, but it
+is not deferrable to close: REQ-147's title is the retired contract verbatim, and
+the same trap (a queried surface asserting what the body replaced, RV-307 F-39)
+applies to any requirement this objective leaves unamended.
+
 ### 6. Verify refusal names its escape hatch
 
 The dirty-tree refusal names `--allow-dirty` instead of prescribing a commit.
+
+### 7. `validate` renders every undeterminable explicitly (absorbs ISS-257)
+
+**One mechanism, two unknowns.** `validate` currently has two ways of not knowing
+something and saying nothing, and REV-041 forbids both:
+
+| unknown | today | population |
+|---|---|---|
+| non-ancestor `verified_sha` → `commits_touching` = `None` | falls out of the let-chain, no finding | **67 of 115** anchored memories |
+| scope entry contributes nothing | never probed at all | **59** entries across 55 memories |
+
+Building these as two mechanisms would implement the same epistemic honesty
+twice — the parallel implementation A1 rejected, one level up. The unifying
+obligation is already approved governance: *"A surface that emits findings rather
+than states discharges this by emitting a finding, not by falling silent."*
+
+- **ISS-257's remedy** is a tri-state at the two call sites (`src/memory.rs`
+  Checks 2 and 4) — drift / no-drift / undeterminable. The ancestry guard in
+  `commits_touching` (`src/git.rs:2493`) is **correct and stays**; the defect is
+  in how callers consume `None`. The correct shape already exists one module
+  away: `src/coverage.rs:150-166` defines `IsStale{Fresh,Stale,Unknown}` over the
+  *same* seam with the contract `None => Unknown`. Ride it; do not re-invent it.
+- **F-36's remedy** is a per-entry contribution probe on a corpus-wide verb, plus
+  the **continuation policy** F-29 identified — what the run does when one
+  memory's surface cannot be probed. A corpus-wide verb must not abort the corpus
+  for one bad row.
+- Objective 3's declared boundary is what keeps this reporting *actionable*
+  rather than 59 lines of noise.
+
+**This makes SL-232 a `validate` slice as much as a `verify` slice.** Stated
+plainly because the title does not say so.
 
 ## Non-Goals
 
@@ -131,21 +268,51 @@ The dirty-tree refusal names `--allow-dirty` instead of prescribing a commit.
   clean-tree precondition relaxes, but re-litigating that exclusion is its own
   decision.
 - **Masters coverage.** `verify` is items-only by construction (E2); masters are
-  unanchored and `collect_all` never scans them (R5). The digest work in
-  objective 3 is what would reach them.
+  unanchored and `collect_all` never scans them (R5). QUE-173's digest is what
+  would reach them, and it is not built here.
+- **IMP-318 (persist attested coverage) and QUE-173 (body digest).** DEC-020
+  argued these travel with the declared boundary; objective 3 answers that `no`
+  on the authored-input/machine-output split. They stay routed. R8 — an
+  attestation not recording what it covered — therefore remains **open** after
+  this slice, and objective 3 does not close it.
 
 ## Risks, assumptions, open questions
 
-- **R-A — the claim surface may not be totalisable from git alone.** F-37 is the
-  second time a totality claim over path resolution has failed (F-26 was the
-  first). Before asserting a replacement rule, enumerate the reachable shapes and
-  probe each — a tool property is a claim needing a falsifier, not a premise.
-- **R-B — `validate`'s contribution probe is undesigned** (F-36), including its
-  continuation policy when one memory's surface is malformed (F-29's shape).
+- **R-A — discharged in method, narrowed in residue.** The enumerate-then-probe
+  obligation was met: three routes reproduced, a shape matrix run over lexical
+  aliases, sparse checkout, `skip-worktree`, `assume-unchanged`, literal glob
+  metacharacters, symlink chains and topology, `core.quotePath`,
+  `core.ignoreCase`, and control characters. Objective 2 then makes most of that
+  taxonomy **non-load-bearing**: the shapes are no longer classified by us, so a
+  fourth unenumerated shape has nothing to break. Two residuals survive and are
+  named rather than closed by assertion — R-E and R-F below.
+- **R-E — index bits suppress the measurement itself, and no pathspec approach
+  can close it.** A tracked file marked `skip-worktree` (`S`) or
+  `assume-unchanged` (`h`) reads `diff-index` exit 0 while modified on disk. No
+  symlink, no pattern, no resolution — the instrument is locally disabled. It is
+  **detectable** (`git ls-files -v` carries the flag on the row) and it affects
+  the *source* leg as well as the claim surface, so it is wider than this slice.
+  Live population in this repo: **0 rows** (HEAD `9f8cf40b`) — latent, not live,
+  and pre-existing rather than introduced. Named because a slice whose purpose is
+  closing false-attestation routes cannot leave a known one unstated.
+- **R-F — case-insensitive collision is unmeasured, not cleared.** `core.ignoreCase`
+  alone did not make pathspec matching case-insensitive on this filesystem
+  (exit 1 either way). A genuinely case-insensitive filesystem (APFS, NTFS) could
+  not be probed from here. Carried as unmeasured; not claimed closed.
 - **R-C — R4 runs unmitigated** while SL-230 is shipped and this is not.
-- **OQ-A — does the declared boundary land as one schema change** with IMP-318
-  and QUE-173, or can they be sequenced independently?
-- **OQ-B — QUE-175 / OQ-2**, gating objective 4.
+- **R-G — absorbing ISS-257 widens the blast radius to a seam no criterion of
+  this slice originally governed.** `memory_health_findings` is consumed
+  corpus-wide; the behaviour-preservation gate applies (existing suites green
+  unchanged), and the tri-state must not convert a silent exemption into a noisy
+  one for the 67 rows that were previously invisible.
+- **OQ-A — answered `no`** (objective 3): the declared boundary is an authored
+  input; IMP-318 and QUE-173 are machine-written outputs. Sequenced, not merged.
+- **OQ-2 / QUE-175** — does claim-surface drift feed retrieve-side ranking, or
+  only `validate`? Gates objective 4 and IMP-317. **This slice must answer it.**
+  (Cited by the design's own id; the pre-rescope text called this `OQ-B`, which
+  collided with `design.md` § 6's `OQ-B` — a different question.)
+- **OQ-B (design § 6)** — `validate`'s contribution mechanism and its
+  continuation policy. Answered in shape by objective 7; open in detail.
 
 ## Summary
 
