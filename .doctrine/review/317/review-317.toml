@@ -1,0 +1,593 @@
+id    = 317
+slug  = "sl-231-phase-0103-implementation-quality-review-deepseek-pass"
+title = "SL-231 PHASE-01..03 implementation quality review (deepseek pass)"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "code-review"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "deepseek-reviewer"
+responder = "orchestrator"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-231"
+
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "Expected every rendered untrusted field to pass escape_hostile (EX-5); observed uid/recorded_at/control-uid rendered raw, re-opening terminal escape and row injection"
+detail = """
+PROVEN EMPIRICALLY. PHASE-03 cleanup #3 closed EX-5 by giving ONE escaper an
+EscapeContext (Inline for table cells, Block for detail). The refactor reached
+only the payload summary/detail; envelope METADATA fields still bypass the
+escaper at every render site.
+
+Unescaped loci (src/commands/observation.rs @ 0fe9572b):
+- observation_row:361   envelope.uid.clone()         -> table cell (Inline needed)
+- observation_row:362   envelope.recorded_at.clone() -> table cell (Inline needed)
+- render_observation_detail:409,421  "uid: {}"
+- render_observation_detail:411,428  "recorded_at: {}"
+- render_observation_detail:449  "superseded by: {by} (control: {control_uid})"
+- render_observation_detail:452  "retracted (control: {control_uid})"
+- render_observation_detail:463  "  {uid} ({kind_str}) {env.recorded_at}"
+Only summary (359,413), detail lines (417), and facet JSON lines (437) are
+escaped. Note line 412 prints a "(untrusted input)" banner and escapes the
+summary while lines 409/411 print raw attacker-controlled fields directly above
+that banner.
+
+WHY THE WRITE-PATH VALIDATOR DOES NOT SAVE THIS. Reads do not re-validate.
+Store::load_one (store.rs:255) uses raw toml::from_str and checks only that
+envelope.uid equals the filename stem. wire::tolerant_read does not call
+validate() -- its own doc comment (wire.rs:918-919) says so explicitly -- and is
+dead code besides. So a record on disk carries arbitrary uid/recorded_at
+straight to the terminal. The uid/filename check constrains uid; recorded_at is
+constrained by nothing at all, which is why it is the easiest vector.
+
+REPRODUCTION (at 0fe9572b; output inspected through `cat -v`):
+  write .doctrine/observations/records/ab/<valid-uuid>.toml containing
+    recorded_at = "2026-01-01T00:00:00Z\\n<ESC>[31mINJECTED-FAKE-ROW<ESC>[0m"
+  (\\n and <ESC> written as TOML escapes \\n and \u001B)
+  then run: doctrine observation list
+Actual observed output (cat -v):
+  2 | 019f1234-...-0123456789ab | 2026-01-01T00:00:00Z         | friction | benign looking
+    |                           | ^[[31mINJECTED-FAKE-ROW^[[0m |          |
+The literal newline forges a continuation row and the raw ESC sequences reach
+the terminal -- precisely the row-injection EX-5 was closed against.
+
+THREAT MODEL IS IN SCOPE. Design 2.4: "Every authored string is untrusted data
+... terminal views escape control characters and escape sequences" -- unqualified
+as to which field. Design 2.1 makes records committed, diffable, shared authored
+data, so records arrive from other agents and contributors via PR. Rendering a
+peer-authored corpus is the normal case here, not an exotic one.
+
+ADDITIONAL LOCUS (same root cause, lower stakes): caller-supplied identifiers are
+echoed unescaped into anyhow errors on stderr. Running `observation show` with an
+ESC-bearing argument prints the raw ESC inside "Failed to read observation at
+.../^[[31mBOGUS.toml". Self-inflicted rather than peer-inflicted, so it rides
+this finding rather than taking its own.
+
+SEVERITY RATIONALE. Blocker, and not for effect: a demonstrated security defect
+that regresses the exit criterion of an already-landed phase, on the public read
+surface, with PHASE-04 and PHASE-05 both building on this adapter. It must not
+ship unreconciled.
+
+FIX SHAPE (not a redesign): route uid, recorded_at, and control uids through the
+existing escape_hostile with the destination-appropriate context at each of the
+nine loci. Fix at the rendering boundary -- validating on read would fight design
+2.4's tolerant-read contract. Add a regression test whose record carries a
+newline and an ESC in recorded_at, asserting neither survives rendering."""
+disposition = "fix-now"
+response = "Accepted, verified independently against the code and reproduced end to end. Nine render loci confirmed unescaped; the escaper itself is sound, so this is a call-site completeness defect in the EX-5 refactor rather than a regression of the escaper. Blocker severity accepted: it is a demonstrated injection on the public read surface, it regresses a landed exit criterion, and PHASE-04 and PHASE-05 both build on this adapter. Fix at the rendering boundary (route uid/recorded_at/control uids through escape_hostile with the destination-appropriate context), not by validating on read, which would fight design 2.4 tolerant reads. Deliberately NOT verified yet: the finding stays open so the blocker keeps gating SL-231 closure until the fix actually lands and a regression test pins a newline plus ESC in recorded_at."
+
+[[finding]]
+id = "F-2"
+status = "answered"
+severity = "major"
+title = "Expected a tolerant diagnostic for a malformed uid; observed a panic — shard_dir byte-slices a UTF-8 uid, crashing show/supersede/retract"
+detail = """
+PROVEN EMPIRICALLY. Same byte-vs-char bug CLASS as the already-fixed PHASE-03
+escaper defect (char::from(u8) Latin-1 corruption), in a different location, and
+green for exactly the same reason: no test string on this path carries a
+non-ASCII byte.
+
+src/observation/store.rs:25-33
+    fn shard_dir(uid: &str) -> &str {
+        let stripped = uid.strip_prefix("urn:uuid:").unwrap_or(uid);
+        let chars = stripped.len();          // <- BYTES, despite the name
+        if chars < 2 { stripped } else { &stripped[chars - 2..] }   // line 31
+    }
+`chars` is str::len() (bytes). `&stripped[chars - 2..]` is a BYTE-index slice, so
+when byte len-2 falls inside a multi-byte character Rust panics.
+
+REPRODUCTION (at 0fe9572b, built binary):
+  $ doctrine observation show 'ea'      # with e-acute as the first char
+  thread 'main' panicked at src/observation/store.rs:31:18:
+  start byte index 1 is not a char boundary; it is inside 'e-acute' (bytes 0..2)
+Confirmed identically on `observation supersede <bad> <uuid>` and
+`observation retract <bad>` -- three of the six public verbs.
+
+REACHABILITY. No validation precedes the path computation on the read side:
+commands/observation.rs:773 calls service.load_one(&args.uid) directly;
+Service::load_one (mod.rs:225-229) calls store::record_path(uid) immediately,
+which calls shard_dir. wire::validate_uid exists (wire.rs:496) but sits on the
+write path only. Positive control: `observation show not-a-uuid` does NOT error
+on the uid -- it happily computes shard "id" and reports a missing file -- which
+demonstrates the absence of validation rather than inferring it.
+
+BLAST RADIUS IS BOUNDED, WHICH IS WHY THIS IS MAJOR NOT BLOCKER. The WRITE path
+is safe: Store::create validates via wire::validate (store.rs:176) BEFORE
+computing record_path (store.rs:185), so the corpus cannot be corrupted and
+PHASE-04's MCP capture tool -- whose uid is also caller-supplied -- will not
+inherit the panic through create. The defect is a crash on malformed input to
+read/correction verbs: no data loss, no corruption, no boundary crossed.
+
+CONTRACT VIOLATED. Design 2.4: "Reads are tolerant. A malformed or unsupported
+record produces a diagnostic carrying its path and reason." A panic is the exact
+opposite of a tolerant read. Repo convention additionally forbids reachable
+panics in non-test code.
+
+FIX SHAPE: validate the uid (uuid::Uuid::parse_str, already available via
+wire::validate_uid) at the adapter boundary before any path computation, and make
+shard_dir slice by CHARACTER (or operate on validated-ASCII input) so it cannot
+panic even if reached. Add a non-ASCII uid case to the read-path tests -- the
+input-class gap that hid this is itself raised separately."""
+disposition = "fix-now"
+response = "Accepted, reproduced directly against the built binary at 0fe9572b on all three uid-taking verbs. Confirmed the write path is unaffected: Store::create validates before computing record_path, so the corpus and PHASE-04 MCP capture do not inherit it. Fix is twofold and both halves are wanted: validate the uid at the adapter boundary before any path computation (wire::validate_uid already exists), and make shard_dir incapable of panicking regardless of caller. Same bug class as the PHASE-03 escaper defect, which is the substantive lesson here -- byte-index reasoning over str is a standing weak spot in this module. Stays open until fixed."
+
+[[finding]]
+id = "F-3"
+status = "answered"
+severity = "major"
+title = "Expected reads to expose record and control diagnostics (design 2.4, 4); observed all diagnostics discarded at every CLI site and rendered nowhere"
+detail = """
+The observation engine builds two diagnostic channels the design requires it to
+expose, and the CLI discards both at every call site. No code path anywhere in
+the product surface renders a Diagnostic.
+
+Discard sites (src/commands/observation.rs @ 0fe9572b):
+- run_show:778    let (all_envs, _diags) = service.load_all();
+- run_show:779    let (res, _outcomes) = resolve::resolve(all_envs);
+- run_list:817    let (all_envs, _diags) = service.load_all();
+- run_list:818    let (resolution, _outcomes) = resolve::resolve(all_envs);
+- run_search:863  let (all_envs, _diags) = service.load_all();
+- run_search:864  let (resolution, _outcomes) = resolve::resolve(all_envs);
+
+Establishing absence rather than asserting it: `grep -n 'diags|Diagnostic|
+outcomes' src/commands/observation.rs` returns exactly the six binding sites
+above and nothing else; a follow-up grep for any diagnostic reaching writeln!/
+print!/push returns empty. The positive control is that the same grep DOES match
+the six bindings, so the empty render-path result is trustworthy.
+
+CONTRACT VIOLATED -- twice, explicitly:
+- Design 2.4: "Reads are tolerant. A malformed or unsupported record produces a
+  diagnostic carrying its path and reason while other valid records remain
+  available." The first half holds (other records survive); the second half --
+  the diagnostic reaching anyone -- does not.
+- Design 4: "History always exposes controls and diagnostics." `--history` mode
+  exposes controls and no diagnostics whatsoever.
+
+CONSEQUENCE. A corpus containing an unparseable or unsupported-version record
+renders as if that record did not exist: `observation list` silently returns a
+short answer with no indication anything was skipped. Likewise every per-control
+diagnostic the resolver is specified to produce -- malformed, dangling,
+kind-incompatible, cycle-introducing, and losing-conflicting controls (design 4)
+-- is computed and dropped, so a correction that silently failed to apply is
+indistinguishable from one that was never made. For a ledger whose whole purpose
+is trustworthy evidence, silent partial reads are the costly failure mode.
+
+WHY MAJOR. This is a designed, implemented, and unit-tested capability that is
+unreachable from the product surface -- the resolver's diagnostic tests are green
+while the user-facing behaviour is entirely absent. Not a blocker: nothing is
+corrupted or unsafe, and the correct results that ARE returned are correct.
+
+FIX SHAPE: surface diagnostics on the read verbs -- at minimum a warning count to
+stderr on table output and a diagnostics array in the JSON envelope, with
+resolve outcomes included under --history. The data is already in hand at each of
+the six sites; only the rendering is missing."""
+disposition = "fix-now"
+response = 'Accepted. Verified all six discard sites and confirmed by grep with a positive control that no CLI path renders a Diagnostic anywhere. This is a design-conformance gap against two explicit clauses (2.4 tolerant reads reporting path and reason; 4 "History always exposes controls and diagnostics"), not a stylistic omission -- an unparseable record currently makes a corpus read silently short, which is the costly failure mode for an evidence ledger. The data is already in hand at every site, so the fix is rendering only: a warning count plus JSON diagnostics array on the read verbs, with resolve outcomes under --history. Note this fix and F-6 touch the same two functions; sequence them together. Stays open until fixed.'
+
+[[finding]]
+id = "F-4"
+status = "answered"
+severity = "minor"
+title = "Expected each VT test to assert the behaviour its name claims; observed three that assert a tautology, the opposite, or only a classification"
+detail = """
+Three tests carry names that assert more than their bodies exercise. Each passes
+`doctrine slice verify-vt` (the mandated function name exists) and `just gate`
+(it compiles and passes) while verifying less than the name implies -- the exact
+gap a separate review turn exists to close.
+
+(1) tests/e2e_observation.rs:348-360 -- record_friction_empty_summary_fails
+    asserts SUCCESS, not failure:
+        let out = run(dir.path(), &["observation","record","friction","valid"]);
+        assert!(out.status.success());
+    A test named `..._fails` recording the string "valid" and asserting success.
+    The body carries a candid stream-of-consciousness comment conceding clap
+    makes the empty case unreachable via CLI. The behaviour IS covered by
+    store::store_validation_fails_before_publication, so this is a misleading
+    name plus a test that verifies nothing its name claims -- not a coverage
+    hole.
+
+(2) src/observation/store.rs:432-441 -- uuid_path_is_kind_and_time_blind
+    asserts a tautology:
+        let p1 = record_path(uid);
+        assert_eq!(p1, record_path(uid));
+        let p2 = record_path(uid);
+        assert_eq!(p1, p2);
+    The comment claims "Same UUID, different kind and time -> same path", but the
+    body never varies kind or time -- record_path's signature takes only a uid,
+    so it is structurally incapable of being kind- or time-sensitive. The test
+    calls one pure function three times with one argument.
+    THIS ONE HAS A REAL COVERAGE CONSEQUENCE. Design 6 requires: "The same UUID
+    under a different requested kind or after a month boundary resolves to the
+    same authoritative path AND CANNOT BE DUPLICATED." Nothing verifies it:
+    different_intent_collides_without_overwrite (store.rs:507-521) varies only
+    the summary, both envelopes friction. Grep for Measurement across store.rs
+    tests and tests/e2e_observation.rs returns only the PayloadIntent enum
+    definition -- no test creates a different KIND at an existing uid. So the
+    design's stated verification item is unverified while the test named for it
+    reports green.
+
+(3) src/main.rs:921-931 -- observation_worker_refusal_points_to_broker
+    asserts classification only:
+        assert!(matches!(write_class(&cmd), WriteClass::Write("observation record")));
+    No refusal message is produced or asserted, and nothing "points to broker".
+    Design 3.4 specifies the guard refuses observation writes in a marked worker
+    fork "with a diagnostic directing a confined worker to observation_record and
+    other workers to report the signal for primary-tree capture" -- that
+    diagnostic text is untested. The classification half is already covered by
+    observation_write_class_split, so this test currently adds nothing.
+    PHASE-05 is the dogfood-activation phase that depends on this routing, so the
+    gap lands directly under upcoming work.
+
+NOT COUNTED, though flagged by a reviewer: fsutil.rs:689
+publication_never_opens_destination_for_write. Its name overstates the structural
+claim, but its comment says so honestly and its body checks inode stability plus
+content preservation on collision -- real behavioural evidence that the
+destination was neither truncated nor replaced. Defensible as written; a rename
+would be a courtesy, not a correction.
+
+WHY MINOR. No live incorrectness: the behaviour behind (2) is almost certainly
+right by construction, and (1)'s subject is covered elsewhere. The cost is
+regression-guard holes -- if record_path later grew kind- or time-awareness, (2)
+would still pass -- and misleading green signal on a design-6 verification item.
+
+FIX SHAPE: (1) rename or delete; (2) replace with a test that creates a friction
+at uid X then attempts a measurement at uid X, asserting one path and an identity
+collision -- discharging design 6 properly; (3) assert the actual refusal
+diagnostic from commands::guard, not the WriteClass arm."""
+disposition = "fix-now"
+response = "Accepted, all three bodies read and confirmed. Instance (2) carries the real weight: design 6 requires that the same UUID under a different requested kind resolves to one path and cannot be duplicated, and nothing verifies it -- different_intent_collides varies only the summary, and no test anywhere creates a different kind at an existing uid. Replace the tautology with that test and the design item is genuinely discharged. Instance (3) matters for PHASE-05, which depends on the dogfood-activation routing whose refusal diagnostic is currently untested. Instance (1) is a rename or delete. The fourth candidate (publication_never_opens_destination_for_write) was correctly excluded by the raiser -- its comment is honest and inode stability is real evidence. Stays open until fixed."
+
+[[finding]]
+id = "F-5"
+status = "answered"
+severity = "minor"
+title = "Expected one source of truth for the facet field set; observed 33 fields hand-enumerated in three places, each failing silently and differently on drift"
+detail = """
+The 33 optional facet string fields are hand-enumerated in THREE independent
+places. Adding or renaming a facet field requires editing all three; missing one
+fails silently in a different way each time.
+
+- src/observation/wire.rs:305  Facets::string_values (~117 lines)
+    -> feeds lexical search. Miss a field here and search silently stops
+       matching it.
+- src/observation/wire.rs:540  validate_facet_strings (~159 lines)
+    -> enforces NUL rejection and FACET_STRING_LIMIT. Miss a field here and
+       hostile or over-limit content bypasses validation entirely.
+- src/commands/observation.rs:547  merge_explicit_facets (173 lines)
+    -> enforces design 3.1's "explicit caller values win" precedence, field by
+       field, with a paired _origin assignment per field. Miss a field here and
+       an explicit caller value is silently overwritten by enrichment.
+
+CURRENT STATE: consistent. A field-by-field diff of the enumerations in
+string_values and validate_facet_strings yields an empty symmetric difference
+(the sole apparent delta, `enumerate`, is an iterator method, not a field). So
+this is a LATENT DRIFT HAZARD, not a live defect -- reported as such.
+
+WHY IT STILL WARRANTS A FINDING. This is the same failure shape as PHASE-03
+defect 2, where the hand-rolled adapter comparator was byte-identical to the
+service's and the notes correctly recorded it as "latent drift, not a live bug"
+-- right up until it wasn't. Three parallel 33-field enumerations, two of them
+150+ lines, is a standing invitation to that defect, and the failure is silent in
+all three directions. The facet set is explicitly expected to grow: design 2.3
+versions each facet independently and QUE-176 will add usage-facet sources.
+
+ALSO THE COMPLEXITY FINDING. merge_explicit_facets at 173 lines and
+validate_facet_strings at ~159 are the two longest functions in the delta;
+wire::validate is ~190 (wire.rs:700). Their length is entirely this repetition
+-- there is no branching complexity worth preserving. Fixing the enumeration
+fixes the length; that is why they are one finding and not four.
+
+FIX SHAPE: derive all three walks from a single field enumeration -- a macro
+listing each facet group's string fields once, or a visitor the three call sites
+share. Whichever is chosen, the invariant to protect is that adding a facet field
+touches exactly one place. A cheap interim guard: a test asserting
+string_values() and the validated-field set have equal cardinality, so a
+one-sided addition fails loudly."""
+disposition = "follow-up"
+response = "Accepted as a real latent hazard; routed to IMP-329 rather than fixed now. Follow-up is the honest route here and not a size dodge: the enumerations were verified CONSISTENT today (empty symmetric difference between string_values and validate_facet_strings), nothing in PHASE-04 or PHASE-05 depends on the refactor, and collapsing three 150-plus-line hand-walks into one field source is a design exercise deserving its own scope rather than a cleanup-turn edit riding a security fix. What is NOT deferred: the cheap interim guard. If the one-line cardinality assertion between string_values() and the validated field set is not added under this slice, the hazard is unguarded while IMP-329 waits -- fold that single test into whichever cleanup turn addresses F-1."
+
+[[finding]]
+id = "F-6"
+status = "answered"
+severity = "minor"
+title = "Expected list and search to share one pipeline; observed 43 lines duplicated verbatim, differing only in the search argument and the empty-result string"
+detail = """
+src/commands/observation.rs:801-843 (run_list) and 847-890 (run_search) are
+43-line near-verbatim copies. Read side by side they differ in exactly three
+things:
+
+- the args type (ObservationListArgs vs ObservationSearchArgs);
+- the search argument to query::query -- None (819) vs Some(&args.query) (866);
+- the empty-result literal -- "(no observations)" (834) vs "(no results)" (881).
+
+Every other line is identical: root resolution, Service construction, the
+projection ternary, Filter construction, load_all, resolve, take(limit), the
+terminal-width lookup, the json/format selection, and both arms of the output
+match.
+
+Project doctrine forbids parallel implementation ("no parallel implementation --
+ride existing seams; find duplication before writing"). This is the third
+instance found in this slice, after PHASE-02's ensure_dir_components /
+ensure_parent_dirs near-copy and PHASE-03's hand-rolled filter_and_order
+duplicating query::query. Notably the PHASE-03 cleanup deleted filter_and_order
+and routed both paths through the service -- but left these two callers of that
+service as duplicates of each other, so the pattern was half-fixed.
+
+CONSEQUENCE is maintenance drift, not incorrectness: the two paths are correct
+today and byte-identical in behaviour. Every future change to listing -- surfacing
+diagnostics (raised separately as its own finding), pagination, new filters, a
+column change -- must be made twice, and F-3's fix in particular will now touch
+both.
+
+FIX SHAPE: one private helper taking the already-common shape --
+(projection, filter, limit, search: Option<&str>, empty_msg: &str, json, format)
+-- with run_list and run_search reduced to argument adaptation, which is all an
+adapter should be doing."""
+disposition = "fix-now"
+response = "Accepted, read side by side and confirmed: 43 identical lines differing only in the search argument and the empty-result literal. Fix now rather than defer, for a specific reason -- F-3 requires surfacing diagnostics in exactly these two functions, so leaving the duplication means making that change twice and creating the drift this codebase has already produced three times (ensure_dir_components, filter_and_order, and now this). Extract the shared pipeline first, then apply F-3 once. Stays open until fixed."
+
+[[finding]]
+id = "F-7"
+status = "answered"
+severity = "minor"
+title = "Expected no parallel implementation; observed dead Service::load_all_resolved re-implementing query(Projection::History) under a PHASE-04 justification the design excludes"
+detail = """
+src/observation/mod.rs:240-251 -- Service::load_all_resolved is dead code that
+re-implements an existing, used capability, justified by a consumer that will
+never call it.
+
+    #[expect(dead_code, reason = "retained for future external consumers; PHASE-04")]
+    pub(crate) fn load_all_resolved(&self) -> Vec<Envelope> {
+        let (envelopes, _diags) = self.store.load_all();
+        let (resolution, _outcomes) = resolve::resolve(envelopes);
+        let mut all: Vec<Envelope> = resolution.all_envelopes().cloned().collect();
+        all.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at)
+                            .then_with(|| b.uid.cmp(&a.uid)));
+        all
+    }
+
+Three problems, compounding:
+
+1. DEAD. `grep -rn load_all_resolved src/ tests/` returns exactly one hit: the
+   definition. No caller in src, none in tests, neither cfg.
+
+2. PARALLEL IMPLEMENTATION. Its body is query::query(&resolution,
+   Projection::History, &filter, None) plus query.rs's sort_query_order. The
+   comparator is byte-identical to query.rs:146-149 --
+   b.recorded_at.cmp(&a.recorded_at).then_with(|| b.uid.cmp(&a.uid)) -- and
+   Projection::History (query.rs:225) already yields all envelopes including
+   controls. This is precisely PHASE-03 defect 2 (a hand-rolled ordering
+   duplicating the service's, comparators byte-identical, latent drift) surviving
+   in the facade after the cleanup removed it from the adapter.
+
+3. FALSE JUSTIFICATION. The reason string names PHASE-04. Design 3.3 defines the
+   entire PHASE-04 MCP surface as observation_record -- a bounded CAPTURE tool
+   that "creates friction only" and refuses controls. It performs no reads at
+   all, so it cannot be this function's consumer. The annotation asserts a
+   forward consumer that the design excludes.
+
+This is NOT the sanctioned staged-ahead pattern
+(mem.pattern.lint.dead-code-staged-ahead-cfg-test). That pattern is
+cfg_attr(not(test), expect(dead_code)) for a fn exercised by tests now with its
+real consumer landing later -- exactly how SourceRegistry::register and
+record_measurement are correctly annotated in this same file (mod.rs:56,62,114).
+load_all_resolved uses a bare #[expect] and has no test consumer either. The
+author knew the pattern; this is the one that does not fit it.
+
+FIX SHAPE: delete it. If a future reader genuinely needs the history projection,
+query::query(Projection::History) is the existing seam and is already exercised."""
+disposition = "fix-now"
+response = "Accepted. Confirmed zero references in src and tests, confirmed the comparator is byte-identical to query.rs sort_query_order, and confirmed against design 3.3 that PHASE-04 is capture-only (observation_record, friction only, controls refused) and therefore cannot be the consumer the annotation names. Also confirmed this is not the sanctioned staged-ahead pattern: that pattern is cfg_attr(not(test), expect(dead_code)) with a live test consumer, exactly as SourceRegistry::register and record_measurement are annotated in this same file. Delete the function; query(Projection::History) is the existing seam and is already exercised. Stays open until fixed."
+
+[[finding]]
+id = "F-8"
+status = "answered"
+severity = "minor"
+title = "Expected the Service doc's injected-time/identity contract to hold; observed record_supersession and record_retraction calling now_v7 and now_timestamp internally"
+detail = """
+The Service doc comment states the opposite of what two of its methods do.
+
+src/observation/mod.rs:73-75 (on `struct Service`):
+    "The repository root, UUIDv7 generation, current time, enrichment context,
+     and source registry are all injected -- no clock, RNG, or disk access in
+     this layer beyond the store delegation."
+
+But:
+- mod.rs:171-172 (record_supersession):
+      let uid = uuid::Uuid::now_v7().to_string();
+      let recorded_at = crate::clock::now_timestamp()?;
+- mod.rs:205-206 (record_retraction): the same two lines.
+
+So identity and time are generated INSIDE the layer that documents them as
+injected. A grep for now_v7|now_timestamp|SystemTime|Utc::now across
+src/observation/ returns exactly these four lines and nothing else -- the same
+grep matching mod.rs is the positive control establishing that wire.rs,
+resolve.rs, and query.rs are genuinely clean, so ADR-001 leaf purity for the pure
+modules is intact. This finding is about the facade only.
+
+INCONSISTENT WITH ITS OWN SIBLING. record_friction (mod.rs:97) takes a
+fully-built &Envelope with uid and recorded_at already supplied by the caller --
+the injected shape the doc describes, and the shape design 2.1 specifies ("uid is
+caller-supplied for replay or generated as UUIDv7 by the command shell;
+recorded_at is supplied by the shell"). The two control verbs deviate from both
+the doc and their sibling.
+
+CONTRACT. Design 5's module table describes the facade as "Shared service over
+injected root, identity, time, enrichment, and registered measurement-source
+admission inputs". AGENTS.md: "no clock, rng, git, or disk in the pure layer --
+pass them in as inputs (the date/uid pattern). Impurity lives in the thin shell."
+
+CONSEQUENCE, honestly bounded. No live incorrectness -- the timestamps produced
+are correct. Two real costs: (a) a doc comment stating the inverse of the code is
+a maintenance trap, and the next reader who trusts it and builds on "time is
+injected here" will be wrong; (b) Service-level control creation cannot be
+time-pinned, so design 4's canonical (recorded_at, uid) control ordering --
+retraction dominates supersession, earliest valid supersession wins -- is not
+deterministically testable through the service. It is currently tested at the
+resolve layer, which constructs envelopes directly and can set recorded_at; that
+is why this is minor rather than major.
+
+FIX SHAPE: either take uid and recorded_at as parameters on record_supersession
+and record_retraction, matching record_friction and letting the CLI shell supply
+them (preferred -- it makes the doc true and the ordering testable end to end);
+or, if the internal generation is deliberate, correct the doc comment to say so
+and note why the controls differ. What should not survive is the current state,
+where the comment and the code disagree."""
+disposition = "fix-now"
+response = "Accepted. Confirmed the doc comment and the two method bodies contradict each other, and confirmed via grep with a positive control that the impurity is confined to the facade -- wire, resolve, and query are genuinely clean, so ADR-001 leaf purity holds and this is narrower than a layering breach. Preferred fix is the first shape offered: take uid and recorded_at as parameters on record_supersession and record_retraction, matching record_friction and design 2.1 (the shell supplies time and identity). That makes the doc true and makes design 4 control ordering deterministically testable through the service instead of only at the resolve layer. Correcting the comment instead is acceptable but strictly worse -- it documents an inconsistency rather than removing one. Stays open until fixed."
+
+[[finding]]
+id = "F-9"
+status = "answered"
+severity = "minor"
+title = "Expected terminal views to escape all control characters (design 2.4); observed DEL (U+007F) passed through raw by escape_hostile"
+detail = '''
+PROVEN EMPIRICALLY. escape_hostile handles C0 and C1 but skips DEL (U+007F).
+
+src/commands/observation.rs:326-331
+    c if c < ' ' && c != '\n' && c != '\t' => write!(out, "\\x{:02x}", ...)   // U+0000..U+001F
+    c if ('\u{80}'..='\u{9f}').contains(&c) => write!(out, "\\x{:02x}", ...)  // U+0080..U+009F
+    _ => out.push(c)                                                          // everything else
+
+DEL is U+007F: not less than ' ' (U+0020), and below the C1 range, so it falls to
+the passthrough arm.
+
+REPRODUCTION (at 0fe9572b, output via cat -v):
+    doctrine observation record friction $'del\x7fhere'
+    doctrine observation list
+    1 | ... | friction | del^?here
+The raw 0x7F byte reaches the terminal through the SUMMARY column -- the column
+that IS routed through escape_hostile -- so this is a gap in the escaper itself,
+not a missed call site (the missed call sites are a separate blocker finding).
+
+CONTRACT. Design 2.4: "terminal views escape control characters and escape
+sequences." DEL is a control character; it is unescaped.
+
+WHY MINOR, NOT PART OF THE BLOCKER. Distinct root cause -- the blocker is fields
+bypassing the escaper, this is the escaper's own character coverage -- and
+distinct severity: DEL is largely inert in modern terminal emulators, with no
+cursor-movement, colour, or OSC semantics. There is no demonstrated
+forgery or hiding primitive here, only a contract gap. Rated on what it does, not
+on its neighbourhood.
+
+The escaper is otherwise correct and was verified as such: it iterates chars (296)
+not bytes, no char::from(u8) or `as` cast survives on this path, ESC plus full
+CSI-sequence consumption is handled (299-318), C1 is handled (329) -- which is the
+range most implementations miss -- and behaviour is linear, not quadratic, on
+32 KiB detail. Non-ASCII round-trips intact, pinned by
+non_ascii_content_survives_rendering_intact.
+
+FIX SHAPE: extend the C0 arm to cover DEL -- e.g. `c if (c < ' ' || c == '\x7f')
+&& c != '\n' && c != '\t'` -- and add U+007F to the escaper's test inputs
+alongside the existing ESC/BEL cases.'''
+disposition = "fix-now"
+response = "Accepted, reproduced: the raw DEL byte reaches the terminal through the summary column, which is the escaped column, so this is the escaper own coverage rather than a missed call site. Correctly kept separate from F-1 and correctly rated minor rather than inflated by proximity to a blocker -- DEL carries no cursor, colour, or OSC semantics in modern emulators, so the contract gap is real but the primitive is not. One match arm plus a test input. Stays open until fixed."
+
+[[finding]]
+id = "F-10"
+status = "answered"
+severity = "minor"
+title = "Expected test inputs to span the classes the contract constrains; observed limit boundaries, multi-byte-at-boundary, and most control chars unexercised"
+detail = '''
+The UTF-8 corruption defect in PHASE-03 survived a fully green suite because no
+test string anywhere carried a non-ASCII byte. That specific gap was closed
+(non_ascii_content_survives_rendering_intact, e2e:282, exercising 2/3/4-byte
+encodings). The GENERAL gap was not: several input classes remain unexercised,
+and this review found a live panic (raised separately) sitting in one of them.
+
+ABSENT, ranked by the severity of what they can hide:
+
+1. MULTI-BYTE CHARACTER AT A SLICE OR LIMIT BOUNDARY. Every limit test uses
+   "x".repeat(N) -- pure ASCII. No test puts a multi-byte character where a byte
+   index lands. This is not hypothetical here: the shard_dir panic raised as its
+   own finding is exactly this class, on the read path, and a test in this class
+   would have caught it. Byte-boundary handling is now known to be a live weak
+   spot in this codebase, not a theoretical one.
+
+2. EXACTLY-AT-LIMIT AND ONE-UNDER. wire.rs:1289 tests only
+   "x".repeat(SUMMARY_LIMIT + 1); the same LIMIT+1-only shape covers
+   DETAIL_LIMIT and FACET_STRING_LIMIT. Nothing asserts that a summary of
+   exactly 1024 bytes is ACCEPTED. An off-by-one flipping `s.len() > limit` to
+   `>=` would silently reject legal input and no test would fail. Design 2.4
+   fixes these limits precisely, so the boundary is contract, not incidental.
+   (RECORD_LIMIT is the exception -- it is exercised at wire.rs:1404.)
+
+3. COMBINING MARKS / DECOMPOSED FORMS. All multi-byte test input is precomposed
+   (e-acute as U+00E9). No decomposed sequence (e + U+0301), where char count,
+   grapheme count, and byte count all differ -- the shape that breaks
+   width-aware table layout and any char-count-based logic.
+
+4. C0 CONTROLS BEYOND ESC/BEL/CR, PLUS DEL. Escaper tests cover ESC, BEL, CR and
+   NUL-as-rejected; U+0001-U+0006, U+0008-U+001A, U+001C-U+001F and U+007F are
+   untested. The DEL gap raised separately is the proof this mattered.
+
+5. CRLF AS AN ADJACENT PAIR. Bare \r and bare \n are each tested; "\r\n" never
+   appears in any test string, so line-ending handling in Inline vs Block context
+   is unexercised.
+
+6. WHITESPACE-ONLY SUMMARY. Empty is rejected (wire.rs:1261); "   " passes the
+   is_empty() check and would be accepted as a valid friction summary. No test
+   pins whether that is intended.
+
+7. VERY LONG SINGLE TOKEN through the search tokenizer; and content that is
+   itself valid-UUID-shaped or TOML/JSON-shaped. Lowest stakes -- cosmetic or
+   performance, not corruption.
+
+ADEQUATELY COVERED, for the record: non-ASCII round-trip, RTL/bidi (U+202E, in
+hostile_strings_round_trip_through_canonical_toml), ANSI CSI and OSC sequences,
+NUL rejection in summary and uid, and the whole-record limit.
+
+WHY MINOR. This is coverage, not incorrectness -- with the one exception already
+raised at its own severity. Its real weight is predictive: this suite's failure
+mode is green-over-unexercised-input, it has produced two defects on this slice
+already, and PHASE-04 adds an MCP surface whose inputs come from confined agents.
+
+FIX SHAPE: add classes 1-2 as explicit cases (a multi-byte character straddling
+each byte limit; exactly-AT-limit accepted and LIMIT+1 rejected for summary,
+detail, and facet string), then 3-5 as cheap additions to the existing hostile
+string constant. Classes 6-7 warrant a decision recorded, not necessarily a test.'''
+disposition = "fix-now"
+response = 'Accepted, with the scope of "now" stated precisely. Classes 1 and 2 (a multi-byte character straddling each byte limit; exactly-AT-limit accepted and LIMIT+1 rejected for summary, detail, and facet string) are fix-now and non-negotiable: class 1 is the exact shape that hid the F-2 panic, and class 2 leaves a contract boundary where an off-by-one would silently reject legal input. Classes 3 to 5 are cheap additions to the existing hostile-string constant and should ride the same turn. Classes 6 and 7 warrant a recorded decision rather than a test -- in particular whether a whitespace-only summary is intended to be valid, which is a product question, not a coverage gap. Stays open until the fix-now classes land.'
+
+[[finding]]
+id = "F-11"
+status = "answered"
+severity = "nit"
+title = "Expected publish_complete to clean its temp on every exit path; observed a write_all failure returning without removing it"
+detail = """
+src/fsutil.rs:302-308. If create_new_file succeeds but write_all fails (ENOSPC, EIO), the `?` at 305-306 returns and the reserved temp is left on disk. Every other exit path cleans up: the hard_link error arm removes it explicitly (316), and both Created and AlreadyExists fall through to the removal at 330.
+
+WHY THIS IS ONLY A NIT, against the reviewer that rated it major. Design 3.2 already licenses exactly this residue: "A crash before the link may leave only an ignored temporary file", and design 6 requires the seam to "leave only an ignored temporary name if interrupted before publication". A failed write IS an interruption before publication, so the observed behaviour is within the designed contract, not outside it. The leaked name is inert by construction: it carries the reserved PUBLICATION_TEMP_PREFIX, and corpus loading skips it twice over -- once on the prefix (store.rs:339) and again on the .toml extension check (store.rs:344), since the temp ends .pub. Nothing is corrupted, no record is lost, and a subsequent publish is unaffected.
+
+What remains is an internal inconsistency worth tidying rather than a defect: the function demonstrably intends to clean up on error (it does so one step later) and simply misses this branch. Left alone, repeated write failures accumulate ignored files in a shard directory.
+
+FIX SHAPE: wrap steps 2-3 so the temp is removed on any early return, or add the removal before the `?` on the write. Verified the rest of the seam is correct: bytes are written and the handle closed (the block at 302-308) BEFORE hard_link publishes at 311, the destination is never opened for write, and the doc comment at 267-272 mirrors design 3.2 faithfully -- including the explicit refusal to claim protection against a malicious local actor swapping directory components. No over-claim anywhere in this module."""
+disposition = "fix-now"
+response = "Accepted at nit, and the raiser downgrade from major is upheld. Design 3.2 explicitly licenses a leftover temp before publication, and the leaked name is inert by construction -- carrying the reserved prefix and skipped twice by corpus loading (prefix check and .toml extension check). So no contract is violated and nothing is corrupted; what remains is an internal inconsistency, since the function demonstrably intends to clean up on error one step later. Trivial to fix while the file is open for nothing else. Confirmed separately that the rest of the seam is correct and that neither code nor comments over-claim beyond design 3.2 narrow wording. Stays open until fixed."
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

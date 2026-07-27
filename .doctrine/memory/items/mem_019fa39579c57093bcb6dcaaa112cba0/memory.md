@@ -36,3 +36,41 @@ not the same as asking an agent to check its own work.
 Mechanics for a read-only review turn: `PI_REUSE_FORK=1` to attach to the
 existing fork plus `PI_TOOLS=read,bash,grep,find,ls` to withhold edit/write.
 See [[mem.pattern.dispatch.pi-rpc-worker-protocol]].
+
+
+## Confirmed in use — RV-317 (SL-231 PHASE-01..03 code review, 2026-07-27)
+
+Three read-only deepseek passes (`PI_REUSE_FORK=1`,
+`PI_TOOLS=read,bash,grep,find,ls`, `PI_THINKING=high`), run lens-diverse rather
+than phase-shaped. The user's correction holds: the passes produced **real
+findings that survived independent adjudication**, including a blocker — a
+terminal escape / row-injection vector re-opened through unescaped envelope
+metadata, with accurate line numbers, correct threat model, and correctly
+proposed severity. Also genuine: discarded read diagnostics, a publication temp
+leak, and a whole-suite VT assertion audit that caught three tests asserting a
+tautology, the opposite of their name, or a classification instead of the
+diagnostic they were named for.
+
+### Two calibration failures worth planning around
+
+1. **Line numbers can be systematically offset.** Pass A's citations were ~410
+   lines off throughout — it numbered against a `git diff` hunk rather than the
+   file. Substance was mostly right; every location needed re-deriving. Two
+   findings even cited *overlapping* ranges in one file, which is the cheap tell.
+   Prompt for `grep -n` output or function names alongside line numbers, and
+   never raise a finding on a reviewer's line number without re-reading it.
+2. **A "CLEAN" section is not evidence of absence.** Pass B declared "no
+   production-code panics on hostile input" clean while a reachable panic sat one
+   module away in a file it had open. The single worst defect of the review
+   (`shard_dir` byte-slicing a UTF-8 uid) came from orchestrator probing —
+   literally running the binary with a non-ASCII argument — not from any pass.
+
+### Practical shape
+
+Reviewer passes and orchestrator probing are **complementary, not redundant**.
+The passes read broadly and cheaply; empirical probing of the built binary finds
+what reading misses. Budget for both. Lens-diverse passes (layering / hostile
+input / test-input coverage) beat phase-shaped ones on a multi-phase delta —
+cross-phase contract drift is invisible to a per-phase pass by construction.
+
+See also [[mem.pattern.review.sweep-defect-class-not-instance]].

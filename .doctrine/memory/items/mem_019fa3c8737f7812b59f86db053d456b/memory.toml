@@ -1,0 +1,42 @@
+memory_uid = "mem_019fa3c8737f7812b59f86db053d456b"
+memory_key = "mem.pattern.review.sweep-defect-class-not-instance"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Fix the defect class, not the instance — sweep for siblings before closing a cleanup turn"
+summary = "When a cleanup turn identifies a defect CLASS, grep the whole delta for siblings before closing it — SL-231 fixed three defects correctly and each class recurred untouched elsewhere."
+created = "2026-07-27"
+updated = "2026-07-27"
+
+[scope]
+paths = ["src"]
+globs = []
+commands = []
+tags = ["review", "cleanup", "defect-class", "dispatch", "code-review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "51dbd8a8b5ec68c2b2780cf06fdd140bebc776ac"
+ref_name = "refs/heads/edge"
+checkout_state_id = "f88ba64dcadc22967e5c6b45013b062a5eb4b294a91d3bf93f7d68c4523fcaac"
+base_commit = "ae3b275efd04d19d0aa7619ae86b990ce09f2a81"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+

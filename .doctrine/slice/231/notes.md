@@ -6,9 +6,15 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · PHASE-01..03 landed and reaped · 0fe9572b
+fresh-as-of: 2026-07-27 · PHASE-01..03 landed and reaped, RV-317 raised · 0fe9572b
 
 ### Produced
+
+- RV-317 — ledgered code review of the landed PHASE-01..03 delta (facet
+  `code-review`, three lens-diverse read-only deepseek passes + orchestrator
+  probing). 11 findings, all disposed, **none verified by design** so the
+  blocker keeps gating closure until fixes land. 1 blocker / 2 major / 7 minor /
+  1 nit. IMP-329 minted from F-5.
 
 - PHASE-03 — CLI, reads, and corrections delivered on the pi/deepseek arm, then
   driven through the funnel: imported (`6a07967c2`), verified green
@@ -111,9 +117,22 @@ fresh-as-of: 2026-07-27 · PHASE-01..03 landed and reaped · 0fe9572b
 - EVD-002 — `claude -p` is the first candidate for trustworthy token telemetry
 - RV-311/F-1 — marked solo worktrees defer friction for coordination-tree
   capture
+- `mem.pattern.review.sweep-defect-class-not-instance` — all three PHASE-03
+  cleanup fixes were correct and all three classes had surviving siblings
+  (RV-317 F-1/F-2/F-6/F-7). Sweep the delta for the class before closing a
+  cleanup turn.
+- `mem.fact.dispatch.deepseek-review-capability` (extended) — the passes found
+  real defects incl. the blocker; two calibration failures worth planning around
+  are diff-relative line numbers and a "CLEAN" section covering a live panic.
+  Reviewer passes and empirical probing of the built binary are complementary.
 
 ### Open
 
+- **RV-317 fixes are UNAPPLIED.** All 11 findings disposed (10 fix-now, 1
+  follow-up→IMP-329) but deliberately left un-verified so F-1 (blocker) keeps
+  gating closure. Fixing landed-phase code lands a commit OUTSIDE any phase
+  boundary row — `record-delta --commit S` pins one commit's patch — so the
+  registry/boundary consequence needs an explicit call before the cleanup turn.
 - QUE-176 — trustworthy per-harness token instrumentation boundaries
 - IMP-319 — subprocess-worker observation capture parity
 - IMP-320 — configurable observation guidance in boot context
