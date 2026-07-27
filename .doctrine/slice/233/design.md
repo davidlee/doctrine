@@ -548,11 +548,15 @@ choreography, silent stale-proposal rebase, prompt omission by fragment name,
 automatic reconstruction of missing procedural evidence, and live skill
 evaluation from an uninstalled dispatch worktree. Carrying the four process
 fragments as additional `stage/*` hymns was also rejected:
-`src/install.rs::KNOWN_STAGE_LABELS` is a deliberately closed lifecycle
-vocabulary, while inquiry, drafting, reviewing, and delegation are
-intra-design obligations rather than new global stages. Extending that registry
-would pollute its semantics; a closed design-specific pack is the narrower
-mechanism.
+`src/install.rs::KNOWN_STAGE_LABELS` is an *enforced* lifecycle vocabulary —
+`check` flags any `stage`-band label outside it — while inquiry, drafting,
+reviewing, and delegation are intra-design obligations rather than new global
+stages. The argument is semantic, not textual: the constant's own comment marks
+the set *provisional*, so its membership is revisable and the rejection cannot
+rest on the registry being closed forever. It rests on what a `stage` label
+*means*. Adding four intra-design obligations to a lifecycle-stage vocabulary
+would pollute that meaning whether or not the list is later extended for genuine
+stages; a closed design-specific pack is the narrower mechanism.
 
 ## 8. Risks & Mitigations
 
