@@ -911,3 +911,36 @@ would have collapsed 5+ exploration calls into one retrieve.
   in the design, not in the §7 touch-set, not in the phase sheet's reading list
   — only the gate knows. Cheap to fix, but it means a "one-line data change"
   estimate is systematically wrong for this file.
+- **The coord tree's index/worktree can sit BEHIND its own HEAD, and that
+  blocks the conclude cadence's first beat.** `[/dispatch; SL-231-conclude]` The
+  funnel commits server-side without touching the working tree, so on entry the
+  two funnel files read as staged modifications that *delete* PHASE-04's and
+  PHASE-05's rows — a stale index presented as pending work. `dispatch status`
+  does not mention it and `refresh-base` gives no pre-flight. The heal is
+  `git restore --source=HEAD --staged --worktree -- <the two files>`, but
+  arriving at "HEAD is the superset, the worktree is behind" needs three diffs
+  (HEAD↔index, index↔worktree, HEAD↔worktree) because the default `git status`
+  reading is the opposite one. A fresh agent following the handover verbatim
+  runs `refresh-base` into a merge refusal on a file it was told was "expected,
+  not drift".
+- **A boundary row that spans a mid-drive `refresh-base` merge silently
+  attributes all of trunk to that phase.** `[/dispatch; SL-231-conclude]`
+  PHASE-01's row is `[095fca404, 02da8ebf47]`, recorded at its conclude; a
+  `refresh-base` merge (`0d2cb5671`, 20 trunk commits) landed *inside* that
+  range. `slice conformance` folds each row's `start..end` `--name-status`, so
+  SL-232/233/234's authored files, `Cargo.lock`, the plugin manifests and
+  `src/review.rs` all read as SL-231's undeclared cells: 45 undeclared, of
+  which 42 are trunk. The honest touched set is 28 files with 3 undeclared
+  (`.doctrine/dispatch/231/funnel.toml`, `.doctrine/slice/231/slice-231.toml`,
+  `src/worktree/allowlist.rs`). Establishing that took reading
+  `conformance_outcome`, five per-range diffs, and a history walk over
+  `boundaries.toml` to prove the row was long-standing rather than freshly
+  mis-derived. The cost lands on whoever audits, and the report reads as a
+  serious scope violation until disproved.
+- **The handover's boundary table disagreed with the committed ledger, and was
+  right about the wrong thing.** `[/dispatch; SL-231-conclude]` The packet gives
+  PHASE-01 as `[0d2cb5671, 1d8cc08ae]` — the true post-refresh delta — while the
+  ledger records `[095fca404, 02da8ebf47]`. Both describe something real, so
+  neither reads as wrong on its face; the discrepancy is only visible if you
+  diff both. A packet that restates queried data invites exactly this: the
+  restatement ages against the source it was copied from.
