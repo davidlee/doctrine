@@ -369,9 +369,9 @@ Expected implementation homes are:
   design-specific prompt pack ships through the existing whole-`install/`
   embed and Nix graft;
 - `install/routing-process.md` for the canonical managed-design core-process
-  sentence projected into the boot snapshot; implementation regenerates
-  `.doctrine/state/boot.md` with `doctrine boot` rather than editing derived
-  state;
+  sentence projected into the boot snapshot; the implementation phase that
+  first makes `doctrine design` executable owns this rewrite, never an earlier
+  design/spec-only commit;
 - `publication/manifest.toml` for explicit library addresses for the sealed
   invariant hymn and four process fragments, satisfying the existing
   unprojected-install-asset reachability invariant;
@@ -386,6 +386,21 @@ The pure layer receives derived facts and generated IDs as inputs. Every new
 embedded asset root must also be included in the Nix `srcWithDist` source
 graft; SL-233 adds no new root because both prompt stores are beneath the
 already grafted `install/`.
+
+The implementation phase that ships the executable `doctrine design` family
+also changes `install/routing-process.md`; the two changes land together so
+shipped guidance never names a command the built binary rejects. Its exit
+criteria include the complete delivery tail for an `install/` asset:
+
+1. `cargo build` re-embeds the authored source;
+2. `doctrine boot` regenerates `.doctrine/state/boot.md`;
+3. `doctrine boot --check` reports current; and
+4. `doctrine install` refreshes the projected
+   `.doctrine/routing-process.md`.
+
+The phase additionally proves that every command named by the generated core
+process is accepted by the just-built binary. Before that phase lands, the
+incumbent core-process sentence remains authoritative.
 
 The first authored plan phase (assigned its immutable `PHASE-NN` ID during
 `/plan`) performs governance descent before engine or command implementation.
