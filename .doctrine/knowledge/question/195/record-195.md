@@ -28,3 +28,8 @@ map, gate ledger, or review history.
 The recommendation is option 1. It preserves the strong meaning of exact
 resume, provides a bounded bridge for existing designs, and keeps imported
 content visibly weaker than state produced by the managed protocol.
+
+## Answer
+
+Option 1 was accepted and is recorded by DEC-084. QUE-196 separately settles
+which durable or prose question sources may seed the reconstructed inquiry map.

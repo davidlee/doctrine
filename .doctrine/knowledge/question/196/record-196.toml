@@ -1,11 +1,11 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 195
-slug = "managed-design-entry-with-an-existing-design-document"
-title = "Managed design entry with an existing design document"
+id = 196
+slug = "question-sources-admitted-during-existing-design-import"
+title = "Question sources admitted during existing-design import"
 record_kind = "question"
-status = "answered"
+status = "open"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
