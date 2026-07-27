@@ -190,3 +190,24 @@ Thirteen charges laid; three gate the lock. The design may not lock until F-1's
 sibling blockers F-2 and F-3 are terminal.
 
 > **HERESIS URITOR; DOCTRINA MANET**
+
+## Responder correction
+
+The first responder-disposition invocation allowed the shell to consume
+backtick-delimited literals in several response strings. The structured
+statuses and dispositions are correct; the omitted literals are:
+
+- F-2: `doctrine design …`, `doctrine slice design <ID>`, and
+  `design materialise`;
+- F-3: `inspect`, `show`, and `show --full`;
+- F-4: `KNOWN_STAGE_LABELS`;
+- F-5: `install/manifest.toml`, `stage/design`, `[hymns].seal`, and
+  `publication/manifest.toml`;
+- F-6: `references(originates_from): SL-233`;
+- F-10: `--from-design`, `--format`, `--known-fragment`, and the `apply`
+  payload;
+- F-13: `QUE-* remains open`.
+
+The complete amendments are committed in `f779bd26`. This correction is in the
+prose companion because answered findings cannot be re-disposed and the
+append-only structured ledger has no responder-edit verb.

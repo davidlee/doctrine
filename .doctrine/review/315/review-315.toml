@@ -30,7 +30,7 @@ response = "Accepted. ISS-259 is now governed by SL-234, whose scoped design fil
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected: a new public command family is reconciled against the existing verb surface. Observed: DEC-075 mints top-level 'doctrine design' beside the extant 'doctrine slice design', and neither the design nor the DEC acknowledges it exists"
 detail = """
@@ -43,10 +43,12 @@ So after SL-233 the corpus holds two differently-namespaced commands, both keyed
 design.md 5.2 asserts only "The public namespace is design-specific (DEC-075)"; DEC-075's body settles the namespace question without once naming the incumbent. Neither 7's rejected-alternatives nor 10's reconciliation claim mentions it. This is the global standard's "No parallel implementation! Find potential duplication before writing new code" breached at design time, on the CLI's public surface, where it is permanent.
 
 Penance — pick one and argue it in 5.2: (a) subsume the incumbent, i.e. `slice design` becomes an alias or is deprecated and its scaffolding responsibility moves under the run; (b) keep the incumbent and place the run under `doctrine slice design <verb>`; or (c) keep both and state explicitly, in 5.2 and in DEC-075, the boundary that makes two design-writing verbs coherent, plus what each does when the other's state exists. Whichever is chosen, the boot SPINE digest and 5.5's skill adapter must agree. Verification: a CLI-surface test asserting the two families' documented boundary."""
+disposition = "fixed"
+response = "DEC-075 and design §5.2 now make top-level  canonical and retain  only as a deprecated alias for , with one writer and one foreign-edit guard. §9.2 requires alias-equivalence and deprecation coverage. Committed in f779bd26."
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected: 'inspect' means metadata-only, strictly less than 'show', as everywhere else in the CLI. Observed: design.md 5.2 inverts the pair — 'show' is the bounded projection and 'inspect' is the full detail"
 detail = """
@@ -60,10 +62,12 @@ Accused (design.md 5.2): "`show` emits its bounded projection; ... `inspect` exp
 This is not cosmetic. STD-002 governs naming; the global standard holds that "Naming things well is VERY important". A verb whose meaning flips depending on which noun precedes it is a permanent trap for exactly the audience this repo serves — agents that learn the surface by generalising from `--help`. An agent that has learned `inspect` = cheap metadata will reach for `design inspect` precisely when it wants the CHEAP read, and will instead receive the unbounded projection that 9.3 says "may scale with the run" — the token-economy failure R1 exists to prevent, delivered by the naming.
 
 Penance: rename. The bounded default stays `show`; the full dump takes a name that already means more-not-less in this corpus — `doctrine design show --full`, or a distinct verb (`dump`, `explain`) — and `inspect`, if retained at all, is bound to its canonical metadata-only meaning. Verification: extend whatever test guards CLI help-text conventions to assert the show/inspect subset relation across every kind that offers both."""
+disposition = "fixed"
+response = "Removed the inverted design . Bounded  remains the default; explicit  may scale with the run. §9.3 now requires help/convention coverage protecting that relation. Committed in f779bd26."
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: scope 5's command to 'reuse the prompt cascade rather than creating a parallel composition mechanism' is discharged with an argument. Observed: install/design-prompts/ is a second content store, asserted without rationale and absent from the rejected-alternatives list"
 detail = """
@@ -76,10 +80,12 @@ That defence answers a charge nobody laid. The scope forbade a parallel COMPOSIT
 The design may well be RIGHT to sit outside the cascade — the strongest argument for it is that `src/install.rs::KNOWN_STAGE_LABELS` is a CLOSED lifecycle vocabulary (route, canon, preflight, slice, design, inquisition, plan, phase-plan, execute, audit, reconcile, close) validated by `doctrine prompt check`, so obligation-keyed labels like `design-inquiry` would be refused as "unknown stage label" (src/commands/prompt.rs:309-320) and widening it would pollute a lifecycle vocabulary with intra-stage obligations. **That argument appears nowhere in the design.** 7's rejected alternatives list eight rejections and this is not among them.
 
 An undischarged scope directive is heresy whether or not the outcome is correct: the reader cannot tell whether the cascade was weighed and found wanting or simply never considered. Penance: add the rejected alternative ("carry the four process fragments as stage-band hymns") to 7 with the KNOWN_STAGE_LABELS argument, or move the pack into the cascade. Either way 5.5 must state which cascade capabilities the pack deliberately forgoes (seal integrity, replaces validation, user override) and why forgoing them is safe."""
+disposition = "design-amended"
+response = "Design §5.5 now records exactly which cascade facilities the closed prompt pack forgoes and why its code-owned single-fragment selection remains safe. §7 rejects stage-band fragments because  is closed lifecycle vocabulary, not intra-design obligation vocabulary. Committed in f779bd26."
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: every asset 5.5 asserts has a delivery path — a named implementation home and a design-target selector. Observed: the 'sealed invariant hymn' requires an edit to install/manifest.toml, which appears in neither"
 detail = """
@@ -100,10 +106,12 @@ Now the ledger of omissions:
 Consequence is concrete, not theoretical: `doctrine slice conformance` cross-checks recorded source deltas against design-target selectors and reports "undeclared edits (highest signal)". The manifest edit lands as an undeclared edit at audit, on a slice whose own subject is making workflow state legible. And if an implementer instead honours the selector set literally, the hymn ships UNSEALED — a user-provenance twin at `stage/design` then wins the slot, and the "invariant" operating contract R7 depends on ("Retain static skill activation and sealed invariant guidance") is silently overridable.
 
 Penance: add `install/manifest.toml` to 5.5's implementation homes and to the design-target selectors; state in 5.5 that `stage/design` enters `[hymns] seal`; and add a verification to 9.4 that the slot is sealed (not merely embedded) — e.g. `doctrine prompt check` green plus an assertion that a user twin at `stage/design` is dropped before matching. While there, confirm whether `install/design-prompts/**` needs a publication-manifest entry under SL-227's minimal-projection regime and name that home too if so."""
+disposition = "fixed"
+response = "Added  as a design target and implementation home; §5.5 requires  in , and §9.4 tests sealed-twin dropping. Inspection also found the SL-227 reachability requirement, so  is now an exact target/home for all five new install assets. Committed in f779bd26."
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: scope's closure intent is met before close, or the scope is amended. Observed: the design moves adherence evaluation past the close gate to CHR-049 while 10 claims 'the slice scope ... is reconciled'"
 detail = """
@@ -116,10 +124,12 @@ So the five-stage evaluation the scope names as closure intent is, by the design
 `slice-233.md` still says close requires the evaluation. `design.md` says it does not. Both are authored, committed, and diffable; there is no marker on either telling a future reader which won. And 10 asserts the opposite of the true state: "The slice scope and known implementation selectors are reconciled." They are not reconciled on this point — they are in direct contradiction, and the reconciliation claim will be read at audit as evidence that they agree.
 
 This is the mechanism by which scope silently narrows. Penance: amend `slice-233.md`'s closure-intent bullet to state that the five-stage adherence evaluation descends to CHR-049 post-close, citing DEC-079, and to state what DOES gate closure in its place (the deterministic evaluation kit of 9.5). Then either substantiate or withdraw 10's reconciliation claim. Verification: `doctrine slice show SL-233` and `design.md` read together must yield one answer to "what must be true to close this slice?", and CHR-049 must carry an inbound needs/originates_from edge from SL-233 so the deferred obligation is queryable rather than merely mentioned."""
+disposition = "fixed"
+response = "Amended SL-233 closure intent: the deterministic kit gates closure, while the installed live adopt/adhere/refresh/recover/complete exercise belongs to CHR-049 per DEC-079. CHR-049 already carries ; §10 now states the same boundary. Committed in f779bd26."
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: scope R4 forbids agent-authored classification acquiring user authority. Observed: DEC-088's acceptance attestation is agent-written, carries authority='user', clears the accepted-decision and reviewing->locked gates, and has no entry on the risk register"
 detail = """
@@ -136,6 +146,8 @@ The confession is honest. The design's response to it is absent. Trace what the 
 The risk register does not cover this. R11 is the nearest: "acceptance basis becomes paperwork ... measure whether it improves audit/recovery or merely repeats the prior turn" — a COST risk, not a truthfulness risk. No risk entry addresses a mistaken or fabricated attestation, and 9's verification plan tests the binding (fingerprint, disposition, revision) without testing anything about its provenance.
 
 Penance, minimal: (a) add an R-entry naming false/mistaken attribution as the residual risk, with its mitigation — the attestation is auditable after the fact (basis + `turn_ref` + bound fingerprint + revision), which is the honest claim; (b) make 5.4's `reviewing -> locked` predicate state explicitly that "the user explicitly accepts" is satisfied by an ATTRIBUTED AGENT CLAIM in v1, so no future reader mistakes the gate for authentication; (c) add to CHR-049's measurement whether bases are ever found to misdescribe the turn they cite. This aligns SL-233 with ADR-007's existing and honest posture — `--as` is "cooperative role assertion, not a security boundary" — rather than leaving the design implying a strength it disclaims two paragraphs later."""
+disposition = "fixed"
+response = "The reviewing→locked predicate now states that v1 accepts an auditable attributed agent claim, not authenticated human proof. R12 records false/mistaken attribution and its residual risk; CHR-049 now samples basis-to-turn accuracy and cost. Committed in f779bd26."
 
 [[finding]]
 id = "F-8"
@@ -158,7 +170,7 @@ Penance: name the exit. Cheapest defensible v1 — a re-adopt path on the LIVE r
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: 'new/amended product and technical specs' has a landing path. Observed: it is listed as an implementation home while 10 explicitly withholds any spec design-target selector, and no phase sequencing is given"
 detail = """
@@ -174,10 +186,12 @@ Three problems compound:
 The withholding of a wildcard is CORRECT and I do not contest it — a `.doctrine/spec/**` design-target would grant this slice licence over the whole governance corpus. The heresy is stopping there and calling it reconciled.
 
 Penance: state in 5.4 or the plan-facing part of 5.5 which phase performs the spec descent and that it precedes the engine phases per the scope; state that PHASE-01 (or whichever) allocates the spec ids and, as its first act after allocation, appends the exact `.doctrine/spec/{product,tech}/NNN/**` paths to the design-target selectors via `doctrine slice selector`; and record that appending selectors mid-slice is the sanctioned mechanism here, so audit reads it as intent rather than drift. Verification: an exit criterion on that phase asserting `doctrine slice conformance SL-233` reports no undeclared spec edits."""
+disposition = "fixed"
+response = "§5.5 now assigns governance descent to the first authored plan phase before engine/command work. After allocating exact spec IDs, that phase immediately adds exact product/tech entity selectors before body edits and exits only with no undeclared spec deltas. Committed in f779bd26."
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected: 5.2 is the interface contract. Observed: load-bearing surface appears only in 5.5 and the DEC corpus — start --from-design, --format, --known-fragment are all absent from the command list"
 detail = """
@@ -191,10 +205,12 @@ design.md 5.2 "Interfaces & Contracts" presents six invocations as the public na
 Individually each is small; together the section stops being the contract it is titled as, and a reader must reconstruct the CLI from three DEC bodies plus 5.5. This matters more than usual on a slice whose thesis is that agents should not have to reconstruct state from scattered prose.
 
 Penance: fold the full invocation forms into 5.2 — every verb with its flags, and one sentence distinguishing the per-submission assertions (mandatory, inside the payload) from the per-invocation assertions (optional, on the command line). This is prose work, not a design change; no decision is reopened."""
+disposition = "fixed"
+response = "§5.2 now carries the public invocation forms for , , run/revision assertions, and repeatable ; it distinguishes optional CLI assertions from mandatory  payload fields. Committed in f779bd26."
 
 [[finding]]
 id = "F-11"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected: 5.5's implementation homes and the authored design-target selectors agree, as 10 claims. Observed: src/fsutil.rs and src/install.rs are selectors with no home; install/manifest.toml is a required edit with neither"
 detail = """
@@ -214,6 +230,8 @@ Selectors present, 5.5 silent:
 A selector with no design rationale is the mirror of an unselected home: at audit, `doctrine slice conformance` will report `src/fsutil.rs` and `src/install.rs` as UNDELIVERED selectors if nothing touches them, and there is no design text to judge whether that is a miss or a selector that should never have been minted. Since selectors are the measurement surface (DEC-069), an unexplained one degrades the conformance signal in both directions.
 
 Penance: one pass reconciling the two lists in both directions — give each orphan selector a clause in 5.5 stating what it delivers, or drop it; and give each unselected home a selector per F-5/F-9. Then 10's reconciliation claim becomes true rather than aspirational. Verification: a design-lock check that every design-target selector is named in 5.5 and vice versa — cheap to do by eye now, and the kind of thing SL-233's own `conformance` verb exists to catch later."""
+disposition = "fixed"
+response = "Reconciled selectors and homes in both directions: fsutil, install, install and publication manifests, Claude-install distribution tests, architecture indexing, evaluation kit, and the exact-spec bootstrap are all explicit. §10 now states the concrete reconciliation. Committed in f779bd26."
 
 [[finding]]
 id = "F-12"
@@ -239,7 +257,7 @@ response = "Committed the pre-existing document-local acronym qualification inde
 
 [[finding]]
 id = "F-13"
-status = "open"
+status = "answered"
 severity = "nit"
 title = "Expected: an accepted DEC's body does not cite a question it no longer leaves open. Observed: DEC-072 closes with 'QUE-188 remains open', but QUE-188 is answered"
 detail = """
@@ -252,6 +270,8 @@ DEC-072 is status `accepted` and shapes SL-233. It is exactly the kind of durabl
 A trifle in isolation. Named because the slice's own premise makes corpus hygiene load-bearing, and because a record that describes its own moment as permanent is the seed of every stale-memory problem `/reviewing-memory` exists to clean up.
 
 Penance: `doctrine knowledge edit DEC-072` — replace the trailing sentence with the settlement ("the review-policy and evidence model is settled by DEC-073"). While there, sweep the other SL-233 DEC bodies for forward references to QUEs now answered — same one-line fix, same reasoning."""
+disposition = "fixed"
+response = "DEC-072 now records that DEC-073 settled QUE-188 and summarizes the accepted v1 policy. A sweep of SL-233 DEC bodies found no other stale  references. Committed in f779bd26."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
