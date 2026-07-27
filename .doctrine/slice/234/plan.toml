@@ -1,0 +1,45 @@
+# Implementation plan for SL-234 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-234"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+[[phase]]
+id        = "PHASE-01"
+name      = "Filter non-file selector entries"
+objective = "Make review-prime glob expansion entry-kind-aware, excluding tracked symlinks and gitlinks before hashing while preserving literal-selector and ordinary-file behaviour."
+entrance_criteria = [
+  { id = "EN-1", text = "SL-234 design is approved and identifies resolve_selectors_to_fileset in src/review.rs as the sole implementation seam." },
+  { id = "EN-2", text = "The existing review-prime and content-set tests are green before the change." },
+]
+exit_criteria = [
+  { id = "EX-1", text = "Glob expansion parses NUL-delimited staged Git entries and admits regular blobs only." },
+  { id = "EX-2", text = "A tracked symlink resolving to a directory no longer enters the review-prime hash fileset." },
+  { id = "EX-3", text = "Literal-selector absence semantics and existing review/content-set behaviour remain unchanged." },
+  { id = "EX-4", text = "RV-315 primes successfully against SL-233's current selectors." },
+]
+verification = [
+  { id = "VT-1", expects = "A Git-backed regression proves a glob ignores a tracked directory symlink while hashing regular files.", test_file = "src/review.rs", keywords = ["prime_glob_ignores_tracked_directory_symlink", "--stage", "-z"], waived = false },
+  { id = "VT-2", expects = "The existing literal-selector regression remains present and green.", test_file = "src/review.rs", keywords = ["vt1_literal_selector_passes_through_and_absence_is_stale"], waived = false },
+  { id = "VA-1", text = "Run doctrine review prime RV-315 and confirm it writes a cache without IsADirectory." },
+  { id = "VA-2", text = "Run doctrine check quick and the focused review/content-set test filters with no new failures." },
+]
+specs             = []           # per-phase narrowing of the plan's specs
+requirements      = []
