@@ -210,6 +210,69 @@ each completes with `.git/index.lock` held. Only `capture_with`'s
 `CheckoutState` branch reaches `write_tree_with_retry`, exactly where it does
 today.
 
+#### The legs must read raw bytes (RV-314 F-19, DEC-087)
+
+The three legs answer *"is git satisfied?"*; **I6** claims *"the attested commit
+contains these bytes"*. Committed `.gitattributes` separates those two questions,
+and `NORMATIVE_FLAGS` (`src/git.rs:451-458`) does not close it — those flags pin
+`core.autocrlf`, `core.eol` and `core.fileMode` so *machine-local config* cannot
+perturb the frame, but attributes are **committed content** and slipped a net
+built for exactly this purpose. Measured on git 2.54.0 with the design's own
+flags:
+
+| route | HEAD vs worktree | tracked | untracked | `diff-index --cached` |
+|---|---|---|---|---|
+| `text eol=crlf` | `…body\n` vs `…body\r\n` | 0 | 0 | 0 |
+| `clean` filter → `CANONICAL` | `CANONICAL` vs **arbitrary attacker content** | 0 | 0 | 0 |
+
+Both are tracked, non-ignored, stable and index-watched — outside DEC-070,
+DEC-071 *and* DEC-082 alike. **I6 was false**, and the filter route hides not line
+endings but arbitrary content.
+
+**The repair is one flag, not a per-file pass.** `--attr-source=<empty tree>`
+joins `NORMATIVE_FLAGS`, so every invocation reads attributes from an empty tree
+and compares raw bytes. Measured: the tracked leg rises from 0 to **172** bytes
+(filter) and 0 to **156** (eol). The empty-tree oid is **derived per repository**
+via `git hash-object -t tree /dev/null`, never hardcoded — it is
+hash-algorithm dependent (`4b825dc6…` sha1, `6ef19b41…` sha256), so a literal
+would be both a magic string (STD-001) and wrong under sha256.
+
+This closes attribute conversion **as a class** rather than the two routes that
+happened to be found. Per-file alternatives were rejected: a raw-byte check on
+`verified_sha:<uid>/memory.md` covers only the memory's prose, not the declared
+evidence that carries the same hazard, and widening it to the whole claim surface
+requires enumerating concrete paths — the 7,670-match expansion **D18 already
+rejected**, then hashing each one.
+
+**Its cost is real and bounded.** In a repo legitimately using `* text eol=crlf`
+every file differs from its blob, so the anchor leg reads dirty near-universally
+and `verify` refuses. That is I9′'s recoverable direction, but it is the
+usability failure DEC-070 rejected for ignored files, and **POL-002** makes a
+CRLF client project a real case. Live population here is **0** — this repo has no
+`.gitattributes`. The mitigation is diagnostic, not behavioural: **on the refusal
+path only**, the un-neutralised probe runs too, and when the two disagree the
+refusal names *attribute conversion* rather than blaming the operator's edits.
+The happy path pays nothing. This lands inside objective 6's refusal-legibility
+work rather than opening a new one.
+
+**Two consequences that must not be assumed away.** This touches `capture()`, so
+the behaviour-preservation gate applies — I1 and T59's byte-identity assertions
+are **re-run, not reasoned about**; in a repo with no `.gitattributes` nothing
+changes and the suites should stay green unchanged, which is a claim to
+demonstrate. And `checkout_state_id`'s inputs change in attribute-using repos, so
+previously persisted values are not reproducible there (population 0 here; stated
+because the value is persisted).
+
+**It creates a git version floor doctrine has never declared — CON-002.**
+`--attr-source` is git 2.40. Unmet, `verify` **refuses legibly**, naming the
+requirement; it never degrades silently to un-neutralised probes, because an
+attestation that cannot guarantee byte equality is what I6 exists to prevent —
+the same principle as § 5.4's "a worthless stamp is worse than an extra
+`git commit`". Detection is a **capability probe**
+(`git --attr-source=<oid> rev-parse --git-dir`, non-zero ⇒ unsupported), not a
+parsed version string: backports and vendored builds make version arithmetic
+unreliable, and capability is the question that matters.
+
 ### 5.2 Two surfaces — measurement and reporting (DEC-069)
 
 **Read this before § 5.2a's rule.** An earlier draft of this design built *one*
@@ -260,7 +323,7 @@ F-10 and F-11 are **one repair**.
 
 | | built from | consumed by | question it answers |
 |---|---|---|---|
-| **measurement** | uid dir ∪ declared entries (magic-prefixed) ∪ the symlink-target closure, emitted per DEC-080 and restricted to targets *not already covered by their originating selector* | `verify`'s claim leg | *is the claim's evidence committed?* |
+| **measurement** | uid dir ∪ declared entries (magic-prefixed) ∪ the symlink-target closure, emitted per DEC-080 | `verify`'s claim leg | *is the claim's evidence committed?* |
 | **reporting** | the index expansion of § 5.2a's rule, unchanged | E7, the § 5.4 table, `validate` | *does this entry contribute?* |
 
 **The uid directory base is constructed, not resolved.** `items/<key>` is a
@@ -272,16 +335,14 @@ matters for F-10: a freshly recorded memory's key symlink is itself untracked, s
 a base that depended on the closure firing would not exist at the moment it is
 most needed.
 
-Two things make that construction safe, and both are load-bearing:
+Three things make that construction safe. **The first two were the design's
+original answer and they were not sufficient — see the third (RV-314 F-18).**
 
 - **The uid is a closed alphabet, validated at parse time.** `is_uid`
   (`memory.rs:970`) accepts `mem_` followed by *exactly* 32 lowercase hex digits,
   and both `RawMemoryToml → Memory` paths **bail** when it fails (`:1340`,
   `:1394`). So `memory_uid` cannot express a path separator, a `..`, a magic
-  prefix or the empty string — it is guarded by the type's own validation before
-  I10 ever sees it, which is a better place than I10. *This matters because the
-  field is author-controlled TOML content becoming a path, which is F-16's shape
-  by a third door; the answer is that the door is already locked.*
+  prefix or the empty string.
 - **`verify` is items-only.** `run_verify` resolves through
   `resolve_show(&items_root, …)` (`memory.rs:3488`), so the masters tier is
   unreachable from this verb. That is what makes the construction total rather
@@ -289,6 +350,32 @@ Two things make that construction safe, and both are load-bearing:
   **key**, not uid — `memory/mem.concept.doctrine.entity-engine/` is a real
   directory — so `MEMORY_ITEMS_DIR/<memory_uid>` would be wrong there, and the
   reason it never arises is a resolution boundary, not a coincidence.
+- **The parsed uid must be bound to the *storage* identity, and is not today.**
+  The two bullets above defend the **lexical** axis. The hazard is **identity**,
+  and they say nothing about it. `resolve_show` (`memory.rs:2351-2364`) joins
+  `items_root` with the reference, reads `dir/memory.toml`, parses it, and
+  returns the embedded uid **without ever checking it matches the directory it
+  came from**; `Memory::try_from` validates the uid's *shape* and nothing else.
+  So a memory stored in directory `A` whose TOML declares an independently-valid
+  uid `B` yields a claim base of `items/B` — a directory that need not exist —
+  while `A`'s body, *the prose actually read and about to be attested*, is
+  measured by nothing. Reproduced: the constructed spec reports
+  `tracked=0 / untracked=0 / index_rc=0` while the real resolved directory
+  reports `tracked=420 / index_rc=1`.
+
+  **The rule:** resolution already establishes the storage identity, so do not
+  reconstruct it — carry it. `read_link` on the key symlink yields the bare uid
+  directory name directly (**no `realpath`, no canonicalisation** — DEC-053 is
+  untouched; this resolves *the memory's own storage location*, which is a
+  different question from classifying a declared pathspec's shape). The parsed
+  `memory_uid` must equal it, and a mismatch is a **refusal** plus a
+  corpus-integrity finding in its own right — a memory whose TOML disagrees with
+  its own directory is broken regardless of what `verify` wanted it for.
+
+  *This finding is worth more than its repair.* It is the third occurrence in
+  three rounds of the same mistake: verifying a property that is **true but not
+  load-bearing**. The alphabet check is correct and closes F-16's door; it simply
+  is not the door that was open.
 
 **Ordinary concrete index matches are not added to the measurement surface.** The
 raw selector already measures those paths; expanding them adds only argv. The
@@ -313,10 +400,22 @@ then emitted only what `ls-files` matched. That prose admits two readings and
 Step 4 was doing two jobs. They separate:
 
 1. **Emission (measurement).** Every lexically-eligible joined target is emitted
-   **immediately** as `:(literal)<target>`, *whether or not the index carries it*.
+   **immediately** as `:(literal)<target>`, *whether or not the index carries it*,
+   and *without any further test*.
 2. **Discovery (traversal).** The index re-expansion is retained **solely** to
    find deeper mode-`120000` entries and continue the walk — bounded and
    cycle-checked as before.
+
+**No coverage filter (RV-314 F-20).** An earlier draft restricted emission to
+targets "not already covered by their originating selector". That wording is
+struck. It was vestigial from the pre-DEC-080 draft, where emission was
+index-conditioned and the restriction did real work; kept alongside unconditional
+emission it contradicted the rule and left `covered` as an **undefined predicate
+standing between a derived target and the surface** — a false positive there
+reintroduces exactly the suppression this decision removes, under a new name. It
+also bought nothing measurable: T68 establishes that an unmatched `:(literal)`
+pathspec is inert on all three legs. The duplicate pathspec is cheaper than the
+classifier that would avoid it.
 
 Contribution **reporting** is untouched and stays index-first (DEC-053).
 
@@ -858,7 +957,13 @@ stands there.
   questions and stamps the frame from an **unexcluded** `capture(root)`.
 - **I6** — a successful attestation's `verified_sha` **contains the attested
   body**, asserted as **byte equality**, not existence: any stale ancestor blob
-  satisfies `cat-file -e` (RV-307 F-14).
+  satisfies `cat-file -e` (RV-307 F-14). **Kept, not narrowed — but it was false
+  as delivered until DEC-087 (RV-314 F-19).** Byte equality is a claim about
+  *bytes*; the three legs measured git's *content-converted* view, and committed
+  `.gitattributes` separates the two. It holds now because the probes read raw
+  bytes (`--attr-source=<empty tree>` in `NORMATIVE_FLAGS`, § 5.1), and it holds
+  **only above CON-002's git floor** — below it `verify` refuses rather than
+  asserting something it cannot deliver.
 - **I7 — restated for the two surfaces** (DEC-069). The inherited form ("the claim
   surface names **real tracked files**, never a symlink standing in for them") is
   false of the measurement surface, which deliberately carries *selectors* and
@@ -1320,6 +1425,18 @@ T52 extends to the write path rather than gaining a row: it now asserts the edit
 **lands** and leaves `verification_state` / `verified_sha` standing, against a
 `--glob` edit on the same fixture which clears them.
 
+### New — the DEC-087 round (RV-314 F-18 / F-19 / F-20)
+
+| # | Test | Asserts |
+|---|---|---|
+| T71 | a memory in directory `A` whose TOML declares an independently **valid but unequal** uid `B` (RV-314 F-18) | **refuses**, and emits a corpus-integrity finding. Discriminating half: constructing the base from the parsed uid alone measures `items/B` and reads clean while `A`'s body is modified |
+| T72 | `.gitattributes` `text eol=crlf`, worktree CRLF, HEAD LF (RV-314 F-19) | **refuses.** Discriminating half: without `--attr-source` all three legs read clean and `git status` is empty |
+| T73 | a `clean` filter mapping worktree content to a fixed blob, worktree holding **arbitrary** other content | **refuses** — the route that hides more than line endings. Discriminating half as T72; note the `--cached` index leg alone does *not* catch it |
+| T74 | `capture()` byte-identity across the `NORMATIVE_FLAGS` change, in a fixture with **no** `.gitattributes` | **unchanged** — the behaviour-preservation gate for I1/T59. This is the demonstration DEC-087's consequence demands, not an assumption |
+| T75 | the empty-tree oid under **sha1 and sha256** fixtures | derived via `git hash-object -t tree /dev/null` and *not* equal across them — fails if the oid is hardcoded (STD-001) |
+| T76 | the capability probe against a git lacking `--attr-source` (CON-002) | `verify` **refuses legibly**, naming the requirement; it does **not** fall back to un-neutralised probes. Discriminating half: a silent fallback would let T72's fixture pass |
+| T77 | refusal-path diagnosis on the T72 fixture | the message names **attribute conversion**, not operator edits — objective 6's legibility applied to this cause |
+
 **Closure:** every test in § 9 green (stated as a **set**, so a test added by a
 later review cannot fall outside the gate by omission — RV-307 F-9);
 `doctrine check gate` clean; **REV-034 applied** per the § 5.6 inventory so
@@ -1343,6 +1460,9 @@ SL-230 (append-only; it reviewed that document).
 | F-15 · measurement's symlink closure still index-conditioned | blocker | **answered** — DEC-080, § 5.2; T65/T66. *Raised round 2* |
 | F-16 · derived pathspecs unprefixed ⇒ uid dir subtractable | blocker | **answered** — DEC-080, I8 restated, § 5.2a; T67. *Raised round 2* |
 | F-17 · 18-state cube cited as a totality proof | major | **answered** — DEC-082, I9′ third bound, R-E promoted; T64. *Raised round 2* |
+| F-18 · uid parsed but never bound to storage identity | blocker | **answered** — § 5.2 third bullet; carry the resolved identity, refuse on mismatch; T71. *Raised round 3, self-inflicted by round 3* |
+| F-19 · `.gitattributes` conversion defeats all three legs | blocker | **answered** — DEC-087, `--attr-source` in `NORMATIVE_FLAGS`, I6 kept; CON-002; T72–T77. *Raised round 3* |
+| F-20 · undefined "not already covered" predicate | major | **answered** — struck; emission is unconditional. *Raised round 3* |
 | F-4 · T49 demands byte-identity from rows T35 changes | major | verified — restate to the drift class; drop the live-corpus absolute |
 | F-5 · R-G's "one-time backlog" | major | verified — restate as stock-and-flow |
 | F-6 · I11 one-directional | major | verified — extract the shared predicate |
@@ -1366,6 +1486,25 @@ entries off the index and left derived ones behind, because the fix was written
 where the finding pointed rather than where the *class* lived. A repair to a
 reuse defect must be checked against every consumer of the reused instrument, not
 only the one that failed.
+
+**Round-3 lesson: check the axis, not just the property.** Three findings across
+three rounds are one mistake — *verifying something true that is not the
+load-bearing thing*. I9 asserted soundness where the hazard was completeness
+(F-1/F-10). The prefix rule was proved for declared strings where the hazard was
+derived ones (F-16). The uid was validated for its alphabet where the hazard was
+its identity (F-18) — and that one was committed **in the same round that
+recorded the previous two**, in prose claiming to close exactly that class. A
+true property stated confidently is the most reliable way this design has found
+to stop looking. F-19 is the same shape at the tool boundary: `git diff` reporting
+clean is true, and it is not the property I6 needs.
+
+**And the corollary, earned the hard way in round 3: an external reviewer's
+*acquittals* need re-derivation more than its findings do.** F-19's clean-filter
+limb was cleared by the reviewer after probing `diff-index --quiet HEAD`; § 5.1
+specifies `--cached`, and against the specified leg the miss is total and hides
+arbitrary content. The finding it *did* raise was real but materially
+understated. Convictions arrive with a probe attached and get re-run; acquittals
+arrive as prose and get believed.
 
 ### Inherited findings, by current state
 

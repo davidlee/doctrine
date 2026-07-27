@@ -1,0 +1,32 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 2
+slug = "verify-requires-git-240-for-attribute-neutralised-probes"
+title = "verify requires git 2.40 for attribute-neutralised probes"
+record_kind = "constraint"
+status = "active"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["git", "compatibility", "verify", "floor"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+statement     = "Doctrine's git invocations require `--attr-source` (git 2.40, March 2023). DEC-087 adds `--attr-source=<empty tree>` to NORMATIVE_FLAGS so committed `.gitattributes` cannot make a byte-divergent worktree read clean (RV-314 F-19). The flag is a main-command option applied to every invocation, so the floor is doctrine-wide, not verify-only. BEHAVIOUR WHEN UNMET: refuse, legibly, naming the requirement and the version found — never degrade silently to un-neutralised probes. Detection is a CAPABILITY probe (`git --attr-source=<oid> rev-parse --git-dir`, non-zero exit ⇒ unsupported), not a parsed version string: distro backports and vendored builds make version arithmetic unreliable, and the capability question is the one that actually matters."
+source        = "technical"
+applies_to    = ["src/git.rs::NORMATIVE_FLAGS", "every doctrine subprocess git invocation", "SL-232", "DEC-087"]
+waiver_reason = ""
+waived_by     = ""
+waived_on     = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = ["Capability probe measured on git 2.54.0: `git --attr-source=<oid> rev-parse --git-dir` exits 0 when supported; an unknown main-command option exits 129 with `unknown option: ...` on stderr. Exit-code discrimination is unnecessary — non-zero is sufficient and is robust to the message changing", "The empty-tree oid is HASH-ALGORITHM DEPENDENT and must be derived, not hardcoded (STD-001): `git hash-object -t tree /dev/null` returns 4b825dc642cb6eb9a060e54bf8d69288fbee4904 under sha1 and 6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321 under sha256, both measured", "No git version floor was declared anywhere in the codebase or in design.md before this record — checked. This constraint creates one that did not previously exist, which is why it is recorded rather than left implicit"]
+contradicts = []
+notes       = ["Refusal rather than degradation follows the design's own standing principle (§ 5.4, RV-307 F-1): a worthless stamp is worse than an extra git commit. An attestation that cannot guarantee byte equality is precisely what I6 exists to prevent, so a silent fallback would reintroduce the class of defect this slice closes", "The floor is doctrine-wide because NORMATIVE_FLAGS applies to every invocation, including `capture()` at record time. Scoping the flag to verify's probes alone was rejected: capture() and verify would then observe different trees, which is exactly the split-brain I1/T59's byte-identity assertions exist to forbid", "Revisit if a supported-platform survey shows a material population below 2.40; the fallback would be `attr.tree` config (same mechanism, needs its own floor probed) rather than degradation"]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-232"
