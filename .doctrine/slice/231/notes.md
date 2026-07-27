@@ -6,15 +6,26 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · PHASE-01..03 landed and reaped, RV-317 raised · 0fe9572b
+fresh-as-of: 2026-07-28 · PHASE-01..03 landed and reaped, RV-317 remediated and
+done · d4a042e39
 
 ### Produced
 
 - RV-317 — ledgered code review of the landed PHASE-01..03 delta (facet
   `code-review`, three lens-diverse read-only deepseek passes + orchestrator
-  probing). 11 findings, all disposed, **none verified by design** so the
-  blocker keeps gating closure until fixes land. 1 blocker / 2 major / 7 minor /
-  1 nit. IMP-329 minted from F-5.
+  probing). 11 findings: 1 blocker / 2 major / 7 minor / 1 nit. IMP-329 minted
+  from F-5. **All eleven now verified; RV-317 is done**, so F-1 no longer gates
+  closure.
+- RV-317 remediation — two orchestrator-directed deepseek turns on forks off
+  `dispatch/231`, each adjudicated against the built binary before commit:
+  `23c4309ed` (turn 1: F-1/F-2/F-9/F-10/F-11 — the hostile-input and
+  byte-safety batch) and `d4a042e39` (turn 2: F-3/F-4/F-6/F-7/F-8 plus F-5's
+  interim guard). Both are standalone commits OUTSIDE any phase boundary row —
+  `record-delta --commit S` pins one commit's patch, so PHASE-04's base must be
+  set to `d4a042e39`.
+- ISS-267 — `e2e_backlog_filter_alias` fails in any `--worker` fork (strips the
+  env leg, not the marker leg). Found running the full suite in turn 2,
+  confirmed pre-existing at the base commit. ISS-260's class, unswept.
 
 - PHASE-03 — CLI, reads, and corrections delivered on the pi/deepseek arm, then
   driven through the funnel: imported (`6a07967c2`), verified green
@@ -125,14 +136,32 @@ fresh-as-of: 2026-07-27 · PHASE-01..03 landed and reaped, RV-317 raised · 0fe9
   real defects incl. the blocker; two calibration failures worth planning around
   are diff-relative line numbers and a "CLEAN" section covering a live panic.
   Reviewer passes and empirical probing of the built binary are complementary.
+- **Remediation turns confirm the same asymmetry: strong at the work, unreliable
+  at judging it.** Both turns self-reported `DEVIATIONS: NONE / UNCERTAIN: NONE`
+  with clippy clean and a green suite; both had exactly one finding that had not
+  actually landed. Turn 1: F-1 half-closed (single-line header fields escaped
+  with the multi-line context, so the injection still reproduced through a
+  different view than the test asserted). Turn 2: the F-5 guard was decorative
+  (`..Default::default()` in the fixture meant BOTH walks skipped a new field and
+  the counts still matched) and the F-4 replacement mutated process-global CWD.
+  Neither was catchable by any gate. The catch in both cases cost one command:
+  **re-run the finding's own reproduction against the built binary.** That should
+  be a named step in the remediation loop, not orchestrator discretion.
+- Prompt precision transfers directly. Turn 1's one real miss traces to the
+  instruction "Block for the multi-line detail view" — a *locus* rule where the
+  contract is a *destination-shape* rule. The worker followed what was written,
+  exactly. Naming the concept in code (`escape_metadata`) closed it better than
+  restating the enum would have.
+- A guard that cannot fail is worse than no guard. Prove a new regression test
+  actually fails on the mistake it targets — for the facet cardinality guard that
+  meant injecting a one-sided field addition and watching it stay green, then
+  re-proving both failure modes after the fix.
 
 ### Open
 
-- **RV-317 fixes are UNAPPLIED.** All 11 findings disposed (10 fix-now, 1
-  follow-up→IMP-329) but deliberately left un-verified so F-1 (blocker) keeps
-  gating closure. Fixing landed-phase code lands a commit OUTSIDE any phase
-  boundary row — `record-delta --commit S` pins one commit's patch — so the
-  registry/boundary consequence needs an explicit call before the cleanup turn.
+- **PHASE-04 must fork from `d4a042e39`**, not from `24edc3776`. The two RV-317
+  remediation commits sit outside every phase boundary row; a fork from the old
+  head silently reintroduces all eleven findings.
 - QUE-176 — trustworthy per-harness token instrumentation boundaries
 - IMP-319 — subprocess-worker observation capture parity
 - IMP-320 — configurable observation guidance in boot context
