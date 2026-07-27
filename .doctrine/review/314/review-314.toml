@@ -21,10 +21,27 @@ detail = "Evidence: .doctrine/slice/232/design.md:211-218 constructs the claim s
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected objective 3 to define a writable backward-compatible schema path; observed scope.unobservable has no producer, API, or migration contract"
 detail = "Evidence: .doctrine/slice/232/design.md:284-320 defines Vec<String>, validation, and edit semantics, and T52 at :828 requires an unobservable edit via memory edit, but names no CLI/MCP field, record behavior, replacement semantics, serialization default, or corpus backfill. The current read and write surfaces are distributed: RawScope at src/memory.rs:1147-1164, Scope at :1242-1253, Draft at :1500-1526, EditFields at :3914-3952, MCP EditParams at src/mcp_server/tools.rs:1029-1068, and install/templates/memory.toml:10-18; none carries unobservable. Existing corpus documents omit it. A competent implementer must still decide whether old documents default, whether record can author it, whether edit replaces or appends, how CLI and MCP expose it, and which existing non-contributing declarations are backfilled. Those choices determine V1-V5, T49, and the persisted format, so this is not a mechanical omission: objective 3 is not executable without another design decision."
+disposition = "fix-now"
+response = """
+Accepted and performed, not prescribed. Settled as DEC-081 and written into design.md § 5.3.
+
+The finding was right that this was not a mechanical omission: the read path needed nothing (RawScope/Scope are tolerant serde defaults, scope_array returns empty for an absent key, and the only toml::to_string round-trips in src/memory.rs are in tests — production writes are all toml_edit), so no migration existed to design, but every write-side choice was genuinely open.
+
+Settled: memory edit is the SOLE producer, riding the existing scope-array arm exactly — a repeatable --unobservable flag, EditFields.unobservable: Option<Vec<String>>, a has_any() arm (without it the flag alone is 'no fields given'), a fourth replace-whole-array block in apply_edit, and a mirrored field on the MCP EditParams. record does NOT author it and the embedded memory.toml template is untouched, so the key materialises only when declared and the corpus stays uniform.
+
+Replace, not append — forced by coupling as well as uniformity: unobservable shadows paths-union-globs by exact string match, so an appending array would drift from replacing ones and V1 would fire on the residue.
+
+The finding did not ask this and it is the sharpest thing the round turned up: the inherited arms COLLAPSE an empty Vec to None at src/memory.rs:717-727, so no scope array can be cleared from the CLI. For unobservable that is load-bearing rather than cosmetic — V2 (an entry git DOES match is a stale declaration) has deleting the entry as its only remedy, and § 5.3 measures the typical memory as declaring ONE unobservable, so the unclearable case is the mainstream case. Resolved with num_args = 0..=1, probed on clap 4: absent=None, bare=Some([]) (the clear), --unobservable a=Some([a]), repeated appends, and --unobservable a mem_x correctly yields ref=mem_x because the value count caps at 1. require_equals and a separate --clear-unobservable flag were both probed and rejected — the first gives one of four sibling flags a different call syntax, the second admits a contradictory --unobservable a --clear-unobservable input needing its own refusal rule. Residual hazard documented: a bare flag immediately before the positional eats the reference, but <REFERENCE> is the sole positional so the outcome is always a hard clap error with nothing written — never silent.
+
+Hard constraint honoured by construction rather than by rule: ClaimSnapshot stays five fields, the new apply_edit block writes the array, and claim_snapshot never reads it, so no code path could clear the verification axis. T52 extends to the write path with a discriminating half (a --glob edit on the same fixture DOES clear).
+
+Backfill declined, with reasons rather than as a punt. F-4's disposition already re-based T49 onto a constructed GitScratch fixture, so the test matrix no longer needs it; and § 5.3's own argument is that check-ignore is a local-state instrument, which is precisely why the boundary must be DECLARED rather than derived — a mechanical bulk backfill of the ~33 candidates is the derived judgement the field exists to refuse. Routed to the backlog, HEAD-stamped.
+
+Also recorded and routed out of scope: the CLI-cannot-clear / MCP-can-clear asymmetry on --path-scope, --glob and --command is pre-existing and not this slice's."""
 
 [[finding]]
 id = "F-3"
@@ -271,24 +288,71 @@ Note the corpus figures that DID reproduce, so the amendment does not over-corre
 
 [[finding]]
 id = "F-15"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected the measurement surface to include every eligible symlink target; observed the closure is still index-conditioned, relocating F-1 one hop behind a symlink"
 detail = "Evidence: design.md § 5.2's measurement surface includes 'resolved symlink targets not already covered by their originating selector' (:250), but the only specified resolver is § 5.2a step 4 (:362-364), which re-expands the joined target via `git ls-files -s`. A target absent from the index therefore never enters the surface. DEC-069 widened the pathspec domain for DECLARED entries and left the DERIVED ones index-conditioned — the same reuse-of-the-reporting-instrument error the split was authored to fix, one hop deeper. Reproduced independently on git 2.54.0 (scratch repo, HEAD carries tracked 'link -> target.txt' and tracked 'target.txt'; then 'git rm --cached target.txt' with a modified copy left on disk): index re-expansion of the blob target is EMPTY, so the surface is [:(literal)link] alone and reports tracked_bytes=0, untracked=0, index_rc=0 — all three legs clean. The control, had the target been emitted literally, reports tracked_bytes=145, index_rc=1. Same miss when the target was never tracked but is present and non-ignored. Both cases sit inside DEC-070's tracked-or-non-ignored domain and on a DEC-071-stable checkout, so neither bound excuses them. This is a false attestation, and it violates I7 (:659) and I9' (:678). Live population is 0 on this corpus (0 symlink-rooted entries, census.py), but § 5.2a's own standard is 'totality by construction, not live defect count'. Raised from the round-2 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f, reproduced by the responder before raising."
+disposition = "fix-now"
+response = """
+Accepted in full, reproduced before disposing, and repaired in design.md § 5.2 as DEC-080.
+
+The charge is exactly right and the framing — 'F-1 relocated one hop behind a symlink' — is the useful part. DEC-069 moved the measurement surface off the index for DECLARED entries and left DERIVED ones behind. Worse, DEC-069's own recorded consequences already said 'a matched symlink is measured itself, and its eligible target closure is measured ADDITIONALLY'; design.md simply never specified emission independent of the index. So this is a specification gap against the decision's own intent, which makes it more embarrassing rather than less.
+
+Reproduced independently on git 2.54.0 before accepting: with HEAD carrying tracked 'link -> target.txt' and tracked 'target.txt', then 'git rm --cached target.txt' and a modified copy on disk, the index re-expansion of the blob target is EMPTY and the surface [:(literal)link] reports tracked=0 / untracked=0 / index_rc=0, while the control emitting the target literally reports tracked=145 bytes / index_rc=1.
+
+Repair: step 4 was doing two jobs and they are separated. EMISSION — every lexically-eligible joined target is emitted immediately as :(literal)<target>, whether or not the index carries it. DISCOVERY — the index re-expansion is retained solely to find deeper mode-120000 entries and continue the walk. Contribution reporting is untouched and stays index-first per DEC-053.
+
+The obvious objection to unconditional emission was checked rather than waved away: a :(literal) pathspec matching nothing anywhere returns rc=0 from diff HEAD, ls-files --others and diff-index alike, and does not mask a real signal emitted beside it (tracked=143 bytes, rc=1 still comes through). The over-approximation I9' licenses is inert, not merely tolerable.
+
+The alternative the inquisitor left open for F-1 — narrow the claim, pin the boundary beside E15/R-H — was evaluated seriously and rejected on two grounds. Polarity: it concedes a DECLARED under-approximation in the invariant this round exists to establish, and lands asymmetrically, since reporting would still call such an entry contributing while measurement never probes it. Population: census.py measures 0 symlink-rooted entries, but that is 0 by accident rather than by construction — doctrine mints a slug symlink for every entity and requires it committed, and for memories the key symlink is the only ergonomic handle agents hold, so a memory scoping another memory or a slice reaches it through a link BY DEFAULT. The boundary would have been pinned directly across the idiomatic path.
+
+Second defect found while repairing, not raised separately: § 5.2a claimed the symlink step was 'live and load-bearing for the uid directory base, reached through one of 347 key symlinks'. It is not. items/<key> is a symlink whose target IS the memory_uid field verbatim, and run_verify has already read that field, so the base is MEMORY_ITEMS_DIR/<memory_uid> by string construction. That is both simpler and survives the fresh-record case where the key symlink is itself untracked — which is F-10's own scenario. The claim is corrected in place rather than quietly dropped.
+
+Verification: T65 (detached target) and T66 (never-tracked, present, non-ignored target), each with a discriminating half that fails if unconditional emission is dropped; T68 pins the unmatched-pathspec inertness."""
 
 [[finding]]
 id = "F-16"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected I8 to hold for derived pathspecs as it does for declared ones; observed a committed symlink whose blob text is pathspec magic subtracts the mandatory uid directory"
 detail = "Evidence: § 5.2a's constant-prefixing rule is normatively scoped 'per entry of scope.paths and scope.globs' (:347), and I8 (:666) speaks only of what a memory 'declares'. Step 4's derived targets are read from index blob content (:362-364) and the design never says they are emitted magic-prefixed. I10's lexical guard (:684) rejects empty/control-char/absolute-outside/'..'-escape shapes and ACCEPTS a relative target beginning with ':(exclude)', so RV-314 F-7's repair does not close this — the constant prefix is the mitigation, not the guard. Reproduced independently on git 2.54.0: HEAD carries a tracked symlink 'evil' whose blob content is the literal string ':(exclude)uid/**', and uid/memory.md is modified on disk. With the derived target emitted RAW alongside the mandatory ':(literal)uid' selector: tracked_bytes=0, index_rc=0 (CLEAN — false attestation). With it emitted as ':(literal):(exclude)uid/**': tracked_bytes=152, index_rc=1 (dirty, correct). This is § 5.2a's own 'Scope entries are data, not pathspec syntax' demonstration reached by the derived route. The finding and F-15 are one repair with two readings of the ambiguous text, and NEITHER reading is safe: index-conditioned emission under-measures (F-15), raw emission permits subtraction (this). T62 tests declared injection only (:1074) and does not discriminate the derived route. Raised from the round-2 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f, reproduced by the responder before raising."
+disposition = "fix-now"
+response = """
+Accepted, reproduced, and repaired as part of DEC-080. The pairing observation is the important one: F-15 and F-16 are two readings of one ambiguous rule and NEITHER is safe, so the design had no correct interpretation available — that is a stronger charge than either finding alone and it is granted.
+
+Reproduced independently on git 2.54.0: a tracked symlink 'evil' whose blob content is the literal string ':(exclude)uid/**', with uid/memory.md modified on disk. Emitted raw alongside the mandatory ':(literal)uid' selector: tracked=0, index_rc=0 — clean, a false attestation. Emitted as ':(literal):(exclude)uid/**': tracked=152, index_rc=1 — dirty, correct.
+
+Granted specifically: I10's lexical guard does NOT close this, so RV-314 F-7's repair is not the mitigation. ':(exclude)uid/**' is relative, escapes nothing and carries no control character, so the guard accepts it. The constant :(literal) prefix is the sole mitigation, and the finding is right that § 5.2a scoped that rule 'per entry of scope.paths and scope.globs' while I8 spoke only of what a memory 'declares'. That scope was the defect.
+
+Repair: I8 is restated to bind DERIVED pathspecs as well as declared ones — every string that becomes a pathspec is prefixed, whatever its source. A symlink target is author-controlled index blob content and is therefore exactly as untrusted as a scope.paths entry; it simply reaches the pathspec set by a different door. § 5.2a's 'Scope entries are data, not pathspec syntax' subsection gains the derived case explicitly, so the two routes are documented together rather than the second being left to inference.
+
+Also granted: T62 covers the declared injection route only and does not discriminate this one. T67 is added with the raw-emission failure as its discriminating half.
+
+Standing note for the next pass, since it is the general form of both findings: the prefix argument now has to hold over a second source of strings, and it will have to be re-made for any third. If a future round introduces another route by which an untrusted string becomes a pathspec, I8's restated form is what must be checked, not § 5.2a's rule."""
 
 [[finding]]
 id = "F-17"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected the 18-state enumeration to prove total dirt detection; observed it is a content/existence projection blind to index-flag suppression, while § 5.2 and DEC-069 cite it as affirmative proof"
 detail = "Evidence: § 5.2 (:236-244) asserts the HEAD x index x worktree cube has 18 states, 16 dirty, and that the three legs of Dirt detect ALL SIXTEEN, concluding 'measurement was never deficient' (:242). DEC-069's record cites the enumeration as affirmative evidence (record-069.toml:17). Eighteen is correct ONLY for the abstraction HEAD in {absent,A} x index in {absent,A,B} x worktree in {absent,A,B} = 2x3x3, two clean — a content/existence projection, not git's state space. Reproduced independently on git 2.54.0: a tracked path modified on disk under 'git update-index --assume-unchanged' reports tracked_bytes=0, untracked=0, index_rc=0; identically under '--skip-worktree'. The checkout is stable (DEC-071 cannot excuse it) and the path is tracked (DEC-070 cannot exclude it), so this is an UNDER-approximation inside I9''s stated bounds — i.e. I9' as written is false, not merely unbounded. The hazard itself is honestly recorded as R-E (:963), so nothing is newly hidden; the defect is the proof structure. Required amendment: state the enumeration as a content/existence projection rather than a totality proof; soften ':242 measurement was never deficient' to 'not deficient along the dimension F-1/F-10 failed on'; and elevate R-E to a THIRD named bound on I9' alongside DEC-070 and DEC-071, since § 5.2 says the bounds 'are not optional'. Note this blindness is inherited, not introduced — capture() has it today — which is DEC-071's own framing and should be stated the same way. F-13 already asks R-E for a boundary test; T56 must additionally be named as a projection and paired with expected-blind tests. Raised from the round-2 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f, reproduced by the responder before raising."
+disposition = "fix-now"
+response = """
+Accepted. The finding is precise about what is wrong: nothing is newly hidden, because the hazard is already carried honestly as R-E — the defect is the PROOF STRUCTURE, and that is the right charge.
+
+Reproduced independently on git 2.54.0: a tracked path modified on disk under 'git update-index --assume-unchanged' reports tracked_bytes=0, untracked=0, index_rc=0; identically under '--skip-worktree'. The checkout is stable so DEC-071 cannot excuse it, and the path is tracked so DEC-070 cannot exclude it. The conclusion follows and is granted without hedging: I9' as written was FALSE, not merely unbounded.
+
+Also granted: 18 is correct only for the abstraction HEAD in {absent,A} x index in {absent,A,B} x worktree in {absent,A,B} = 2x3x3 with two clean states. That is a content/existence projection, not git's state space.
+
+Settled as DEC-082, three changes, no mechanism change. (1) The enumeration is stated as a projection and reframed as evidence that the three legs are jointly NECESSARY rather than jointly sufficient; the decisive HEAD=A/index=B/worktree=A case still earns its keep by showing the index leg is not redundant. (2) § 5.2's 'measurement was never deficient' is narrowed to 'not deficient along the dimension F-1/F-10 failed on'. (3) R-E is PROMOTED from a § 8 risk to the THIRD named bound on I9', alongside DEC-070's evidence domain and DEC-071's temporal boundary — § 5.2 asserts the bounds are not optional, so a counterexample inside them has to become a bound rather than a footnote.
+
+The dimensions the finding listed that the legs DO catch are recorded in § 5.2 rather than dropped, since they are the reason the projection is nearly sufficient: mode-only and file-to-symlink changes produce tracked diff bytes; empty and non-empty intent-to-add produce diff bytes and index_rc=1; unmerged stages likewise; submodules are rejected before hashing by git.rs::reject_submodules. Index-flag suppression is the sole exception, which is what makes it a clean bound rather than a ragged one.
+
+Two remedies considered and rejected on the record. Widening the legs via 'ls-files -v' — out of scope and arguably wrong, since the flags exist precisely to tell git to stop looking and honouring them is consistent behaviour. Redefining DEC-070's domain to exclude these paths — rejected as dishonest framing: they are tracked, and DEC-070's domain is 'tracked or non-ignored', so excluding them by redefinition hides the boundary instead of declaring it.
+
+Stated the same way DEC-071 states its window: this blindness is INHERITED, not introduced. capture() sequences the same three probes today and is equally blind, so every existing attestation already carries it.
+
+Verification: T64 asserts both flags expected-blind on all three legs, pinning the boundary so it can be neither silently closed nor silently widened. That discharges F-13's symmetry complaint (R-E unpinned while R-H gets T45) in the same test."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -234,21 +234,43 @@ because both questions look like *"which paths?"*.
 #### The legs were never the problem — the domain was
 
 There are three predicates per path, not one: presence in **HEAD**, in the
-**index**, and on **disk**. The HEAD × index × worktree cube has 18 states, 16 of
-them dirty, and the three probe legs of § 5.1's `Dirt` detect **all sixteen**. The
-decisive case is `HEAD=A, index=B, worktree=A` — tracked diff `0`, untracked `0`,
-index diff `1` — which also proves the index leg is not redundant.
+**index**, and on **disk**. Over the **content/existence projection** —
+`HEAD ∈ {absent, A} × index ∈ {absent, A, B} × worktree ∈ {absent, A, B}` — the
+cube has 18 states, 16 of them dirty, and the three probe legs of § 5.1's `Dirt`
+detect **all sixteen**. The decisive case is `HEAD=A, index=B, worktree=A` —
+tracked diff `0`, untracked `0`, index diff `1` — which also proves the index leg
+is not redundant.
 
-So measurement was never deficient. The **pathspec domain** was: under
-index-only construction an index-detached path is absent from the surface, and no
-leg is ever *asked* about it. That is why F-1, F-10 and F-11 are **one repair**.
+**That enumeration is a projection, not a totality proof (RV-314 F-17, DEC-082).**
+It establishes that the three legs are jointly *necessary*, not that they are
+jointly *sufficient* over git's real state space. Dimensions outside the
+projection were probed separately and the legs do catch them — mode-only
+(`100644→100755`) and file→symlink changes produce tracked diff bytes; empty and
+non-empty `add -N` produce diff bytes and index diff `1`; unmerged stages
+likewise; submodules are rejected before hashing by `git.rs::reject_submodules`
+and cannot attest cleanly. **Index-flag suppression is the exception, and it is
+the third bound on I9′** — see below.
+
+So measurement was not deficient *along the dimension F-1 and F-10 failed on*.
+The **pathspec domain** was: under index-only construction an index-detached path
+is absent from the surface, and no leg is ever *asked* about it. That is why F-1,
+F-10 and F-11 are **one repair**.
 
 #### The two surfaces
 
 | | built from | consumed by | question it answers |
 |---|---|---|---|
-| **measurement** | uid dir ∪ declared entries (magic-prefixed) ∪ symlink targets *not already covered by their originating selector* | `verify`'s claim leg | *is the claim's evidence committed?* |
+| **measurement** | uid dir ∪ declared entries (magic-prefixed) ∪ the symlink-target closure, emitted per DEC-080 and restricted to targets *not already covered by their originating selector* | `verify`'s claim leg | *is the claim's evidence committed?* |
 | **reporting** | the index expansion of § 5.2a's rule, unchanged | E7, the § 5.4 table, `validate` | *does this entry contribute?* |
+
+**The uid directory base is constructed, not resolved.** `items/<key>` is a
+symlink whose target *is* the `memory_uid` field verbatim
+(`mem.concept.backlog.work-intake-membership → mem_019ea25af18d77e2b0f981473c50753e`),
+and `run_verify` has already read that field by the time it builds the surface.
+So the base is `MEMORY_ITEMS_DIR/<memory_uid>` by string construction. This
+matters for F-10: a freshly recorded memory's key symlink is itself untracked, so
+a base that depended on the closure firing would not exist at the moment it is
+most needed.
 
 **Ordinary concrete index matches are not added to the measurement surface.** The
 raw selector already measures those paths; expanding them adds only argv. The
@@ -257,6 +279,55 @@ pathspecs is an argument-size hazard on every verify. Expansion contributes to
 measurement **only** the symlink-target closure that git pathspec traversal
 cannot supply, which is the part I7 exists for.
 
+#### The closure emits; the index only discovers (DEC-080)
+
+*This subsection is RV-314 F-15/F-16's repair.* DEC-069 moved the measurement
+surface off the index for **declared** entries and left the **derived** ones
+behind: § 5.2a step 4 read a matched symlink's target from its index blob and
+then emitted only what `ls-files` matched. That prose admits two readings and
+**neither is safe** — both reproduced on git 2.54.0:
+
+| reading | failure |
+|---|---|
+| emit only index-matched targets | a target detached from the index (or never tracked but present and non-ignored) never enters the surface. Measured: the surface `[:(literal)link]` reports tracked `0`, untracked `0`, index `0` while the control emitting the target reports **145 bytes, index `1`**. This is **F-1 relocated one hop behind a symlink** |
+| emit the joined target raw | the target string is author-controlled blob content. A tracked symlink whose blob reads `:(exclude)uid/**` **subtracts the mandatory uid directory**: tracked `0`, index `0` (false attestation) raw, versus **152 bytes, index `1`** when literal-prefixed |
+
+Step 4 was doing two jobs. They separate:
+
+1. **Emission (measurement).** Every lexically-eligible joined target is emitted
+   **immediately** as `:(literal)<target>`, *whether or not the index carries it*.
+2. **Discovery (traversal).** The index re-expansion is retained **solely** to
+   find deeper mode-`120000` entries and continue the walk — bounded and
+   cycle-checked as before.
+
+Contribution **reporting** is untouched and stays index-first (DEC-053).
+
+**Unconditional emission is safe on all three legs, measured not assumed.** A
+`:(literal)` pathspec matching nothing anywhere returns `0` from `diff HEAD`,
+`ls-files --others` and `diff-index` alike, and does not mask a real signal
+emitted alongside it (`tracked=143 bytes, index=1` still comes through). The
+over-approximation I9′ licenses is therefore inert, not merely tolerable.
+
+**The lexical guard is not the mitigation — the constant prefix is.** I10 rejects
+empty, control-character, absolute-outside and `..`-escaping shapes; it *accepts*
+`:(exclude)uid/**`, which is relative, escapes nothing and carries no control
+character. So F-7's repair does not close F-16. **I8 is restated** (§ 5.5) to bind
+*derived* pathspecs as well as declared ones — § 5.2a's prefix rule was scoped
+"per entry of `scope.paths` and `scope.globs`", and that scope was the defect.
+
+**Why the closure is kept rather than deleted.** Dropping it from measurement and
+pinning a boundary beside E15/R-H is lawful and would make both findings *cease
+to exist* rather than be fixed — no derived pathspecs, no injection surface. It
+was rejected on two grounds. First polarity: it concedes a **declared
+under-approximation** in the very invariant this round exists to establish, and
+lands asymmetrically, since reporting would still call such an entry
+*contributing* while measurement never probes it. Second population: `census.py`
+measures **0** symlink-rooted entries, but that is 0 *by accident*, not by
+construction — doctrine mints a slug symlink for every entity and requires it
+committed, and for memories the key symlink is the only ergonomic handle agents
+hold. A memory scoping another memory or a slice reaches it through a link **by
+default**, so the boundary would be pinned directly across the idiomatic path.
+
 #### The replacement invariant
 
 > **I9′ — the measurement surface may over-approximate the claim, never
@@ -264,9 +335,10 @@ cannot supply, which is the part I7 exists for.
 
 The polarity is the whole point: over-measuring yields a **refusal**, which is
 recoverable (`--allow-dirty`, or committing); under-measuring yields a **false
-attestation**, which is not. The two bounds on it are not optional —
-**DEC-070** names the domain and **DEC-071** names the temporal boundary; without
-either, I9′ asserts more than it can deliver.
+attestation**, which is not. The **three** bounds on it are not optional —
+**DEC-070** names the evidence domain, **DEC-071** the temporal boundary, and
+**DEC-082** the index-flag exclusion; without any one of them, I9′ asserts more
+than it can deliver. Each is stated below rather than assumed.
 
 #### The evidence domain (DEC-070)
 
@@ -302,6 +374,33 @@ same three probes at `src/git.rs:2230-2239`, so every existing attestation
 carries it. DEC-069 widens the pathspec domain, not the temporal one. Locking or
 snapshotting was rejected — it would take `.git/index.lock` on the clean path and
 destroy I2.
+
+#### The index-flag exclusion (DEC-082)
+
+A path the index has been told to stop watching is invisible to **all three
+legs**, on a stable checkout, while tracked. Measured on git 2.54.0 — a tracked
+file modified on disk:
+
+```
+git update-index --assume-unchanged  → tracked 0, untracked 0, index 0
+git update-index --skip-worktree     → tracked 0, untracked 0, index 0
+```
+
+Neither existing bound excuses this: the path is **tracked**, so DEC-070's domain
+includes it, and the checkout is **stable**, so DEC-071 does not reach it. It is
+an under-approximation *inside* I9′'s stated bounds, which is why R-E is promoted
+from a § 8 risk to a **named bound on the invariant** rather than left as a
+footnote. **I9′ holds only over paths the index is still watching.**
+
+Like DEC-071's window, this is **inherited, not introduced** — `capture()`
+sequences the same three probes today and is equally blind, so every existing
+attestation already carries it. Widening the legs (`ls-files -v` exposes the
+lowercase state letters) was rejected as out of scope and arguably wrong: the
+flags exist precisely to tell git to stop looking, and honouring them is
+consistent. Redefining DEC-070's domain to exclude these paths was rejected as
+dishonest — they are tracked, and hiding a boundary by redefinition is the
+opposite of declaring it. The blindness is pinned by expected-blind tests (§ 9)
+so it can be neither silently closed nor silently widened.
 
 #### What DEC-053 keeps
 
@@ -361,7 +460,11 @@ Applied per entry of `scope.paths` and `scope.globs`:
    `"\303\274n\303\257.txt"` and corrupts any parsed output (`residue.sh` (d)).
 4. **Resolve matched symlinks from the index blob.** Every match of mode `120000`
    has its target read via `cat-file blob :<path>`, joined **lexically** to the
-   link's parent, and re-expanded. Bounded and cycle-checked.
+   link's parent, put through step 1's guard, and re-expanded. Bounded and
+   cycle-checked. *For the **measurement** surface the joined target is also
+   emitted directly as `:(literal)<target>`, independent of what the re-expansion
+   matches — see § 5.2's DEC-080. For **reporting**, which is this section's
+   scope, only the re-expansion's matches count.*
 5. **Non-empty match set ⇒ contributes. Empty ⇒ non-contributing** — objective
    7's sink, declarable under objective 3.
 
@@ -389,12 +492,22 @@ the working tree** (`candidate.sh` FAL-2, passed).
 On this corpus the symlink-resolution step adds **zero** coverage for declared
 scopes. 25 entries match symlinks, all self-covering; **0** entries are
 symlink-*rooted* (`census.py`), which *confirms* the inherited "no glob
-declaration is symlink-rooted" claim rather than refuting it. It **is** live and
-load-bearing for the uid directory base, reached through one of 347 key symlinks
-(RV-307 F-15). The full resolve pass over `.doctrine/**` — 7,670 matches, 2,071
-symlinks — costs **7ms**, so scale is not a constraint.
+declaration is symlink-rooted" claim rather than refuting it. The full resolve
+pass over `.doctrine/**` — 7,670 matches, 2,071 symlinks — costs **7ms**, so
+scale is not a constraint.
 
-The value here is **totality by construction, not live defect count.**
+*Corrected this round:* an earlier draft called the step "live and load-bearing
+for the uid directory base, reached through one of 347 key symlinks". It is not —
+the base is constructed from `memory_uid` (§ 5.2), which is both simpler and
+survives the fresh-record case where the key symlink is itself untracked. The
+step's measurement-side population is therefore **0 today**.
+
+The value here is **totality by construction, not live defect count** — and here
+that phrase is carrying real weight rather than decorating a null result, because
+the 0 is an accident of the corpus rather than a property of it. Entity slug
+symlinks are the handle agents hold, so a declaration reaching evidence through a
+link is the *expected* future shape, not an exotic one. That is the argument
+DEC-080 rests on.
 
 #### Scope entries are data, not pathspec syntax (RV-307 F-18)
 
@@ -411,6 +524,14 @@ git diff-index --quiet HEAD -- items/<uid> ':(literal):(exclude)…'    → exit
 Git parses magic only at the head of a pathspec, so the prefix renders the
 remainder inert. The uid directory is emitted the same way, so **nothing a memory
 declares can subtract it** (I8). The two prefixes are named constants (STD-001).
+
+**The same rule binds *derived* strings, not only declared ones (RV-314 F-16).**
+A symlink's target is author-controlled blob content, so it is exactly as
+untrusted as a `scope.paths` entry and reaches the pathspec set by a different
+door. Emitted raw, `:(exclude)uid/**` as a link target reproduces the middle row
+of the table above — tracked `0`, index `0`, a clean read on a modified body.
+Scoping this rule "per entry of `scope.paths` and `scope.globs`" was the defect;
+**every** string that becomes a pathspec is prefixed, whatever its source.
 
 #### The base of the claim surface is the canonicalised uid directory
 
@@ -462,11 +583,75 @@ unobservable = [".claude/skills/dispatch*/**"]
   declaring `../gone` unobservable would silence a broken declaration forever,
   and V2 could never fire to catch it because git will never match it.
 
+**The producer (RV-314 F-2, DEC-081).** A declared boundary needs an authoring
+verb. `memory edit` is the sole one, riding the existing scope-array arm exactly:
+
+| joint | change |
+|---|---|
+| CLI | `#[arg(long, num_args = 0..=1)] unobservable: Option<Vec<String>>` on `MemoryCommand::Edit` |
+| seam | `src/memory.rs:708-730` — a direct pass-through, *not* the `is_empty() → None` collapse the other three arms use |
+| `EditFields` | `unobservable: Option<Vec<String>>`, plus a `has_any()` arm — without it `--unobservable` alone is "no fields given" |
+| `apply_edit` | a fourth replace-whole-array block beside `paths`/`globs`/`commands`; `scope.insert` mints the key on demand |
+| MCP | `unobservable: Option<Vec<String>>` on `EditParams` (`src/mcp_server/tools.rs`), mapped straight through like the rest |
+| `record` | **unchanged.** So is the embedded `memory.toml` template |
+
+**Semantics: replace, and clearable.** Replace matches the sibling arms, and the
+coupling forces it — `unobservable` shadows entries in `paths ∪ globs` by exact
+string match, so if those replace and this appended, the two would drift and V1
+would fire on the residue. Clearing matters more here than for the siblings:
+**V2's only remedy is deleting the entry**, and the typical memory declares one
+`unobservable`, so the single-entry case *is* the mainstream case. Probed on
+clap 4:
+
+```
+absent                             → None       (no edit)
+--unobservable                     → Some([])   (clear)
+--unobservable a                   → Some(["a"])
+--unobservable a --unobservable b  → Some(["a","b"])
+--unobservable a mem_x             → ref=mem_x, Some(["a"])   (value count caps at 1)
+```
+
+*Residual hazard, documented in the flag's help:* a **bare** `--unobservable`
+placed immediately before the positional eats the reference. It can never be
+silent — `<REFERENCE>` is the sole positional, so the outcome is always a hard
+clap error with nothing written — but the message names a missing argument and
+does not hint that the flag consumed it. `require_equals` and a separate
+`--clear-unobservable` flag were both rejected (DEC-081): the first gives one of
+four sibling flags a different call syntax, the second admits a contradictory
+input needing its own refusal rule. *Not a second clearing route:*
+`--unobservable=` yields `[""]`, which **V3** drops and reports — identical to
+`--glob=` today.
+
+**Absent means empty; there is no migration.** `RawScope` gains
+`#[serde(default)] unobservable: Vec<String>` and `Scope` the matching field.
+Reads are already safe by construction: `scope_array` returns empty for a missing
+key, and the only `toml::to_string` round-trips in `src/memory.rs` are in tests —
+production writes are all `toml_edit`, which preserves unknown keys. The field
+has exactly **one reader**, at command tier, in `validate`'s contribution
+reporting.
+
+**No lexical guard at write time.** `--unobservable ../gone` writes; `validate`
+reports it malformed and V5 refuses to let the declaration suppress that. Same
+posture as `paths`/`globs`, and consistent with "all findings, none refusals".
+
+**No corpus backfill in this slice**, and not as a punt. `check-ignore` is a
+local-state instrument — which is *precisely why* this boundary is declared
+rather than derived — so a mechanical bulk backfill of the ~33 candidates would
+be the derived judgement the field exists to refuse. The intended operating mode
+is one declaration in response to one finding. F-4's disposition already re-based
+T49 onto a constructed `GitScratch` fixture, so nothing in the test matrix needs
+the backfill either. The population routes to the backlog, HEAD-stamped.
+
 **It does not clear the attestation.** SL-230 D4/D8 clear the verification axis on
 a *claim-field* edit. `unobservable` changes reporting, not measurement, so it is
 not a claim field. This falls out of the "never subtracts" rule and is a useful
 consistency check: if editing it *had* to clear the attestation, the
 parallel-assertion shape would be wrong.
+
+Mechanically this is **by construction, not by rule**: `ClaimSnapshot`
+(`title`, `summary`, `paths`, `globs`, `commands`) stays five fields, the fourth
+`apply_edit` block writes the array, and `claim_snapshot` never reads it. There
+is no code path that could clear the axis, so nothing has to remember not to.
 
 **Sizing, with its instrument named.** Of 59 non-contributing entries, **33 have
 a root this checkout ignores** and 26 do not (`populations.py`). So declarations
@@ -661,26 +846,41 @@ stands there.
   false of the measurement surface, which deliberately carries *selectors* and
   tracked symlink entries. The property that survives: *a matched symlink is
   measured **itself**, and its eligible target closure is measured **in
-  addition**.* Rooted at the canonicalised uid directory, which is what stops a
-  key-form reference measuring the symlink instead of the body (RV-307 F-15).
-- **I8 — nothing a memory *declares* can subtract from what it is *measured
-  against*. Now binding on all three legs.** Entries are emitted magic-prefixed;
+  addition**.* Rooted at the uid directory, which is what stops a key-form
+  reference measuring the symlink instead of the body (RV-307 F-15) — constructed
+  from `memory_uid`, not resolved through the key symlink (§ 5.2). **Sharpened by
+  RV-314 F-15 / DEC-080:** "in addition" means *emitted unconditionally*, not
+  *emitted if the index also carries it*. The index-conditioned reading is an
+  under-approximation and reproduces F-1 behind a symlink.
+- **I8 — nothing a memory *declares or derives* can subtract from what it is
+  *measured against*. Binding on all three legs, and on every string that becomes
+  a pathspec whatever its source.** Entries are emitted magic-prefixed;
   `unobservable` suppresses reporting only, never measurement. *Widened by
   DEC-069:* declared entries now reach the measuring probes directly, so
   magic-prefixing must be applied on the tracked, index **and untracked** legs
   alike. Probed on all three: `:(literal):(exclude)<uid dir>` is neutralised
   everywhere, and `ls-files --others` still returns the uid body. The inherited
   demonstration exercised only `diff-index`; that was never sufficient.
+  *Widened again by RV-314 F-16 / DEC-080:* the rule was scoped to what a memory
+  **declares**, leaving symlink targets — author-controlled index blob content —
+  unprefixed. Reproduced: a link whose blob reads `:(exclude)uid/**` subtracts the
+  uid directory on all three legs when emitted raw. I10's lexical guard does
+  **not** catch it (the string is relative, escapes nothing, holds no control
+  character), so the constant prefix is the sole mitigation.
 - ~~**I9**~~ — **struck and replaced by I9′.** The inherited I9 asserted
   *soundness* ("every path in the claim surface is a real tracked index entry")
   where the hazard is *completeness*. It was polarised backwards, which is why
   RV-314 F-1 and F-10 passed under it. Struck id, never reused.
 - **I9′ — the measurement surface may over-approximate the claim, never
   under-approximate it, within the declared evidence domain** (§ 5.2, DEC-069).
-  Bounded by **DEC-070** (tracked-or-non-ignored commit-eligible) and **DEC-071**
-  (a checkout stable for the duration of the probes). Over-measuring yields a
-  recoverable refusal; under-measuring yields an unrecoverable false attestation.
-  Scoped to `verify` deliberately (RV-307 F-27).
+  Bounded by **DEC-070** (tracked-or-non-ignored commit-eligible), **DEC-071** (a
+  checkout stable for the duration of the probes) and **DEC-082** (paths the index
+  is still watching — `assume-unchanged` / `skip-worktree` are blind to all three
+  legs, measured). Over-measuring yields a recoverable refusal; under-measuring
+  yields an unrecoverable false attestation. Scoped to `verify` deliberately
+  (RV-307 F-27). *The 18-state cube does not prove this invariant* — it is a
+  content/existence projection showing the three legs jointly **necessary**, not
+  jointly sufficient (DEC-082).
 - **I10 — nothing lexically ineligible is ever emitted as a pathspec, declared or
   derived.** Empty or whitespace-only, control-char-bearing, absolute-outside, or
   root-escaping entries are dropped before git sees them. **Lexical, therefore
@@ -968,6 +1168,14 @@ dispatch worktree, or a different object format legitimately disagrees about.
   Live population: **0 rows** (`populations.py`, whole index). Latent and
   pre-existing, not introduced — named because a slice whose purpose is closing
   false-attestation routes cannot leave a known one unstated.
+  ***Promoted this round (RV-314 F-17, DEC-082).*** It is no longer only a risk:
+  it is a counterexample sitting *inside* I9′'s other two bounds — the path is
+  tracked, so DEC-070 admits it, and the checkout is stable, so DEC-071 does not
+  reach it — which made I9′ false as written rather than merely unbounded. R-E is
+  now the **third named bound** on the invariant (§ 5.2) and is pinned by
+  expected-blind tests (T64), discharging F-13's symmetry complaint at the same
+  time. Re-measured this round on `assume-unchanged` **and** `skip-worktree`: all
+  three legs read clean.
 - **R-F — case-insensitive collision is unmeasured, not cleared.**
   `core.ignoreCase` alone did not flip pathspec matching on ext4 (`residue.sh`
   (e)). A genuinely case-insensitive filesystem could not be probed from this
@@ -1074,6 +1282,26 @@ result can no longer stand for both questions.
 | T62 | I8 injection `:(literal):(exclude)<uid dir>` | neutralised on **each of the three legs separately** — the tracked, index and untracked probes each measured independently. The inherited demonstration covered only `diff-index` |
 | T63 | DEC-071's temporal boundary | stated as an explicit stable-checkout assumption with a deterministic seam; **not** an atomicity claim |
 
+### New — the DEC-080 / DEC-081 / DEC-082 round (RV-314 F-2 / F-15 / F-16 / F-17)
+
+T56's **meaning** narrows: it verifies the three legs are jointly *necessary* over
+the content/existence projection, and must be labelled as such. It is not a
+totality proof and § 9 must not let it read as one (DEC-082).
+
+| # | Test | Asserts |
+|---|---|---|
+| T64 | a tracked path modified on disk under `assume-unchanged`, and again under `skip-worktree` (DEC-082) | **expected-blind** — all three legs read clean. Pins R-E as a declared boundary of I9′ so it can be neither silently closed nor silently widened; discharges F-13's symmetry complaint against T45 |
+| T65 | a declared entry that is a **tracked symlink** whose target is detached from the index (`git rm --cached`) and modified on disk (RV-314 F-15) | **refuses.** Discriminating half: with emission conditioned on the index re-expansion the surface reads clean on all three legs — the test fails if DEC-080's unconditional emission is dropped |
+| T66 | the same shape where the target was **never tracked** but is present and non-ignored | **refuses** — the second F-15 route, inside DEC-070's domain |
+| T67 | a tracked symlink whose **blob content** is `:(exclude)<uid dir>`, with the uid body modified (RV-314 F-16) | **refuses.** Discriminating half: emitted raw the uid directory is subtracted and all legs read clean. T62 covers the *declared* injection route only and does not discriminate this one |
+| T68 | a derived target that matches nothing anywhere, emitted alongside a genuinely dirty selector | the run **completes** (no leg errors) **and** the real dirt is still reported — pins the inertness that makes unconditional emission safe |
+| T69 | `memory edit --unobservable` (bare) on a memory declaring one entry (DEC-081) | the array is **cleared**. Discriminating half: `--path-scope` with no values is a no-op, so the test fails if the arm is copied from the siblings rather than given `num_args = 0..=1` |
+| T70 | `unobservable` authored via the **MCP** `EditParams` and via the CLI | identical persisted TOML — the two surfaces cannot drift (the EX-5 discipline SL-230 PHASE-05 established for `body`) |
+
+T52 extends to the write path rather than gaining a row: it now asserts the edit
+**lands** and leaves `verification_state` / `verified_sha` standing, against a
+`--glob` edit on the same fixture which clears them.
+
 **Closure:** every test in § 9 green (stated as a **set**, so a test added by a
 later review cannot fall outside the gate by omission — RV-307 F-9);
 `doctrine check gate` clean; **REV-034 applied** per the § 5.6 inventory so
@@ -1089,11 +1317,14 @@ SL-230 (append-only; it reviewed that document).
 
 | Finding | Sev | State |
 |---|---|---|
-| F-1 · index-detached evidence never probed | blocker | **answered** — DEC-069, § 5.2, I9′, T56/T57 |
-| F-10 · untracked uid dir invisible to both legs | blocker | **answered** — same repair; T57 |
+| F-1 · index-detached evidence never probed | blocker | **answered** — DEC-069 § 5.2 for declared entries, **DEC-080** for derived ones (the round-2 gap); I9′, T56/T57/T65/T66 |
+| F-10 · untracked uid dir invisible to both legs | blocker | **answered** — same repair; T57. Base now constructed from `memory_uid`, so it does not depend on the closure firing |
 | F-11 · `dirty_under -> bool` cannot serve `capture_with` | major | **answered** — § 5.1 `Dirt`, D3 revised, T59 |
 | F-3 · Revision routing deferred against the scope | blocker | **closed** — DEC-076, four rows on REV-034, § 5.6 |
-| F-2 · `scope.unobservable` has no producer | blocker | **OPEN** — no CLI flag, MCP field, or replace/append semantics yet |
+| F-2 · `scope.unobservable` has no producer | blocker | **answered** — DEC-081, § 5.3; `edit`-only, replace, `num_args = 0..=1` clear; T69/T70, T52 extended |
+| F-15 · measurement's symlink closure still index-conditioned | blocker | **answered** — DEC-080, § 5.2; T65/T66. *Raised round 2* |
+| F-16 · derived pathspecs unprefixed ⇒ uid dir subtractable | blocker | **answered** — DEC-080, I8 restated, § 5.2a; T67. *Raised round 2* |
+| F-17 · 18-state cube cited as a totality proof | major | **answered** — DEC-082, I9′ third bound, R-E promoted; T64. *Raised round 2* |
 | F-4 · T49 demands byte-identity from rows T35 changes | major | verified — restate to the drift class; drop the live-corpus absolute |
 | F-5 · R-G's "one-time backlog" | major | verified — restate as stock-and-flow |
 | F-6 · I11 one-directional | major | verified — extract the shared predicate |
@@ -1104,8 +1335,19 @@ SL-230 (append-only; it reviewed that document).
 | F-13 · R-E unpinned while R-H gets T45 | minor | verified — pin or state why not |
 | F-14 · "81 `.doctrine` items" does not reproduce | minor | verified — **29 at HEAD `743e7fe61`**; re-measure, stamp, move into a probe |
 
-**One blocker remains: F-2.** F-8's byte-domain call and F-7's exhaustion
-classification are still open in *detail* though settled in *shape*.
+**No blocker's remedy is unwritten.** Every finding above now has prose in this
+document, not merely a disposition on the ledger. What remains is *verification*
+by the raiser: F-1, F-10, F-15, F-16 and F-17 are answered here for the first
+time and have not yet survived a pass. F-8's byte-domain call and F-7's
+exhaustion classification are still open in *detail* though settled in *shape*.
+
+**Round-2 lesson, recorded because it generalises.** F-15 and F-16 are the *same*
+error as F-1 and F-10 — the reporting instrument answering a measurement question
+— surviving one level below where the repair was applied. DEC-069 moved declared
+entries off the index and left derived ones behind, because the fix was written
+where the finding pointed rather than where the *class* lived. A repair to a
+reuse defect must be checked against every consumer of the reused instrument, not
+only the one that failed.
 
 ### Inherited findings, by current state
 

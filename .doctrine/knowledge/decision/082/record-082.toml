@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 82
+slug = "index-flag-suppression-is-the-third-bound-on-i9-prime"
+title = "Index-flag suppression is the third bound on I9-prime"
+record_kind = "decision"
+status = "accepted"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["memory", "verify", "invariant", "git"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "design.md § 5.2 enumerates the HEAD x index x worktree cube as 18 states, 16 of them dirty, and asserts the three legs of `Dirt` detect all sixteen -- concluding 'measurement was never deficient'. DEC-069 records the enumeration as affirmative evidence. RV-314 F-17 showed 18 is correct only for the abstraction HEAD in {absent,A} x index in {absent,A,B} x worktree in {absent,A,B} = 2x3x3, a CONTENT/EXISTENCE projection rather than git's state space. A tracked path modified on disk under `git update-index --assume-unchanged` or `--skip-worktree` is invisible to all three legs on a stable checkout -- an under-approximation inside both of I9-prime's stated bounds, which makes I9-prime as written false rather than merely unbounded."
+choice       = "Three changes, no mechanism change. (1) The enumeration is stated as a content/existence projection, not a totality proof, and § 5.2's 'measurement was never deficient' is narrowed to 'not deficient along the dimension F-1/F-10 failed on'. (2) R-E -- index-flag suppression -- is elevated to a THIRD named bound on I9-prime, alongside DEC-070's evidence domain and DEC-071's temporal boundary, because § 5.2 says the bounds 'are not optional' and I9-prime is false without it. (3) T56 is named as a projection and paired with expected-blind tests asserting the legs read clean under both index flags, so the blindness is pinned as a known boundary rather than rediscovered."
+alternatives = ["Leave R-E as a § 8 risk and footnote the enumeration -- rejected: I9-prime is stated as an invariant with exactly two bounds, and a counterexample inside both bounds falsifies it. A risk register entry does not repair an invariant", "Widen the legs to detect index-flag suppression (`ls-files -v` for the lowercase state letters) -- out of scope and arguably wrong: the flags exist precisely to tell git to stop looking, and honouring them is consistent behaviour. Route as follow-up if it is ever wanted", "Redefine DEC-070's evidence domain to exclude index-flag-suppressed paths -- rejected as dishonest framing: these paths are TRACKED, and DEC-070's domain is 'tracked or non-ignored'. Excluding them by redefinition hides the boundary rather than declaring it"]
+rationale    = "The hazard is not new and was already carried honestly as R-E, so nothing was hidden -- the defect is the PROOF STRUCTURE. § 4 forbids stating a fix's value by what it fixes today, and an enumeration over a projection cited as proof of total detection is exactly that error at the level of evidence. The blindness is inherited, not introduced: `capture()` sequences the same three probes today and is equally blind, so every existing attestation already carries it. That is DEC-071's own framing for the temporal window and it applies unchanged here."
+consequences = ["I9-prime gains a third bound and its statement must name all three explicitly, since § 5.2 asserts the bounds are load-bearing rather than decorative", "R-E is promoted from an open risk to a declared boundary of the invariant; RV-314 F-13 separately asks it for a boundary test, and the expected-blind tests discharge both", "DEC-069's evidence entry citing the 18-state enumeration must be read as projection evidence, not totality evidence. The enumeration is still correct and still does real work -- it proves the three legs are jointly necessary, and the decisive HEAD=A/index=B/worktree=A case still shows the index leg is not redundant", "No mechanism change and no code impact beyond the new tests"]
+decided_by   = "david"
+decided_on   = "2026-07-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = ["Reproduced on git 2.54.0: a tracked path modified on disk under `git update-index --assume-unchanged` reports tracked_bytes=0, untracked=0, index_rc=0; identically under `--skip-worktree`. The checkout is stable (DEC-071 cannot excuse it) and the path is tracked (DEC-070 cannot exclude it)", "The external reviewer independently derived the same 2x3x3 = 18 with two clean states, confirming the arithmetic is right and the DOMAIN is what is misstated", "Special states OUTSIDE the projection that the legs DO catch, measured: mode-only (100644->100755) and file->symlink changes produce tracked diff bytes; empty and non-empty intent-to-add produce diff bytes and index_rc=1; unmerged stages produce diff bytes and index_rc=1; submodules are rejected before hashing by git.rs::reject_submodules and cannot attest cleanly"]
+contradicts = ["design.md § 5.2's 'measurement was never deficient' as written", "DEC-069's citation of the enumeration as affirmative evidence of total detection"]
+notes       = ["This is a claim-repair, not a behaviour-repair. The design is no less safe than it was; it is now honest about a boundary it already knew and already recorded as R-E"]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-232"
