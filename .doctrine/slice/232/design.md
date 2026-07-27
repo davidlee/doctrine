@@ -272,6 +272,24 @@ matters for F-10: a freshly recorded memory's key symlink is itself untracked, s
 a base that depended on the closure firing would not exist at the moment it is
 most needed.
 
+Two things make that construction safe, and both are load-bearing:
+
+- **The uid is a closed alphabet, validated at parse time.** `is_uid`
+  (`memory.rs:970`) accepts `mem_` followed by *exactly* 32 lowercase hex digits,
+  and both `RawMemoryToml → Memory` paths **bail** when it fails (`:1340`,
+  `:1394`). So `memory_uid` cannot express a path separator, a `..`, a magic
+  prefix or the empty string — it is guarded by the type's own validation before
+  I10 ever sees it, which is a better place than I10. *This matters because the
+  field is author-controlled TOML content becoming a path, which is F-16's shape
+  by a third door; the answer is that the door is already locked.*
+- **`verify` is items-only.** `run_verify` resolves through
+  `resolve_show(&items_root, …)` (`memory.rs:3488`), so the masters tier is
+  unreachable from this verb. That is what makes the construction total rather
+  than tier-conditional: `MEMORY_MASTERS_DIR` (repo-root `memory/`) is keyed by
+  **key**, not uid — `memory/mem.concept.doctrine.entity-engine/` is a real
+  directory — so `MEMORY_ITEMS_DIR/<memory_uid>` would be wrong there, and the
+  reason it never arises is a resolution boundary, not a coincidence.
+
 **Ordinary concrete index matches are not added to the measurement surface.** The
 raw selector already measures those paths; expanding them adds only argv. The
 `.doctrine/**` resolve alone is 7,670 matches — passing those back to git as
