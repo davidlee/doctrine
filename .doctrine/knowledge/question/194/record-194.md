@@ -40,3 +40,7 @@ is a primary product outcome and evaluation signal for SL-233. The recovery
 protocol must remain narrow and conservative: authored truth is never deleted,
 silent duplicate creation is forbidden, and ambiguous partial failure requires
 human reconciliation.
+
+## Answer
+
+Option 1 was accepted and is recorded by DEC-083.

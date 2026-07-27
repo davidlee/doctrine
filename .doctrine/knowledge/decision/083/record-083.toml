@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 194
-slug = "atomic-knowledge-checkpoint-creation-from-design-apply"
-title = "Atomic knowledge checkpoint creation from design apply"
-record_kind = "question"
-status = "answered"
+id = 83
+slug = "design-apply-owns-recoverable-knowledge-checkpoints"
+title = "Design apply owns recoverable knowledge checkpoints"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
