@@ -235,8 +235,12 @@ Checkpoint disposition has mutually exclusive `create` and `adopt` forms:
   "create": {
     "kind": "decision",
     "title": "Design apply owns recoverable checkpoints",
-    "body": "...",
-    "status": "accepted"
+    "body": "..."
+  },
+  "acceptance": {
+    "authority": "user",
+    "basis": "User selected option 1 in response to QUE-194",
+    "turn_ref": "optional-harness-reference"
   }
 }}
 ```
@@ -245,7 +249,11 @@ Checkpoint disposition has mutually exclusive `create` and `adopt` forms:
 {"checkpoint": {
   "id": "cp-017",
   "disposes": "inq-012",
-  "adopt": {"record": "DEC-083"}
+  "adopt": {"record": "DEC-083"},
+  "acceptance": {
+    "authority": "user",
+    "basis": "User confirmed DEC-083 applies to this inquiry"
+  }
 }}
 ```
 
@@ -254,6 +262,15 @@ required legal `shapes` edge when absent, and records the same canonical
 disposition without creating a duplicate. Reliably discovering an applicable
 pre-existing record is a retrieval concern outside v1; substituting a supplied
 ID is first-class and cheap.
+
+Semantic content cannot set its own accepted status. A checkpoint that claims
+accepted truth carries a separate user-acceptance attestation with a concise
+`basis` and optional harness turn reference. Doctrine derives the payload
+fingerprint and binds the attestation to it, the inquiry disposition, and the
+current revision. Without it, a created record retains its kind's default
+status and cannot clear an accepted-decision gate. This records an attributed
+agent claim of user acceptance; it is not independent human authentication
+(DEC-088).
 
 For `create`, the shell journals an intent keyed by submission ID, reserves a
 fresh canonical knowledge ID through the existing entity reservation backend,
@@ -364,6 +381,8 @@ graft.
   only an explicit canonical citation merges them.
 - **DEC-086:** reserve and journal a checkpoint record's canonical ID before
   materialising authored bytes.
+- **DEC-088:** accepted checkpoints require a content-bound user-acceptance
+  attestation; semantic payloads cannot self-declare accepted status.
 
 Rejected alternatives include a fully specified/hierarchical workflow machine,
 a general process DSL, a full arbitrary inquiry graph, separate record-creation
@@ -402,6 +421,8 @@ evaluation from an uninstalled dispatch worktree.
   establishes current evidence.
 - **R10 — abstractions harden before evidence.** Keep public semantics
   design-specific and extract only independently useful pure seams.
+- **R11 — acceptance basis becomes paperwork.** Keep the v1 basis concise and
+  measure whether it improves audit/recovery or merely repeats the prior turn.
 
 ## 9. Quality Engineering & Validation
 
@@ -497,7 +518,9 @@ It also measures map steering, refresh, recovery, repeated-fragment elision,
 interaction cost, human usefulness, and resulting design quality. Evidence is
 classified separately as adopt, adhere, refresh, recover, and complete. If
 activation succeeds but resolved obligations are ignored, the exercise may add
-the `.doctrine/governance.md` authority-primer arm from RSK-229.
+the `.doctrine/governance.md` authority-primer arm from RSK-229. The evaluation
+also samples acceptance-basis usefulness: whether reviewers or resumed agents
+use it, whether it disambiguates acceptance, and its interaction/token cost.
 
 ## 10. Review Notes
 
@@ -507,6 +530,8 @@ the `.doctrine/governance.md` authority-primer arm from RSK-229.
 - QUE-195 and QUE-196 are answered by DEC-084 and DEC-085.
 - QUE-197 is answered by DEC-086 after adversarial review found that the
   original ambiguous checkpoint condition had no public repair path.
+- QUE-198 is answered by DEC-088; CHR-049 retains an explicit question about
+  whether the required acceptance basis carries its paperwork cost.
 - The pre-existing-record adoption form was added after the user identified
   the duplicate-decision edge case. It extends DEC-083 without making
   comprehensive record discovery part of v1.

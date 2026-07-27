@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 198
-slug = "how-managed-checkpoints-prove-user-acceptance"
-title = "How managed checkpoints prove user acceptance"
-record_kind = "question"
-status = "answered"
+id = 88
+slug = "accepted-checkpoints-carry-content-bound-user-attestations"
+title = "Accepted checkpoints carry content-bound user attestations"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
@@ -29,3 +31,7 @@ superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
 [[relation]]
 label = "shapes"
 target = "SL-233"
+
+[[relation]]
+label = "shapes"
+target = "QUE-198"

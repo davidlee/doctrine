@@ -38,3 +38,8 @@ acceptance.
 The recommendation is option 1. It makes the authority claim explicit and
 fingerprinted without requiring a harness integration or separating semantic
 checkpointing back into several adherence-sensitive commands.
+
+## Answer
+
+Option 1 was accepted and is recorded by DEC-088. The required `basis` remains
+subject to measurement in CHR-049 rather than being presumed permanently useful.
