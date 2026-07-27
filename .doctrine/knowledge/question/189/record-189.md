@@ -14,3 +14,10 @@ default?
 
 This default affects cost and interaction cadence, not capability: DEC-073
 allows the run policy to be changed during the design.
+
+## Answer
+
+DEC-074 chooses option 1 for v1: human section review is required by default
+and adversarial section review is opt-in. IDE-045 captures the post-v1 direction
+to configure this default and user-defined reviewer invocation in project
+configuration.
