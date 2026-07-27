@@ -31,3 +31,7 @@ That raises two possible sources for a reconstructed inquiry frontier:
 The recommendation is option 1. It uses the relation graph where authoritative
 durable identity exists, admits a narrow conventional prose bridge without
 laundering it into truth, and refuses speculative text-similarity merging.
+
+## Answer
+
+Option 1 was accepted and is recorded by DEC-085.

@@ -293,17 +293,12 @@ graft.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-1 / QUE-195 — existing design with no runtime snapshot.** The current
-  recommendation is conservative explicit import: plain `resume` reports the
-  condition; `start --from-design` imports headings as unreviewed section
-  drafts without inventing inquiry, decision, gate, or review history. User
-  decision remains pending.
-- **OQ-2 — discovery of applicable existing knowledge.** V1 accepts an
+- **OQ-1 — discovery of applicable existing knowledge.** V1 accepts an
   existing canonical DEC/QUE/ASM as a checkpoint disposition. Reliably
   discovering a relevant but not-yet-linked record at the right conversational
   moment remains a retrieval-quality problem. The envelope may surface known
   linked context but does not claim comprehensive discovery.
-- **OQ-3 / RSK-229 — managed-instruction authority.** Boot establishes strong
+- **OQ-2 / RSK-229 — managed-instruction authority.** Boot establishes strong
   routing obligations but not RFC-021's general contract for the authority of
   dynamically resolved behaviour. This does not block v1. A concise
   user-owned `.doctrine/governance.md` primer is a cheap measurement arm, not a
@@ -348,6 +343,11 @@ graft.
 - **DEC-083:** `design apply` creates recoverable DEC/QUE/ASM checkpoints rather
   than requiring a separate adherence-sensitive ritual. The same disposition
   contract accepts a supplied existing canonical record to avoid duplication.
+- **DEC-084:** existing authored designs enter only through explicit,
+  conservative import; plain resume never infers missing procedural history.
+- **DEC-085:** import bootstraps direct non-terminal shaping QUEs as durable
+  inquiries and conventional Open Questions OQs as unverified prose proposals;
+  only an explicit canonical citation merges them.
 
 Rejected alternatives include a fully specified/hierarchical workflow machine,
 a general process DSL, a full arbitrary inquiry graph, separate record-creation
@@ -486,11 +486,11 @@ the `.doctrine/governance.md` authority-primer arm from RSK-229.
 - This design was written immediately after context compaction using both the
   durable SL-233 knowledge graph and the original assistant-authored section
   presentations recovered from the Codex JSONL session history.
-- QUE-195 remains open and must be integrated before lock.
+- QUE-195 and QUE-196 are answered by DEC-084 and DEC-085.
 - The pre-existing-record adoption form was added after the user identified
   the duplicate-decision edge case. It extends DEC-083 without making
   comprehensive record discovery part of v1.
 - Design-target selectors remain unrecorded while the design is provisional and
   specification artifact IDs/paths are not allocated.
-- After QUE-195: reconcile scope, run the integrated adversarial review,
-  integrate findings, record final selectors, and seek explicit lock approval.
+- Next: reconcile scope, run the integrated adversarial review, integrate
+  findings, record final selectors, and seek explicit lock approval.
