@@ -6,9 +6,30 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · design (**design.md written**; ready for adversarial review) · 26df9de1
+fresh-as-of: 2026-07-27 · design (**RV-314 run; F-1/F-10/F-11 + F-3 amended into
+design.md**; F-2 open) · 81e3e732
 
-### Produced
+### Produced — RV-314 round (this sweep)
+
+- **RV-314** — design-facet ledger, raiser `inquisitor`. **14 findings**: 4
+  blockers (F-1, F-2, F-3, F-10), 6 major, 4 minor. External codex pass raised
+  F-1–F-10; F-11–F-14 local. 10 verified, F-3 closed, **F-1/F-2/F-10 open**.
+- **DEC-069** — measurement and reporting are two surfaces. Measurement = uid dir
+  ∪ declared selectors (magic-prefixed) ∪ uncovered symlink closure. Contribution
+  reporting stays index-first per DEC-053.
+- **DEC-070** — evidence domain is tracked-or-non-ignored commit-eligible.
+- **DEC-071** — claim measurement inherits `capture()`'s stable-checkout boundary.
+- **DEC-076** — REQ-146/REQ-155 land as **REV-034 rows**, not a second revision.
+- **REV-034 amended** — 4 `modify` rows (REQ-147 primary, SPEC-007, REQ-146,
+  REQ-155); title widened to the turnover; stale `SL-230 needs` prose corrected.
+- **`design.md` amended** — § 5.1 `observe_dirt -> Dirt`; § 5.2 NEW (the split);
+  § 5.2a the old rule rescoped to reporting; I7/I8/I10 restated, **I9 struck →
+  I9′**; D3 revised, D12 narrowed, D18–D20 added; R6 deepened; **T56–T63**;
+  § 10 carries the finding table.
+- **RFC-011 case notes** — three entries (prime's selector precondition, codex
+  `--as inquisitor` rejection, dev-binary restatement cost).
+
+### Produced — earlier rounds
 
 - **`design.md` REWRITTEN** — wholesale, not patched. The STALE banner is gone;
   the document now carries the decisions. Reference legend added (§ 0), REV-034
@@ -69,7 +90,43 @@ Three figures **did not reproduce** from `slice-232.md` and are corrected in
 - **`verified_sha` carries two value kinds** — 24 of 59 attestations are
   `checkout_state_id`, never commit-anchored. New finding → DEC-055, IMP-325.
 
-### Learned
+### Measured — RV-314 round (HEAD `743e7fe61`)
+
+- **"81 items declare `.doctrine/**` scopes" does NOT reproduce — it is 29**
+  (35 entries). RV-314 F-14. The same parser reproduces every other figure
+  (440 scope entries exact; 389→390 memories), so the instrument agrees
+  elsewhere. Unstamped, ~2.8× overstated, and sitting in § 1's Design Problem.
+- **The HEAD × index × worktree cube** — 18 states, 16 dirty; all detected by the
+  three legs. `H=A, I=B, W=A` is decisive: only the index leg fires.
+- **Ignored-untracked, if counted as evidence** — 19 `.doctrine`-scoped memories
+  match 2,983 files; **39 memories / 15,319 corpus-wide**. Killed the inclusive
+  domain (DEC-070).
+- **I2 holds under the split** — all three legs read-only, each completes with
+  `.git/index.lock` held.
+
+### Learned — RV-314 round
+
+- **Check an invariant's POLARITY, not just its truth.** I9 was true and useless:
+  it asserted *soundness* (nothing false enters) where the hazard was
+  *completeness* (real evidence omitted). Two blockers survived eight adversarial
+  rounds under it. Ask what a guarantee makes impossible, then ask whether that is
+  the failure you actually fear.
+- **An instrument built for a REPORTING question will look correct when reused for
+  a MEASUREMENT one.** Both questions read as *"which paths?"*, which is why the
+  reuse was invisible. This is the fifth instance of § 5.7's convergence and the
+  first where the instrument was right and the *question* was wrong.
+- **A design that stamps its figures can still carry one that does not.** F-14's
+  81 sat in the section a reader trusts most and re-derives least, in the
+  flattering direction, in a document whose § 0 exists to prevent exactly that.
+- **Mint the id BEFORE citing it.** Wrote `DEC-074` into three documents, the
+  allocator returned `DEC-076` — another agent took 074/075 in between. Also hit
+  the inverse: a concurrent agent's follow-up wrote into *my* DEC-069 assuming an
+  id it had not been given. The slug symlink is what makes ownership recoverable.
+- **Dispose ≠ verify, and the difference is the close-gate.** Blockers whose
+  remedy is unperformed stay open; verifying them would clear the gate on a
+  promise. F-3 earned `fix-now` + verify because the rows were actually authored.
+
+### Learned — earlier rounds
 
 - **When a rule keeps failing over a domain, suspect the *instrument*, not the
   rule.** The generalisable move is the reformulation that makes the failing
@@ -104,9 +161,29 @@ Three figures **did not reproduce** from `slice-232.md` and are corrected in
 
 ### Open
 
-**Next action: open a fresh RV and seed it from `design.md` § 10.** Default
-external reviewer **codex mcp** — not read-only, or it cannot write the ledger.
-Drive review verbs from the primary tree.
+**Next action: answer RV-314 F-2 (`scope.unobservable` has no producer), then run
+an adversarial pass on the § 5.2 amendment before verifying F-1/F-10.** Codex
+thread `019fa1a1-4834-7a60-981d-f85e9a7f572f` is warm with the full design,
+probes and its own F-1/F-10 analysis. Default reviewer **codex mcp** — not
+read-only, or it cannot write the ledger. Drive review verbs from the primary tree.
+
+- **RV-314 F-2 (blocker, OPEN)** — `scope.unobservable` is a *declared* boundary
+  with no write surface. Read path is safe by construction (`toml_edit` preserves
+  unknown keys; `scope_array` returns empty when absent). Open: CLI flag on
+  `memory edit`, MCP `EditParams` field, replace-vs-append, absent-field default,
+  whether `record` may author it, corpus backfill. `ClaimSnapshot` must **not**
+  gain it or T52 inverts.
+- **RV-314 F-1 / F-10 (blockers, OPEN)** — prose written (DEC-069/070/071), not
+  yet adversarially checked. Do not verify until it is.
+- **RV-314 F-7 is a PREREQUISITE to § 5.2's split**, not a parallel task —
+  unguarded derived targets return exit 128 on all three legs. Its exhaustion
+  classification (non-contributing / malformed / probe error) is still unchosen,
+  and it interacts with the D10-vs-§5.4-table contradiction.
+- **RV-314 F-8** — settled in shape, open in detail: name the byte domain
+  (`OsString` + widened argv) or narrow I9′ to the UTF-8 index, honestly.
+- **RV-314 F-4/F-5/F-6/F-9/F-12/F-13/F-14** — verified, amendments recorded in
+  each disposition; **not yet written into `design.md`**. F-14 needs the 29 figure
+  restated with its HEAD stamp and moved into a probe.
 
 - **RV-307 F-25 — answered in part only.** **R8 survives this slice.** Objective
   3 must not read as closing it.
@@ -121,12 +198,16 @@ Drive review verbs from the primary tree.
 - **R-I (new)** — the Rust TOML parser's handling of an escaped NUL is
   unmeasured; `control-chars.py` measured Python's `tomllib`.
 - **R-G** — narrowed by DEC-055: the 34 newly-visible rows drain, because
-  objective 1 is what makes clean re-verification possible.
+  objective 1 is what makes clean re-verification possible. **Contested by RV-314
+  F-5**: the *stock* drains, the *flow* does not — `--allow-dirty` keeps minting
+  non-commit `verified_sha`. Restate as stock-and-flow.
+- **R6 deepened (DEC-069)** — the slice **tightens** as well as loosens: untracked
+  evidence under a declared glob now refuses. Only the loosening is intuitive.
 - **OQ-5** — open, with the § 4 tension named and a reopen trigger.
 - **OQ-3 / QUE-173, IMP-318, IMP-325, IMP-317 limb (b), ISS-258** — routed, not
   built here.
-- **Governance** — REV-034's inventory is re-taken in `design.md` § 5.6.
-  **REQ-146 and REQ-155 are new rows.** Whether they land as added REV-034 rows
-  or a second revision is a `/reconcile` call.
+- ~~**Governance — REQ-146/REQ-155 routing**~~ — **SETTLED** (DEC-076, RV-314
+  F-3). Added REV-034 rows, authored; the revision now carries four. Superseded
+  the earlier "`/reconcile` call" note, which contradicted the scope.
 - ~~**OQ-2**~~ ~~**OQ-A**~~ ~~**OQ-6**~~ ~~**OQ-B**~~ ~~**E13's fate**~~
   ~~**F-38**~~ ~~**F-39 limb 1**~~ — all answered; see `design.md`.
