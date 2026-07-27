@@ -63,6 +63,7 @@ split). Ride the review ledger's const-fn `can()` table rather than inventing a 
 second permission vocabulary."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete — the technical spec exists and can be cited as the governing contract" },
+  { id = "EN-2", text = "DESIGN GATE (projection): a written sketch of the projection and token-bounding algorithm exists and has had an adversarial pass whose findings are dispositioned. It gates THIS phase, not PHASE-04, because the envelope type defined here is the thing being bounded — designing the type before the algorithm that must fit inside a budget invites rework of the pure model. §9.3 asserts the limits hold but never says how; R1 (ceremony exceeding value) is decided by this sketch" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "`src/design_run/` exists and is registered under ADR-001 layering (leaf <- engine <- command, no cycles)" },
@@ -122,7 +123,7 @@ gate: the projection and token-bounding algorithm is genuinely undesigned in \
 design.md §9.3, which asserts that limits hold without specifying how."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 complete — a persisted run exists to project" },
-  { id = "EN-2", text = "DESIGN GATE: a written sketch of the projection and token-bounding algorithm exists — what is dropped, how the nearby frontier is selected, how the material-change delta is computed — and has had an adversarial pass whose findings are dispositioned. design.md §9.3 asserts the limits hold but does not say how; R1 (ceremony exceeding value) is decided here" },
+  { id = "EN-2", text = "the PHASE-02 projection sketch is still current against the model as implemented; any drift between sketch and pure model is re-passed adversarially before bounding is coded" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "`doctrine design start|show|apply|resume` are wired and accepted by the built binary" },
@@ -131,6 +132,7 @@ exit_criteria = [
   { id = "EX-4", text = "named limits bound normal envelope frontier, change-summary, blocker and declaration-example detail, and hold against a generated fixture of hundreds of nodes" },
   { id = "EX-5", text = "`show` is a strict subset of any `inspect`-style surface; the help-text convention test guards that polarity rather than prose asserting it" },
   { id = "EX-6", text = "`apply` validates the whole candidate before any authored mutation; validation failure leaves state byte-identical" },
+  { id = "EX-7", text = "the bounded delegation seam exists (scope §4, DEC-058/DEC-068): one bounded inquiry obligation can be exported and an attributed proposal accepted back, the coordinator remains the sole writer of state, and a stale proposal is refused as stale and left inspectable — never silently rebased. V1 defines the protocol boundary only; no spawn transport and no broker" },
 ]
 verification = [
   { id = "VT-1", expects = "the single canonical envelope type exists and is the read model", test_file = "src/commands/design.rs", keywords = ["DesignTurnEnvelope"], waived = false },
@@ -164,7 +166,7 @@ exit_criteria = [
 ]
 verification = [
   { id = "VT-1", expects = "checkpoint recovery resumes each known journal phase without duplication, including the pre-journal crash case", test_file = "tests/e2e_design_checkpoint.rs", keywords = ["journal", "reserved"], waived = false },
-  { id = "VT-2", expects = "existing entity-creation callers are behaviour-preserved across the new seam", test_file = "src/entity.rs", keywords = ["claim_fresh_id"], waived = false },
+  { id = "VT-2", expects = "the fresh-creation path exposes the new caller-visible midpoint — a keyword that does not exist at head, so the mandate cannot pass vacuously", test_file = "src/entity.rs", keywords = ["claim_fresh_id", "on_reserved"], waived = false },
   { id = "VA-1", text = "the existing knowledge and entity suites stay green unchanged — the behaviour-preservation gate for shared machinery" },
   { id = "VA-2", text = "no parallel DEC/QUE/ASM wire type was introduced; the existing knowledge surface is reused (research thread 2)" },
 ]
@@ -191,6 +193,7 @@ exit_criteria = [
   { id = "EX-4", text = "an invalid or stale adoption changes neither runtime clearance nor the watermark — both polarities implemented, not just the happy path" },
   { id = "EX-5", text = "re-adoption refuses missing, duplicate and unknown markers, marker-free additions, and structural deletion — refusing rather than guessing" },
   { id = "EX-6", text = "the deprecated `slice design` shim is mutually exclusive with the managed writer: with a live run it forwards through the same implementation and guard; with no run it preserves scaffold-only no-clobber behaviour and never creates runtime state (DEC-075)" },
+  { id = "EX-7", text = "conservative import lands here, riding the same marker machinery (scope §4, DEC-084/DEC-085): `doctrine design start --from-design` enters an existing authored design.md one-shot and explicitly, importing sections as unreviewed `imported-prose` proposals with source location and fingerprint, bootstrapping direct non-terminal shaping QUEs as durable inquiries and conventional `OQ-*` entries as unverified prose proposals. Only an explicit canonical QUE citation merges sources — text similarity never does — and no procedural evidence is ever inferred" },
 ]
 verification = [
   { id = "VT-1", expects = "hand-edit then re-adopt preserves run/map/cursor/receipts, updates only marker-addressed sections, and invalidates evidence for each changed fingerprint", test_file = "tests/e2e_design_materialise.rs", keywords = ["adopt", "marker"], waived = false },
@@ -255,6 +258,7 @@ exit_criteria = [
   { id = "EX-4", text = "no shipped or generated core-process guidance advertises `slice design` as the canonical design-stage verb; deprecation documentation may still name the shim explicitly (§9.4)" },
   { id = "EX-5", text = "the projected `.doctrine/routing-process.md` is refreshed and no longer divergent from the embed" },
   { id = "EX-6", text = "static `/design` activation is retained — this slice does not use successful dynamic delivery as evidence that privileged activation can be removed (scope §5, A2)" },
+  { id = "EX-7", text = "the handover adapter converges too (scope §4, DEC-058): `plugins/doctrine/skills/handover/SKILL.md` is a declared design target, and handover short-circuits when structured state is current — verifying persistence and returning the slice/run reference plus only residual unstructured state, instead of restating what the run already holds" },
 ]
 verification = [
   { id = "VT-1", expects = "shipped core-process guidance names the canonical family", test_file = "install/routing-process.md", keywords = ["doctrine design"], waived = false },

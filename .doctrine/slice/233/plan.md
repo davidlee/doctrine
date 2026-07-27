@@ -54,22 +54,27 @@ strictly safe. There is a lower bound and no upper one.
 
 ### The three design gates
 
-Design-in-the-small is not evenly distributed across the nine phases. PHASE-02,
-03, 05 and 07 are heavily prescribed by design.md — ride the review ledger's
-`can()` table, ride `wire.rs`, ride `write_body`, one enum selecting one file —
-and PHASE-03 in particular acquired three explicit rules and a seven-assertion
-matrix through RV-315 F-19 and F-20. Those phases can go straight to
-`/phase-plan`.
+Design-in-the-small is not evenly distributed across the nine phases. PHASE-03,
+05 and 07 are heavily prescribed by design.md — ride `wire.rs`, ride the
+existing reservation backend, one enum selecting one file — and PHASE-03 in
+particular acquired three explicit rules and a seven-assertion matrix through
+RV-315 F-19 and F-20. Those phases can go straight to `/phase-plan`.
 
 Three phases carry genuine undesigned surface, and each takes a design gate as
 an entrance criterion: a written sketch plus an adversarial pass whose findings
 are dispositioned before implementation starts.
 
-- **PHASE-04 — projections and token bounds.** §9.3 asserts that named limits
+- **PHASE-02 — projections and token bounds.** §9.3 asserts that named limits
   bound the envelope against a large-run fixture, but the algorithm behind them
   does not exist: what is dropped, how the nearby frontier is chosen, how the
   material-change delta is computed. R1 — that protocol ceremony exceeds its
   value — is won or lost here, and it is the risk the whole slice is judged on.
+  The gate sits at PHASE-02 rather than at PHASE-04 where the bounding is coded,
+  because the envelope *type* is defined in PHASE-02 and it is the thing being
+  bounded. Designing the type first and discovering later that the budget
+  demands different data is rework of the pure model, which everything above it
+  then inherits. PHASE-04 only re-passes the sketch if the model drifted from
+  it.
 - **PHASE-06 — the marker grammar.** Re-adoption correctness rests entirely on
   it, and the design specifies only that markers are "unobtrusive" plus a list
   of refusals. Refusals are only as good as the grammar they refuse against;
@@ -95,6 +100,24 @@ CHR-049 already carries the live human-in-the-loop exercise post-close, against
 genuinely installed bytes, with entry checks that refuse authored-only presence.
 The separation that mattered already existed, and buying it again would have
 cost a reopened lock, a superseded DEC-079, and a weakened closure gate.
+
+### Three scope objectives the first draft dropped
+
+A critical pass over the plan against the scope found three of scope §4's
+objectives with no owning phase at all. They are recorded here because the
+omission is instructive: each is a *seam* rather than a component, and seams are
+what a phase list built from an architecture diagram tends to lose.
+
+- **Bounded delegation** (DEC-058, DEC-068) had three incidental mentions and no
+  exit criterion — the fragment file was planned, the protocol was not. It lands
+  in PHASE-04 as EX-7, where the envelope and `apply` already live.
+- **Conservative import** (DEC-084, DEC-085) had none. `--from-design` is the
+  only entry an existing authored design has, and it rides PHASE-06's marker
+  machinery, so it lands there as EX-7.
+- **The handover short-circuit** (DEC-058) had none, despite
+  `plugins/doctrine/skills/handover/SKILL.md` being a declared design-target
+  selector no phase touched. It lands in PHASE-08 as EX-7 alongside the other
+  adapter convergence.
 
 ## Notes
 
