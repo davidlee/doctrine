@@ -210,3 +210,12 @@ pointers*, never missing content.
   default: the blocking dirt is uncorrelated with the memory being attested.
   Under [[mem.pattern.memory.thread-hidden-until-verified]] a `thread` memory in
   this position would have been *unreachable*, not merely unattested.
+- **`slice show` does not render a `fulfils` edge.** `doctrine link SL-232
+  fulfils ISS-257 --degree full` reports success and the edge is in
+  `slice-232.toml` as `[[relation]] label = "fulfils"`, but the `relationships:`
+  block of `doctrine slice show 232` omits it — it lists `governed_by`,
+  `references(...)` and `needs` only. The guardrails mandate reading entities via
+  `show` precisely so an agent never judges an entity from one tier; a
+  `show` that silently drops an authored edge inverts that. Cost here was one
+  extra verification round-trip against the raw TOML — i.e. exactly the raw-file
+  read the rule exists to prevent.
