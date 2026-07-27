@@ -30,7 +30,7 @@ response = "Accepted. ISS-259 is now governed by SL-234, whose scoped design fil
 
 [[finding]]
 id = "F-2"
-status = "contested"
+status = "answered"
 severity = "blocker"
 title = "Expected: a new public command family is reconciled against the existing verb surface. Observed: DEC-075 mints top-level 'doctrine design' beside the extant 'doctrine slice design', and neither the design nor the DEC acknowledges it exists"
 detail = """
@@ -44,7 +44,7 @@ design.md 5.2 asserts only "The public namespace is design-specific (DEC-075)"; 
 
 Penance — pick one and argue it in 5.2: (a) subsume the incumbent, i.e. `slice design` becomes an alias or is deprecated and its scaffolding responsibility moves under the run; (b) keep the incumbent and place the run under `doctrine slice design <verb>`; or (c) keep both and state explicitly, in 5.2 and in DEC-075, the boundary that makes two design-writing verbs coherent, plus what each does when the other's state exists. Whichever is chosen, the boot SPINE digest and 5.5's skill adapter must agree. Verification: a CLI-surface test asserting the two families' documented boundary."""
 disposition = "fixed"
-response = "DEC-075 and design §5.2 now make top-level  canonical and retain  only as a deprecated alias for , with one writer and one foreign-edit guard. §9.2 requires alias-equivalence and deprecation coverage. Committed in f779bd26."
+response = "Completed the contested delivery leg. The boot-source core process now teaches design start and the managed design family rather than the deprecated slice command. DEC-075 and design section 5.2 define the mutually exclusive shim behavior: live runs forward to canonical materialisation; no-run invocations preserve legacy scaffold/no-clobber behavior with migration warnings. Boot regeneration and check are green. Committed in d8a4cf66."
 
 [[finding]]
 id = "F-3"
@@ -277,7 +277,7 @@ response = "DEC-072 now records that DEC-073 settled QUE-188 and summarizes the 
 
 [[finding]]
 id = "F-14"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: the F-2 alias decision reaches every surface that names the incumbent. Observed: install/routing-process.md and the derived boot.md still teach 'slice design' as the core-process design verb, and neither is in any SL-233 selector"
 detail = """
@@ -299,6 +299,8 @@ Two consequences, both structural:
 And the same disease F-5 and F-9 were raised for recurs: `install/routing-process.md` appears in **no** SL-233 selector, neither design-target nor scope-relevant. The edit lands undeclared at `doctrine slice conformance`.
 
 Penance: add `install/routing-process.md` to the design-target selectors and to §5.5's implementation homes; amend the Core process line to the canonical `doctrine design` family; note that `doctrine boot` must be re-run so the snapshot follows (AGENTS.md: "run `doctrine boot` after governance edits"); and state in §5.2 the no-run behaviour of the retained alias. Verification: `doctrine boot --check` green, and an assertion that no shipped guidance names `slice design` as the design verb."""
+disposition = "fixed"
+response = "Added install/routing-process.md as an exact design target and implementation home, changed its core-process line to the canonical managed design family, regenerated derived boot state, and verified doctrine boot --check. Design tests now require that shipped/generated core-process guidance never advertises slice design as canonical. The no-run compatibility behavior is explicit in DEC-075 and section 5.2. Committed in d8a4cf66."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
