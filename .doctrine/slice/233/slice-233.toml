@@ -148,6 +148,26 @@ selector = "install/routing-process.md"
 intent = "design-target"
 note = "teach the canonical managed-design command family in the boot source and verify deprecation convergence"
 
+[[selector]]
+selector = ".doctrine/adr/001/layering.toml"
+intent = "design-target"
+note = "SL-233 plan revision: ADR-001 tier registration for design_run; incumbent slice design shim; design-gate sketches; skill lock drift from the SKILL.md rewrites"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+note = "SL-233 plan revision: ADR-001 tier registration for design_run; incumbent slice design shim; design-gate sketches; skill lock drift from the SKILL.md rewrites"
+
+[[selector]]
+selector = ".doctrine/slice/233/sketches/**"
+intent = "design-target"
+note = "SL-233 plan revision: ADR-001 tier registration for design_run; incumbent slice design shim; design-gate sketches; skill lock drift from the SKILL.md rewrites"
+
+[[selector]]
+selector = "skills-lock.json"
+intent = "design-target"
+note = "SL-233 plan revision: ADR-001 tier registration for design_run; incumbent slice design shim; design-gate sketches; skill lock drift from the SKILL.md rewrites"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-005"

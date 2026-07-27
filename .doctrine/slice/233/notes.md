@@ -21,7 +21,10 @@ fresh-as-of: 2026-07-27 · design (RV-315 terminal, awaiting lock) · 7de1f628
   and repaired; F-20 raised against the repair and paid.
   20a838a7, 69c48a95, 15835f6c, a0f6ba1c, d3c74c5f, d5e1a9c0, a2e235b3,
   7de1f628.
-- DEC-092 (authored watermark) — **`proposed`, awaiting user acceptance**.
+- DEC-092 (authored watermark) — **accepted** (6f3240cf7).
+- Plan authored (cf19aedeb), revised once (475858835), then attacked
+  and repaired: 12 phases, execution order 01→02→03→04→05→06→11→12→
+  10→07→08→09. Four selectors added; five broken VT mandates fixed.
 - Scope B2 amended: descent is exactly 2 new specs + SPEC-019 + SPEC-023.
 - Round-2 research packet: 6 `pi-scout` threads, `research.md` refreshed
   and baseline re-stamped. **Gitignored tier** (`.gitignore:48`) — exists
@@ -52,6 +55,18 @@ fresh-as-of: 2026-07-27 · design (RV-315 terminal, awaiting lock) · 7de1f628
   Refutes the thread-6 claim; fixes the evaluation kit to the coord tree.
 - `src/install.rs:941` comments `KNOWN_STAGE_LABELS` "Provisional" — the
   stage-hymn rejection rests on axis *meaning*, not registry closure.
+  The comment already states both facts and `design` is already a
+  member: PHASE-07 must NOT edit the constant.
+- ADR-001 tier registration is `.doctrine/adr/001/layering.toml`, not
+  `tests/architecture_layering.rs` — the test auto-discovers units and
+  loads the toml. Adding a module is an authored `.doctrine/` edit, so
+  PHASE-02 is coordinator-only.
+- The incumbent `slice design` is `src/slice.rs:174/449/734`, not
+  `src/commands/` — design §5.5's home list omits it.
+- `src/vtgate.rs` matches raw case-sensitive substrings AND requires
+  the `test_file` to be modified by the slice. A VT mandate naming a
+  type the design never named, or a two-token CLI invocation, cannot
+  pass a correct implementation.
 - Detail with citations lives in `research/research.md` § Round 2.
 
 ### Open
