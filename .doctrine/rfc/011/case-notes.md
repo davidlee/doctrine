@@ -219,3 +219,30 @@ pointers*, never missing content.
   `show` that silently drops an authored edge inverts that. Cost here was one
   extra verification round-trip against the raw TOML — i.e. exactly the raw-file
   read the rule exists to prevent.
+
+## [design; sl232-design-write-a]
+
+- **Handover line-number references were stale within one commit.** The packet
+  cited `src/memory.rs:3376` (`run_verify`), `:3400` (`memory_health_findings`),
+  `:3413-3421` (validate staleness), `:2826-2834` (`collect_all`). All four had
+  moved (actual: `:3484`, `:3508`, `:3522-3531`, `:2934`). Cost: one wasted
+  `sed` round-trip on each before falling back to `grep -n "fn <name>"`. Line
+  numbers in a handover are a liability the moment anything lands; a
+  `grep`-able symbol name is free and does not rot. Suggests handover packets
+  should cite `file.rs::fn_name` and let the reader locate it.
+- **`doctrine spec req list` needs a positional the help text buries.**
+  `--spec 007` is rejected in favour of a bare `SPEC_REF` positional; three
+  attempts (`req show`, `req list --spec`, top-level `show REQ-147`) before
+  landing on `spec req list SPEC-007`. And requirement *titles* are not printed
+  by any `req` verb — the roster shows `id | label | kind | status | prose`,
+  where `prose` was `—` for all 13 rows, so the titles had to be read out of
+  `.doctrine/requirement/NNN/requirement-NNN.toml` directly, against the
+  standing "read via `show`, never raw files" rule. There is no
+  `doctrine requirement show` verb. A queried-surface amendment sweep (F-39's
+  fourth tier) cannot be driven from the CLI as it stands.
+- **A probe's own falsifier caught a bucketing bug, which is the point.**
+  `populations.py` FAL-P1 required every entry to be printed with its verdict;
+  the first run put all 59 in one bucket, visibly wrong, because
+  `text.lstrip("./")` eats the leading dot of `.claude/`. A summary-only probe
+  would have reported a plausible number. Registering the falsifier as *print
+  the working, not just the total* is what made it self-evident.
