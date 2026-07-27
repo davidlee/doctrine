@@ -608,3 +608,28 @@ CLAUDE.md framing and did not inspect `ps` would have folded web-sourced
 guesses into a plan.
 Fix: correct the CLAUDE.md line to distinguish by *domain* (repo vs web), not by
 "smarter"; scout's `--think high` is the escalation for hard repo questions.
+
+[dispatch; SL-231-p03-review-yield]
+Three cleanup turns on PHASE-03 vs one on PHASE-02 and zero on PHASE-01. The
+scaling factor was not phase difficulty per se but SURFACE COUNT: P03 shipped a
+1009-line CLI adapter, a 796-line e2e suite, a guard classification, and an
+escaper — four independent surfaces, and each cleanup turn found a defect on a
+different one. Neither the worker's own gate nor the funnel verify beat could
+see any of the three: all were green-passing correctness/design defects.
+
+The cheapest detection was ORCHESTRATOR READING OF THE DIFF, not a review agent.
+Total cost of finding all three was a handful of targeted greps against the fork
+(structure of the new file, call sites of a suspicious helper, test-content
+sampling for the escaper). Two heuristics did the work and generalise:
+  1. a "thin adapter" whose line count rivals the service it adapts is
+     re-implementing something — grep its private fns for verbs the service
+     owns (filter/order/resolve/merge);
+  2. a security/robustness test that is green is only as good as its INPUTS —
+     grep the test file for the input class it claims to cover (here: no
+     non-ASCII byte existed anywhere in the suite, so a Latin-1 corruption bug
+     was structurally undetectable).
+
+Also: asking the worker for a READ on an ambiguous design point (rather than
+mandating a fix) surfaced a real EX-5 gap it had not been told about — good
+yield — but its proposed remedy was unworkable. Ask for the analysis; do not
+import the conclusion.

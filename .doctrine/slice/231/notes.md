@@ -6,9 +6,36 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · PHASE-01 + PHASE-02 landed and reaped · 7e6f7c0b
+fresh-as-of: 2026-07-27 · PHASE-01..03 landed and reaped · 0fe9572b
 
 ### Produced
+
+- PHASE-03 — CLI, reads, and corrections delivered on the pi/deepseek arm, then
+  driven through the funnel: imported (`6a07967c2`), verified green
+  (`ef7c9b455`), concluded (`0fe9572b`), fork reaped. Boundary row
+  `[4163c554b, 6a07967c2]`. Conformance 11/11 declared source paths.
+- PHASE-03 needed THREE orchestrator cleanup turns — more than P01/P02
+  combined. Each finding was concrete and gate-invisible:
+  1. `escape_hostile` iterated bytes and passed them through `char::from(u8)`,
+     a Latin-1 mapping, so every multi-byte UTF-8 char was corrupted
+     ("é" → "Ã©"). The suite was green only because every test string was pure
+     ASCII. Now char-wise with C1 handling, pinned by
+     `non_ascii_content_survives_rendering_intact`.
+  2. The adapter hand-rolled `filter_and_order`, duplicating `query::query`,
+     which already supports `Projection::History`. The tell: the worker
+     annotated `Projection::History` as `expect(dead_code, "PHASE-04")` while
+     hand-implementing history mode. Comparators were byte-identical, so the
+     defect was latent drift, not a live bug. `filter_and_order` deleted; both
+     paths route through the service.
+  3. EX-5 was not fully discharged: an unescaped newline in a comfy-table cell
+     let crafted content render as an apparent extra row. Fixed with ONE
+     escaper taking an `EscapeContext` (Inline for cells, Block for detail) —
+     not a second escaper, which would have repeated defect 2.
+- Finding 3 came from asking the worker for its READ on an ambiguous point
+  rather than mandating a fix. It identified the attack correctly but proposed
+  an unworkable remedy (escape newlines always, re-apply formatting after —
+  impossible once content newlines are indistinguishable from layout ones).
+  Worth repeating the technique; not worth accepting the answer unexamined.
 
 - PHASE-02 — no-clobber publication and store delivered on the pi/deepseek arm,
   then driven through the funnel: imported (`70f131d43`), verified green
