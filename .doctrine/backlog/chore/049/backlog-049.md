@@ -29,6 +29,10 @@ proof of behavioural adoption.
 - Prompt/tool/token overhead and repeated-fragment elision.
 - Human-rated interview usefulness and adversarial review of the resulting
   design.
+- Accuracy of user-acceptance attestations: sample whether each concise
+  `basis` faithfully describes its cited turn (when available), whether a
+  reviewer or resumed agent can detect a mismatch, and whether the field earns
+  its interaction/token cost.
 
 If adoption is weak despite successful activation, run the small
 `.doctrine/governance.md` authority-primer arm described by RSK-229 before

@@ -111,18 +111,27 @@ an explicit run UID for stale-context detection.
 The public namespace is design-specific (DEC-075):
 
 ```text
-doctrine design start SL-233
-doctrine design show SL-233
+doctrine design start SL-233 [--from-design]
+doctrine design show SL-233 [--full] [--format prompt|json|status]
+  [--run <uid>] [--known-revision <revision>]
+  [--known-fragment <name@digest>]...
 doctrine design apply SL-233 --input <json-or-file>
-doctrine design inspect SL-233
-doctrine design resume SL-233
+doctrine design resume SL-233 [--run <uid>] [--known-revision <revision>]
+  [--known-fragment <name@digest>]...
 doctrine design materialise SL-233
+doctrine slice design SL-233  # deprecated materialise alias
 ```
 
 `start` creates a run; `show` emits its bounded projection; `apply` validates
-one sparse idempotent mutation; `inspect` exposes full protocol and map detail;
-`resume` emits everything a fresh context needs next; and `materialise` renders
-runtime sections into authored prose.
+one sparse idempotent mutation; `show --full` exposes protocol and map detail
+that may scale with the run; `resume` emits everything a fresh context needs
+next; and `materialise` renders runtime sections into authored prose.
+
+The top-level family is canonical. The incumbent
+`doctrine slice design <ID>` remains temporarily as a deprecated compatibility
+alias for `doctrine design materialise <ID>`; both route to one implementation
+and one foreign-edit guard. New documentation and generated guidance use only
+the canonical form (DEC-075).
 
 Happy-path recovery needs only `doctrine design resume SL-233`. Optional run UID
 and known revision arguments add explicit assumption checking or change-only
@@ -141,8 +150,8 @@ stable-ID object partially updates its subject. One batch is unordered,
 duplicate subjects are refused, and the complete candidate is validated before
 mutation. V1 has lifecycle transitions rather than deletion (DEC-063).
 
-Every submission asserts `run_uid`, `known_revision`, and an idempotent
-`submission_id`.
+Every `apply` payload asserts `run_uid`, `known_revision`, and an idempotent
+`submission_id`, irrespective of optional CLI addressing/assertion flags.
 
 ### 5.3 Data, State & Ownership
 
@@ -180,7 +189,8 @@ retain an explicitly unresolved outcome, or mark the exchange intentionally
 non-durable. Accepted truth remains user-owned (DEC-062).
 
 Normal output contains the active path, nearby frontier, blockers, counts, and
-material changes. Full inspection is explicit. Adaptive traversal establishes
+material changes. Full detail is explicit through `show --full`. Adaptive
+traversal establishes
 major branches breadth-first, pursues a consequential or blocking branch
 depth-first, then reassesses; the user may pin a node or select breadth/depth
 posture at any time.
@@ -201,7 +211,9 @@ Forward boundaries have explicit predicates:
   sufficiency;
 - drafting → reviewing: required sections exist and materialisation is current;
 - reviewing → locked: current section attestations and integrated review exist,
-  blocking findings are disposed, and the user explicitly accepts.
+  blocking findings are disposed, and a current, content-bound attestation
+  attributes explicit acceptance to the user. In v1 this is an auditable agent
+  claim, not authenticated proof of a human act.
 
 Evidence is bound to its subject fingerprint. Material change invalidates only
 affected clearance (DEC-066). A direct regression records a reason. Returning
@@ -300,8 +312,11 @@ variant matrix (DEC-077).
 Every reusable fragment prints `name@digest` and carries the same JSON
 metadata. A known receipt omits a fragment only when its digest is current; a
 stale receipt re-emits it. The TurnEnvelope is never omitted (DEC-078). The
-prompt pack is a closed design-specific content store, not a second general
-selector algebra.
+prompt pack is a closed, embedded, Doctrine-owned design content store, not a
+second general selector algebra. It deliberately forgoes cascade seal
+integrity, `replaces` validation, and user overrides: one code-owned
+next-obligation enum selects at most one file, while receipts bind the exact
+selected bytes and digest.
 
 Expected implementation homes are:
 
@@ -313,18 +328,40 @@ Expected implementation homes are:
   module registration, command declaration, and read/write classification;
 - `src/entity.rs`, `src/reserve.rs`, and `src/knowledge.rs` for the separable
   reserved-materialisation seam used by checkpoint creation;
+- `src/fsutil.rs` for the existing leaf-level atomic sibling-replacement helper
+  used by snapshot and edit-preserving materialisation writes;
+- `src/install.rs` for embedded asset access, manifest seal loading, and the
+  closed `KNOWN_STAGE_LABELS` boundary (not for a second prompt resolver);
 - `src/main.rs` for command wiring;
 - `plugins/doctrine/skills/design/SKILL.md` and
   `plugins/doctrine/skills/handover/SKILL.md`;
-- `install/hymns/stage/design.md` and `install/design-prompts/*.md`;
+- `install/hymns/stage/design.md`, `install/design-prompts/*.md`, and
+  `install/manifest.toml`; `stage/design` is added to `[hymns].seal`, while the
+  design-specific prompt pack ships through the existing whole-`install/`
+  embed and Nix graft;
+- `publication/manifest.toml` for explicit library addresses for the sealed
+  invariant hymn and four process fragments, satisfying the existing
+  unprojected-install-asset reachability invariant;
 - new/amended product and technical specs, including the applicable SPEC-023
   and skill-contract boundaries;
-- focused unit/integration tests and architecture-layer indexing.
+- focused unit/integration tests, including
+  `tests/e2e_claude_install.rs` for installed skill/asset distribution and
+  `tests/architecture_layering.rs` to classify the new `design_run` module;
 - an authored evaluation kit beneath `.doctrine/slice/233/evaluation/`.
 
 The pure layer receives derived facts and generated IDs as inputs. Every new
 embedded asset root must also be included in the Nix `srcWithDist` source
-graft.
+graft; SL-233 adds no new root because both prompt stores are beneath the
+already grafted `install/`.
+
+The first authored plan phase (assigned its immutable `PHASE-NN` ID during
+`/plan`) performs governance descent before engine or command implementation.
+It allocates the exact product and technical specification entities, then
+immediately adds their exact `.doctrine/spec/product/<NNN>/**` and
+`.doctrine/spec/tech/<NNN>/**` paths as `design-target` selectors before
+editing either body. This is the narrow bootstrap in place of a corpus-wide
+spec target; the phase exits only when conformance reports no undeclared spec
+edits.
 
 ## 6. Open Questions & Unknowns
 
@@ -392,7 +429,13 @@ Rejected alternatives include a fully specified/hierarchical workflow machine,
 a general process DSL, a full arbitrary inquiry graph, separate record-creation
 choreography, silent stale-proposal rebase, prompt omission by fragment name,
 automatic reconstruction of missing procedural evidence, and live skill
-evaluation from an uninstalled dispatch worktree.
+evaluation from an uninstalled dispatch worktree. Carrying the four process
+fragments as additional `stage/*` hymns was also rejected:
+`src/install.rs::KNOWN_STAGE_LABELS` is a deliberately closed lifecycle
+vocabulary, while inquiry, drafting, reviewing, and delegation are
+intra-design obligations rather than new global stages. Extending that registry
+would pollute its semantics; a closed design-specific pack is the narrower
+mechanism.
 
 ## 8. Risks & Mitigations
 
@@ -427,6 +470,11 @@ evaluation from an uninstalled dispatch worktree.
   design-specific and extract only independently useful pure seams.
 - **R11 — acceptance basis becomes paperwork.** Keep the v1 basis concise and
   measure whether it improves audit/recovery or merely repeats the prior turn.
+- **R12 — user acceptance is falsely or mistakenly attributed.** Bind the
+  claim to payload fingerprint, inquiry disposition, revision, concise basis,
+  and optional turn reference so it is inspectable; sample basis-to-turn
+  accuracy in CHR-049. Residual risk remains because v1 trusts a cooperative
+  agent assertion rather than authenticating the human.
 
 ## 9. Quality Engineering & Validation
 
@@ -459,6 +507,9 @@ Wire and end-to-end tests prove:
   outstanding-delegation receipts;
 - exact resume from runtime and semantic reconstruction with a new run UID;
 - optional run assertion and changes-since-revision projection;
+- canonical `design materialise` and deprecated `slice design` alias produce
+  identical bytes and foreign-edit refusals through one implementation seam,
+  while CLI help marks only the latter deprecated;
 - stale delegated proposals remain unapplied and inspectable;
 - checkpoint recovery resumes each known journal phase without duplication;
 - a crash before ID journalling leaves no unidentified authored record;
@@ -473,8 +524,10 @@ inconsistent slice/run identity.
 
 A generated large-run fixture contains hundreds of inquiry nodes, durable
 references, and changes. Named limits bound normal TurnEnvelope frontier,
-change-summary, blocker, and declaration-example detail. Full `inspect` may
-scale with the run; normal `show` must not.
+change-summary, blocker, and declaration-example detail. `show --full` may
+scale with the run; normal `show` must not. Help-text convention tests protect
+this subset relation and ensure no design-specific `inspect` inverts the
+established metadata-only meaning.
 
 Prompt tests prove:
 
@@ -488,11 +541,16 @@ Prompt tests prove:
 ### 9.4 Assets and compatibility
 
 Tests verify the active plugin skill, handover adapter, invariant hymn, and four
-prompt files ship in publication/embed surfaces. Prompt checks, install tests,
-and existing skill/plugin tests remain green. The host-side Nix build must
-resolve every fragment from the produced binary. Existing slice lifecycle,
-knowledge, review, prompt-cascade, installation, and architecture-layer suites
-remain unchanged and green as behaviour-preservation evidence.
+prompt files ship in publication/embed surfaces.
+`publication/manifest.toml` gives all five new `install/` assets explicit
+library addresses. `install/manifest.toml` seals `stage/design`; prompt checks
+prove a user twin is dropped, and install tests prove the sealed hymn is not
+projected as user-editable content. Prompt checks, publication reachability
+checks, install tests, and existing skill/plugin tests remain green. The
+host-side Nix build must resolve every fragment from the produced binary.
+Existing slice lifecycle, knowledge, review, prompt-cascade, installation, and
+architecture-layer suites remain unchanged and green as
+behaviour-preservation evidence.
 
 ### 9.5 Evaluation kit delivered by SL-233
 
@@ -543,8 +601,13 @@ use it, whether it disambiguates acceptance, and its interaction/token cost.
   the duplicate-decision edge case. It extends DEC-083 without making
   comprehensive record discovery part of v1.
 - Known design-target selectors are recorded. Exact product/technical spec
-  entity paths must be added immediately after their canonical IDs are
-  allocated; no broad spec wildcard is granted as an implementation target.
-- The slice scope and known implementation selectors are reconciled. Next:
-  choose formal `/inquisition` or proceed toward planning under the skill's
-  explicit review choice, then seek design lock.
+  entity paths are allocated and added by the first authored plan phase before
+  those bodies are edited; no broad spec wildcard is granted as an
+  implementation target.
+- The scope now makes the deterministic evaluation kit the SL-233 closure gate
+  and gives the installed live exercise to CHR-049, whose `originates_from`
+  edge preserves provenance.
+- The implementation homes and current selectors are reconciled, including
+  manifest sealing, publication addresses, asset-distribution tests,
+  architecture indexing, and the deferred exact spec paths. RV-315 remains the
+  formal review gate; the design cannot lock until its ledger is resolved.

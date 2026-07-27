@@ -19,5 +19,7 @@ partially developed prose disposable while making progress inspectable,
 addressable, and recoverable within the exact-resume guarantee of DEC-057.
 
 Human and adversarial-agent section review must be first-class, distinct
-evidence rather than one undifferentiated `aligned` flag. QUE-188 remains open
-for the review-policy and evidence model.
+evidence rather than one undifferentiated `aligned` flag. DEC-073 settles the
+v1 review policy and evidence model: human section review is the default,
+adversarial section review is first-class and opt-in, and an integrated
+adversarial review remains mandatory.

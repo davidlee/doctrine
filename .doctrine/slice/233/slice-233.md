@@ -199,8 +199,12 @@ epistemic records.
   default and that material agent-authored restructuring remains visible.
 - Preserve existing slice lifecycle, knowledge-record, prompt-cascade, and
   shipped-skill behaviour outside the declared `/design` path.
-- Evaluate adherence at the relevant RFC-021 stages—adopt, adhere, refresh,
-  recover, and complete—without treating successful outcome alone as proof.
+- Deliver and mechanically verify the deterministic evaluation fixture,
+  moderator protocol, rubric, evidence collectors, and assertions needed to
+  exercise the relevant RFC-021 stages. These artifacts gate SL-233 closure.
+  The live adopt/adhere/refresh/recover/complete agent exercise runs
+  immediately post-close under CHR-049, once the changed skill and prompt
+  assets are genuinely installed; successful outcome alone is not proof.
 
 ## Summary
 

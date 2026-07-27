@@ -133,6 +133,16 @@ selector = ".doctrine/slice/233/evaluation/**"
 intent = "design-target"
 note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
 
+[[selector]]
+selector = "install/manifest.toml"
+intent = "design-target"
+note = "seal the invariant design hymn and verify distribution; exact spec selectors follow ID allocation"
+
+[[selector]]
+selector = "publication/manifest.toml"
+intent = "design-target"
+note = "publish the invariant design hymn and four design prompt fragments through the existing asset library"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-005"
