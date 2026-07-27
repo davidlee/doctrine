@@ -270,3 +270,34 @@ dispatch worker may write (worker_commit HARD forbidden zone). Discovering this
 required reading `src/mcp_server/worker_commit.rs`. A `selector doctor` lint for
 "design-target path in the worker-forbidden zone ⇒ orchestrator-authored" would
 surface it at plan time instead of at dispatch time.
+
+## [design; sl232-design-write-a, cont.]
+
+- **`grep` is a ugrep wrapper with `-I`, and it silently skips binary files.**
+  A verification sweep over the freshly-written `design.md` returned "clean" three
+  times — for the RV-307 F-39 code-wording sweep, for dangling `A1`/`X1`, and for
+  a control-character check. All three were **false negatives**: the file
+  contained a NUL byte (I emitted a literal NUL where I meant the six-character
+  text backslash-u-0000), so ugrep classified the file binary and matched
+  nothing — including a `grep -c` that should have printed `0`. The tell was that
+  `grep -c` printed *nothing at all* rather than a count.
+  Cost: ~6 tool calls chasing a phantom cwd bug before checking `type grep`.
+  Generalises past this repo: **a negative grep result is only trustworthy if a
+  positive control on the same file also passes.** Worth a memory. Arguably the
+  harness should surface "binary file matches" rather than swallowing it.
+- **The verification instruction was load-bearing and nearly defeated.** The
+  packet said of F-39 limb 1: "the rewrite should sweep it. **Then verify it
+  did.**" The verification ran, reported clean, and was worthless. Only a
+  follow-up sanity count exposed it. An instruction to verify needs a companion
+  instruction to *falsify the verifier* — the rule this slice applies rigorously
+  to probes, not yet applied to the agent's own checks.
+- **Emitting a literal control character into an authored file is easy and
+  invisible.** It happened three times in one session while writing *about*
+  control characters, and twice more it was caught only by the harness rejecting
+  a Bash command. Nothing in the toolchain flagged the file itself; `doctrine
+  validate` passed clean with a NUL in a tracked design document.
+- **Multi-path pathspecs bite the path-limited-commit rule.** `git commit -- $P`
+  with an unquoted multi-path shell variable fails confusingly ("could not open
+  directory '<all paths joined>'"). Bit twice. Not doctrine's fault, but the
+  path-limiting guidance actively pushes agents toward multi-path pathspecs, so
+  it is worth an explicit example in AGENTS.md.
