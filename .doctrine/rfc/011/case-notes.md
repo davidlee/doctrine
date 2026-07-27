@@ -718,3 +718,51 @@ finding, exactly as the same findings do for `spec-003.md:50` and
   (CON-003 got one, RFC-022 did not). Left alone rather than hand-created, since
   the convention says the *command* mints them. Possible inconsistency; not
   chased.
+
+[code-review; RV-317-sl231-remediation-turn1]
+
+- **pi log final-report extraction, round two.** The previous note recorded that
+  "longest text block" and "block containing VERDICT" both mis-fire. The
+  replacement heuristic — last assistant message by stream position — ALSO
+  mis-fires: it returned a mid-run `"Let me read the wire module..."`. The final
+  report does not ride the `message_update` stream at all; it lives in a
+  terminal `{"type":"turn_end","message":{...}}` event, with `agent_end` and
+  `agent_settled` after it. Cost: one wasted extraction round, one throwaway
+  second script, and a moment of believing a completed worker had stalled.
+  The durable rule is `type == "turn_end"` → `message.content[].text`, not any
+  positional heuristic over the partials. Worth folding into a shipped helper
+  rather than re-derived per session — this is the third variant written.
+
+- **`$UID` is readonly in zsh.** A repro script assigning `UID=<uuid>` died with
+  `bad math expression`. Not doctrine's fault, but worth noting that the spawn
+  environment's shell is zsh while the reflex is bash; `$UID`, `$PATH`-style
+  specials and word-splitting differences have now each cost a round in this
+  slice.
+
+- **Adjudication caught what the gate could not, again.** The worker's report
+  read `D1: FIXED / DEVIATIONS: NONE / UNCERTAIN: NONE` with clippy clean and
+  4123+31 green. One of the five was half-fixed: single-line header fields were
+  escaped with the multi-line context, so the injection the finding described
+  still reproduced — through a DIFFERENT view than the one the test asserted.
+  The worker's own new test passed because it asserted "no raw ESC" and never
+  asserted the newline was neutralised. Cost is not the fix (small) but the
+  principle: a self-authored test pinned the half of the contract the author had
+  in mind. The empirical re-run of the original reproduction is what caught it,
+  and it took one command. Re-running the finding's own repro against the built
+  binary should be a NAMED step in the remediation loop, not orchestrator
+  discretion — it is far cheaper than the review that found the defect.
+
+[feedback→plan handoff; SL-233 lock/decompose ordering]
+Locked the design the moment the ledger went terminal, then the User raised
+slice decomposition in the very next turn — which would have invalidated four
+spots in the just-locked design (§5.5 home, DEC-079, §9.5, §10). Cost: a minted
+slice, a scope amendment written then reverted, and two turns of analysis, all
+discarded. Root cause: the lock gate treats "ledger terminal" as sufficient,
+but a design is only safe to lock once *plan shape* is also settled — the
+decomposition question ("is this one slice or several?") is answered at plan
+time yet invalidates design content. Cheap fix: /design's lock step should ask
+whether the phase terrain is agreed before flipping status, or /plan should be
+reachable from a `design-locked-pending-shape` state. Second-order note: the
+recovery was only cheap because CHR-049 already existed — I recommended the
+split without checking for an existing post-close vehicle first. Check the
+backlog for an existing carrier before proposing new structure.
