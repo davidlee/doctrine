@@ -74,3 +74,50 @@ input / test-input coverage) beat phase-shaped ones on a multi-phase delta —
 cross-phase contract drift is invisible to a per-phase pass by construction.
 
 See also [[mem.pattern.review.sweep-defect-class-not-instance]].
+
+
+## Remediation turns show the SAME asymmetry (RV-317 fixes, 2026-07-28)
+
+Two orchestrator-directed remediation turns fixed RV-317's eleven findings
+(`23c4309ed`, `d4a042e39`). Both self-reported `DEVIATIONS: NONE` and
+`UNCERTAIN: NONE`, with clippy clean and a fully green suite. Both had exactly
+one finding that had not actually landed:
+
+- **Turn 1** — the blocker was *half* closed. All nine unescaped loci were
+  escaped, but single-line header fields got the multi-line context, which
+  preserves newlines by design, so the injection still reproduced through a
+  different view than the worker's own new test asserted. Its test checked "no
+  raw ESC" and never checked the newline.
+- **Turn 2** — the new regression guard was decorative. `..Default::default()`
+  in the fixture meant a newly added field defaults to `None`, *both* walks skip
+  it, and the counts still match: it passed the exact mistake it existed to
+  catch. Separately, its replacement test mutated process-global CWD (the only
+  `set_current_dir` in all of `src/`), a latent parallel-test flake.
+
+None of this was catchable by any gate — clippy and 4100+ tests were green in
+both cases.
+
+### The countermeasure is one command
+
+**Re-run the finding's own reproduction against the built binary.** Both misses
+fell out immediately: `observation show <uid>` still printed forged header
+lines; injecting a one-sided field addition left the cardinality guard green.
+This costs seconds and is far cheaper than the review that found the defect —
+it should be a NAMED step in the remediation loop, not orchestrator discretion.
+Corollary for any new regression test: prove it FAILS on the mistake it targets
+before believing it.
+
+### Prompt precision transfers directly
+
+Turn 1's one real miss traces to the instruction "Block for the multi-line
+detail view" — a *locus* rule where the actual contract is a *destination-shape*
+rule (single-line slot vs multi-line payload). The worker followed what was
+written, exactly. When a remediation prompt names a fix by location rather than
+by the invariant, expect the invariant to be missed at the locations not listed.
+
+### Also worth knowing
+
+It silently used a correct number (27 facet string fields) where the prompt
+asserted a wrong one (33) — right outcome, but the discrepancy went unflagged
+under `UNCERTAIN: NONE`. Do not read `UNCERTAIN: NONE` as "nothing surprising
+was encountered".
