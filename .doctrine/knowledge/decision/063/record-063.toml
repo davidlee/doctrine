@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 183
-slug = "sparse-redeclaration-protocol-for-design-run-mutation"
-title = "Sparse redeclaration protocol for design-run mutation"
-record_kind = "question"
-status = "answered"
+id = 63
+slug = "design-run-mutation-uses-atomic-sparse-json-declarations"
+title = "Design-run mutation uses atomic sparse JSON declarations"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
