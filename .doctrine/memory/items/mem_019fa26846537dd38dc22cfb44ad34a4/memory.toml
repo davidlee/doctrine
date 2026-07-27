@@ -1,0 +1,47 @@
+memory_uid = "mem_019fa26846537dd38dc22cfb44ad34a4"
+memory_key = "mem.pattern.doctrine.skill-eval-after-landing"
+schema_version = 1
+lifespan = "procedural"
+memory_type = "pattern"
+status = "active"
+title = "Evaluate changed skills after landing, not from dispatch candidates"
+summary = "Installed skills resolve from github:origin/main, so dispatch candidates are a poor surface for live agent evaluation of skill edits."
+created = "2026-07-27"
+updated = "2026-07-27"
+
+[scope]
+paths = ["plugins/doctrine/skills"]
+globs = []
+commands = ["doctrine dispatch"]
+tags = ["evaluation", "skills"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "be9727c61f31df7edf3a840943590cc07cac4ff9"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5703d132882d3229a409e7c8ba35861c04a0471f961ba9203c0ed96980f16df1"
+base_commit = "6c98f1635895a7aadd283bd683e31a1595f88fd0"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[relation]]
+label = "related"
+target = "mem.pattern.distribution.skills-source-vs-installed"
+

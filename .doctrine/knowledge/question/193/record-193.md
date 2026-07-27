@@ -39,3 +39,10 @@ If managed runs activate but adoption remains weak, an additional small arm may
 add the user-owned `.doctrine/governance.md` authority primer described by
 RSK-229. That isolates a plausible authority confound without treating the
 local mitigation as a shipped product contract.
+
+## Answer
+
+DEC-079 chooses option 2 for the slice boundary, paired with an immediate,
+explicit post-close measurement exercise in CHR-049. SL-233 delivers the
+protocol and fixtures; CHR-049 runs the live evaluation after the changed skill
+is actually installed.
