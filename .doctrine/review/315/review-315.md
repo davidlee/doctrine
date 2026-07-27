@@ -191,6 +191,7 @@ sibling blockers F-2 and F-3 are terminal.
 
 > **HERESIS URITOR; DOCTRINA MANET**
 
+
 ## Responder correction
 
 The first responder-disposition invocation allowed the shell to consume
@@ -399,5 +400,150 @@ Verified terminal: F-1 through F-14 entire. Open: **F-15** (blocker).
 
 `await=responder`. One sentence in one file stands between this design and its
 lock — restore it, and the ledger goes terminal.
+
+> **HERESIS URITOR; DOCTRINA MANET**
+
+## Round 4 — the watermark tried against its own boundaries
+
+Three charges are **verified terminal**. One is **contested**, and one new
+charge records the repair's regression of a prior terminal finding. DEC-092's
+core instinct is sound; its stated protocol is not yet coherent enough to
+accept.
+
+### F-16 — verified
+
+SPEC-019 does not merely sit near checkpoint creation. Its synthesized
+responsibilities own the `knowledge new <record_kind>` family, each record
+kind's tree, and each reservation namespace. DEC-086's managed path claims an
+ID from that reservation backend and materialises the same DEC/QUE/ASM entity
+family. A second producer into those owned namespaces is therefore a
+SPEC-019 concern even though the new technical spec will own the orchestration
+mechanism.
+
+The repair draws that boundary correctly. Scope B2 names SPEC-019; §5.5 limits
+its amendment to acknowledging managed-run provenance and leaves the
+reserve/journal/materialise mechanism to the new technical spec; the
+selectors-before-bodies bootstrap names SPEC-019 explicitly. No ownership was
+laundered across the descent. **Verified.**
+
+### F-17 — verified
+
+The responder's correction is right. The offending sentence was scope canon at
+`slice-233.md:175-177`, not a design restatement. PRD-003 says the skills
+capability does not own what a skill says, while SPEC-010 reads only
+`name`/`description` and treats the body as opaque payload. “The skill
+contract” therefore denoted no amendable governed entity.
+
+Amending B2 was legitimate and necessary: leaving the void in scope while
+striking only a design restatement would make the design contradict its canon.
+The amended B2 narrows no product objective or affected surface. It still
+requires the design-skill rewrite, now honestly classified as implementation
+against the existing source target and gated by the new product contract's
+thin-adapter requirement. **Verified.**
+
+### F-18 — verified
+
+B2 and §5.5 now say the same exact thing: SPEC-023 gains one registry entry,
+`stage/design` in `[hymns].seal`. The four files under
+`install/design-prompts/` remain a closed design-specific store owned by the
+new technical spec, with the deliberate absence of cascade seal integrity,
+`replaces` validation, and user override recorded rather than smuggled under
+SPEC-023. The loose reading has been burned away. **Verified.**
+
+### F-19 — contested
+
+The original hole was real, and the entry watermark is the right answer to the
+interval *between* applies. A normal mutation following a foreign edit can now
+compare current `design.md` bytes with the last Doctrine-authored fingerprint
+and refuse before clearing another gate. Treating absent `design.md` as cold
+only before first materialisation is likewise sound: it permits a new run
+without making later deletion indistinguishable from cold start.
+
+But the response claims more than the design proves.
+
+First, “every mutating verb” is finite at the public surface — `start`, `apply`,
+`materialise`, and the live-run arm of the deprecated shim; `show` and `resume`
+are reads. No top-level verb has simply vanished from the list. The problem is
+inside `apply`: §5.5 makes `adopt_authored` an `apply` declaration, invoked
+precisely because current authored bytes differ from the stored watermark.
+§5.3 simultaneously says every mutating verb refuses that divergence on entry.
+No ordering or exception lets re-adopt reach its declared-fingerprint and
+marker validation. The repair therefore regresses the live-run escape verified
+under F-8. That regression is raised separately as F-20 so a terminal old
+finding cannot hide it.
+
+Second, the `with_turn` analogy is useful but not exact. `with_turn` holds a
+Doctrine-writer lock, hashes the authored ledger, and atomically replaces that
+same ledger before updating its baton. The design-run command hashes
+`design.md` while writing a runtime snapshot, a checkpoint journal, and
+possibly authored knowledge records. DEC-083 and DEC-086 explicitly order
+checkpoint effects before the final design snapshot and forbid rollback of
+authored knowledge. A check immediately before the snapshot write cannot make
+§9.2's general promise that a mid-invocation edit leaves “nothing written”:
+the journal or knowledge record may already exist. A check before all effects
+instead leaves the whole effect sequence after the check, during which a
+foreign edit may still land.
+
+Nor is the final hash read an atomic compare-and-swap with an uncoordinated
+human editor. An edit can land after that read and before the runtime atomic
+rename. The next mutating entry will detect it, so the repair moves that narrow
+race to delayed detection rather than losing it forever; it does not justify
+the categorical claim that every mid-invocation edit is refused with runtime
+state unmutated. Even the review analogue's injected hook proves only the
+window before its final comparison, not the irreducible comparison-to-rename
+interval.
+
+The boundary intent can be saved. Ordinary mutations should entry-refuse
+divergence. Re-adopt needs an explicit exceptional admission path that proves
+the caller-declared current fingerprint, validates the complete stable-marker
+map, invalidates all affected evidence, and alone re-baselines. Because it
+cannot preserve “nothing written” across DEC-086's multi-effect operation, the
+design must state the actual ordering and recovery guarantee, not borrow the
+stronger same-file wording.
+
+The §9.2 assertions are only partly fit for execution. The between-applies case
+is falsifiable. A deterministic hook can test a named pre-write window. But
+“mid-invocation” and “nothing written” are overbroad until the write being
+guarded and the checkpoint-effect ordering are named. The cold/re-adopt bullet
+bundles distinct cases and omits the decisive negative matrix: ordinary
+`apply` refuses divergence, valid `adopt_authored` alone may cross it, invalid
+or stale adoption changes neither runtime clearance nor the watermark.
+**Contested.**
+
+### F-20 — the prior penance made self-refusing
+
+F-8 was terminal on evidence that a live run could recover from a human edit
+through marker-validated re-adoption. Commit `20a838a7` puts a universal entry
+refusal in front of that same `apply` path without specifying its sole lawful
+exception. This is not licence to weaken the guard generally: an informal
+“re-adopt bypasses it” would let a caller launder arbitrary foreign bytes.
+The exception must be a protocol — declared exact current fingerprint, complete
+marker validation, evidence invalidation, no gate inheritance, and a
+re-baseline only after the candidate is valid. Until then the old wedge has
+returned wearing the new guard's vestments. **Open, major.**
+
+### Standing
+
+- **DEC-092 survives as a mechanism candidate, not as an accepted decision.**
+  The authored watermark and entry comparison close F-19's original
+  between-applies blindness. The universal-rule wording, re-adopt admission,
+  multi-effect ordering, and residual comparison-to-write race require
+  amendment before the User should accept it.
+- **No silent scope narrowing was found.** `slice show SL-233` retains all five
+  objectives, affected surfaces, non-goals, and closure intent. B2 is more
+  exact, not smaller: two new specs plus SPEC-019 and SPEC-023.
+- **The whole repair diff was swept against F-1 through F-15.** F-2/F-14's
+  namespace boundary, F-3's read naming, F-5/F-9/F-11's delivery descent,
+  F-15's implementation-timed routing rewrite, and the other settled repairs
+  remain intact. The sole regression found is F-8, now carried durably as F-20.
+
+### Disposition
+
+Verified terminal: **F-16, F-17, F-18**. Contested: **F-19**. Open:
+**F-20**.
+
+`await=responder`. DEC-092 does not pass this bench as written. Let no one call
+a sampled hash an omnipotent lock, nor an exception a protocol merely because
+its name is explicit.
 
 > **HERESIS URITOR; DOCTRINA MANET**

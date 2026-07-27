@@ -338,7 +338,7 @@ response = "Restored the incumbent core-process sentence in shipped routing guid
 
 [[finding]]
 id = "F-16"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: every spec whose domain the design writes into is named in B2's descent. Observed: checkpoints create DEC/QUE/ASM through a new reserve-journal-materialise path, and SPEC-019 — which owns those kinds — is absent from B2"
 detail = """
@@ -354,7 +354,7 @@ response = "Upheld, and the case is stronger than the finding states. SPEC-019's
 
 [[finding]]
 id = "F-17"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: B2 names only entities that exist and can be amended. Observed: 'the skill contract' names nothing governed — no spec, ADR or reference doc owns a skill body — so the first phase's spec-amendment mandate points at a void"
 detail = """
@@ -375,7 +375,7 @@ response = "Verified and struck. Both citations hold: .doctrine/spec/product/003
 
 [[finding]]
 id = "F-18"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: B2's SPEC-023 amendment scope agrees with 5.5's account of the prompt pack. Observed: B2 is loose enough to read as putting install/design-prompts/ under SPEC-023, which 5.5 spends a paragraph arguing it is not"
 detail = """
@@ -393,7 +393,7 @@ response = "Accepted; the wording is now closed to the narrow reading. B2 and de
 
 [[finding]]
 id = "F-19"
-status = "answered"
+status = "contested"
 severity = "major"
 title = "Expected: the state model detects a foreign hand-edit to authored design.md on every mutating path. Observed: DEC-059's revision CAS lives inside the runtime snapshot and structurally cannot see authored bytes, and only materialise carries a guard — so apply proceeds blind"
 detail = """
@@ -412,6 +412,13 @@ Suggested repair: carry an authored design.md fingerprint in the snapshot beside
 Provenance: plan-grounding research (research/raw/plan-review-ledger-analogue.md), which recommends the two-window pattern explicitly."""
 disposition = "fixed"
 response = "Upheld in full; the hole was real and the suggested repair is taken as given. Verified the analogue first: src/review.rs:2020-2035 documents the protocol and 2090-2113 implements it — entry CAS against the stored baton hash, then a re-read pre-write CAS against the step-2 snapshot with an injectable mid-turn hook as the test seam. Verified the gap: design.md 5.3's snapshot contents carried no authored fingerprint, and 5.5 guarded only materialise. The snapshot now carries an authored watermark — the fingerprint of design.md as Doctrine last left it — beside the revision. Every mutating verb fingerprints on entry and refuses on divergence, then re-fingerprints immediately before writing and refuses rather than writes when the bytes moved during the invocation. Two boundary rules are stated: an absent design.md before first materialisation is cold, not divergent; and explicit re-adopt is the only path that re-baselines the watermark. 5.5 now says materialise records its output fingerprint AS that watermark and that every other mutating verb checks the same one. R4's mitigation names the two windows. 9.2 gains three assertions: the between-applies edit refused at entry rather than discovered later at materialise, the mid-invocation edit refused pre-write with nothing written and runtime state unmutated, and the cold-start/re-adopt boundary. Recorded as DEC-092 (status proposed — accepted truth is user-owned under DEC-062/B4, so it is not self-attested), which names the two rejected alternatives explicitly: extending DEC-059's revision, and leaning on DEC-066's per-section fingerprints. 7's roll-up carries it marked proposed. Implementation lands in the persistence phase beside the revision CAS. Committed in 20a838a7."
+
+[[finding]]
+id = "F-20"
+status = "open"
+severity = "major"
+title = "Expected: the verified live-run re-adopt path remains reachable under the watermark guard. Observed: every mutating verb entry-refuses the divergence that adopt_authored must reconcile"
+detail = "F-8 was verified after design section 5.5 made live-run re-adoption an explicit apply declaration. Repair 20a838a7 now says every mutating verb fingerprints design.md on entry and refuses when it differs from the stored watermark (design.md:181-188; DEC-092), while section 5.5 still defines adopt_authored as apply against the exact current foreign fingerprint (design.md:324-339). Apply is a mutating verb, and no admission-order exception permits adopt_authored to pass the entry refusal before marker and fingerprint validation. Expected: an explicit, narrowly scoped divergence-reconciliation path that first proves the declared current fingerprint, validates the complete marker map, and alone may rebaseline, while ordinary apply remains entry-guarded. Observed: the universal rule makes the prior F-8 penance self-refusing; weakening it informally would instead let callers launder foreign edits unless the exception and its negative tests are specified."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
