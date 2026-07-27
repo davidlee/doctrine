@@ -26,3 +26,8 @@ Option 1 is recommended. It adds a small stateless projection input, works
 across compaction and session boundaries, and avoids building a server-side
 prompt-delivery ledger. The TurnEnvelope remains present every turn because it
 contains volatile state.
+
+## Answer
+
+DEC-078 chooses option 1: stable prompt fragments use content-addressed caller
+receipts, while the dynamic TurnEnvelope is emitted on every projection.

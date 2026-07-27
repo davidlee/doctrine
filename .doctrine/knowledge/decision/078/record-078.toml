@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 192
-slug = "prompt-fragment-repetition-and-cache-receipts"
-title = "Prompt fragment repetition and cache receipts"
-record_kind = "question"
-status = "answered"
+id = 78
+slug = "prompt-projection-uses-content-addressed-fragment-receipts"
+title = "Prompt projection uses content-addressed fragment receipts"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
