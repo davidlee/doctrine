@@ -14,7 +14,7 @@ ref   = "SL-231"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected every rendered untrusted field to pass escape_hostile (EX-5); observed uid/recorded_at/control-uid rendered raw, re-opening terminal escape and row injection"
 detail = """
@@ -82,7 +82,7 @@ response = "Accepted, verified independently against the code and reproduced end
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected a tolerant diagnostic for a malformed uid; observed a panic — shard_dir byte-slices a UTF-8 uid, crashing show/supersede/retract"
 detail = """
@@ -137,7 +137,7 @@ response = "Accepted, reproduced directly against the built binary at 0fe9572b o
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected reads to expose record and control diagnostics (design 2.4, 4); observed all diagnostics discarded at every CLI site and rendered nowhere"
 detail = """
@@ -190,7 +190,7 @@ response = 'Accepted. Verified all six discard sites and confirmed by grep with 
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected each VT test to assert the behaviour its name claims; observed three that assert a tautology, the opposite, or only a classification"
 detail = """
@@ -263,7 +263,7 @@ response = "Accepted, all three bodies read and confirmed. Instance (2) carries 
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected one source of truth for the facet field set; observed 33 fields hand-enumerated in three places, each failing silently and differently on drift"
 detail = """
@@ -312,7 +312,7 @@ response = "Accepted as a real latent hazard; routed to IMP-329 rather than fixe
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected list and search to share one pipeline; observed 43 lines duplicated verbatim, differing only in the search argument and the empty-result string"
 detail = """
@@ -352,7 +352,7 @@ response = "Accepted, read side by side and confirmed: 43 identical lines differ
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected no parallel implementation; observed dead Service::load_all_resolved re-implementing query(Projection::History) under a PHASE-04 justification the design excludes"
 detail = """
@@ -405,7 +405,7 @@ response = "Accepted. Confirmed zero references in src and tests, confirmed the 
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected the Service doc's injected-time/identity contract to hold; observed record_supersession and record_retraction calling now_v7 and now_timestamp internally"
 detail = """
@@ -462,7 +462,7 @@ response = "Accepted. Confirmed the doc comment and the two method bodies contra
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected terminal views to escape all control characters (design 2.4); observed DEL (U+007F) passed through raw by escape_hostile"
 detail = '''
@@ -509,7 +509,7 @@ response = "Accepted, reproduced: the raw DEL byte reaches the terminal through 
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected test inputs to span the classes the contract constrains; observed limit boundaries, multi-byte-at-boundary, and most control chars unexercised"
 detail = '''
@@ -575,7 +575,7 @@ response = 'Accepted, with the scope of "now" stated precisely. Classes 1 and 2 
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected publish_complete to clean its temp on every exit path; observed a write_all failure returning without removing it"
 detail = """
