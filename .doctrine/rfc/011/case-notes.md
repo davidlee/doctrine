@@ -317,3 +317,31 @@ surface it at plan time instead of at dispatch time.
 - Instructing an external reviewer to use `./target/debug/doctrine` rather than the
   PATH binary has to be restated in every dispatch prompt; it is project canon
   (AGENTS.md) that the subprocess arm cannot see.
+
+[design; SL-232-rv314-round2-a1b2]
+Adversarial round on an amended design section, external reviewer (codex) on a
+warm thread. Cost/efficiency observations:
+
+- **Warm-thread continuation was the right call and cheap.** The handover named
+  the thread id; `codex-reply` re-read the changed file itself rather than being
+  fed the prose. One prompt, three reproduced findings. A cold start would have
+  paid for the whole design + probe corpus again.
+- **Reproducing the reviewer's probes cost ~3 short bash calls and was worth it**
+  — but note the asymmetry: verifying a *positive* claim (here, a false-attestation
+  route) is cheap because the counterexample is self-contained. Verifying the
+  reviewer's "limbs that held" list is not, and I did not attempt it. That is an
+  unpriced trust surface in every external-review round: acquittals are accepted
+  on assertion while convictions are re-derived. Worth naming as a standing
+  posture rather than rediscovering each round.
+- **Ledger `raise` detail fields are carrying full probe transcripts.** Three
+  raises here ran 1.5-2.5k chars each of `--detail`. That is the right place for
+  them (durable, queryable) but the shell-quoting cost is real: every `'` in a
+  pathspec like `:(exclude)` had to be hand-escaped inside a single-quoted bash
+  heredoc-less argument. A `--detail-file` / stdin form on `review raise` would
+  remove a whole class of quoting risk on the most evidence-dense verb.
+- **`review show` prints the prose companion but not the findings table.** To read
+  the 14 findings' state I had to grep the sister toml directly, which the
+  guardrails explicitly discourage ("read entities via show, not raw files").
+  `review show` synthesising the finding roll, or a `review findings <RV>` verb,
+  would close a real read-path gap — this cost two exploratory `--help` calls and
+  a raw-file read that the boot rules told me not to do.
