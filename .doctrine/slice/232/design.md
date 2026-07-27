@@ -6,6 +6,36 @@
 
 ## 0. Provenance and status — READ FIRST
 
+> ## ⚠ STALE AS OF 2026-07-27 — THIS DOCUMENT CONTRADICTS `slice-232.md`
+>
+> A design round has taken decisions that this text does not carry. **Where this
+> document and `slice-232.md` / `notes.md` § Harvest disagree, they are right and
+> this is wrong.** It is retained un-rewritten so the replacement is authored
+> against the reasoning that failed, not from scratch — the same discipline § 5.5
+> already applies to I9 and E7.
+>
+> **Do not implement from this document. Do not review it as canon.**
+>
+> | Section | Status |
+> |---|---|
+> | § 5.2 the ordered algorithm | **replaced wholesale** by DEC-053 (index-first). Steps 1–7, the shape rule, the whole-component prefix rule, and the `realpath` oracle are all retired. |
+> | § 5.4 D11 | **falsified** — "`validate` keeps its existing raw seam" cannot survive objective 7 (DEC-054). Its four-defect enumeration is incomplete: the `None`-swallow is a fifth and the only non-conformant one. |
+> | § 5.5 I9 | falsified as written *and* superseded: it must be re-expressed as an **outcome** property, not a pre-emission one. |
+> | § 5.5 E13 | basis dissolved — aborts are now prevented lexically, so "git aborts, so there is no verdict" no longer justifies a refusal. Re-justify or fold into E7. |
+> | § 6 OQ-2, OQ-A | **answered** (`yes` / `no`). See QUE-175 and `slice-232.md`. |
+> | § 8 R-A | discharged in method; narrowed to new risks R-E / R-F. R-G added. |
+> | § 9 the T-matrix | **pins an algorithm that no longer exists.** Needs rebuilding, not editing. |
+>
+> Authoritative now: **`slice-232.md`** (scope, seven objectives), **`notes.md`
+> § Harvest** (produced / learned / open), **DEC-053**, **DEC-054**, **QUE-175**,
+> and **`probes/`** — the executable evidence, re-runnable, with falsifiers
+> registered in-header.
+>
+> Still true and still load-bearing below: § 1–§ 4 (the problem, current state,
+> forces, principles), the F-18 magic-prefix rule and I8, F-13's `--allow-dirty`
+> re-capture, F-15's uid-directory base, and DEC-020's ruling that
+> non-contribution is reported and never classified.
+
 **This design is inherited, not authored here, and it is NOT locked.**
 
 Split out of SL-230 by **DEC-027** at RV-307 round 8. The text below is the
