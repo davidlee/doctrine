@@ -108,6 +108,10 @@ As answers land, capture what should outlive the session via `/knowledge`: an
 unresolved question → QUE, a locked design choice → DEC, an assumption the
 design carries → ASM.
 
+If the conversation hinges on document-local acronyms (OQ-17, F-4): don't
+assume the user has them memorized. Introduce them qualified by the ID of the
+containing artifact, and provide a brief synopsis if not obvious from context.
+
 Once accepted, ensure the slice scope (`slice-nnn.md`) is consistent with and
 reflects your current shared understanding before proceeding.
 
