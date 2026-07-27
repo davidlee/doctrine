@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 191
-slug = "v1-delivery-boundary-for-design-prompts-and-skill-adapters"
-title = "V1 delivery boundary for design prompts and skill adapters"
-record_kind = "question"
-status = "answered"
+id = 77
+slug = "v1-ships-a-thin-design-skill-and-small-prompt-pack"
+title = "V1 ships a thin design skill and small prompt pack"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

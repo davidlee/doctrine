@@ -31,3 +31,9 @@ Options:
 Option 1 is recommended. It is the minimum boundary that can test adherence
 while respecting DEC-064 and SPEC-023; option 2 creates a parallel composition
 mechanism, and option 3 cannot demonstrate that agents adopt the new protocol.
+
+## Answer
+
+DEC-077 chooses option 1 with a deliberately small decomposition: one thin
+active skill, one invariant stage hymn, and a few obligation-selected Markdown
+fragments. V1 does not multiply content by role, model, or user override.
