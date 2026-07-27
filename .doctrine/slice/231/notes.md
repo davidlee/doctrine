@@ -6,8 +6,9 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-28 · all five phases completed; verify-vt green on
-PHASE-01/02/03/05, PHASE-04 pending its derived registry row · b5428c47
+fresh-as-of: 2026-07-28 · all five phases completed, pre-conclude · code tip
+b5428c47 · dispatch/231 20e1556fe · edge cf062dfae · verify-vt exit 0 (PASS on
+PHASE-01/02/03/05; PHASE-04's three rows pending their derived registry row)
 
 ### Produced
 
