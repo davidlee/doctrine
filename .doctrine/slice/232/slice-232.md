@@ -182,7 +182,7 @@ Only the first two unify (objective 7); this objective is the third alone:
 |---|---|---|
 | ISS-257 — non-ancestor anchor renders as clean | *can I determine drift?* | objective 7 |
 | F-36 — no contribution probe | *can I observe this evidence?* | objective 7 |
-| R7 / IMP-317 — raw, `paths`-gated scope seam | *which paths do I ask about?* | here |
+| R7 — raw, `paths`-gated scope seam | *which paths do I ask about?* | (a) here · (b) IMP-317 |
 
 - `validate`'s staleness check and `retrieve::git_facts` both keep a raw
   `scope.paths`-gated seam (R7, F-19/F-24/F-27/F-28). They ask a *historical*
@@ -195,11 +195,30 @@ Only the first two unify (objective 7); this objective is the third alone:
   is a fifth, the largest by population, and the only one that is
   **non-conformant** against amended SPEC-007 rather than merely weak. Both are
   restated in the design, not silently inherited.
-- Adoption is a **dataflow change**, not a call-site swap: `collect_all` unions
-  `items/` and `shipped/`, so a row's origin is unrecoverable from its uid (F-28).
-- Gated on **QUE-175 / OQ-2**: does claim-surface drift feed retrieve-side
-  ranking, or only `validate`? Answer it here. Routed as **IMP-317**, to be closed
-  `wont-do` if the answer is no.
+**OQ-2 / QUE-175 is answered `yes`, on measurement** (HEAD `9f8cf40b`). Of 389
+memories, 59 are attested; **30** are path-scoped (commit mode, ranked by drift)
+and **13 are glob-only** — 30% of scoped-and-attested memories ranked on a 30-day
+timer instead of by commits touching their evidence, and they scope precisely the
+fast-moving surfaces (`src/**`, `plugins/**`, `tests/**`, `src/worktree/**`,
+`.claude/skills/dispatch*/**`). IMP-317 therefore does **not** close `wont-do`,
+and R7 is not restated as permanent.
+
+The measurement also **splits IMP-317**, which bundled two changes of very
+different cost:
+
+- **(a) taken here** — pass `scope.globs` alongside `scope.paths` and neutralise
+  pathspec magic before either reaches `commits_touching`. No `dir`, no
+  provenance, no `collect_all` change: a two-argument change that fixes the 13
+  mis-moded memories and closes the F-18 injection route into the historical
+  seam. It rides objective 7, which is already at those call sites.
+- **(b) routed to IMP-317** — own-directory drift in the historical seam. This is
+  the limb that needs item-directory provenance threaded through `collect_all`
+  and `memory_health_findings`: a dataflow change, not two arguments (F-28).
+
+**The F-27 constraint governs (a) and survives DEC-053 unchanged**: `verify`'s
+surface must not be reused, because the two verbs differ on *history versus now*,
+not on which oracle resolves. (a) is deliberately *not* a shared surface — it
+widens the raw seam's input and neutralises it, and resolves nothing.
 
 ### 5. SPEC-007 reconciliation — REV-034
 
@@ -307,8 +326,10 @@ plainly because the title does not say so.
   one for the 67 rows that were previously invisible.
 - **OQ-A — answered `no`** (objective 3): the declared boundary is an authored
   input; IMP-318 and QUE-173 are machine-written outputs. Sequenced, not merged.
-- **OQ-2 / QUE-175** — does claim-surface drift feed retrieve-side ranking, or
-  only `validate`? Gates objective 4 and IMP-317. **This slice must answer it.**
+- **OQ-2 / QUE-175 — answered `yes` on measurement** (objective 4): 13 of 43
+  scoped-and-attested memories are glob-only and ranked by calendar rather than
+  drift. IMP-317 splits — (a) globs + magic-neutralisation taken here, (b) the
+  own-directory dataflow change routed. QUE-175 is settled by this slice.
   (Cited by the design's own id; the pre-rescope text called this `OQ-B`, which
   collided with `design.md` § 6's `OQ-B` — a different question.)
 - **OQ-B (design § 6)** — `validate`'s contribution mechanism and its
