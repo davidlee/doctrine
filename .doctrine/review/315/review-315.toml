@@ -304,7 +304,7 @@ response = "Added install/routing-process.md as an exact design target and imple
 
 [[finding]]
 id = "F-15"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected: shipped guidance describes commands that exist. Observed: d8a4cf66 landed a core-process line teaching 'design start' into the embedded boot source at design stage — the command does not exist, and SL-233 has no plan"
 detail = """
@@ -335,6 +335,75 @@ Second-order harm is the one that stings: an agent meeting `error: unrecognized 
 Penance: restore the incumbent Core process sentence in `install/routing-process.md` on `edge` now, and move the canonical rewrite into the implementation phase that ships the `doctrine design` family — the design-target selector added in d8a4cf66 already makes that phase's edit conformant. Retain §5.5's home and §9's boot/guidance assertion as authored intent; they are correct and should stay. Add to that phase's exit criteria the full refresh ritual, since editing an `install/` asset is not self-delivering: `cargo build` to re-embed, `doctrine boot`, then `doctrine boot --check` green, and `doctrine install` to refresh the projected `.doctrine/routing-process.md` (currently stale from 02:54 and itself divergent from the embed — it omits `reconcile` from the close sequence). Verification: at every commit before that phase, `doctrine boot` output names only commands the built binary answers."""
 disposition = "fixed"
 response = "Restored the incumbent core-process sentence in shipped routing guidance. The design retains the exact target and home but now assigns its rewrite to the implementation phase that first makes the design command family executable, with cargo build, boot regeneration, boot check, install projection refresh, and built-command acceptance as exit criteria. The current binary and all three current guidance copies now agree; boot check and the quick gate pass. Committed in 18177655."
+
+[[finding]]
+id = "F-16"
+status = "open"
+severity = "major"
+title = "Expected: every spec whose domain the design writes into is named in B2's descent. Observed: checkpoints create DEC/QUE/ASM through a new reserve-journal-materialise path, and SPEC-019 — which owns those kinds — is absent from B2"
+detail = """
+B2 reads 'A narrow product and technical contract descend RFC-021; SPEC-023 and the skill contract are amended only where their existing ownership applies.' SPEC-019 owns the epistemic record kinds (DEC/QUE/ASM): their lifecycles, typed facets, evidence structure, prefix-to-kind resolution and relation seam. It does NOT own record creation — 'knowledge new' is the only sanctioned creation path today.
+
+DEC-083/086 introduce a second creation path: reserve a canonical id through the reservation backend, journal it, then materialise authored bytes. That path writes records into SPEC-019's domain while SPEC-019 remains silent that it exists. The result is a governance gap in which record provenance is ambiguous — an auditor reading SPEC-019 finds no sanction for how these records came to be.
+
+Minimum repair: amend SPEC-019 with an acknowledgement that managed design runs are a legitimate provenance source for DEC/QUE/ASM, created through a reserve-then-journal protocol rather than the interactive verb. No mechanism ownership transfers; the mechanism belongs to the new tech spec. Then add SPEC-019's path to B2 and to the first phase's selector set.
+
+Provenance: plan-grounding research (SL-233 research/raw/plan-spec-boundary.md), not the original inquisition sweep."""
+
+[[finding]]
+id = "F-17"
+status = "open"
+severity = "major"
+title = "Expected: B2 names only entities that exist and can be amended. Observed: 'the skill contract' names nothing governed — no spec, ADR or reference doc owns a skill body — so the first phase's spec-amendment mandate points at a void"
+detail = """
+B2 commits the descent to amending 'SPEC-023 and the skill contract ... where their existing ownership applies'. There is no skill contract to amend. Verified in source:
+
+  .doctrine/spec/product/003/spec-003.md:50 — PRD-003 'does not own *what a skill says* (the skill bodies themselves)'
+  .doctrine/spec/tech/010/spec-010.md:55 — SPEC-010 reads only name/description frontmatter, 'everything else is opaque payload'
+
+The eight-state workflow machine in plugins/doctrine/skills/design/SKILL.md is ungoverned prose. DEC-077's rewrite of it into a thin adapter is therefore an IMPLEMENTATION artifact change, not a spec amendment.
+
+Why this is major rather than cosmetic: the first phase allocates spec entities and appends selectors, and both phase ids and selectors are immutable append-only. A phase that believes it must amend a skill contract has two bad exits — mint a spurious spec for skill-body semantics, or amend SPEC-010, which owns distribution and explicitly treats bodies as opaque. Either pollutes an existing boundary in a way a later slice must unpick.
+
+Repair: strike 'and the skill contract' from B2; classify plugins/doctrine/skills/design/SKILL.md as a source target (it already is one) and state that its rewrite is implementation gated by the new PRD's thin-adapter requirement.
+
+Provenance: plan-grounding research (research/raw/plan-spec-boundary.md), claims independently verified against both spec bodies."""
+
+[[finding]]
+id = "F-18"
+status = "open"
+severity = "minor"
+title = "Expected: B2's SPEC-023 amendment scope agrees with 5.5's account of the prompt pack. Observed: B2 is loose enough to read as putting install/design-prompts/ under SPEC-023, which 5.5 spends a paragraph arguing it is not"
+detail = """
+5.5 is unambiguous: the pack is 'a closed, embedded, Doctrine-owned design content store, not a second general selector algebra', deliberately forgoing cascade seal integrity, replaces validation and user overrides. The rejected-alternatives paragraph argues the same boundary from KNOWN_STAGE_LABELS being a closed lifecycle vocabulary.
+
+B2's 'SPEC-023 ... amended where existing ownership applies' does not say which part. Read narrowly it means the sealed stage/design hymn entry only — correct, and genuinely within SPEC-023's ownership of sealed stage-band hymns. Read broadly it sweeps in the four process fragments, which would govern a non-cascade mechanism through the cascade spec and pollute the very boundary 5.5 defends.
+
+This is minor because the design already contains the correct answer; it is an internal inconsistency of wording, not a wrong decision. But the first phase acts on B2, not on 5.5.
+
+Repair: make B2 explicit — SPEC-023 gains exactly one entry, stage/design in [hymns].seal; the prompt pack is governed by the new technical spec.
+
+Provenance: plan-grounding research (research/raw/plan-spec-boundary.md)."""
+
+[[finding]]
+id = "F-19"
+status = "open"
+severity = "major"
+title = "Expected: the state model detects a foreign hand-edit to authored design.md on every mutating path. Observed: DEC-059's revision CAS lives inside the runtime snapshot and structurally cannot see authored bytes, and only materialise carries a guard — so apply proceeds blind"
+detail = """
+Two mechanisms exist and neither covers the apply path:
+
+  DEC-059 — a monotonic revision inside .doctrine/state/slice/NNN/design.toml, compared-and-swapped per submission. It is a runtime-file counter. A user editing design.md does not touch it, so it cannot move.
+  DEC-066 — section fingerprints binding evidence to subject content, so material change invalidates affected clearance. That is evidence invalidation, a different job from write safety, and it is evaluated against sections the run already knows about.
+  DEC-072 — materialise records its output fingerprint and refuses to overwrite foreign edits. Correct, but scoped to materialise.
+
+So a hand-edit landing between two applies is invisible to the run until someone materialises. In the interval the run continues to advance stages and clear gates against a design.md that no longer says what the snapshot believes it says.
+
+The review ledger already solved this shape and is worth copying rather than reinventing. with_turn (src/review.rs:2025-2133) takes a content hash of the authored bytes at entry, compares it against the stored baton hash and heals-and-bails on divergence, then RE-READS and re-hashes immediately before writing — a two-window guard that catches an edit landing before the invocation and one landing during it. Its crash-between-writes case is tested at review.rs:3658.
+
+Suggested repair: carry an authored design.md fingerprint in the snapshot beside the revision, check it at entry and again pre-write on every mutating verb, and refuse rather than silently proceed. Note that DEC-066's per-section fingerprints do not substitute — they answer 'which evidence died', not 'may I write at all'.
+
+Provenance: plan-grounding research (research/raw/plan-review-ledger-analogue.md), which recommends the two-window pattern explicitly."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
