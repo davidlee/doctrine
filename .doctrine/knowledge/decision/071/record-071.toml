@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 71
+slug = "claim-measurement-inherits-captures-stable-checkout-boundary"
+title = "Claim measurement inherits capture's stable-checkout boundary"
+record_kind = "decision"
+status = "accepted"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["memory", "verify", "claim-surface"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-069's dirt observation runs three git probes in sequence. They are not an atomic snapshot: a probe demonstrated leg 1 reading clean, the worktree mutating, then legs 2 and 3 reading clean, while the final state was dirty. The over-approximation invariant cannot be stated unconditionally against a checkout that moves underneath it."
+choice       = "Accept the existing capture() boundary. The invariant is scoped to a checkout stable for the duration of the probes, and the design says so explicitly rather than claiming an atomicity it cannot deliver. No locking, no snapshotting, no re-probe loop."
+alternatives = ["Snapshot the index or take a lock for the duration. Rejected -- it would take `.git/index.lock` on the clean path, destroying I2, which is the invariant protecting concurrent doctrine processes from lock contention", "Re-probe and compare until two passes agree. Rejected -- unbounded on an actively edited tree, and it converts a stated assumption into a latency cliff without closing the window"]
+rationale    = "The window is pre-existing, not introduced: capture() already runs `git diff HEAD`, `untracked_fingerprint` and `diff-index --cached` sequentially at src/git.rs:2230-2239, so every existing attestation carries the same boundary. DEC-069 widens the pathspec domain, not the temporal one. Naming an inherited boundary honestly is the design's own standard -- R-E and R-F are carried the same way, as measured-and-unclosed rather than silently assumed."
+consequences = ["The replacement invariant carries an explicit stable-checkout precondition rather than reading as unconditional", "A deterministic test seam or an explicitly stated assumption is required in the test matrix, so the boundary is pinned rather than forgotten", "The boundary is inherited by any future consumer of the dirt observation, and must not be cited as evidence that the observation is atomic"]
+decided_by   = "david"
+decided_on   = "2026-07-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = ["Probed on git 2.54.0: leg 1 clean, mutate, legs 2 and 3 clean, final state dirty", "capture() at src/git.rs:2230-2239 already sequences the same three probes, so the window predates this slice"]
+contradicts = []
+notes       = ["Bounds DEC-069; see DEC-070 for the evidence domain"]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-232"

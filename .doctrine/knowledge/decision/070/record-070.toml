@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 70
+slug = "claim-evidence-domain-excludes-ignored-untracked-files"
+title = "Claim evidence domain excludes ignored untracked files"
+record_kind = "decision"
+status = "accepted"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["memory", "verify", "claim-surface"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-069's measurement surface emits declared scope entries as pathspecs against an untracked-enumeration leg. `git ls-files --others` takes `--exclude-standard` or not, and the two answers differ: with it, a declared entry matching an ignored-but-present file reads clean on all three legs; without it, git returns the file. DEC-069 is therefore undefined until the evidence domain is named."
+choice       = "The claim evidence domain is TRACKED OR NON-IGNORED COMMIT-ELIGIBLE evidence -- `--exclude-standard` stays on. An ignored-but-present file matching a declared scope entry is not claim evidence and does not block attestation. The domain is stated explicitly in the over-approximation invariant rather than left implicit in a flag."
+alternatives = ["Count every filesystem object matching a declaration, dropping `--exclude-standard`. Refuted on measurement, not preference: 19 `.doctrine`-scoped memories match 2,983 ignored files, and corpus-wide 39 memories match 15,319. Verification would be near-universally blocked by build output and derived state", "Leave it implicit in the flag. Rejected -- it is precisely the kind of unstated domain boundary that produced RV-314 F-1 and F-10"]
+rationale    = "An attestation names a commit. A file git is configured never to commit cannot be evidence for a claim about a commit, so excluding it is a definition of the domain rather than a concession within it. The three tiers make this principled: derived and runtime state are gitignored by construction, so ignoring them at verify time agrees with the storage rule rather than working around it. Where the boundary genuinely bites -- a declared entry whose evidence is legitimately unobservable -- `scope.unobservable` is the sanctioned declaration, which keeps the boundary falsifiable rather than silent."
+consequences = ["The over-approximation invariant is bounded by a named domain: over-approximate WITHIN tracked-or-non-ignored evidence, never under-approximate within it", "A test pinning the ignored-untracked boundary is required whichever way it fell; it is now a normative property, not an implementation detail", "E8 gains force: a gitignored but TRACKED path stays evidence, because ignore rules do not bind tracked files. The two rules are consistent -- tracked-ness dominates ignore-ness"]
+decided_by   = "david"
+decided_on   = "2026-07-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = ["Measured at HEAD 743e7fe61: including ignored files, 19 `.doctrine`-scoped memories match 2,983 files; corpus-wide 39 memories match 15,319", "Probed on git 2.54.0: a declared `ignored/**` entry returns zero on all three legs with `--exclude-standard`, and the file without it"]
+contradicts = []
+notes       = ["Bounds DEC-069; see DEC-071 for the atomicity boundary"]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-232"

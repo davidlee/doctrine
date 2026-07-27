@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 69
+slug = "measurement-surface-is-selectors-plus-uncovered-symlink-closure"
+title = "Measurement surface is selectors plus uncovered symlink closure"
+record_kind = "decision"
+status = "accepted"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["memory", "verify", "claim-surface"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-232 built verify's claim-measurement surface from the git index (DEC-053, index-first). RV-314 F-1/F-10 proved that construction admits false attestation: real evidence absent from the index is never probed. RV-314 F-11 separately showed the `dirty_under -> bool` factoring cannot serve `capture_with`, which needs three fingerprints."
+choice       = "Separate the two questions the index expansion was answering. CONTRIBUTION REPORTING stays index-first, exactly as DEC-053 specifies. MEASUREMENT uses a distinct surface: the canonical uid directory, plus every declared scope entry emitted magic-prefixed by field of origin, plus only those resolved symlink targets not already covered by their originating selector. Ordinary concrete index matches are NOT added -- the raw selector already measures them. Probed by a three-leg dirt observation (tracked worktree-vs-HEAD, untracked enumeration, index-vs-HEAD) mirroring capture()'s existing probes, with untracked fingerprinting deferred behind an is_dirty() projection."
+alternatives = ["Union the expansion with `ls-tree HEAD` -- still needs raw selectors for untracked additions and index state, and must resolve symlinks across a second tree; not simpler", "Narrow to declared selectors with expansion advisory-only -- loses I7, since git does not traverse symlinks in pathspecs and agents address memories by key", "Full union of selectors and the entire index expansion -- equally complete but passes thousands of concrete pathspecs back to git; the `.doctrine/**` resolve alone is 7,670 matches, an argv-size hazard on every verify"]
+rationale    = "I9 was polarised backwards: it asserted SOUNDNESS (nothing false enters the surface) where the false-attestation hazard is COMPLETENESS (real evidence omitted, so nothing probes it). Index-first was designed to answer a reporting question and was reused to build a measurement surface -- two questions, one instrument, which is the error the design's own convergence section names four other times. Enumeration of the 18-state HEAD/index/worktree cube confirms the three legs detect all 16 dirty states; the decisive case is HEAD=A/index=B/worktree=A, where only the index leg fires. The defect was never the legs -- it was the pathspec domain."
+consequences = ["I9 is replaced by an over-approximation invariant: the measurement surface may over-approximate the claim, never under-approximate it. Over-measuring yields a recoverable refusal; under-measuring yields an unrecoverable false attestation", "I7 must be restated: a matched symlink is measured itself, and its eligible target closure is measured additionally", "I8 survives only if magic-prefixing is applied on ALL THREE legs, including `ls-files --others`, which the design's original demonstration never exercised", "RV-314 F-7's lexical guard repair becomes a PREREQUISITE, not a neighbour: an unguarded derived target returns exit 128 on all three legs, tripling the failing command surface", "Change is not confined to verify -- the richer observation touches capture(), so I1's byte-identity tests stay mandatory", "verify tightens: untracked evidence under a declared glob now refuses where index-first ignored it. R6 must absorb this"]
+decided_by   = "david"
+decided_on   = "2026-07-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = ["RV-314 F-1, F-10, F-11 -- the three routes, each reproduced on git 2.54.0", "18-state HEAD/index/worktree cube enumerated; 16 dirty states, all three legs required", "Index-lock probe: all three legs are read-only and exit 0 with .git/index.lock held, so I2 survives", "I8 injection probe: `:(literal):(exclude)<uid dir>` neutralised on tracked, staged and untracked legs alike"]
+contradicts = ["DEC-053 as applied to MEASUREMENT. DEC-053's motivation is untouched and its rule stands for contribution reporting -- no return of realpath, character-based shape classification, or the whole-component-prefix rule"]
+notes       = ["Replaces design.md I9 as written; see DEC-070 for the evidence domain and DEC-071 for the atomicity boundary", "E15/R-H is unchanged by this decision: a path reachable only through a symlinked directory matches nothing in HEAD or the index, and `ls-files --others` does not descend symlinked directories"]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-232"
