@@ -1,0 +1,102 @@
+id = 233
+slug = "cli-managed-design-runs-and-inquiry-maps"
+title = "CLI-managed design runs and inquiry maps"
+status = "proposed"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "plugins/doctrine/skills/design/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "install/hymns/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/*.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/spec/product/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = ".doctrine/spec/tech/**"
+intent = "scope-relevant"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-005"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-009"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-011"
+
+[[relation]]
+label = "governed_by"
+target = "POL-002"
+
+[[relation]]
+label = "governed_by"
+target = "STD-001"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "existing DEC QUE and ASM durable checkpoint semantics"
+target = "SPEC-019"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "prompt-fragment composition and resolution boundary"
+target = "SPEC-023"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "immutable attributed session-ledger precedent"
+target = "SPEC-024"
+
+[[relation]]
+label = "related"
+target = "RFC-021"
+
+[[relation]]
+label = "related"
+target = "SL-231"
+
+[[relation]]
+label = "related"
+target = "SL-055"
+
+[[relation]]
+label = "related"
+target = "IMP-324"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.
