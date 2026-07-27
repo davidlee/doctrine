@@ -1,0 +1,43 @@
+memory_uid = "mem_019fa18161f47651af7687d8dccbbc67"
+memory_key = "mem.pattern.harness.grep-negative-needs-positive-control"
+schema_version = 1
+lifespan = "semantic"
+memory_type = "pattern"
+status = "active"
+title = "A negative grep result is untrustworthy without a positive control"
+summary = "`grep` in this harness is a ugrep wrapper with `-I`, which silently skips binary files — so a file containing one stray control byte matches nothing, and even `grep -c` prints nothing rather than 0."
+created = "2026-07-27"
+updated = "2026-07-27"
+
+[scope]
+paths = []
+globs = []
+commands = ["grep"]
+tags = ["grep", "verification", "harness", "footgun", "false-negative"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "1dac0ce4ec6c5ef98863186ac32bfa5a14575c5a"
+ref_name = "refs/heads/edge"
+checkout_state_id = "be30b73f8971204dfe5910802f8b54cae2011a5bfa8a3bf4746ee09ec684e68a"
+base_commit = "a514514ebbbe108c41ddc7c222778430bd6d4f48"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
