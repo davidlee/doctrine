@@ -1,0 +1,41 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 92
+slug = "authored-watermark-guards-the-authored-tier"
+title = "Authored watermark guards the authored tier"
+record_kind = "decision"
+status = "proposed"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["design-run", "state-model", "concurrency", "authored-tier"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "DEC-059's revision is a counter inside the gitignored runtime snapshot; it cannot move when a user hand-edits authored design.md. DEC-072 guards only materialise. So an edit landing between two applies is invisible while the run keeps advancing stages and clearing gates against prose that no longer says what the snapshot believes."
+choice       = "Carry an authored watermark — the fingerprint of design.md as Doctrine last left it — in the runtime snapshot beside the revision. Every mutating verb checks it on entry and re-checks immediately before writing, refusing rather than proceeding. Only explicit re-adopt re-baselines it."
+alternatives = [
+  "Extend DEC-059's revision to cover authored bytes — rejected: it is a runtime-file counter a foreign editor never touches.",
+  "Rely on DEC-066 per-section fingerprints — rejected: they answer which evidence died, not whether a write is permitted, and are evaluated only against sections the run already knows about.",
+  "Guard at materialise only (status quo, DEC-072) — rejected: detection arrives after the run has already cleared gates against stale prose.",
+]
+rationale    = "The review ledger already solved this shape: src/review.rs::with_turn takes an entry CAS against the stored hash and a pre-write CAS against a re-read, catching an edit landing before the invocation and one landing during it. Copying a tested two-window guard beats inventing a third state-model mechanism."
+consequences = [
+  "The runtime snapshot gains one field; SL-233 phase 3 (persistence) owns it.",
+  "Every mutating design verb gains an entry and pre-write check — a refusal path to test, not a merge path.",
+  "An absent design.md before first materialisation must be treated as cold, not divergent.",
+]
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-233"

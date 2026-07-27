@@ -171,10 +171,23 @@ flattens:
 - fingerprinted draft sections;
 - content-bound review attestations and runtime findings;
 - prompt-fragment receipts;
-- recoverable checkpoint intent.
+- recoverable checkpoint intent;
+- the authored watermark — the fingerprint of `design.md` as Doctrine last left
+  it.
 
 Writes use atomic sibling replacement. Unknown schema versions and stale
-revisions are refused. Exact procedural resume depends on this file; after its
+revisions are refused. The revision guards runtime writers against each other
+and structurally cannot see the authored tier, so the watermark guards that
+tier separately: every mutating verb fingerprints `design.md` on entry and
+refuses when it diverges from the watermark, then re-fingerprints immediately
+before writing and refuses rather than writes when the bytes moved during the
+invocation. The two windows catch an edit landing before the invocation and one
+landing during it — the shape `src/review.rs::with_turn` already runs for the
+review ledger. An absent `design.md` before first materialisation is cold, not
+divergent. Explicit re-adopt is the only path that re-baselines the watermark;
+no verb silently adopts a foreign edit, and DEC-066's per-section fingerprints
+do not substitute — they answer which evidence died, not whether a write is
+permitted. Exact procedural resume depends on this file; after its
 loss Doctrine reconstructs only what authored slice prose and linked knowledge
 can support (DEC-057).
 
@@ -226,8 +239,9 @@ forward does not require ceremonial replay of every command, but every
 applicable cumulative gate must again hold against current content (DEC-067).
 
 Draft sections are runtime records with stable ID, order, title, body, and
-fingerprint. `materialise` records its output fingerprint and refuses to
-overwrite foreign edits. Its output carries unobtrusive stable-section-ID
+fingerprint. `materialise` records its output fingerprint as the §5.3 authored
+watermark and refuses to overwrite foreign edits; every other mutating verb
+checks that same watermark rather than proceeding blind. Its output carries unobtrusive stable-section-ID
 comments. After a human edit, an explicit re-adopt declaration through `apply`
 may import the exact current authored fingerprint into the same live run.
 Doctrine maps existing markers, re-fingerprints changed sections, preserves
@@ -375,8 +389,19 @@ Expected implementation homes are:
 - `publication/manifest.toml` for explicit library addresses for the sealed
   invariant hymn and four process fragments, satisfying the existing
   unprojected-install-asset reachability invariant;
-- new/amended product and technical specs, including the applicable SPEC-023
-  and skill-contract boundaries;
+- one new product spec and one new technical spec descending RFC-021, plus two
+  narrow amendments within existing ownership: SPEC-023 gains exactly one entry
+  — `stage/design` in `[hymns].seal` — and SPEC-019 gains an acknowledgement
+  that a managed design run is a legitimate provenance for DEC/QUE/ASM records,
+  created through the reserve-then-journal protocol of DEC-083/DEC-086 rather
+  than the interactive `knowledge new` verb. Neither amendment carries
+  mechanism: the prompt pack and the reserved-materialisation seam are owned by
+  the new technical spec. No skill contract is amended, because no
+  specification owns a skill body — PRD-003 disclaims *what a skill says*, and
+  SPEC-010 reads only `name`/`description` and treats the remainder as opaque
+  payload — so DEC-077's rewrite of `plugins/doctrine/skills/design/SKILL.md`
+  is implementation against the source target already listed above, gated by
+  the new product spec's thin-adapter requirement;
 - focused unit/integration tests, including
   `tests/e2e_claude_install.rs` for installed skill/asset distribution and
   `tests/architecture_layering.rs` to classify the new `design_run` module;
@@ -407,9 +432,11 @@ The first authored plan phase (assigned its immutable `PHASE-NN` ID during
 It allocates the exact product and technical specification entities, then
 immediately adds their exact `.doctrine/spec/product/<NNN>/**` and
 `.doctrine/spec/tech/<NNN>/**` paths as `design-target` selectors before
-editing either body. This is the narrow bootstrap in place of a corpus-wide
-spec target; the phase exits only when conformance reports no undeclared spec
-edits.
+editing either body. The descent is exactly four entities — two new, and the
+two amendments named above — so the phase also appends SPEC-019's and
+SPEC-023's paths before touching them. This is the narrow bootstrap in place of
+a corpus-wide spec target; the phase exits only when conformance reports no
+undeclared spec edits.
 
 ## 6. Open Questions & Unknowns
 
@@ -472,6 +499,10 @@ edits.
   materialising authored bytes.
 - **DEC-088:** accepted checkpoints require a content-bound user-acceptance
   attestation; semantic payloads cannot self-declare accepted status.
+- **DEC-092** *(proposed — awaiting user acceptance)*: an authored watermark in
+  the runtime snapshot guards the authored tier, checked at entry and again
+  pre-write on every mutating verb. DEC-059's revision cannot see authored bytes
+  and DEC-066's section fingerprints answer a different question.
 
 Rejected alternatives include a fully specified/hierarchical workflow machine,
 a general process DSL, a full arbitrary inquiry graph, separate record-creation
@@ -497,8 +528,10 @@ mechanism.
   inquiry lifecycle, cursor/posture, review, delegation, and recovery as
   separate types with derived facts.
 - **R4 — runtime and authored truth diverge.** Store canonical references,
-  bind evidence to fingerprints, refuse foreign materialisation overwrite,
-  provide explicit marker-validated live-run re-adoption, and label semantic
+  bind evidence to fingerprints, check the authored watermark on entry and
+  again pre-write on every mutating verb so a hand-edit cannot go unnoticed
+  between two applies, refuse foreign materialisation overwrite, provide
+  explicit marker-validated live-run re-adoption, and label semantic
   reconstruction honestly.
 - **R5 — cross-tier failure duplicates authored knowledge.** Journal before
   authored mutation, reserve and journal the canonical ID before
@@ -551,6 +584,13 @@ Wire and end-to-end tests prove:
 - deterministic TOML round-trip and useful schema-version refusal;
 - atomic rewrite and unchanged state after validation failure;
 - expected-revision conflict reporting;
+- an authored hand-edit landing between two applies is refused by the entry
+  watermark check on the next mutating verb, not discovered later at
+  materialise;
+- an authored hand-edit landing mid-invocation is refused by the pre-write
+  check with nothing written and runtime state unmutated;
+- an absent `design.md` before first materialisation is cold rather than
+  divergent, and only explicit re-adopt re-baselines the watermark;
 - submission retry idempotency and refusal of changed payload under a reused ID;
 - safe receipt-history eviction that preserves the latest and
   outstanding-delegation receipts;

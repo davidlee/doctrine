@@ -173,8 +173,12 @@ epistemic records.
 - **B1 — runtime recovery.** A schema-versioned, revision-guarded snapshot owns
   exact resume; authored records support explicitly weaker reconstruction.
 - **B2 — specification boundary.** A narrow product and technical contract
-  descend RFC-021; SPEC-023 and the skill contract are amended only where their
-  existing ownership applies.
+  descend RFC-021. Exactly two existing specifications are amended, each within
+  its own ownership: SPEC-023 gains one sealed hymn entry, and SPEC-019 gains an
+  acknowledgement that a managed design run is a legitimate provenance for
+  DEC/QUE/ASM records. No skill contract is amended — no specification owns a
+  skill body, so the design skill's rewrite is implementation against a source
+  target.
 - **B3 — inquiry topology.** One primary parent plus sparse `needs`; lifecycle,
   cursor, and traversal remain orthogonal.
 - **B4 — checkpoint admission.** A resolved node has an explicit semantic
