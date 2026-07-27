@@ -345,3 +345,31 @@ warm thread. Cost/efficiency observations:
   `review show` synthesising the finding roll, or a `review findings <RV>` verb,
   would close a real read-path gap — this cost two exploratory `--help` calls and
   a raw-file read that the boot rules told me not to do.
+
+[design; SL-232-rv314-round3-a1b2]
+Round 3 of the same warm-thread adversarial loop. Two datapoints worth more than
+the token accounting:
+
+- **The reviewer's ACQUITTAL was wrong, and only re-probing caught it.** Codex
+  cleared the `.gitattributes` clean-filter case ("did not produce the same total
+  miss") having probed `git diff-index --quiet HEAD`. The design specifies the
+  third leg as `diff-index --quiet --cached HEAD`. Against the specified leg the
+  miss is total — arbitrary attacker content, all three legs blind. The finding
+  it *did* raise was real but strictly understated. This is the concrete instance
+  of the asymmetry flagged in the round-2 note: convictions get re-derived,
+  acquittals get accepted on assertion. Here the acquittal was the expensive one.
+  Cost of catching it: one 12-line bash probe. Cost of missing it: a blocker
+  ships as a wording fix.
+- **Cheapest catch of the round was self-directed.** Before the reviewer
+  reported, I probed the attack surface I judged most likely (a field I had
+  introduced that turns author-controlled TOML into a path) and found the
+  amendment under-specified. Pre-empting the reviewer on your own new prose is
+  much cheaper than a full round-trip — but note I *still* got the axis wrong:
+  I checked the uid's alphabet, declared it safe, and missed that identity was
+  never bound to storage. Same class as the session's standing lesson (check an
+  invariant's polarity, not just its truth): I verified a true property that was
+  not the load-bearing one. Self-probing narrows the gap; it does not close it.
+- Ledger mechanics unchanged from round 2 — `--detail` is still carrying multi-kB
+  probe transcripts through shell quoting, and `review show` still will not print
+  the finding roll. Both already noted; repeating only to mark that they recurred
+  every round rather than once.
