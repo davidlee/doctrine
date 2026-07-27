@@ -2636,8 +2636,9 @@ pub(crate) fn run_prime(path: Option<PathBuf>, args: &PrimeArgs) -> anyhow::Resu
 /// directly: it is hashed as-is, so an absent declared literal still hashes-absent
 /// in `contentset::compute` and surfaces as drift the moment it appears/vanishes
 /// (R1 absence⇒stale preserved). A GLOB expands against the tracked file set
-/// (`git ls-files` in the parent root) via the shared pure `globmatch` leaf — no
-/// re-implementation, no new dependency.
+/// (`git ls-files --stage -z` in the parent root) via the shared pure `globmatch`
+/// leaf. Only regular blobs are hashable content: symlinks and gitlinks are
+/// excluded before matching rather than followed through the working tree.
 fn resolve_selectors_to_fileset(root: &Path, selectors: &[String]) -> anyhow::Result<Vec<String>> {
     // The tracked file set, read once (the impure `git` seam in the shell).
     let mut tracked: Option<Vec<String>> = None;
@@ -2653,9 +2654,9 @@ fn resolve_selectors_to_fileset(root: &Path, selectors: &[String]) -> anyhow::Re
         }
         // Glob — expand against the tracked file set (lazily fetched once).
         if tracked.is_none() {
-            let listing = crate::git::git_text(root, &["ls-files"])
+            let listing = crate::git::git_text(root, &["ls-files", "--stage", "-z"])
                 .context("git ls-files for selector glob expansion")?;
-            tracked = Some(listing.lines().map(str::to_owned).collect());
+            tracked = Some(parse_ls_files_stage_entries(&listing)?);
         }
         for path in tracked.as_deref().unwrap_or(&[]) {
             if crate::globmatch::glob_matches(&pattern, path) {
@@ -2664,6 +2665,32 @@ fn resolve_selectors_to_fileset(root: &Path, selectors: &[String]) -> anyhow::Re
         }
     }
     Ok(set.into_iter().collect())
+}
+
+const GIT_REGULAR_BLOB_MODES: [&str; 2] = ["100644", "100755"];
+
+/// Parse NUL-delimited `git ls-files --stage -z` output and retain only regular
+/// blob paths. The first TAB separates fixed metadata from the path; spaces,
+/// tabs, and newlines inside the path therefore survive intact.
+fn parse_ls_files_stage_entries(listing: &str) -> anyhow::Result<Vec<String>> {
+    let mut paths = Vec::new();
+    for record in listing.split('\0').filter(|record| !record.is_empty()) {
+        let malformed = || anyhow::anyhow!("malformed git ls-files --stage record: `{record}`");
+        let (metadata, path) = record.split_once('\t').ok_or_else(&malformed)?;
+        let mut fields = metadata.split_whitespace();
+        let (Some(mode), Some(_object_id), Some(_stage), None) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
+            return Err(malformed());
+        };
+        if path.is_empty() {
+            return Err(malformed());
+        }
+        if GIT_REGULAR_BLOB_MODES.contains(&mode) {
+            paths.push(path.to_owned());
+        }
+    }
+    Ok(paths)
 }
 
 /// Whether a selector string is a literal path (no glob metacharacters): a
@@ -4216,6 +4243,74 @@ mod tests {
             cache_staleness(root, &cache).unwrap(),
             CacheVerdict::Current
         ));
+    }
+
+    /// ISS-259: entity roots contain committed slug symlinks whose targets are
+    /// directories. A glob must track the regular files beneath the root without
+    /// passing the symlink itself to the content hasher.
+    #[test]
+    #[cfg(unix)]
+    fn prime_glob_ignores_tracked_directory_symlink() {
+        use std::process::Command;
+
+        let tmp = git_fixture_rv_with_selectors(
+            &[".doctrine/spec/product/**"],
+            &[(".doctrine/spec/product/001/spec-001.md", "# Product spec\n")],
+        );
+        let root = tmp.path();
+        std::os::unix::fs::symlink("001", root.join(".doctrine/spec/product/001-product-spec"))
+            .unwrap();
+        for args in [&["add", "."][..], &["commit", "-m", "add slug symlink"][..]] {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        run_prime(
+            Some(root.to_path_buf()),
+            &PrimeArgs {
+                reference: "RV-001".to_owned(),
+            },
+        )
+        .unwrap();
+
+        let cache = read_cache(root, 1).unwrap().expect("cache primed");
+        assert_eq!(
+            cache.tracked_paths(),
+            vec![".doctrine/spec/product/001/spec-001.md".to_owned()]
+        );
+    }
+
+    #[test]
+    fn staged_files_parser_preserves_paths_and_filters_non_files() {
+        let listing = concat!(
+            "100644 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0\tpath with spaces.rs\0",
+            "100755 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb 0\tscript.sh\0",
+            "120000 cccccccccccccccccccccccccccccccccccccccc 0\tdirectory-link\0",
+            "160000 dddddddddddddddddddddddddddddddddddddddd 0\tsubmodule\0",
+        );
+        assert_eq!(
+            parse_ls_files_stage_entries(listing).unwrap(),
+            vec!["path with spaces.rs".to_owned(), "script.sh".to_owned()]
+        );
+    }
+
+    #[test]
+    fn staged_files_parser_rejects_malformed_record() {
+        let err = parse_ls_files_stage_entries("100644 missing-fields-and-tab\0").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("malformed git ls-files --stage record"),
+            "named parser failure: {err:#}"
+        );
     }
 
     /// VT-1 (literal): a literal selector passes through degenerate (no tree
