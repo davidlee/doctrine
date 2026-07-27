@@ -1,0 +1,42 @@
+memory_uid = "mem_019fa39579c57093bcb6dcaaa112cba0"
+memory_key = "mem.fact.dispatch.deepseek-review-capability"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "deepseek-v4-pro is a capable reviewer, not just an implementer"
+summary = "deepseek-v4-pro (pi arm) is a decent code reviewer — not Opus-grade, but reliably finds real defects in Opus-written code. Use it for review passes, not only implementation."
+created = "2026-07-27"
+updated = "2026-07-27"
+
+[scope]
+paths = []
+globs = []
+commands = ["pi-spawn-confined.sh"]
+tags = ["dispatch", "review", "pi", "deepseek", "model-selection"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e9a9133edfdb58de9e4f2740e372677720fb89dd"
+ref_name = "refs/heads/edge"
+checkout_state_id = "118d778e3ae6aa58fc65517970f6d99bf328f1959201508c119d440c9ab416ab"
+base_commit = "7cd5879d1cb600d124fe1e414c377c2c223b8b94"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
