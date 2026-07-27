@@ -28,10 +28,26 @@ detail = "Evidence: .doctrine/slice/232/design.md:284-320 defines Vec<String>, v
 
 [[finding]]
 id = "F-3"
-status = "open"
+status = "verified"
 severity = "blocker"
 title = "Expected REQ-146 and REQ-155 governance routing settled before implementation; observed design defers the Revision decision to reconcile"
 detail = "Evidence: the authoritative SL-232 scope says the REQ-146/REQ-155 Revision choice is settled during design and is not deferrable to close at .doctrine/slice/232/slice-232.md:232-239. The design instead leaves whether these are REV-034 rows or a second revision as a governance call for /reconcile at .doctrine/slice/232/design.md:607-618. REV-034 currently revises only REQ-147 and SPEC-007 (.doctrine/revision/034/revision-034.toml:28-36); REV-041 contains only a SPEC-007 row (.doctrine/revision/041/revision-041.toml:28-31). ADR-013 requires governance-to-work dependencies to route through a concrete Revision at .doctrine/adr/013/adr-013.md:44-49. Therefore SL-232 needs REV-034 does not authorize the two newly identified requirement changes, and implementation would begin while its normative dependency is deliberately unresolved. This violates the slice scope and ADR-013, and must be reconciled before execution rather than deferred to the reconciliation phase."
+disposition = "fix-now"
+response = """
+Accepted and reconciled in this design round — the finding was correct on both limbs, and the remedy is performed, not prescribed.
+
+The contradiction was real and verbatim: slice-232.md says the routing call "is settled during design, but it is not deferrable to close", while design.md § 5.6 called it "a governance call for `/reconcile`". And the governance consequence was as stated — `SL-232 needs REV-034` is authored, but REV-034's four-row payload covered only two of the changes SL-232 makes, so ADR-013's dependency did not authorise the rest.
+
+Settled as **DEC-076**: both requirements land as **added REV-034 change rows**, on atomicity rather than tidiness. All four sites go false at the same instant — when this slice's code lands — and ADR-013 makes `revision apply` the forcing-function tying approval to the truth-write, so two revisions would mean two applies for one landing and a window where SPEC-007 asserts a mix of retired and current contracts. That is the queried-surface trap of RV-307 F-39, which is the very failure REQ-147's row exists to close. ADR-013's model favours accumulation independently: a Revision is "born as content-light pending intent", "accumulates staged deltas as it is worked", and exists to give dependents "a crisp single anchor".
+
+Authored this round:
+- **REV-034 now carries four `modify` rows** — REQ-147 (primary), SPEC-007, REQ-146, REQ-155 — added via `revision change add`, not by hand.
+- Both new rows have their before/after title excerpts written into `revision-034.md`, with the measurement behind each (REQ-146: 13 of 43 scoped-and-attested memories are glob-only; REQ-155: REV-041's surface-independent discharge clause).
+- REV-034's title widened from `verify`'s contract to the turnover it is; a § Scope section records why it widened and why a second revision was rejected.
+- The stale `SL-230 needs REV-034` prose corrected — DEC-027 moved the edge and SL-230's `needs` is empty.
+- design.md § 5.6 and slice-232.md § 5 both record the routing as settled, so scope and design agree again.
+
+Verified: REV-034 was `proposed` / `approval=none` before amendment, so nothing frozen was rewritten; `doctrine spec validate SPEC-007` reports clean. Left deliberately: the slug still reads `verify-attests-against-a-claim-relevant-clean-tree…`, unrenamed because the id is identity and the slug is never authoritative (STD-002)."""
 
 [[finding]]
 id = "F-4"

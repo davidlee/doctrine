@@ -1,0 +1,33 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 76
+slug = "req-146-and-req-155-land-as-rev-034-rows-not-a-second-revision"
+title = "REQ-146 and REQ-155 land as REV-034 rows, not a second revision"
+record_kind = "decision"
+status = "accepted"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["governance", "revision", "spec-007"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = "SL-232's re-taken SPEC-007 inventory found two requirements the implementation falsifies beyond REV-034's original scope: REQ-146 (objective 4 widens the historical staleness seam from scope.paths to paths + globs) and REQ-155 (objective 7 makes validate a findings surface, a discharge mode absent from the requirement's five-state render vocabulary). The design deferred the routing call to /reconcile; RV-314 F-3 established that the scope forbids this -- it says the call 'is settled during design, but it is not deferrable to close' -- and that ADR-013's authored dependency `SL-232 needs REV-034` did not authorise two of the four changes it must cover."
+choice       = "Both land as added REV-034 change rows. REV-034 now carries four `modify` rows -- REQ-147 (primary), SPEC-007, REQ-146, REQ-155 -- and its title widened from `verify`'s contract to the turnover it actually is: 'SPEC-007 tells the truth about the memory verification surface after SL-232'. One anchor, one apply."
+alternatives = ["Mint a second revision for the two new requirements, with SL-232 needing both", "Split by surface: REV-034 keeps verify (REQ-147, SPEC-007), a second revision takes the validate/retrieve seam (REQ-146, REQ-155). Thematically tidiest, and the most exposed to the atomicity defect since it guarantees two applies for one landing"]
+rationale    = "Atomicity, not tidiness. All four sites go false at the same instant -- when SL-232's code lands -- and ADR-013 makes `revision apply` the 'forcing-function' tying recorded approval to the truth-write. Two revisions means two applies for one landing, opening a window in which SPEC-007 asserts a mix of retired and current contracts: the queried-surface trap of RV-307 F-39, which is the very failure REQ-147's row exists to close. ADR-013's model favours accumulation independently -- a Revision is 'born as content-light pending intent', 'accumulates staged deltas as it is worked', and exists to give dependents 'a crisp single anchor'. Two anchors for one slice's governance dependency is the shape it was designed to avoid. REV-034 being `proposed`/`approval=none` makes accumulation its designed state rather than an amendment of settled truth."
+consequences = ["REV-034's title and rationale were rewritten, not appended to -- the accepted cost of option A", "Its slug still reads `verify-attests-against-a-claim-relevant-clean-tree...`; left unrenamed because the id is identity and the slug is never authoritative (STD-002)", "The stale `SL-230 needs REV-034` prose was corrected in the same edit -- DEC-027 moved the edge to SL-232 and SL-230's needs is empty", "SL-232's closure criteria are unchanged in form but now bind four rows: SPEC-007, REQ-146, REQ-147, REQ-155 and the implementation must agree at close"]
+decided_by   = "david"
+decided_on   = "2026-07-27"
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = ["ADR-013: Revision 'accumulates staged deltas as it is worked'; `revision apply` is the forcing-function tying approval to the truth-write", "REV-034 verified `proposed` / `approval=none` before amendment -- nothing frozen", "slice-232.md: the routing call 'is settled during design, but it is not deferrable to close'", "REQ-146/147/155 titles read at .doctrine/requirement/{146,147,155}/ and each confirmed to carry the contract the implementation falsifies"]
+contradicts = []
+notes       = ["Discharges RV-314 F-3"]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-232"

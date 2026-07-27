@@ -238,6 +238,16 @@ is not deferrable to close: REQ-147's title is the retired contract verbatim, an
 the same trap (a queried surface asserting what the body replaced, RV-307 F-39)
 applies to any requirement this objective leaves unamended.
 
+**Settled** (DEC-076, discharging RV-314 F-3): **added REV-034 change rows**, now
+authored. The re-taken inventory found two further requirements whose titles the
+implementation falsifies — **REQ-146** (objective 4 widens the historical seam from
+`scope.paths` to `paths ∪ globs`) and **REQ-155** (objective 7 makes `validate` a
+findings surface, a discharge mode absent from the requirement's five-state render
+vocabulary). REV-034 therefore carries four `modify` rows and its title widened
+from `verify`'s contract to the turnover it is. A second revision was rejected on
+atomicity: all four go false at the same instant, and two applies for one landing
+opens a window where SPEC-007 asserts a mix of retired and current contracts.
+
 ### 6. Verify refusal names its escape hatch
 
 The dirty-tree refusal names `--allow-dirty` instead of prescribing a commit.

@@ -614,8 +614,24 @@ in both tiers (`spec-007.toml:20` capability line and `spec-007.md:120`
 
 REQ-146 and REQ-155 are the **queried-surface trap of RV-307 F-39** exactly:
 their titles are active members of SPEC-007 asserting what the body now qualifies.
-Whether these land as added REV-034 change rows or a second revision is a
-governance call for `/reconcile`; the inventory itself is settled here.
+
+**Routing: settled here, not deferred** (DEC-076, discharging RV-314 F-3). Both
+land as **added REV-034 change rows**, authored — the revision now carries four
+`modify` rows (REQ-147 primary, SPEC-007, REQ-146, REQ-155) and its title widened
+from `verify`'s contract to the turnover it actually is. An earlier draft deferred
+this to `/reconcile`, which contradicted the scope's own instruction that the call
+"is settled during design, but it is not deferrable to close", and left ADR-013's
+dependency (`SL-232 needs REV-034`) not authorising two of the four changes it
+must cover.
+
+A second revision was rejected on **atomicity**, not tidiness. All four sites go
+false at the same instant — when this slice's code lands — and ADR-013 makes
+`revision apply` the forcing-function tying approval to the truth-write. Two
+revisions means two applies for one landing, opening a window where SPEC-007
+asserts a mix of retired and current contracts: the exact trap REQ-147's row
+exists to close. ADR-013 also favours accumulation directly — a Revision is "born
+as content-light pending intent", "accumulates staged deltas as it is worked", and
+gives dependents "a crisp single anchor".
 
 ### 5.7 The convergence, stated as a principle
 

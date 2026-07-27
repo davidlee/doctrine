@@ -1,6 +1,6 @@
 id      = 34
 slug    = "verify-attests-against-a-claim-relevant-clean-tree-not-a-globally-clean-one"
-title   = "Verify attests against a claim-relevant clean tree, not a globally clean one"
+title   = "SPEC-007 tells the truth about the memory verification surface after SL-232"
 status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
 approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
 updated = "2026-07-26"
@@ -32,5 +32,15 @@ primary = true
 
 [[change]]
 target = "SPEC-007"
+action = "modify"
+primary = false
+
+[[change]]
+target = "REQ-146"
+action = "modify"
+primary = false
+
+[[change]]
+target = "REQ-155"
 action = "modify"
 primary = false
