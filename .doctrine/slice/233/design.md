@@ -542,7 +542,7 @@ undeclared spec edits.
   materialising authored bytes.
 - **DEC-088:** accepted checkpoints require a content-bound user-acceptance
   attestation; semantic payloads cannot self-declare accepted status.
-- **DEC-092** *(proposed — awaiting user acceptance)*: an authored watermark in
+- **DEC-092:** an authored watermark in
   the runtime snapshot guards the authored tier. Ordinary mutation entry-refuses
   divergence; `adopt_authored` is the sole lawful crossing and carries its own
   admission protocol; the pre-write re-check narrows the residual window to
