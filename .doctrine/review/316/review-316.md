@@ -41,3 +41,8 @@ literal.
 ### Governance/spec (REV)
 
 - None.
+
+## Reconciliation Outcome
+
+The audit raised no findings and its brief requires no per-slice or governance
+writes. Reconcile pass complete — handoff to `/close`.
