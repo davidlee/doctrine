@@ -14,10 +14,19 @@ ref   = "SL-232"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected claim measurement to preserve every claim delta; observed index-positive expansion drops untracked additions and HEAD-only deletions"
 detail = "Evidence: .doctrine/slice/232/design.md:211-218 constructs the claim surface only from non-empty git ls-files matches in the current index; :367-370 then gives dirty_under only that expansion, while :513-519 calls the outcome total. Probe /tmp/claude-1000/-workspace-doctrine/d1a8ae94-a2bd-4fa5-aabc-c29d486a1090/scratchpad/rv314-index-domain.Sx6PV8 produced INDEX_EXPANSION_GLOB=<src/a.rs>, UNTRACKED_ORIGINAL_GLOB=src/new.rs, UNTRACKED_EXPANDED_LITERAL=<empty>, HEAD_HAS_DELETED=.doctrine/adr/001/evidence.md, INDEX_EXPANSION_DELETED=<empty>, ORIGINAL_DELETED_DIFF_RC=1, EXPANDED_ONLY_DIFF_RC=0, with status D .doctrine/adr/001/evidence.md and ?? src/new.rs. Thus an untracked addition under a declared glob vanishes from the concrete set; worse, a tracked claim path staged for deletion vanishes from the index while the anchor leg excludes .doctrine, so both questions can pass and stamp HEAD although claim evidence is dirty. This resurrects RV-307 F-1/F-6 and violates I6 and the claimed I9 totality. T17-T19 cover only excluded corpus dirt and T25 only a modified ADR; no test covers either delta-only side."
+disposition = "fix-now"
+response = """
+Accepted; the remedy landed in round 1 and THIS DISPOSITION IS OVERDUE — recording that first, because the lapse is the more useful half.
+
+F-1's repair (DEC-069's measurement/reporting split, extended by DEC-080 to derived pathspecs) was written into design.md in round 1 and the prose has stood since. `review dispose` was never run. The finding therefore sat `open` with no disposition while design.md § 10, the slice's Harvest notes and a handover packet all recorded it as "answered" — three artefacts agreeing because each copied the last, and `review show` does not print the finding roll, so the divergence was invisible through the sanctioned read path. Round 4 caught it. § 10 now carries a standing instruction that the ledger is the only authority on finding state, with the grep that reads it.
+
+On the substance, unchanged and re-affirmed: the finding was correct. An index-positive construction drops untracked additions and HEAD-only deletions, and the anchor leg excludes `.doctrine`, so both questions could pass while claim evidence was dirty. The repair is the split — measurement is built from the uid directory, the declared selectors emitted magic-prefixed, and the symlink-target closure; reporting keeps the index-first expansion (DEC-053). I9 was struck and replaced by I9-prime, which is polarised for completeness rather than soundness. T56/T57/T65/T66 cover it, with T57 asserting WHICH leg catches each of F-1a, F-1b and F-10 so a later refactor cannot silently move the coverage.
+
+One correction since: the uid-directory base is no longer constructed from `memory_uid` (DEC-091, via F-26) — it is the directory `resolve_show` already returned. F-1's repair is unaffected; the base is simply arrived at more safely."""
 
 [[finding]]
 id = "F-2"
@@ -176,10 +185,19 @@ Raised at `minor` correctly: none of these produces a false attestation, and all
 
 [[finding]]
 id = "F-10"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected fresh record-to-verify to refuse; observed dirty_under cannot see the untracked mandatory uid directory"
 detail = "Evidence: the design defines dirty_under as the sole diff-index dirtiness measurement at .doctrine/slice/232/design.md:156-172, adds the uid directory directly to claim_pathspecs at :367-370, and explicitly promises a fresh untracked record refuses at :379-384 and T8 at :783. Probe /tmp/claude-1000/-workspace-doctrine/d1a8ae94-a2bd-4fa5-aabc-c29d486a1090/scratchpad/rv314-untracked-uid.DXOYDO created .doctrine/memory/items/mem_new/memory.md untracked; git diff-index --quiet HEAD -- :(literal).doctrine/memory/items/mem_new returned DIRECT_LITERAL_DIFF_INDEX_RC=0 while git ls-files --others and status both reported the file. diff-index does not enumerate untracked paths. Because the anchor leg excludes .doctrine, neither question sees this directory, so verify would attest HEAD that does not contain the prose: the exact RV-307 F-1 false stamp the rewrite claims to close. Fixing this requires an untracked-aware claim probe or a second measurement, contradicting the stated one-primitive model and I2, so implementation must not proceed on this design."
+disposition = "fix-now"
+response = """
+Accepted; same overdue-disposition lapse as F-1 — see that response for the record-keeping half.
+
+Substance re-affirmed: `diff-index` does not enumerate untracked paths, so a freshly recorded memory's untracked uid directory was invisible to the claim leg while the anchor leg excluded `.doctrine`. The repair is the same one F-1 forced: the measurement surface carries the uid directory and the declared selectors as raw pathspecs, and `Dirt`'s untracked leg (`ls-files --others --exclude-standard`) answers for exactly this case. DEC-070 bounds it to tracked-or-non-ignored commit-eligible evidence so the fix does not import 15,319 ignored files.
+
+The finding's closing claim — that fixing this "contradicts the stated one-primitive model and I2" — was the one part not accepted, and it was answered rather than waved away. `observe_dirt` returns an observation, not a bool (F-11's repair), so the untracked leg is part of the ONE primitive rather than a second measurement; and I2 survives because `is_dirty()` never fingerprints the untracked set and never reaches `write_tree_with_retry`. Probed, not asserted: each leg completes with `.git/index.lock` held.
+
+Improved since by DEC-091: the base is the directory `resolve_show` returned rather than a string built from `memory_uid`, which serves this finding better than the original repair did — `resolve_show` reads the directory from disk, so it does not require the key symlink to be tracked, which is precisely the fresh-record case F-10 is about."""
 
 [[finding]]
 id = "F-11"
@@ -416,87 +434,243 @@ No new test: the correct assertion here is the ABSENCE of a suppression path, wh
 
 [[finding]]
 id = "F-21"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected --attr-source=<empty tree> to close attribute conversion as a class; observed .git/info/attributes and core.attributesFile still convert and hide arbitrary bytes"
 detail = """Evidence: design.md § 5.1 and DEC-087 claim `--attr-source=<empty tree>` closes attribute conversion "as a class" rather than the two routes found. It does not. `--attr-source` replaces only the TREE attribute source; git additionally consults `.git/info/attributes` and `core.attributesFile`, and neither is affected. Reproduced independently by the responder on git 2.54.0 under the design's own NORMATIVE_FLAGS plus `--attr-source=<empty tree>`, in two fixtures whose filter was never committed: (a) `f filter=canon` in `.git/info/attributes`; (b) the same line in a file named by `core.attributesFile`. Both give `check-attr filter` = `f: filter: canon` WITH the flag applied, tracked=0, untracked=0, cached_rc=0, while HEAD blob oid 76cdaa848a00ff6df61f228dca7e21ae76707a4d differs from the raw worktree oid 17e9b17077d28907fc3b8f39146256977426a239. All three legs read clean on a tracked, non-ignored, index-watched path on a stable checkout, so DEC-070, DEC-071 and DEC-082 do not reach it and I6's byte-equality guarantee is false exactly as it was before DEC-087. The refusal-path diagnostic also fails silently here: the neutralised and un-neutralised probes AGREE, so it cannot name attribute conversion as the cause. Sharper than the general form: § 5.1's own argument for DEC-087 is that NORMATIVE_FLAGS exists so "machine-local config cannot perturb the frame" — and `core.attributesFile` is machine-local config. DEC-087 therefore leaves open precisely the category the mechanism it extends was built to close. This is the fifth instance of the standing lesson: the property verified ("committed attributes are neutralised") is true and is not the load-bearing one ("attributes are neutralised"). Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f; reproduced by the responder before raising."""
+disposition = "fix-now"
+response = """
+Accepted in full, reproduced independently, and the repair is performed rather than prescribed. Settled as DEC-089, which SUPERSEDES DEC-087; design.md § 5.1 rewritten.
+
+The charge is exactly right, including its sharpest form: `core.attributesFile` is machine-local config, and § 5.1's own argument for DEC-087 is that `NORMATIVE_FLAGS` exists so machine-local config cannot perturb the frame. DEC-087 left open the category the mechanism it extends was built to close. Re-measured here on three fixtures, each committing a `clean` filter under a different attribute source, probed under five flag combinations (`probes/attr-sources.sh`): tree closes under `--attr-source` (0 -> 155); `core.attributesFile` is UNMOVED by `--attr-source` and closes under `-c core.attributesFile=/dev/null` (0 -> 155); `.git/info/attributes` stays 0 under every combination tested, including `--attr-source` + `attributesFile=/dev/null` + `GIT_ATTR_NOSYSTEM=1`.
+
+The repair is stated as a PARTITION by where the mechanism lives, not as a list of routes, because a list is what F-22 refuted DEC-082 for: committed content -> `--attr-source`; machine-local config -> `-c` (including `core.fsmonitor`); system -> `GIT_ATTR_NOSYSTEM`; git-dir state -> DETECT AND REFUSE; index state -> unmeasurable (DEC-090); ignore/exclude -> deliberately out of scope, since DEC-070 already rules ignored files out of the evidence domain.
+
+`info/attributes` cannot be neutralised, so it is refused: one read of one file at the path git reports, refusing when any line declares a conversion attribute. Patterns are NOT matched against the claim surface — that is D18's rejected enumeration — so the rule is coarse and over-refuses in I9-prime's recoverable direction. Measured and load-bearing: it is the COMMON dir, so a linked worktree inherits the main repository's file and E9's dispatch case does not escape it.
+
+Two things the finding did not ask, found by attacking the repair before disposing it. (a) The `$XDG_CONFIG_HOME/git/attributes` default — read when `core.attributesFile` is UNSET — is a live machine-local route that `--attr-source` does not touch and `-c core.attributesFile=/dev/null` does close; a fixture that sets the key explicitly would not exercise it, so T91 is written against the unset form. (b) An ambient `GIT_ATTR_SOURCE` is NOT a residual route: measured, the explicit flag wins.
+
+Declared unverified rather than smoothed: `GIT_ATTR_NOSYSTEM` is the one member of the set not probed. `/etc/gitattributes` does not exist in this jail and constructing it means writing to a shared `/etc`. It rests on git's documentation alone and is flagged in § 5.1 so a later round attacks it rather than inheriting it as measured."""
 
 [[finding]]
 id = "F-22"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected DEC-082's index-flag bound to enumerate every freshness suppression; observed core.fsmonitor blinds all three legs on an unflagged tracked path"
 detail = """Evidence: DEC-082 bounds I9-prime on "paths the index is still watching", enumerated as `assume-unchanged` and `skip-worktree`. That is an enumeration, not a principle: git's freshness layer has other mechanisms that make all three legs trust cached index state. Reproduced independently by the responder on git 2.54.0: with `core.fsmonitor` pointed at a hook that returns a stable token and no changed paths, priming the index with one `git status`, then replacing an 11-byte tracked file with 45 bytes of unrelated content, the three legs report tracked=0, untracked=0, cached_rc=0 and `git status --porcelain` does not list the path at all (it lists only the untracked hook directory). `git ls-files -v` shows NO non-`H` rows, so neither DEC-082 flag is set; the path is tracked, non-ignored, the checkout is stable, and the index still records the 11-byte blob d0ad87f8847db2dfbc2ce78e21056443c5b4a841 against a 45-byte worktree. `--attr-source` cannot help: git is not converting content, it is declining to read it. This is an under-approximation inside all three of I9-prime's stated bounds, i.e. I9-prime is false again, by the same shape F-17 established and DEC-082 was minted to close. `core.fsmonitor` is a mainstream performance feature, not an exotic setting, and POL-002 makes a client project using it a real case. PARTIAL NON-REPRODUCTION, recorded rather than suppressed: the reviewer also charged an index stat-cache route (equal-length content with mtime restored, under `core.trustctime=false` + `core.checkStat=minimal`). In the responder's hands that route did NOT reproduce — the tracked leg reported 101 bytes under both default and the weakened config — so that limb is fixture-sensitive and is not part of this charge. The fsmonitor limb alone carries it. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f; the fsmonitor limb reproduced and the stat-cache limb refuted by the responder before raising."""
+disposition = "fix-now"
+response = '''
+Accepted on the fsmonitor limb, which reproduced; the stat-cache limb did NOT reproduce and is excluded from the charge rather than quietly carried. Repaired across DEC-089 and DEC-090, which between them partition the freshness class.
+
+Reproduced (`probes/freshness.sh`): fsmonitor hook returning a stable token, index primed by one `git status`, an 11-byte tracked file replaced with 47 bytes of unrelated content — tracked=0, untracked leg unaffected, `diff-index --cached` rc=0, and `git status --porcelain` does not list the path. `ls-files -v` reports `H`, so no DEC-082 flag is involved and the finding's central claim holds: DEC-082's bound was an ENUMERATION, and I9-prime was false again by the shape DEC-082 was minted to close.
+
+The repair splits on the finding's own observation that "git is not converting content, it is declining to read it". Where the suppression is CONFIG it is neutralised like config — `-c core.fsmonitor=false`, DEC-089. Measured, and this is the load-bearing fact rather than an assumption: the neutralisation restores the tracked leg (0 -> 138) EVEN ON AN INDEX ALREADY PRIMED by an fsmonitor-enabled `git status`, and again after re-priming, so the `FSMONITOR_VALID` bits do not survive the config being off at read time. Where the suppression is INDEX STATE and no config reaches it, DEC-090 makes it a refusal: any claim-surface row whose `ls-files -v` tag is not `H` is `unmeasurable` and `verify` refuses.
+
+That converts I9-prime from "holds within these bounds" to "holds, or the verb refuses" — a closure rather than a bound, which is what this finding charged DEC-082 with failing to be. And it costs no new git invocation: § 5.2a step 4 already runs `ls-files -s -z`, and `-s -v -z` carries the tag and the stage in one output (measured layout `<tag> <mode> <oid> <stage>\t<path>`).
+
+PARTIAL NON-REPRODUCTION, recorded inside the finding and repeated here: the index stat-cache route (equal-length content, mtime restored, `core.trustctime=false` + `core.checkStat=minimal`) did not reproduce in the responder's hands — the tracked leg reported 101 bytes under both default and the weakened config. That limb is fixture-sensitive and forms no part of the charge or the repair.
+
+Consequence stated rather than buried: T64 INVERTS. It asserted the two index flags are expected-blind; it now asserts the same fixtures refuse. The old assertion was pinning a defect in place, and R-E leaves the known-open list as discharged rather than carried.'''
 
 [[finding]]
 id = "F-23"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected a global raw-byte flag to preserve existing guards; observed it turns SL-212's fail-closed custom-merge-driver refusal into fail-open"
 detail = """Evidence: DEC-087 places `--attr-source=<empty tree>` in NORMATIVE_FLAGS, which `src/git.rs::run_git_env` and `src/git.rs::git_stdin` apply to EVERY git invocation (both confirmed in source: each builds `Command::new("git")` with `.args(NORMATIVE_FLAGS)`). One existing consumer is a safety guard belonging to another slice. `src/git.rs::custom_merge_driver_paths` refuses trees carrying a non-built-in `merge` gitattributes driver, because `git merge-tree`'s projection cannot reproduce one (SL-212 create/ingest guards, OQ-2, fail-closed); its doc comment states the classification is a SUPERSET so "an unknown value refuses rather than slips through". It obtains the values through `src/git.rs::check_attr_merge_z`, which routes through `git_stdin` and therefore through NORMATIVE_FLAGS. Its `BUILT_IN` allow-list at `src/git.rs` includes `unspecified`. Reproduced independently by the responder on git 2.54.0 with a committed `.gitattributes` containing `f merge=ours`: under today's NORMATIVE_FLAGS, `check-attr merge -- f` returns `f: merge: ours` (custom, refuse); with `--attr-source=<empty tree>` added it returns `f: merge: unspecified` (built-in, allow). So the proposed flag silently converts a documented fail-CLOSED guard into fail-OPEN, in a subsystem SL-232 does not otherwise touch and whose behaviour-preservation nobody is watching. This is not a wording defect: the repair cannot live indiscriminately in a global flag list. DEC-087 must either scope the flag to a command class (which reopens the split-brain objection it rejected — capture() and verify observing different trees) or choose a different raw-byte mechanism. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f; reproduced by the responder before raising."""
+disposition = "fix-now"
+response = """
+Accepted in full and reproduced. This was the finding that decided the shape of the repair, so it gets the credit: DEC-089's placement exists because of it.
+
+Reproduced on git 2.54.0 with a committed `.gitattributes` carrying `f merge=ours` (`probes/attr-sources.sh`): under today's flags `check-attr merge -- f` returns `f: merge: ours` — custom, so `custom_merge_driver_paths` refuses; with `--attr-source=<empty tree>` it returns `f: merge: unspecified`, which is in that guard's `BUILT_IN` allow-list, so it allows. A global flag silently inverted a documented fail-CLOSED guard belonging to SL-212, in a subsystem SL-232 does not otherwise touch and whose behaviour-preservation nobody was watching.
+
+The finding's structural point — "the repair cannot live indiscriminately in a global flag list" — is accepted, and so is its framing of the two escapes. It offered "scope to a command class (which reopens the split-brain objection)" or "choose a different mechanism". The answer taken is a third: scope to the OBSERVATION PRIMITIVE. `observe_dirt` is the single dirt measurement; `capture_with` consumes it and `capture()` delegates to `capture_with`, so capture and verify still read the same tree — the split-brain objection is correct against a command-class scope and does not reach a scope whose unit IS the one measurement. `check_attr_merge_z` routes through `git_stdin` and never through `observe_dirt`, so the guard is preserved BY CONSTRUCTION rather than by an exemption.
+
+EX-1 survives verbatim: `run_git_env` remains the sole chokepoint applying `NORMATIVE_FLAGS`, and the neutralising flags arrive as ordinary `args` from one caller. The alternative of exempting `check_attr_merge_z` from the chokepoint was rejected — a conditional chokepoint is exactly the property EX-1 exists to deny.
+
+New obligation created by this finding and written into § 9: T80 asserts `custom_merge_driver_paths` still refuses a `merge=ours` tree, with the discriminating half being that a globally-applied neutralisation makes it allow. That is a behaviour-preservation test for ANOTHER slice's invariant, and it belongs to this slice's gate because this slice is what could break it.
+
+Noted in passing, and it sharpens the argument for placement rather than weakening it: DEC-087's global reach would have incidentally FIXED a sibling defect (ISS-261, `dispatch.rs` comparing a filtered worktree oid against an unfiltered tree oid) while breaking this guard. Same reach, both effects, neither intended."""
 
 [[finding]]
 id = "F-24"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected a per-repository empty-tree oid to join a compile-time constant flag list; observed a bootstrap cycle with no specified unflagged route"
 detail = """Evidence: DEC-087 says the empty-tree oid is "derived per repository" via `git hash-object -t tree /dev/null` and that the flag "joins NORMATIVE_FLAGS". Those two statements cannot both hold as written. `src/git.rs::NORMATIVE_FLAGS` is a compile-time `const &[&str]`, and `src/git.rs::run_git_env` is documented as the SINGLE chokepoint applying it (EX-1, "no second runner"); `src/git.rs::git_stdin` applies it too. A per-repository runtime value cannot be a member of a compile-time constant, and deriving it requires a git invocation that by EX-1 must itself pass through the chokepoint that needs the value. The design supplies no bootstrap exemption, no dynamic flag builder, no second runner, and no cache lifecycle. CON-002's capability probe has the identical dependency — it needs an oid before it can test `git --attr-source=<oid>`. Measured by the responder on git 2.54.0, establishing that the derivation genuinely cannot be hoisted or hardcoded: (a) run OUTSIDE any repository, `git hash-object -t tree /dev/null` returns the sha1 oid 4b825dc642cb6eb9a060e54bf8d69288fbee4904 unconditionally, so the derivation must run inside the target repo to be algorithm-correct; (b) inside a sha256 repo it returns 6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321; (c) passing the sha1 oid to a sha256 repo is `fatal: bad --attr-source or GIT_ATTR_SOURCE`, exit 128 — every attribute-reading invocation dies rather than degrades, which lands in the same unclassified probe-error state RV-314 F-7 still has open; (d) a well-formed but nonexistent oid is accepted silently (exit 0), so a mis-derived value inside the right algorithm fails open rather than loudly. The choice of bootstrap route and its interaction with the one-runner rule is a design decision, not an implementation detail, and it is unmade. Independently derived by the responder and by the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f."""
+disposition = "fix-now"
+response = """
+Accepted. The two statements genuinely cannot both hold as written, and the finding's measured (a)-(d) sequence is confirmed.
+
+The contradiction dissolves at the placement rather than needing a bootstrap exemption. Under DEC-089 the neutralising flags are NOT members of `NORMATIVE_FLAGS`; they are extra argv contributed by one caller, `observe_dirt`'s builder. So a per-repository runtime value is an ARGUMENT, not a member of a compile-time `const`, and the category error the finding identifies stops existing. No dynamic flag builder, no second runner, no exemption to EX-1.
+
+Nor is there a cycle. `git hash-object -t tree /dev/null` reads no attributes, so the derivation goes through the plain chokepoint with today's `NORMATIVE_FLAGS` and needs nothing it is deriving. Measured additions the finding did not have: the derivation writes NO object (loose-object count unchanged before and after), so I2's read-only property is preserved — worth stating because a naive `-w` spelling would have taken a write on the clean path.
+
+The finding's (a)-(d) are re-derived and all four stand: outside a repository `hash-object -t tree /dev/null` returns the sha1 oid unconditionally, so the derivation must run INSIDE the target repo to be algorithm-correct; a sha256 repo yields `6ef19b41…`; passing a sha1 oid to a sha256 repo is exit 128 on every attribute-reading invocation; and a well-formed but nonexistent oid is accepted SILENTLY at exit 0, so a mis-derivation fails open. That last one is why the derivation is per-observation with no cache — there is no cache lifecycle to get wrong, and no invalidation question in the long-lived MCP server process, which was the finding's related complaint under F-25.
+
+CON-002's capability probe shares the dependency and is answered the same way: it needs an oid first, and deriving one is unflagged, so the ordering is derive-then-probe with no circularity.
+
+Found while checking this finding and routed out rather than absorbed: `src/git.rs::EMPTY_TREE_OID` is an EXISTING hardcoded sha1 constant used by the reservation subsystem, so the exact hazard this finding names is already live in the tree, independent of SL-232. Filed as ISS-262. It fails loudly (exit 128) rather than silently, which is why it is an issue and not a blocker."""
 
 [[finding]]
 id = "F-25"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected CON-002's doctrine-wide floor to bind every caller; observed only verify refuses while retrieve::freeze silently degrades"
 detail = 'Evidence: CON-002 states the git 2.40 floor is doctrine-wide "because NORMATIVE_FLAGS applies to every invocation, including capture() at record time", and that unmet behaviour is "refuse, legibly ... never degrade silently". design.md § 5.1 specifies that refusal for `verify` only, and T76 tests `verify`. The other callers of the same flag list do not share the contract, and one of them does exactly what CON-002 forbids. Confirmed in source by the responder: `src/retrieve.rs` line 532 is `let frame = crate::git::capture(root).ok();`, and its own doc comment two lines above says `capture(root).ok()` SWALLOWS the error — so below the floor `retrieve` silently produces a degraded snapshot rather than refusing. By contrast `src/memory.rs::run_verify` and `src/memory.rs` line 1817 (`run_record`) both use `capture(&root)?` and propagate, yielding a generic `CaptureError::Git` rather than the legible, requirement-naming refusal CON-002 promises. So a single constraint produces three different behaviours across three call sites: legible refusal (verify, as specified), opaque error (record), and silent degradation (retrieve). Additionally unspecified: where the capability probe runs, how often, and how it is cached and invalidated in the long-lived MCP server process. CON-002 declares a doctrine-wide obligation and design.md discharges it verb-locally; either the constraint narrows to verify or the contract has to be written for every caller. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f; confirmed in source by the responder before raising.'
+disposition = "fix-now"
+response = """
+Accepted on the facts, and the remedy is NOT the one the finding implies — stated plainly rather than silently substituted.
+
+Confirmed in source, exactly as charged: `retrieve.rs::freeze` is `crate::git::capture(root).ok()` with its own doc comment saying it swallows the error; `memory.rs::run_verify` and `run_record` both use `capture(&root)?` and propagate a generic `CaptureError::Git`. One constraint, three behaviours.
+
+The finding's premise partly dissolves under DEC-089: CON-002 said the floor was doctrine-wide "because NORMATIVE_FLAGS applies to every invocation", and the flags no longer join `NORMATIVE_FLAGS`. But the finding SURVIVES that move, because `capture()` still routes through `observe_dirt` and therefore still needs `--attr-source`. So it is answered on its merits, not dismissed on a technicality.
+
+The remedy partitions callers by WHAT THEY PERSIST, not by verb: `memory verify` and `memory record` persist a claim (`verified_sha` / the born frame) and must refuse legibly, naming CON-002; `retrieve::freeze` persists nothing and DEGRADES, exactly as B18/B19 already specify. That is the half the finding got wrong. It reads retrieve's degradation as the violation ("does exactly what CON-002 forbids"), but degradation there is a SETTLED decision from another slice and it is correct: `retrieve` makes no attestation, so a thinner visibly-`Unknown` result set is not a false claim about anything, and forcing it to refuse would break B18/B19 to satisfy a constraint written about attestations. Making `retrieve` refuse would be capitulating to the letter of CON-002 against its purpose.
+
+What WAS wrong is the part the finding buried in a subordinate clause: `record` propagating an opaque `CaptureError::Git` under a constraint that promises legibility. That is a real gap and it is now specified — T86 asserts `record` refuses legibly below the floor, with the discriminating half being that `retrieve::freeze` on the same repository degrades to `None` and does NOT refuse.
+
+CON-002 is amended to say this rather than "doctrine-wide", which it never accurately was.
+
+The finding's second limb — where the capability probe runs, how often, how it is cached and invalidated in the long-lived MCP server — is answered by DEC-089's derivation policy: derived once per observation, no cache, therefore no invalidation question. Accepted as a real omission and closed."""
 
 [[finding]]
 id = "F-26"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected F-18's identity binding to cover every accepted reference; observed it is Key-route-only and Uid/UidPrefix have no symlink to read"
 detail = """Evidence: § 5.2's F-18 repair says "read_link on the key symlink yields the bare uid directory name directly" and requires the parsed `memory_uid` to equal it. That mechanism has no object on two of the three reference routes `verify` accepts. `src/memory.rs::MemoryRef::parse` classifies a reference by shape into `Uid`, `UidPrefix` or `Key`; `src/memory.rs::resolve_show` handles all three, taking the literal name for `Uid`/`Key` and calling `resolve_uid_prefix` for `UidPrefix`, then `crate::fsutil::safe_join(items_root, name)`. `src/fsutil::safe_join` is a plain join with two rejections and performs NO canonicalisation (confirmed in source). So on the `Key` route the joined dir IS the key symlink and `read_link` works; on the `Uid` and `UidPrefix` routes the joined dir is the real uid directory and there is no symlink to read. § 5.2 never mentions the three variants and specifies no identity source for the latter two, so F-18's defect survives on both: `memory verify mem_AAAA...` where `items/mem_AAAA/memory.toml` declares an independently-valid `memory_uid = mem_BBBB...` yields a claim base of `items/mem_BBBB`, which need not exist. Under DEC-080/T68 an unmatched `:(literal)` pathspec is inert on all three legs, so the surface reads clean while `items/mem_AAAA/memory.md` — the body actually read, and the file `run_verify` then stamps via `dir.join("memory.toml")` — is measured by nothing. That is F-18's exact false attestation on the routes its repair does not reach. Note `run_verify` already binds `dir` from `resolve_show` and already load-bears on it three lines later; the identity is in hand on every route, and the design reached past it for a Key-only mechanism. This is the fourth instance of the round-2 lesson: the repair was written where the finding pointed rather than where the class lived. Corpus shape is not the defect — the responder measured 349 key symlinks, all single-component bare-uid targets, none absolute, nested or dangling; totality across accepted resolution routes is. Independently derived by the responder and by the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f."""
+disposition = "fix-now"
+response = """
+Accepted in full, confirmed in source, and the repair DELETES the mechanism rather than extending it. Settled as DEC-091.
+
+Confirmed independently before disposal: `MemoryRef` has exactly the three variants; `resolve_show` takes the literal name for `Uid | Key`, calls `resolve_uid_prefix` for `UidPrefix`, then `fsutil::safe_join`s — a plain join with two rejections and no canonicalisation — and returns `(Memory, String, PathBuf)`; `run_verify` destructures that `dir` and stamps `dir.join("memory.toml")`. So on `Key` the joined dir IS the symlink and `read_link` works, and on `Uid`/`UidPrefix` there is no symlink to read. F-18's repair was Key-route-only and § 5.2 never mentioned the variants.
+
+The finding's own closing observation is the repair, and it is the right one: "run_verify already binds `dir` from resolve_show and already load-bears on it three lines later; the identity is in hand on every route, and the design reached past it." So the base is that `dir`, with one `read_link` hop when it is itself a symlink and none when it is not. The parsed `memory_uid` is NOT consulted at all — which means there is no identity to bind and no equality check to write. The directory measured and the file stamped are the same FILE by construction rather than by agreement between two derivations.
+
+Precision the first draft of this response got wrong and is corrected here: they are the same file reached by two paths, not literally the same path value — measurement needs the git-visible uid directory because git does not traverse symlinks in pathspecs, while the stamp writes through the symlink and lands in the same file. Saying "the same value" would have been the true-but-imprecise claim this slice keeps punishing.
+
+The alternative of extending F-18's equality check to all three routes was rejected on the record: it keeps TWO derivations of one fact plus a rule that they agree, which is the enumeration answer to a totality problem — the move § 5.2a exists to refuse.
+
+Corpus shape RE-DERIVED rather than accepted from the finding: 349 key symlinks under `.doctrine/memory/items/`, 0 non-bare targets, 0 dangling — matching the reviewer's figure. Alongside them, 391 real uid directories, so 42 memories are reachable ONLY by the uid route. That figure is not in the finding and it strengthens it: the unreached routes are not exotic.
+
+Consequences written: T71 is rewritten from an F-18 uid-mismatch test into a three-route test, since under DEC-091 a uid mismatch is no longer a verify-time concern at all; the mismatch remains a real corpus defect and is routed to `validate`; and § 5.2's "constructed, not resolved" subsection inverts, with its fresh-record argument surviving intact and better served."""
 
 [[finding]]
 id = "F-27"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected DEC-081's MCP joint to be the published tool contract; observed it names only EditParams, leaving the advertised schema without the field"
 detail = """Evidence: § 5.3's producer table names the MCP joint as "`unobservable: Option<Vec<String>>` on `EditParams` (`src/mcp_server/tools.rs`), mapped straight through like the rest". `EditParams` is not the public contract. Confirmed in source by the responder: `src/mcp_server/tools.rs::tools` publishes the JSON input schema (the `memory_edit` entry is declared there), while `EditParams` is a separate local struct defined inside `src/mcp_server/tools.rs::call_tool` and used only to deserialise the incoming arguments. They are two independent joints; `unobservable` appears in neither today (grep over the file returns nothing). Adding the field only to `EditParams` makes handler-level tests pass while MCP clients never discover the field, because it is absent from the advertised schema — the field would be writable only by a client that guessed it. T70 compares persisted TOML and therefore cannot discriminate this: it exercises the deserialiser, not the advertised contract, so its claimed CLI/MCP equivalence is non-discriminating at the actual boundary. This matters more than a missed line because § 5.3's whole argument is that `memory edit` is the SOLE producer of a declared boundary; a producer half of whose surface is undiscoverable is not a producer. Amendment: name `src/mcp_server/tools.rs::tools`'s schema entry as a distinct joint in the producer table, and give T70 a discriminating half asserting the field is present in the advertised schema. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f; confirmed in source by the responder before raising."""
+disposition = "fix-now"
+response = """
+Accepted, confirmed in source, and the amendment is written exactly as the finding asked.
+
+Confirmed independently: `src/mcp_server/tools.rs::tools` publishes the JSON input schema (the `memory_edit` entry is declared there), while `EditParams` is a separate local struct inside `::call_tool` used only to deserialise incoming arguments. Two independent joints, and `unobservable` appears in neither today.
+
+The finding's strongest point is not the missed line but the consequence: § 5.3's whole argument is that `memory edit` is the SOLE producer of a declared boundary, and a producer half of whose surface is undiscoverable is not a producer — a field present only in the deserialiser is writable solely by a client that guessed it. Accepted verbatim.
+
+§ 5.3's producer table now names the two MCP joints separately — "MCP — deserialiser" (`EditParams`) and "MCP — advertised schema" (`tools()`) — rather than one row that quietly meant the smaller of the two.
+
+T70 is accepted as non-discriminating at the actual boundary, for the reason given: it compares persisted TOML, so it exercises the deserialiser and its claimed CLI/MCP equivalence cannot see a missing schema entry. Rather than rewrite T70, a new T87 asserts the field is present in the ADVERTISED schema, with the discriminating half stated explicitly — a build wiring only `EditParams` passes T70 and fails T87. Keeping both is deliberate: T70's equivalence property is still worth holding, it just was never the property this finding is about."""
 
 [[finding]]
 id = "F-28"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected a changed checkout_state_id algorithm to move its normalizer tag; observed forget.checkout.v1 would label two different computations"
 detail = """Evidence: DEC-087 and § 5.1 both state as a consequence that "checkout_state_id's inputs change in attribute-using repos, so previously persisted values are not reproducible there" — and stop there. `src/git.rs::CHECKOUT_NORMALIZER` is `"forget.checkout.v1"`, and `src/git.rs::checkout_state_id`'s doc comment says the value is "Canonicalized + sha256'd under CHECKOUT_NORMALIZER so the id is config-independent and reproducible"; the tag is serialised into the hashed JSON as `"normalizer"`. The tag exists precisely to version the algorithm. DEC-087 changes an input to that algorithm without bumping it, so the same label would identify two different computations, and a persisted `checkout_state_id` carrying `forget.checkout.v1` becomes ambiguous between pre- and post-DEC-087 semantics. The design states the non-reproducibility as an accepted consequence but never reaches the mechanism that exists to make such a change legible. Amendment: bump the normalizer tag (and say what happens to values carrying the old one), or state why the tag deliberately does not move — but not silence. Note this interacts with DEC-055/IMP-325, which already own discriminating `verified_sha`'s two value kinds; a stale-normalizer value is a third distinguishable state. Live population here is 0 (this repo has no `.gitattributes`), which is why it is `major` and not a blocker. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f; confirmed in source by the responder before raising."""
+disposition = "fix-now"
+response = """
+Accepted without reservation. The design stated the consequence and stopped one step short of the mechanism that exists to make it legible, which is a fair characterisation of what happened.
+
+`CHECKOUT_NORMALIZER` is `"forget.checkout.v1"` and is serialised into the hashed JSON as `"normalizer"`; `checkout_state_id`'s doc comment says the value is canonicalised under it "so the id is config-independent and reproducible". The tag exists precisely to version the algorithm. Changing an input to that algorithm without moving the tag would let one label identify two computations, which is the ambiguity the tag was introduced to prevent.
+
+The tag moves to `forget.checkout.v2`, and § 5.1 now says what happens to values carrying the old one: a persisted `v1` is legible as PRE-NEUTRALISATION rather than ambiguous. The finding's own observation that this interacts with DEC-055/IMP-325 is adopted as the routing — a stale-normalizer value is a third distinguishable state alongside the two `verified_sha` value kinds IMP-325 already owns, and it goes there rather than opening new work here.
+
+Severity accepted as `major` rather than blocker on the finding's own reasoning: live population is 0 because this repository has no `.gitattributes`.
+
+One thing the finding did not reach, and it raises the stakes on this row rather than lowering them: the self-attack on DEC-089 found that `untracked_fingerprint` hashes untracked paths through a filter-sensitive `git hash-object`, so `checkout_state_id`'s inputs change in attribute-using repos by a SECOND route as well as the tracked leg. That strengthens the case for the version bump — there are now two independent input changes hiding behind one label — and it is repaired separately (`hash-object --no-filters`, T90)."""
 
 [[finding]]
 id = "F-29"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected F-20's coverage-filter strike to be complete; observed the predicate survives in 5.4's operational claim_pathspecs definition"
 detail = """Evidence: F-20's disposition says the "not already covered by their originating selector" wording was "struck rather than defined" and that "emission is now unconditional and 'without any further test' is stated in the rule so the restriction cannot be reintroduced by a later editor reading the old table". The strike was applied in one of the two places the predicate appears. design.md § 5.2's "No coverage filter" subsection records the strike; but § 5.4's operational definition still reads `claim_pathspecs` = the uid directory, plus declared entries magic-prefixed, "plus only those resolved symlink targets not already covered by their originating selector". Confirmed textually by the responder: `command grep -n 'not already covered' design.md` returns three hits — the § 5.2 subsection recording the strike, the § 10 row recording F-20 as answered, and the surviving § 5.4 row itself. The surviving copy is the worse one: § 5.4 is the row an implementer reads to BUILD the surface, so of the two mutually exclusive constructors the operational one is the unstruck one, and it reinstates exactly the undefined classifier standing between a derived target and the measurement surface that F-20 was raised to remove. Two consequences. First, the design hands an implementer two incompatible definitions, which is the state F-20 charged verbatim. Second, and worse for the record: F-20's disposition asserts a completed strike that did not happen, so the ledger's account of its own repair is false. Diagnosis is the same as F-20's own: vestigial wording surviving a rewrite in a table while the subsection above it was replaced — now for the second time, in the same document, on the same sentence. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f; confirmed textually by the responder before raising."""
+disposition = "fix-now"
+response = """
+Accepted in full, including — and especially — its second consequence, that F-20's disposition asserted a completed strike that had not happened. That is the ledger being wrong about its own repair, and it is the more serious half.
+
+Confirmed textually before disposing, and then again after: `command grep -n 'not already covered' design.md` returned three hits — § 5.2's subsection RECORDING the strike, § 10's F-20 row, and the surviving § 5.4 operational row. The finding's diagnosis of which copy is worse is correct: § 5.4 is the row an implementer reads to BUILD the surface, so of two mutually exclusive constructors the operational one was the unstruck one.
+
+§ 5.4's `claim_pathspecs` row now reads "plus EVERY resolved symlink target, emitted unconditionally and without any further test (DEC-080)", which restates the rule positively rather than merely deleting the clause — a bare deletion would have left the row silent on a point the other constructor is explicit about.
+
+SWEPT FOR A THIRD COPY BEFORE DISPOSING, because the finding's own diagnosis is that this wording survives rewrites: `not already covered`, `already covered`, `covered by their originating`, and `coverage filter` all now return only the two legitimate hits — the strike record and the § 10 ledger row. No fourth constructor exists.
+
+The general lesson is taken rather than the instance patched. A disposition that claims a completed edit is a CLAIM NEEDING A CHECK, and the check is grepping for the string you say you removed. That is now standing practice for this ledger, and it is the same discipline that caught the F-1/F-10 disposition lapse this round.
+
+T89 records the residual honestly as a VA obligation rather than pretending a unit test can see it: the failure mode was prose divergence between two constructors in one document, and no VT reads prose. What a test CAN assert — that emission carries no coverage predicate — is stated alongside."""
 
 [[finding]]
 id = "F-30"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected step 4's exhaustion classification to cover ordinary index states; observed an unmerged symlink hits an unclassified cat-file exit 128"
 detail = """Evidence: RV-314 F-7 is verified with its exhaustion classification (non-contributing / malformed / probe error) still unchosen, and design.md's own § 5.2 "Sequencing" subsection calls it a prerequisite. The round-4 pass reproduced the open joint from an ordinary index state rather than from an outside-the-repo target, which is the form the design has so far reasoned about. Fixture: a tracked symlink `link` present at index stages 1, 2 and 3, each with mode 120000 (an unmerged entry — the state any conflicted merge produces). Reviewer transcript on git 2.54.0: `git ls-files -s -z -- ':(literal)link'` exits 0 and returns 165 bytes across stages 1,2,3, so § 5.2a step 4 sees a matched mode-120000 entry and proceeds; `git cat-file blob :link` then exits 128 with `fatal: path 'link' is in the index, but not at stage 0` / `hint: Did you mean ':1:link'?`. The constructor fails while deriving the target. Note the dirt gate would ultimately refuse anyway because the index leg fires (`diff-index --quiet --cached HEAD` exits 1, tracked leg 0 bytes), but that is an accident of this fixture, not the specified behaviour: the design still does not say whether such an entry is malformed, non-contributing, or a probe error, and those outcomes differ between `verify` (refusal) and `validate` (finding). It also intersects the D10-versus-§ 5.4-table contradiction the design still carries — D10 says the two gate questions are verify's only refusals while the § 5.4 outcome table retains a "probe errored ⇒ refuse" row. NOT REPRODUCED BY THE RESPONDER — accepted on the reviewer's transcript as a sharpening of an already-verified open finding rather than as a new independent charge; it should be re-run when F-7's classification is settled. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f."""
+disposition = "fix-now"
+response = """
+Accepted as a sharpening of F-7, on the reviewer's transcript, and it closes F-7's four-round-old classification question rather than merely restating it. NOT REPRODUCED BY THE RESPONDER as an independent charge — but the mechanism WAS reproduced here in the course of building the repair, which is worth recording: an unmerged symlink shows `120000 <oid> 2` and `120000 <oid> 3` under `ls-files -s`, two `M link` rows under `ls-files -v`, and `git cat-file blob :link` exits 128 with "is in the index, but not at stage 0".
+
+Settled as DEC-090: `unmeasurable` is a THIRD gate outcome beside clean and dirty. `verify` refuses naming the cause; `validate` emits a finding and continues per B18. Its members are the whole of F-7's classification — index tag not `H`, stage not 0, non-UTF-8, probe error.
+
+The finding is right that the fixture's refusal is "an accident of this fixture, not the specified behaviour", and the repair does not rely on it. The unmerged entry is classified FROM THE STAGE FIELD `ls-files -s` already returns, so `cat-file`'s exit 128 is UNREACHABLE rather than handled after the fact. Ordering, not classification, and it costs nothing: `-s -v -z` combine into one invocation carrying tag, mode, oid and stage together (measured).
+
+Classifying it as malformed was considered and rejected on a principle the design already holds: malformedness is LEXICAL, decided without reading repository state (I10/D16), and stage number is repository state. Putting it in the malformed bucket would be the derived-instrument classification DEC-020 forbids — so the third outcome is not a convenience, it is the only lawful place for this.
+
+The finding's last limb — the D10-versus-§ 5.4-table contradiction — is resolved IN THE TABLE'S FAVOUR. D10 said "verify's only refusals are the two gate questions"; the § 5.4 outcome table never stopped carrying a "probe errored ⇒ refuse" row. D10 was under-stated and is corrected: `verify` has three refusals. § 7's D10 now says so, and states why this does not reopen DEC-020.
+
+Re-run obligation honoured rather than deferred: the finding asked that it be re-run once F-7's classification is settled. It is settled here, and T83 pins it — classified unmeasurable from the stage field, WITHOUT `cat-file` being reached, with the discriminating half being that reaching it yields the unclassified 128."""
 
 [[finding]]
 id = "F-31"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected DEC-080's unconditional emission to be reachable for every index pathname; observed non-UTF-8 targets cannot enter the string surface"
 detail = '''Evidence: RV-314 F-8 is verified with its byte-domain call still open — name the domain (`OsString` plus widened argv) or narrow I9-prime to the UTF-8 index, honestly. DEC-080 raised the stakes and the design did not revisit it. Under the pre-DEC-080 reading a non-UTF-8 symlink target only had to be REPORTED; under DEC-080 every lexically-eligible joined target must be EMITTED as a `:(literal)` pathspec into the measurement surface, so a target that cannot be represented cannot be measured — which converts F-8 from a reporting-fidelity question into an I9-prime under-approximation, the polarity I9-prime exists to forbid. Reviewer fixture on git 2.54.0: a tracked filename `bad-\xff` and a tracked symlink `link` whose blob is that same byte string; `git ls-files -s -z` returns the raw bytes (`...096261642dff00...096c696e6b00`), `git cat-file blob :link` returns `6261642dff`, and `git ls-files` renders the name quoted as `"bad-\377"`. The proposed `Dirt.untracked: Vec<String>` (§ 5.1), `expand_scope_entry`'s result, and `src/git.rs::run_git_env`'s `&[&str]` argument shape cannot carry those bytes without a lossy conversion — which would emit a DIFFERENT pathspec than the one matched — or a failure, which lands in F-7's unclassified probe-error state. Both branches are exactly what F-8 named; what is new is that DEC-080 makes the emission path mandatory. NOT REPRODUCED BY THE RESPONDER — accepted on the reviewer's transcript as a sharpening of an already-verified open finding. Amendment: settle F-8's byte domain in the same edit that settles F-7's classification, and state which of the two DEC-080 assumes. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f.'''
+disposition = "fix-now"
+response = """
+Accepted as a sharpening of F-8, on the reviewer's transcript. NOT REPRODUCED BY THE RESPONDER — recorded as such rather than dressed up.
+
+The finding's central move is accepted and it is the reason F-8 could no longer be deferred: under DEC-080 emission is MANDATORY, so a target that cannot be represented cannot be measured, which converts F-8 from a reporting-fidelity question into an I9-prime under-approximation — the polarity I9-prime exists to forbid. That is a genuine escalation and the design had not revisited F-8 after DEC-080 raised the stakes.
+
+Settled as DEC-090, and the answer is the horn the finding did not name. It offered two: widen the byte domain (`OsString` plus widened argv) or narrow I9-prime honestly. The third is to REFUSE: a pathname or derived target that is not valid UTF-8 is `unmeasurable`, `verify` refuses, `validate` reports. So the domain stays UTF-8 AND I9-prime is not narrowed — the case simply never reaches an attestation.
+
+Widening argv was rejected on cost against population, on the record: it widens `run_git_env`'s signature — the single chokepoint — across every caller in the codebase, in order to MEASURE a path that `scrub_line` can then only report in escaped form anyway, for a live population of 0. Refusing is total, costs nothing, and is in I9-prime's recoverable direction. The finding's "which of the two DEC-080 assumes" is answered: neither; it assumes the emission set is representable, and the unrepresentable case is refused before emission.
+
+This also removes the second branch the finding named — the lossy conversion that "would emit a DIFFERENT pathspec than the one matched". Under T68 such a pathspec matches nothing and is inert, so the lossy branch is a SILENT under-approximation, which is the worst of the available outcomes. T84 pins exactly that as the discriminating half.
+
+Re-run obligation: like F-30 this was accepted on transcript, so T84 is the falsifiable artefact rather than this disposition. Flagged for round 5 as a place where the responder is relying on the reviewer's fixture."""
 
 [[finding]]
 id = "F-32"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected T69's clearing test to discriminate; observed its control is a parse error and the copied apply_edit block stamps a no-op clear"
 detail = """Evidence: two defects in DEC-081's clearing story, both cheap, neither a false attestation. (1) T69's discriminating half is stated against a control that does not exist. The reviewer ran `./target/debug/doctrine memory edit <uid> --path-scope` and got rc=2, `error: a value is required for '--path-scope <PATH_SCOPE>'` — a bare sibling flag is a hard clap parse error, not the no-op T69 contrasts against. The discriminating half must be rewritten against something the CLI can actually produce. (2) Copying the sibling `apply_edit` block, as § 5.3's producer table specifies ("a fourth replace-whole-array block beside paths/globs/commands"), imports a no-op write. Confirmed in source by the responder: `src/memory.rs::apply_edit`'s `--path-scope`, `--glob` and `--command` arms each build the array and set `changed = true` unconditionally whenever the field is `Some`, with no comparison against the existing value, while the function's own doc comment promises "`updated` stamped ONCE at root if any field changed. Returns `true` iff any field changed." For the siblings the no-op is unreachable, because the CLI collapses an empty Vec to `None` before it arrives. DEC-081 deliberately REMOVES that collapse for `unobservable` (`num_args = 0..=1`, a direct pass-through, "not the `is_empty() → None` collapse the other three arms use") in order to make clearing possible — which makes a no-op clear reachable for the first time, so `--unobservable` on an already-empty array rewrites the TOML and stamps `updated` against the function's stated contract. The fix DEC-081 chose for one problem opens a behaviour the sibling arms never exposed, and T69 tests neither idempotence nor the `updated` stamp. Raised from the round-4 external codex pass on thread 019fa1a1-4834-7a60-981d-f85e9a7f572f; limb (2) confirmed in source by the responder before raising."""
+disposition = "fix-now"
+response = """
+Accepted on both limbs; limb (2) confirmed in source by the responder, limb (1) reproduced against the dev binary.
+
+Limb (1), reproduced: `./target/debug/doctrine memory edit <uid> --path-scope` returns `error: a value is required for '--path-scope <PATH_SCOPE>' but none was supplied`. So T69's discriminating half was written against a control that does not exist — a bare sibling flag is a hard clap parse error, not the no-op T69 contrasts against. T69's control is replaced with something the CLI can actually produce.
+
+Limb (2), confirmed in source: `apply_edit`'s `--path-scope`, `--glob` and `--command` arms each build the array and set `changed = true` unconditionally whenever the field is `Some`, with no comparison against the existing value — while the function's own doc comment promises "`updated` stamped ONCE at root if any field changed. Returns `true` iff any field changed." The finding's reasoning about why this has never mattered is exactly right: for the siblings the no-op is UNREACHABLE, because the CLI collapses an empty `Vec` to `None` at `src/memory.rs` before it arrives.
+
+And its sharpest observation is accepted: DEC-081 deliberately REMOVES that collapse for `unobservable` (`num_args = 0..=1`, a direct pass-through) in order to make clearing possible — which makes a no-op clear reachable for the first time. So the fix chosen for one problem opens a behaviour the sibling arms never exposed. § 5.3's producer table no longer says "a fourth replace-whole-array block beside paths/globs/commands" without qualification; it says the block compares before it writes, with the reasoning stated so an implementer copying the sibling does not undo it.
+
+T88 covers it: `--unobservable` bare against an already-empty array is a no-op — TOML byte-identical, `updated` NOT stamped — with the discriminating half being the sibling arms' unconditional `changed = true` copied verbatim.
+
+Severity accepted as `minor`: neither limb produces a false attestation, and both are cheap. Recorded at length anyway because the general shape — a fix for one problem making a latent defect reachable — is the kind of thing that is only visible at the moment the fix is designed."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

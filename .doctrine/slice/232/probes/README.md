@@ -63,3 +63,39 @@ falsifiable:
   than refuting it. The pivot's value is totality by construction, not live
   defect count, and saying otherwise would be the overclaim RV-307 F-25/F-33
   punished.
+
+## Round 4 additions (RV-314 F-21…F-32, DEC-089 / DEC-090 / DEC-091)
+
+All on git 2.54.0. Each script carries its falsifier in-header.
+
+| script | question | headline result |
+|---|---|---|
+| `attr-sources.sh` | which attribute sources survive `--attr-source`? | **tree** closed by the flag; **`core.attributesFile`** closed only by `-c core.attributesFile=/dev/null`; **`$GIT_COMMON_DIR/info/attributes`** closed by *nothing* tested. Also: the flag flips a committed `merge=ours` to `unspecified`, which is F-23 |
+| `freshness.sh` | does `core.fsmonitor` blind the legs, and does config neutralisation lift it? | blinds all three legs with `ls-files -v` reading `H`; `-c core.fsmonitor=false` restores them **even on a primed index and after re-priming** |
+| `index-tags.sh` | can one `ls-files` discriminate every suppression? | `h` / `S` / `S` / `M` for assume-unchanged / skip-worktree / sparse / unmerged, `H` otherwise; **`-s -v -z` combine into one invocation** |
+| `raw-bytes.sh` | is `untracked_fingerprint`'s `hash-object` filter-sensitive? | **yes** — two different untracked files collide to one oid under a `clean` filter. This falsified a claim in this design's own first draft |
+| `no-filters.sh` | is `--no-filters` sufficient, or does eol conversion survive it? | sufficient for **both** the filter and the `text eol=crlf` routes |
+
+**The absolute-byte-count rule above applies to these too**, and round 4's
+figures are likewise fixture-local. What reproduces is the discrimination and the
+exact oids — `3c79cdb822b0…` (the collision), `81920715…` / `d004ceee…` (raw,
+separated), `126799cc…` (raw CRLF) versus `0eabd516…` (LF-normalised).
+
+### Findings that came out against the hypothesis, round 4
+
+- **`FAL-5` / R-E is now CLOSED, not carried.** The note above says "no pathspec
+  approach closes this. Detectable via `ls-files -v`". Both halves were right;
+  the conclusion drawn from them was wrong. `ls-files -v` costs nothing where the
+  expander already runs, and DEC-090 turns the detection into a refusal.
+- **F-22's stat-cache limb did NOT reproduce.** The tracked leg reported 101
+  bytes under both the default config and the reviewer's weakened
+  `core.trustctime=false` + `core.checkStat=minimal`. Recorded inside the finding
+  rather than dropped; F-22 rests on its fsmonitor limb alone.
+- **`GIT_ATTR_NOSYSTEM` is the one unmeasured neutralisation.** `/etc/gitattributes`
+  does not exist in this jail and constructing it means writing to a shared
+  `/etc`. Declared unverified rather than assumed measured.
+- **A negative grep is not evidence unless it could have gone positive.** The
+  first sweep for attribute-sensitive reads inside `capture()` grepped for
+  `run_git|git_stdin|Command::new` and returned empty; `capture()` uses the
+  `git_bytes`/`git_opt`/`git_text` wrappers, so the query was incapable of a
+  positive. The real defect was one probe away and nearly shipped.
