@@ -1,11 +1,11 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 187
-slug = "runtime-section-drafts-and-alignment-authority"
-title = "Runtime section drafts and alignment authority"
+id = 188
+slug = "section-level-human-and-adversarial-review-policy"
+title = "Section-level human and adversarial review policy"
 record_kind = "question"
-status = "answered"
+status = "open"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
