@@ -16,3 +16,10 @@ materialise operations for the managed `/design` run?
 
 The run remains slice-scoped in all three options; this question is about the
 public product vocabulary, not storage ownership.
+
+## Answer
+
+DEC-075 chooses option 1: managed design runs use the first-class
+`doctrine design …` command family. The public vocabulary remains
+design-specific while its internal mechanisms preserve extraction-friendly
+seams.
