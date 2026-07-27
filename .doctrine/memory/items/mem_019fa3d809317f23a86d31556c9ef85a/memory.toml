@@ -1,0 +1,54 @@
+memory_uid = "mem_019fa3d809317f23a86d31556c9ef85a"
+memory_key = "mem.pattern.design.guard-in-front-of-its-own-escape"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Guard in front of its own escape hatch"
+summary = "A universal guard in front of the recovery path that exists to cross it makes that path self-refusing; the exception must be a specified protocol, not an informal bypass"
+created = "2026-07-27"
+updated = "2026-07-27"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["concurrency", "state-model", "review"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "e55631ecdf6abf56a72df8e1b62b173d8bc57c20"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d083bc246830f5daa989decc1dcf585223ba582a1cc857fcee8ad51afc294564"
+base_commit = "e2207ab95b65d1c92c4cb777ed076fe4de7096f5"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-315"
+
+[[relation]]
+label = "related"
+target = "mem_019f9f428fd37e1294e07106b38157ee"
+
+[[relation]]
+label = "related"
+target = "mem_019ebee3c67875f1b4aad250501d09a4"
+
