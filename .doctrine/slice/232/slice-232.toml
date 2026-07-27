@@ -63,6 +63,11 @@ role = "concerns"
 descriptor = "validate's undeterminables unify; ISS-257 absorbed"
 target = "DEC-054"
 
+[[relation]]
+label = "references"
+role = "concerns"
+target = "DEC-055"
+
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
 # relation axes — the `[relationships]` table above holds only the dep/seq payload
