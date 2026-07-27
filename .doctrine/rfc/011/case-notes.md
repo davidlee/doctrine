@@ -944,3 +944,20 @@ would have collapsed 5+ exploration calls into one retrieve.
   neither reads as wrong on its face; the discrepancy is only visible if you
   diff both. A packet that restates queried data invites exactly this: the
   restatement ages against the source it was copied from.
+- **The only substantive phase sheets lived in the tree the cadence tells you to
+  delete.** `[/dispatch; SL-231-conclude]` Runtime state is per-worktree, so
+  PHASE-04's and PHASE-05's sheets (9.2k and 13.7k, carrying the Findings the
+  audit reads) existed *only* under `.dispatch/SL-231/.doctrine/state/`; the
+  primary tree held 1k templates. PHASE-01's progress row existed only in the
+  primary. Neither tree was a superset. "Remove the coord worktree DIRECTORY
+  (keep the refs)" is stated as ref hygiene and says nothing about runtime
+  state, so following it literally destroys the audit's primary evidence — and
+  silently, because the sheets are gitignored and the templates that survive
+  look plausible. Carried forward by hand before teardown.
+- **Coord teardown leaves the boot snapshot pointing at a deleted binary.**
+  `[/dispatch; SL-231-conclude]` The `Invoking doctrine` section bakes the
+  regenerating binary's path, so a dispatch session bakes
+  `.dispatch/SL-<N>/target/debug/doctrine`. Removing the coord tree makes that
+  path dead, and the next session's first tool call fails on a path it was
+  handed by governance. Cured with `doctrine boot` from the primary binary —
+  but nothing in the conclude cadence prompts it.
