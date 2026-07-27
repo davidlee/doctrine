@@ -1,11 +1,11 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 182
-slug = "design-run-prompt-fragment-boundary"
-title = "Design-run prompt fragment boundary"
+id = 184
+slug = "managed-design-workflow-state-and-obligation-model"
+title = "Managed design workflow state and obligation model"
 record_kind = "question"
-status = "answered"
+status = "open"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []

@@ -8,3 +8,8 @@ Which instructions are stable canonical `/design` behaviour, which belong in a
 point-in-time next-obligation envelope, and how should SPEC-023 compose the
 result without making required state-machine steps depend on optional prompt
 retrieval?
+
+Answered by DEC-064: SPEC-023 resolves stable guidance; the managed run owns
+dynamic state and next obligation; one structured turn envelope renders prompt,
+JSON, and status views. The thin static adapter activates this contract rather
+than reimplementing it.
