@@ -38,6 +38,101 @@ intent = "scope-relevant"
 selector = ".doctrine/spec/tech/**"
 intent = "scope-relevant"
 
+[[selector]]
+selector = "src/design_run/**"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/commands/design.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/commands/mod.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/entity.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/reserve.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/knowledge.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/fsutil.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "src/install.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "install/hymns/stage/design.md"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "install/design-prompts/**"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "plugins/doctrine/skills/design/SKILL.md"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "plugins/doctrine/skills/handover/SKILL.md"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "tests/e2e_design_*.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "tests/architecture_layering.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = "tests/e2e_claude_install.rs"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
+[[selector]]
+selector = ".doctrine/slice/233/evaluation/**"
+intent = "design-target"
+note = "SL-233 managed design implementation; add exact spec entity paths after ID allocation"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-005"

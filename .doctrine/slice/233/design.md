@@ -4,9 +4,10 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-> **Status: adversarial review in progress.** Sections 1–9 preserve the
-> substance aligned during the design interview and were reconciled against the
-> original session transcript after compaction.
+> **Status: internal adversarial review integrated; awaiting formal-review
+> choice and explicit lock.** Sections 1–9 preserve the substance aligned
+> during the design interview and were reconciled against the original session
+> transcript after compaction.
 
 ## 1. Design Problem
 
@@ -308,6 +309,8 @@ Expected implementation homes are:
   prompt selection, and serialization contract;
 - `src/commands/design.rs` for persistence, entity effects, recovery, and CLI
   rendering;
+- `src/commands/mod.rs`, `src/commands/cli.rs`, and `src/commands/guard.rs` for
+  module registration, command declaration, and read/write classification;
 - `src/entity.rs`, `src/reserve.rs`, and `src/knowledge.rs` for the separable
   reserved-materialisation seam used by checkpoint creation;
 - `src/main.rs` for command wiring;
@@ -317,6 +320,7 @@ Expected implementation homes are:
 - new/amended product and technical specs, including the applicable SPEC-023
   and skill-contract boundaries;
 - focused unit/integration tests and architecture-layer indexing.
+- an authored evaluation kit beneath `.doctrine/slice/233/evaluation/`.
 
 The pure layer receives derived facts and generated IDs as inputs. Every new
 embedded asset root must also be included in the Nix `srcWithDist` source
@@ -532,10 +536,15 @@ use it, whether it disambiguates acceptance, and its interaction/token cost.
   original ambiguous checkpoint condition had no public repair path.
 - QUE-198 is answered by DEC-088; CHR-049 retains an explicit question about
   whether the required acceptance basis carries its paperwork cost.
+- The internal adversarial pass also restored bounded receipt-eviction rules,
+  made import one-shot, added the actual CLI/guard and shared entity-engine
+  homes, and reconciled the slice's previously open design questions.
 - The pre-existing-record adoption form was added after the user identified
   the duplicate-decision edge case. It extends DEC-083 without making
   comprehensive record discovery part of v1.
-- Design-target selectors remain unrecorded while the design is provisional and
-  specification artifact IDs/paths are not allocated.
-- Next: reconcile scope, run the integrated adversarial review, integrate
-  findings, record final selectors, and seek explicit lock approval.
+- Known design-target selectors are recorded. Exact product/technical spec
+  entity paths must be added immediately after their canonical IDs are
+  allocated; no broad spec wildcard is granted as an implementation target.
+- The slice scope and known implementation selectors are reconciled. Next:
+  choose formal `/inquisition` or proceed toward planning under the skill's
+  explicit review choice, then seek design lock.

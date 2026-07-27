@@ -71,6 +71,11 @@ epistemic records.
   result by creating a record, linking an existing record, retaining an
   unresolved result, or explicitly marking the exchange non-durable. Do not
   manufacture a record for every conversational turn.
+- Make creation and adoption one recoverable managed operation: reserve and
+  journal new canonical identity before authored materialisation, or accept a
+  supplied existing canonical record without duplication.
+- Separate semantic content from a content-bound user-acceptance attestation;
+  agent-authored payloads cannot declare their own accepted status.
 - Keep section drafts, traversal state, delivery receipts, and other provisional
   process data out of the knowledge graph unless the design establishes an
   authored semantic reason for them.
@@ -86,6 +91,10 @@ epistemic records.
 - Keep global transition authority with the coordinating run; a delegated
   worker proposes results and map changes but does not advance the workflow
   independently.
+- Permit explicit conservative entry from an existing `design.md`: import
+  sections as unreviewed drafts, direct non-terminal shaping QUEs as durable
+  inquiries, and conventional `OQ-*` entries only as unverified prose
+  proposals. Never infer procedural evidence or deduplicate by text similarity.
 
 ### 5. Thin skill adapter and governance descent
 
@@ -135,7 +144,7 @@ epistemic records.
   delivering every transport in v1.
 - A graphical design-tree UI or project-defined behaviour language.
 
-## Risks, assumptions, and open questions
+## Risks, assumptions, and resolved design boundaries
 
 - **R1 — ceremony and token tax.** A map or checkpoint protocol that costs more
   attention than it saves will train users and agents to bypass it. Compact
@@ -161,22 +170,20 @@ epistemic records.
   ownership from activation policy.
 - **A3 — existing epistemic kinds are the first durable sink.** `DEC`, `QUE`,
   and `ASM` are reused unless design demonstrates a semantic mismatch.
-- **OQ-1 — run recovery model.** Which state is explicitly persisted, which is
-  derived from authored records, and what concurrency or freshness token guards
-  transitions?
-- **OQ-2 — governing specification boundary.** Does this require a new product
-  capability and tech container, revisions to prompt/skills contracts, or both?
-- **OQ-3 — minimum inquiry-map schema.** Which statuses and sparse cross-links
-  are necessary without turning the map into a general graph language?
-- **OQ-4 — checkpoint admission.** At which transitions must semantic results be
-  dispositioned, and how is user acceptance represented without approval
-  ceremony after every map edit?
-- **OQ-5 — bounded delegation in v1.** How much session/subagent proposal
-  exchange can be delivered without importing harness-specific spawn and broker
-  machinery?
-- **OQ-6 — fragment boundary.** Which instructions are stable behaviour
-  definition, which are point-in-time resolution envelope, and how does
-  SPEC-023 compose them without hiding required steps behind optional pulls?
+- **B1 — runtime recovery.** A schema-versioned, revision-guarded snapshot owns
+  exact resume; authored records support explicitly weaker reconstruction.
+- **B2 — specification boundary.** A narrow product and technical contract
+  descend RFC-021; SPEC-023 and the skill contract are amended only where their
+  existing ownership applies.
+- **B3 — inquiry topology.** One primary parent plus sparse `needs`; lifecycle,
+  cursor, and traversal remain orthogonal.
+- **B4 — checkpoint admission.** A resolved node has an explicit semantic
+  disposition. Accepted truth additionally requires a content-bound
+  user-acceptance attestation.
+- **B5 — delegation.** V1 defines transport-neutral attributed proposals while
+  the coordinator remains sole writer; it does not spawn or broker.
+- **B6 — prompt boundary.** One invariant stage hymn, at most one coarse
+  obligation fragment, and one dynamic TurnEnvelope form the delivered prompt.
 
 ## Verification and closure intent
 
