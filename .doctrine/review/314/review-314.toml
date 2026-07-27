@@ -226,5 +226,32 @@ What is not acceptable is the present state, where the reasoning that earned R-H
 
 Related and worth carrying into the amendment: R-E's detection mechanism (`git ls-files -v`) is named but unbuilt, and F-1/F-10's repair reopens exactly the observation-domain question R-E sits inside. If the domain repair introduces an index-bit-aware leg, R-E may narrow for free — re-examine it after that edit rather than before."""
 
+[[finding]]
+id = "F-14"
+status = "verified"
+severity = "minor"
+title = """Expected the "81 items declare .doctrine scopes" figure to reproduce; observed 29 at HEAD 743e7fe61, an unreproducible 2.8x overstatement in the design's load-bearing justification"""
+detail = """
+Evidence: design.md:74-76 and the scope at slice-232.md assert "**81 items** declare `.doctrine/**` scopes", cited as the proof — alongside RV-307 F-1/F-6 — that a blanket exclusion of doctrine's own authored trees is wrong. § 1 leans on it directly: "so an ADR a memory explicitly names is claim evidence exactly as `src/` is."
+
+Re-measured independently at HEAD `743e7fe61` over `.doctrine/memory/items/*/memory.toml`, excluding key symlinks so each memory counts once: **390 memories carrying a `[scope]` table, 440 total `scope.paths` + `scope.globs` entries, of which 35 begin with `.doctrine`, declared by 29 distinct memories.**
+
+The 440 figure is a positive control: it matches design.md:50-52's "440 scope entries" exactly, and 390 vs its "389 tracked memories" differs by one (corpus growth). So the measurement instrument agrees with the design's own on every figure except this one. An independent count by the codex reviewer in the same session returned 30 declaring memories / 29 currently matching tracked entries — concordant with 29, not with 81.
+
+The conclusion is unaffected: at 29 memories and 35 entries, a blanket `.doctrine` exclusion still removes real claim evidence, and RV-307 F-1's separate proof (memory items live under `.doctrine/memory/items/`) is untouched. This is a wrong number, not a wrong argument.
+
+It is raised because of *where* it sits. § 0:32-38 commits every corpus figure to a stamped HEAD specifically because "RV-313 F-1 caught a design-time absolute that failed to reproduce at execution purely through corpus growth". This figure carries no stamp, is off by 2.8x in the direction that flatters the argument, and sits in the Design Problem — the section a reader trusts most and re-derives least. Growth cannot explain it: the corpus grew, and the figure should have risen.
+
+Required amendment: re-measure, restate with its HEAD stamp, and add the count to a probe under `probes/` so it re-runs like every other measured claim in this document. Check whether the original 81 counted key symlinks or `.doctrine` substring matches anywhere in the record rather than scope entries — naming the miscount protects the next reader who tries to reproduce it."""
+disposition = "design-wrong"
+response = """
+Accepted. Wrong number, sound argument — the amendment is arithmetic plus a probe, not a redesign.
+
+Amendment: replace "81 items" with the re-measured figure at its HEAD stamp (29 memories / 35 entries at `743e7fe61`), in both design.md:74-76 and the scope. Add the count to `probes/census.py` — or a sibling — so it re-runs with every other measured claim rather than sitting as unverifiable prose. The corrected figure still carries § 1's argument: 29 memories naming `.doctrine` evidence is ample to refute a blanket exclusion, and RV-307 F-1's independent proof (memory items live at `.doctrine/memory/items/<key>/`, so the exclusion removes the memory being verified) does not depend on the count at all.
+
+Worth recording in the amendment *why* it was wrong, since the next reader will try to reproduce it: the plausible miscounts are (a) counting key symlinks alongside canonical uid directories, which roughly doubles the population, or (b) matching the `.doctrine` substring anywhere in the record — relations, wikilinks, body text — rather than in `scope.paths`/`scope.globs`. Naming the suspected instrument error is the same discipline § 5.7 applies to the four refuted discriminators.
+
+Note the corpus figures that DID reproduce, so the amendment does not over-correct: 440 scope entries exact, 389→390 memories (growth of one), and the 25 symlink-matching entries reconfirmed as all self-covering with zero added target coverage. The evidence base is sound; this is a single unstamped outlier in it."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
