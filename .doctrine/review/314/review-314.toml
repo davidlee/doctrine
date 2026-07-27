@@ -35,45 +35,111 @@ detail = "Evidence: the authoritative SL-232 scope says the REQ-146/REQ-155 Revi
 
 [[finding]]
 id = "F-4"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected T49 to preserve only unaffected behavior; observed nine of its 25 rows are intentionally changed by the same design"
 detail = "Evidence: .doctrine/slice/232/design.md:423-432 adds a contribution finding to every non-contributing path/glob entry, T35 at :800 pins those findings, yet T49 at :825 requires all 25 ancestor-resolvable rows to emit byte-identical findings to today. A read-only corpus join using the same merge-base --is-ancestor and ls-files probes printed ANCESTOR_RESOLVABLE_WITH_NEW_CONTRIBUTION_FINDINGS=9, including mem_019eacd4b2af7a7099792cc3e1671cc5 (.doctrine/skills/**), mem_019f367068b477d2a78d8c1d8c3dedb4 (src/**/jail/**), and seven others. Unless all nine receive an authored unobservable migration, which the design never specifies, T35 and T49 cannot both pass. This makes the stated behaviour-preservation gate impossible rather than discriminating and invalidates R-G as a regression argument."
+disposition = "design-wrong"
+response = """
+Accepted. T49 as written cannot pass alongside T35, and the design is the defect — no code exists to be wrong.
+
+T49 conflates two output classes. Objective 7 changes `validate` along two independent axes: (a) the *drift* findings from Checks 2/4, where the tri-state converts silent `None` into an explicit undeterminable state, and (b) the *contribution* findings, which are entirely new output that every non-contributing entry now earns (F-36's remedy, T35). Byte-identity can only be claimed over (a), and only for rows the tri-state does not touch. The nine rows codex enumerated are ancestor-resolvable — so unchanged on axis (a) — but gain new axis-(b) output, which is exactly what T35 demands.
+
+Required amendment: restate T49 to assert byte-identity over the **Check 2 / Check 4 drift findings alone** for the ancestor-resolvable population, explicitly excluding contribution findings from its comparison set. R-G's regression argument at :750-755 leans on T49 and must be reworded with it — it currently reads as though the whole `validate` output is preserved for those rows, which is false by this design's own intent.
+
+Second defect, not raised separately but repaired by the same edit: T49 encodes a **live-corpus absolute** ("the 25 ancestor-resolvable rows"). § 0:32-38 states that corpus figures are HEAD-stamped precisely because RV-313 F-1 caught a design-time absolute that failed to reproduce at execution through corpus growth. A test asserting "25 rows" reproduces that error inside the matrix that was rebuilt to avoid it. The model fixture is `GitScratch` (§ 9:770); express T49 against a constructed fixture population, not a count of the live corpus.
+
+Latitude on the exact fixture shape is the author's; the direction is forced — T49 cannot assert what it currently asserts."""
 
 [[finding]]
 id = "F-5"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected R-G to describe recurring unknowns; observed unchanged allow-dirty keeps creating the state called one-time"
 detail = "Evidence: the gate deliberately preserves allow_dirty as an unexcluded capture that stamps CheckoutState when dirty at .doctrine/slice/232/design.md:342-345 and :372-378. The tri-state explicitly counts 24 checkout_state_id values among the undeterminable causes at :409-415, and T48 at :824 requires those values to remain undeterminable. Nevertheless R-G at :750-755 says the 34 newly visible rows drain and are a one-time backlog. Every future verify --allow-dirty invocation on a dirty checkout creates another non-commit verified_sha that merge-base cannot resolve; it remains noisy until a later clean verification. Objective 1 makes remediation possible but neither removes nor bounds the escape hatch. The blast radius is therefore a standing operational degradation, not a one-time migration, and the risk assessment materially understates it."
+disposition = "design-wrong"
+response = """
+Accepted. R-G's "one-time backlog that drains" is not true of the mechanism this design ships.
+
+The reasoning is sound for the *existing* 24 `checkout_state_id` rows: objective 1 relaxes the gate, so those become cleanly re-verifiable and drain. But the design deliberately preserves `--allow-dirty` (§ 5.4:342-345, I4 at :503-504) as an unexcluded capture that stamps `CheckoutState` on a dirty tree. Every future invocation mints another non-commit `verified_sha` that `merge-base --is-ancestor` cannot resolve, and T48 at :824 requires exactly those to render undeterminable. The inflow is therefore not bounded by this slice; only the existing stock is drained.
+
+This matters beyond wording because R-G is the argument that carries the behaviour-preservation risk for a corpus-wide seam. Calling a standing inflow a migration understates the blast radius — the precise error § 4's last principle names ("state a fix's value by what it makes impossible, not by what it fixes today") and that RV-307 F-25/F-33 punished.
+
+Required amendment: restate R-G as a **stock-and-flow** risk. The stock (24 rows, drainable once objective 1 lands) is one-time; the flow (every subsequent `--allow-dirty` verify) is standing and unbounded by this slice. Say plainly that the design accepts a permanent undeterminable-finding inflow proportional to escape-hatch use, and either bound it (out of scope here) or route the bounding as follow-up. IMP-325 already owns discriminating the causes; it does not own bounding the inflow."""
 
 [[finding]]
 id = "F-6"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected I11 lockstep to have two-way enforcement; observed duplicated predicates and T47 catches only one divergence direction"
 detail = "Evidence: current retrieve::staleness gates commit mode on paths at src/retrieve.rs:371-378, while retrieve::git_facts independently gates subprocess facts on paths at :551-570. The design admits both must widen together at .doctrine/slice/232/design.md:479-484 and I11 at :526-528, but proposes no shared predicate. T47 at :823 says only that it fails if git_facts is widened without staleness. The inverse regression is untested: if staleness widens to paths-or-globs while git_facts remains paths-only, a glob-only attested memory enters commit mode with default commits_since=None and renders Unknown. T47 still satisfies its stated commit-mode assertion, while ranking is silently wrong and I11 is violated. A bilateral Fresh/Stale discriminator or a single shared predicate is required; a comment plus this one-directional test does not enforce the invariant."
+disposition = "design-wrong"
+response = """
+Accepted, and the remedy is forced by the design's own reasoning rather than open.
+
+Confirmed in the tree: `retrieve::staleness` branch 1 gates on `!m.scope.paths.is_empty() && !m.anchor.verified_sha.is_empty()` (src/retrieve.rs:371-378) and `git_facts` returns `GitFacts::default()` unless the same predicate holds (src/retrieve.rs:551-570). Two literal copies of one rule. I11 at :526-528 correctly identifies that they must widen together, but a duplicated predicate plus a comment is not an invariant — it is a convention awaiting the next editor.
+
+T47 is genuinely one-directional. It asserts a glob-only attested memory resolves in commit mode, which fails if `git_facts` alone widens. The inverse — `staleness` widened, `git_facts` not — leaves `commits_since` at its `None` default, so branch 1 returns `Staleness::Unknown` and T47's stated commit-mode assertion is still satisfied while ranking is silently wrong.
+
+Required amendment: **extract the predicate once** and have both sites call it, exactly as D3 extracts one dirtiness primitive rather than duplicating it and D13 refuses to implement the same epistemic honesty twice. A shared `fn commit_mode_eligible(m: &Memory) -> bool` makes I11 true by construction and retires the invariant into the type system, where it costs nothing to maintain. Then restate I11 as a structural fact rather than a coordination duty, and give T47 a discriminating half that pins Fresh/Stale (not merely "commit mode"), so a `None`-defaulted Unknown cannot masquerade as a pass.
+
+This is the same move § 5.7 makes four times over: do not ask two readers to re-derive a property; record it once at the source."""
 
 [[finding]]
 id = "F-7"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected symlink re-expansion to preserve the lexical guard and have a total bound; observed target-derived paths bypass step 1 and exhaustion policy is unspecified"
 detail = "Evidence: .doctrine/slice/232/design.md:201-205 guards only the declared entry; step 4 at :214-216 joins index-blob target text and re-expands it while merely saying bounded and cycle-checked. Probe /tmp/claude-1000/-workspace-doctrine/d1a8ae94-a2bd-4fa5-aabc-c29d486a1090/scratchpad/rv314-symlink-target.0IbmQs created tracked symlinks with blobs /etc/hostname and ../../outside; re-expansion returned exit 128 and fatal pathspec is outside repository for both. Thus step 4 manufactures exactly the absolute-outside/root-escaping input I10 calls unreachable. The candidate silently chooses a different policy: candidate.sh:71 hard-codes depth 10 and :82-87 skips absolute, escaping, and seen targets, but the design does not adopt that policy, define cycle identity, name the bound, or say whether depth exhaustion is non-contribution, malformed, or probe error. T41 at design.md:817 tests termination but pins no bound or exhaustion outcome. This also contradicts D10 at :681-686, which says probe-aborting entries are gone and only the two gate questions refuse, while the outcome table at :451-456 still permits probe-error refusal. The constructor is not total or executable at this joint."
+disposition = "design-wrong"
+response = """
+Accepted. Step 4 is the constructor's weakest joint and the finding is proven, not argued — a tracked symlink whose index blob reads `/etc/hostname` or `../../outside`, re-expanded per :214-216, returns `fatal: pathspec is outside repository` at exit 128.
+
+Two distinct defects, one unambiguous and one requiring a call.
+
+**Unambiguous, and non-negotiable:** step 1's lexical guard is written as a check on the *declared entry* (:201-205), but step 4 manufactures new pathspec inputs from index blob content — untrusted data by § 4's own principle ("scope entries are untrusted data, never syntax"; the same is true of link targets, which are arbitrary bytes an attacker or an ordinary `ln -s` can set). I10 at :520-525 claims nothing lexically ineligible is ever emitted, "total by construction rather than by enumeration". That totality is false as written: the guard runs before the only step that creates fresh candidates. **Amendment: step 1's guard is a filter applied to every path entering the emission set, declared or derived, and I10 must be restated to say so.** This also repairs I10's claim that `exit 128` is *unreachable* rather than *handled* — currently it is neither.
+
+**Requires a call, and must be settled in the amendment:** the design says "bounded and cycle-checked" without naming the bound, the cycle identity, or the exhaustion outcome. `candidate.sh` already chose a policy (depth 10 at :71; skip absolute/escaping/seen at :82-87) which the design does not adopt or acknowledge — a probe silently legislating design is its own small heresy. Exhaustion has three lawful classifications with materially different behaviour: non-contributing (report, attest), malformed (report, attest, but never suppressible by `unobservable` per V5), or probe error (**verify refuses**, per the § 5.4 table at :451-456). Pick one and write it into the table.
+
+Note the internal contradiction the finding surfaces: D10 at :681-686 states `verify`'s only refusals are the two gate questions, while the § 5.4 outcome table still carries a "probe errored ⇒ refuse" row. Both cannot stand. Resolving the exhaustion classification is the natural moment to reconcile them."""
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected -z to make index expansion byte-safe; observed the design handles quoting but not non-UTF-8 tracked pathnames"
 detail = "Evidence: .doctrine/slice/232/design.md:211-213 claims -z prevents parsed-output corruption and T55 at :831 covers only valid UTF-8. Git permits arbitrary non-NUL filename bytes. Probe /tmp/claude-1000/-workspace-doctrine/d1a8ae94-a2bd-4fa5-aabc-c29d486a1090/scratchpad/rv314-nonutf8.ghT4dJ added src/bad-FF.rs with byte FF; git ls-files -s -z returned CONTAINS_FF=True and UTF8_DECODE=error at byte 58. The proposed signature at design.md:438 is (root, entry, magic), but no byte/OsString result contract is named. Existing git plumbing accepts only &[&str] at src/git.rs:494-515 and git_bytes at :521-529 returns raw bytes only for output; therefore a concrete matched pathname cannot be fed back into the required literal pathspec through the current chokepoint without a lossy or failing conversion. I9 calls the result total at design.md:513-519, yet this legal index domain is omitted. Specify byte-preserving ownership and argv plumbing and add a discriminating invalid-UTF-8 test; core.quotePath and -z alone do not solve encoding."
+disposition = "design-wrong"
+response = '''
+Accepted. `-z` and `core.quotePath` are two different hazards and the design closes only the first.
+
+§ 5.2 step 3 (:211-213) correctly establishes that `-z` is required, not stylistic, because `core.quotePath=true` renders `ünï.txt` as `"\303\274n\303\257.txt"` and corrupts parsed output. That reasoning is sound and `residue.sh` (d) supports it. But `-z` solves *delimiting*, not *encoding*. Git permits any byte sequence except NUL and `/` in a pathname; the index legally contains non-UTF-8 names, as codex's probe demonstrated (a tracked `src/bad-\xFF.rs` survives `ls-files -s -z` and fails UTF-8 decode at byte 58).
+
+The consequence is concrete and structural, not theoretical: step 4 must feed matched pathnames *back* into git as `:(literal)` pathspecs, and the existing chokepoint at src/git.rs:494-515 accepts only `&[&str]`. `git_bytes` at :521-529 returns raw bytes but takes str args. So a non-UTF-8 match cannot round-trip through the current plumbing without a lossy conversion (which would emit a *different* pathspec than the one matched — a silent claim-surface corruption) or a failure (which lands in the unclassified probe-error state F-7 also hits). I9's totality claim at :513-519 does not survive either outcome.
+
+Required amendment: name the byte-domain contract explicitly. Either (a) declare `expand_scope_entry`'s result `Vec<OsString>`/`Vec<Vec<u8>>` and widen the argv plumbing to carry it, stating the platform assumption; or (b) declare non-UTF-8 index paths **out of the supported domain**, classify them under the malformed/probe-error taxonomy once F-7 settles it, and narrow I9's totality claim to the UTF-8 index — an honest narrowing is acceptable, a silent one is not. T55 currently pins only valid UTF-8 under `quotePath`; whichever branch is taken needs a discriminating invalid-UTF-8 test beside it.
+
+This is the same class of defect as F-1 and F-7: a totality claim asserted over a domain narrower than git's actual one.'''
 
 [[finding]]
 id = "F-9"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected the rebuilt test matrix to cover every normative edge and validation rule; observed E8, E9, V3, and V4 have neither tests nor exemptions"
 detail = "Evidence: E8 requires a force-added ignored path to remain evidence and E9 requires checkout-dependent absolute-inside narrowing to be reported at .doctrine/slice/232/design.md:544-549. V3 requires empty/whitespace unobservable entries to be dropped and reported and V4 requires silent deduplication at :301-314. The complete retained/new matrix at :778-831 has no force-added-ignored case, no primary-vs-linked-worktree absolute case, and T51 covers V1, V2, and V5 only; T42 covers malformed claim entries, not unobservable validation, and no test covers duplicate unobservable values. No explicit reason exempts these properties. Each can regress independently: consulting ignore rules would break E8, using repository root rather than checkout root would break E9, and naive schema plumbing would break V3/V4 while all listed tests stayed green. The rewrite therefore does not provide the matrix completeness it claims."
+disposition = "design-wrong"
+response = """
+Accepted. § 9 opens by declaring the matrix "rebuilt, not edited" (:773-776), which is a completeness claim; four normative properties fall outside it with neither a test nor a stated exemption.
+
+Each can regress independently and silently, which is the test that matters:
+
+- **E8** (:544-546) — a gitignored-but-tracked entry is kept, because ignore rules do not bind tracked files. Under index-first this holds by construction (`ls-files -s` lists tracked paths regardless of ignore state), which is a *reason* it is cheap to test, not a reason to skip it. An implementer who reaches for `check-ignore` — and § 5.3:322-329 shows `check-ignore` is already in this slice's vocabulary for sizing — breaks E8 with every listed test still green.
+- **E9** (:547-549) — the inside/outside split is a property of the **checkout**, not the string, so a memory's claim surface narrows when verified from a linked worktree. This project runs dispatch worktrees as a normal mode, so E9 is mainstream, not exotic. Using the repository root rather than the checkout root breaks it invisibly.
+- **V3 / V4** (:308-311) — T51 covers V1, V2 and V5 only. T42 covers malformed entries in `paths`/`globs`, which is a different field and a different code path. Naive schema plumbing satisfies every existing test while dropping V3's report or V4's dedup.
+
+Required amendment: add the four cases to § 9, or record an explicit exemption with its reason in the same place the other exemptions live (E2's "by construction" and E5's "exempt by kind" are the precedent — both are stated, which is why they are acceptable).
+
+Raised at `minor` correctly: none of these produces a false attestation, and all are cheap. They are recorded because the matrix's own framing claims a completeness it does not have, and an unstated gap in a *rebuilt* matrix is indistinguishable from an oversight in the next reader's hands."""
 
 [[finding]]
 id = "F-10"
@@ -84,7 +150,7 @@ detail = "Evidence: the design defines dirty_under as the sole diff-index dirtin
 
 [[finding]]
 id = "F-11"
-status = "open"
+status = "verified"
 severity = "major"
 title = "Expected D3's one-primitive decomposition to be implementable; observed `dirty_under -> bool` cannot serve `capture_with`'s CheckoutState branch, which needs three fingerprints"
 detail = """
@@ -95,10 +161,21 @@ The real `capture()` at src/git.rs:2185-2284 does not compute one boolean. It co
 A primitive returning `bool` discards every one of them. So `capture_with` cannot delegate to `dirty_under` on the dirty path without recomputing the same three git invocations — which is either parallel implementation (the exact objection D3 itself raises against a separate `source_clean` probe, and that D13 at :694-698 raises one level up) or a silent widening of the primitive's contract that the design never states.
 
 This is distinct from F-10: F-10 concerns *what* `dirty_under` must observe; this concerns whether the stated *decomposition* can hold at all. Note I1's guarantee survives either way (`capture` delegates to `capture_with`), so the invariant is not at risk — the defect is that § 5.1's system model and D3's rationale describe a factoring that cannot be built, and an implementer must therefore re-derive the seam. Remedy: either name a richer return type (e.g. a `Dirt { tracked: Vec<u8>, untracked: Option<String>, index_dirty: bool }` the bool is projected from) or drop the "capture_with delegates to dirty_under" claim and state the two as siblings over a shared argv builder."""
+disposition = "design-wrong"
+response = """
+Accepted. § 5.1's system model and D3's rationale describe a factoring that cannot be built.
+
+`capture()` (src/git.rs:2185-2284) does not compute a boolean. It computes three artefacts and consumes all of them: `diff_bytes` (:2230-2233) hashed to `worktree_fp` (:2247), `untracked_fp` (:2234, defaulted :2248), and `index_tree` from `write_tree_with_retry` (:2244) — all three feeding `checkout_state_id(...)` at :2255, with `index_tree != tree` (:2245) additionally driving the write-tree-vs-diff-index disagreement branch at :2258-2271. A `-> bool` primitive discards every one, so `capture_with` cannot delegate to `dirty_under` on the dirty path without recomputing the same invocations — the parallel implementation D3 itself rejects when dismissing the `source_clean` probe.
+
+I1 is not at risk: `capture(root) = capture_with(root, &[])` holds by construction regardless of how the layer below is cut. The defect is that the stated decomposition is not implementable, so an implementer must silently re-derive the seam — and the seam is where F-1 and F-10 also land.
+
+Required amendment, and it should be taken **as one edit with F-1/F-10** rather than separately: name a return type rich enough to serve both callers. The natural shape falls straight out of `capture`'s own three probes — a `Dirt { tracked: Vec<u8>, untracked: Option<String>, index_dirty: bool }` (or equivalent) that `capture_with` consumes whole and that `verify`'s claim question projects to a bool. That single change simultaneously (a) makes D3's delegation real, (b) gives F-10 its untracked leg by construction rather than as a bolt-on, and (c) preserves I2 — the projection to bool still never reaches `write_tree_with_retry`, since the index-tree computation stays in `capture_with`'s dirty branch where it already is.
+
+If instead the two are kept as siblings over a shared argv builder, say so and drop the "delegates to it" claim from § 5.1 and D3. Either is lawful; the current text is neither."""
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "verified"
 severity = "minor"
 title = """Expected § 2's re-taken inventory to name every surface objective 7 touches; observed `memory_health_findings_native` is absent, and its `"{uid}: "` prefix parse is an unstated contract on the new finding strings"""
 detail = """
@@ -109,10 +186,21 @@ The inventory is incomplete. `memory_health_findings` at src/memory.rs:3508 retu
 Consequence: every new finding objective 7 emits — the flat undeterminable state (DEC-055, T48), the per-entry contribution finding (F-36's remedy, T35), and the V1/V2 `unobservable` findings (T51) — must be formatted `"{uid}: …"` or it silently loses entity attribution in the doctor surface. The design specifies none of these strings' shapes, and no test in § 9 asserts the attribution survives. T48 and T35 assert the findings exist; neither asserts they resolve to an entity.
 
 Low severity because the failure is degraded reporting, not a false attestation, and the fix is a formatting rule. Raised because § 5.6's re-taken inventory is explicitly presented as complete for `validate`, and this is the one consumer of `validate`'s findings that imposes a format obligation on them."""
+disposition = "design-wrong"
+response = """
+Accepted. § 5.6 presents the `validate` inventory as deliberately re-taken and complete; it omits the one consumer that imposes a format obligation on the findings objective 7 adds.
+
+`memory_health_findings` returns `Vec<String>` (src/memory.rs:3508), but it is consumed through `memory_health_findings_native` (:3590-3600), which recovers each finding's owning entity by string matching — `memories.iter().find(|m| msg.starts_with(&format!("{}: ", m.uid)))` — before tagging it `Category::MemoryHealth`. That prefix is an undocumented parse contract between the two functions, and every string Check 2 and Check 4 emit today honours it by coincidence of authorship rather than by any stated rule.
+
+Objective 7 adds at least four new finding shapes: the flat undeterminable state (DEC-055, T48), the per-entry contribution finding (F-36's remedy, T35), and V1/V2 `unobservable` findings (T51). Any that does not lead with `"{uid}: "` silently loses entity attribution in the doctor surface — the finding still prints, but it stops resolving to a memory. T48 and T35 assert the findings *exist*; neither asserts they *attribute*.
+
+Required amendment: add `memory_health_findings_native` to § 2's Current State table and state the `"{uid}: "` prefix as a contract the new strings inherit. Give one of T35/T48 a discriminating half asserting the emitted finding resolves to its memory — cheap, and it converts an implicit convention into something a refactor cannot quietly break.
+
+`minor` is the right severity: degraded reporting, not a false attestation, and the fix is a formatting rule plus one assertion. Recorded because the inventory's claim to be re-taken is what makes the omission worth naming — this design is held to the standard it set for itself."""
 
 [[finding]]
 id = "F-13"
-status = "open"
+status = "verified"
 severity = "minor"
 title = "Expected known false-attestation boundaries to be pinned symmetrically; observed R-H earns a boundary test (T45) while the structurally identical R-E earns none"
 detail = """
@@ -123,6 +211,20 @@ R-H at :756-760 is the same shape: a known gap, live population 0, recovery mech
 R-E receives no test at all. The § 9 matrix at :778-831 contains no `skip-worktree` / `assume-unchanged` case on either leg. So the two risks are argued identically and treated differently, and R-E — which the design itself says is the *wider* of the two, reaching the anchor leg — is the one left unpinned. A later change that silently widens or narrows R-E's exposure has nothing to fail against, which is precisely the property T45 exists to provide.
 
 This is not a demand to *close* R-E; tolerating it with population 0 is defensible. The finding is the asymmetry: either R-E gets a T45-equivalent boundary test, or the design states why a bit-suppressed measurement cannot be pinned the way an unresolved symlinked directory can. Note this is distinct from F-9, which concerns edge cases and validation rules (E8/E9/V3/V4) with no test *or* exemption; here the exemption reasoning exists for the twin risk and simply was not applied."""
+disposition = "design-wrong"
+response = """
+Accepted, narrowly. The finding does not ask for R-E to be closed — tolerating it at population 0 is defensible and the design's decision to name it is correct conduct. The defect is that two risks argued identically are treated differently.
+
+R-H (:756-760) and R-E (:736-745) have the same shape: a measured gap, live population 0, a recovery/detection mechanism identified and deliberately not built. R-H earns T45, whose stated purpose is to pin the boundary "so it can be neither silently closed nor silently widened". R-E earns nothing — § 9 contains no `skip-worktree` / `assume-unchanged` case on either leg. By the design's own account R-E is the *wider* of the two, since it "affects the **anchor** leg as well as the claim surface", so the untested one is the one with more reach.
+
+Required amendment — either is acceptable, and the choice is the author's:
+
+- add a T45-equivalent that sets `skip-worktree` (or `assume-unchanged`) on a claimed tracked file, modifies it on disk, and pins the current outcome as a known boundary; **or**
+- state in R-E why a bit-suppressed measurement cannot be pinned the way an unresolved symlinked directory can, and let the asymmetry stand on the record with its reason.
+
+What is not acceptable is the present state, where the reasoning that earned R-H a boundary test exists and simply was not applied to its twin. Note this is not F-9's defect: there the properties have no test *and* no exemption anywhere; here the exemption reasoning is already written for the parallel case.
+
+Related and worth carrying into the amendment: R-E's detection mechanism (`git ls-files -v`) is named but unbuilt, and F-1/F-10's repair reopens exactly the observation-domain question R-E sits inside. If the domain repair introduces an index-bit-aware leg, R-E may narrow for free — re-examine it after that edit rather than before."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
