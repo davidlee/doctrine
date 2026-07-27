@@ -213,6 +213,163 @@ pub(crate) fn copy_selected(
 }
 
 // ---------------------------------------------------------------------------
+// Component-wise parent creation (extracted from entity.rs, SL-231 PHASE-02)
+// ---------------------------------------------------------------------------
+
+/// Create each missing component of `rel`'s parent under `tree_root`, pushing
+/// only the ones *this call* creates onto `created_dirs`. `create_dir_all`
+/// cannot report which components it made, so the walk is component-wise
+/// `create_dir` (finding 2). An `AlreadyExists` that is a real dir is a
+/// pre-existing/concurrent parent (skip, do not track); anything else (a file
+/// or symlink squatting the path) is an error.
+pub(crate) fn ensure_parent_dirs(
+    tree_root: &Path,
+    rel: &Path,
+    created_dirs: &mut Vec<PathBuf>,
+) -> anyhow::Result<()> {
+    let Some(parent) = rel.parent() else {
+        return Ok(());
+    };
+    if parent.as_os_str().is_empty() {
+        return Ok(());
+    }
+    let mut cur = tree_root.to_path_buf();
+    for comp in parent.components() {
+        cur.push(comp);
+        if create_dir_component(&cur)? {
+            created_dirs.push(cur.clone());
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// No-clobber publication primitive (SL-231 PHASE-02, design §3.2)
+// ---------------------------------------------------------------------------
+
+/// Reserved publication-temp filename prefix. Names starting with this prefix
+/// are in-progress publication artifacts that corpus loaders must skip (EX-3).
+pub(crate) const PUBLICATION_TEMP_PREFIX: &str = ".tmp.";
+
+/// The outcome of a [`publish_complete`] call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PublishOutcome {
+    /// The complete content was published at the destination.
+    Created,
+    /// The destination already exists — content was NOT overwritten.
+    AlreadyExists,
+}
+
+/// Write complete bytes to a reserved sibling temp, publish only through a
+/// no-clobber `hard_link`, then remove the temp. The destination is NEVER
+/// opened for write.
+///
+/// The guarantee: partial authoritative records are prevented on macOS and
+/// Linux; no-clobber concurrency is provided; encountered parent squatters
+/// (symlink or non-directory) are refused. A crash before the link may leave
+/// an ignored temp; a crash after the link may leave the inode under both
+/// names. This does NOT protect against a malicious local actor continuously
+/// swapping directory components.
+pub(crate) fn publish_complete(
+    destination: &Path,
+    complete_bytes: &[u8],
+) -> anyhow::Result<PublishOutcome> {
+    static PUB_TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = destination
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!("destination has no parent dir: {}", destination.display())
+        })?;
+    let dest_name = destination.file_name().ok_or_else(|| {
+        anyhow::anyhow!("destination has no file name: {}", destination.display())
+    })?;
+
+    // Step 1: ensure parent components exist, refusing squatters.
+    ensure_dir_components(dir)?;
+
+    let seq = PUB_TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp_name = format!(
+        "{}{}.{}.{}.pub",
+        PUBLICATION_TEMP_PREFIX,
+        dest_name.to_string_lossy(),
+        std::process::id(),
+        seq
+    );
+    let tmp = dir.join(&tmp_name);
+
+    // Step 2: write and close the complete bytes at the reserved sibling temp.
+    {
+        let mut f = create_new_file(&tmp)
+            .with_context(|| format!("Failed to create publication temp {}", tmp.display()))?;
+        if let Err(e) = std::io::Write::write_all(&mut f, complete_bytes) {
+            drop(f);
+            drop(fs::remove_file(&tmp));
+            return Err(e)
+                .with_context(|| format!("Failed to write publication temp {}", tmp.display()));
+        }
+        // `f` is dropped here — closed before publication.
+    }
+
+    // Step 3: publish the complete inode through a no-clobber hard link.
+    let outcome = match std::fs::hard_link(&tmp, destination) {
+        Ok(()) => PublishOutcome::Created,
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => PublishOutcome::AlreadyExists,
+        Err(e) => {
+            // Clean the temp before surfacing the error.
+            drop(fs::remove_file(&tmp));
+            return Err(e).with_context(|| {
+                format!(
+                    "Failed to hard_link {} -> {}",
+                    tmp.display(),
+                    destination.display()
+                )
+            });
+        }
+    };
+
+    // Step 4: remove the temporary name after publication or collision.
+    // The destination inode retains the link (Created) or already existed
+    // (AlreadyExists); in either case the temp name is no longer needed.
+    drop(fs::remove_file(&tmp));
+
+    Ok(outcome)
+}
+
+/// Try to create a single directory component. Returns `Ok(true)` if this
+/// call created it, `Ok(false)` if it already existed as a real directory.
+/// Errors on a symlink or non-directory squatter — the shared per-component
+/// step for both [`ensure_parent_dirs`] (which records created dirs for
+/// rollback) and `ensure_dir_components` (which does not).
+fn create_dir_component(path: &Path) -> anyhow::Result<bool> {
+    match fs::create_dir(path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+            if !is_real_dir(path) {
+                bail!(
+                    "Failed to create {}: a non-directory squats that path",
+                    path.display()
+                );
+            }
+            Ok(false)
+        }
+        Err(e) => Err(e).with_context(|| format!("Failed to create {}", path.display())),
+    }
+}
+
+/// Ensure every component of `path` exists as a real directory, creating
+/// missing ones component-wise. Refuses a symlink or non-directory squatter
+/// to match the contract of [`ensure_parent_dirs`].
+fn ensure_dir_components(path: &Path) -> anyhow::Result<()> {
+    let mut cur = PathBuf::new();
+    for comp in path.components() {
+        cur.push(comp);
+        create_dir_component(&cur)?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -444,5 +601,174 @@ mod tests {
             fs::read_to_string(dst.join("sub").join("b.txt")).unwrap(),
             "world"
         );
+    }
+
+    // --- ensure_parent_dirs (component-wise safe parent walk) ---
+
+    #[test]
+    fn ensure_parent_dirs_creates_missing_components_and_tracks_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("tree");
+        fs::create_dir(&root).unwrap(); // tree_root must exist (caller's contract)
+        let mut created: Vec<PathBuf> = Vec::new();
+
+        // rel includes the artifact leaf; only parent components are created.
+        ensure_parent_dirs(&root, Path::new("a/b/c/file.toml"), &mut created).unwrap();
+
+        assert!(root.join("a").is_dir());
+        assert!(root.join("a/b").is_dir());
+        assert!(root.join("a/b/c").is_dir());
+        assert!(
+            !root.join("a/b/c/file.toml").exists(),
+            "artifact itself not created"
+        );
+        assert_eq!(created.len(), 3);
+        assert!(created.contains(&root.join("a")));
+        assert!(created.contains(&root.join("a/b")));
+        assert!(created.contains(&root.join("a/b/c")));
+    }
+
+    #[test]
+    fn ensure_parent_dirs_noop_when_all_dirs_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("tree");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir_all(root.join("a/b/c")).unwrap();
+        let mut created: Vec<PathBuf> = Vec::new();
+
+        ensure_parent_dirs(&root, Path::new("a/b/c/file.toml"), &mut created).unwrap();
+
+        assert!(created.is_empty(), "no dirs created when all exist");
+    }
+
+    #[test]
+    fn parent_creation_refuses_symlink_squatter() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("tree");
+        fs::create_dir(&root).unwrap();
+        // `a` is a symlink (pointing somewhere), not a real directory.
+        std::os::unix::fs::symlink("/somewhere", root.join("a")).unwrap();
+        let mut created: Vec<PathBuf> = Vec::new();
+
+        let err = ensure_parent_dirs(&root, Path::new("a/b/file.toml"), &mut created).unwrap_err();
+        assert!(err.to_string().contains("non-directory squats"));
+    }
+
+    #[test]
+    fn parent_creation_refuses_file_squatter() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("tree");
+        fs::create_dir(&root).unwrap();
+        // `a` is a regular file, not a directory.
+        fs::write(root.join("a"), "block").unwrap();
+        let mut created: Vec<PathBuf> = Vec::new();
+
+        let err = ensure_parent_dirs(&root, Path::new("a/b/file.toml"), &mut created).unwrap_err();
+        assert!(err.to_string().contains("non-directory squats"));
+    }
+
+    // --- publish_complete (no-clobber hard-link publication) ---
+
+    #[test]
+    fn publish_complete_new() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("sub").join("record.toml");
+        let body = b"uid = \"x\"\n";
+
+        let outcome = publish_complete(&dest, body).unwrap();
+        assert_eq!(outcome, PublishOutcome::Created);
+        assert_eq!(
+            fs::read_to_string(&dest).unwrap(),
+            std::str::from_utf8(body).unwrap()
+        );
+        // No temp left behind.
+        let siblings: Vec<String> = fs::read_dir(dest.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(siblings, vec!["record.toml"]);
+    }
+
+    #[test]
+    fn publication_never_opens_destination_for_write() {
+        // The implementation proves this structurally: publish_complete never
+        // calls File::create or File::options().write(true).open() on the
+        // destination. It writes to a temp sibling and publishes through
+        // std::fs::hard_link — an atomic directory-entry operation that never
+        // opens the existing inode. This test exercises collision to
+        // demonstrate the content-preserving guarantee.
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        let dest = sub.join("record.toml");
+        let body = b"uid = \"original\"\n";
+
+        // First write creates the file.
+        let outcome = publish_complete(&dest, body).unwrap();
+        assert_eq!(outcome, PublishOutcome::Created);
+
+        // Record inode after creation.
+        let meta1 = fs::symlink_metadata(&dest).unwrap();
+        let ino1 = {
+            use std::os::unix::fs::MetadataExt;
+            meta1.ino()
+        };
+
+        // Collision — must not open the destination for write.
+        let outcome2 = publish_complete(&dest, b"uid = \"different\"\n").unwrap();
+        assert_eq!(outcome2, PublishOutcome::AlreadyExists);
+
+        // Content unchanged.
+        assert_eq!(
+            fs::read_to_string(&dest).unwrap(),
+            std::str::from_utf8(body).unwrap()
+        );
+        // Inode unchanged — hard_link on collision doesn't touch it.
+        let meta2 = fs::symlink_metadata(&dest).unwrap();
+        {
+            use std::os::unix::fs::MetadataExt;
+            assert_eq!(meta2.ino(), ino1, "inode must not change");
+        }
+    }
+
+    #[test]
+    fn publication_cleans_temp_after_collision() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        let dest = sub.join("record.toml");
+        let body = b"uid = \"x\"\n";
+
+        // Create the destination first.
+        let outcome = publish_complete(&dest, body).unwrap();
+        assert_eq!(outcome, PublishOutcome::Created);
+
+        // Collision.
+        let outcome2 = publish_complete(&dest, b"uid = \"y\"\n").unwrap();
+        assert_eq!(outcome2, PublishOutcome::AlreadyExists);
+        // Content unchanged.
+        assert_eq!(
+            fs::read_to_string(&dest).unwrap(),
+            std::str::from_utf8(body).unwrap()
+        );
+
+        // No stray temp.
+        let siblings: Vec<String> = fs::read_dir(&sub)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(siblings, vec!["record.toml"]);
+    }
+
+    #[test]
+    fn publish_complete_refuses_parent_squatter() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Place a file where a directory component is expected.
+        fs::write(root.join("sub"), "block").unwrap();
+        let dest = root.join("sub").join("record.toml");
+
+        let err = publish_complete(&dest, b"uid = \"x\"\n").unwrap_err();
+        assert!(err.to_string().contains("non-directory squats"));
     }
 }

@@ -188,7 +188,7 @@ fn vt2_tools_list() {
         "tools/list should not error: {resp:?}"
     );
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 28, "expected 28 tools, got {tools:?}");
+    assert_eq!(tools.len(), 29, "expected 29 tools, got {tools:?}");
 
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in &[
@@ -226,6 +226,8 @@ fn vt2_tools_list() {
         // SL-228 PHASE-06 — the single-prescription funnel oracle (distinct from
         // `dispatch_next_ready`, the readiness authority's wrapper).
         "dispatch_next",
+        // SL-231 PHASE-04 — the bounded, friction-only capture adapter.
+        "observation_record",
     ] {
         assert!(
             names.contains(expected),
@@ -1303,6 +1305,395 @@ fn e2e_onboard_returns_non_empty() {
     assert!(
         text.contains("anthropic/claude-sonnet-4"),
         "should list at least one emitted model key: {text}"
+    );
+
+    kill(child);
+}
+
+// ── SL-231 PHASE-04 (VT-1): `observation_record` — the bounded, friction-only
+//    MCP capture adapter over the shared observation service (design §3.3).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The MCP capture tool's name, as the wire carries it.
+const OBSERVATION_RECORD: &str = "observation_record";
+
+/// A well-formed `UUIDv7` for a caller-supplied `uid`.
+const OBS_UID_A: &str = "019f1234-5678-7abc-8def-0123456789ab";
+const OBS_UID_B: &str = "019f1234-5678-7abc-8def-0123456789ac";
+
+/// Seed the minimal marker set `root::find` needs to resolve a doctrine root.
+fn seed_observation_root(root: &Path) {
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::create_dir_all(root.join(".doctrine/review")).unwrap();
+}
+
+/// Call `observation_record` and return the raw JSON-RPC response.
+fn record_observation(
+    stdin: &mut impl Write,
+    reader: &mut BufReader<impl std::io::Read>,
+    arguments: Value,
+) -> Value {
+    let params = tools_call_params(OBSERVATION_RECORD, arguments);
+    call(stdin, reader, "tools/call", Some(&params))
+}
+
+/// Parse a successful `observation_record` response into its receipt object.
+fn receipt_of(resp: &Value) -> Value {
+    assert!(resp.get("error").is_none(), "expected a receipt: {resp:?}");
+    serde_json::from_str(tool_result_text(resp)).expect("receipt JSON")
+}
+
+/// The sorted key set of a JSON object.
+fn key_set(v: &Value) -> Vec<String> {
+    let mut keys: Vec<String> = v
+        .as_object()
+        .expect("object")
+        .keys()
+        .map(String::clone)
+        .collect();
+    keys.sort();
+    keys
+}
+
+/// VT-1: the MCP receipt is the CLI receipt — same key set, same kind, same
+/// idempotency semantics — and the record it publishes is a real friction
+/// observation carrying the MCP enrichment allowlist.
+#[test]
+fn observation_record_matches_cli_contract() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_observation_root(root);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let resp = record_observation(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({
+            "uid": OBS_UID_A,
+            "summary": "the funnel refused with no remedy",
+            "detail": "worker could not tell which belt fired",
+        }),
+    );
+    let receipt = receipt_of(&resp);
+
+    assert_eq!(
+        key_set(&receipt),
+        vec!["kind", "outcome", "recorded_at", "rel_path", "uid"],
+        "the receipt is the design §3.1 contract, no more and no less: {receipt}"
+    );
+    assert_eq!(receipt["uid"], OBS_UID_A, "{receipt}");
+    assert_eq!(receipt["kind"], "friction", "{receipt}");
+    assert_eq!(receipt["outcome"], "created", "{receipt}");
+    assert!(
+        receipt["recorded_at"]
+            .as_str()
+            .is_some_and(|s| !s.is_empty()),
+        "the server supplies recorded_at: {receipt}"
+    );
+
+    // The receipt's rel_path is relative and names a record that really landed.
+    let rel = receipt["rel_path"].as_str().expect("rel_path");
+    assert!(
+        !Path::new(rel).is_absolute(),
+        "rel_path must be repository-relative, got {rel}"
+    );
+    let stored = fs::read_to_string(root.join(rel)).expect("published record");
+    assert!(
+        stored.contains("the funnel refused with no remedy"),
+        "summary must be stored verbatim: {stored}"
+    );
+    assert!(
+        stored.contains("worker could not tell which belt fired"),
+        "detail must be stored: {stored}"
+    );
+    assert!(
+        stored.contains("kind = \"friction\""),
+        "the record is a friction observation: {stored}"
+    );
+
+    // Enrichment allowlist: the NAMED MCP interface / product / command, all
+    // marked automatic. Nothing else is invented by the server.
+    assert!(
+        stored.contains("interface = \"mcp\""),
+        "automatic interface must name the MCP surface: {stored}"
+    );
+    assert!(
+        stored.contains("product_surface = \"doctrine\""),
+        "automatic product_surface: {stored}"
+    );
+    assert!(
+        stored.contains("command = \"observation_record\""),
+        "automatic command names the tool: {stored}"
+    );
+    assert!(
+        stored.contains("interface_origin = \"automatic\""),
+        "automatic values carry automatic origin: {stored}"
+    );
+
+    // Idempotency: the SAME uid + the SAME caller intent replays, never collides.
+    let replay = record_observation(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({
+            "uid": OBS_UID_A,
+            "summary": "the funnel refused with no remedy",
+            "detail": "worker could not tell which belt fired",
+        }),
+    );
+    let replay_receipt = receipt_of(&replay);
+    assert_eq!(replay_receipt["outcome"], "replayed", "{replay_receipt}");
+
+    // Explicit facet values WIN over the automatic enrichment.
+    let explicit = record_observation(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({
+            "uid": OBS_UID_B,
+            "summary": "explicit facets win",
+            "facets": {
+                "execution": { "interface": "pi", "interface_origin": "explicit" },
+                "correlation": { "agent_id": "agent-ad06" }
+            }
+        }),
+    );
+    let explicit_receipt = receipt_of(&explicit);
+    let explicit_rel = explicit_receipt["rel_path"].as_str().expect("rel_path");
+    let explicit_stored = fs::read_to_string(root.join(explicit_rel)).expect("published record");
+    assert!(
+        explicit_stored.contains("interface = \"pi\""),
+        "an explicit interface must beat the automatic one: {explicit_stored}"
+    );
+    assert!(
+        !explicit_stored.contains("interface = \"mcp\""),
+        "the automatic interface must not survive alongside the explicit one: {explicit_stored}"
+    );
+    assert!(
+        explicit_stored.contains("product_surface = \"doctrine\""),
+        "unshadowed automatic fields still enrich: {explicit_stored}"
+    );
+    assert!(
+        explicit_stored.contains("agent_id = \"agent-ad06\""),
+        "an ALREADY-SUPPLIED opaque agent id is mapped through: {explicit_stored}"
+    );
+
+    kill(child);
+}
+
+/// VT-1: the CLI and MCP receipts are the SAME contract. Recorded through both
+/// adapters into one root, the two receipts carry identical key sets and the
+/// same `kind`/`outcome` vocabulary.
+#[test]
+fn observation_record_receipt_matches_cli_receipt_shape() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_observation_root(root);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+    let mcp_receipt = receipt_of(&record_observation(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "summary": "captured over MCP" }),
+    ));
+    kill(child);
+
+    // `current_dir` is load-bearing: the worker-fork guard resolves the root from
+    // the CWD, so driving the CLI from the seeded fixture keeps this hermetic —
+    // it must not inherit whatever tree the test binary happens to run in.
+    let out = Command::new(bin())
+        .args(["observation", "record", "friction", "captured over the CLI"])
+        .arg("--path")
+        .arg(root)
+        .current_dir(root)
+        .env_remove("DOCTRINE_WORKER")
+        .output()
+        .expect("run observation record");
+    assert!(out.status.success(), "CLI record failed: {out:?}");
+    let cli_receipt: Value = serde_json::from_slice(&out.stdout).expect("CLI receipt JSON");
+
+    assert_eq!(
+        key_set(&mcp_receipt),
+        key_set(&cli_receipt),
+        "the MCP receipt must be the CLI receipt: {mcp_receipt} vs {cli_receipt}"
+    );
+    assert_eq!(mcp_receipt["kind"], cli_receipt["kind"]);
+    assert_eq!(mcp_receipt["outcome"], cli_receipt["outcome"]);
+}
+
+/// VT-1: the SERVER resolves the repository root. The caller cannot name one —
+/// the schema carries no path field, and a smuggled `path`/`root` argument is
+/// refused outright rather than silently honoured.
+#[test]
+fn observation_record_uses_registered_primary_root() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_observation_root(root);
+
+    let decoy_dir = tmp();
+    let decoy = decoy_dir.path();
+    seed_observation_root(decoy);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    // The input schema exposes NO path field — the absence is the mechanism.
+    let list = call(&mut stdin, &mut reader, "tools/list", None);
+    let tool = list["result"]["tools"]
+        .as_array()
+        .expect("tools")
+        .iter()
+        .find(|t| t["name"] == OBSERVATION_RECORD)
+        .expect("observation_record is registered")
+        .clone();
+    let props = key_set(&tool["inputSchema"]["properties"]);
+    assert_eq!(
+        props,
+        vec!["detail", "enrich", "facets", "summary", "uid"],
+        "the schema carries exactly the design §3.3 fields: {props:?}"
+    );
+
+    // A smuggled caller path is refused, and writes NOTHING to the decoy.
+    for key in ["path", "root"] {
+        let resp = record_observation(
+            &mut stdin,
+            &mut reader,
+            serde_json::json!({ "summary": "redirect me", key: decoy.to_string_lossy() }),
+        );
+        let err = resp.get("error").unwrap_or_else(|| {
+            panic!("a caller-supplied `{key}` must be refused: {resp:?}");
+        });
+        assert_eq!(err["code"], -32602, "{resp:?}");
+        assert!(
+            parse_error_detail(&resp).contains(key),
+            "the refusal names the offending key: {resp:?}"
+        );
+    }
+    assert!(
+        !decoy.join(".doctrine/observations").exists(),
+        "no record may land outside the server-resolved root"
+    );
+
+    // A plain call lands under the server-resolved root.
+    let receipt = receipt_of(&record_observation(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "summary": "lands in the registered root" }),
+    ));
+    let rel = receipt["rel_path"].as_str().expect("rel_path");
+    assert!(root.join(rel).is_file(), "record must land under {root:?}");
+    assert!(
+        !decoy.join(rel).exists(),
+        "record must NOT land under the decoy root"
+    );
+
+    kill(child);
+}
+
+/// VT-1: friction ONLY. Measurement authority and the two correction controls
+/// are unrepresentable in the schema and explicitly refused on the wire; no
+/// record of any other kind can be created through this surface.
+#[test]
+fn observation_record_refuses_non_friction_authority() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_observation_root(root);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let forbidden = [
+        // Measurement authority — a machine-source claim.
+        serde_json::json!({ "summary": "s", "kind": "measurement" }),
+        serde_json::json!({ "summary": "s", "source": "claude-p" }),
+        serde_json::json!({ "summary": "s", "counters": { "tokens": 1 } }),
+        serde_json::json!({ "summary": "s", "gauges": { "ratio": 1.0 } }),
+        // Supersession control.
+        serde_json::json!({ "summary": "s", "old_uid": OBS_UID_A, "replacement_uid": OBS_UID_B }),
+        // Retraction control.
+        serde_json::json!({ "summary": "s", "target_uid": OBS_UID_A }),
+    ];
+    for args in forbidden {
+        let resp = record_observation(&mut stdin, &mut reader, args.clone());
+        let err = resp
+            .get("error")
+            .unwrap_or_else(|| panic!("must refuse {args}: {resp:?}"));
+        assert_eq!(err["code"], -32602, "refusing {args}: {resp:?}");
+        assert!(
+            parse_error_detail(&resp).contains("friction"),
+            "the refusal must say this surface creates friction only: {resp:?}"
+        );
+    }
+
+    // Nothing was published by any refused call.
+    assert!(
+        !root.join(".doctrine/observations").exists(),
+        "a refused call must publish nothing"
+    );
+
+    // A missing summary is refused too — friction without a summary is not a
+    // capture, and the service would reject it anyway.
+    let resp = record_observation(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({ "detail": "d" }),
+    );
+    assert!(resp.get("error").is_some(), "summary is required: {resp:?}");
+
+    kill(child);
+}
+
+/// VT-1 / EX-5: hostile MCP input is escaped before it is rendered back to the
+/// caller. The refusal echoes the offending uid, so it goes through the same
+/// terminal escaper the CLI renderer uses — a raw ESC must never reach a client.
+#[test]
+fn observation_record_escapes_hostile_input_in_refusals() {
+    let dir = tmp();
+    let root = dir.path();
+    seed_observation_root(root);
+
+    let mut child = spawn_server(root);
+    let mut stdin = child.stdin.take().expect("stdin");
+    let stdout = child.stdout.take().expect("stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let resp = record_observation(
+        &mut stdin,
+        &mut reader,
+        serde_json::json!({
+            "summary": "hostile",
+            "uid": "\u{1b}[31mnot-a-uuid\u{1b}[0m\u{7f}\nSECOND LINE",
+        }),
+    );
+    assert!(
+        resp.get("error").is_some(),
+        "a bad uid must refuse: {resp:?}"
+    );
+    let detail = parse_error_detail(&resp);
+    assert!(
+        !detail.contains('\u{1b}'),
+        "no raw ESC may survive into a rendered refusal: {detail:?}"
+    );
+    assert!(
+        detail.contains("\\x1b"),
+        "the ANSI escape must be neutralised as a literal: {detail:?}"
+    );
+    assert!(
+        !detail.contains('\u{7f}'),
+        "no raw DEL may survive: {detail:?}"
+    );
+    assert!(
+        !detail.contains('\n'),
+        "the refusal is a single logical line — no forged line: {detail:?}"
     );
 
     kill(child);

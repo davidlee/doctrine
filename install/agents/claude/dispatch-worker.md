@@ -3,7 +3,7 @@ name: dispatch-worker
 description: Doctrine dispatch worker — executes ONE slice phase inside an isolated git worktree and hands back a single source-delta commit. Spawned by the /dispatch orchestrator; never touches .doctrine/ authored state, runtime state, or memory.
 doctrine-role: worker
 isolation: worktree
-tools: Read, Edit, Write, Bash, Grep, Glob, mcp__doctrine__worker_commit
+tools: Read, Edit, Write, Bash, Grep, Glob, mcp__doctrine__worker_commit, mcp__doctrine__observation_record
 ---
 
 You are a **doctrine dispatch worker**. The orchestrator (the `/dispatch` funnel)

@@ -1333,6 +1333,45 @@ pub fn scan() {
         );
     }
 
+    // ── SL-231 PHASE-01: observation purity gate ────────────────────
+
+    /// The three pure observation modules must not import clock, RNG, disk,
+    /// environment, terminal, or MCP types. They may import only existing
+    /// leaves (lexical, fsutil, root) and std collections/serde.
+    #[test]
+    fn observation_pure_modules_have_no_imperative_imports() {
+        let pure_modules = [
+            "src/observation/wire.rs",
+            "src/observation/resolve.rs",
+            "src/observation/query.rs",
+        ];
+        // Forbidden patterns: each (pattern, description)
+        let forbidden: &[(&str, &str)] = &[
+            ("std::fs", "disk I/O"),
+            ("std::env", "environment variable access"),
+            ("SystemTime", "clock"),
+            ("Instant", "clock"),
+            ("use rand", "RNG"),
+            ("std::process", "process spawning"),
+            ("println!", "terminal output"),
+            ("eprintln!", "terminal output"),
+            ("crate::clock", "clock import"),
+            ("crate::tty", "terminal import"),
+            ("crate::mcp_server", "MCP import"),
+            ("dbg!", "debug macro"),
+        ];
+        for module_path in pure_modules {
+            let content = std::fs::read_to_string(module_path)
+                .unwrap_or_else(|_| panic!("must be able to read {module_path}"));
+            for (pattern, desc) in forbidden {
+                assert!(
+                    !content.contains(pattern),
+                    "{module_path} contains forbidden import {pattern} ({desc})"
+                );
+            }
+        }
+    }
+
     #[test]
     fn check_tangle_grew_detected() {
         // Two engine modules with a mutual cycle, baseline=0 → TangleGrew.

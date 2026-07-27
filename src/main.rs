@@ -52,6 +52,7 @@ mod map_server;
 mod mcp_server;
 mod memory;
 mod meta;
+mod observation;
 mod paths;
 mod plan;
 mod policy;
@@ -888,6 +889,29 @@ mod write_class_tests {
             ),
             "estimate pin --retire must be Orchestrator(\"estimate pin --retire\")"
         );
+    }
+
+    // ── SL-231 PHASE-03: Observation write-class tests ──────────────────────────
+
+    #[test]
+    fn observation_write_class_split() {
+        // Record, supersede, retract are Write-classed.
+        assert_eq!(
+            cls(&["doctrine", "observation", "record", "friction", "test"]),
+            Some("observation record")
+        );
+        assert_eq!(
+            cls(&["doctrine", "observation", "supersede", "a", "b"]),
+            Some("observation supersede")
+        );
+        assert_eq!(
+            cls(&["doctrine", "observation", "retract", "a"]),
+            Some("observation retract")
+        );
+        // Show, list, search are Read-classed.
+        assert_eq!(cls(&["doctrine", "observation", "show", "a"]), None);
+        assert_eq!(cls(&["doctrine", "observation", "list"]), None);
+        assert_eq!(cls(&["doctrine", "observation", "search", "query"]), None);
     }
 
     // ── PHASE-01: Behaviour-preservation verification net (SL-115) ──────────────

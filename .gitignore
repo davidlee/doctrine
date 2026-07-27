@@ -51,6 +51,11 @@ handover.md
 .doctrine/dispatch/
 !.doctrine/agents/AGENTS.md
 
+# Observation records are AUTHORED — committed and visible in review.
+# Only the reserved publication temporaries an interrupted capture can
+# leave behind are ignored (SL-231; fsutil::PUBLICATION_TEMP_PREFIX).
+.doctrine/observations/**/.tmp.*
+
 web/map/dist/
 web/map/node_modules/
 

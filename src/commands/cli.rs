@@ -806,6 +806,12 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: crate::commands::prompt::PromptCommand,
     },
+
+    /// Record, show, list, search, supersede, and retract observations (SL-231).
+    Observation {
+        #[command(subcommand)]
+        command: crate::commands::observation::ObservationCommand,
+    },
 }
 
 // ── help rendering ───────────────────────────────────────────────────────────
@@ -899,6 +905,7 @@ static FAMILIES: &[Family] = &[
             "worktree",
             "dispatch",
             "catalog",
+            "observation",
         ],
     },
 ];
@@ -1853,6 +1860,7 @@ pub(crate) fn dispatch(cmd: Command, color: bool) -> Result<()> {
         Command::Prompt { command } => crate::commands::prompt::dispatch(command, render_boot_map),
         Command::Map { command } => crate::commands::map::dispatch(command),
         Command::Onboard => crate::commands::map::run_onboard(),
+        Command::Observation { command } => crate::commands::observation::dispatch(command, color),
     }
 }
 
@@ -1917,7 +1925,7 @@ mod tests {
         // + `findings` (SL-194 PHASE-01) + `onboard` (SL-201 PHASE-01) + `compare` (SL-210 PHASE-02)
         // + `publication` (SL-223 PHASE-02) + `graph` (SL-226 PHASE-04)
         // + `library` (SL-227 PHASE-02).
-        assert_eq!(visible.len(), 53, "expected 53 visible top-level commands");
+        assert_eq!(visible.len(), 54, "expected 54 visible top-level commands");
     }
 
     /// R-a — narrow-width WRAP case (design watchout): at a width that forces the
