@@ -34,7 +34,8 @@ The `/research` pre-design round spawns these — one read-only agent per thread
   thread needs judgement.
 - Both take a prompt via stdin or arg and return results on stdout — pipe each
   thread's stdout to `.doctrine/slice/NNN/research/raw/<thread>.md`.
-- Do NOT use harness subagents for research in this repo.
+- Do NOT use harness subagents for research in this repo, use the above liberally
+  to preserve interactive session context.
 
 ## useful commands
 
