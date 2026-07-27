@@ -672,5 +672,309 @@ T88 covers it: `--unobservable` bare against an already-empty array is a no-op �
 
 Severity accepted as `minor`: neither limb produces a false attestation, and both are cheap. Recorded at length anyway because the general shape — a fix for one problem making a latent defect reachable — is the kind of thing that is only visible at the moment the fix is designed."""
 
+[[finding]]
+id = "F-33"
+status = "open"
+severity = "blocker"
+title = "Stat-cache config blinds all three legs at tag H — DEC-089's partition omits core.trustctime / core.checkStat"
+detail = '''
+DEC-089 (§ 5.1) states the neutralisation as a **partition by where the mechanism lives**, and its machine-local-config row enumerates `core.attributesFile` and `core.fsmonitor`. Two further machine-local config keys — `core.trustctime` and `core.checkStat` — make git trust the index stat cache without reading content. `NORMATIVE_FLAGS` (`src/git.rs::NORMATIVE_FLAGS`) pins neither, and DEC-090 cannot catch it because `ls-files -v` still reports `H`.
+
+Reproduced, git 2.54.0. A tracked file modified in place, size preserved, mtime restored, with a genuine ctime gap:
+
+    printf 'AAAAAAAAAA\n' > f; touch -d '2001-01-01 00:00:00 UTC' f
+    git add f && git commit -qm base
+    cp -p f ref; <burn ~1s>; printf 'BBBBBBBBBB\n' > f; touch -r ref f
+
+Default config (control):
+
+    ls-files -v:      H
+    diff HEAD bytes:  101      <- detected, correctly
+
+Each key **alone** is sufficient to blind it:
+
+    core.trustctime=false     tag=H  diffHEAD=0  untracked=0  cached_rc=0
+    core.checkStat=minimal    tag=H  diffHEAD=0  untracked=0  cached_rc=0
+    both                      tag=H  diffHEAD=0  untracked=0  cached_rc=0
+
+HEAD content is `AAAAAAAAAA`, worktree content is `BBBBBBBBBB`. All three legs of `observe_dirt` read clean over the exact specified pathspec while the bytes differ arbitrarily.
+
+**Responder verification note — a correction to the raiser's first fixture.** My initial reproduction showed the *control* also reading 0 bytes, which would have refuted the config attribution. It did not: the control's `git add` and the subsequent write fell in the same wall-clock second, so ctime matched by accident and the stat cache was already trusted. Forcing a genuine ctime gap separates them cleanly, and the discrimination above is the config, exactly as raised. Recording this because a same-second fixture is the natural way to write this probe and it silently destroys the control.
+
+Falsifies § 5.1's "The partition, not the list … so it answers for a mechanism nobody has found yet", § 5.5 I6, and I9′'s closure. Note the shape: the partition names the right *category* (machine-local config) and its **enumeration inside that category** is what is incomplete — the same failure DEC-082 was refuted for one round earlier, one level down. The remedy is presumably `-c core.trustctime=true -c core.checkStat=default` on `observe_dirt`'s argv, but the round-4 lesson applies: a fifth key may exist, and an enumeration inside a partition row is not a partition.'''
+
+[[finding]]
+id = "F-34"
+status = "open"
+severity = "blocker"
+title = "DEC-090's unmeasurable detector rides the claim constructor only; the anchor question stays falsely clean"
+detail = '''
+DEC-090 promotes `unmeasurable` to a total outcome — I9′ becomes "holds, or the verb refuses". Its detector is `git ls-files -s -v -z` run **per claim entry** (§ 5.2: "§ 5.2a step 4 already runs `git ls-files -s -z` per entry"), and § 5.2 states explicitly that `observe_dirt`, `Dirt`, `capture_with` and `capture()` are **not touched**. The anchor question (§ 5.4) is `capture_with(root, corpus_excludes)` — the same three blind legs, over the complement of the corpus, with no tag inspection anywhere.
+
+Reproduced, git 2.54.0, on both index flags:
+
+    git init .; mkdir -p .doctrine/memory/items/mem_x src
+    printf 'body\n' > .doctrine/memory/items/mem_x/memory.md
+    printf 'orig\n' > src/outside.rs
+    git add -A && git commit -qm init
+    printf 'MODIFIED-DIRTY\n' > src/outside.rs
+
+Before the flag, the anchor question sees the dirt:
+
+    diff HEAD --binary --no-textconv --no-ext-diff -- ':(exclude).doctrine'  =>  151 bytes
+    ls-files --others --exclude-standard -- ':(exclude).doctrine'            =>  0
+    diff-index --quiet --cached HEAD -- ':(exclude).doctrine'                =>  rc 0
+
+After `git update-index --skip-worktree src/outside.rs` (`assume-unchanged` behaves identically):
+
+    ls-files -v src/outside.rs   =>  S
+    on disk                      =>  MODIFIED-DIRTY
+    git show HEAD:src/outside.rs =>  orig
+    diff HEAD bytes              =>  0
+    untracked                    =>  0
+    index rc                     =>  0
+
+=> `anchor_kind = Commit`, `checkout_state_id` empty, and § 5.4's only-success tuple `(Commit, false)` is reached. Meanwhile DEC-090's detector, applied to the claim surface, correctly reports the uid directory as `H` — it never looks at `src/outside.rs`.
+
+Control: `git update-index --no-skip-worktree src/outside.rs` restores `diff HEAD bytes: 151`. The discrimination is the flag, not the fixture.
+
+Falsifies § 5.5 **I3** ("a genuinely dirty **anchor** tree still refuses without `--allow-dirty`") and § 5.4's two-question gate. I6 itself survives — the attested body's bytes are on the claim surface, which DEC-090 does cover — so this is a false *anchor*, not a false byte-equality claim; that distinction should survive into the disposition rather than being flattened.
+
+DEC-090's own rejection of *honouring the flags* applies verbatim here: "attesting over a path git was told to ignore is the worthless stamp § 5.4 refuses to trade for an extra `git commit`". The argument does not weaken when the suppressed path is outside `.doctrine/**`. § 8 already concedes "R-E's anchor half survives beside R-I" while simultaneously recording R-E as discharged by DEC-090 — those two statements cannot both stand.
+
+The missing signal is one invocation over the anchor pathspec set: `git ls-files -s -v -z -- ':(exclude).doctrine'`, filtered to tag != `H`. Note the cost asymmetry that makes this a real design question rather than a mechanical fix: the claim surface is a short literal set, the anchor surface is the whole index (8,521 entries in this repo), so the per-entry trick does not transfer. Either the anchor gets its own suppression probe or I3 and § 5.4's anchor prose must be narrowed to state what the anchor question actually guarantees.
+
+**Responder note:** derived and reproduced independently before the raiser's round-5 return, from the handover's own ranked self-assessment; the two reproductions agree on different flags (`skip-worktree` and `assume-unchanged`).'''
+
+[[finding]]
+id = "F-35"
+status = "open"
+severity = "blocker"
+title = "--allow-dirty stamps a Commit frame over a byte-divergent body; the escape hatch cannot bypass unmeasurable"
+detail = '''
+§ 5.4 takes the `allow_dirty` branch **before** either gate probe, and I4 says the flag "bypasses **both** gate questions" and stamps from an unexcluded `capture(root)` — "Commit if genuinely clean, else CheckoutState". DEC-090's discussion further treats `--allow-dirty` as the recovery path from an `unmeasurable` refusal. That composition is unsound, because `capture()` is itself blind to the suppressing flags: "genuinely clean" is precisely the predicate the flags falsify.
+
+Reproduced, git 2.54.0, with the suppressed path **on the claim surface itself**:
+
+    git update-index --skip-worktree .doctrine/memory/items/mem_x/memory.md
+    printf 'ARBITRARY-WORKTREE-BODY\n' > .doctrine/memory/items/mem_x/memory.md
+
+    ls-files -s -v <memory.md>  =>  S 100644 <oid> 0
+    git show HEAD:<memory.md>   =>  COMMITTED-BODY
+    cat <memory.md>             =>  ARBITRARY-WORKTREE-BODY
+
+Exact `capture()` legs, unexcluded:
+
+    diff HEAD --binary --no-textconv --no-ext-diff  =>  0 bytes
+    ls-files --others --exclude-standard            =>  0
+    diff-index --quiet --cached HEAD                =>  rc 0
+
+=> `capture()` takes its clean branch and returns `AnchorKind::Commit` with an empty `checkout_state_id`. `src/memory.rs::stamp_verification` therefore writes `frame.commit`. The claim constructor — which *would* have seen `S` and refused — is never run, because `--allow-dirty` short-circuits ahead of it. **I6 is directly false on this path**: `verified_sha` names a commit that does not contain the attested body.
+
+Also confirmed on a suppressed path *outside* the corpus, where the same `capture(root)` returns `Commit` rather than `CheckoutState`, so the escape hatch records a dirty tree with a clean commit anchor indistinguishable from a genuinely clean one. Control in both fixtures: clearing the flag restores non-zero tracked bytes.
+
+Two things this falsifies beyond the mechanism. **I4's arithmetic is now wrong on its face** — it specifies bypass for "both" gate questions where D10, amended in this same round, says "`verify` has **three** refusals — the two gate questions and **unmeasurable**". The design nowhere states which of the three `--allow-dirty` bypasses. **And the answer cannot be "all three."** `--allow-dirty` legitimately bypasses *dirtiness*, because a `CheckoutState` stamp is an honest record of a dirty tree. It cannot bypass *inability to identify the bytes being stamped*, because there is then no honest frame to write — neither `Commit` (false) nor `CheckoutState` (a content id computed from legs that cannot see the content).
+
+This is a different defect from the `untracked_fingerprint` collision DEC-089 repairs with `--no-filters`: that one is a false *identity* between two dirty states, this one is a dirty state wearing the clean state's frame.
+
+**Responder note:** the "unspecified I4 arithmetic" half was derived independently before the raiser's return, and I had judged it minor on the reading that the pseudocode's ordering already settles it. That reading was wrong in the consequential direction — the ordering is exactly what produces the false attestation rather than what excuses it. Raised at the raiser's severity.'''
+
+[[finding]]
+id = "F-36"
+status = "open"
+severity = "blocker"
+title = "DEC-091's single read_link hop accepts a nested alias and measures the intermediate symlink only"
+detail = """
+DEC-091 (§ 5.2) resolves **exactly one** `read_link` hop when `resolve_show`'s `dir` is itself a symlink, and accepts any target that is "a single bare component" (a non-bare target is malformed and reported under I10). `src/memory.rs::resolve_show` reaches the body through `src/fsutil::safe_join` plus an ordinary filesystem read, which follows **every** hop the OS resolves. One hop and all hops are not the same function.
+
+Reproduced, git 2.54.0:
+
+    .doctrine/memory/items/mem.fact.key  ->  alias                    (bare, single component)
+    .doctrine/memory/items/alias         ->  mem_000...000            (bare, single component)
+    .doctrine/memory/items/mem_000.../memory.md
+
+    readlink mem.fact.key   =>  alias
+    body read via the key   =>  DIRTY-BODY
+    git show HEAD:<uid>/memory.md  =>  COMMITTED-BODY
+
+DEC-091's one-hop base is `.doctrine/memory/items/alias`. Measured over exactly that literal pathspec:
+
+    diff HEAD --binary --no-textconv --no-ext-diff  =>  0 bytes
+    ls-files --others --exclude-standard            =>  0
+    diff-index --quiet --cached HEAD                =>  rc 0
+    ls-files -s -v                                  =>  H 120000 <oid> 0
+
+Control — the directory `resolve_show` actually reads and `run_verify` actually stamps:
+
+    diff HEAD bytes  =>  377
+
+The base resolves to a **mode-120000 index entry**, so the three legs measure the symlink blob (unchanged, tag `H`) and the body is measured by nothing. This is F-18's false attestation surviving DEC-091 by one more level of indirection — the fourth occurrence of the round-2 lesson, and the design says so about F-26 without the repair reaching the general case.
+
+`alias` passes I10 (bare, relative, escapes nothing, no control character) and passes DEC-091's own bare-component test, so neither existing guard fires. The symlink-target closure (DEC-080) does not save it either: that is specified per **declared scope entry**, not for recursively resolving the uid base.
+
+The design's corpus evidence — "**349** key symlinks, every target a single-component bare uid, none absolute, nested or dangling" — is a measured population, not a constructor invariant, and § 5.2a's own argument for DEC-080 ("the 0 is an accident of the corpus rather than a property of it") applies here against DEC-091 verbatim.
+
+The remedy space is narrow and each option costs something the design has already refused once: resolve to a fixed point (unbounded hops, needs a cycle bound), or refuse when the one-hop target is itself a symlink (cheap, in I9′'s recoverable direction), or require the resolved base to be a directory rather than a `120000` entry — which the constructor can already see, since it reads the mode in `ls-files -s -v -z`.
+
+**Responder note:** reproduced independently; the raiser's fixture and mine agree."""
+
+[[finding]]
+id = "F-37"
+status = "open"
+severity = "blocker"
+title = "Inherited GIT_WORK_TREE redirects every measuring leg away from the bytes run_verify stamps"
+detail = """
+DEC-089's partition enumerates axes by where the mechanism lives — committed content, machine-local config, machine-local default, system-wide, git-dir state, index state, ignore/exclude. **Process environment is not an axis in that table**, and it is one.
+
+`src/git.rs::run_git_env` builds `Command::new("git")` with `-C <root>` and adds only the caller's extra `envs`; it never calls `env_clear` and never removes git's own environment variables. Confirmed in source — the function body is four lines and has no removal. `git -C <root>` does **not** override an inherited `GIT_WORK_TREE`.
+
+Reproduced, git 2.54.0, repo root genuinely dirty and an alternate clean worktree present:
+
+    rev-parse --show-toplevel (with GIT_WORK_TREE set)  =>  /…/clean
+
+    unredirected diff HEAD bytes                        =>  258   <- correct
+    GIT_WORK_TREE=<clean> diff HEAD --binary … -- <p>    =>  0
+    GIT_WORK_TREE=<clean> ls-files --others … -- <p>     =>  0
+    GIT_WORK_TREE=<clean> diff-index --quiet --cached HEAD -- <p>  =>  rc 0
+
+    root body  =>  DIRTY-BODY-ROOT
+    HEAD body  =>  COMMITTED-BODY
+
+Also reproduced with `GIT_DIR` and `GIT_WORK_TREE` set together (0 bytes). All three legs read clean while the file `run_verify` stamps is byte-divergent from HEAD — a direct I6 false attestation, inside neither DEC-070's evidence domain bound nor DEC-071's stable-checkout bound.
+
+The route is not exotic. Git sets `GIT_DIR` (and, for a non-bare repo driven from a linked worktree, `GIT_WORK_TREE`) in the environment of **hook** processes, and this project's own dispatch machinery runs doctrine inside git-driven contexts. Live population here is 0 only because nothing currently invokes `memory verify` from a hook.
+
+Scope note, stated so the disposition does not over-claim: I reproduced the `GIT_WORK_TREE` route and the `GIT_DIR`+`GIT_WORK_TREE` route. I attempted `GIT_INDEX_FILE` against a scratch index and my fixture produced `fatal: index file smaller than expected` (rc 128) rather than a false-clean, so **that limb is not demonstrated** and should not be asserted in the repair without its own probe — though it is worth attacking, since `run_git_env` uses `GIT_INDEX_FILE` as its own deliberate seam (`filter_tree`, EX-2) and an inherited value would collide with that seam directly.
+
+The repair shape is a sanitised environment at the one chokepoint — the same "EX-1, single chokepoint" argument DEC-089 already rests on, extended from argv to env. Note this cuts against `run_git_env`'s existing purpose, which is to *add* environment: the seam must distinguish doctrine's deliberate variables from inherited ones, so this is not a one-line `env_clear`."""
+
+[[finding]]
+id = "F-38"
+status = "open"
+severity = "blocker"
+title = "DEC-071's stable-checkout bound does not cover info/attributes, which DEC-089 newly load-bears on across a scan-then-probe gap"
+detail = """
+DEC-089 makes `$GIT_COMMON_DIR/info/attributes` the one conversion source that is **refused rather than neutralised**: `verify` reads that file and refuses when any line declares a conversion attribute. That turns a git-dir file into a load-bearing input read at one instant and relied upon across the three probes that follow. DEC-071 bounds only "a checkout stable for the duration of the probes"; `info/attributes` is in the **git dir**, not the checkout, so the declared temporal assumption does not reach it.
+
+The mechanism half is confirmed here rather than inherited. With the full DEC-089 neutralisation set applied — `--attr-source=<empty tree>`, `-c core.attributesFile=/dev/null`, `-c core.fsmonitor=false`, `GIT_ATTR_NOSYSTEM=1` — and an `info/attributes` carrying `f filter=canon`:
+
+    git show HEAD:f  =>  CANONICAL
+    cat f            =>  ARBITRARY-WORKTREE-CONTENT
+
+    diff HEAD --binary --no-textconv --no-ext-diff -- f  =>  0 bytes
+    ls-files --others --exclude-standard -- f            =>  0
+    diff-index --quiet --cached HEAD -- f                =>  rc 0
+
+Control, the same tree with `info/attributes` removed:
+
+    diff HEAD bytes  =>  116
+
+So the file escapes the entire neutralisation set — which is what DEC-089 already measured and why it chose refusal — and the residual is the window between the refusal scan and the probes. A file absent at scan time and present at probe time passes the refusal and converts the comparison, with HEAD, index and worktree all stable throughout.
+
+What is new here is **not** the conversion mechanism (settled, measured, correctly attributed in § 5.1) but the **temporal boundary**: § 5.5 declares two bounds and neither covers a mutable input outside the checkout. State the finding at that altitude in the disposition — the mechanism half should not be re-litigated.
+
+Severity note for adjudication: this needs an actor mutating the git dir *during* a verify, which is a narrower predicate than F-33/F-36/F-37, each of which needs only a pre-existing state. It is raised as a blocker because the design's threat model elsewhere explicitly contemplates an adversarial author hiding "arbitrary attacker content" behind a clean filter (§ 5.1), so a TOCTOU on the single file that is doctrine's only defence against that route is in-model rather than hypothetical. If the disposition narrows the threat model instead, that is a legitimate answer — but it must be written down, because three decisions currently rest on it.
+
+The repair space: re-read `info/attributes` after the probes and refuse on change (cheap, closes the window without needing a lock), or bring git-dir attribute state inside DEC-071's declared bound and say so explicitly, or stat-and-compare around the probe set. Doing nothing is available too, but then § 5.5's bound list must say that a mid-verify git-dir mutation is out of scope."""
+
+[[finding]]
+id = "F-39"
+status = "open"
+severity = "major"
+title = "CON-002 the entity still mandates a doctrine-wide NORMATIVE_FLAGS floor; the design's claim that it is amended is false"
+detail = """
+§ 5.1 asserts: "CON-002 is amended to say this rather than 'doctrine-wide', which it never was." The amendment was written into `design.md` and never applied to the authoritative entity. Read via the CLI (`./target/debug/doctrine knowledge show CON-002`), the record still says:
+
+    statement: … DEC-087 adds `--attr-source=<empty tree>` to NORMATIVE_FLAGS so
+    committed `.gitattributes` cannot make a byte-divergent worktree read clean
+    (RV-314 F-19). The flag is a main-command option applied to every invocation,
+    so the floor is doctrine-wide, not verify-only. …
+
+    applies_to: src/git.rs::NORMATIVE_FLAGS, every doctrine subprocess git
+                invocation, SL-232, DEC-087
+
+and its notes carry the reasoning DEC-089 specifically overturned:
+
+    The floor is doctrine-wide because NORMATIVE_FLAGS applies to every
+    invocation … Scoping the flag to verify's probes alone was rejected:
+    capture() and verify would then observe different trees, which is exactly
+    the split-brain I1/T59's byte-identity assertions exist to forbid
+
+DEC-089 does exactly the thing recorded there as rejected — it moves the flags off `NORMATIVE_FLAGS` onto `observe_dirt`'s argv builder — and answers the split-brain objection on different grounds (the scope unit **is** the one measurement, and `capture_with` consumes `observe_dirt`, so capture and verify still observe the same tree). The design's answer is coherent; the entity has not heard it.
+
+Three concrete divergences, each independently actionable:
+
+1. `statement` names DEC-087, which is superseded.
+2. `statement` says the floor is doctrine-wide; the design's amended partition binds by **what the caller persists** — `verify` and `record` refuse legibly, `retrieve::freeze` degrades to `None` per B18/B19.
+3. `applies_to` names `src/git.rs::NORMATIVE_FLAGS` and `DEC-087`, neither of which the constraint attaches to any more.
+
+An implementer reading the entity — which the project's own guardrail instructs, "read entities via `doctrine <kind> show <ID>`, not raw files" — builds `NORMATIVE_FLAGS`, and is then refuted by F-23's `check_attr_merge_z` inversion all over again. The two artefacts cannot both be conformed to.
+
+Bounded governance repair: amend the CON-002 record (statement, `applies_to`, and the superseded note), and add the DEC-089 supersession link. Worth checking in the same pass whether DEC-087's own record is marked superseded by DEC-089, and whether DEC-082's is marked superseded by DEC-090 — this finding is evidence that round 4's entity-side writes lagged its document-side writes, and F-40 is the same lag inside `design.md` itself."""
+
+[[finding]]
+id = "F-40"
+status = "open"
+severity = "major"
+title = "DEC-091 did not propagate: I7 and § 5.2a still require the deleted memory_uid construction"
+detail = """
+DEC-091 (§ 5.2, "The uid directory base is the resolved directory — neither constructed nor re-derived") states that the base is the directory `src/memory.rs::resolve_show` already returned and that "the parsed `memory_uid` is **not consulted**, so there is no identity to bind and no equality check to write". Two sites still assert the mechanism it deletes, and one of them is an invariant.
+
+**Site 1 — I7 (§ 5.5), the load-bearing one:**
+
+    Rooted at the uid directory, which is what stops a key-form reference
+    measuring the symlink instead of the body (RV-307 F-15) — constructed
+    from `memory_uid`, not resolved through the key symlink (§ 5.2).
+
+That is the *first* draft's mechanism, and it cites § 5.2 — the section that now says the opposite — so the stale text arrives wearing a cross-reference that reads as corroboration. F-18 showed constructing from `memory_uid` yields a base of `items/B` for a memory living in directory `A`, measuring the attested body with nothing. An implementer who builds to I7 rather than to § 5.2 reimplements precisely that defect.
+
+**Site 2 — § 5.2a's "Corrected this round" paragraph:**
+
+    the base is constructed from `memory_uid` (§ 5.2), which is both simpler
+    and survives the fresh-record case where the key symlink is itself
+    untracked.
+
+Same stale mechanism, and its stated justification has also moved: § 5.2 now discharges the fresh-record case differently — "`resolve_show` reads the directory from disk, which does not require the symlink to be tracked at all". The conclusion survives; the reason given here does not.
+
+The inconsistency is load-bearing rather than cosmetic because it changes **which directory becomes the mandatory measurement pathspec**, and the design offers two contradictory invariants with no precedence rule between them.
+
+Not findings, for the disposition's benefit — these read correctly as history and should not be swept: § 7's D-record narration ("reached past it, first to construct a base from `memory_uid` (F-18)") and T71's note explaining what the F-18-form test used to assert.
+
+This is the round-2 lesson recurring at document scale: the repair was written where the finding pointed rather than everywhere the claim lived. § 10 records that three decisions landed in one round; this is the part that did not propagate. The sweep should cover I3/I4/I6/I7/I9′ against DEC-089, DEC-090 and DEC-091 together — F-34 and F-35 each independently found stale invariant text in the same list, which suggests the propagation failure is systematic rather than two isolated misses."""
+
+[[finding]]
+id = "F-41"
+status = "open"
+severity = "major"
+title = "Round-4 probe artefacts are defective: T83 records the wrong exit code, T84 has no persisted probe, attr-sources.sh fails on rerun"
+detail = '''
+`probes/README.md` asserts the round's evidence is persisted so a later reviewer can re-run rather than re-derive. Three limbs of that claim are false, and the design's own standing rule — "the probes are authoritative over the prose" — makes that consequential: a defective probe does not merely fail to help, it outranks the correct prose.
+
+**Limb 1 — T83's discriminating half does not discriminate.** `probes/index-tags.sh:35` reads:
+
+    printf '  cat-file blob :link -> '; $G cat-file blob :link 2>&1 | head -2 | tr '\n' ' '; echo "(rc=$?)"
+
+`$?` is `tr`'s status, not `cat-file`'s, and the script sets no `pipefail`. Confirmed directly:
+
+    out=$(git cat-file blob :nonexistent-stage 2>&1); echo $?   =>  128
+    git cat-file blob :nonexistent-stage 2>&1 | head -2 | tr '\n' ' '; echo $?   =>  0
+
+So the artefact records `rc=0` for a command that exits 128 — and the exit code is exactly what T83 exists to pin, since DEC-090 closes F-30 "by ordering, not by classification", i.e. by ensuring the `exit 128` is never reached. The probe cannot currently tell a reached abort from an avoided one.
+
+**Limb 2 — T84 has no persisted probe.** A content search across `probes/` for a non-UTF-8 symlink-target fixture (`non-UTF-8`, `non-utf`, `target_hex`, `\377`) returns nothing. The raiser reconstructed the mechanism independently and it holds — a `120000` entry whose blob is `ff 74 61 72 67 65 74` yields `cat-file blob` exit 0 with a target that fails UTF-8 conversion at byte 0, so DEC-090's refusal boundary is implementable — but the durable artefact the round claimed does not exist.
+
+**Limb 3 — `attr-sources.sh` is not re-runnable.** Rerun output:
+
+    fatal: not a git repository: (null)
+    linked git-dir =
+    linked git-common-dir =
+    linked check-attr = fatal: not a git repository: (null)
+
+It reuses `/tmp/attrprobe-wt-linked` without clearing it and suppresses the failing `worktree add`, so the second run silently produces empty results where the first produced the measurement. This is the probe backing DEC-089's linked-worktree claim ("a linked worktree inherits the main repository's file, so E9's dispatch case does not escape it") — the one that, on rerun, produces nothing.
+
+Bounded repairs: `set -o pipefail` (or capture rc directly) in `index-tags.sh`; write the missing T84 fixture; make `attr-sources.sh` clear its scratch worktree and fail loudly on `worktree add`. Then re-run the whole `probes/` set once and record which scripts are green — the design leans on these artefacts in five decisions and none of them has been re-executed since it was written.
+
+Note for the disposition: this does **not** falsify DEC-090's mechanisms. Both the unmerged-stage ordering and the non-UTF-8 refusal boundary were independently reproduced and hold. What fails is the evidence layer, and the handover for round 5 already flagged F-30/F-31 as "accepted on the reviewer's transcript, not reproduced independently" with T83/T84 named as the falsifiable artefacts — this finding is that flag coming due.'''
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

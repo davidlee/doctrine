@@ -6,11 +6,92 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · design (**RV-314 round 4 DISPOSED; 32 findings,
-0 open, `await=raiser`; only F-3 verified — 21 answered-but-UNVERIFIED**) ·
-ce8cb114
+fresh-as-of: 2026-07-27 · design (**RV-314 round 5 RAISED; 41 findings,
+9 open of which 6 blockers, `await=responder`; 21 older findings still
+answered-but-UNVERIFIED**) · 1795b5c5
 
-### Produced — RV-314 round 4 disposal (this sweep)
+### Produced — RV-314 round 5 (this sweep)
+
+Round 5 on the warm codex thread, posture **disprove**, with an explicit mandate
+to **re-derive its own acquittals** rather than inherit them. **F-33–F-41 raised;
+six blockers.** Every finding reproduced by the responder before raising.
+
+**The three round-4 decisions were all refuted.** DEC-089, DEC-090 and DEC-091
+each fell, and the design must not go to `/plan`.
+
+- **F-33** (blocker) — `core.trustctime` / `core.checkStat` blind all three legs
+  at tag `H`. DEC-089's partition names the right *category* (machine-local
+  config) and its **enumeration inside that row** is incomplete. Either key alone
+  suffices.
+- **F-34** (blocker) — DEC-090's detector rides the claim constructor only; the
+  **anchor** question stays falsely clean. I3 false. Predicted in the round-5
+  handover and confirmed independently before the reviewer returned.
+- **F-35** (blocker) — `--allow-dirty` stamps a `Commit` frame over a
+  byte-divergent body. **I6 directly false** on that path. I4's "both gate
+  questions" is stale against D10's "three refusals".
+- **F-36** (blocker) — DEC-091's single `read_link` hop accepts a **nested
+  alias**; the base lands on a `120000` entry and the body is measured by nothing.
+  F-18 surviving one level deeper.
+- **F-37** (blocker) — inherited **`GIT_WORK_TREE`** redirects every leg.
+  `run_git_env` never sanitises the environment. **Process environment is a
+  missing axis** in DEC-089's partition.
+- **F-38** (blocker) — DEC-071's stable-checkout bound does not reach
+  `info/attributes`, which DEC-089 newly load-bears on across a scan-then-probe
+  gap.
+- **F-39** (major) — **CON-002 the entity was never amended**; it still mandates
+  the doctrine-wide `NORMATIVE_FLAGS` floor and names DEC-087.
+- **F-40** (major) — DEC-091 did not propagate: **I7** and § 5.2a still require
+  the deleted `memory_uid` construction.
+- **F-41** (major) — probe artefacts defective: T83's `index-tags.sh` reports
+  `tr`'s rc not `cat-file`'s (no `pipefail`, records `rc=0` for a 128), T84 has
+  **no persisted probe**, `attr-sources.sh` fails silently on rerun.
+
+**Acquittals, re-derived not inherited** — recorded so round 6 does not respend
+them. DEC-089's attribute-source coverage holds (`--attr-source` closes the
+committed tree, `-c core.attributesFile=/dev/null` closes both the config and the
+XDG default, `hash-object --no-filters` is sufficient for clean filters *and* eol);
+the `info/attributes` refusal predicate is coarse but has **no syntax-based false
+negative** (macro indirection must still name one of the six attributes in the
+same file); DEC-090's unmerged-stage ordering and non-UTF-8 refusal boundary both
+hold as mechanisms; DEC-070's ignored-present/index-detached case stays covered;
+**I2 survives** the new constructor and the raw-byte flags (probed with
+`index.lock` held); **I8/I10's** declared-and-derived prefix rule holds with no
+third unprefixed string source; `core.untrackedCache` yields no further blind
+state; DEC-081's producer shape survives; **T89's VA classification is
+defensible**. `GIT_ATTR_NOSYSTEM` remains **unverified, not acquitted** — no
+counterexample found, no fixture buildable without a shared `/etc` write.
+
+### Learned — RV-314 round 5
+
+- **A same-second fixture silently destroys its own control.** My first F-33
+  reproduction showed the *control* reading clean too, which looked like a
+  refutation of the reviewer's config attribution. It was not: `git add` and the
+  test write fell in the same wall-clock second, so ctime matched by accident and
+  the stat cache was already trusted. Forcing a genuine ctime gap restored the
+  discrimination. **When a control and a treatment agree, suspect the fixture
+  before the finding.** Third instance on this slice of the round-4 family — a
+  measurement incapable of producing the answer it was run to detect.
+- **An enumeration inside a partition row is still an enumeration.** DEC-089 was
+  written specifically to answer "for a mechanism nobody has found yet" by
+  partitioning on *where the mechanism lives* — and fell to a fourth and fifth
+  config key inside a row it had already named correctly. The axis was right one
+  level up and wrong one level down. Fifth consecutive round of the standing
+  lesson.
+- **A repair that resolves one hop meets an adversary who adds two.** DEC-091
+  deleted machinery to become total by construction, and "one `read_link` hop"
+  reintroduced exactly the boundary the deletion was meant to remove.
+- **Entity-side writes lag document-side writes.** F-39 and F-40 are one failure
+  in two artefacts: round 4 wrote three decisions into `design.md` and did not
+  finish propagating them to CON-002, to I7, or to § 5.2a. **After a multi-decision
+  round, sweep the invariant list and the knowledge entities before declaring the
+  round done** — the design says "CON-002 is amended" and the entity had never
+  heard of it.
+- **The probes are authoritative over the prose, so a defective probe outranks
+  correct prose.** F-41 found a probe recording `rc=0` for a command that exits
+  128 — pinning the exact fact DEC-090 rests on, backwards. Persisted evidence
+  needs re-running, not just writing.
+
+### Produced — RV-314 round 4 disposal (previous sweep)
 
 All 14 open findings disposed `fix-now` (F-1, F-10, F-21–F-32). Every finding
 reproduced or re-derived before disposal; **three new decisions, all

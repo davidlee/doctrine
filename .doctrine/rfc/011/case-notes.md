@@ -546,3 +546,42 @@ the conformance registry describing something other than what shipped. The
 skill's cadence puts per-phase review AFTER import; for the pi arm, where the
 orchestrator commits the delta by hand anyway, review before the commit is
 strictly cheaper and keeps the boundary row honest.
+
+[review/round-5; sl232-rv314-r5]
+- **Warm-thread liveness probe paid for itself again.** One-line probe before a
+  multi-kB round-5 prompt; the thread answered with its own round-4 numbering
+  (R4-1..R4-12) rather than the ledger's F-21..F-32, which confirmed warmth *and*
+  revealed that the reviewer does not carry ledger ids. Cost ~30 tokens, avoided
+  re-sending a 3kB prompt into a dead or mislabelled thread.
+- **The long review ran past the 120s MCP timeout into a background task, as
+  predicted.** ~13 minutes wall clock. The waiting window was not wasted — the
+  responder independently derived and reproduced two of the nine findings
+  (F-34, F-35) before the reviewer returned. **Recommend making this explicit
+  practice**: when dispatching a long adversarial round, work the handover's own
+  ranked self-assessment in parallel rather than blocking. It also produced a
+  cross-check: two independent reproductions of F-34 on different index flags.
+- **Instructing the reviewer to re-derive its own acquittals was the highest-value
+  line in the prompt.** It returned ~11 explicit acquittals with fresh
+  measurements, which are now recorded in notes.md § Harvest so round 6 does not
+  respend them. Without the instruction these arrive as silence, and silence is
+  indistinguishable from "did not look" — which is exactly how DEC-082 survived
+  round 3 and died in round 4. Cheap prompt line, large downstream saving.
+- **The content-classifier rewrite budget was NOT spent this round.** Round 4
+  needed one rewrite round-trip after the endpoint refused adversarial-review
+  prose. Framing round 5 in correctness-review vocabulary from the first send
+  (soundness, false attestation, byte divergence — not exploit/hiding/attacker)
+  passed unchanged. Worth promoting from "budget one round-trip" to "write it in
+  correctness terms first".
+- **`review_raise` via MCP avoided the documented zsh quoting workaround
+  entirely.** The handover prescribes writing multi-kB detail to a file and
+  passing `--detail "$(cat file)"` from bash because the interactive shell is zsh
+  and does not word-split. The MCP tool takes the detail as a structured
+  parameter, so the whole hazard disappears. **The handover advice is CLI-specific
+  and should say so** — an agent following it via MCP writes scratch files for no
+  reason (I wrote two before noticing).
+- **Ledger ids lined up with the reviewer's proposed numbering by luck, not
+  design.** The reviewer emitted F-33..F-41 and the ledger assigned F-33..F-41
+  because exactly 32 findings existed. Had another agent raised concurrently they
+  would have diverged silently, and nine details citing sibling ids
+  cross-reference each other. **A raise-time id echo is load-bearing and there is
+  no guard.**
