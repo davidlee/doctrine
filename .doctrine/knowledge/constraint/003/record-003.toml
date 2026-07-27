@@ -1,0 +1,32 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 3
+slug = "memory-attestation-threat-model-contain-a-compromised-agent"
+title = "Memory attestation threat model: contain a compromised agent"
+record_kind = "constraint"
+status = "active"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["threat-model", "memory", "verify", "attestation", "security", "scope"]
+
+[facet]                         # every field typed; seeded empty (captured later)
+statement     = "The adversary `memory verify` defends against is an AGENT compromised by prompt injection, seriously misaligned, or stupid in a way indistinguishable from malice. The goal is BLAST-RADIUS CONTAINMENT: a bad agent must not be able to propagate a false belief into the corpus and have later agents act on it. OUT OF MODEL, explicitly: a hostile human operator, and confidentiality. IN MODEL: everything the agent can reach with the privileges it actually holds — which in this harness includes a shell, so it includes writing machine-local git config, writing under .git (including info/attributes), setting index flags, and controlling the environment of any git process doctrine spawns. NOT NARROWED to `ordinary authoring`: the adversary is the agent, and the agent has the operator's filesystem privileges. CONSEQUENCE FOR SCOPE: a control the adversary can simply invoke or disable is not a control — this reaches --allow-dirty directly. OPEN, and deliberately not settled here: whether a defence is worth building against a route the adversary could equally reach by editing the memory file directly. That is a cost question per route, not a boundary of the model."
+source        = "operator"
+applies_to    = ["SL-232", "src/memory.rs::run_verify", "src/git.rs::capture", "RFC-022"]
+waiver_reason = ""
+waived_by     = ""
+waived_on     = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = ["Stated by the operator 2026-07-27 after RV-314 round 5, in direct response to the observation that five review rounds had produced 42 findings without converging", "RV-314 rounds 1-5: each round refuted the previous round's repair. Round 4 and round 5 both found blockers in decisions written that same round, so the refutation rate was not decaying"]
+contradicts = []
+notes       = ["ROOT CAUSE THIS RECORD ADDRESSES: with no stated adversary there is no completeness criterion, so every review round could always find another mechanism and no repair could ever be shown sufficient. This is the constraint that makes the question answerable", "Bounds the review, not just the design: a round-6 finding that requires a privilege excluded above is out of scope by this record rather than by argument", "The `don't record incorrect facts` harm is a DIFFERENT problem, largely accident rather than adversary, and is better served by outcome tracking than by dirty-file checking (RFC-022)", "Does NOT decide the three open design questions it bears on (whether the anchor question survives, what happens to --allow-dirty, whether byte-comparison replaces the three legs). It is the yardstick those decisions are measured against"]
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "shapes"
+target = "SL-232"
