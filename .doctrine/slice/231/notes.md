@@ -6,10 +6,30 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-28 · PHASE-01..03 landed and reaped, RV-317 remediated and
-done · d4a042e39
+fresh-as-of: 2026-07-28 · PHASE-01..04 landed and reaped, RV-317 done, the two
+broken VT rows settled · ce148fb08
 
 ### Produced
+
+- PHASE-04 — confined-worker MCP capture delivered on the **claude/Opus** arm
+  (first phase of this slice not on pi/deepseek), driven through the funnel:
+  worker self-commit `b3f28288a` via the gated `worker_commit`, imported
+  (`51472f5e1`), verified green on the `gate` cadence (`da159611e`), concluded
+  (`413d762ab`), fork reaped (`ce148fb08`). Boundary row
+  `[d598dd4c1, da159611e]`. `check regression diff --base d598dd4c1` clean.
+- Plan amendment (`5e152bdf2`, `d598dd4c1`) — the two `verify-vt` rows the
+  RV-317 F-4 remediation broke, settled per the `/plan` narrow-amendment route:
+  PHASE-02 VT-3 re-pointed onto live keywords; PHASE-03 VT-3 **split** into
+  VT-3 + a new VT-4 (forced by the one-`test_file`-per-VT mandate once the
+  criterion's two halves came to live in different files). Ids appended, never
+  renumbered. All 14 landed-phase VT criteria now PASS.
+- Two e2e cases written to close PHASE-03 VT-4's real gap rather than narrow the
+  criterion to what already passed (user's call):
+  `dispatched_marked_fork_refusal_points_to_observation_record_broker` and the
+  negative `leaked_env_on_nonlinked_tree_refuses_without_broker_advice`; the
+  pre-existing case renamed to `solo_marked_fork_…` for the shape it actually
+  asserts. Both proven load-bearing by two independent, mutually discriminating
+  mutations. `tests/e2e_observation.rs` refactored onto one `spawn` helper.
 
 - RV-317 — ledgered code review of the landed PHASE-01..03 delta (facet
   `code-review`, three lens-diverse read-only deepseek passes + orchestrator
@@ -114,6 +134,44 @@ done · d4a042e39
 
 ### Learned
 
+- **A phase has two memory surfaces — the CONTENT it changes and the MECHANICS
+  that drive it — and `/retrieve-memory` scoped to only the first is a silent
+  half-probe.** `mem_019f9effcf4a7922b31c1a1b37841d06` documents the half-arm
+  trap below verbatim, including a "why an orchestrator walks into it" section;
+  it was missed because the phase-plan retrieval was scoped to PHASE-04's files,
+  and that memory is tagged on the *command* surface. Cost a full worker turn.
+- `dispatch arm-spawn` needs BOTH `--slice` and `--phase`: a half-arm binds
+  nothing, and `worker_commit` refuses `unprovable-fork` **at hand-back** — the
+  failure is end-loaded, so the whole worker turn is spent before it surfaces.
+  The `/dispatch-agent` skill's own template still reads
+  `arm-spawn --base <B> [--slice <N>]`, which produces exactly this (IMP-331).
+- The corpus sanctions two recoveries from an unbound fork (re-arm + re-spawn,
+  or fallback-A live-worktree import) and says there is no re-bind verb. A third
+  was taken here — hand-repairing `slice`/`phase` into the coord-tree
+  `DispatchRecord`. It worked and preserved the gated-commit path, but it
+  defeats the fork-time-snapshot property the binding exists to provide.
+  **Recorded as a disclosed deviation, not a practice.**
+- **A handover's recommendation is a hypothesis, not a finding — re-derive it
+  against the code before acting.** This packet's PHASE-03 VT-3 recommendation
+  ("add a solo non-linked marked-fork case") describes a test that cannot pass:
+  `marker.rs` computes `marker_leg = is_linked && marker_present`, so a marker
+  on a non-linked tree is inert, and design §3.4 has both solo and dispatched
+  forks LINKED — the *env* leg is what separates them. The packet had also
+  mislabelled its own landed test's shape. Following it would have produced a
+  vacuous test, which is the very defect RV-317 F-4 was raised about.
+- A worker prompt can prescribe something the architecture forbids. This one
+  told PHASE-04's worker to reuse `escape_hostile` from `src/commands/…`;
+  `mcp_server` and `commands` are both command-tier and SL-203 deliberately
+  severed that back edge, so the import would have re-formed the SCC and red-ed
+  `architecture_layering` — which the same prompt forbade retuning. The worker
+  found the only consistent path (move the shared items down into the
+  `observation` leaf) and reported it as a deviation. **Check a prescribed reuse
+  against ADR-001 direction before writing it into a prompt.**
+- The pre-spawn base-clean beat is `doctrine check prove`, and clippy + a green
+  suite is NOT a substitute — `prove`'s fmt-check leg is the one that caught an
+  unformatted call in `5e152bdf2`. A RED base is a BASE defect: fixed
+  operator-side in its own commit (`d598dd4c1`), never folded into a worker
+  delta.
 - PHASE-01's EX-5 is not worker-satisfiable: `architecture_layering_gate` raises
   `Unclassified` for any `src/` unit absent from `.doctrine/adr/001/layering.toml`,
   which workers may not write. Orchestrator must pre-seed the classification onto
@@ -159,9 +217,20 @@ done · d4a042e39
 
 ### Open
 
-- **PHASE-04 must fork from `d4a042e39`**, not from `24edc3776`. The two RV-317
-  remediation commits sit outside every phase boundary row; a fork from the old
-  head silently reintroduces all eleven findings.
+- **PHASE-05 is not fully dispatchable.** Its selectors include
+  `.doctrine/governance.md` and `.doctrine/rfc/011/rfc-011.md`, which every
+  worker hard-refuses as `forbidden-zone`. The prose half must be
+  orchestrator-authored — same shape as PHASE-01's EX-5 pre-seed.
+- PHASE-04's three VT rows read UNATTRIBUTABLE, and that is expected, not a
+  gap: on the claude arm the conformance registry is DERIVED at
+  `dispatch sync --prepare-review`, so those rows resolve at the slice-level
+  conclude cadence once all five phases land.
+- PHASE-04 worker UNCERTAIN items, unadjudicated and due at audit: facet
+  `schema_version` defaulting, and caller-supplied `*_origin` values riding
+  through as sent.
+- PHASE-04 T6 was minimal — the shipped worker definition gained the capability
+  token but no body prose describing it. Likely PHASE-05's scope; confirm there
+  rather than leaving it to audit.
 - QUE-176 — trustworthy per-harness token instrumentation boundaries
 - IMP-319 — subprocess-worker observation capture parity
 - IMP-320 — configurable observation guidance in boot context

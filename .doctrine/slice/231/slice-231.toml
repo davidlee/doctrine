@@ -1,9 +1,9 @@
 id = 231
 slug = "friction-observation-ledger-and-capture-interface"
 title = "Friction observation ledger and capture interface"
-status = "ready"
+status = "started"
 created = "2026-07-26"
-updated = "2026-07-26"
+updated = "2026-07-27"
 tags = []
 
 [relationships]
