@@ -633,3 +633,20 @@ Also: asking the worker for a READ on an ambiguous design point (rather than
 mandating a fix) surfaced a real EX-5 gap it had not been told about — good
 yield — but its proposed remedy was unworkable. Ask for the analysis; do not
 import the conclusion.
+
+[preflight; sl233-plan-research-20260727]
+Second wrapper defect, ~30 min lost, diagnosed by the user not the agent:
+`pi-scout`/`pi-research` `exec pi` with stdin INHERITED, and pi does not
+self-exit while stdin is open. `scripts/pi-spawn-confined.sh:13-14` documents
+this exact behaviour and handles it (timeout backstop + `agent_end` poll +
+kill -9); the research wrappers do none of it. Result: two of six threads
+returned zero bytes with no exit status, twice across a re-fire, while four
+identical siblings succeeded — pure fd-0 luck.
+Agent-side lesson for RFC-011: I treated "no output, no process, no exit code"
+as a crash and re-fired verbatim TWICE before the user named the cause. The
+correct reflex on a silent subprocess failure is to compare against the repo's
+OWN working invocation of the same binary — `pi-spawn-confined.sh` had the
+answer in a header comment the whole time, and grep-ing for how the repo already
+spawns pi would have found it in one call. Cost: ~2 wasted re-fires plus a
+foreground-debug attempt. Captured as ISS-266; ISS-265 is the sibling guidance
+fault in the same two scripts.
