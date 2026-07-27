@@ -663,3 +663,33 @@ inherited the label without resolving it. Cheap fix at the raise site — a
 doc-local enumeration reference should carry `file:line` on first use in a
 finding, exactly as the same findings do for `spec-003.md:50` and
 `src/review.rs:2025-2133`.
+
+[code-review; RV-317-sl231-review]
+- **pi log extraction is the dominant incidental cost of a review pass.**
+  `pi-spawn-confined.sh` writes the raw RPC event stream to the log — ~1 MB for a
+  48-line file, because every `message_update` carries the FULL accumulated
+  `partial` content, not just the delta. Getting the reviewer's verdict out
+  needed a bespoke Python walk over nested JSON, and the first two attempts
+  grabbed the wrong text (a file the agent had read; then the echoed prompt)
+  because "longest text block" and "block containing VERDICT" are both wrong
+  heuristics — the prompt itself contains the word VERDICT. Three tool calls and
+  two persisted-output truncations to retrieve one page of text that the
+  subprocess already had in hand. A `--final-message-only` output path, or the
+  script tee-ing the last assistant message to `<log>.verdict.txt`, would remove
+  this entirely and it recurs on every single review/worker turn.
+- **Harness refuses tool input containing raw control characters.** Raising a
+  finding whose evidence is an ANSI-injection reproduction failed with
+  `InputValidationError: command contains control characters that would be hidden
+  in the approval dialog`. Correct guard, but for THIS project the payloads under
+  review are frequently hostile strings, so it will recur. Workaround: write the
+  detail to a scratchpad file with printable stand-ins (`<ESC>`, `^[`) and pass
+  `--detail "$(cat file)"`. Worth knowing up front rather than discovering
+  mid-raise — cost one wasted raise attempt with a long argument.
+- **Reviewer line numbers were systematically diff-relative** (~410 off), so
+  every one of 11 findings had to be re-located against the source before it
+  could be raised. Not harness friction, but it doubles the adjudication cost of
+  an otherwise-good pass; prompting for `grep -n` output alongside claims would
+  likely fix it.
+- Minor: `for cmd in "supersede X Y"` word-splitting bit again (the handover
+  warned Bash `$VAR` splitting misbehaves in this harness shell) — the whole
+  string arrived as one subcommand. Literal args only.
