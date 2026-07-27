@@ -24,39 +24,66 @@ dependencies = []
 #
 # ARRAY ORDER IS EXECUTION ORDER (`src/plan.rs` reads the ordered phase array and
 # never sorts by id). The 2026-07-28 revision split the two oversized phases and
-# gave four unowned scope objectives their own homes; because ids are immutable
+# gave six unowned scope objectives their own homes; because ids are immutable
 # and append-only, the new phases carry PHASE-10…PHASE-12 and are positioned in
 # the array where they actually run. Execution order is therefore:
 #   01 → 02 → 03 → 04 → 05 → 06 → 11 → 12 → 10 → 07 → 08 → 09
 # See plan.md § Sequencing for why.
+#
+# ── WHAT A VT MANDATE PROVES, AND WHAT IT DOES NOT ────────────────────────────
+# `src/vtgate.rs::check_vt` NEVER RUNS A TEST. It proves that a slice-modified
+# file contains each `keyword` as a raw substring — over unstripped source, so a
+# comment satisfies it — and that each `patterns` regex matches at least one
+# LINE. Nothing more.
+#
+# Three devices therefore carry the real weight, and every code phase uses all
+# three. A phase is not disposable without them:
+#
+#   1. `patterns` anchored at line start on a DECLARATION shape (`^\s*fn name\(`,
+#      `^\s*pub enum X`). A comment line begins with `/`, so it cannot match.
+#      This forces the named item to exist as code.
+#   2. Exit criteria that ENUMERATE THE EXACT TEST FUNCTION NAMES. The names are
+#      the contract; the patterns anchor on them; omission is then visible in one
+#      grep instead of hidden behind a paraphrase.
+#   3. A negative control (`VA-NC` in each phase): every named test was observed
+#      RED before it was made green, with the failing output recorded in the
+#      phase sheet. This is the only device that catches a test which passes
+#      because it asserts nothing. A test never seen red is not evidence.
+#
+# Plus a uniform escape sweep (`VA-ES`) — no `#[ignore]`, no `todo!()`, no
+# `unimplemented!()`, no `assert!(true)`, and a test census that never shrinks.
+# The coordinator runs VA rows; the worker does not self-certify them.
 
 [[phase]]
 id        = "PHASE-01"
 name      = "Governance descent"
 objective = """
 Descend RFC-021 into exactly four specification entities — one new product spec, \
-one new technical spec, and two narrow amendments (SPEC-019, SPEC-023) — appending \
-all four exact paths as design-target selectors BEFORE any body is edited. \
-Coordinator-only by construction: a dispatch worker never writes authored \
-.doctrine/ state."""
+one new technical spec, and two narrow amendments (SPEC-019, SPEC-023, both tech \
+specs) — appending all four exact paths as design-target selectors BEFORE any \
+body is edited. Coordinator-only by construction: a dispatch worker never writes \
+authored .doctrine/ state."""
 entrance_criteria = [
   { id = "EN-1", text = "design.md is locked and RV-315 is terminal (all 20 findings)" },
-  { id = "EN-2", text = "the selector list carries no exact spec-entity paths yet — only the deferred `.doctrine/spec/{product,tech}/**` scope-relevant globs" },
+  { id = "EN-2", text = "the selector list carries no exact NEW spec-entity paths yet. The two amendment targets are already declared design-target (`.doctrine/spec/tech/019/**`, `.doctrine/spec/tech/023/**`, added 2026-07-28), so only the two newly allocated ids remain to append" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "one new product spec and one new technical spec exist, each descending RFC-021, with ids allocated by the CLI (never guessed)" },
   { id = "EX-2", text = "the new technical spec owns the reserve-then-journal mechanism, the prompt pack, and the reserved-materialisation seam" },
   { id = "EX-3", text = "SPEC-019 carries only an acknowledgement that a managed design run is a legitimate provenance for DEC/QUE/ASM created through the reserve-then-journal protocol — no mechanism ownership transfers (RV-315 F-16)" },
   { id = "EX-4", text = "SPEC-023 gains exactly one entry — `stage/design` in `[hymns].seal` — and nothing else; the prompt pack is NOT swept under SPEC-023 (RV-315 F-18)" },
-  { id = "EX-5", text = "all four exact spec paths were appended as design-target selectors BEFORE the first body edit, not after" },
+  { id = "EX-5", text = "both new exact spec paths were appended as design-target selectors BEFORE the first body edit, not after" },
   { id = "EX-6", text = "no skill contract is amended: no specification owns a skill body, so `plugins/doctrine/skills/design/SKILL.md` remains a source target only (RV-315 F-17)" },
-  { id = "EX-7", text = "the selector append lands as its own commit, distinct from and preceding every spec-body commit — the phase does not land as one commit, because a single commit makes EX-5 unfalsifiable (plan revision D4)" },
+  { id = "EX-7", text = "the selector append lands as its own commit, distinct from and preceding every spec-body commit — the phase does not land as one commit, because a single commit makes EX-5 unfalsifiable" },
 ]
 verification = [
-  { id = "VA-1", text = "`doctrine slice conformance SL-233` reports no undeclared spec edits — the design's named exit condition for this phase" },
-  { id = "VA-2", text = "`doctrine spec validate` passes for both new entities and both amendments" },
-  { id = "VA-3", text = "`git log` shows the selector-only commit strictly preceding every spec-body commit, per EX-7" },
-  { id = "VA-4", text = "the descent totals exactly four entities — neither a fifth spurious entity nor a missing one; both errors are undoable only by a later slice" },
+  { id = "VT-1", expects = "SPEC-023's body actually names the one sealed slot, so EX-4 is anchored to bytes rather than to a claim", test_file = ".doctrine/spec/tech/023/spec-023.md", keywords = ["stage/design"], waived = false },
+  { id = "VT-2", expects = "SPEC-019's body actually carries the managed-design-run provenance acknowledgement", test_file = ".doctrine/spec/tech/019/spec-019.md", keywords = ["managed design run"], waived = false },
+  { id = "VA-1", text = "RUN: `doctrine slice conformance SL-233` — exit 0 and no undeclared spec edits. The design's named exit condition for this phase" },
+  { id = "VA-2", text = "RUN: `doctrine spec validate` — exit 0 for both new entities and both amendments" },
+  { id = "VA-3", text = "RUN: `git log --oneline -- .doctrine/slice/233/slice-233.toml` and the spec dirs — the selector-only commit hash strictly precedes every spec-body commit hash, per EX-7. Report both hashes, not a summary" },
+  { id = "VA-4", text = "RUN: `doctrine spec list` before and after — the delta is EXACTLY two new ids. A fifth spurious entity or a missing one is undoable only by a later slice, so the count is asserted, not eyeballed" },
+  { id = "VA-5", text = "ANTI-VACUITY: `git diff` for SPEC-023 shows a single added seal entry and no mechanism prose; `git diff` for SPEC-019 shows an acknowledgement paragraph and no mechanism prose. A diff that moves mechanism into either amendment fails EX-3/EX-4 regardless of what the body claims" },
 ]
 specs        = []
 requirements = []
@@ -74,24 +101,28 @@ second permission vocabulary. Registering the module is an authored ADR-001 edit
 so this phase is coordinator-only too."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-01 complete — the technical spec exists and can be cited as the governing contract" },
-  { id = "EN-2", text = "DESIGN GATE (projection): `.doctrine/slice/233/sketches/projection-bounds.md` exists as an authored, committed sketch of the projection and token-bounding algorithm — what is dropped, how the nearby frontier is chosen, how the material-change delta is computed — and a dedicated RV ledger raised against it is terminal, every finding dispositioned. It gates THIS phase, not PHASE-04, because the envelope type defined here is the thing being bounded. §9.3 asserts the limits hold but never says how; R1 (ceremony exceeding value) is decided by this sketch" },
+  { id = "EN-2", text = "DESIGN GATE (projection). `.doctrine/slice/233/sketches/projection-bounds.md` exists, is committed, and answers ALL SEVEN of: (a) the named limit for each bounded field and the number chosen; (b) what is dropped first when a limit binds, and how the drop is signalled rather than silent; (c) how the `nearby frontier` is selected from the map; (d) how the material-change delta is computed and against what baseline; (e) the worst-case envelope size in tokens for the large-run fixture; (f) what `show --full` may scale with that normal `show` may not; (g) what the agent loses when a limit binds, and why that loss is acceptable. A sketch missing any of the seven is not a sketch. A dedicated RV ledger raised against it by a reviewer who is NOT its author is terminal with every finding dispositioned. It gates THIS phase, not PHASE-04, because the envelope type defined here is the thing being bounded" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "`src/design_run/` exists and is registered under ADR-001 layering — the tier assignment is a new line in `.doctrine/adr/001/layering.toml`, the authoritative classification the gate loads; `tests/architecture_layering.rs` auto-discovers the unit and needs no edit" },
-  { id = "EX-2", text = "the five coarse stages of design.md §5.4 are a closed vocabulary: Exploring, Inquiring, Drafting, Reviewing, Locked — defined or re-exported at `src/design_run/mod.rs` so the module root is the single addressable home for the vocabulary" },
+  { id = "EX-2", text = "the five coarse stages of design.md §5.4 are a closed vocabulary: Exploring, Inquiring, Drafting, Reviewing, Locked — declared as a single enum NAMED `Stage` at `src/design_run/mod.rs`. The name is the VT-1 anchor; renaming it requires a plan revision, not a local decision" },
   { id = "EX-3", text = "forward-boundary gates are a const-fn table modelled on `src/review.rs`'s `can()`, not a bespoke matcher" },
   { id = "EX-4", text = "stage, inquiry lifecycle, cursor/posture, review, delegation and recovery are separate types with derived facts — no accidental hierarchical state machine (design R3)" },
   { id = "EX-5", text = "the module is pure: no clock, rng, git, or filesystem access anywhere under `src/design_run/`" },
   { id = "EX-6", text = "DEC-067 is pure-layer semantics: a direct regression carries a recorded reason, and returning forward requires every applicable cumulative gate to hold again against current content — no ceremonial replay, no inherited clearance" },
   { id = "EX-7", text = "an inquiry node carries `provenance` as a first-class field, and cursor is distinct from traversal posture (DEC-060, DEC-061) — user-pinned or user-locked direction is representably distinct from agent-proposed structure, so design R4 (authority laundering) is a type-level property rather than a convention" },
-  { id = "EX-8", text = "design.md §9.1's seven pure-engine test families exist as in-module unit tests over values and injected `DerivedDesignFacts`: stage legality/regression/cumulative gates; evidence invalidation by changed fingerprint; parent-and-`needs` cycles, derived blockers, reverse dependants; required dispositions for resolved nodes; section-edit invalidation and reviewer-policy combinations; sparse omission / `null` / empty-collection semantics; unordered batches, duplicate-subject refusal, whole-candidate validation" },
+  { id = "EX-8", text = "design.md §9.1's pure-engine suite lives in ONE file, `src/design_run/tests.rs`, and contains EXACTLY these eight named tests: `stage_gate_table_admits_only_legal_forward_moves`, `direct_regression_requires_a_recorded_reason`, `changed_fingerprint_invalidates_only_affected_evidence`, `parent_and_needs_cycles_are_refused`, `blocked_is_derived_not_stored`, `resolved_node_without_disposition_is_refused`, `sparse_omission_null_and_empty_collection_differ`, `unordered_batch_refuses_duplicate_subjects`. The names are the contract — VT-3 anchors on them, so a paraphrased or merged test fails the gate. All eight operate on values and injected `DerivedDesignFacts` only" },
 ]
 verification = [
-  { id = "VT-1", expects = "the closed stage vocabulary is present as named variants at the module root", test_file = "src/design_run/mod.rs", keywords = ["Exploring", "Inquiring", "Drafting", "Reviewing", "Locked"], waived = false },
-  { id = "VT-2", expects = "the new module is classified in the authoritative ADR-001 tier map — the file the layering gate actually loads", test_file = ".doctrine/adr/001/layering.toml", keywords = ["design_run"], waived = false },
-  { id = "VA-1", text = "a purity sweep over `src/design_run/**` finds no `std::fs`, `std::time`, `rand`, or `git` usage" },
-  { id = "VA-2", text = "existing suites remain green unchanged — the behaviour-preservation gate for shared machinery" },
-  { id = "VA-3", text = "each of EX-8's seven §9.1 families maps to a named test; none is silently absent" },
+  { id = "VT-1", expects = "the closed stage vocabulary is a real enum declaration at the module root — the pattern anchors at line start on `enum`, which a comment cannot satisfy", test_file = "src/design_run/mod.rs", keywords = ["Exploring", "Inquiring", "Drafting", "Reviewing", "Locked"], patterns = ['^\s*pub(\(crate\))?\s+enum\s+Stage\b'], waived = false },
+  { id = "VT-2", expects = "the new module is classified in the authoritative ADR-001 tier map with a real assignment line, not a comment mentioning it", test_file = ".doctrine/adr/001/layering.toml", keywords = ["design_run"], patterns = ['^design_run\s*=\s*"(leaf|engine|command)"'], waived = false },
+  { id = "VT-3", expects = "all eight §9.1 tests exist as functions, each anchored at line start so a comment or a docstring listing the names cannot satisfy the mandate", test_file = "src/design_run/tests.rs", keywords = ["DerivedDesignFacts"], patterns = ['^\s*fn stage_gate_table_admits_only_legal_forward_moves\(', '^\s*fn direct_regression_requires_a_recorded_reason\(', '^\s*fn changed_fingerprint_invalidates_only_affected_evidence\(', '^\s*fn parent_and_needs_cycles_are_refused\(', '^\s*fn blocked_is_derived_not_stored\(', '^\s*fn resolved_node_without_disposition_is_refused\(', '^\s*fn sparse_omission_null_and_empty_collection_differ\(', '^\s*fn unordered_batch_refuses_duplicate_subjects\('], waived = false },
+  { id = "VA-1", text = "RUN: `rg -n 'std::fs|std::time|SystemTime|rand::|std::process|Command::new' src/design_run/` — zero hits. The purity claim is a grep result, not an assertion" },
+  { id = "VA-2", text = "RUN: `cargo test` — existing suites green and UNCHANGED. `git diff --stat` shows no edit to any pre-existing test file except `.doctrine/adr/001/layering.toml`. Editing an existing test to accommodate the new module is a behaviour-preservation failure, not a fix" },
+  { id = "VA-3", text = "RUN: `cargo test design_run -- --list` — all eight EX-8 names appear. Then open `src/design_run/tests.rs` and confirm each of the eight contains at least one assertion whose expected value is a literal, not a value recomputed from the code under test. A test that asserts `f(x) == f(x)` is not a test" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the eight EX-8 tests was observed RED before being made green. The phase sheet records, per test, the failing output. A test that has never been seen red is not evidence — this is the only check that catches an assertion-free test, and the phase is not disposable without it" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true|unreachable!\\(' src/design_run/` returns nothing, and `cargo test -- --list | wc -l` is >= the pre-phase count. No test disabled, stubbed, or trivially satisfied to make the gate green" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit (clippy zero warnings across the workspace, full suite green)" },
 ]
 specs        = []
 requirements = []
@@ -101,7 +132,8 @@ id        = "PHASE-03"
 name      = "Persistence and the authored watermark"
 objective = """
 Persist the run at `.doctrine/state/slice/<NNN>/design.toml`, riding \
-`src/comparison/wire.rs` as the schema+version precedent. Deliver run identity, \
+`src/comparison/wire.rs` as the schema+version precedent and `src/state.rs`'s \
+`STATE_SLICE_DIR` as the single-source path root (STD-001). Deliver run identity, \
 revision CAS, submission idempotency, bounded receipt eviction, the grouped \
 §5.3 state, and DEC-092's authored watermark under its three distinct rules."""
 entrance_criteria = [
@@ -116,16 +148,25 @@ exit_criteria = [
   { id = "EX-5", text = "DEC-092 rule 1: `start`, ordinary `apply`, `materialise` and the shim's live-run arm entry-refuse an authored-watermark divergence; absent design.md is cold before first materialisation and divergent after" },
   { id = "EX-6", text = "DEC-092 rule 3: every mutating verb re-fingerprints immediately before the snapshot write and abandons the write if bytes moved — rule-1 verbs compare against the watermark, a rule-2 re-adoption against the fingerprint it was admitted on, NEVER against the old watermark (RV-315 F-20)" },
   { id = "EX-7", text = "the abandoned-write guarantee is implemented as `the run does not advance`, not `nothing was written` — journalled effects ordered before the snapshot under DEC-083/086 remain and stay recoverable" },
-  { id = "EX-8", text = "writes use the existing `src/fsutil.rs::write_atomic` sibling-replacement helper, not a new writer" },
+  { id = "EX-8", text = "writes use the existing `src/fsutil.rs::write_atomic` sibling-replacement helper, not a new writer. The snapshot path derives from `src/state.rs`'s existing private `STATE_SLICE_DIR` constant through a new `pub(crate) fn design_snapshot_path` in that same module — the constant stays private and the helper is the single source (STD-001). The helper's name is the VT-4 anchor; renaming it requires a plan revision. A second `.doctrine/state/slice` literal anywhere is the violation this criterion exists to prevent" },
   { id = "EX-9", text = "run identity is persisted: one active run per slice in v1, with an explicit run UID for stale-context detection, and every `apply` payload asserts `run_uid` + `known_revision` + `submission_id` irrespective of the optional CLI addressing flags (§5.2)" },
   { id = "EX-10", text = "the snapshot groups rather than flattens all of §5.3: run header / stage / next obligation / receipts; inquiry map, cursor, posture; gate evidence bound to its subject fingerprint (DEC-066); fingerprinted draft sections; content-bound review attestations and runtime findings; prompt-fragment receipts; recoverable checkpoint intent; the authored watermark" },
+  { id = "EX-11", text = "the pre-write window is reachable by a DETERMINISTIC INJECTABLE HOOK, not by a timing race. §9.2 requires an edit injected into the named window to abandon the write; without a seam that a test can drive, that assertion is untestable and every rule-3 test would be theatre. The hook is test-only and must not alter the production path" },
+  { id = "EX-12", text = "`tests/e2e_design_state.rs` contains EXACTLY these thirteen named tests, and the names are the contract. Rule-1/2/3 (seven, from §9.2): `hand_edit_between_applies_is_refused_at_entry`, `edit_in_prewrite_window_abandons_the_write`, `checkpoint_effects_survive_an_abandoned_write_without_duplicate`, `edit_after_final_comparison_is_caught_by_next_entry_check`, `adopt_authored_crosses_divergence_and_rebaselines_alone`, `stale_or_invalid_adoption_changes_neither_clearance_nor_watermark`, `absent_design_md_is_cold_before_first_materialise_divergent_after`. Persistence (six): `unknown_schema_version_is_refused_with_a_useful_message`, `snapshot_toml_round_trips_deterministically`, `stale_known_revision_is_refused_with_a_conflict_report`, `validation_failure_leaves_the_snapshot_byte_identical`, `reused_submission_id_with_changed_payload_is_refused`, `eviction_preserves_latest_and_outstanding_delegation_receipts`" },
 ]
 verification = [
-  { id = "VT-1", expects = "the authored watermark is a first-class persisted field, not an incidental hash", test_file = "src/commands/design.rs", keywords = ["watermark"], waived = false },
-  { id = "VT-2", expects = "the between-applies edit is refused at entry, and the mid-window edit abandons the write through a deterministic injectable hook", test_file = "tests/e2e_design_state.rs", keywords = ["watermark", "revision"], waived = false },
-  { id = "VA-1", text = "design.md §9.2's seven watermark assertions each map to a named test; none is silently dropped" },
-  { id = "VA-2", text = "the `nothing written` phrasing appears nowhere in code, comments, or error text — the guarantee is `the run does not advance`" },
-  { id = "VA-3", text = "the §9.2 assertions this phase owns each map to a named test: deterministic TOML round-trip, useful schema-version refusal, atomic rewrite with unchanged state after validation failure, expected-revision conflict reporting, submission retry idempotency and changed-payload refusal, and safe receipt eviction preserving latest + outstanding-delegation receipts" },
+  { id = "VT-1", expects = "the authored watermark is a real named function in the persistence shell, not a comment or a string in an error message", test_file = "src/commands/design.rs", keywords = ["watermark"], patterns = ['^\s*(pub(\(crate\))?\s+)?fn\s+\w*watermark\w*\s*\('], waived = false },
+  { id = "VT-2", expects = "the seven §9.2 watermark assertions exist as functions, each anchored at line start", test_file = "tests/e2e_design_state.rs", keywords = ["watermark"], patterns = ['^\s*fn hand_edit_between_applies_is_refused_at_entry\(', '^\s*fn edit_in_prewrite_window_abandons_the_write\(', '^\s*fn checkpoint_effects_survive_an_abandoned_write_without_duplicate\(', '^\s*fn edit_after_final_comparison_is_caught_by_next_entry_check\(', '^\s*fn adopt_authored_crosses_divergence_and_rebaselines_alone\(', '^\s*fn stale_or_invalid_adoption_changes_neither_clearance_nor_watermark\(', '^\s*fn absent_design_md_is_cold_before_first_materialise_divergent_after\('], waived = false },
+  { id = "VT-3", expects = "the six persistence assertions exist as functions in the same file", test_file = "tests/e2e_design_state.rs", keywords = ["revision"], patterns = ['^\s*fn unknown_schema_version_is_refused_with_a_useful_message\(', '^\s*fn snapshot_toml_round_trips_deterministically\(', '^\s*fn stale_known_revision_is_refused_with_a_conflict_report\(', '^\s*fn validation_failure_leaves_the_snapshot_byte_identical\(', '^\s*fn reused_submission_id_with_changed_payload_is_refused\(', '^\s*fn eviction_preserves_latest_and_outstanding_delegation_receipts\('], waived = false },
+  { id = "VA-1", text = "RUN: `cargo test --test e2e_design_state -- --list` — all thirteen EX-12 names appear and the count is thirteen or more. A missing name is a missing assertion" },
+  { id = "VA-2", text = "RUN: `rg -n 'nothing was written|nothing written' src/ tests/` — zero hits. The guarantee is `the run does not advance`, and the wrong phrasing in a comment or an error string is how the wrong guarantee gets implemented later" },
+  { id = "VT-4", expects = "the snapshot path helper is a real new function in the module that owns the private constant — `design_snapshot_path` does not exist at head, so this cannot pass vacuously", test_file = "src/state.rs", keywords = ["STATE_SLICE_DIR"], patterns = ['^\s*pub\(crate\)\s+fn\s+design_snapshot_path'], waived = false },
+  { id = "VA-3", text = "RUN: `rg -n '\\.doctrine/state/slice' src/ --glob '!src/state.rs'` — zero hits. The path must derive from `design_snapshot_path`; a second literal is an STD-001 violation and the two will drift" },
+  { id = "VA-4", text = "ANTI-THEATRE on the pre-write window: read `edit_in_prewrite_window_abandons_the_write` and confirm it drives the EX-11 hook and asserts BOTH that the snapshot file is byte-identical AND that stage/gate state did not advance. A test that only asserts an error is returned does not prove the write was abandoned" },
+  { id = "VA-5", text = "ANTI-THEATRE on rule 2: read `stale_or_invalid_adoption_changes_neither_clearance_nor_watermark` and confirm it asserts the watermark field is UNCHANGED by comparing to the pre-call value, not merely that the call errored. F-20 was raised precisely because a guard can be present and still self-refuse" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the thirteen EX-12 tests was observed RED before being made green, with failing output recorded in the phase sheet. For the three rule-3 tests specifically, the red must come from removing the pre-write re-check, not from a compile error — a compile failure is not a behavioural red" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/commands/design.rs src/design_run/ tests/e2e_design_state.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -142,26 +183,32 @@ revision bolted on here now lands in PHASE-10; this phase is the command surface
 and the read model, nothing else."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-03 complete — a persisted run exists to project" },
-  { id = "EN-2", text = "the PHASE-02 projection sketch is still current against the model as implemented; drift between sketch and pure model is re-passed on the same RV ledger and dispositioned before bounding is coded. `no drift` is an acceptable and expected finding — this is a re-read, not a mandatory second review round" },
+  { id = "EN-2", text = "the PHASE-02 projection sketch is re-read against the model as implemented and each of its seven answers is confirmed still true or amended on the same RV ledger. `no drift` is an acceptable and expected finding — this is a re-read, not a mandatory second review round. Record which of the seven were re-confirmed, so `no drift` is a checked claim rather than a skipped step" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "`doctrine design start|show|apply|resume` are wired and accepted by the built binary" },
-  { id = "EX-2", text = "one structured `TurnEnvelope` is the canonical read model, defined under `src/design_run/` and re-exported from `src/design_run/mod.rs`, projected by the command shell as prompt, JSON, or human status (DEC-064) — one type, three renderings, never three models" },
+  { id = "EX-2", text = "one structured `TurnEnvelope` is the canonical read model, declared as a single type under `src/design_run/` and re-exported from `src/design_run/mod.rs` BY NAME, not via a glob (`pub(crate) use envelope::TurnEnvelope;`) — the named re-export is the VT-1 anchor. Projected by the command shell as prompt, JSON, or human status (DEC-064): one type, three renderings, never three models" },
   { id = "EX-3", text = "normal output carries active path, nearby frontier, blockers, counts and material changes; full detail is explicit through `show --full`" },
-  { id = "EX-4", text = "named limits bound normal envelope frontier, change-summary, blocker and declaration-example detail, and hold against a generated fixture of hundreds of nodes" },
+  { id = "EX-4", text = "the named limits from the PHASE-02 sketch are NAMED CONSTANTS in one module (STD-001), not literals at their use sites, and they bound normal envelope frontier, change-summary, blocker and declaration-example detail against a generated fixture of hundreds of nodes" },
   { id = "EX-5", text = "`show` is a strict subset of any `inspect`-style surface; the help-text convention test guards that polarity rather than prose asserting it" },
   { id = "EX-6", text = "`apply` validates the whole candidate before any authored mutation; validation failure leaves state byte-identical" },
   { id = "EX-7", text = "the DEC-063 sparse mutation contract is implemented as authored: an omitted key persists, `null` clears a nullable scalar, `[]` clears a collection, a stable-ID object partially updates its subject, one batch is unordered, a duplicate subject is refused, and v1 has lifecycle transitions rather than deletion" },
   { id = "EX-8", text = "traversal direction is a first-class declaration set (scope §2): the user may pin, defer, prune, or select breadth/depth posture at any time, and the adaptive default — establish major branches breadth-first, pursue a consequential or blocking arm depth-first, then reassess — is the posture the run starts in. User-directed changes are distinguishable from agent-proposed ones through PHASE-02 EX-7's provenance" },
   { id = "EX-9", text = "`doctrine design resume` returns the compact projection scope §4 enumerates — active path, accepted decisions, open questions, assumptions, evidence references, blockers, next obligation — and the happy path needs only `doctrine design resume SL-NNN`; `--run`, `--known-revision`, and `--known-fragment` add explicit assumption checking or change-only projection and are never required addressing" },
+  { id = "EX-10", text = "`tests/e2e_design_projection.rs` contains EXACTLY these seven named tests, and the names are the contract: `normal_envelope_stays_within_named_limits_on_a_large_run`, `show_full_may_scale_but_normal_show_does_not`, `omitted_key_persists_null_clears_scalar_empty_clears_collection`, `duplicate_subject_in_one_batch_is_refused`, `validation_failure_leaves_state_byte_identical`, `pin_defer_prune_and_posture_are_user_directed_declarations`, `resume_returns_the_seven_scope_fields_without_optional_flags`" },
 ]
 verification = [
-  { id = "VT-1", expects = "the single canonical envelope type exists at the pure module root and is the read model", test_file = "src/design_run/mod.rs", keywords = ["TurnEnvelope"], waived = false },
-  { id = "VT-2", expects = "named projection limits hold against a large-run fixture rather than being asserted in prose", test_file = "tests/e2e_design_projection.rs", keywords = ["TurnEnvelope", "frontier"], waived = false },
-  { id = "VA-1", text = "the projection sketch's adversarial findings are all dispositioned before the phase closes" },
-  { id = "VA-2", text = "token cost of a normal turn is measured and recorded, not assumed — R1's evidence starts here" },
-  { id = "VA-3", text = "the new top-level command joins the hand-maintained `FAMILIES` taxonomy (`src/commands/cli.rs`), `families_partition_the_visible_command_tree` passes, and its hard-coded visible-command census is updated — a new top-level command is an unclassified-command panic until it is" },
-  { id = "VA-4", text = "`doctrine boot` is re-run once the family is wired. The boot command map is generated from the compiled clap tree through FAMILIES/SPINE (`src/boot.rs`), so the snapshot goes stale here, six phases before PHASE-08 rewrites the authored `install/routing-process.md`. Only the gitignored runtime snapshot moves in this phase; no authored guidance changes" },
+  { id = "VT-1", expects = "the canonical envelope is a real type declaration re-exported at the pure module root — a comment naming it cannot satisfy the pattern", test_file = "src/design_run/mod.rs", keywords = ["TurnEnvelope"], patterns = ['^\s*pub(\(crate\))?\s+(struct|use)\s+.*TurnEnvelope'], waived = false },
+  { id = "VT-2", expects = "the seven EX-10 assertions exist as functions, each anchored at line start", test_file = "tests/e2e_design_projection.rs", keywords = ["TurnEnvelope", "frontier"], patterns = ['^\s*fn normal_envelope_stays_within_named_limits_on_a_large_run\(', '^\s*fn show_full_may_scale_but_normal_show_does_not\(', '^\s*fn omitted_key_persists_null_clears_scalar_empty_clears_collection\(', '^\s*fn duplicate_subject_in_one_batch_is_refused\(', '^\s*fn validation_failure_leaves_state_byte_identical\(', '^\s*fn pin_defer_prune_and_posture_are_user_directed_declarations\(', '^\s*fn resume_returns_the_seven_scope_fields_without_optional_flags\('], waived = false },
+  { id = "VA-1", text = "RUN: `cargo test --test e2e_design_projection -- --list` — all seven EX-10 names appear" },
+  { id = "VA-2", text = "R1 EVIDENCE: the measured token cost of a normal turn against the large-run fixture is recorded as a NUMBER in the phase sheet and compared to the PHASE-02 sketch's answer (e). A divergence over 2x reopens the sketch's RV rather than being absorbed silently. `measured and recorded` means a figure, not the word `measured`" },
+  { id = "VA-3", text = "RUN: `cargo test --test e2e_help_families_golden --test e2e_subcommand_help` — green. The new top-level command joins `FAMILIES` in `src/commands/cli.rs`, `families_partition_the_visible_command_tree` passes, and its hard-coded visible-command census is updated. A new top-level command is an unclassified-command panic until it is" },
+  { id = "VA-4", text = "RUN: `doctrine boot` once the family is wired, then `doctrine boot --check`. The boot command map is generated from the compiled clap tree through FAMILIES/SPINE (`src/boot.rs`), so the snapshot goes stale here, six phases before PHASE-08 rewrites the authored `install/routing-process.md`. Only the gitignored runtime snapshot moves in this phase; `git status` must show no authored guidance change" },
+  { id = "VA-5", text = "ANTI-THEATRE on bounds: read `normal_envelope_stays_within_named_limits_on_a_large_run` and confirm the fixture actually EXCEEDS every limit before projection — a bound is unproven if the fixture never reaches it. Confirm the assertion compares against the EX-4 named constants, not against whatever the code produced" },
+  { id = "VA-6", text = "RUN: `rg -n '\\b(20|50|100|200|500)\\b' src/design_run/ | rg -v 'const|test'` — inspect every hit. A bare numeric limit at a use site is an EX-4 / STD-001 violation" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the seven EX-10 tests was observed RED before being made green, with failing output in the phase sheet. For the three sparse-semantics assertions the red must come from the semantics being wrong, not from a missing command" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/commands/design.rs src/design_run/ tests/e2e_design_projection.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -178,23 +225,29 @@ which today has none. Also delivers the two non-record dispositions, without \
 which a resolved node that produces no record is unrepresentable."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-04 complete — `apply` exists to carry a checkpoint declaration" },
-  { id = "EN-2", text = "`src/entity.rs::claim_fresh_id` is re-read at head; the design's account of it having no caller-visible midpoint between id-claim and byte-write is confirmed against current source, not recalled" },
+  { id = "EN-2", text = "`src/entity.rs::claim_fresh_id` (line 410 at plan time) is re-read at head; the design's account of it having no caller-visible midpoint between id-claim and byte-write is confirmed against current source, not recalled" },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "the fresh-creation path exposes a callback seam between id-claim and byte-write, added without changing existing callers' behaviour" },
+  { id = "EX-1", text = "the fresh-creation path exposes a callback seam between id-claim and byte-write, added without changing existing callers' behaviour. The parameter is NAMED `on_reserved` and sits on its own line in `claim_fresh_id`'s signature (the function already formats one parameter per line, `src/entity.rs:410-416`). The name is the VT-2 anchor; renaming it requires a plan revision" },
   { id = "EX-2", text = "the six DEC-086 steps are ordered exactly as authored; a crash before id journalling leaves no unidentified authored record" },
   { id = "EX-3", text = "every post-journal recovery resumes against the exact reserved canonical id — never a fresh one" },
   { id = "EX-4", text = "adopting an existing canonical record creates no duplicate and requires no reservation; `adopt` validates the record's kind and usable status and applies the required legal `shapes` edge when absent" },
   { id = "EX-5", text = "authored knowledge is never deleted or rolled back to repair a runtime failure (DEC-083)" },
   { id = "EX-6", text = "an accepted checkpoint carries a content-bound user-acceptance attestation; a semantic payload cannot self-declare accepted status (DEC-088, scope R4). Without one, a created record retains its kind's default status and cannot clear an accepted-decision gate" },
   { id = "EX-7", text = "all four semantic dispositions are implemented, not just the two that create graph edges (scope §3, design §5.3): create a record, adopt an existing canonical record, retain an explicitly unresolved outcome, or mark the exchange intentionally non-durable. Resolving a node without one of the four is refused" },
+  { id = "EX-8", text = "the crash points are reachable by a DETERMINISTIC INJECTABLE FAULT at each of the six DEC-086 steps — test-only, not altering the production path. Without it EX-2/EX-3 are untestable and their tests would be theatre" },
+  { id = "EX-9", text = "`tests/e2e_design_checkpoint.rs` contains EXACTLY these five named tests, and the names are the contract: `crash_before_id_journal_leaves_no_unidentified_record`, `post_journal_recovery_resumes_the_exact_reserved_id`, `adopting_an_existing_record_creates_no_duplicate`, `retain_unresolved_and_non_durable_are_valid_dispositions`, `resolved_node_without_disposition_is_refused_at_the_command`" },
 ]
 verification = [
-  { id = "VT-1", expects = "checkpoint recovery resumes each known journal phase without duplication, including the pre-journal crash case", test_file = "tests/e2e_design_checkpoint.rs", keywords = ["journal", "reserved"], waived = false },
-  { id = "VT-2", expects = "the fresh-creation path exposes the new caller-visible midpoint — a keyword that does not exist at head, so the mandate cannot pass vacuously", test_file = "src/entity.rs", keywords = ["claim_fresh_id", "on_reserved"], waived = false },
-  { id = "VA-1", text = "the existing knowledge and entity suites stay green unchanged — the behaviour-preservation gate for shared machinery" },
-  { id = "VA-2", text = "no parallel DEC/QUE/ASM wire type was introduced; the existing knowledge surface is reused (research thread 2)" },
-  { id = "VA-3", text = "the §9.2 checkpoint assertions each map to a named test: recovery resumes each known journal phase without duplication, a crash before id journalling leaves no unidentified record, every post-journal recovery uses the exact reserved id, and adoption creates no duplicate" },
+  { id = "VT-1", expects = "the five EX-9 assertions exist as functions, each anchored at line start", test_file = "tests/e2e_design_checkpoint.rs", keywords = ["journal", "reserved"], patterns = ['^\s*fn crash_before_id_journal_leaves_no_unidentified_record\(', '^\s*fn post_journal_recovery_resumes_the_exact_reserved_id\(', '^\s*fn adopting_an_existing_record_creates_no_duplicate\(', '^\s*fn retain_unresolved_and_non_durable_are_valid_dispositions\(', '^\s*fn resolved_node_without_disposition_is_refused_at_the_command\('], waived = false },
+  { id = "VT-2", expects = "the fresh-creation path exposes a real new caller-visible midpoint — `on_reserved` does not exist at head, and the pattern anchors it as a signature parameter line, which a comment cannot be", test_file = "src/entity.rs", keywords = ["claim_fresh_id"], patterns = ['^\s*fn\s+claim_fresh_id', '^\s*(mut\s+)?on_reserved:'], waived = false },
+  { id = "VA-1", text = "RUN: `cargo test --bin doctrine entity && cargo test --bin doctrine knowledge` — green and UNCHANGED. `git diff` shows no existing entity/knowledge test edited. The seam is additive; editing an existing test to accommodate it is the behaviour-preservation failure this gate exists to catch" },
+  { id = "VA-2", text = "RUN: `rg -n 'struct .*(Dec|Que|Asm|Knowledge).*Wire|enum .*KnowledgeKind' src/design_run/ src/commands/design.rs` — zero hits. No parallel DEC/QUE/ASM wire type; the existing knowledge surface is reused (research thread 2)" },
+  { id = "VA-3", text = "ANTI-THEATRE on recovery: read `post_journal_recovery_resumes_the_exact_reserved_id` and confirm it asserts the recovered id EQUALS the id journalled before the fault, captured from the journal rather than recomputed. A test that asserts `an id exists` proves nothing about DEC-086" },
+  { id = "VA-4", text = "ANTI-THEATRE on rollback: `rg -n 'remove_file|remove_dir|rollback|delete' src/commands/design.rs` — inspect every hit against EX-5. Authored knowledge is never rolled back to repair a runtime failure; a cleanup path that deletes a materialised record is the exact defect DEC-083 forbids" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the five EX-9 tests was observed RED before being made green, with failing output in the phase sheet. For the two crash-recovery tests the red must come from the fault injection reaching a real unhandled state, not from the fault seam being absent" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/entity.rs src/commands/design.rs tests/e2e_design_checkpoint.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -205,14 +258,14 @@ name      = "Materialise, markers, and the compatibility shim"
 objective = """
 Render runtime sections into authored prose riding `src/entity.rs::write_body`, \
 and deliver the stable-section-ID marker grammar plus DEC-092 rule 2's \
-re-adoption protocol, together with the two-armed deprecated shim. This phase \
-carries a design gate: the marker grammar is the substrate re-adopt correctness \
-rests on, and design.md specifies only that markers are `unobtrusive` plus a list \
-of refusals. Conservative import, which the first revision bolted on here, now \
-lands in PHASE-11 on top of this machinery."""
+re-adoption protocol, together with the two-armed deprecated shim whose incumbent \
+lives in `src/slice.rs`. This phase carries a design gate: the marker grammar is \
+the substrate re-adopt correctness rests on, and design.md specifies only that \
+markers are `unobtrusive` plus a list of refusals. Conservative import, which the \
+first revision bolted on here, now lands in PHASE-11 on top of this machinery."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-05 complete" },
-  { id = "EN-2", text = "DESIGN GATE: `.doctrine/slice/233/sketches/marker-grammar.md` exists as an authored, committed sketch — syntax, escaping, collision behaviour, what happens when a user edits or deletes a marker, and how a marker survives a Markdown formatter — and a dedicated RV ledger raised against it is terminal, every finding dispositioned. The refusals in design.md §5.5 are only as good as the grammar they are refusing against" },
+  { id = "EN-2", text = "DESIGN GATE (marker grammar). `.doctrine/slice/233/sketches/marker-grammar.md` exists, is committed, and answers ALL SEVEN of: (a) the exact marker syntax, byte for byte, with a worked example; (b) what happens to a marker's payload when a section title changes; (c) escaping — what a section body may contain that would otherwise parse as a marker, and how it is neutralised; (d) collision behaviour for a duplicated id; (e) what a user editing or deleting a marker produces, per refusal in §5.5; (f) survival of `prettier`/`mdformat`-style reflow, tested against at least one real formatter; (g) whether a marker is visible in rendered Markdown, and if so what a reader sees. A sketch missing any of the seven is not a sketch. A dedicated RV ledger raised against it by a reviewer who is NOT its author is terminal with every finding dispositioned. The refusals in design.md §5.5 are only as good as the grammar they are refusing against" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "materialise rides `write_body` rather than inventing a prose writer" },
@@ -220,15 +273,21 @@ exit_criteria = [
   { id = "EX-3", text = "DEC-092 rule 2 is a protocol: declared exact current fingerprint matching observed bytes, complete marker-map validation, DEC-066 evidence invalidation, no clearance inherited across the crossing, and re-baseline only after full validation" },
   { id = "EX-4", text = "an invalid or stale adoption changes neither runtime clearance nor the watermark — both polarities implemented, not just the happy path" },
   { id = "EX-5", text = "re-adoption refuses missing, duplicate and unknown markers, marker-free additions, and structural deletion — refusing rather than guessing; a new section uses the normal structured declaration contract instead" },
-  { id = "EX-6", text = "the deprecated `slice design` shim is mutually exclusive with the managed writer (DEC-075). Its incumbent lives in `src/slice.rs` (`SliceCommand::Design` / `run_design`), which this phase edits. With a live run it forwards to `design materialise` through the same implementation and foreign-edit guard. With no run it preserves the legacy scaffold-only no-clobber contract, never creates or reconstructs runtime state, emits a deprecation warning on EVERY invocation, points new work to `doctrine design start`, and points an existing document to `doctrine design start --from-design`" },
+  { id = "EX-6", text = "the deprecated `slice design` shim is mutually exclusive with the managed writer (DEC-075). Its incumbent lives in `src/slice.rs` (`SliceCommand::Design` at :174, dispatch at :449, `run_design` at :734), which this phase edits. With a live run it forwards to `design materialise` through the same implementation and foreign-edit guard. With no run it preserves the legacy scaffold-only no-clobber contract, never creates or reconstructs runtime state, emits a deprecation warning on EVERY invocation, points new work to `doctrine design start`, and points an existing document to `doctrine design start --from-design`. The warning text is a named constant in `src/slice.rs` matching `DEPRECAT` (STD-001 — no magic strings), which is also the VT-2 anchor: `run_design` already exists at head, so anchoring on it would pass vacuously" },
   { id = "EX-7", text = "SUPERSEDED by PHASE-11. Conservative import was assigned here by the 2026-07-27 revision and reassigned to its own phase on 2026-07-28 because PHASE-06 was carrying four separable deliverables behind one design gate. The id is retained rather than renumbered (immutability); the requirement is unchanged, only its home" },
+  { id = "EX-8", text = "`tests/e2e_design_materialise.rs` contains EXACTLY these five named tests, and the names are the contract: `hand_edit_then_readopt_preserves_run_map_cursor_receipts`, `readopt_refuses_missing_duplicate_unknown_markers`, `readopt_refuses_marker_free_addition_and_structural_deletion`, `deprecated_shim_live_run_matches_materialise_bytes_and_refusals`, `deprecated_shim_without_run_scaffolds_warns_and_points`" },
+  { id = "EX-9", text = "the marker grammar has a ROUND-TRIP PROPERTY TEST: for a generated section body containing marker-lookalike text, adversarial whitespace, and nested Markdown, materialise-then-parse recovers the identical section map. The sketch's escaping answer (c) is worthless unless something generates the inputs it claims to survive" },
 ]
 verification = [
-  { id = "VT-1", expects = "hand-edit then re-adopt preserves run/map/cursor/receipts, updates only marker-addressed sections, and invalidates evidence for each changed fingerprint", test_file = "tests/e2e_design_materialise.rs", keywords = ["adopt", "marker"], waived = false },
-  { id = "VT-2", expects = "a test named for the deprecated shim proves canonical materialise and the shim produce identical bytes and identical foreign-edit refusals through one seam — the keyword is the test identifier, not a CLI invocation, which would not appear as a contiguous substring", test_file = "tests/e2e_design_materialise.rs", keywords = ["deprecated_shim"], waived = false },
-  { id = "VA-1", text = "the marker-grammar sketch's adversarial findings are all dispositioned before the phase closes" },
-  { id = "VA-2", text = "the refusal paths are tested hostilely — a design that refuses rather than guesses is only as good as the refusals it implements (RV-315 round 2 standing note)" },
-  { id = "VA-3", text = "the §9.2 shim assertions each map to a named test: with a live run both verbs produce identical bytes and refusals; with no run the shim scaffolds, preserves no-clobber, warns on every invocation, and emits both pointer messages" },
+  { id = "VT-1", expects = "the five EX-8 assertions plus the EX-9 round-trip exist as functions, each anchored at line start", test_file = "tests/e2e_design_materialise.rs", keywords = ["adopt", "marker"], patterns = ['^\s*fn hand_edit_then_readopt_preserves_run_map_cursor_receipts\(', '^\s*fn readopt_refuses_missing_duplicate_unknown_markers\(', '^\s*fn readopt_refuses_marker_free_addition_and_structural_deletion\(', '^\s*fn deprecated_shim_live_run_matches_materialise_bytes_and_refusals\(', '^\s*fn deprecated_shim_without_run_scaffolds_warns_and_points\(', '^\s*fn marker_round_trip_survives_lookalike_and_adversarial_bodies\('], waived = false },
+  { id = "VT-2", expects = "the incumbent shim in `src/slice.rs` gained a real named deprecation constant — a declaration line a doc comment cannot fake, and one that does not exist at head", test_file = "src/slice.rs", keywords = ["--from-design"], patterns = ['^\s*(pub\(crate\)\s+)?const\s+\w*DEPRECAT\w*'], waived = false },
+  { id = "VA-1", text = "RUN: `cargo test --test e2e_design_materialise -- --list` — all six VT-1 names appear" },
+  { id = "VA-2", text = "ANTI-THEATRE on refusals: for EACH refusal in §5.5 — missing marker, duplicate marker, unknown marker, marker-free addition, structural deletion — confirm the test asserts the SPECIFIC refusal reason, not merely that an error occurred. Five distinct wrong inputs collapsing into one `is_err()` assertion is one test wearing five names (RV-315 round 2 standing note)" },
+  { id = "VA-3", text = "ANTI-THEATRE on shim equivalence: `deprecated_shim_live_run_matches_materialise_bytes_and_refusals` must compare BYTES from both paths, not both exit codes. `identical bytes` was the design's word" },
+  { id = "VA-4", text = "RUN: the deprecated shim with no run, three times, and confirm the warning appears on ALL THREE invocations. `warns on every invocation` (§9.2) is not `warns once`, and a once-per-process latch is the natural wrong implementation" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the six VT-1 tests was observed RED before being made green, with failing output in the phase sheet. For the five refusal assertions the red must be a WRONG ACCEPTANCE — the input was accepted before the refusal was implemented — not a missing function" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/slice.rs src/commands/design.rs tests/e2e_design_materialise.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -252,11 +311,17 @@ exit_criteria = [
   { id = "EX-4", text = "only an explicit canonical QUE citation merges an imported node with an existing record — text similarity never does, in either direction (DEC-085)" },
   { id = "EX-5", text = "no procedural evidence is ever inferred: plain resume never reconstructs missing history, and import never manufactures attestations, receipts, or gate clearance (DEC-084, principle 6)" },
   { id = "EX-6", text = "semantic reconstruction after runtime loss is implemented and labelled honestly (DEC-057): it reconstructs only what authored slice prose and linked knowledge can support, issues a NEW run UID, and is explicitly weaker than exact resume — the distinction is surfaced to the caller, not buried" },
+  { id = "EX-7", text = "`tests/e2e_design_import.rs` contains EXACTLY these five named tests, and the names are the contract: `from_design_imports_sections_as_unreviewed_prose_with_fingerprint`, `oq_entries_enter_only_from_the_open_questions_section`, `text_similarity_never_merges_only_explicit_citation_does`, `reconstruction_after_snapshot_loss_issues_a_new_run_uid`, `import_manufactures_no_attestation_receipt_or_gate_clearance`" },
 ]
 verification = [
-  { id = "VT-1", expects = "import and reconstruction are covered end-to-end: an existing design.md enters one-shot with imported-prose provenance, and reconstruction after snapshot deletion yields a new run uid with no invented evidence", test_file = "tests/e2e_design_import.rs", keywords = ["from_design", "imported-prose", "run_uid"], waived = false },
-  { id = "VA-1", text = "the §9.2 assertions this phase owns each map to a named test: exact resume from runtime versus semantic reconstruction with a new run UID, and import refusing to infer procedural history" },
-  { id = "VA-2", text = "the import is exercised against this slice's own `design.md` as a hostile real-world fixture — 781 lines, conventional `OQ-1`/`OQ-2` entries, and no markers — and the result is inspected for manufactured history" },
+  { id = "VT-1", expects = "the five EX-7 assertions exist as functions, each anchored at line start", test_file = "tests/e2e_design_import.rs", keywords = ["imported-prose"], patterns = ['^\s*fn from_design_imports_sections_as_unreviewed_prose_with_fingerprint\(', '^\s*fn oq_entries_enter_only_from_the_open_questions_section\(', '^\s*fn text_similarity_never_merges_only_explicit_citation_does\(', '^\s*fn reconstruction_after_snapshot_loss_issues_a_new_run_uid\(', '^\s*fn import_manufactures_no_attestation_receipt_or_gate_clearance\('], waived = false },
+  { id = "VA-1", text = "RUN: `cargo test --test e2e_design_import -- --list` — all five EX-7 names appear" },
+  { id = "VA-2", text = "HOSTILE FIXTURE: import is exercised against this slice's own `.doctrine/slice/233/design.md` — 781 lines, conventional `OQ-1`/`OQ-2` entries in §6, DEC/QUE citations throughout, and no markers. The resulting run is dumped and inspected for manufactured history. This is the phase's real test; a synthetic three-section fixture proves nothing about DEC-084" },
+  { id = "VA-3", text = "ANTI-THEATRE on EX-4: `rg -n 'levenshtein|similarity|jaro|fuzzy|ratio|distance' src/commands/design.rs src/design_run/` — zero hits. `text similarity never merges` is a property of the code containing no similarity function, not of a test asserting one case" },
+  { id = "VA-4", text = "ANTI-THEATRE on EX-5: `import_manufactures_no_attestation_receipt_or_gate_clearance` must assert the attestation, receipt and gate-evidence collections are EMPTY after import, by enumeration. A test asserting one absent field leaves the other two free" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the five EX-7 tests was observed RED before being made green, with failing output in the phase sheet" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/commands/design.rs tests/e2e_design_import.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -272,20 +337,26 @@ alignment then an integrated adversarial pass), finding disposition, and the \
 `reviewing -> locked` predicate including the user-acceptance attestation."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-06 complete — fingerprinted sections exist for an attestation to bind to" },
-  { id = "EN-2", text = "PHASE-05 complete — the content-bound acceptance-attestation shape exists from DEC-088 and is reused here rather than re-invented" },
+  { id = "EN-2", text = "PHASE-05 complete — the content-bound acceptance-attestation shape exists from DEC-088 and is reused here rather than re-invented. Confirm by reading the PHASE-05 type, not by recalling it" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "human and adversarial section review are first-class content-bound attestations bound to the section fingerprint (DEC-073); a section edit invalidates only affected clearance under DEC-066" },
   { id = "EX-2", text = "the v1 default is human section review with adversarial section review opt-in, while the integrated adversarial pass remains mandatory (DEC-074, scope §5)" },
   { id = "EX-3", text = "findings remain runtime data unless promoted to knowledge or to the final authored review ledger — they do not silently enter the knowledge graph (design R3)" },
-  { id = "EX-4", text = "the `reviewing -> locked` predicate holds exactly as authored (§5.4): current section attestations exist, an integrated review exists, blocking findings are disposed, and a current content-bound attestation attributes explicit acceptance to the user" },
+  { id = "EX-4", text = "the `reviewing -> locked` predicate holds exactly as authored (§5.4): current section attestations exist, an integrated review exists, blocking findings are disposed, and a current content-bound attestation attributes explicit acceptance to the user. All four are required; each alone is insufficient" },
   { id = "EX-5", text = "the lock attestation is labelled as an auditable agent claim of user acceptance, NOT authenticated proof of a human act — v1 trusts a cooperative agent, and R12's residual risk is stated in the surface, not only in design.md" },
   { id = "EX-6", text = "configurable reviewer/posture commands are NOT delivered — they are deferred to IDE-045 (DEC-074), and the extension seam is left explicit rather than pre-built" },
+  { id = "EX-7", text = "`tests/e2e_design_review.rs` contains EXACTLY these seven named tests. The first four are the lock gate's four independent refusals — one per missing component, because a single `lock_gate_refuses` test cannot prove the predicate is a conjunction: `lock_refuses_without_current_section_attestations`, `lock_refuses_without_an_integrated_review`, `lock_refuses_with_an_undisposed_blocking_finding`, `lock_refuses_without_a_user_acceptance_attestation`, then `lock_admits_with_all_four_present`, `section_edit_invalidates_only_that_sections_attestation`, `integrated_adversarial_pass_is_mandatory_section_adversarial_is_opt_in`" },
 ]
 verification = [
-  { id = "VT-1", expects = "the lock gate refuses without each of its four components and admits with all four; a section edit after attestation invalidates that section's clearance alone", test_file = "tests/e2e_design_review.rs", keywords = ["attestation", "locked"], waived = false },
-  { id = "VA-1", text = "the §9.2 assertion `section-edit invalidation and reviewer-policy combinations` maps to named tests here and in PHASE-02's pure suite, at both altitudes" },
-  { id = "VA-2", text = "no reviewer-posture configuration surface leaked in; IDE-045 remains the owner" },
+  { id = "VT-1", expects = "the seven EX-7 assertions exist as functions, each anchored at line start — the four refusals separately, so the conjunction is proven component by component", test_file = "tests/e2e_design_review.rs", keywords = ["attestation"], patterns = ['^\s*fn lock_refuses_without_current_section_attestations\(', '^\s*fn lock_refuses_without_an_integrated_review\(', '^\s*fn lock_refuses_with_an_undisposed_blocking_finding\(', '^\s*fn lock_refuses_without_a_user_acceptance_attestation\(', '^\s*fn lock_admits_with_all_four_present\(', '^\s*fn section_edit_invalidates_only_that_sections_attestation\(', '^\s*fn integrated_adversarial_pass_is_mandatory_section_adversarial_is_opt_in\('], waived = false },
+  { id = "VA-1", text = "RUN: `cargo test --test e2e_design_review -- --list` — all seven EX-7 names appear" },
+  { id = "VA-2", text = "ANTI-THEATRE on the conjunction: each of the four refusal tests must construct a run in which EXACTLY ONE component is missing and the other three are present. A test that omits three components and asserts refusal proves nothing about which component the gate reads" },
+  { id = "VA-3", text = "ANTI-THEATRE on EX-1: `section_edit_invalidates_only_that_sections_attestation` must assert both polarities — the edited section's clearance is gone AND a sibling section's clearance survives. `only` is the load-bearing word and a one-sided assertion drops it" },
+  { id = "VA-4", text = "RUN: `rg -n 'reviewer|posture' src/commands/cli.rs src/commands/design.rs | rg -i 'arg|flag|option|config'` — zero hits. No reviewer-posture configuration surface leaked in; IDE-045 remains the owner" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the seven EX-7 tests was observed RED before being made green, with failing output in the phase sheet. For the four refusal tests the red must be a WRONG ADMISSION — the lock succeeded with the component missing — not a compile error" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/commands/design.rs src/design_run/ tests/e2e_design_review.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -302,18 +373,23 @@ attributed proposal back, and keep global transition authority with the \
 coordinator. No spawn transport, no broker."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-04 complete — the envelope and `apply` exist to export from and accept into" },
-  { id = "EN-2", text = "PHASE-03 EX-4 is landed: receipt eviction already refuses to evict a receipt referenced by an outstanding delegation, so this phase consumes that guarantee rather than restating it" },
+  { id = "EN-2", text = "PHASE-03 EX-4 is landed: receipt eviction already refuses to evict a receipt referenced by an outstanding delegation, so this phase consumes that guarantee rather than restating it. Confirm `eviction_preserves_latest_and_outstanding_delegation_receipts` is green before starting" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "one bounded inquiry obligation can be exported as a self-contained assignment, and an attributed proposal accepted back into the coordinating run" },
   { id = "EX-2", text = "the coordinator remains the sole writer of state: a delegated worker proposes results and map changes but never advances the workflow independently" },
   { id = "EX-3", text = "a stale proposal is refused as stale and left inspectable — never silently rebased (design §5.4, rejected alternatives)" },
   { id = "EX-4", text = "the seam is transport-neutral: v1 defines no spawn mechanism, no cross-filesystem write broker, and no MCP mutation authority (scope Non-Goals)" },
+  { id = "EX-5", text = "`tests/e2e_design_delegation.rs` contains EXACTLY these three named tests, and the names are the contract: `stale_proposal_is_refused_and_left_inspectable`, `delegated_worker_cannot_advance_the_run`, `accepted_proposal_retains_its_attribution`" },
 ]
 verification = [
-  { id = "VT-1", expects = "a stale delegated proposal remains unapplied and inspectable rather than rebased or dropped", test_file = "tests/e2e_design_delegation.rs", keywords = ["proposal", "stale"], waived = false },
-  { id = "VA-1", text = "the §9.2 assertion `stale delegated proposals remain unapplied and inspectable` maps to a named test" },
-  { id = "VA-2", text = "no spawn or broker code was introduced under the cover of the protocol boundary" },
+  { id = "VT-1", expects = "the three EX-5 assertions exist as functions, each anchored at line start", test_file = "tests/e2e_design_delegation.rs", keywords = ["proposal"], patterns = ['^\s*fn stale_proposal_is_refused_and_left_inspectable\(', '^\s*fn delegated_worker_cannot_advance_the_run\(', '^\s*fn accepted_proposal_retains_its_attribution\('], waived = false },
+  { id = "VA-1", text = "RUN: `cargo test --test e2e_design_delegation -- --list` — all three EX-5 names appear" },
+  { id = "VA-2", text = "ANTI-THEATRE on EX-3: `stale_proposal_is_refused_and_left_inspectable` must assert BOTH that the run state is unchanged AND that the proposal is still readable afterwards. `refused` alone permits an implementation that drops it, which is the failure mode `never silently rebased` was written against" },
+  { id = "VA-3", text = "RUN: `rg -n 'Command::new|spawn|fork|exec|reqwest|tokio::process' src/design_run/ src/commands/design.rs` — zero hits. No spawn or broker code introduced under the cover of the protocol boundary" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the three EX-5 tests was observed RED before being made green, with failing output in the phase sheet" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/commands/design.rs src/design_run/ tests/e2e_design_delegation.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -331,23 +407,28 @@ ever authored, though the band is registered in `install/hymns/README.md` and \
 `design` is already a valid `KNOWN_STAGE_LABELS` member."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-12 complete — the four process fragments name obligations that all now exist, including the reviewing stage's" },
-  { id = "EN-2", text = "the stage-band resolution path is exercised end-to-end at least once before the pack is relied upon — zero prior stage hymns exist on disk, so the band's happy path has never run" },
+  { id = "EN-2", text = "the stage-band resolution path is exercised end-to-end at least once before the pack is relied upon — zero prior stage hymns exist on disk, so the band's happy path has never run. Evidence is a passing resolve against a throwaway stage hymn, recorded in the phase sheet, not an inspection of the resolver" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "the `install/hymns/stage/` directory is created (it does not exist at head), `install/hymns/stage/design.md` exists, and `stage/design` is added to `[hymns].seal` — exactly one SPEC-023 entry, matching PHASE-01's amendment" },
   { id = "EX-2", text = "the four fragments (inquiry, drafting, reviewing, delegation) live under `install/design-prompts/` as a closed, code-owned store: one next-obligation enum selects at most one file, with no selector algebra, no `replaces` validation, and no user override" },
-  { id = "EX-3", text = "all five new install assets carry explicit `publication/manifest.toml` library addresses, satisfying `asset_source.rs::assert_unprojected_install_assets_are_published`" },
+  { id = "EX-3", text = "all five new install assets carry explicit `publication/manifest.toml` library addresses, satisfying `src/asset_source.rs::assert_unprojected_install_assets_are_published`" },
   { id = "EX-4", text = "prompt checks prove a user twin of the sealed hymn is dropped; install tests prove the sealed hymn is not projected as user-editable content" },
   { id = "EX-5", text = "PRECEDENT BOUND (research thread 5, high risk): a test asserts `install/design-prompts/` has no consumer outside the design run, and `name@digest` appears nowhere outside `design show`/`design resume` — the RFC-021 cascade fork is bounded by test, not by intention" },
-  { id = "EX-6", text = "NO CHANGE to `src/install.rs::KNOWN_STAGE_LABELS` or its comment. The first revision asked for a comment correction; at head the comment already reads `Provisional SL-186 stage set (STD-001 single source). check flags any stage-band label not in this list` — both facts design.md §7 rests on — and `design` is already a member. The residual obligation is the negative one: the phase must NOT edit the constant, and must not read design.md §7's rejection argument as licence to extend it" },
+  { id = "EX-6", text = "NO CHANGE to `src/install.rs::KNOWN_STAGE_LABELS` or its comment. The first revision asked for a comment correction; at head (`src/install.rs:942-945`) the comment already reads `Provisional SL-186 stage set (STD-001 single source). check flags any stage-band label not in this list` — both facts design.md §7 rests on — and `design` is already a member. The residual obligation is negative: the phase must NOT edit the constant, and must not read §7's rejection argument as licence to extend it" },
   { id = "EX-7", text = "no new embed root is created — both prompt stores sit beneath the already-grafted `install/`, so Nix `srcWithDist` needs no change" },
+  { id = "EX-8", text = "`tests/e2e_claude_install.rs` gains EXACTLY these three named tests, and the names are the contract: `sealed_design_hymn_and_four_fragments_ship_installed`, `design_prompts_have_no_consumer_outside_the_design_run`, `known_fragment_receipt_omits_body_stale_receipt_reemits`" },
 ]
 verification = [
-  { id = "VT-1", expects = "the seal registry gains exactly the one new entry", test_file = "install/manifest.toml", keywords = ["stage/design"], waived = false },
-  { id = "VT-2", expects = "installed-asset distribution covers the sealed hymn and the four fragments", test_file = "tests/e2e_claude_install.rs", keywords = ["stage/design", "design-prompts"], waived = false },
-  { id = "VA-1", text = "`doctrine prompt check` is green and the host-side `just nix-build` resolves every fragment from the produced binary (release-check gate, host only — nix is absent in jails)" },
-  { id = "VA-2", text = "a fragment's `name@digest` receipt behaviour is proven: a known current receipt omits it, a stale receipt re-emits it, and the envelope is never omitted" },
-  { id = "VA-3", text = "`git diff` for this phase shows `src/install.rs` untouched, per EX-6" },
+  { id = "VT-1", expects = "the seal registry gains the one new entry as a real list member, not a comment", test_file = "install/manifest.toml", keywords = ["stage/design"], patterns = ['^\s*seal\s*=.*stage/design'], waived = false },
+  { id = "VT-2", expects = "the three EX-8 assertions exist as functions, each anchored at line start", test_file = "tests/e2e_claude_install.rs", keywords = ["stage/design", "design-prompts"], patterns = ['^\s*fn sealed_design_hymn_and_four_fragments_ship_installed\(', '^\s*fn design_prompts_have_no_consumer_outside_the_design_run\(', '^\s*fn known_fragment_receipt_omits_body_stale_receipt_reemits\('], waived = false },
+  { id = "VA-1", text = "RUN: `doctrine prompt check` — exit 0. RUN on the host: `just nix-build` — the produced binary resolves all five assets (release-check gate, host only; nix is absent in jails, so this is deferred to the host and recorded, never skipped silently)" },
+  { id = "VA-2", text = "ANTI-THEATRE on EX-5: `design_prompts_have_no_consumer_outside_the_design_run` must be a repository-wide grep assertion — it enumerates every file referencing `design-prompts` or `name@digest` and asserts the set equals a named allowlist. A test that checks one file proves nothing about a fork's blast radius" },
+  { id = "VA-3", text = "RUN: `git diff --stat src/install.rs` for this phase — EMPTY, per EX-6" },
+  { id = "VA-4", text = "ANTI-THEATRE on receipts: `known_fragment_receipt_omits_body_stale_receipt_reemits` must assert three things — a current receipt omits the body, a STALE digest re-emits it, and the TurnEnvelope is present in both cases. Omission-only is the natural half-implementation and it silently breaks recovery" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the three EX-8 tests was observed RED before being made green, with failing output in the phase sheet" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' tests/e2e_claude_install.rs src/commands/design.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -365,24 +446,31 @@ reading. Carries a design gate: no specification owns a skill body (RV-315 F-17)
 so the adapter's shape is ungoverned by any spec."""
 entrance_criteria = [
   { id = "EN-1", text = "PHASE-07 complete — the family is executable end-to-end, including materialise and the prompt pack" },
-  { id = "EN-2", text = "DESIGN GATE: `.doctrine/slice/233/sketches/thin-adapter.md` exists as an authored, committed sketch — what survives from the eight-state machine, what moves into Doctrine, what the skill still owns on activation and recovery — and a dedicated RV ledger raised against it is terminal, every finding dispositioned. F-17 established that no spec governs this artifact, so the adversarial pass is the only gate it gets" },
+  { id = "EN-2", text = "DESIGN GATE (thin adapter). `.doctrine/slice/233/sketches/thin-adapter.md` exists, is committed, and answers ALL SIX of: (a) a line-by-line disposition of the incumbent eight-state machine — for each state, moved to Doctrine / retained in the skill / dropped, with the reason; (b) what the skill still owns on activation; (c) what it owns on recovery, when no run exists and when a stale one does; (d) the target body size, with the incumbent's size as the baseline; (e) what an agent does when `doctrine design` is absent or errors — the degradation path; (f) which existing skills cross-reference `/design` and what breaks in each. A sketch missing any of the six is not a sketch. A dedicated RV ledger raised against it by a reviewer who is NOT its author is terminal with every finding dispositioned. F-17 established that no spec governs this artifact, so the adversarial pass is the only gate it gets" },
 ]
 exit_criteria = [
   { id = "EX-1", text = "the design skill is a thin activation/recovery adapter; the workflow machine's deterministic mechanism now lives in Doctrine, and rendered guidance is invariant hymn + at most one process fragment + envelope" },
   { id = "EX-2", text = "`install/routing-process.md`'s core-process sentence teaches the canonical family, and every command it names is accepted by the just-built binary — the F-15 lower bound, proven not assumed" },
   { id = "EX-3", text = "the full install-asset delivery tail runs in this phase, since editing an `install/` asset is not self-delivering: `cargo build` re-embeds, `doctrine boot` regenerates, `doctrine boot --check` reports current, `doctrine install` refreshes the projected `.doctrine/routing-process.md`" },
   { id = "EX-4", text = "no shipped or generated core-process guidance advertises `slice design` as the canonical design-stage verb; deprecation documentation may still name the shim explicitly (§9.4)" },
-  { id = "EX-5", text = "the projected `.doctrine/routing-process.md` is refreshed and no longer divergent from the embed" },
+  { id = "EX-5", text = "the projected `.doctrine/routing-process.md` is refreshed and no longer divergent from the embed. Both files are declared design targets; at head both contain the `slice design` core-process sentence, so both move" },
   { id = "EX-6", text = "static `/design` activation is retained — this slice does not use successful dynamic delivery as evidence that privileged activation can be removed (scope §5, A2)" },
   { id = "EX-7", text = "the handover adapter converges too (scope §4, DEC-058): `plugins/doctrine/skills/handover/SKILL.md` is a declared design target, and handover short-circuits when structured state is current — verifying persistence and returning the slice/run reference plus only residual unstructured state, instead of restating what the run already holds" },
   { id = "EX-8", text = "`skills-lock.json` is regenerated and committed. It is tracked and holds a `computedHash` per skill; rewriting two SKILL.md bodies drifts it, and leaving the drift uncommitted contaminates the next agent's `git status` and every subsequent path-limited commit" },
+  { id = "EX-9", text = "`tests/e2e_claude_install.rs` gains EXACTLY these two named tests, and the names are the contract: `no_shipped_guidance_advertises_slice_design_as_canonical`, `every_command_named_by_core_process_is_accepted_by_the_binary`. The second one PARSES the generated core process for command invocations and executes each against the built binary — it does not check a hardcoded list, which would drift the moment the sentence changes" },
 ]
 verification = [
-  { id = "VT-1", expects = "shipped core-process guidance names the canonical family", test_file = "install/routing-process.md", keywords = ["doctrine design"], waived = false },
-  { id = "VT-2", expects = "a boot/guidance test asserts no shipped or generated core-process guidance advertises `slice design` as canonical", test_file = "tests/e2e_claude_install.rs", keywords = ["routing-process"], waived = false },
-  { id = "VA-1", text = "`doctrine boot --check` reports current at the phase's final commit, and the claim is reproducible at that commit rather than asserted" },
-  { id = "VA-2", text = "the adapter sketch's adversarial findings are all dispositioned before the phase closes" },
-  { id = "VA-3", text = "`git status --porcelain` is clean of `skills-lock.json` at the phase's final commit, per EX-8" },
+  { id = "VT-1", expects = "the core-process sentence still exists and the file names the canonical family; VA-3's repo-wide grep is what proves `slice design` left", test_file = "install/routing-process.md", keywords = ["doctrine design"], patterns = ['^\*\*Core process:\*\*'], waived = false },
+  { id = "VT-2", expects = "the two EX-9 assertions exist as functions, each anchored at line start", test_file = "tests/e2e_claude_install.rs", keywords = ["routing-process"], patterns = ['^\s*fn no_shipped_guidance_advertises_slice_design_as_canonical\(', '^\s*fn every_command_named_by_core_process_is_accepted_by_the_binary\('], waived = false },
+  { id = "VA-1", text = "RUN: `doctrine boot --check` — exit 0 AND reports current, re-run at the phase's FINAL commit rather than mid-phase. A claim recorded before the last edit is not evidence about the last edit" },
+  { id = "VA-2", text = "RUN: `git status --porcelain` — clean of `skills-lock.json` and of `.doctrine/routing-process.md`, per EX-5 and EX-8" },
+  { id = "VA-3", text = "RUN: `rg -n 'slice design' install/ plugins/ .doctrine/routing-process.md .doctrine/state/boot.md` — every remaining hit is explicitly deprecation documentation, enumerated in the phase sheet with its justification. At plan time the only two real hits were `install/routing-process.md:47` and `.doctrine/routing-process.md:20`; both must move, and they are the ONLY guidance files that must" },
+  { id = "VA-6", text = "SCOPE FENCE — do NOT converge history. A repo-wide `git grep -l 'slice design'` at plan time also hit ADR-005, ADR-014, DEC-075, QUE-190, a memory item, REV-030/032/036, REQ-089 and REQ-384. Every one is either a historical record that correctly names the verb of its own era, or a noun-phrase false positive (`the boundary against slice design`). `git diff --stat` for this phase must show ZERO changes under `.doctrine/adr/`, `.doctrine/knowledge/`, `.doctrine/revision/`, `.doctrine/requirement/`, `.doctrine/memory/`. Rewriting an accepted ADR to make a grep clean is corpus vandalism, not convergence" },
+  { id = "VA-4", text = "ANTI-THEATRE on the adapter: compare the rewritten SKILL.md against the sketch's answer (d) target size and against the incumbent baseline. If the body did not substantially shrink, the workflow machine was copied rather than moved, and EX-1 is unmet whatever the prose claims" },
+  { id = "VA-5", text = "ANTI-THEATRE on EX-9: read `every_command_named_by_core_process_is_accepted_by_the_binary` and confirm it EXTRACTS invocations from the generated text at runtime. A test enumerating commands in its own source is a hardcoded list wearing a parser's name, and it is exactly what let F-15 through" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: both EX-9 tests were observed RED before being made green — the first against the pre-rewrite guidance, the second against a deliberately introduced bogus command name in the core-process sentence" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' tests/e2e_claude_install.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
 ]
 specs        = []
 requirements = []
@@ -408,11 +496,16 @@ exit_criteria = [
   { id = "EX-4", text = "the kit samples acceptance-basis usefulness: whether reviewers or resumed agents use it, whether it disambiguates acceptance, and its interaction cost" },
   { id = "EX-5", text = "the kit is mechanically verified — the assertions run, not merely exist" },
   { id = "EX-6", text = "the kit records honestly that a successful outcome alone is not proof of behavioural adoption, and that CHR-049's live exercise against genuinely installed assets is the actual evidence" },
+  { id = "EX-7", text = "`tests/e2e_design_evaluation.rs` contains EXACTLY these two named tests, and the names are the contract: `evaluation_kit_assertions_run_over_all_five_evidence_classes`, `rubric_scores_a_known_bad_transcript_below_a_known_good_one`. The second is the kit's own negative control — a rubric that cannot separate a deliberately bad transcript from a good one is not measuring anything" },
 ]
 verification = [
-  { id = "VT-1", expects = "the kit's evidence surfaces are proven by a running test, not merely present as files — EX-5's `the assertions run` is itself under test", test_file = "tests/e2e_design_evaluation.rs", keywords = ["evaluation", "rubric"], waived = false },
-  { id = "VA-1", text = "every RFC-021 stage the scope names as needing exercise has a corresponding assertion; none is silently unexercised" },
-  { id = "VA-2", text = "the kit runs green from the coordination tree — not from a dispatch worktree, whose `.doctrine/state` is its own and empty" },
+  { id = "VT-1", expects = "the two EX-7 assertions exist as functions, each anchored at line start — EX-5's `the assertions run` is itself under test", test_file = "tests/e2e_design_evaluation.rs", keywords = ["evaluation", "rubric"], patterns = ['^\s*fn evaluation_kit_assertions_run_over_all_five_evidence_classes\(', '^\s*fn rubric_scores_a_known_bad_transcript_below_a_known_good_one\('], waived = false },
+  { id = "VA-1", text = "RUN: `cargo test --test e2e_design_evaluation` — green from the COORDINATION tree, not a dispatch worktree, whose `.doctrine/state` is its own and empty. Record which tree it ran in" },
+  { id = "VA-2", text = "every RFC-021 stage the scope names as needing exercise maps to a named assertion; the mapping is enumerated in the phase sheet, stage by stage, so an unexercised stage is visible rather than absorbed" },
+  { id = "VA-3", text = "ANTI-THEATRE: the kit ships BOTH a known-good and a known-bad transcript fixture, and `rubric_scores_a_known_bad_transcript_below_a_known_good_one` asserts a strict ordering between their scores. Without the bad fixture the rubric is unfalsifiable and PHASE-09 is decorative" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: both EX-7 tests were observed RED before being made green, with failing output in the phase sheet" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' tests/e2e_design_evaluation.rs` returns nothing; `cargo test -- --list | wc -l` has not shrunk" },
+  { id = "VA-G", text = "RUN: `doctrine check gate` — exit 0 at the phase's final commit" },
   { id = "VH-1", text = "the user accepts the rubric as measuring something they care about, before CHR-049 spends a live human-moderated session against it" },
 ]
 specs        = []

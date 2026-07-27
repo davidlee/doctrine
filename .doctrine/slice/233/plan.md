@@ -219,6 +219,32 @@ at `src/slice.rs:174`, dispatched at `:449`, `run_design` at `:734` — not in
 shim work edits it, so it is now a declared design-target selector; without that
 the phase would exit into a conformance failure.
 
+**The stall sweep.** A phase stalls if it must edit a path with no design-target
+selector: the work lands, then `slice conformance` refuses it at close, and the
+selector cannot be added by the worker because authored `.doctrine/` state is
+coordinator-only. Ten more such paths were found by walking each phase's actual
+edit set against head, and all are now declared: `.doctrine/routing-process.md`
+(the tracked *projected* copy, which carries the same `slice design`
+core-process sentence as the embed and so must move with it);
+`.doctrine/spec/tech/019/**` and `.doctrine/spec/tech/023/**` (both amendment
+targets are tech specs — now known exactly, so PHASE-01 only has two ids left to
+append); `src/state.rs` (`STATE_SLICE_DIR` is a private const there, and STD-001
+forbids a second literal, so the snapshot path helper must live in that module);
+`tests/common/**` (shared e2e helpers); `tests/e2e_help_families_golden.rs`,
+`tests/e2e_subcommand_help.rs` and `tests/e2e_boot_map_golden.rs` (all shift when
+a top-level command family is added); `install/hymns/README.md` (the band
+registry); and `Cargo.toml`. `sha2` is already a workspace dependency, so
+fingerprinting adds none.
+
+**What PHASE-08 must NOT converge.** A repo-wide `git grep 'slice design'` hits
+ADR-005, ADR-014, DEC-075, QUE-190, a memory item, three revisions, and REQ-089 /
+REQ-384. Every hit is either a historical record correctly naming the verb of its
+own era, or a noun-phrase false positive ("the boundary against slice design",
+"its concrete home … are slice design"). None mandates the verb, so PHASE-01's
+four-entity descent stands and only the two routing-process files move. PHASE-08
+VA-6 fences this explicitly, because "converge shipped guidance" is exactly the
+instruction an over-eager implementer answers by editing accepted ADRs.
+
 **A new top-level command is not free.** `FAMILIES` in `src/commands/cli.rs` is
 the only hand-maintained classification of the command surface, and
 `families_partition_the_visible_command_tree` panics on any visible command not
@@ -268,16 +294,68 @@ lie. PHASE-08 carries it explicitly.
 the regenerated lock — otherwise the drift contaminates the next agent's
 `git status`, which is exactly the shared-index hazard AGENTS.md warns about.
 
-**VT mandates match raw, case-sensitive substrings.** `src/vtgate.rs` runs
-`source.contains(kw)` over the unmodified file and additionally requires the
-`test_file` to have been modified by the slice. Four of the first draft's
-mandates could not have passed a correct implementation: lowercase stage names
-against PascalCase Rust variants, a `DesignTurnEnvelope` the design calls
+## Verification under an untrusted implementer
+
+The implementation is being written by a model that must be assumed lazy,
+literal-minded, and willing to make a gate green without making the code right.
+The plan is therefore constructed so that **no criterion can be satisfied by a
+claim** — every one resolves to a command with an exit code, a grep result, or a
+recorded failure output. The relevant facts:
+
+**A VT mandate proves less than it looks like.** `src/vtgate.rs::check_vt` never
+runs a test. It checks that a slice-modified file contains each keyword as a raw
+substring — over unstripped source, so a comment satisfies it — and that each
+`patterns` regex matches at least one line. Four of the first draft's mandates
+could not have passed a correct implementation at all (lowercase stage names
+against PascalCase variants, a `DesignTurnEnvelope` the design calls
 `TurnEnvelope`, a `"slice design"` CLI invocation that appears in test source as
-`["slice", "design"]`, and the layering-test misfire above. Where a mandate now
-depends on a name, the corresponding exit criterion fixes that name, so the
-gate is self-enforcing rather than a guess about how the implementer will write
-it.
+`["slice", "design"]`, and the layering-test misfire above) — and every one of
+them, once fixed, would still have been satisfiable by a comment.
+
+Four devices carry the real weight. Every code phase uses all four:
+
+1. **`patterns` anchored at line start on a declaration shape** —
+   `^\s*fn name\(`, `^\s*pub(\(crate\))? enum Stage\b`,
+   `^\s*(mut\s+)?on_reserved:`. A comment line begins with `/`, so it cannot
+   match. Each shape was positive-controlled against existing code before being
+   written into the plan; a pattern that can never match is worse than no
+   pattern.
+2. **Exit criteria that enumerate the exact test function names.** Sixty-odd
+   names across the phases. The names are the contract, the patterns anchor on
+   them, and a paraphrased or merged test fails the gate. Where a mandate
+   depends on a name that does not yet exist — `Stage`, `TurnEnvelope`,
+   `on_reserved`, `design_snapshot_path`, a `DEPRECAT*` constant — the exit
+   criterion fixes that name and says so, and renaming it is a plan revision
+   rather than a local decision. Anchoring on a name that already exists
+   (`run_design`, `claim_fresh_id` alone) would pass vacuously, which is why
+   those anchors moved.
+3. **A negative control per phase (`VA-NC`).** Every named test was observed RED
+   before it was made green, with the failing output recorded in the phase
+   sheet. This is the only device that catches a test which passes because it
+   asserts nothing, and several phases constrain what the red must be: for the
+   PHASE-12 lock refusals it must be a wrong *admission*, for the PHASE-06
+   refusals a wrong *acceptance*, for the PHASE-03 rule-3 tests a behavioural
+   failure rather than a compile error. A test never seen red is not evidence.
+4. **An escape sweep per phase (`VA-ES`).** No `#[ignore]`, `todo!()`,
+   `unimplemented!()` or `assert!(true)` under the phase's paths, and a test
+   census that never shrinks — the four cheapest ways to turn a red suite green.
+
+Beyond those, each phase carries **anti-theatre criteria** aimed at its own
+specific way of being faked: a bounds test whose fixture never reaches the
+bound; five distinct refusals collapsing into one `is_err()`; a shim-equivalence
+test comparing exit codes instead of bytes; a lock-gate test that omits three
+components and proves nothing about which one the gate read; a similarity
+function that makes `text similarity never merges` false regardless of what any
+test asserts; a core-process test with a hardcoded command list wearing a
+parser's name. These are written as instructions to the *coordinator*, who runs
+the VA rows — the worker does not self-certify.
+
+The two design gates that were "a written sketch and an adversarial pass" now
+enumerate the questions the sketch must answer — seven for projection bounds,
+seven for the marker grammar, six for the thin adapter — and require the RV
+reviewer to be someone other than the sketch's author. A sketch missing any
+listed answer is not a sketch, which is what stops the gate degrading into a
+paragraph and a rubber stamp.
 
 **The research packet is gitignored.** `.doctrine/slice/233/research/` exists in
 the primary working tree only. It will not travel to a fresh clone or a dispatch

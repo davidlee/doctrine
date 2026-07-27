@@ -168,6 +168,56 @@ selector = "skills-lock.json"
 intent = "design-target"
 note = "SL-233 plan revision: ADR-001 tier registration for design_run; incumbent slice design shim; design-gate sketches; skill lock drift from the SKILL.md rewrites"
 
+[[selector]]
+selector = ".doctrine/routing-process.md"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = ".doctrine/spec/tech/019/**"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = ".doctrine/spec/tech/023/**"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = "src/state.rs"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = "tests/common/**"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = "tests/e2e_help_families_golden.rs"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = "tests/e2e_subcommand_help.rs"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = "tests/e2e_boot_map_golden.rs"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = "install/hymns/README.md"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
+[[selector]]
+selector = "Cargo.toml"
+intent = "design-target"
+note = "SL-233 stall sweep: projected routing copy (tracked, names slice design); the two known amendment targets; STATE_SLICE_DIR single-source (STD-001); shared test helpers; help/boot goldens that shift when a command family is added; hymn band registry; new test targets"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-005"
