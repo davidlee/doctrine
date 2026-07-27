@@ -276,3 +276,5 @@ publish: web-build release-check
   cargo publish --allow-dirty
 
 
+gc:
+  cargo sweep --time 7
