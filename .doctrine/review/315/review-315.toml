@@ -14,7 +14,7 @@ ref   = "SL-233"
 
 [[finding]]
 id = "F-1"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected: review prime warms this ledger from SL-233's selectors. Observed: it fail-hards with 'Is a directory (os error 21)' for any slice whose selectors glob an entity root"
 detail = """
@@ -25,6 +25,8 @@ Root cause, exact: src/review.rs:2641 `resolve_selectors_to_fileset` expands eve
 Blast radius is not SL-233: ANY slice selecting `.doctrine/spec/**`, `.doctrine/slice/**`, `.doctrine/adr/**`, `.doctrine/backlog/**` or any other entity root cannot be primed at all. AGENTS.md mandates committing those symlinks ("doctrine entity creation commands mint a symlink with the title slug as a convenience. Commit these with the entity itself") — the engine therefore breaks on its own convention.
 
 Severity: prime is documented as an optimization signal, not a gate (review-ledger.md 2). But this is not a degraded signal, it is a hard refusal that removes the warm cache and the staleness signal from every entity-globbing slice, and SL-233 is a slice whose whole subject is agent-legible workflow state. Penance: forgive `IsADirectory` alongside `NotFound` in contentset::compute, or filter non-blob entries at fileset resolution (git ls-files -s mode != 120000/160000). Regression test: a tracked symlink-to-directory inside a globbed selector primes cleanly."""
+disposition = "accepted-routed"
+response = "Accepted. ISS-259 is now governed by SL-234, whose scoped design filters non-regular Git index entries at review selector resolution while leaving contentset strict. Authored in 90ffc068; implementation awaits design approval under the no-code-without-approved-plan gate."
 
 [[finding]]
 id = "F-2"
@@ -215,7 +217,7 @@ Penance: one pass reconciling the two lists in both directions — give each orp
 
 [[finding]]
 id = "F-12"
-status = "open"
+status = "answered"
 severity = "minor"
 title = "Expected: a design-target file is not mutated before the design locks and a plan exists. Observed: plugins/doctrine/skills/design/SKILL.md carries an uncommitted edit while SL-233 sits at status 'design' with no plan"
 detail = """
@@ -232,6 +234,8 @@ The third is a **design-target selector of SL-233** (`doctrine slice show SL-233
 I weigh this honestly. The edit is small, is prose, improves the skill, and is plausibly a direct user instruction — this repo's own governance permits small items outside the full workflow, and an unrelated improvement to a shipped skill is a defensible thing to have done. It is nonetheless uncommitted mutation of the exact file 5.5 schedules for rewrite as "a thin activation/recovery adapter", sitting in the working tree while the design that will rewrite it is under review. Two concrete costs: it will conflict with or be silently swallowed by that rewrite, and if it is still uncommitted when the slice records source deltas, `doctrine slice conformance` will attribute a change SL-233 did not author to SL-233.
 
 Penance: commit it now, on its own, with its own scope — it is not SL-233 work and must not ride an SL-233 commit (AGENTS.md: path-limit the commit itself, `git commit <paths> -F -`, never a pathless commit). If it IS intended as SL-233 work, it belongs in a phase after lock, not before it. Same disposition for `.doctrine/governance.md`, which is unrelated to this slice and should not be carried into its commits. `.doctrine/slice/232/notes.md` belongs to SL-232 and is another agent's business, not mine."""
+disposition = "fixed"
+response = "Committed the pre-existing document-local acronym qualification independently as 05703c57; the SL-233 rewrite no longer owns or obscures that diff."
 
 [[finding]]
 id = "F-13"
