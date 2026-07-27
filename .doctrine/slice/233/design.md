@@ -180,11 +180,13 @@ revisions are refused. The revision guards runtime writers against each other
 and structurally cannot see the authored tier, so the watermark guards that
 tier separately. Three rules, and they are not the same rule:
 
-1. **Ordinary mutation entry-refuses divergence.** Every mutating verb
-   fingerprints `design.md` on entry and refuses when it differs from the
-   watermark, rather than clearing another gate against prose the snapshot no
-   longer describes. An absent `design.md` before first materialisation is
-   *cold*, not divergent; absent after it is divergent.
+1. **Ordinary mutation entry-refuses divergence.** The mutating verbs are
+   finite and named in §5.2: `start`, ordinary `apply`, `materialise`, and the
+   live-run arm of the deprecated shim. Each fingerprints `design.md` on entry
+   and refuses when it differs from the watermark, rather than clearing another
+   gate against prose the snapshot no longer describes. `show` and `resume` are
+   reads and mutate neither tier. An absent `design.md` before first
+   materialisation is *cold*, not divergent; absent after it is divergent.
 2. **Re-adopt is the sole lawful crossing, and it is a protocol, not a
    bypass.** `adopt_authored` exists precisely because the bytes diverged, so
    it is exempt from rule 1 — but only through the §5.5 admission path: the
@@ -196,12 +198,17 @@ tier separately. Three rules, and they are not the same rule:
    neither runtime clearance nor the watermark. No other verb, and no informal
    "re-adopt bypasses the guard", may admit foreign bytes.
 3. **The pre-write check narrows the window; it does not close it.**
-   Immediately before the runtime snapshot write, a mutating verb re-reads and
-   re-fingerprints `design.md` and abandons the write on divergence. Doctrine
-   holds no lock against a human editor, so an edit landing between that
-   comparison and the atomic rename is not caught by *this* invocation; it is
-   caught by rule 1 at the next one. The guarantee is delayed detection, never
-   silent acceptance.
+   Immediately before the runtime snapshot write, every mutating verb — both
+   classes — re-reads and re-fingerprints `design.md` and abandons the write if
+   the bytes have moved since it observed them. The comparison basis differs by
+   class and the difference is load-bearing: rule-1 verbs compare against the
+   watermark, while a rule-2 re-adoption compares against the exact fingerprint
+   it was admitted on, *never* against the old watermark — comparing adoption
+   against the watermark it exists to replace would resurrect F-20's
+   self-refusal. Doctrine holds no lock against a human editor, so an edit
+   landing between that comparison and the atomic rename is not caught by
+   *this* invocation; it is caught by rule 1 at the next one. The guarantee is
+   delayed detection, never silent acceptance.
 
 Rule 3's guarantee is bounded by effect ordering, and the bound is stated
 rather than papered over. For a checkpoint-bearing `apply`, DEC-083 and DEC-086
