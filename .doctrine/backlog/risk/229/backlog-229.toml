@@ -1,0 +1,33 @@
+schema = "doctrine.backlog"
+version = 1
+
+id = 229
+slug = "managed-behaviours-lack-an-explicit-privileged-authority-contract"
+title = "Managed behaviours lack an explicit privileged authority contract"
+kind = "risk"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = ["area:agents", "area:boot", "area:design", "area:harness", "area:skills"]
+
+[facet]                         # risk only — every field typed; seeded empty
+likelihood = ""                 # low | medium | high | critical
+impact     = ""                 # low | medium | high | critical
+origin     = ""
+controls   = []
+
+# outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
+# — `originates_from` for backlog→slice provenance — governed_by, related, drift) are
+# uniform `[[relation]]` rows (SL-048 "the cut") — author them with
+# `doctrine link RSK-NNN <label> <target>`; `doctrine inspect RSK-NNN` renders
+# them. The dep/seq axes below stay typed (they carry per-edge payloads).
+[relationships]
+needs    = []                   # item→item hard prerequisite
+after    = []                   # item→item soft sequence: { to, rank? }
+triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "SL-233"
