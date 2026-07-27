@@ -650,3 +650,16 @@ answer in a header comment the whole time, and grep-ing for how the repo already
 spawns pi would have found it in one call. Cost: ~2 wasted re-fires plus a
 foreground-debug attempt. Captured as ISS-266; ISS-265 is the sibling guidance
 fault in the same two scripts.
+
+[feedback; SL-233 RV-315 F-16..F-19 disposal]
+The handover's "Next actions" asserted all four findings were "repairs to
+`design.md`, not to code", and each finding's own repair text said "strike from
+B2" / "add to B2's descent". B2 is a **scope** bullet (`slice-233.md:175-177`),
+not a design section — `grep -n "B2" design.md` returned nothing and cost a
+second corpus-wide grep to locate. Cost: ~2 extra tool rounds, plus the risk of
+a wrong edit had the grep been trusted less. Root cause: findings raised from
+research cite a doc-local label (`B2`) without its owning file, and the handover
+inherited the label without resolving it. Cheap fix at the raise site — a
+doc-local enumeration reference should carry `file:line` on first use in a
+finding, exactly as the same findings do for `spec-003.md:50` and
+`src/review.rs:2025-2133`.
