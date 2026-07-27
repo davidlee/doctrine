@@ -1,0 +1,296 @@
+# Implementation plan for SL-233 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-233"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Governance descent"
+objective = """
+Descend RFC-021 into exactly four specification entities — one new product spec, \
+one new technical spec, and two narrow amendments (SPEC-019, SPEC-023) — appending \
+all four exact paths as design-target selectors BEFORE any body is edited. \
+Coordinator-only by construction: a dispatch worker never writes authored \
+.doctrine/ state."""
+entrance_criteria = [
+  { id = "EN-1", text = "design.md is locked and RV-315 is terminal (all 20 findings)" },
+  { id = "EN-2", text = "the selector list carries no exact spec-entity paths yet — only the deferred `.doctrine/spec/{product,tech}/**` scope-relevant globs" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "one new product spec and one new technical spec exist, each descending RFC-021, with ids allocated by the CLI (never guessed)" },
+  { id = "EX-2", text = "the new technical spec owns the reserve-then-journal mechanism, the prompt pack, and the reserved-materialisation seam" },
+  { id = "EX-3", text = "SPEC-019 carries only an acknowledgement that a managed design run is a legitimate provenance for DEC/QUE/ASM created through the reserve-then-journal protocol — no mechanism ownership transfers (RV-315 F-16)" },
+  { id = "EX-4", text = "SPEC-023 gains exactly one entry — `stage/design` in `[hymns].seal` — and nothing else; the prompt pack is NOT swept under SPEC-023 (RV-315 F-18)" },
+  { id = "EX-5", text = "all four exact spec paths were appended as design-target selectors BEFORE the first body edit, not after" },
+  { id = "EX-6", text = "no skill contract is amended: no specification owns a skill body, so `plugins/doctrine/skills/design/SKILL.md` remains a source target only (RV-315 F-17)" },
+]
+verification = [
+  { id = "VA-1", text = "`doctrine slice conformance SL-233` reports no undeclared spec edits — the design's named exit condition for this phase" },
+  { id = "VA-2", text = "`doctrine spec validate` passes for both new entities and both amendments" },
+  { id = "VA-3", text = "selector append order is evidenced by commit order: the selector commit precedes every spec-body commit" },
+  { id = "VA-4", text = "the descent totals exactly four entities — neither a fifth spurious entity nor a missing one; both errors are undoable only by a later slice" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Pure run model"
+objective = """
+Introduce `src/design_run/` carrying the pure run model: stage vocabulary, the \
+coarse gate table, inquiry-map types, and the serialization contract. No clock, \
+rng, git, or disk — impurity stays in the thin shell (AGENTS.md pure/imperative \
+split). Ride the review ledger's const-fn `can()` table rather than inventing a \
+second permission vocabulary."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — the technical spec exists and can be cited as the governing contract" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`src/design_run/` exists and is registered under ADR-001 layering (leaf <- engine <- command, no cycles)" },
+  { id = "EX-2", text = "the five coarse stages of design.md §5.4 are a closed vocabulary: exploring, inquiring, drafting, reviewing, locked" },
+  { id = "EX-3", text = "forward-boundary gates are a const-fn table modelled on `src/review.rs`'s `can()`, not a bespoke matcher" },
+  { id = "EX-4", text = "stage, inquiry lifecycle, cursor/posture, review, delegation and recovery are separate types with derived facts — no accidental hierarchical state machine (design R3)" },
+  { id = "EX-5", text = "the module is pure: no clock, rng, git, or filesystem access anywhere under `src/design_run/`" },
+]
+verification = [
+  { id = "VT-1", expects = "the closed stage vocabulary is present as named variants in the pure module", test_file = "src/design_run/mod.rs", keywords = ["exploring", "inquiring", "drafting", "reviewing", "locked"], waived = false },
+  { id = "VT-2", expects = "the architecture-layering suite classifies the new module rather than ignoring it", test_file = "tests/architecture_layering.rs", keywords = ["design_run"], waived = false },
+  { id = "VA-1", text = "a purity sweep over `src/design_run/**` finds no `std::fs`, `std::time`, `rand`, or `git` usage" },
+  { id = "VA-2", text = "existing suites remain green unchanged — the behaviour-preservation gate for shared machinery" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Persistence and the authored watermark"
+objective = """
+Persist the run at `.doctrine/state/slice/<NNN>/design.toml`, riding \
+`src/comparison/wire.rs` as the schema+version precedent. Deliver revision CAS, \
+submission idempotency, bounded receipt eviction, and DEC-092's authored \
+watermark under its three distinct rules."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-02 complete — the pure model exists to serialize" },
+  { id = "EN-2", text = "DEC-092 is accepted and its three rules are read as authored, not summarised from recall" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "the snapshot is schema-versioned with parse-time rejection of unknown versions, riding wire.rs's precedent rather than a second scheme" },
+  { id = "EX-2", text = "a monotonic revision compare-and-swaps every mutation; stale writers are refused" },
+  { id = "EX-3", text = "submission idempotency: a retried submission id resumes; a changed payload under a reused id is refused; an id outside the replay window is refused as expired, never treated as new" },
+  { id = "EX-4", text = "receipt eviction is bounded but can never remove the latest receipt or one referenced by an outstanding delegation" },
+  { id = "EX-5", text = "DEC-092 rule 1: `start`, ordinary `apply`, `materialise` and the shim's live-run arm entry-refuse an authored-watermark divergence; absent design.md is cold before first materialisation and divergent after" },
+  { id = "EX-6", text = "DEC-092 rule 3: every mutating verb re-fingerprints immediately before the snapshot write and abandons the write if bytes moved — rule-1 verbs compare against the watermark, a rule-2 re-adoption against the fingerprint it was admitted on, NEVER against the old watermark (RV-315 F-20)" },
+  { id = "EX-7", text = "the abandoned-write guarantee is implemented as `the run does not advance`, not `nothing was written` — journalled effects ordered before the snapshot under DEC-083/086 remain and stay recoverable" },
+  { id = "EX-8", text = "writes use the existing `src/fsutil.rs::write_atomic` sibling-replacement helper, not a new writer" },
+]
+verification = [
+  { id = "VT-1", expects = "the authored watermark is a first-class persisted field, not an incidental hash", test_file = "src/commands/design.rs", keywords = ["watermark"], waived = false },
+  { id = "VT-2", expects = "the between-applies edit is refused at entry, and the mid-window edit abandons the write through a deterministic injectable hook", test_file = "tests/e2e_design_state.rs", keywords = ["watermark", "revision"], waived = false },
+  { id = "VA-1", text = "design.md §9.2's seven watermark assertions each map to a named test; none is silently dropped" },
+  { id = "VA-2", text = "the `nothing written` phrasing appears nowhere in code, comments, or error text — the guarantee is `the run does not advance`" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "Command surface and bounded projections"
+objective = """
+Wire the `doctrine design` family (start / show / apply / resume) and the single \
+structured envelope every read derives from. Deliver bounded projections with \
+named limits proven against a large-run fixture. This phase carries a design \
+gate: the projection and token-bounding algorithm is genuinely undesigned in \
+design.md §9.3, which asserts that limits hold without specifying how."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-03 complete — a persisted run exists to project" },
+  { id = "EN-2", text = "DESIGN GATE: a written sketch of the projection and token-bounding algorithm exists — what is dropped, how the nearby frontier is selected, how the material-change delta is computed — and has had an adversarial pass whose findings are dispositioned. design.md §9.3 asserts the limits hold but does not say how; R1 (ceremony exceeding value) is decided here" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`doctrine design start|show|apply|resume` are wired and accepted by the built binary" },
+  { id = "EX-2", text = "one structured envelope is the canonical read model, projected as prompt, JSON, or human status (DEC-064) — one type, three renderings, never three models" },
+  { id = "EX-3", text = "normal output carries active path, nearby frontier, blockers, counts and material changes; full detail is explicit through `show --full`" },
+  { id = "EX-4", text = "named limits bound normal envelope frontier, change-summary, blocker and declaration-example detail, and hold against a generated fixture of hundreds of nodes" },
+  { id = "EX-5", text = "`show` is a strict subset of any `inspect`-style surface; the help-text convention test guards that polarity rather than prose asserting it" },
+  { id = "EX-6", text = "`apply` validates the whole candidate before any authored mutation; validation failure leaves state byte-identical" },
+]
+verification = [
+  { id = "VT-1", expects = "the single canonical envelope type exists and is the read model", test_file = "src/commands/design.rs", keywords = ["DesignTurnEnvelope"], waived = false },
+  { id = "VT-2", expects = "named projection limits hold against a large-run fixture rather than being asserted in prose", test_file = "tests/e2e_design_projection.rs", keywords = ["DesignTurnEnvelope", "frontier"], waived = false },
+  { id = "VA-1", text = "the projection sketch's adversarial findings are all dispositioned before the phase closes" },
+  { id = "VA-2", text = "token cost of a normal turn is measured and recorded, not assumed — R1's evidence starts here" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Checkpoint create and adopt"
+objective = """
+Deliver DEC-083/DEC-086's recoverable checkpoint: journal the intent, claim a \
+canonical id through the existing reservation backend, journal the id, \
+materialise the record, apply status and relations, then complete the snapshot. \
+Requires a caller-visible midpoint in `src/entity.rs`'s fresh-creation path, \
+which today has none."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-04 complete — `apply` exists to carry a checkpoint declaration" },
+  { id = "EN-2", text = "`src/entity.rs::claim_fresh_id` is re-read at head; the design's account of it having no caller-visible midpoint between id-claim and byte-write is confirmed against current source, not recalled" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "the fresh-creation path exposes a callback seam between id-claim and byte-write, added without changing existing callers' behaviour" },
+  { id = "EX-2", text = "the six DEC-086 steps are ordered exactly as authored; a crash before id journalling leaves no unidentified authored record" },
+  { id = "EX-3", text = "every post-journal recovery resumes against the exact reserved canonical id — never a fresh one" },
+  { id = "EX-4", text = "adopting an existing canonical record creates no duplicate and requires no reservation" },
+  { id = "EX-5", text = "authored knowledge is never deleted or rolled back to repair a runtime failure (DEC-083)" },
+  { id = "EX-6", text = "an accepted checkpoint carries a content-bound user-acceptance attestation; a semantic payload cannot self-declare accepted status (DEC-088, scope R4)" },
+]
+verification = [
+  { id = "VT-1", expects = "checkpoint recovery resumes each known journal phase without duplication, including the pre-journal crash case", test_file = "tests/e2e_design_checkpoint.rs", keywords = ["journal", "reserved"], waived = false },
+  { id = "VT-2", expects = "existing entity-creation callers are behaviour-preserved across the new seam", test_file = "src/entity.rs", keywords = ["claim_fresh_id"], waived = false },
+  { id = "VA-1", text = "the existing knowledge and entity suites stay green unchanged — the behaviour-preservation gate for shared machinery" },
+  { id = "VA-2", text = "no parallel DEC/QUE/ASM wire type was introduced; the existing knowledge surface is reused (research thread 2)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-06"
+name      = "Materialise, markers, and the compatibility shim"
+objective = """
+Render runtime sections into authored prose riding `src/entity.rs::write_body`, \
+and deliver the stable-section-ID marker grammar plus DEC-092 rule 2's \
+re-adoption protocol. This phase carries a design gate: the marker grammar is \
+the substrate re-adopt correctness rests on, and design.md specifies only that \
+markers are `unobtrusive` plus a list of refusals."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-05 complete" },
+  { id = "EN-2", text = "DESIGN GATE: a written sketch of the marker grammar exists — syntax, escaping, collision behaviour, what happens when a user edits or deletes a marker, and how a marker survives a Markdown formatter — and has had an adversarial pass whose findings are dispositioned. The refusals in design.md §5.5 are only as good as the grammar they are refusing against" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "materialise rides `write_body` rather than inventing a prose writer" },
+  { id = "EX-2", text = "output carries unobtrusive stable-section-ID comments and records its output fingerprint as the §5.3 authored watermark" },
+  { id = "EX-3", text = "DEC-092 rule 2 is a protocol: declared exact current fingerprint matching observed bytes, complete marker-map validation, DEC-066 evidence invalidation, no clearance inherited across the crossing, and re-baseline only after full validation" },
+  { id = "EX-4", text = "an invalid or stale adoption changes neither runtime clearance nor the watermark — both polarities implemented, not just the happy path" },
+  { id = "EX-5", text = "re-adoption refuses missing, duplicate and unknown markers, marker-free additions, and structural deletion — refusing rather than guessing" },
+  { id = "EX-6", text = "the deprecated `slice design` shim is mutually exclusive with the managed writer: with a live run it forwards through the same implementation and guard; with no run it preserves scaffold-only no-clobber behaviour and never creates runtime state (DEC-075)" },
+]
+verification = [
+  { id = "VT-1", expects = "hand-edit then re-adopt preserves run/map/cursor/receipts, updates only marker-addressed sections, and invalidates evidence for each changed fingerprint", test_file = "tests/e2e_design_materialise.rs", keywords = ["adopt", "marker"], waived = false },
+  { id = "VT-2", expects = "canonical materialise and the deprecated shim produce identical bytes and identical foreign-edit refusals through one seam", test_file = "tests/e2e_design_materialise.rs", keywords = ["slice design"], waived = false },
+  { id = "VA-1", text = "the marker-grammar sketch's adversarial findings are all dispositioned before the phase closes" },
+  { id = "VA-2", text = "the refusal paths are tested hostilely — a design that refuses rather than guesses is only as good as the refusals it implements (RV-315 round 2 standing note)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-07"
+name      = "Prompt pack and asset distribution"
+objective = """
+Author the sealed invariant hymn at `install/hymns/stage/design.md` and the four \
+closed process fragments beneath `install/design-prompts/`, seal `stage/design`, \
+give all five assets explicit publication addresses, and prove distribution. \
+First-use risk: `install/hymns/stage/` is currently EMPTY and `[hymns].seal` \
+holds exactly one entry (`preamble/core`), so this is the first stage-band hymn \
+ever authored, though the band is registered in `install/hymns/README.md`."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-06 complete" },
+  { id = "EN-2", text = "the stage-band resolution path is exercised end-to-end at least once before the pack is relied upon — zero prior stage hymns exist on disk, so the band's happy path has never run" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`install/hymns/stage/design.md` exists and `stage/design` is added to `[hymns].seal` — exactly one SPEC-023 entry, matching PHASE-01's amendment" },
+  { id = "EX-2", text = "the four fragments (inquiry, drafting, reviewing, delegation) live under `install/design-prompts/` as a closed, code-owned store: one next-obligation enum selects at most one file, with no selector algebra, no `replaces` validation, and no user override" },
+  { id = "EX-3", text = "all five new install assets carry explicit `publication/manifest.toml` library addresses, satisfying the unprojected-install-asset reachability invariant" },
+  { id = "EX-4", text = "prompt checks prove a user twin of the sealed hymn is dropped; install tests prove the sealed hymn is not projected as user-editable content" },
+  { id = "EX-5", text = "PRECEDENT BOUND (research thread 5, high risk): a test asserts `install/design-prompts/` has no consumer outside the design run, and `name@digest` appears nowhere outside `design show`/`design resume` — the RFC-021 cascade fork is bounded by test, not by intention" },
+  { id = "EX-6", text = "`src/install.rs`'s `KNOWN_STAGE_LABELS` comment is corrected so the code and design.md §7 agree: the set is enforced by `check` and explicitly provisional, and the stage-hymn rejection rests on axis meaning rather than registry closure" },
+  { id = "EX-7", text = "no new embed root is created — both prompt stores sit beneath the already-grafted `install/`, so Nix `srcWithDist` needs no change" },
+]
+verification = [
+  { id = "VT-1", expects = "the seal registry gains exactly the one new entry", test_file = "install/manifest.toml", keywords = ["stage/design"], waived = false },
+  { id = "VT-2", expects = "installed-asset distribution covers the sealed hymn and the four fragments", test_file = "tests/e2e_claude_install.rs", keywords = ["stage/design", "design-prompts"], waived = false },
+  { id = "VA-1", text = "`doctrine prompt check` is green and the host-side `just nix-build` resolves every fragment from the produced binary (release-check gate, host only — nix is absent in jails)" },
+  { id = "VA-2", text = "a fragment's `name@digest` receipt behaviour is proven: a known current receipt omits it, a stale receipt re-emits it, and the envelope is never omitted" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-08"
+name      = "Thin adapter and guidance convergence"
+objective = """
+Rewrite `plugins/doctrine/skills/design/SKILL.md` from an eight-state workflow \
+machine into a thin activation/recovery adapter, and converge shipped guidance \
+onto the canonical command family. This is the phase that ships the executable \
+`doctrine design` family end-to-end, so design.md §5.5 places the \
+`install/routing-process.md` rewrite here — see plan.md for that reading. \
+Carries a design gate: no specification owns a skill body (RV-315 F-17), so the \
+adapter's shape is ungoverned by any spec."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-07 complete — the family is executable end-to-end, including materialise and the prompt pack" },
+  { id = "EN-2", text = "DESIGN GATE: a written sketch of the thin adapter exists — what survives from the eight-state machine, what moves into Doctrine, what the skill still owns on activation and recovery — and has had an adversarial pass whose findings are dispositioned. F-17 established that no spec governs this artifact, so the adversarial pass is the only gate it gets" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "the design skill is a thin activation/recovery adapter; the workflow machine's deterministic mechanism now lives in Doctrine, and rendered guidance is invariant hymn + at most one process fragment + envelope" },
+  { id = "EX-2", text = "`install/routing-process.md`'s core-process sentence teaches the canonical family, and every command it names is accepted by the just-built binary — the F-15 lower bound, proven not assumed" },
+  { id = "EX-3", text = "the full install-asset delivery tail runs in this phase, since editing an `install/` asset is not self-delivering: `cargo build` re-embeds, `doctrine boot` regenerates, `doctrine boot --check` reports current, `doctrine install` refreshes the projected `.doctrine/routing-process.md`" },
+  { id = "EX-4", text = "no shipped or generated core-process guidance advertises `slice design` as the canonical design-stage verb; deprecation documentation may still name the shim explicitly (§9.4)" },
+  { id = "EX-5", text = "the projected `.doctrine/routing-process.md` is refreshed and no longer divergent from the embed" },
+  { id = "EX-6", text = "static `/design` activation is retained — this slice does not use successful dynamic delivery as evidence that privileged activation can be removed (scope §5, A2)" },
+]
+verification = [
+  { id = "VT-1", expects = "shipped core-process guidance names the canonical family", test_file = "install/routing-process.md", keywords = ["doctrine design"], waived = false },
+  { id = "VT-2", expects = "a boot/guidance test asserts no shipped or generated core-process guidance advertises `slice design` as canonical", test_file = "tests/e2e_claude_install.rs", keywords = ["routing-process"], waived = false },
+  { id = "VA-1", text = "`doctrine boot --check` reports current at the phase's final commit, and the claim is reproducible at that commit rather than asserted" },
+  { id = "VA-2", text = "the adapter sketch's adversarial findings are all dispositioned before the phase closes" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-09"
+name      = "Evaluation kit"
+objective = """
+Deliver the deterministic evaluation kit beneath `.doctrine/slice/233/evaluation/`: \
+fixture, moderator protocol, rubric, evidence collectors, and assertions covering \
+the adopt / adhere / refresh / recover / complete evidence classes. These artifacts \
+gate SL-233 closure; CHR-049 runs the live human-in-the-loop exercise post-close \
+against installed bytes. Coordinator-only: a dispatch worker never writes authored \
+.doctrine/ state, and a fork carries its own empty `.doctrine/state` (verified at \
+plan time), so this cannot run from a worktree."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-08 complete — the skill and prompt assets exist in the shape the kit will evaluate" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "a deterministic fixture, moderator protocol, rubric, evidence collectors, and assertions exist under `.doctrine/slice/233/evaluation/`" },
+  { id = "EX-2", text = "evidence is classified separately as adopt, adhere, refresh, recover, and complete — not collapsed into one score" },
+  { id = "EX-3", text = "the kit measures interaction cost and token cost, so R1 (ceremony exceeding its value) can be judged on evidence rather than impression" },
+  { id = "EX-4", text = "the kit samples acceptance-basis usefulness: whether reviewers or resumed agents use it, whether it disambiguates acceptance, and its interaction cost" },
+  { id = "EX-5", text = "the kit is mechanically verified — the assertions run, not merely exist" },
+  { id = "EX-6", text = "the kit records honestly that a successful outcome alone is not proof of behavioural adoption, and that CHR-049's live exercise against genuinely installed assets is the actual evidence" },
+]
+verification = [
+  { id = "VA-1", text = "every RFC-021 stage the scope names as needing exercise has a corresponding assertion; none is silently unexercised" },
+  { id = "VA-2", text = "the kit runs green from the coordination tree — not from a dispatch worktree, whose `.doctrine/state` is its own and empty" },
+  { id = "VH-1", text = "the user accepts the rubric as measuring something they care about, before CHR-049 spends a live human-moderated session against it" },
+]
+specs        = []
+requirements = []
