@@ -32,18 +32,9 @@ content only, so the absent `.claude/` silently changed which arm was measured
 different surface: not a clone, a linked worktree, and here the router's own
 step-2 instruction is what defeats step-4's test.
 
-## Fix direction
+## Fix
 
-The marker is a proxy for "which harness is the orchestrator", which the
-orchestrator knows directly and the filesystem does not. Options:
-
-- Evaluate the marker at the **project root** (`git rev-parse --path-format=absolute
-  --git-common-dir`'s parent), not the cwd — a one-line clarification in the
-  router, and the narrowest fix.
-- Better: state the marker as **session-root-relative** and add the negative
-  case explicitly ("a linked worktree never carries it — do not read the cwd").
-- Best, if it is worth the machinery: have `dispatch setup` record the driving
-  arm in the coordination record, so the arm is a fact of the drive rather than
-  a per-turn filesystem inference.
-
-Any of these is prose-level; no engine change is implied.
+Switch from a filesystem marker (`.claude/` directory) to a process-level
+env var (`CLAUDECODE=1`). An env var survives cwd changes into linked
+worktrees, where a gitignored directory does not. One-line change in
+`plugins/doctrine/skills/dispatch/SKILL.md` step 4; no engine change.
