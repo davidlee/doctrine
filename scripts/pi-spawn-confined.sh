@@ -36,18 +36,28 @@ cd "$ROOT" || { echo "cd ROOT failed"; exit 1; }
 # (relative dirs are resolved against $ROOT) so callers keep the pi-spawn.sh
 # relative-dir convention.
 case "$D" in /*) ;; *) D="$ROOT/$D" ;; esac
-rm -rf "$D"
 
-"$DOCTRINE" worktree fork --base "$B" --branch "$BR" --dir "$D" --worker ||
-  {
-    echo "FORK FAILED $?"
+# PI_REUSE_FORK=1 attaches a second turn to an EXISTING fork instead of minting a
+# new one: the review pass reads the worker's delta, and an escalation model cleans
+# it up in place. Re-forking would destroy the very work both need, so the fork,
+# the `rm -rf`, and $B are skipped — everything downstream (confinement, prompt,
+# completion) is unchanged.
+if [ "${PI_REUSE_FORK:-0}" = 1 ]; then
+  [ -d "$D" ] || { echo "[spawn] PI_REUSE_FORK=1 but $D does not exist"; exit 1; }
+  echo "[spawn] reuse $D (HEAD $(git -C "$D" rev-parse --short HEAD))"
+else
+  rm -rf "$D"
+  "$DOCTRINE" worktree fork --base "$B" --branch "$BR" --dir "$D" --worker ||
+    {
+      echo "FORK FAILED $?"
+      exit 1
+    }
+  cp "$ROOT/AGENTS.md" "$D/" || {
+    echo "AGENTS copy failed"
     exit 1
   }
-cp "$ROOT/AGENTS.md" "$D/" || {
-  echo "AGENTS copy failed"
-  exit 1
-}
-echo "[spawn] fork $BR @ $B -> $D (HEAD $(git -C "$D" rev-parse --short HEAD))"
+  echo "[spawn] fork $BR @ $B -> $D (HEAD $(git -C "$D" rev-parse --short HEAD))"
+fi
 
 OUT=$(mktemp)
 PI_FIFO=$(mktemp -u) && mkfifo "$PI_FIFO"
@@ -103,10 +113,13 @@ esac
 # Fail-closed guard: an empty confinement PREFIX must never fall through to an
 # unconfined pi exec (EX-2; defence-in-depth for the future PHASE-04 reader path).
 [ "${#PREFIX[@]}" -gt 0 ] || { echo "[spawn] empty confinement PREFIX — aborting" >&2; exit 1; }
+# PI_THINKING / PI_TOOLS default to the historic hardcoded values, so existing
+# callers are byte-unchanged. A capable-but-loose worker model wants `high`; a
+# read-only review turn wants the tool list without `edit,write`.
 timeout "$BACKSTOP" "${PREFIX[@]}" \
-  pi --mode rpc --thinking off --session-dir "$D/.pi-session" \
+  pi --mode rpc --thinking "${PI_THINKING:-off}" --session-dir "$D/.pi-session" \
   --no-extensions --no-skills --no-themes \
-  --offline --approve --tools read,bash,edit,write,grep,find,ls \
+  --offline --approve --tools "${PI_TOOLS:-read,bash,edit,write,grep,find,ls}" \
   <"$PI_FIFO" >"$OUT" 2>&1 &
 PI=$!
 
