@@ -15,6 +15,12 @@ Doctrine omits the body only when both identity and digest match the current
 asset. A changed or unknown digest causes the current fragment to be emitted,
 so upgrades and process edits cannot be hidden by a stale receipt.
 
+Prompt-form output marks each emitted fragment with its `name@digest`, so the
+caller can return the receipt without separately querying metadata. JSON output
+exposes the same identity and digest as structured fragment metadata. The thin
+`/design` skill explains this convention once; individual fragment bodies do
+not repeat the instructions for using it.
+
 The receipt is a stateless projection input, not persisted delivery state.
 Callers can carry it across turns, compactions, and sessions; losing it merely
 causes harmless reinjection. The dynamic TurnEnvelope is always emitted.
