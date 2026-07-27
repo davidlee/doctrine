@@ -24,6 +24,26 @@ named the rule).
 | `candidate.sh` | The index-first rule (DEC-053) against five registered falsifiers. FAL-2 is load-bearing: `cat-file blob :<path>` returns a link target *while the file is absent from the worktree*. FAL-4 and FAL-5 **failed** — recorded as such. |
 | `residue.sh` | What the candidate does **not** close, plus `core.quotePath` (corrupts parsed output; `-z` defeats it), `core.ignoreCase` (**unmeasured** — did not flip matching on ext4), NUL/newline at the argv boundary, and the index-only ancestor walk that recovers FAL-4. |
 | `census.py` | The live-corpus census: 440 scope entries / 389 memories. Delegates all pathspec matching to git rather than re-implementing it. |
+| `closure.sh` | DEC-080 — RV-314 F-15/F-16/F-20. Index-conditioned emission drops a detached and a never-tracked symlink target; a derived string read as pathspec magic narrows the measured set; an unmatched `:(literal)` spec is inert and masks nothing. Four falsifiers, all held. |
+| `attributes.sh` | DEC-087 / CON-002 — RV-314 F-19. Committed attributes defeat all three legs on both the `eol` and clean-filter routes; `--attr-source=<empty tree>` restores them; the empty-tree oid differs by hash algorithm; the capability probe discriminates by exit status. Runs **both** `diff-index` forms side by side so the round-3 acquittal cannot recur. Five falsifiers, all held. |
+
+## Rounds 2–3: figures re-authored, not re-derived
+
+`closure.sh` and `attributes.sh` were written in round 4 to recover measurements
+that rounds 2 and 3 had taken in a scratch directory since deleted. The figures
+were durable — in the RV-314 ledger, `design.md` and `notes.md` § Harvest — but
+the *scripts* were not, which is precisely the state `probes/` exists to prevent
+(RV-313 F-1). Every falsifier registered in the two new scripts holds on
+re-run, and the exact oids reproduce.
+
+**Absolute byte counts do not, and should not be read as though they do.**
+`design.md` quotes 145 / 152 / 143 / 156 / 172 bytes from the original fixtures;
+these scripts produce different numbers from their own. A `git diff HEAD
+--binary` byte count is a function of path names and file content, so a fixture
+difference moves it. What re-runs — and what the falsifiers are written against
+— is the *discrimination*: zero versus non-zero, exit 0 versus exit 1. Treat the
+quoted absolutes as provenance for a measurement that happened, not as values to
+re-assert.
 
 ## Findings that came out against the hypothesis
 

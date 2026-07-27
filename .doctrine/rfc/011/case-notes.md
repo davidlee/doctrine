@@ -394,3 +394,46 @@ the token accounting:
 - Two zsh glob failures on unquoted `--include=*.rs` / `src/prompt*.rs` passed
   to Bash; both returned "no matches found" that read like empty grep results.
   The footgun hook fired correctly on the negative-grep risk.
+
+---
+
+[design; SL-232 RV-314 round 4 — handover pickup]
+
+**`review show`'s missing finding roll let two blockers drift out of sync
+undetected.** The handover packet, `notes.md` § Harvest and `design.md` § 10 all
+recorded RV-314 as "20 findings, all disposed" with F-1/F-10 "answered". The
+sister toml has both at `status = "open"` with no `disposition` — the remedy
+prose landed in `81e3e732c` but `review dispose` was never run. Three authored
+artefacts agreed with each other and disagreed with the ledger, and the
+divergence was invisible through the sanctioned read path: `doctrine review show
+RV-314` prints the derived status, the `reviews` edge and the brief, but not the
+per-finding roll. The only way to see it is `command grep` over
+`.doctrine/review/314/review-314.toml`, which is exactly the raw-file read the
+"read entities via `show`" guardrail forbids. Cost: the state had to be
+re-derived by hand before any work could start, and a round-3 agent's summary
+had already propagated the wrong version into two documents. Already logged once
+as a read-path gap; logging again because this is the first time it produced an
+actual false record rather than an inconvenience.
+
+**The codex MCP endpoint rejected an adversarial-review prompt on a
+cybersecurity content classifier.** The round-4 prompt described the design's own
+recorded hazards in the design's own vocabulary — a committed symlink whose blob
+text is read as pathspec magic and thereby narrows the measured file set, a clean
+filter hiding worktree content from all three probe legs. Response: *"This
+content was flagged for possible cybersecurity risk."* Rephrasing the same
+substance in correctness-review terms ("a string reaching git unprefixed can be
+read as pathspec magic and thereby narrow the set of files actually measured";
+"content that diverges from the blob without limit") passed unchanged. Nothing
+was dropped — but the rewrite cost a full prompt round-trip, and the failure mode
+is silent about which span tripped it. Any skill that sends `/inquisition`-style
+prose to an external reviewer will hit this: adversarial review is *written* in
+the register the classifier screens for.
+
+**`codex-reply` returned `content: ""` on the accepted prompt.** No error, no
+partial output. A one-line liveness probe confirmed the thread had in fact
+received and understood the instructions, so the empty return was the transport,
+not the model — but distinguishing "thread died" from "silent empty reply" cost
+an extra round-trip that a non-empty error would not have. Then the follow-up
+"proceed" reply ran past the 120s MCP timeout into a background task, which is
+the correct behaviour but means a long external review always costs at least
+three exchanges: prompt, liveness/ack, execute.
