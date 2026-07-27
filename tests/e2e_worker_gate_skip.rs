@@ -17,8 +17,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Output};
 
-/// The worker-marker file, relative to a repo root (mirrors marker.rs:114).
-const WORKER_MARKER_REL: &str = ".doctrine/state/dispatch/worker";
+use common::WORKER_MARKER_REL;
 
 /// True iff `just` is on PATH — these e2e proofs drive the real task runner.
 fn just_available() -> bool {

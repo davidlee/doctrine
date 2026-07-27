@@ -244,8 +244,8 @@ fn migrated_loses_to_projection() {
 /// SKIPPED in worker jail (fs::remove_file is an authored write).
 #[test]
 fn anchor_conflict_resolved_by_superseding_row() {
-    if std::env::var_os("DOCTRINE_WORKER").is_some() {
-        eprintln!("skipped: worker jail: cannot remove comparison files");
+    if common::under_worker_marker() {
+        eprintln!("skipped: worker fork: cannot remove comparison files");
         return;
     }
     let dir = project();
@@ -292,8 +292,8 @@ fn anchor_conflict_resolved_by_superseding_row() {
 /// SKIPPED in worker jail (`estimate clear` is WRITE-classed).
 #[test]
 fn clear_tombstones_claim_and_fallthrough() {
-    if std::env::var_os("DOCTRINE_WORKER").is_some() {
-        eprintln!("skipped: worker jail: estimate clear is WRITE-classed");
+    if common::under_worker_marker() {
+        eprintln!("skipped: worker fork: estimate clear is WRITE-classed");
         return;
     }
     let dir = project();

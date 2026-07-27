@@ -59,16 +59,19 @@ fn stderr(out: &Output) -> String {
 }
 
 /// `adr status` goldens exercise an authored write (`doctrine adr status`) as a
-/// child process, which inherits `DOCTRINE_WORKER` from this process's env.
-/// Inside a marked worker fork that write is CORRECTLY guard-refused
-/// (`src/commands/guard.rs`), so the golden's write/no-write assertions no
-/// longer hold — not a regression, just the wrong place to run this golden.
-/// Skip rather than false-negative; the coord-tree unmarked run is authoritative.
+/// child process whose cwd is the running tree. Inside a marked worker fork that
+/// write is CORRECTLY guard-refused (`src/commands/guard.rs`), so the golden's
+/// write/no-write assertions no longer hold — not a regression, just the wrong
+/// place to run this golden. Skip rather than false-negative; the coord-tree
+/// unmarked run is authoritative.
+///
+/// The predicate is [`common::under_worker_marker`] — BOTH legs. An env-only test
+/// misses the fork that ran `env -u DOCTRINE_WORKER just gate` (the repo's own
+/// worker guidance), which turns the env leg off while the marker leg stays on:
+/// the skip would not fire and the goldens red unreachably (ISS-260).
 fn skip_under_worker_marker(test_name: &str) -> bool {
-    if std::env::var("DOCTRINE_WORKER").is_ok() {
-        eprintln!(
-            "{test_name}: DOCTRINE_WORKER set — skipping (authored write, guard-refused by design)"
-        );
+    if common::under_worker_marker() {
+        eprintln!("{test_name}: worker fork — skipping (authored write, guard-refused by design)");
         true
     } else {
         false
