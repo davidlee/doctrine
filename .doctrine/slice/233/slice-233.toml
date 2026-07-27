@@ -143,6 +143,11 @@ selector = "publication/manifest.toml"
 intent = "design-target"
 note = "publish the invariant design hymn and four design prompt fragments through the existing asset library"
 
+[[selector]]
+selector = "install/routing-process.md"
+intent = "design-target"
+note = "teach the canonical managed-design command family in the boot source and verify deprecation convergence"
+
 [[relation]]
 label = "governed_by"
 target = "ADR-005"

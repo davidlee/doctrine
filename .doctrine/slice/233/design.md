@@ -119,7 +119,7 @@ doctrine design apply SL-233 --input <json-or-file>
 doctrine design resume SL-233 [--run <uid>] [--known-revision <revision>]
   [--known-fragment <name@digest>]...
 doctrine design materialise SL-233
-doctrine slice design SL-233  # deprecated materialise alias
+doctrine slice design SL-233  # deprecated compatibility shim
 ```
 
 `start` creates a run; `show` emits its bounded projection; `apply` validates
@@ -129,9 +129,14 @@ next; and `materialise` renders runtime sections into authored prose.
 
 The top-level family is canonical. The incumbent
 `doctrine slice design <ID>` remains temporarily as a deprecated compatibility
-alias for `doctrine design materialise <ID>`; both route to one implementation
-and one foreign-edit guard. New documentation and generated guidance use only
-the canonical form (DEC-075).
+shim. With a live run it forwards to `doctrine design materialise <ID>` through
+the same implementation and foreign-edit guard. With no run it preserves the
+legacy scaffold-only contract: create the template only if `design.md` is
+absent, emit a deprecation warning directing new work to
+`doctrine design start`, and otherwise retain the no-clobber refusal while
+pointing an existing document to `doctrine design start --from-design`. It
+never creates or reconstructs runtime state. Thus the legacy fallback and
+managed writer are mutually exclusive, not parallel writers (DEC-075).
 
 Happy-path recovery needs only `doctrine design resume SL-233`. Optional run UID
 and known revision arguments add explicit assumption checking or change-only
@@ -363,6 +368,10 @@ Expected implementation homes are:
   `install/manifest.toml`; `stage/design` is added to `[hymns].seal`, while the
   design-specific prompt pack ships through the existing whole-`install/`
   embed and Nix graft;
+- `install/routing-process.md` for the canonical managed-design core-process
+  sentence projected into the boot snapshot; implementation regenerates
+  `.doctrine/state/boot.md` with `doctrine boot` rather than editing derived
+  state;
 - `publication/manifest.toml` for explicit library addresses for the sealed
   invariant hymn and four process fragments, satisfying the existing
   unprojected-install-asset reachability invariant;
@@ -532,9 +541,13 @@ Wire and end-to-end tests prove:
   outstanding-delegation receipts;
 - exact resume from runtime and semantic reconstruction with a new run UID;
 - optional run assertion and changes-since-revision projection;
-- canonical `design materialise` and deprecated `slice design` alias produce
-  identical bytes and foreign-edit refusals through one implementation seam,
-  while CLI help marks only the latter deprecated;
+- with a live run, canonical `design materialise` and deprecated
+  `slice design` produce identical bytes and foreign-edit refusals through one
+  implementation seam;
+- with no run, deprecated `slice design` preserves template scaffolding and
+  no-clobber behaviour, warns on every invocation, points new work to
+  `design start`, and points an existing document to
+  `design start --from-design`;
 - hand-editing a materialised section wedges neither truth tier: re-adopting
   its exact fingerprint preserves the run/map/cursor/receipts, updates only
   marker-addressed sections, and invalidates content-bound evidence for each
@@ -583,6 +596,11 @@ host-side Nix build must resolve every fragment from the produced binary.
 Existing slice lifecycle, knowledge, review, prompt-cascade, installation, and
 architecture-layer suites remain unchanged and green as
 behaviour-preservation evidence.
+
+Boot/guidance tests run `doctrine boot --check` after regeneration and assert
+that no shipped or generated core-process guidance advertises `slice design`
+as the canonical design-stage verb. Compatibility/deprecation documentation
+may still name the shim explicitly.
 
 ### 9.5 Evaluation kit delivered by SL-233
 

@@ -14,10 +14,18 @@ slice-scoped. The shorter namespace is intended for repeated agent interaction;
 it does not imply that design is independent of the governed slice lifecycle.
 
 The pre-existing `doctrine slice design <ID>` command is retained as a
-deprecated compatibility alias for `doctrine design materialise <ID>`. Both
-forms call the same materialisation implementation and enforce the same
-foreign-edit protections; they are not independent writers. New documentation,
-help examples, and agent guidance use the top-level family.
+deprecated compatibility shim. When a managed run exists it delegates to
+`doctrine design materialise <ID>` through the same implementation and
+foreign-edit guard. When no run exists it preserves the incumbent scaffold-only
+behaviour: it creates the design template only when `design.md` is absent,
+emits a deprecation warning directing new work to `doctrine design start`, and
+otherwise preserves the existing no-clobber refusal with
+`doctrine design start --from-design` as the migration path. The shim never
+creates or reconstructs runtime state.
+
+The two paths are mutually exclusive rather than independent live-run writers.
+New documentation, help examples, generated boot guidance, and agent guidance
+use the top-level family.
 
 Read naming follows the established CLI convention: `show` is the bounded
 default projection, and `show --full` explicitly requests protocol and inquiry

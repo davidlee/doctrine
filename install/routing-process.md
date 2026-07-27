@@ -44,10 +44,11 @@ new` instead of losing it; check `backlog list` at the start of substantive work
 Finished a coherent unit → `/harvest`. Handing off to fresh context → `/handover`.
 Agent confusion / stale memory corpus → `/reviewing-memory`.
 
-**Core process:** `slice new` (scope) → `slice design` (author + adversarial
-review until locked) → `slice plan` → `slice phases` → per phase: `phase-plan`
-the runtime sheet, flip `in_progress`, implement TDD red/green/**refactor**, end
-green, flip `completed` → `/audit` → reconcile → `/close`.
+**Core process:** `slice new` (scope) → `design start` → managed `design …`
+(author, materialise, adversarial review, lock) → `slice plan` → `slice phases`
+→ per phase: `phase-plan` the runtime sheet, flip `in_progress`, implement TDD
+red/green/**refactor**, end green, flip `completed` → `/audit` → reconcile →
+`/close`.
 
 **Guardrails:** use the CLI (prefer the MCP tools if available); don't guess
 ids / command shapes / paths — and **read entities via `doctrine <kind> show
