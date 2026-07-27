@@ -1,0 +1,32 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 23
+slug = "executable-plan-gates-and-adversarial-tdd"
+title = "Executable plan gates and adversarial TDD"
+status = "open"
+created = "2026-07-27"
+updated = "2026-07-27"
+tags = []
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "whether baton-passed TDD rides the existing turn-based adversarial ledger or needs new machinery (Q5)"
+target = "ADR-007"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the plan-hardening pass that raised every finding in this RFC"
+target = "SL-233"
+
+[[relation]]
+label = "related"
+target = "RFC-004"
+
