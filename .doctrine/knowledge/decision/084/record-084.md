@@ -18,3 +18,10 @@ This preserves the strong meaning of exact resume while providing a bounded
 migration and runtime-loss recovery path for existing designs. The sources from
 which open inquiry nodes may additionally be bootstrapped are settled
 separately by QUE-196.
+
+This new-run recovery path is distinct from DEC-072's live-run re-adoption. If
+the runtime snapshot survives, an explicit `apply` declaration can adopt a
+human-edited materialised document back into that same run using its stable
+section markers. It does not mint a new run UID or reconstruct inquiry history;
+it preserves procedural state and invalidates only evidence bound to changed
+section fingerprints.

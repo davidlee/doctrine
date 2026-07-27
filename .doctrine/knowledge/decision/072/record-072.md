@@ -17,6 +17,18 @@ The ordered runtime collection is the source from which Doctrine materialises
 the authored `design.md` at the drafting-to-reviewing boundary. This keeps
 partially developed prose disposable while making progress inspectable,
 addressable, and recoverable within the exact-resume guarantee of DEC-057.
+Materialisation emits unobtrusive stable-section-ID comments and records the
+whole output fingerprint.
+
+If a human edits that materialised document while the run remains live,
+Doctrine still refuses to overwrite it. An explicit `apply` declaration may
+instead re-adopt the exact current authored fingerprint. Stable markers map
+existing sections back into the same run; Doctrine updates their title, order,
+body, and fingerprints, preserves run identity, inquiry state, cursor, and
+prompt receipts, and invalidates content-bound evidence for every changed
+section. Missing, duplicate, or unknown markers and structural deletion are
+refused rather than guessed. New sections enter through the normal structured
+`apply` contract, not marker-free prose.
 
 Human and adversarial-agent section review must be first-class, distinct
 evidence rather than one undifferentiated `aligned` flag. DEC-073 settles the

@@ -222,7 +222,15 @@ applicable cumulative gate must again hold against current content (DEC-067).
 
 Draft sections are runtime records with stable ID, order, title, body, and
 fingerprint. `materialise` records its output fingerprint and refuses to
-overwrite foreign edits (DEC-072).
+overwrite foreign edits. Its output carries unobtrusive stable-section-ID
+comments. After a human edit, an explicit re-adopt declaration through `apply`
+may import the exact current authored fingerprint into the same live run.
+Doctrine maps existing markers, re-fingerprints changed sections, preserves
+run UID, inquiry map, cursor, and prompt receipts, and invalidates affected
+alignment, review, and gate evidence under DEC-066. It refuses missing,
+duplicate, or unknown markers, marker-free additions, and structural deletion
+rather than guessing. New sections use the normal structured declaration
+contract (DEC-072, DEC-084).
 
 Human and adversarial section review are first-class content-bound
 attestations. Findings remain runtime data unless promoted to knowledge or the
@@ -295,11 +303,27 @@ resumes the first incomplete effect. Authored records are never rolled back
 (DEC-083, DEC-086).
 
 `start --from-design` performs a one-time import. It does not establish ongoing
-two-way synchronisation with prose. Direct non-terminal shaping QUEs seed
-durable inquiry nodes. Conventional `OQ-*` entries are recognised only in the
-explicit Open Questions section and enter as unverified `imported-prose` nodes
-with source location/fingerprint. An explicit QUE citation merges the sources;
-text similarity never does (DEC-084, DEC-085).
+two-way synchronisation with prose. It is the new-run/runtime-loss path;
+live-run re-adoption is instead an explicit sparse `apply` declaration:
+
+```json
+{
+  "run_uid": "dr-…",
+  "known_revision": 42,
+  "submission_id": "sub-…",
+  "adopt_authored": {"fingerprint": "sha256:…"}
+}
+```
+
+The shell reads `design.md` once, verifies the declared fingerprint, validates
+all section markers and the complete candidate, then commits the same atomic
+state transition and idempotency receipt as any other submission.
+
+Direct non-terminal shaping QUEs seed durable inquiry nodes. Conventional
+`OQ-*` entries are recognised only in the explicit Open Questions section and
+enter as unverified `imported-prose` nodes with source location/fingerprint. An
+explicit QUE citation merges the sources; text similarity never does (DEC-084,
+DEC-085).
 
 The active skill becomes a thin activation/recovery adapter. A sealed invariant
 hymn lives at `install/hymns/stage/design.md`; the closed prompt pack contains
@@ -449,8 +473,9 @@ mechanism.
   inquiry lifecycle, cursor/posture, review, delegation, and recovery as
   separate types with derived facts.
 - **R4 — runtime and authored truth diverge.** Store canonical references,
-  bind evidence to fingerprints, refuse foreign materialisation overwrite, and
-  label semantic reconstruction honestly.
+  bind evidence to fingerprints, refuse foreign materialisation overwrite,
+  provide explicit marker-validated live-run re-adoption, and label semantic
+  reconstruction honestly.
 - **R5 — cross-tier failure duplicates authored knowledge.** Journal before
   authored mutation, reserve and journal the canonical ID before
   materialisation, key work by submission ID, and never roll back records.
@@ -510,6 +535,13 @@ Wire and end-to-end tests prove:
 - canonical `design materialise` and deprecated `slice design` alias produce
   identical bytes and foreign-edit refusals through one implementation seam,
   while CLI help marks only the latter deprecated;
+- hand-editing a materialised section wedges neither truth tier: re-adopting
+  its exact fingerprint preserves the run/map/cursor/receipts, updates only
+  marker-addressed sections, and invalidates content-bound evidence for each
+  changed fingerprint;
+- re-adoption refuses a stale declared fingerprint, missing/duplicate/unknown
+  section markers, marker-free additions, and structural deletion without
+  mutating runtime state;
 - stale delegated proposals remain unapplied and inspectable;
 - checkpoint recovery resumes each known journal phase without duplication;
 - a crash before ID journalling leaves no unidentified authored record;
