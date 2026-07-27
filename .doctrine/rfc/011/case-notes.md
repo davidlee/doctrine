@@ -246,3 +246,27 @@ pointers*, never missing content.
   `text.lstrip("./")` eats the leading dot of `.claude/`. A summary-only probe
   would have reported a plausible number. Registering the falsifier as *print
   the working, not just the total* is what made it self-evident.
+
+[preflight; sl231-dispatch-arm-plan-a1]
+No read verb for a slice's plan/design bodies. `slice show` explicitly excludes
+design/plan/notes, and `slice plan <ID>` is an *authoring* verb — invoking it to
+read cost a round trip and an alarming `Refusing to overwrite existing
+.../plan.toml` error before falling back to `Read` on the raw file. The boot
+guardrail says "read entities via `doctrine <kind> show <ID>`, not raw files",
+but for the two highest-traffic slice artefacts there is no such path. Every
+preflight/dispatch agent pays this. Suggest `slice show --plan/--design` or a
+`slice design show` read verb.
+
+[preflight; sl231-dispatch-arm-plan-a2]
+`doctrine memory retrieve "<query>"` rejects a positional query
+(`unexpected argument ... found`) while `memory search "<query>"` accepts one.
+Asymmetric argument shape between the two sibling read verbs → one wasted call.
+
+[preflight; sl231-dispatch-arm-plan-a3]
+`slice selector list` is the only place the phase touch-set is visible, and it
+is not cross-checked against the worker-forbidden `.doctrine/` floor at author
+time. SL-231's locked touch-set contains three `.doctrine/**` paths that no
+dispatch worker may write (worker_commit HARD forbidden zone). Discovering this
+required reading `src/mcp_server/worker_commit.rs`. A `selector doctor` lint for
+"design-target path in the worker-forbidden zone ⇒ orchestrator-authored" would
+surface it at plan time instead of at dispatch time.
