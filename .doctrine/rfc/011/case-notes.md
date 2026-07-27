@@ -301,3 +301,19 @@ surface it at plan time instead of at dispatch time.
   directory '<all paths joined>'"). Bit twice. Not doctrine's fault, but the
   path-limiting guidance actively pushes agents toward multi-path pathspecs, so
   it is worth an explicit example in AGENTS.md.
+
+[inquisition; RV-314 SL-232 design pass]
+- `review prime` requires the target slice to declare `[[selector]]` entries; the
+  skill/ledger doc says "warms the cache from the target slice's selectors" but
+  neither states the failure mode when a slice has none. Cost a speculative grep
+  of slice-232.toml before invoking. A one-line precondition in review-ledger.md §2
+  would remove it.
+- The external (codex) arm reported that the binary **rejects `--as inquisitor`**
+  on `review raise`, despite `review new --raiser inquisitor` being the sanctioned
+  way to stamp the posture. It fell back to `--as raiser`. Round-trip cost: one
+  failed invocation + a paragraph of explanation in its report. Either `--as`
+  should accept the role *label* set at `review new`, or the help text should say
+  `--as` takes a role *slot* (raiser|responder), not the label.
+- Instructing an external reviewer to use `./target/debug/doctrine` rather than the
+  PATH binary has to be restated in every dispatch prompt; it is project canon
+  (AGENTS.md) that the subprocess arm cannot see.
