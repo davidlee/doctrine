@@ -17,8 +17,9 @@ content. The change and its regression share the existing private review seam.
 One phase is sufficient because no public interface, persisted schema, or
 cross-module contract changes. The phase begins red with a real Git repository
 containing a committed slug-style symlink to a directory. It then replaces the
-path-only listing with staged, NUL-delimited index records, filters to regular
-blob modes, and finishes by exercising RV-315 itself.
+path-only listing with staged, NUL-delimited index records, parses those records
+through a small pure helper with named malformed-input failure, filters to
+regular blob modes, and finishes by exercising RV-315 itself.
 
 Keeping the parser and test in `src/review.rs` avoids a new module and preserves
 ADR-001's existing `review` command → `contentset` leaf dependency. The

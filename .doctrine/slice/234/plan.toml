@@ -30,14 +30,15 @@ entrance_criteria = [
   { id = "EN-2", text = "The existing review-prime and content-set tests are green before the change." },
 ]
 exit_criteria = [
-  { id = "EX-1", text = "Glob expansion parses NUL-delimited staged Git entries and admits regular blobs only." },
+  { id = "EX-1", text = "A pure helper parses NUL-delimited staged Git entries with named failure for malformed records; glob expansion admits regular blobs only." },
   { id = "EX-2", text = "A tracked symlink resolving to a directory no longer enters the review-prime hash fileset." },
   { id = "EX-3", text = "Literal-selector absence semantics and existing review/content-set behaviour remain unchanged." },
   { id = "EX-4", text = "RV-315 primes successfully against SL-233's current selectors." },
 ]
 verification = [
-  { id = "VT-1", expects = "A Git-backed regression proves a glob ignores a tracked directory symlink while hashing regular files.", test_file = "src/review.rs", keywords = ["prime_glob_ignores_tracked_directory_symlink", "--stage", "-z"], waived = false },
+  { id = "VT-1", expects = "A Git-backed regression proves a glob ignores a tracked directory symlink while hashing regular files.", test_file = "src/review.rs", keywords = ["prime_glob_ignores_tracked_directory_symlink", "parse_ls_files_stage_entries", "--stage", "-z"], waived = false },
   { id = "VT-2", expects = "The existing literal-selector regression remains present and green.", test_file = "src/review.rs", keywords = ["vt1_literal_selector_passes_through_and_absence_is_stale"], waived = false },
+  { id = "VT-3", expects = "The staged-entry parser rejects malformed records with a named error.", test_file = "src/review.rs", keywords = ["staged_files_parser_rejects_malformed_record", "malformed git ls-files --stage record"], waived = false },
   { id = "VA-1", text = "Run doctrine review prime RV-315 and confirm it writes a cache without IsADirectory." },
   { id = "VA-2", text = "Run doctrine check quick and the focused review/content-set test filters with no new failures." },
 ]
