@@ -20,8 +20,9 @@ after the cheap alternative was falsified.
 
 ## What was found — `verified_sha` carries two incompatible value kinds
 
-`stamp_verification` (`src/memory.rs:3524-3529`) writes `frame.checkout_state_id`
-into `[git].verified_sha` under `--allow-dirty`, and `frame.commit` otherwise. One
+`stamp_verification` (`src/memory.rs::stamp_verification`, the branch at
+`:3465-3470`) writes `frame.checkout_state_id` into `[git].verified_sha` under
+`--allow-dirty`, and `frame.commit` otherwise. One
 field, two kinds, and **no discriminator on the record**. `[git].anchor_kind`
 does not serve: it describes the *born* frame at `record` time, not the
 verify-time stamp (389 memories: 328 `checkout_state` / 60 `commit`, against 59

@@ -10,6 +10,22 @@ tags = []
 needs = ["REV-034"]                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
+[[selector]]
+selector = "src/git.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/retrieve.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/mcp_server/tools.rs"
+intent = "design-target"
+
 [[relation]]
 label = "fulfils"
 degree = "full"

@@ -9,8 +9,8 @@ objective 7 emits one flat *cannot determine* finding for all three causes.
 
 ## The defect
 
-`stamp_verification` (`src/memory.rs:3524-3529`) writes **two incompatible value
-kinds** into one field:
+`stamp_verification` (`src/memory.rs::stamp_verification`, the branch at
+`:3465-3470`) writes **two incompatible value kinds** into one field:
 
 ```rust
 let verification_value = if allow_dirty && frame.anchor_kind == AnchorKind::CheckoutState {

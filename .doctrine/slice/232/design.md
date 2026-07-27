@@ -1,79 +1,56 @@
 # Design SL-232: Corpus-aware memory verify gate
 
-<!-- Reference forms (.doctrine/glossary.md § reference forms): entity ids padded
-     (SL-232, REQ-147, ADR-004); doc-local refs bare — OQ-2 (§6), D9 (§7),
-     R7 (§8), T25 (§9). -->
+## 0. How to read this document
 
-## 0. Provenance and status — READ FIRST
+**Status: authored for SL-232, not yet reviewed.** This replaces the inherited
+SL-230 text wholesale. The previous version carried a ⚠ STALE banner because
+decisions had been taken that it did not carry; those decisions are now written
+here and the banner is gone. No ledger is attached yet — open one before
+implementation and seed it from § 10.
 
-> ## ⚠ STALE AS OF 2026-07-27 — THIS DOCUMENT CONTRADICTS `slice-232.md`
->
-> A design round has taken decisions that this text does not carry. **Where this
-> document and `slice-232.md` / `notes.md` § Harvest disagree, they are right and
-> this is wrong.** It is retained un-rewritten so the replacement is authored
-> against the reasoning that failed, not from scratch — the same discipline § 5.5
-> already applies to I9 and E7.
->
-> **Do not implement from this document. Do not review it as canon.**
->
-> | Section | Status |
-> |---|---|
-> | § 5.2 the ordered algorithm | **replaced wholesale** by DEC-053 (index-first). Steps 1–7, the shape rule, the whole-component prefix rule, and the `realpath` oracle are all retired. |
-> | § 5.4 D11 | **falsified** — "`validate` keeps its existing raw seam" cannot survive objective 7 (DEC-054). Its four-defect enumeration is incomplete: the `None`-swallow is a fifth and the only non-conformant one. |
-> | § 5.5 I9 | falsified as written *and* superseded: it must be re-expressed as an **outcome** property, not a pre-emission one. |
-> | § 5.5 E13 | basis dissolved — aborts are now prevented lexically, so "git aborts, so there is no verdict" no longer justifies a refusal. Re-justify or fold into E7. |
-> | § 6 OQ-2, OQ-A | **answered** (`yes` / `no`). See QUE-175 and `slice-232.md`. |
-> | § 8 R-A | discharged in method; narrowed to new risks R-E / R-F. R-G added. |
-> | § 9 the T-matrix | **pins an algorithm that no longer exists.** Needs rebuilding, not editing. |
->
-> Authoritative now: **`slice-232.md`** (scope, seven objectives), **`notes.md`
-> § Harvest** (produced / learned / open), **DEC-053**, **DEC-054**, **QUE-175**,
-> and **`probes/`** — the executable evidence, re-runnable, with falsifiers
-> registered in-header.
->
-> Still true and still load-bearing below: § 1–§ 4 (the problem, current state,
-> forces, principles), the F-18 magic-prefix rule and I8, F-13's `--allow-dirty`
-> re-capture, F-15's uid-directory base, and DEC-020's ruling that
-> non-contribution is reported and never classified.
+### Reference legend
 
-**This design is inherited, not authored here, and it is NOT locked.**
+Three naming systems are in play. They are not interchangeable.
 
-Split out of SL-230 by **DEC-027** at RV-307 round 8. The text below is the
-gate half of SL-230's design, carried over verbatim so that eight rounds of
-adversarial review — the measured censuses, the executed git evidence, the
-refuted alternatives — are not thrown away and re-derived. Every `RV-307 F-NN`
-citation refers to that ledger, which stays attached to SL-230 (append-only; it
-reviewed *that* document).
+| Form | What it is | Where to look it up |
+|---|---|---|
+| `SL-` `DEC-` `QUE-` `ISS-` `IMP-` `REQ-` `REV-` `ADR-` `SPEC-` `POL-` `STD-` `RV-` `RFC-` | **Entities.** Durable ids, files on disk. | `doctrine <kind> show <ID>` |
+| `OQ-` `D-` `E-` `I-` `R-` `T-` `V-` | **Doc-local labels**, meaningful only inside this file. `OQ` § 6, `D` § 7, `E`/`I`/`V` § 5.5, `R` § 8, `T` § 9. | this document |
+| `RV-307 F-NN`, `RV-313 F-N` | **Findings on a review ledger** — always written with the ledger id. | `.doctrine/review/<n>/review-<n>.toml` |
+| `FAL-` | **Falsifiers** registered in a probe header before the probe ran. | `probes/*.sh`, `probes/*.py` |
 
-**Two blockers are open and inherited. They are design problems, not text
-defects, and they must be solved before this design can lock:**
+**Ledger findings are always qualified.** The inherited text declared once that
+bare `F-NN` meant RV-307, then dropped the prefix throughout. That was safe when
+RV-307 was the only ledger; it is not — RV-313 is cited here, and this slice
+opens its own next. Every citation below names its ledger.
 
-- **RV-307 F-36** — DEC-020 requires `validate` to raise every non-contributing
-  scope entry, but D11 leaves `validate` with no contribution probe at all: it
-  keeps a historical, `scope.paths`-gated seam that cannot implement T35.
-  Supplying one is an undesigned second per-entry git path, plus a corpus-wide
-  continuation policy for a memory whose surface is malformed (F-29's shape).
-  **§ 5.4's D11 text and § 5.5's E7 both currently assert a consequence with no
-  mechanism.**
-- **RV-307 F-37** — the premise that a non-resolving entry contributes nothing is
-  **false**. Reproduced on git 2.54.0 by three routes: `missing/../link` (an
-  unresolved `..` alias), a sparse checkout where the tracked link is absent, and
-  a `scope.paths` literal whose filename contains `*` (the shape rule at § 5.2
-  step 2 reads the star as a wildcard and skips whole-path resolution). Each
-  contributes while bypassing canonicalisation, and each reads clean against a
-  dirty target. **§ 5.2 step 4, step 5 and I9 are wrong as written** — this is
-  the second failed totality claim over path resolution (F-26 was the first), so
-  the replacement rule needs its reachable shapes enumerated and probed, not
-  reasoned about.
+**Criteria ids are immutable.** `E12` is struck (withdrawn by DEC-020) and never
+reused; `E10` was never minted. `I5` was never minted. New edge cases start at
+`E14`, new invariants at `I10`, new decisions at `D12`, new tests at `T40`.
+Retired tests keep their ids and are listed as retired, never renumbered.
 
-Two majors are also open: **F-38** (NUL/newline scope entries escape E11/E13 —
-NUL cannot cross the argv boundary at all, so it is neither exit 0, 1, nor 128)
-and **F-39**'s gate limb (code-only wording survives at D9; IMP-317's *title*
-still names the rejected shared constructor).
+### Evidence base
 
-Route: `/design` on this slice, starting from those four. Do not treat any
-totality or stability claim below as settled merely because it survived to here —
-this slice's dominant cost driver was exactly that error, eight times.
+Every measured claim traces to an executable probe in `probes/`, each with its
+falsifiers registered **in-header before the probe ran**. Re-run them rather than
+trusting this prose. Corpus figures are stamped with the HEAD they were taken at,
+because RV-313 F-1 caught a design-time absolute that failed to reproduce at
+execution purely through corpus growth.
+
+| probe | establishes |
+|---|---|
+| `route1.sh` `route2.sh` `route3.sh` | RV-307 F-37's three routes, reproduced |
+| `shapes.sh` | the RV-307 R-A enumeration; `realpath` and contribution are uncorrelated **in both directions** |
+| `candidate.sh` | the index-first rule against five falsifiers. **FAL-4 and FAL-5 failed** and are recorded as failures |
+| `residue.sh` | what index-first does *not* close; `core.quotePath`, `core.ignoreCase`, the ancestor walk |
+| `census.py` | claim-surface shape over the live corpus |
+| `populations.py` | the decision populations the open items turned on |
+| `control-chars.py` | RV-307 F-38's two obligations, separated by measurement |
+
+Current figures at HEAD **`377022dfa`**: 389 tracked memories, 440 scope entries
+(298 `paths` / 142 `globs`), 59 attested.
+
+---
 
 ## 1. Design Problem
 
@@ -85,6 +62,12 @@ made — or, as observed live during the SL-230 design round, because of an
 the refusal and reach for `git stash` rather than `--allow-dirty`, which is
 undiscoverable and postdates the filing of IMP-221.
 
+**The cost is measured, not asserted.** Of 59 attested memories, **24 carry a
+`checkout_state_id` rather than a commit** in `verified_sha` — they were stamped
+through the `--allow-dirty` escape hatch against a dirty tree (`populations.py`).
+41% of this corpus's attestations are not commit-anchored. That is what the
+current gate costs in practice.
+
 The naive remedy — ignore doctrine's own authored trees — is **wrong**, and
 RV-307 F-1/F-6 proved it on this corpus. Memory items live at
 `.doctrine/memory/items/<key>/`, so a blanket exclusion removes *the memory being
@@ -94,305 +77,182 @@ claim evidence exactly as `src/` is.
 
 So the gate must be **claim-aware**: exclude unclaimed dirt, never claimed
 evidence. Constructing that per-memory surface is the whole difficulty of this
-slice, and it is where all 29 of the inherited findings live.
+slice, and it is where all 29 inherited findings live.
 
 ## 2. Current State
 
+Line numbers are cited alongside symbol names because line numbers rot — prefer
+the symbol. Verified at HEAD `377022dfa`.
+
 | Surface | Behaviour | Site |
 |---|---|---|
-| `memory verify` | refuses on any dirty tree unless `--allow-dirty` | `src/memory.rs:3382-3390` |
-| `capture()` | blanks the commit oid whenever the tree is dirty; yields a `checkout_state_id` hash instead | `src/git.rs` |
-| Verification axis | `[review].verification_state`, `[review].reviewed`, `[git].verified_sha` — written **only** by `stamp_verification` | `src/memory.rs:3350-3362` |
-| `memory validate` | staleness = commits touching **scoped paths** since `verified_sha`; gated on `!scope.paths.is_empty()`, array passed raw | `src/memory.rs:3413-3424` |
-| `retrieve::git_facts` | same raw scope seam, feeding ranking | `src/retrieve.rs:556-557` |
-| `collect_all` | unions `items/` and `shipped/` into one `Vec<Memory>`, erasing which root supplied each row | `src/memory.rs:2826-2834` |
-| `fsutil::safe_join` | plain `tree_root.join(rel)` — **no canonicalisation** | `src/fsutil.rs:20-33` |
+| `memory verify` | refuses on any dirty tree unless `--allow-dirty` | `memory.rs::run_verify` `:3484` |
+| `stamp_verification` | writes `frame.commit`, **or `frame.checkout_state_id` under `--allow-dirty`**, into the *same* `verified_sha` field | `memory.rs::stamp_verification` `:3425`, branch `:3465-3470` |
+| `capture()` | blanks the commit oid whenever the tree is dirty; yields a `checkout_state_id` hash instead | `git.rs::capture` `:2185` |
+| Verification axis | `[review].verification_state`, `[review].reviewed`, `[git].verified_sha` — written **only** by `stamp_verification` | `memory.rs` |
+| `memory validate` Check 2 | staleness = commits touching **scoped paths** since `verified_sha`; gated on `!scope.paths.is_empty()`, array passed raw; `None` binds in a let-chain and **falls out silently** | `memory.rs` `:3520-3531` |
+| `memory validate` Check 4 | own-body drift; same silent-`None` let-chain | `memory.rs` `:3547-3578` |
+| `retrieve::git_facts` | same raw scope seam, gated on `scope.paths.is_empty()`, feeding ranking | `retrieve.rs::git_facts` `:556` |
+| `retrieve::staleness` | branch 1 gated on `!scope.paths.is_empty() && !verified_sha.is_empty()` — **the same predicate** `git_facts` gates on | `retrieve.rs::staleness` `:371` |
+| `git::commits_touching` | ancestry guard: non-ancestor or bad object ⇒ `None`. **Correct, and stays.** | `git.rs::commits_touching` `:2493` |
+| `coverage::IsStale` | `{Fresh, Stale, Unknown}` over the *same* seam, contract `None => Unknown` | `coverage.rs` `:150-166` |
+| `collect_all` | unions `items/` and `shipped/` into one `Vec<Memory>`, erasing which root supplied each row | `memory.rs::collect_all` `:2934` |
+| `fsutil::safe_join` | rejects absolute paths and `..`, but performs **no symlink canonicalisation** | `fsutil.rs::safe_join` `:20` |
+| `memory::scrub_line` | escapes `\n`/`\r`/`\t` and every control char `< 0x20` — built for exactly the RV-307 F-38 hazard class | `memory.rs::scrub_line` `:2010` |
+| `retrieve::is_global_reference` | the ADR-002 signature as a record-local predicate | `retrieve.rs::is_global_reference` `:345` |
 
-**`capture()` has exactly three callers** — `src/retrieve.rs:532` (read path),
-`src/memory.rs:1708` (`record`), `src/memory.rs:3382` (`verify`). Two of the three
-would be damaged by unconditional leniency, which is why the exclusion is a
-parameter and not a change to `capture()`.
+**`capture()` has exactly three callers** — the retrieve read path, `record`, and
+`verify`. Two of the three would be damaged by unconditional leniency, which is
+why the exclusion is a parameter and not a change to `capture()`.
 
 ## 3. Forces & Constraints
 
 | Authority | Constraint |
 |---|---|
-| **SPEC-007** | Asserts verify attests "against a clean working tree, refusing a dirty one" — **three** sites: `spec-007.toml:22`, `spec-007.md:132-133`, and **`REQ-147`**, whose *title is the retired contract verbatim* and which is an active member of SPEC-007. Already false since `--allow-dirty`; this slice changes it further. Amended by **REV-034** (moved here from SL-230 by DEC-027). |
-| **ADR-013** ✓ | Governance→work dependency routes through a Revision. `SL-232 needs REV-034` is authored. |
-| **ADR-001** ✓ | `corpus_guard` = leaf, `git` = leaf, `memory` = command. Downward edges only. |
-| **POL-002** | The exclusion set must rest on doctrine-owned contracts, never host layout. `.doctrine` and `MEMORY_MASTERS_DIR` are platform-owned constants, so exclusion is legal — but `memory/` exists only in this repo, so guard it on existence rather than assume it. |
-| **STD-001** | Named constants, not path literals. Satisfied by reuse: `DOCTRINE_PATHSPEC` already exists (`src/corpus_guard.rs:43`). |
+| **SPEC-007** | Asserts verify attests "against a clean working tree, refusing a dirty one" — amended by **REV-034**. Also carries the REV-041 clause binding `validate`. Full re-taken inventory in § 5.6. |
+| **REV-041** (approved, done) | The five-state resolution is the **render contract**, binding `find`/`retrieve`. The prohibition on **silent over-trust is surface-independent** and binds `memory validate`'s health checks. "A surface that emits findings rather than states discharges this by emitting a finding, not by falling silent." This is objective 7's normative anchor. |
+| **ADR-013** | Governance→work dependency routes through a Revision. `SL-232 needs REV-034` is authored. |
+| **ADR-001** | `corpus_guard` = leaf, `git` = leaf, `memory` = command. Downward edges only. |
+| **ADR-002** | The global/derived orientation class is repo-empty, unanchored, evergreen. Its scope is **not a claim about the querying repo's tree** — the basis for E14. |
+| **POL-002** | The exclusion set must rest on doctrine-owned contracts, never host layout. Also why the anchor question must not be called "the code" (§ 5.4) — a client project's non-doctrine tree need not be code. |
+| **STD-001** | Named constants, not path literals. Satisfied by reuse: `DOCTRINE_PATHSPEC` already exists. The two pathspec magic prefixes are likewise constants. |
 | **SL-008 D6** | `thread_expiry` is reviewed canon — not loosened. |
-| **DEC-020** | Non-contribution is reported and attested over, never classified. Three derived instruments were refuted; a fourth is not a finding. The stable answer is a *declared* boundary — this slice's objective 3. |
-| **SL-230** | Owns the body-write seam and attestation invalidation (D1/D2/D4/D5/D7/D8). This design must not re-open them. Note the live coupling: SL-230 ships invalidation *without* this relaxation, so its R4 runs unmitigated until this lands (DEC-027). |
+| **DEC-020** | Non-contribution is reported and attested over, **never classified by a derived instrument**. Three were refuted. The stable answer is a *declared* boundary — objective 3. |
+| **DEC-053** | The claim surface is built from the index, never the filesystem. Replaces the inherited ordered algorithm. |
+| **DEC-054** | `validate`'s two unknowns unify; ISS-257 absorbed as objective 7. |
+| **DEC-055** | One flat undeterminable state; `verified_sha`'s kind is not discriminated here. |
+| **SL-230** | Owns the body-write seam and attestation invalidation. Not re-opened here. Its R4 runs unmitigated until this lands (DEC-027). |
 
 ## 4. Guiding Principles
 
 - **The frame tells the truth.** `capture()` reports the literal state of the
   tree. Leniency is a *policy* applied by one consumer, never baked into the
   measurement.
-- **Attestation is about the claim — the whole claim, and only the claim.** A
-  memory attests that its body is true of what it declares. Dirt the memory does
-  not declare says nothing about that; a change to a path it *does* declare says
-  everything. Governance dirt is not exempt by being governance (RV-307
-  F-6/F-33, T25). The exclusion is claim-aware, never blanket.
+- **Attestation is about the claim — the whole claim, and only the claim.** Dirt
+  the memory does not declare says nothing about it; a change to a path it *does*
+  declare says everything. Governance dirt is not exempt by being governance
+  (RV-307 F-6/F-33).
 - **A tool property is a claim needing a falsifier, not a premise.** "Stable",
-  "total", "deterministic" — each must be probed by varying the local state the
-  instrument reads. Measuring that a discriminator *works* is not evidence that
-  it is *stable*. This is the named dominant cost driver of the eight rounds
-  behind this text, and F-37 is its most recent instance.
+  "total", "deterministic" must each be probed by varying the local state the
+  instrument reads. Measuring that a discriminator *works* is not evidence it is
+  *stable*. The named dominant cost driver of the eight rounds behind this text,
+  and it caught two proposals during this design round.
 - **Scope entries are untrusted data, never syntax.** SPEC-007 § Concerns treats
   stored memory text as hostile input.
+- **A property the writer knows must not be re-derived by the reader from local
+  repository state.** This design answers *"which instrument decides X?"* with
+  *"none — record it at the source"* four separate times (§ 5.7). Every derived
+  instrument tried in this slice's history reads state that a shallow clone, a
+  pruned repo, a dispatch worktree, or a different object format legitimately
+  disagrees about.
+- **State a fix's value by what it makes impossible, not by what it fixes
+  today.** Several mechanisms here add zero live coverage and exist for totality.
+  Saying otherwise is the overclaim RV-307 F-25/F-33 punished.
 
 ## 5. Proposed Design
 
 ### 5.1 System Model
 
 ```
-command tier   memory.rs ──────────────┬──────────── run_verify
-                                       │             composes the pathspec sets (policy)
-leaf tier      corpus_guard.rs  DOCTRINE_PATHSPEC  (existing constant, STD-001)
-               git.rs     dirty_under(root, pathspecs) -> Result<bool>     ← the primitive
-                          capture_with(root, excludes) -> Result<Frame>    ← delegates to it
-                          capture(root) = capture_with(root, &[])          ← unchanged behaviour
+command tier   memory.rs ─┬─ run_verify              composes pathspec sets (policy)
+                          └─ memory_health_findings  composes the same expander (policy)
+
+leaf tier      corpus_guard.rs  DOCTRINE_PATHSPEC              (existing constant, STD-001)
+               git.rs   dirty_under(root, pathspecs) -> bool         ← the dirtiness primitive
+                        capture_with(root, excludes) -> Frame        ← delegates to it
+                        capture(root) = capture_with(root, &[])      ← unchanged behaviour
+                        expand_scope_entry(root, entry, magic)       ← the index-first expander
+               memory.rs::scrub_line                                 ← existing report framing
 ```
 
-Two changes at their correct altitudes: one parameterised dirtiness primitive at
-leaf, and policy composition at command. **There is exactly one dirtiness
-measurement in the design** — `dirty_under` — used twice by `verify` with
-different pathspec sets. No path predicate exists at leaf and no second probe
-exists anywhere; both were specified by earlier drafts and are deleted (RV-307
-F-2).
+Three elements at their correct altitudes: one parameterised dirtiness
+primitive, one per-entry index expander, and policy composition at command tier.
+**There is exactly one dirtiness measurement** (`dirty_under`, used twice by
+`verify` with different pathspec sets) and **exactly one entry expander**
+(`expand_scope_entry`, composed differently by `verify` and `validate`).
 
-*Open (F-36):* `validate` needs a contribution probe and this model does not
-give it one. Whatever supplies it is a third element of this diagram.
+The third element is objective 7's answer to RV-307 F-36, which the inherited
+model left as an acknowledged hole.
 
-### 5.2 Interfaces & Contracts
+### 5.2 The claim-surface constructor — index-first
 
-**Dirtiness primitive (leaf, `src/git.rs`)** — one implementation, parameterised.
+**This section replaces the inherited ordered algorithm wholesale** (DEC-053). It
+is not a fourth repair of it. The inherited rule classified an entry's shape from
+its *characters*, canonicalised it with `realpath`, then asked git a question
+about the index. RV-307 F-37's three routes are all one defect: **a filesystem
+oracle answering an index question.**
 
-```rust
-/// Is anything under `pathspecs` dirty? Runs the three dirtiness probes with
-/// the given pathspec set. Returns a bool: it never computes
-/// `checkout_state_id`, so it never calls `write-tree` and never takes
-/// `.git/index.lock` (I2). An empty set means "the whole tree".
-pub(crate) fn dirty_under(root: &Path, pathspecs: &[&str]) -> Result<bool, CaptureError>
+Reproduced on git 2.54.0 (`route1.sh`, `route2.sh`, `route3.sh`):
 
-/// Capture the git frame, ignoring paths under `excludes` when deciding
-/// dirtiness. Delegates the dirty decision to `dirty_under`.
-pub(crate) fn capture_with(root: &Path, excludes: &[&str]) -> Result<Frame, CaptureError>
+| route | why the inherited rule missed it |
+|---|---|
+| `missing/../link` | git normalises `..` **lexically**; `realpath -e` requires the intermediate directory to exist |
+| sparse checkout / `skip-worktree` | git matches the **index**; `realpath` requires the working tree |
+| a literal filename containing `*` | git's `:(literal)` reads `*` as a character; the shape rule read it as a wildcard |
 
-/// Unchanged public behaviour — the existing three callers keep this signature.
-pub(crate) fn capture(root: &Path) -> Result<Frame, CaptureError> {
-    capture_with(root, &[])
-}
-```
+`shapes.sh` shows the two instruments are uncorrelated in *both* directions:
+`missing/../link` and a sparse entry fail `realpath -e` and still contribute;
+`linkdir/target.txt` resolves cleanly and contributes nothing.
 
-`pathspecs` are *arbitrary* git pathspecs — negative (`:(exclude)…`) or positive
-(`:(literal).doctrine/memory/items/mem_<uid>`, `:(glob).doctrine/adr/**`) — which
-is what lets one primitive serve both of `verify`'s questions. **That latitude is
-the leaf's, not the caller's**: the command tier composes the sets and is
-responsible for neutralising untrusted input before it reaches here (F-18). A
-primitive that accepts pathspec magic is correct; a policy that forwards memory
-text into one unfiltered is not. Git's rule is that a path
-matches iff it matches at least one positive pathspec (or there are none) *and* no
-negative one, so the two questions cannot be folded into a single call: **two
-calls, one implementation.**
+#### The rule
 
-*Revised twice.* The first draft proposed a separate `source_clean` probe, which
-would have duplicated repo-identity derivation, the multi-root guard, submodule
-rejection and ref resolution (§ 10, A1). The second parameterised `capture()`
-itself, but that left `verify` with only a whole-frame answer when it needed a
-narrow boolean — and computing a `Frame` for the claim question would have taken
-the index lock on exactly the path I2 protects (§ 10, X1/F-11). Extracting
-`dirty_under` is what A1 actually wanted: the shared measurement lifted once, with
-`capture_with` as its first consumer. I1 still holds by construction —
-`capture(root)` delegates with an empty slice.
+Applied per entry of `scope.paths` and `scope.globs`:
 
-Parameterisation is required because `capture()` **blanks the commit oid whenever
-the tree is dirty** (`git.rs`: `commit: String::new(), // empty iff dirty`) — it
-yields only a `checkout_state_id` hash, and you cannot subtract corpus paths from
-a sha256. The three probes take pathspecs natively:
+1. **Guard lexically, before emission.** An entry that is empty/whitespace-only,
+   contains a control character, is absolute-outside-the-repo, or escapes the
+   root by `..` is **never emitted** (I10). It is reported as **malformed**
+   (§ 5.5) and the run continues. Absolute-inside entries are rewritten
+   repo-relative.
+2. **Emit magic-prefixed by field of origin, never by character.**
+   `scope.paths` → `:(literal)`, `scope.globs` → `:(glob)`. The schema already
+   records the distinction the inherited step 2 was re-deriving unreliably. This
+   is RV-307 F-37's structural correction and answers RV-307 F-32's returned
+   contest at the root rather than at the split point.
+3. **Expand against the index** — `git ls-files -s -z -- <spec>`. `-z` is
+   **required, not stylistic**: `core.quotePath=true` renders `ünï.txt` as
+   `"\303\274n\303\257.txt"` and corrupts any parsed output (`residue.sh` (d)).
+4. **Resolve matched symlinks from the index blob.** Every match of mode `120000`
+   has its target read via `cat-file blob :<path>`, joined **lexically** to the
+   link's parent, and re-expanded. Bounded and cycle-checked.
+5. **Non-empty match set ⇒ contributes. Empty ⇒ non-contributing** — objective
+   7's sink, declarable under objective 3.
 
-| Probe | Command | Pathspec |
-|---|---|---|
-| worktree | `git diff HEAD --binary …` | passed through |
-| untracked | `untracked_fingerprint` → `git ls-files --others --exclude-standard -z` | passed through |
-| index | `git diff-index --quiet --cached HEAD` | passed through |
+Step 4 is what closes the sparse-checkout route, and it is load-bearing:
+`cat-file blob :<path>` returns the link target **while the file is absent from
+the working tree** (`candidate.sh` FAL-2, passed).
 
-✓ **Verified empirically, not assumed** (RV-307 brief line 3, Git 2.54.0, scratch
-repos + this repo). Exclusion-only pathspec sets behave as required: a binary
-worktree change confined to `.doctrine` yielded 0 diff bytes, adding a source
-change yielded 3,824,818; the untracked leg printed nothing until a source file
-was added; the index leg exited 0 then 1. `untracked_fingerprint` gains a
-`pathspecs` parameter — a signature change to a private leaf fn whose only caller
-is `dirty_under`.
+#### What this retires
 
-**The two questions `verify` asks.** Policy stays entirely at command tier:
+- **Character-based shape classification.** The schema records path-vs-glob in
+  the field name.
+- **The whole-component-prefix rule.** Nothing is resolved before emission, so
+  there is no prefix to split.
+- **E13's mechanical-necessity basis** — see § 5.5.
+- **Most of RV-307 R-A's enumerate-then-probe burden.** The obligation was
+  discharged in method (`shapes.sh`), but the taxonomy is now
+  **non-load-bearing**: shapes are no longer classified by us, so a fourth
+  unenumerated shape has nothing to break. That is the substantive reason to
+  prefer this over a repair — the three prior totality claims (RV-307 F-26, F-32,
+  F-37) each failed by asserting a rule over an under-enumerated domain, and this
+  rule has no domain to under-enumerate.
 
-```rust
-// 1. Is the CODE dirty?  (the anchor — corpus dirt is not evidence about it)
-let source = capture_with(root, &corpus_excludes)?;
+#### Stated honestly: what it buys, and what it does not
 
-// 2. Is the CLAIM's own evidence committed?
-let claim_dirty = dirty_under(root, &claim_pathspecs)?;
-```
+On this corpus the symlink-resolution step adds **zero** coverage for declared
+scopes. 25 entries match symlinks, all self-covering; **0** entries are
+symlink-*rooted* (`census.py`), which *confirms* the inherited "no glob
+declaration is symlink-rooted" claim rather than refuting it. It **is** live and
+load-bearing for the uid directory base, reached through one of 347 key symlinks
+(RV-307 F-15). The full resolve pass over `.doctrine/**` — 7,670 matches, 2,071
+symlinks — costs **7ms**, so scale is not a constraint.
 
-| Set | Contents | Why |
-|---|---|---|
-| `corpus_excludes` | `:(exclude)` + `DOCTRINE_PATHSPEC`; plus `:(exclude)memory` (`MEMORY_MASTERS_DIR`) **only when that directory exists** | dirt in doctrine's own authored trees says nothing about whether a claim about the code still holds |
-| `claim_pathspecs` | the memory's **own item directory**, plus its declared `scope.paths` and `scope.globs`, per the construction rule below | this *is* the claim's evidence surface — the prose being attested, and the code it is attested against |
+The value here is **totality by construction, not live defect count.**
 
-**The base of the claim surface is the *canonicalised uid* directory** (RV-307
-F-15) — `.doctrine/memory/items/mem_<uid>/`, never the path `resolve_show`
-returned. `run_verify` resolves through `fsutil::safe_join`, a plain
-`tree_root.join(rel)` with **no canonicalisation** (`src/fsutil.rs:20-33`), so a
-reference given as a *key* yields `.doctrine/memory/items/<key>` — and every key
-in `items/` is a **symlink** to the uid dir. **Git does not traverse symlinks in
-pathspecs**: such a pathspec matches the symlink entry alone, so all three probe
-legs report clean while the body is modified. Proven, not argued (git 2.54.0,
-scratch repo, tracked memory with a modified `memory.md`):
+#### Scope entries are data, not pathspec syntax (RV-307 F-18)
 
-| Probe, via **key** symlink | Result | Same probe, via **uid** dir | Result |
-|---|---|---|---|
-| `git diff HEAD --name-only` | *(empty)* | `git diff HEAD --name-only` | `…/memory.md` |
-| `git diff-index --quiet --cached HEAD` | exit 0 — *clean* | same | exit 1 — *dirty* |
-| `git ls-files` | 1 entry: the symlink | `git ls-files` | `memory.md`, `memory.toml` |
-
-That is F-1 restored through the reference form, on the mainstream path: SL-230's
-D4/D8 clear the axis on every claim edit, so *edit → re-verify* is the flow this slice
-creates, and agents address memories **by key** (the boot snapshot and
-`/retrieve-memory` both emit keys). T8's fresh-`record` case survives only by
-luck — the untracked *symlink* trips the untracked leg — so T8 passing proves
-nothing here. `validate`'s own-directory drift count (SL-230 D5) takes the uid dir
-for the identical reason.
-
-**Scope entries are free text**, and this corpus proves they are not uniformly
-repo-relative. Round 5 stated the treatment as a table of *cases*, which RV-307
-F-26 falsified on both counts: two rows claimed the same entry (a tracked symlink
-whose target resolves outside the repo), and the universal rule that was supposed
-to govern them all — canonicalise everything (I9) — cannot be applied to a
-pattern or to a path that no longer exists. So the rule is stated as an **ordered
-algorithm**. The order is not presentation: it is what makes the classification
-total and disjoint, and every class is decided by **probe outcome**, never by the
-shape of the string.
-
-Applied to each entry of `scope.paths` and `scope.globs`:
-
-1. **Empty or whitespace-only → malformed, refuse** (E11). Never emitted in any
-   form: prefixed, a bare `:(literal)`/`:(glob)` matches the entire index; raw,
-   git rejects it outright.
-2. **Classify the shape.** An entry containing `*`, `?` or `[` is a **pattern**;
-   anything else is a **concrete path**. They resolve differently, because a
-   pattern has no single real path to resolve to.
-3. **Resolve.** A concrete path resolves whole. A pattern resolves its longest
-   **whole-component** prefix — the text up to the last `/` *before* the first
-   wildcard character — and re-appends the remainder. The prefix must end at a
-   separator, not at the wildcard (RV-307 F-32): splitting at the wildcard
-   *character* yields `foo` for `foo*/bar`, which resolves to nothing, while the
-   entry itself matches tracked `foobar/bar` (verified, git 2.54.0:
-   `ls-files --error-unmatch -- ':(glob)foo*/bar'` → exit 0, `foobar/bar`). **A
-   textual wildcard-free prefix is not a path prefix**, and treating it as one
-   sends a contributing glob down the non-resolving branch. Under the corrected
-   rule `foo*/bar` has an *empty* whole-component prefix and is emitted unchanged,
-   where it matches. **A pattern whose whole-component prefix is empty resolves to
-   nothing and is emitted unchanged** —
-   `**/.gitignore` (one live corpus entry) is rooted at no directory, so there is
-   no symlink for git to be blind to. This is *not* a bare magic prefix and does
-   not engage E11: the emitted form is `:(glob)**/.gitignore`, which matches
-   exactly the files it names (verified, git 2.54.0: 2 of 3 tracked files, where a
-   bare `:(glob)` returns all 3). Stated because step 3 is otherwise silent on it
-   and the case is reachable today. Resolution is necessary, not cosmetic:
-   `:(glob)<slug-symlink>/**` matches **nothing** and reports clean against a
-   modified target, exactly as the literal form did in F-20 — verified, git 2.54.0:
-   0 files via the link, 1 via the resolved prefix, `diff-index` exit 0 versus
-   exit 1. No glob declaration in this corpus is currently symlink-rooted, so this
-   closes a latent hole at zero migration cost.
-4. **Emit — unless the emitted form would abort the probe.**
-   - **Resolves inside the repo** → emit it, repo-relative and magic-prefixed.
-     Step 5 decides whether it contributes. (Normalising an absolute-inside entry
-     is hygiene, not a correctness fix — git converts absolute pathspecs itself —
-     but it keeps the emitted pathspec legible and stable across checkouts.)
-   - **Does not resolve** → emit it as written, magic-prefixed. There is nothing
-     to canonicalise, and step 5 finds that it matches nothing. No history is
-     consulted and no classification is attempted (DEC-020).
-   - **The emitted form is outside the repository** → **malformed, refuse**
-     (E13). Git does not return a verdict on such a pathspec, it *aborts* —
-     `exit 128` — and would take `verify` down with it. This is F-26's collision
-     cut in favour of the probe: where the entry points is not the test, what it
-     does to the probe is. It is **one** class covering both a resolution that
-     lands outside and a non-resolving outside-shaped string, which is F-32's
-     second limb — under the round-7 algorithm the latter was unclassified and
-     reached the history probe, which aborted. Verified, git 2.54.0:
-
-     | Emitted form | `ls-files --error-unmatch` |
-     |---|---|
-     | `:(literal)nonexistent/inside.txt` | exit 1 — unmatched: **a verdict** |
-     | `:(literal)/tmp/no-such-absolute` | **exit 128** — `is outside repository` |
-     | `:(literal)../outside-no-such` | **exit 128** — `is outside repository` |
-     | `:(glob)/tmp/no-such-*/**` | **exit 128** — `Invalid path` |
-
-     A non-resolving entry *inside* the repo is survivable and a non-resolving
-     entry *outside* it is not. That, and nothing about the entry's provenance,
-     is what separates malformed from merely non-contributing.
-5. **Contribution.** `git ls-files --error-unmatch`, **per entry** so the report
-   can name the entry rather than the set. Exit 0 → **observable**: real claim
-   evidence, and it must be clean. Exit 1 → **non-contributing**: reported on
-   stderr, raised by `validate`, and attested over. No further discrimination is
-   attempted — that is DEC-020, and the reason is below. The observable set is
-   what `dirty_under` then probes.
-6. `scope.commands` never enters: not path-shaped, exempt by kind (E5).
-7. Nothing left → the uid directory alone (E6). It is unconditional, so the claim
-   surface is never empty.
-
-**Why the algorithm stops at step 5 and does not sort the non-contributing**
-(DEC-020, RV-307 F-25/F-31). The distinction the design kept reaching for — a
-*genuine defect* the author should fix, versus evidence *git can never see* — was
-drawn three times and refuted three times, and always for the same reason: every
-instrument proposed to decide it reads **local repository state**.
-
-| Instrument | Refuted by | Because |
-|---|---|---|
-| blanket refusal (no boundary) | F-21 | 36 active items stop verifying |
-| filesystem existence | F-25 | checkout-dependent — `.claude/skills/**` is absent from a source checkout, present in an installed one |
-| `git rev-list --all` history | F-31 | ref-set-dependent — deleting a branch flips a once-tracked path from refuse to attest while its commit object survives |
-
-The third is the one that settled it. `--all` means *reachable from this clone's
-current refs*, not *ever tracked* (verified, git 2.54.0: with the branch present
-`rev-list --all --max-count=1 -- <path>` returns the commit; after `git branch -D`
-it returns empty, while `cat-file -e` on that commit still exits 0). A shallow
-clone, a pruned repo, a fresh clone and a dispatch worktree legitimately hold
-different answers, because **git's view is inherently local** — so a fourth
-derived instrument would fail exactly as the first three did. The property being
-assumed of each instrument was *stability*, and stability is a claim needing a
-falsifier, not a premise; measuring that a discriminator **works** is not evidence
-that it is **stable**.
-
-So `verify` does not classify. It attests over every non-contributing entry,
-names each on stderr, and `validate` raises them. The question *should
-non-contribution refuse, and on which entries* leaves this slice for its own
-(DEC-020). The stable answer is known and deliberately not built here: a boundary
-that survives cloning must be **declared** on the record, not derived from it — a
-schema change of the same shape and cost as IMP-318 and QUE-173/OQ-3, which is
-why all three are scoped together rather than one being smuggled in.
-
-**I9 is total** because every entry that *contributes* has been resolved. The two
-shapes that cannot be resolved are handled without an uncanonicalised pathspec
-ever bearing evidence: an outside target is refused at step 4, and an absent path
-is emitted inert — it matches nothing, so it contributes nothing to canonicalise.
-
-A **gitignored** entry that resolves and is tracked is *kept*: ignore rules do not
-bind tracked files, so a force-added path under an ignored root is real evidence
-(E8).
-
-**Scope entries are data, not pathspec syntax** (RV-307 F-18). `scope.paths` and
-`scope.globs` are free text in an *untrusted* substrate — SPEC-007 § Concerns
-treats stored memory text as hostile input (R2) — and § 5.2 previously called the
-pathspec set "*arbitrary* git pathspecs". Interpolated raw, a scope entry of
-`:(exclude).doctrine/memory/items/mem_<uid>` **subtracts the mandatory uid
-directory from the claim surface**, and the attestation goes through against a
-modified body. Demonstrated, not postulated (git 2.54.0, scratch repo, body
-modified):
+Interpolated raw, an entry of `:(exclude).doctrine/memory/items/mem_<uid>`
+subtracts the mandatory uid directory from the claim surface and the attestation
+goes through against a modified body. Demonstrated, not postulated:
 
 ```
 git diff-index --quiet HEAD -- items/<uid>                            → exit 1  (dirty, correct)
@@ -400,618 +260,624 @@ git diff-index --quiet HEAD -- items/<uid> ':(exclude)items/<uid>'    → exit 0
 git diff-index --quiet HEAD -- items/<uid> ':(literal):(exclude)…'    → exit 1  (dirty — magic neutralised)
 ```
 
-So every scope-derived entry is emitted **magic-prefixed**: `:(literal)` for
-`scope.paths`, `:(glob)` for `scope.globs`. Git parses magic only at the head of a
-pathspec, so the prefix renders the remainder inert — a hostile entry degrades to
-a literal path that matches nothing (and is then reported by E7), never to an
-operator on the surface. The two prefixes are named constants, not inline literals
-(STD-001). The uid directory is emitted the same way, so **nothing a memory
-declares can subtract it** (I8).
+Git parses magic only at the head of a pathspec, so the prefix renders the
+remainder inert. The uid directory is emitted the same way, so **nothing a memory
+declares can subtract it** (I8). The two prefixes are named constants (STD-001).
 
-**An empty entry is worse than a hostile one** (RV-307 F-23). The prefix rule is
-unconditional, so an empty or whitespace-only scope value would be emitted as a
-*bare* `:(literal)` or `:(glob)` — which matches **the entire index**, not
-nothing. Verified: `git ls-files -- ':(literal)'` returns every tracked file. That
-inverts the failure — the claim surface becomes the whole repository and `verify`
-refuses on any unrelated dirt anywhere — and it is why the empty case belongs in
-D10's *malformed* class, dropped before emission and reported, never prefixed and
-passed through. Raw, it is not survivable either: git rejects an empty pathspec
-outright (`fatal: empty string is not a valid pathspec`). **Never emit a bare
-magic prefix** (E11).
+#### The base of the claim surface is the canonicalised uid directory
 
-**Canonicalisation is a rule about every path in the surface, not just the uid
-directory** (RV-307 F-20). F-15's remedy resolved the item directory through its
-key symlink; declared scopes need the identical treatment, because git's blindness
-to symlinks is a property of *pathspecs*, not of item directories. A scope naming
-a tracked symlink passes the `--error-unmatch` check — the symlink is tracked —
-while the probe sees only the link blob and not the target's content:
-
-```
-git diff-index --quiet HEAD -- items/link-to-target   → exit 0   (blind)
-git diff-index --quiet HEAD -- real/target.txt        → exit 1   (dirty)
-```
-
-This corpus carries **2,001 tracked symlinks** — doctrine mints a slug symlink per
-entity — so the *readable* form an agent naturally scopes
-(`.doctrine/adr/001-module-layering`) is precisely the blind one. Resolution is
-therefore step 3 of the construction algorithm above, and applies to patterns as
-well as concrete paths; an entry whose target resolves outside the repository is
-**malformed and refuses** (E13, F-26). One rule, stated once and scoped to the
-question it holds for: **nothing reaches `verify`'s claim surface uncanonicalised**
-(I9) — and nothing canonicalised reaches `validate`'s historical one (D11, F-27).
-
-**The inside/outside split is a property of the checkout, not of the string**
-(E9). `"/workspace/doctrine/src/worktree/jail.rs"` — carried by four items — is
-inside the primary tree and *outside* a dispatch worktree at any other path. So a
-memory's claim surface narrows when it is verified from a linked worktree, in a
-repo whose whole dispatch model is linked worktrees. E7 makes it audible; the
-design states it rather than letting it be discovered.
-
-**Non-contribution is reported, never classified** (D10, DEC-020, RV-307
-F-6/F-21/F-25/F-31). Git does not fail a pathspec that matches nothing (absent
-`--error-unmatch` — `git diff HEAD -- src/nope.rs` exits 0 silently), so a dropped
-or unmatched scope entry shrinks the claim surface *silently*. Making it audible
-is the whole remedy; sorting the silence into kinds is what this slice does not do.
-
-| Outcome | Example, from the real corpus | Response |
-|---|---|---|
-| **Probe-aborting** — empty, or an emitted form outside the repo | `""`, `"/etc/passwd"`, a tracked symlink whose target is outside, `"../gone"` | **refuse.** Git aborts rather than answering, so there is no attestation to make (E11, E13) |
-| **Non-contributing** — emitted, matches no tracked file | `src/worktree.rs` (moved), `.claude/skills/**`, `.harness/probe/**`, `.doctrine/state/slice/` | **report on stderr + `validate` finding**, then attest (E7) |
-| **Observable** — matches at least one tracked file | anything tracked | **must be clean, or refuse** — this is the claim probe proper |
-
-The first row is a **mechanical necessity, not a judgement about the memory**:
-the probe cannot run, so no verdict of any kind is available. That is what keeps
-the shrunk D10 coherent rather than arbitrary — the only refusal that survives is
-the one where refusing is the sole option. Every entry that git *can* answer for,
-it answers for, and the answer is binary: contributes or does not.
-
-`validate` raises the non-contributing entries as a corpus-health finding so the
-overclaim is aggregated rather than emitted as per-attestation noise.
-`scope.commands` is *exempt by kind*, not a failed entry: it is structurally
-non-path (E5), a property of the schema rather than of this tree.
-
-***What `verified_sha` asserts, stated rather than implied*** (RV-307 F-25/F-33).
-The round-3 draft answered non-contribution with a stderr advisory and § 5.2
-rejected it — *a warning does not make an unobservable claim committed* — then
-adopted that same advisory for two of four classes. F-25's charge was that
-condemning a mechanism in one paragraph and relying on it in the next is not a
-position but an inconsistency. Sustained; the inconsistency is resolved by
-adopting the advisory **explicitly**, with the reading stated outright and the
-residual routed:
-
-> A `verified_sha` asserts that **everything git could observe about this claim
-> was committed and unchanged at that commit** — not that every declared entry was
-> observed. A memory declaring a path git does not track carries an attestation
-> over a proper subset of what it declares.
-
-That is the weak reading, and under DEC-020 it is the design's **only** reading.
-The strong reading — every declared entry observed, or no stamp — is the round-4
-blanket refusal, and measurement falsified it: it treats a memory about harness
-behaviour as defective for scoping the harness, and the remedy it prescribes (edit
-the scope) is itself a claim edit, so it clears the axis and guarantees the memory
-is unverified in exchange for making it verifiable. The blanket rule costs 36
-active items; DEC-020 costs **zero** — no memory loses a stamp. Nothing in this
-design may assert the strong reading anywhere else (F-33): the two contracts
-cannot coexist as separate normative readings, because a planner could implement
-either and remain textually compliant.
-
-The weak reading's residual is real and is **not** closed here: a consumer of the
-stamp cannot distinguish a full attestation from a partial one, because the
-shortfall lives on stderr and in `validate`, not on the record. Closing it means
-persisting the covered surface — a new field, i.e. a schema change and its own
-slice, exactly OQ-3's shape. Routed as **IMP-318** and carried as **R8**, on the
-R5 precedent: state the gap, do not paper it.
-
-**The seam is the refusal path in `run_verify`, not a side-channel.** Surface
-construction returns the observable pathspec set *and* the list of
-non-contributing entries; the command tier refuses on any **probe-aborting**
-member before it probes anything, and passes the remainder to the reporter.
-Detection is `git ls-files --error-unmatch` per entry — the same plumbing, no new
-dependency, and **no second git query**: the history probe an earlier draft
-required here is gone with DEC-020. E7 is the wording of that report; E11 and E13
-the refusals.
-
-This is the correction for RV-307 F-1 and F-6. Excluding `.doctrine/**` wholesale
-excluded the memory *being verified* — items live at
-`.doctrine/memory/items/<key>/` — so `verify` would have stamped a HEAD that
-provably lacked the attested body, and would have ignored a modified
-`.doctrine/adr/001/layering.toml` that a memory explicitly scopes. **81 items in
-this corpus carry `.doctrine/**` scopes.** Doctrine's ownership of the path
-constant makes the exclusion legal under POL-002; it does not make the excluded
-evidence irrelevant.
+(RV-307 F-15.) `run_verify` resolves through `fsutil::safe_join`, which performs
+no symlink canonicalisation, so a reference given as a *key* yields
+`.doctrine/memory/items/<key>` — and every key in `items/` is a symlink to the
+uid dir. **Git does not traverse symlinks in pathspecs**: such a pathspec matches
+the symlink entry alone, so all three probe legs report clean while the body is
+modified. Agents address memories **by key** (the boot snapshot and
+`/retrieve-memory` both emit keys), so this is the mainstream path, not an edge.
 
 ### 5.3 Data, State & Ownership
 
-No schema change in objectives 1–2; `dirty_under` returns a value and owns no
-state.
+`dirty_under` and `expand_scope_entry` return values and own no state.
+`MEMORY_SHIPPED_DIR` and `MEMORY_ITEMS_DIR` are both under `.doctrine`, so one
+exclusion root covers them; only `MEMORY_MASTERS_DIR` (repo-root `memory/`) sits
+outside, contributed only when it exists (E4).
 
-`MEMORY_SHIPPED_DIR` (`.doctrine/memory/shipped`) and `MEMORY_ITEMS_DIR`
-(`.doctrine/memory/items`) are both *under* `.doctrine`, so one exclusion root
-covers them. Only `MEMORY_MASTERS_DIR` (`memory`, repo-root) sits outside — and
-it is contributed only when the directory exists (E4). The item under attestation
-is then re-admitted as a *positive* pathspec in `claim_pathspecs`; the two sets are
-independent, so no re-inclusion magic is needed (git offers none).
+**Objective 3 is the one schema change: `scope.unobservable`.**
 
-**Objective 3 is a deliberate exception.** The declared-boundary signal, and
-IMP-318's attested-coverage field, *are* schema changes — that is precisely why
-DEC-020 deferred them out of SL-230 and why they belong here. Their shape is
-open (OQ-A).
+```toml
+[scope]
+paths  = ["src/dispatch.rs"]
+globs  = [".claude/skills/dispatch*/**"]
+unobservable = [".claude/skills/dispatch*/**"]
+```
+
+| property | rule |
+|---|---|
+| type | `Vec<String>`, in the existing `[scope]` table |
+| matching | **exact string equality** against `paths ∪ globs`. No pathspec semantics, no instrument, no local state |
+| both-fields case | one entry text appearing in both `paths` and `globs` is covered in both by a single declaration. Live population: 1 (`src/dispatch.rs`) |
+| effect | suppresses the **non-contribution report only**. Never subtracts from the claim surface |
+| naming | not `untracked` (a git term of art for a *state*, and misleading given E8's force-added case) and not `external` (answers "is this part of the claim?" with *no*, which is wrong) |
+
+**Validation rules**, all findings, none refusals:
+
+- **V1** — an `unobservable` entry matching no member of `paths ∪ globs` declares
+  nothing. Finding.
+- **V2** — an `unobservable` entry that git **does** match is a stale
+  declaration. Finding. *This is the falsifiability property that earned the
+  shape*: the boundary is self-policing rather than a permanent silence.
+- **V3** — empty/whitespace entries dropped and reported, exactly as § 5.2 step 1
+  treats them in `paths`/`globs`.
+- **V4** — duplicates deduped silently. Intra-field duplicates: 0 corpus-wide.
+- **V5** — an `unobservable` declaration **never** suppresses a *malformed*
+  finding. The escape hatch is offered only where it is the correct answer;
+  declaring `../gone` unobservable would silence a broken declaration forever,
+  and V2 could never fire to catch it because git will never match it.
+
+**It does not clear the attestation.** SL-230 D4/D8 clear the verification axis on
+a *claim-field* edit. `unobservable` changes reporting, not measurement, so it is
+not a claim field. This falls out of the "never subtracts" rule and is a useful
+consistency check: if editing it *had* to clear the attestation, the
+parallel-assertion shape would be wrong.
+
+**Sizing, with its instrument named.** Of 59 non-contributing entries, **33 have
+a root this checkout ignores** and 26 do not (`populations.py`). So declarations
+could plausibly convert 59 undifferentiated reports into ~26 actionable findings.
+This is an **estimate, not a target**: `check-ignore` is itself a local-state
+instrument, which is exactly why the boundary must be *declared* rather than
+derived. The earlier figure of 20 declarable (39 actionable) does not reproduce;
+it used a fixed root list that omitted `.agents/skills/**`, `.mcp.json`,
+`.worktrees/**`, `docs/claude/workflows.md` and `web/map/dist`.
+
+**Rejected shapes**, on the record: a sigil inside the entry string
+(character-sniffing, the exact error § 5.2 deletes, and it collides with real
+filenames); a per-memory flag (too coarse — the typical memory declares several
+paths and one unobservable); a separate `external` list (see naming above); an
+array-of-tables carrying a `reason` (documentation, not mechanism — and if wanted
+later, a parallel field keyed by the same exact match is additive).
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Verify.** The gate is **two questions, both of which must pass**:
+#### `verify` — two questions, both of which must pass
 
 ```
 if allow_dirty {
     let full = capture(root)?;      // UNEXCLUDED — the real state of the tree
     stamp(full);                    // Commit if genuinely clean, else CheckoutState
 } else {
-    let source = capture_with(root, corpus_excludes)?;   // 1. is the code dirty?
-    let claim_dirty = dirty_under(root, claim_pathspecs)?;  // 2. is the claim committed?
-    match (source.anchor_kind, claim_dirty) {
-        (Commit, false) => attest against source.commit,    // the only success
+    let anchor = capture_with(root, corpus_excludes)?;      // 1. the ANCHOR question
+    let claim_dirty = dirty_under(root, claim_pathspecs)?;  // 2. the CLAIM question
+    match (anchor.anchor_kind, claim_dirty) {
+        (Commit, false) => attest against anchor.commit,    // the only success
         _               => refuse, naming which question failed,
     }
 }
 ```
 
-**Why `--allow-dirty` re-captures unexcluded** (RV-307 F-13). Both `Commit`
-branches of `capture` set `checkout_state_id: String::new()` (`src/git.rs:2036`,
-`:2048`) — only the dirty branch computes one. So a claim-only-dirty tree yields a
-`Commit`-anchored `source` frame carrying no `checkout_state_id`, and the claim
-leg is deliberately a bool (I2 — it must not compute one, or it takes the index
-lock). The escape hatch would have had nothing to stamp, and would have recorded a
-clean-looking attestation for a tree the operator explicitly flagged as dirty.
-Taking the anchor from an unmodified `capture(root)` makes I4 literally true: the
-escape hatch uses today's function, unchanged. It is **not an extra capture**: the
-`allow_dirty` branch is taken *before* the gate probes, so exactly one capture
-runs on that path — the same single `capture(root)` `run_verify` performs today
-(`src/memory.rs:3382`), and the index lock it may take is one today's
-`--allow-dirty` takes anyway. Same root cause as F-1: the default path was
-reasoned about and the escape hatch left to inherit machinery built for a
-different question.
+**The two questions are named on substance** (RV-307 F-39 limb 1). The inherited
+text called the first "is the code dirty?" at three sites, contradicting § 4's
+claim-not-code boundary. It is worse than a wording slip: the first question
+excludes `.doctrine/**` and `memory/`, so what remains is *everything else* —
+which in a client project may be docs, assets or config. Calling it "the code"
+bakes in a host-project assumption that **POL-002** prohibits. The questions are:
 
-Dirt in doctrine's authored corpus that the memory does not claim against no
-longer blocks, and the anchor is a real addressable commit rather than a
-`checkout_state_id`. What must be committed is the memory's own body and every
-declared path **git can observe** — the weak reading of § 5.2, which is the only
-reading this design carries (RV-307 F-33). A declared path git does not track is
-reported, not required.
+- **the anchor question** — is the tree *outside doctrine's own authored corpus*
+  clean enough to anchor an attestation?
+- **the claim question** — is the claim's own evidence committed?
+
+| Set | Contents |
+|---|---|
+| `corpus_excludes` | `:(exclude)` + `DOCTRINE_PATHSPEC`; plus `:(exclude)memory` **only when that directory exists** |
+| `claim_pathspecs` | the memory's own **uid** directory, plus the expansion of its declared `scope.paths` and `scope.globs` per § 5.2 |
+
+**Why `--allow-dirty` re-captures unexcluded** (RV-307 F-13). Both `Commit`
+branches of `capture` leave `checkout_state_id` empty; only the dirty branch
+computes one. A claim-only-dirty tree therefore yields a `Commit`-anchored frame
+carrying no `checkout_state_id`, and the claim leg is deliberately a bool (I2). The
+escape hatch would have had nothing to stamp. Taking the anchor from an
+unmodified `capture(root)` makes I4 literally true. It is **not an extra
+capture**: the `allow_dirty` branch is taken *before* the gate probes.
 
 **This costs the `record` → `verify` convenience, deliberately** (RV-307 F-1). A
-freshly recorded memory's directory is untracked, so `verify` now refuses until it
-is committed. The alternative was a `verified_sha` naming a commit that provably
-did not contain the attested prose — demonstrated in a scratch repo, where
-`git cat-file -e "$verified_sha:.../memory.md"` exited 128 while the drift count
-that was supposed to catch it printed 0, then and forever. A worthless stamp is
-worse than an extra `git commit`. The refusal says which of the two questions
-failed, and what to do about it.
+freshly recorded memory's directory is untracked, so `verify` refuses until it is
+committed. The alternative was a `verified_sha` naming a commit that provably did
+not contain the attested prose. A worthless stamp is worse than an extra
+`git commit`.
 
-***The claim-surface constructor serves `verify` alone*** (D11, RV-307
-F-19/F-27/F-28/F-29). Round 4 widened it to `validate` as well, on the reasoning
-that two constructions of "the claim's evidence surface" in one slice is the
-parallel implementation A1 already rejected. Round 6 falsified that reasoning:
-**the two verbs are not asking the same question, so a shared surface is not
-shared correctness.**
+**Refusal legibility.** The current message never mentions `--allow-dirty`. At the
+one moment an agent is looking for the escape hatch, the tool hides it and
+prescribes committing. The refusal names its own flag (objective 6).
 
-`verify` asks *is this evidence dirty right now*, and canonicalisation is
-mandatory — a pathspec naming a symlink reads clean while its target is modified
-(F-15, F-20). `validate` asks *how many commits touched this evidence since
-`verified_sha`*, and canonicalisation is **actively wrong**: it resolves against
-today's checkout and then queries yesterday-to-today history. Demonstrated (git
-2.54.0, scratch repo, a committed retarget of `link` from `real/a` to `real/b`):
+#### `validate` — one mechanism, two unknowns (objective 7)
 
-```
-git rev-list --count BASE..HEAD -- link         → 1   (the retarget is drift, correctly counted)
-git rev-list --count BASE..HEAD -- real/b       → 0   (canonicalised: the drift disappears)
-git diff-index --quiet HEAD -- link             → 0   (blind — why verify MUST canonicalise)
-git diff-index --quiet HEAD -- real/b           → 1   (dirty — correct for verify)
-```
+**D11 is falsified.** The inherited decision said `validate` "keeps its existing
+raw seam"; that cannot survive objective 7, which must touch the same two call
+sites (DEC-054). Its four-defect enumeration was also incomplete — the
+`None`-swallow is a fifth, the largest by population and the only one that is
+**non-conformant** against amended SPEC-007 rather than merely weak. Both are
+restated here rather than silently corrected, the discipline RV-307 F-34/F-39
+established.
 
-One transformation, opposite correctness on the two consumers. D11 was an
-over-generalisation of I9 — the same defect class this review keeps finding, one
-level up: the remedy was written against the finding (F-20's symlink blindness)
-and promoted to a universal invariant without checking the sibling it would reach.
+**ISS-257's remedy — the tri-state.** Checks 2 and 4 bind `commits_touching` in a
+let-chain, so `None` falls out and emits nothing. *Cannot determine* renders as
+*no drift*. The correct shape already exists one module away: `coverage.rs`'s
+`IsStale{Fresh, Stale, Unknown}` over the **same** seam with the contract
+`None => Unknown`. **Ride it; do not re-invent it.** The ancestry guard in
+`commits_touching` is **correct and stays** — a non-ancestor `since` over-counts
+a set difference, so `None` is the documented no-over-trust posture. The defect
+is in how the callers consume it.
 
-Two further facts made the shared form unbuildable in any case:
-`memory_health_findings(root, &[Memory], today)` (`src/memory.rs:3400`) receives
-no item directory; `run_validate` discards `_dir` at `:3480-3483`; and
-`collect_all` (`:2826-2834`) unions `items/` and `shipped/` into one `Vec<Memory>`,
-so the row's origin is not merely absent but unrecoverable from `uid` — which is
-why `read_body` (`:2788-2797`) probes both roots. And the design specified a
-refusal for `verify`'s malformed class while saying nothing about what a
-corpus-wide `validate` does with one (F-29).
+**The state is flat** (DEC-055). `None` has three live causes — non-ancestor
+commit (8), dangling object (2), and a `checkout_state_id` that was never a commit
+at all (24) — and `validate` reports one undeterminable state for all of them.
+Discriminating them is routed as **IMP-325**. The rejected shortcut (split by
+stamp width) is falsified: `git init --object-format=sha256` yields 64-hex commit
+ids, so the rule fails totally on that class of repo. Recorded because the idea is
+attractive and cheap-looking, and the next reader will re-derive it.
 
-**So `validate` keeps its existing raw seam and gains only SL-230 D5's own-directory
-count.** The raw seam's defects are real, pre-existing, and named rather than
-silently inherited:
+**Population, corrected.** 34 of **59 attested** memories are silently
+unstaleable; reach 42.4% (`populations.py`). The scope document's "67 of 115
+anchored" used the wrong denominator — Checks 2 and 4 both gate on
+`!verified_sha.is_empty()`, so *attested* is the code-relevant set. The ratio
+survived re-measurement; the absolute was overstated roughly twofold.
 
-| Defect in `validate`'s raw seam (`src/memory.rs:3413-3421`) | Consequence |
-|---|---|
-| gated on `!memory.scope.paths.is_empty()` (`:3414`) | a memory scoped **only by glob** is never staleness-checked |
-| `scope.globs` never passed | glob scopes are invisible to drift |
-| absolute entries passed as-is | absolute-scope items match nothing, or abort the call |
-| no magic neutralisation | the F-18 injection reaches `commits_touching` too |
+**F-36's remedy — the contribution probe.** `validate` composes
+`expand_scope_entry` over `paths ∪ globs` and asks only *empty or not*.
 
-They are **not** fixed here, because fixing them correctly means building
-`validate` a *history-stable* surface — a second constructor with different rules,
-not a reuse of this one — and that is a change to corpus-wide staleness ranking,
-which is OQ-2's deferred decision. Carried as **R7** and routed as **IMP-317**.
+***This does not reopen RV-307 F-27, and the distinction is load-bearing.*** F-27
+holds that `verify`'s surface must not be reused for a *historical* question —
+canonicalising against today's checkout erases a committed symlink retarget
+(measured 1 → 0). Contribution is a **now** question: *does this entry match
+anything in the index today?* Both verbs ask it identically. What stays unshared
+is the drift seam (`commits_touching`). **The cut is history-vs-now, exactly as
+F-27 drew it — not verify-vs-validate.**
 
-SL-230 D5's own-directory count is unaffected by F-27: the uid directory is reached by
-resolving the *key* symlink, and a uid never changes, so there is no retarget for
-history to lose. Stated rather than left to be inferred.
+***RV-307 F-28's cost objection also does not reach this limb.*** The inherited
+constructor needed `(root, memory, dir)`, and `collect_all` discards provenance.
+Contribution needs no `dir`: the uid directory is `verify`-only, and Check 4
+already builds its body path from `memory.uid`, canonical by construction. The
+signature is `(root, entry, magic)`. No dataflow change, no `collect_all` touch.
+F-28 remains correct about IMP-317 limb (b); it simply does not apply here.
 
-**`retrieve::git_facts` is the third consumer and is likewise not converted**
-(RV-307 F-24). It gates on `m.scope.paths.is_empty()` and passes `scope.paths` raw
-(`src/retrieve.rs:556-557`) — the same defects, plus the same missing directory
-(`:628` has `root`, `Memory` and `Snapshot`, no `dir`).
+**Continuation policy** (RV-307 F-29) — **B18's precedent, not a new posture.**
+Per-entry, per-memory: a failure degrades that entry to a finding and the run
+continues. Two precedents already in the tree: `retrieve::git_facts` ("a
+`commits_touching` failure is per-candidate, never a query abort") and
+`coverage_scan` (degrades cells to `Unknown` rather than dropping them).
 
-**Adoption is not a call-site swap, and round 5 was wrong to claim it was**
-(RV-307 F-28). The constructor takes `(root, memory, dir)`; neither `validate` nor
-`retrieve` has a `dir` to give it, and `collect_all` has already discarded the
-provenance that would supply one. Adoption requires threading item-directory
-origin through `collect_all` and `memory_health_findings` — a dataflow change, not
-two arguments. IMP-317 carries that corrected scope. Bounding the slice is
-legitimate; misdescribing the cost of un-bounding it later is not.
+**The verify/validate asymmetry, which is F-29's actual answer:**
 
-Coverage stated honestly (RV-307 F-7 — the draft claimed more): this catches the
-verb path, hand-edits to **items**, and other agents. It does **not** catch
-masters. Masters are minted unanchored (`anchor_kind = None`, `src/memory.rs:1705`)
-so there is no `verified_sha` to diff from, and `collect_all` scans only items and
-shipped — `MEMORY_MASTERS_DIR` appears in production code at `:1753` (record
-placement) alone, never in `validate`. Masters are out of scope by D6; the gap is
-carried as R5, not papered over.
+| entry outcome | `verify` | `validate` |
+|---|---|---|
+| malformed (empty / control char / escaping / absolute-outside) | report, then attest | finding, continue |
+| probe errored (git failure) | **refuse** — cannot attest what it cannot measure | finding, continue |
+| matches nothing, not declared | stderr report, then attest | finding |
+| matches nothing, declared `unobservable` | silent | silent |
+| matches, declared `unobservable` | stderr report (V2) | finding (V2) |
+| matches | must be clean, else refuse | no finding |
 
-Verified against live data: `git rev-list --count <verified_sha>..HEAD -- <dir>`
-returned 3 for the memory whose stamp survived a committed body edit — the same
-plumbing the scoped-paths check already uses.
+The asymmetry is principled, not convenient: `verify` attests one memory, so
+refusing is available and correct; `validate` surveys the corpus, so refusing one
+row destroys the survey.
 
-**Refusal legibility.** The current message — "working tree is dirty: refusing to
-verify … Commit first, then verify." — never mentions `--allow-dirty`. At the one
-moment an agent is looking for the escape hatch, the tool hides it and prescribes
-stashing. The refusal names its own flag.
+**Cost.** Roughly 440 added `ls-files` invocations. Measured baseline: `memory
+validate` currently takes **73s** on this corpus, 99% user CPU, dominated by an
+unrelated O(relations × corpus) rescan filed as **ISS-258**. Against that
+baseline the probe is noise; against the sub-second baseline ISS-258's fix
+produces, it becomes the dominant term. **Re-measure after ISS-258 lands** — this
+is a re-measure trigger, not a settled figure.
+
+#### Objective 4 — IMP-317 limb (a), and a lockstep that must not break
+
+`validate` Check 2 and `retrieve::git_facts` both gate on
+`!scope.paths.is_empty()` and pass the array raw. Limb (a) widens both to
+`paths ∪ globs` and neutralises pathspec magic before either reaches
+`commits_touching`. This fixes the **13 of 43** scoped-and-attested memories that
+are glob-only and therefore ranked on a 30-day calendar instead of by commits
+touching their evidence (QUE-175, answered `yes` on measurement), and closes the
+RV-307 F-18 injection route into the historical seam.
+
+**`retrieve::staleness` branch 1 must widen with it.** It gates on the *same*
+predicate `git_facts` gates on. Widening `git_facts` alone changes nothing
+observable — the glob-only memory would still fall through to the time branch.
+The lockstep is now an invariant (I11): a hypothesis that these two could
+disagree was **refuted** during the design round precisely because they share the
+predicate, and widening one without the other would reintroduce the collision.
+
+**This is not a shared surface, and F-27 is untouched.** Limb (a) widens the raw
+seam's *input* and neutralises it; it resolves nothing. Limb (b) — own-directory
+drift in the historical seam — stays routed as IMP-317, and F-28's dataflow cost
+stands there.
 
 ### 5.5 Invariants, Assumptions & Edge Cases
 
+#### Invariants
+
 - **I1** — the three existing `capture()` call sites see byte-for-byte identical
-  frames. Guaranteed by construction (`capture` delegates with `&[]`), pinned by
-  T11. `record`'s born anchor and the retrieve read path must not move.
-- **I2** — the clean-after-exclusion path never calls `write-tree`, so it takes
-  no index lock — preserving the lock-contention property `capture()` documents
-  for concurrent doctrine processes (`src/git.rs:1996-2000`). **Strengthened**:
-  `dirty_under` returns a bool and never computes `checkout_state_id`, so the
-  *claim* probe never reaches `write_tree_with_retry` (`src/git.rs:1924`) even when
-  the claim surface is dirty. Pinned by T23.
-- **I3** — a genuinely dirty *source* tree still refuses without `--allow-dirty`.
+  frames. Guaranteed by construction (`capture` delegates with `&[]`).
+- **I2** — the clean-after-exclusion path never calls `write-tree`, so it takes no
+  index lock. `dirty_under` returns a bool and never computes
+  `checkout_state_id`, so the *claim* probe never reaches `write_tree_with_retry`
+  even when the claim surface is dirty.
+- **I3** — a genuinely dirty **anchor** tree still refuses without
+  `--allow-dirty`. (See OQ-5: this invariant is what OQ-5 would delete.)
 - **I4** — `--allow-dirty` semantics unchanged: it bypasses **both** gate
-  questions and stamps the frame from an **unexcluded** `capture(root)` — today's
-  function, called as today (RV-307 F-13). Stated explicitly rather than inferred,
-  because inferring it from the exclusion-aware frame gave an empty
-  `checkout_state_id`.
+  questions and stamps the frame from an **unexcluded** `capture(root)`.
 - **I6** — a successful attestation's `verified_sha` **contains the attested
-  body**. The point of the claim probe; pinned by T24 as **byte equality** —
-  `git show "$verified_sha:<uid-dir>/memory.md"` equals the on-disk body.
-  Existence (`cat-file -e`) is *not* the assertion and never was sufficient: any
-  stale ancestor blob at that path satisfies it (F-14).
+  body**, asserted as **byte equality**, not existence: any stale ancestor blob
+  satisfies `cat-file -e` (RV-307 F-14).
 - **I7** — the claim surface names **real tracked files**, never a symlink
-  standing in for them: it is rooted at the canonicalised uid directory (§ 5.2,
-  F-15). Pinned by T28, which verifies *by key* against a modified tracked body
-  and requires a refusal.
+  standing in for them: it is rooted at the canonicalised uid directory.
 - **I8** — nothing a memory *declares* can subtract from what it is *measured
-  against*. Scope entries are emitted magic-prefixed (§ 5.2, F-18), so the uid
-  directory is present in the claim surface unconditionally. Pinned by T30.
-- **I9** — nothing **bearing evidence** on `verify`'s claim surface is
-  uncanonicalised: the uid directory and every declared scope alike is
-  symlink-resolved before it becomes a pathspec — a concrete path whole, a pattern
-  by its longest **whole-component** prefix, the text up to the last `/` before
-  the first wildcard (§ 5.2, F-15/F-20/F-26/F-32). Total by construction over the
-  entries that matter: an outside target is refused (E13) and an absent path is
-  emitted inert, matching nothing, so it carries no evidence to canonicalise.
-  **Scoped to `verify` deliberately** (F-27):
-  canonicalisation is required for a dirtiness question and wrong for a historical
-  one, so it must not reach `validate`'s drift count (D11). Pinned by T28, T33,
-  T36, T37.
-- **E2** — masters and shipped never reach the gate at all: `run_verify` resolves
-  through `items_root` alone (`src/memory.rs:3378-3380`), so `verify` is
-  items-only by construction and no master or shipped memory is addressable by it.
-  (Repo-empty masters additionally carry `anchor_kind = None`, never
-  `CheckoutState`.) Checked because the claim probe made the question live —
-  `.doctrine/memory/shipped/` is gitignored (`.gitignore:44`, 0 tracked files), so
-  had `verify` reached it, its whole claim surface would have been untracked and
-  the probe would have passed vacuously. It cannot. Nothing to do; recorded so the
-  next pass need not re-derive it.
+  against*. Entries are emitted magic-prefixed; `unobservable` suppresses
+  reporting only, never measurement.
+- **I9 — restated as an OUTCOME property.** The inherited I9 ("nothing bearing
+  evidence is uncanonicalised") was a *pre-emission* claim about a resolution step
+  that no longer exists, and RV-307 F-37 falsified it. The property that survives
+  is about the **result**: *every path in the claim surface is a real tracked
+  index entry, and every tracked symlink among them has had its target added.*
+  Total by construction — the surface is built **from** the index, so a non-index
+  path cannot enter it. Scoped to `verify` deliberately (RV-307 F-27).
+- **I10 — nothing lexically ineligible is ever emitted as a pathspec.** Empty or
+  whitespace-only, control-char-bearing, absolute-outside, or root-escaping
+  entries are dropped before git sees them. **Lexical, therefore total by
+  construction rather than by enumeration** — which is the property RV-307 F-26,
+  F-32 and F-37 each failed to achieve. This is what makes the `exit 128` abort
+  *unreachable* rather than *handled*.
+- **I11 — the two historical-seam gates move together.** `retrieve::git_facts`
+  and `retrieve::staleness` branch 1 gate on the same predicate and must continue
+  to. Widening one alone is a silent no-op.
+
+#### Edge cases
+
+- **E2** — masters and shipped never reach `verify`: `run_verify` resolves
+  through `items_root` alone, so `verify` is items-only by construction.
 - **E4** — `memory/` absent (every client project) → that exclusion root is
   simply not contributed.
-- **E5** — `scope.commands` is not path-shaped and contributes no pathspec to
-  `claim_pathspecs`; a memory scoped only by command has just its item directory
-  in the claim surface.
+- **E5** — `scope.commands` is not path-shaped and contributes no pathspec; a
+  memory scoped only by command has just its item directory in the claim surface.
+  Exempt by kind, never reported as a defect.
 - **E6** — a memory with an empty scope has a claim surface of exactly its own
   item directory. Still meaningful: the body must be committed.
-- **E7** — **every** non-contributing scope entry is **reported on stderr at
-  verify time and raised by `validate` as a corpus-health finding** (D10,
-  DEC-020). Silent narrowing of the claim surface is a false attestation reached
-  quietly; the operator is told when the evidence surface is smaller than the
-  declared scope, and the corpus-wide verb makes the backlog visible rather than
-  per-attestation noise. `scope.commands` is exempt by kind and is not reported as
-  a defect (E5). *Narrowed by F-25, then widened back by DEC-020:* there is no
-  stale class to carve out — E7 covers the whole of non-contribution, which is
-  what makes it the design's single answer to it.
-- **E8** — a **gitignored** scope entry is *kept*, not dropped (§ 5.2, F-16).
-  Ignore rules do not bind tracked files, so dropping would discard real evidence
-  from a force-added path; keeping is inert when the path is genuinely untracked.
-- **E9** — the absolute-inside / absolute-outside classification is a property of
-  the **checkout location**, not of the scope string. The four items scoped
-  `"/workspace/doctrine/…"` resolve inside the primary tree and outside a linked
-  worktree, so the same memory has a narrower claim surface when verified from a
-  dispatch worktree — announced by E7 rather than silent.
-- **E11** — an empty or whitespace-only scope entry is **dropped before emission
-  and refused**, never prefixed: a bare `:(literal)`/`:(glob)` matches the entire
-  index (F-23), and raw it aborts the probe. No bare magic prefix is ever emitted.
-- ~~**E12**~~ — **withdrawn by DEC-020.** It refused a *stale* entry, discriminated
-  by `git rev-list --all`; F-31 showed that discriminator is ref-set-dependent, and
-  no derived instrument replaces it (§ 5.2). Stale entries now take E7 like every
-  other non-contributing entry. Retained as a struck id because criteria ids are
-  immutable — E12 is never reused.
-- **E13** — a scope entry whose **emitted form is outside the repository** is
-  malformed and refuses: an absolute literal, a tracked symlink pointing out
-  (F-26), or a non-resolving outside-shaped string such as `"../gone"` (F-32).
-  One class, because the test is what the entry does to the probe — git aborts
-  `exit 128` instead of returning a verdict — not where it points and not whether
-  it resolves.
+- **E7** — **every** non-contributing scope entry is reported on stderr at verify
+  time and raised by `validate`, unless declared `unobservable`. Silent narrowing
+  of the claim surface is a false attestation reached quietly.
+- **E8** — a **gitignored** scope entry that is nonetheless tracked is *kept*:
+  ignore rules do not bind tracked files, so a force-added path is real evidence.
+- **E9** — the inside/outside split is a property of the **checkout**, not the
+  string. The 3 absolute-inside entries resolve inside the primary tree and
+  outside a linked worktree, so a memory's claim surface narrows when verified
+  from a dispatch worktree. Announced by E7 rather than silent.
+- **E11 — an empty or whitespace-only entry is malformed: reported, not
+  refused.** Never emitted (I10) — a bare `:(literal)`/`:(glob)` matches the
+  **entire index**, which would invert the failure and make `verify` refuse on
+  any unrelated dirt anywhere. Live population: **0**.
+- ~~**E12**~~ — **withdrawn by DEC-020.** Struck id, never reused.
+- **E13 — an entry whose emitted form would leave the repository is malformed:
+  reported, not refused.** *Its basis has changed and the refusal is gone.*
+  DEC-020 grounded the only surviving refusal in **mechanical necessity** — git
+  aborts rather than returning a verdict — and called that "not a judgement about
+  the memory, which is what makes this cut principled rather than merely
+  smaller." DEC-053 removes the mechanism (I10). Keeping the refusal would
+  therefore convert it into exactly the judgement DEC-020 forbids. The refusal is
+  not optional to drop; it is compelled by DEC-020's own reasoning. Live
+  population: **0**.
+- **E14 — the contribution probe excludes the ADR-002 global/derived class.**
+  `validate` runs over `collect_all`, which unions items and shipped. A global
+  master is repo-empty and unanchored *by design*; its scope is not a claim about
+  the querying repo's tree. **9 of 44** shipped scope entries are non-contributing
+  in doctrine's own repo (`doc/entity-model.md`, `.doctrine/state/boot.md`,
+  `.doctrine/skills/**`); in a client project this would be near-total and
+  permanent. Emitting findings for them is the RV-307 F-25 error at corpus scale.
+  Gated on `retrieve::is_global_reference` — record-local, so no provenance is
+  needed and F-28 stays dissolved.
+- **E15 — an entry traversing a symlinked *directory* is non-contributing, not
+  resolved.** `linkdir/target.txt` and `:(glob)linkdir/**` match nothing under
+  index-first, because step 4 only re-expands symlinks that are **themselves
+  matched**. This is `candidate.sh` **FAL-4, which failed** and is recorded as a
+  failure. An index-only ancestor walk recovers it (`residue.sh` (b), measured)
+  and is deliberately **not built**. Live population: **0** (`census.py` COUNT 3).
+  Carried as R-H. *Note this is a capability the inherited design claimed and this
+  one does not* — see § 8.
+- **E16 — a control-character-bearing entry is malformed: reported, not
+  refused**, and never emitted (I10). A NUL cannot cross the argv boundary at all,
+  so no git process is created and there is no exit code to classify — it sits
+  outside E11/E13's original taxonomy, which is RV-307 F-38's first obligation.
+  Live population: **0**.
 
-**Status of I9 and E7 (F-37, F-36).** I9 is **falsified as written** — F-37's
-three routes contribute without being canonicalised. E7 asserts a `validate`
-consequence for which D11 provides no mechanism. Both are retained here rather
-than deleted so the replacement is written against the reasoning that failed,
-not from scratch; neither may be treated as holding.
+#### Report framing (RV-307 F-38's second obligation)
 
-*Criteria ids are immutable* — **E12** is struck and never reused (withdrawn by
-DEC-020, above). **E10** was never minted; the gap is inherited, not a deletion.
+Every scope entry text passes through `memory::scrub_line` before entering any
+finding or stderr line. It already escapes `\n`, `\r`, `\t` and every control
+char below `0x20`, and was built for this hazard class — its doc comment notes
+that a scope value carrying a newline "would otherwise inject a forged metadata
+line into the 'data, not instruction' block". **Riding the seam, not building a
+second one.** Measured: a newline reaches git and returns an ordinary exit 1, so
+it is a *reporting* hazard, distinct from NUL's *argv* hazard (`control-chars.py`
+FAL-N4) — which is why F-38 insisted the two obligations not be conflated.
+
+### 5.6 SPEC-007 reconciliation — the re-taken REV-034 inventory
+
+**REV-034's inventory was drawn for `verify` before objective 7 existed and is
+re-taken here, not deferred to close.** Objective 7 gives `validate` a probe, a
+reporting contract and a continuation policy against a spec surface that barely
+names it: `validate` appears in SPEC-007 as **one normative statement**, carried
+in both tiers (`spec-007.toml:20` capability line and `spec-007.md:120`
+§ Git-anchored staleness) — the sentence REV-041 added.
+
+| Site | Current text | Why it must change |
+|---|---|---|
+| `spec-007.toml:22` | "stamp the verification axis against a clean working tree, refusing a dirty one" | already in REV-034 |
+| `spec-007.md:138-141` | "it refuses a dirty tree so no false attestation is recorded" | already in REV-034 |
+| **REQ-147** | title **is** the retired contract verbatim | already in REV-034 |
+| **REQ-146** | "…scoped+attested by commits touching **scoped paths** since verified_sha…" | **NEW.** Objective 4 limb (a) widens the seam to `paths ∪ globs`. Both tiers carry "scoped paths". |
+| **REQ-155** | "Resolve every undecidable git-reachability case to an explicit **fresh/stale/unknown/unanchored/reference** state" | **NEW.** REV-041 split the five-state vocabulary out as the *render contract* binding `find`/`retrieve`. A findings surface discharges the same obligation "by emitting a finding, not by falling silent" — which is **not** in REQ-155's title vocabulary. |
+
+REQ-146 and REQ-155 are the **queried-surface trap of RV-307 F-39** exactly:
+their titles are active members of SPEC-007 asserting what the body now qualifies.
+Whether these land as added REV-034 change rows or a second revision is a
+governance call for `/reconcile`; the inventory itself is settled here.
+
+### 5.7 The convergence, stated as a principle
+
+This design answers *"which instrument decides X?"* with *"none — record it at
+the source"* four times. Stated once so it is a principle rather than four
+coincidences:
+
+| question | instruments refuted | answer |
+|---|---|---|
+| is this entry a path or a pattern? | character sniffing (`*`/`?`/`[`) | **the field it came from** (DEC-053) |
+| is this entry expected to be unobservable? | filesystem existence (RV-307 F-25), `rev-list --all` (RV-307 F-31) | **declared on the record** (objective 3) |
+| is this `verified_sha` a commit? | stamp width, `cat-file -e` | **record the kind** (IMP-325, not here) |
+| is this entry emittable? | probe-and-see (`exit 128`) | **decided lexically** (I10) |
+
+Every refuted instrument reads state that a shallow clone, a pruned repo, a
+dispatch worktree, or a different object format legitimately disagrees about.
 
 ## 6. Open Questions & Unknowns
 
-- **OQ-2** — should own-directory drift feed *retrieve-side* `staleness`, not just
-  `validate`? Load-bearing on whether either `validate` or `retrieve::git_facts`
-  leaves the raw seam (RV-307 F-24/F-27). Both are the same corpus-wide
-  reclassification by different routes. Routed as **IMP-317**, which closes
-  `wont-do` if the answer is "no" — in which case R7 is restated as intended
-  rather than provisional. Tracked as **QUE-175**. **This slice must answer it**;
-  SL-230 could only defer it.
-- **OQ-3** — a body digest stamped at verify time would make invalidation
-  git-independent and path-independent, covering uncommitted edits and masters
-  (which have no `verified_sha`). Needs a new persisted field. Tracked as
-  **QUE-173**; scope with OQ-6 and IMP-318.
-- **OQ-5** — should the *source* leg narrow to the memory's declared scopes too,
-  so a dirty `src/` file no memory claims against stops blocking? Raised by the
-  F-6 disposition and deliberately not taken in SL-230: it changes what the
-  anchor means for every memory at once, where the claim probe only adds a check.
-  I3 is preserved as-is. Reopenable here.
-- **OQ-6** — **should non-contribution ever refuse, and on which entries?**
-  Deferred out of SL-230 by DEC-020 after three derived instruments were refuted.
-  The answer that survives cloning is a **declared** boundary — a signal on the
-  record marking evidence git is not expected to observe — not one derived from
-  local repository state. A persisted field, so it shares OQ-3's and IMP-318's
-  shape and cost. **This is objective 3 and the reason the slice exists.**
-- **OQ-A** — do the declared boundary, IMP-318's attested coverage, and QUE-173's
-  digest land as **one** schema change or as sequenced ones? DEC-020 argues they
-  are one shape; that is an argument, not a measurement.
-- **OQ-B** — what is `validate`'s contribution mechanism (F-36), and what is its
-  continuation policy when one memory's surface is probe-aborting (F-29's shape)?
+**Answered this round — struck, not left stale:**
+
+- ~~**OQ-2**~~ — answered **`yes`** on measurement (QUE-175). 13 of 43
+  scoped-and-attested memories are glob-only and ranked by calendar. IMP-317
+  splits; limb (a) taken as objective 4.
+- ~~**OQ-A**~~ — answered **`no`**. The declared boundary is an authored input;
+  IMP-318 and QUE-173 are machine-written outputs of a verify run. Different
+  writers, lifecycles and validation. Sequenced, not merged.
+- ~~**OQ-6**~~ — answered: `scope.unobservable`, § 5.3.
+- ~~**OQ-B**~~ — answered: the shared *now*-question expander plus B18's
+  continuation policy, § 5.4.
+
+**Still open:**
+
+- **OQ-3 / QUE-173** — a body digest stamped at verify time would make
+  invalidation git-independent and path-independent. Routed, not built here.
+- **OQ-5 — should the *anchor* leg narrow to declared scopes too**, so a dirty
+  file no memory claims against stops blocking? **The inherited framing treated
+  this as a nicety; it is not.** § 4's own principle — *dirt the memory does not
+  declare says nothing about the claim* — points toward answering it **yes**, so
+  leaving it open is a live tension this design names rather than hides. Deferred
+  because taking it **deletes I3**, an inherited invariant governing every memory
+  at once, and that needs its own evidence. **Reopen trigger:** if the relaxation
+  this slice ships proves insufficient in practice — agents still hitting
+  refusals from tree dirt no memory claims — reopen with measurement, not
+  argument.
 
 ## 7. Decisions, Rationale & Alternatives
 
-- **D3 — extract one dirtiness primitive (`dirty_under(root, pathspecs)`);
-  `capture_with` delegates to it; `capture()` delegates with `&[]`.** *Revised
-  twice — by § 10 A1, then by RV-307 F-1/F-11.* The original decision was a
-  separate `source_clean` probe, on the reasoning that `capture()` must stay
-  untouched; that confused *behaviour* with *code* (the invariant worth protecting
-  is I1, which delegation gives by construction). The second version parameterised
-  `capture()` alone, which was still short: `verify` needs a *narrow boolean* for
-  the claim question, and building a whole `Frame` to answer it would take the
-  index lock on precisely the path I2 protects. Extracting the measurement is what
-  A1 was actually asking for. *Alternative:* bake the exclusion into `capture()`
-  unconditionally. *Rejected:* two of its three callers would be damaged —
-  `record` would stamp a false born anchor and the retrieve read path would
-  shift. *Alternative:* soften the refusal and keep stamping `checkout_state_id`.
-  *Rejected:* weaker evidence for the common case, and it makes the default and
-  `--allow-dirty` near-identical.
-- **D9 — the gate asks two questions: is the code dirty, and is the claim
-  committed?** The exclusion set answers the first; a positive pathspec set over
-  the memory's item directory and declared scopes answers the second. *Forced by
-  RV-307 F-1/F-6* — a single exclusion set cannot express "ignore corpus dirt
-  except the part this memory is about", because git offers no re-inclusion after
-  an exclude. *Alternative:* OQ-3's body digest. *Rejected here:* new persisted
-  field, schema change, own slice — and unnecessary, since a positive pathspec
-  answers the same question with machinery this slice already builds.
-  *Alternative:* keep the blanket exclusion and accept the false stamp.
-  *Rejected:* it is the exact hazard SPEC-007 § Concerns names, made cheap.
+- **D3 — extract one dirtiness primitive (`dirty_under`); `capture_with`
+  delegates to it; `capture()` delegates with `&[]`.** *Revised twice.* The
+  original was a separate `source_clean` probe, which confused *behaviour* with
+  *code* — the invariant worth protecting is I1, which delegation gives by
+  construction. The second parameterised `capture()` alone, still short: `verify`
+  needs a narrow boolean for the claim question, and building a whole `Frame` to
+  answer it would take the index lock on precisely the path I2 protects.
+  *Alternative:* bake the exclusion into `capture()` unconditionally. *Rejected:*
+  two of its three callers would be damaged.
+- **D9 — the gate asks two questions: is the ANCHOR tree clean, and is the CLAIM
+  committed?** *Forced by RV-307 F-1/F-6* — a single exclusion set cannot express
+  "ignore corpus dirt except the part this memory is about", because git offers no
+  re-inclusion after an exclude. **Reworded on substance** per RV-307 F-39 limb 1
+  and POL-002: "the code" was both a category error and a host-project assumption.
 - **D10 — non-contribution is reported and attested over; it is not classified.**
-  *Settled by **DEC-020** (user ruling, RV-307 round 7) after being revised four
-  times: forced by F-6 round 3, bounded by F-21's census, re-cut by F-25, refuted
-  again by F-31.* `verify` attests over every non-contributing scope entry, names
-  each on stderr, and `validate` raises them (E7). The **only** refusal is the
-  probe-aborting entry — empty (E11) or an emitted form outside the repository
-  (E13) — because there git returns no verdict at all. That is a mechanical
-  necessity, not a judgement about the memory, which is what makes this cut
-  principled rather than merely smaller.
-  *Alternative:* warn and proceed, silently (round-3 draft) — rejected then and
-  not restored now: the advisory is adopted **explicitly**, with the weak reading
-  stated (§ 5.2) and the residual routed, which is a position rather than the
-  inconsistency F-25 charged. *Alternative:* refuse on everything (round-4) —
-  rejected on **measurement**: 36 active items stop verifying, including a class
-  of harness memory git can never observe. *Alternative:* split by filesystem
-  existence (round-5) — rejected: `.claude/skills/**` is absent from a source
-  checkout and present in an installed one, so the rule refuses a protected class
-  in one tree and admits it in another (F-25). *Alternative:* split by
-  `git rev-list --all` history (round-6/7) — rejected: `--all` means *reachable
-  from this clone's refs*, so deleting a branch flips an entry from refuse to
-  attest while its commit survives (F-31). **The pattern, not three unlucky
-  choices:** every derived instrument reads local repository state, and a shallow
-  clone, a pruned repo and a dispatch worktree legitimately disagree — so a fourth
-  would fail identically. *Alternative:* a **declared** boundary on the record —
-  the answer that does survive cloning, and deferred only because it is a schema
-  change (OQ-6, with OQ-3 and IMP-318). *Alternative:* record the covered surface
-  in the attestation — the honest closure of the weak reading's residual, same
-  deferral. Routed as IMP-318, carried as R8.
-  **Cost of the chosen cut: zero** — no memory loses a stamp, where the round-6
-  cut cost 4 and the round-4 blanket cost 36.
-- **D11 — the claim-surface constructor serves `verify` alone.** *Forced by
-  RV-307 F-19, bounded by F-24, then narrowed by F-27/F-28/F-29.* Round 4 widened
-  it to `validate` to avoid a parallel implementation; round 6 showed the two
-  verbs ask different questions — `verify` asks *dirty now*, where canonicalisation
-  is mandatory, and `validate` asks *commits since*, where canonicalising against
-  today's checkout erases a committed symlink retarget (1 → 0, measured). Sharing
-  the surface would have shipped a false negative in the drift count, and could
-  not have been built anyway: `collect_all` unions items and shipped, discarding
-  the item-directory provenance the constructor requires. `validate` therefore
-  keeps its raw seam and gains only SL-230 D5's own-directory count; its defects and
-  `retrieve::git_facts`'s are named, carried as R7 and routed as IMP-317.
-  *Alternative:* convert all three now — rejected as scope expansion under cover
-  of a bug fix, and now known to need a dataflow change rather than a call-site
-  swap. *Alternative:* build `validate` a second, history-stable constructor here
-  — rejected: it changes corpus-wide staleness ranking, which is OQ-2's deferred
-  decision, not a body-write slice's.
-
-*Inherited, and each still open to attack.* D9's first gate question is worded
-"is the code dirty?" at three sites, which F-39 shows contradicts § 4 — the
-boundary is the *claim*, not the code. D11's integration claim was already
-withdrawn once (F-28) and is now short a mechanism (F-36).
+  *Settled by DEC-020 after four revisions.* Every derived instrument reads local
+  repository state, so a fourth would fail as the first three did. **Narrowed
+  further here:** D10's one surviving refusal (the probe-aborting entry) is now
+  also gone, because DEC-053 removed the mechanical necessity that justified it
+  (E13). `verify`'s only refusals are the two gate questions.
+- ~~**D11**~~ — **falsified** (DEC-054). "The constructor serves `verify` alone"
+  cannot survive objective 7. Superseded by D13 and D17.
+- **D12 — the claim surface is built from the index, never the filesystem**
+  (DEC-053). See § 5.2. *Alternative:* a fourth repair of the ordered algorithm.
+  *Rejected:* three totality claims had already failed over the same domain; the
+  generalisable move was to make the failing taxonomy non-load-bearing, not to
+  enumerate harder.
+- **D13 — `validate`'s two unknowns are one mechanism** (DEC-054, objective 7).
+  *Alternative:* build ISS-257 and RV-307 F-36 separately. *Rejected:* it
+  implements the same epistemic honesty twice — the same parallel-implementation
+  objection that forced `dirty_under` to be extracted once rather than duplicated
+  (D3), one level up.
+- **D14 — the undeterminable state is flat** (DEC-055). *Alternative:* split by
+  stamp width. *Rejected on a falsifier:* sha256 repos have 64-hex commit ids, so
+  the rule fails totally there; it also needs RV-307 F-31's refuted `cat-file`
+  instrument for the dangling rows, and would introduce doctrine's first sha-width
+  assumption. Routed as IMP-325.
+- **D15 — the declared boundary is `scope.unobservable`: a parallel assertion
+  matched by exact string equality** (§ 5.3). Chosen because it is *falsifiable*
+  (V2) and never subtracts from the claim surface (I8). Three shapes rejected on
+  the record.
+- **D16 — malformed entries are reported, never refused, and the malformed /
+  non-contributing split is lexical.** This does **not** violate DEC-020, which
+  forbids classifying *within* non-contribution using instruments that read local
+  state. A lexical split reads no state. The split earns its keep through the
+  *remedy*: E7's remedy is a `unobservable` declaration, which is the wrong answer
+  for a broken entry (V5).
+- **D17 — the contribution probe is shared; the historical seam is not.**
+  Contribution is a *now* question both verbs ask identically; drift is the
+  historical question RV-307 F-27 protects. The cut is history-vs-now, not
+  verify-vs-validate. *Alternative:* give `validate` its own probe. *Rejected:*
+  parallel implementation, and it needs no `dir`, so F-28's cost objection does
+  not apply.
 
 ## 8. Risks & Mitigations
 
-- **R6 — `verify` is now harder to satisfy, not easier, for the freshly-recorded
-  memory.** `record` → `verify` refuses until the memory is committed (D9). The
-  slice's headline benefit is narrower than the scope document implied: unrelated
-  corpus dirt stops blocking, your own uncommitted claim still does. Accepted as
-  the honest reading; `slice-230.md` is reconciled to say so.
-- **R7 — two scope consumers keep the raw seam** (RV-307 F-24, widened by F-27).
-  `validate`'s staleness check (`src/memory.rs:3413-3421`) and
-  `retrieve::git_facts` (`src/retrieve.rs:556-557`) both gate on
-  `scope.paths.is_empty()` and pass the array raw, so glob-only memories get no
-  drift signal and the canonicalisation/neutralisation fixes do not reach either.
-  Bounded deliberately: a correct shared surface for a *historical* question is a
-  second constructor, not a reuse of `verify`'s (D11), and building it changes
-  corpus-wide staleness ranking, which OQ-2 defers. Routed as IMP-317. **Cost
-  corrected** (F-28): adoption needs item-directory provenance threaded through
-  `collect_all` and `memory_health_findings` — a dataflow change, not a call-site
-  swap. Standing risk: two notions of "scoped drift" coexist and the weaker one
-  drives both staleness and ranking.
-- **R8 — an attestation does not record what it covered** (RV-307 F-25;
-  **widened by DEC-020**). Under D10's weak reading a `verified_sha` may attest
-  over a proper subset of the declared scope, and the shortfall lives on stderr
-  and in `validate` rather than on the record — so a downstream consumer cannot
-  tell a full attestation from a partial one. **DEC-020 widens the exposure
-  deliberately**: with the stale class no longer refusing, a moved source path is
-  now also attested over, so the risk covers every non-contributing entry rather
-  than only the never-tracked ones. That is the accepted price of not deriving a
-  boundary from local state, and it is why the residual is routed rather than
-  tolerated. Closing it needs a persisted coverage field (OQ-3/OQ-6's shape);
-  routed as IMP-318. Mitigated meanwhile by E7's report and the `validate`
-  finding, which make the shortfall visible to an operator even though it is
-  invisible to a consumer.
-- **R-A — the claim surface may not be totalisable from git alone.** F-37 is the
-  second failed totality claim over path resolution (F-26 was the first), and the
-  failures were not adjacent: one was about which shapes *can* be resolved, the
-  other about whether resolution failure implies non-contribution. Before
-  asserting a replacement, enumerate the reachable shapes — `..` aliases, sparse
-  checkout, `skip-worktree`, literal filenames containing glob metacharacters,
-  case-insensitive collisions, `core.quotePath` — and probe each. Mitigation is
-  method, not text.
-- **R-B — `validate`'s contribution probe is undesigned** (F-36). It is the
-  mandatory sink for DEC-020's reporting, so the ruling is currently applied
-  normatively and not mechanistically.
+- **R6 — `verify` is harder to satisfy, not easier, for the freshly-recorded
+  memory.** Unrelated corpus dirt stops blocking; your own uncommitted claim still
+  does. Accepted as the honest reading.
+- **R7 — partially closing.** Limb (a) fixes the glob gate and magic
+  neutralisation in both historical consumers. Limb (b) — own-directory drift
+  needing item-directory provenance through `collect_all` — stays routed as
+  IMP-317, where RV-307 F-28's dataflow cost stands.
+- **R8 — an attestation does not record what it covered. SURVIVES THIS SLICE.**
+  OQ-A answered `no`, so IMP-318 is not built here and a stamp still cannot
+  distinguish a full attestation from a partial one. **Objective 3 does not close
+  this.** The declared boundary makes the shortfall *authored* rather than
+  inferred, which answers RV-307 F-25 **in part only**. Say so plainly wherever
+  objective 3 is described.
+- **R-A — discharged in method, narrowed to R-E/R-F/R-H.** The enumerate-then-probe
+  obligation was met (`shapes.sh`). D12 then makes the taxonomy non-load-bearing.
+- **R-E — index bits suppress the measurement itself, and no pathspec approach
+  closes it.** A tracked file marked `skip-worktree` (`S`) or `assume-unchanged`
+  (`h`) reads `diff-index` exit 0 while modified on disk. This is `candidate.sh`
+  **FAL-5, which failed**. Detectable via `git ls-files -v`, and it affects the
+  **anchor** leg as well as the claim surface, so it is wider than this slice.
+  Live population: **0 rows** (`populations.py`, whole index). Latent and
+  pre-existing, not introduced — named because a slice whose purpose is closing
+  false-attestation routes cannot leave a known one unstated.
+- **R-F — case-insensitive collision is unmeasured, not cleared.**
+  `core.ignoreCase` alone did not flip pathspec matching on ext4 (`residue.sh`
+  (e)). A genuinely case-insensitive filesystem could not be probed from this
+  jail.
+- **R-G — absorbing ISS-257 widens the blast radius to a corpus-wide seam.**
+  `memory_health_findings` is consumed corpus-wide, so the behaviour-preservation
+  gate applies and the tri-state must not convert a silent exemption into a noisy
+  one. **Narrowed by DEC-055:** the 34 newly-visible rows drain — objective 1 is
+  what makes clean re-verification possible — so this is a one-time backlog the
+  slice creates the remedy for, not a standing degradation.
+- **R-H — index-first does not resolve a symlinked directory in an entry's
+  ancestry** (E15). *This is a capability the inherited design claimed and this one
+  does not*, so it must not be presented as a pure gain. The recovery mechanism is
+  measured and available (`residue.sh` (b)) and deliberately not built. Live
+  population **0**; reopen if a symlink-rooted declaration ever appears.
+- **R-I — the Rust TOML parser's handling of an escaped NUL is unmeasured.**
+  `control-chars.py` measured Python's `tomllib`, which parses `\u0000` to a real
+  NUL. The rule holds regardless because the MCP route is open, but the Rust-side
+  parse is carried as unmeasured, not cleared — same treatment as R-F.
 - **R-C — R4 runs unmitigated meanwhile.** SL-230 ships invalidation without this
-  relaxation, so every claim-field edit costs a re-verify against today's stricter
-  gate. DEC-027's accepted tradeoff, and the reason to sequence this next rather
-  than later.
-- **R-D — hostile scope input is not totally handled** (F-38). NUL cannot cross
-  the argv boundary, so it is outside E11/E13's exit-code taxonomy entirely, and
-  newline-bearing entries split E7's report across lines with no framing rule.
+  relaxation. DEC-027's accepted tradeoff, and the reason to sequence this next.
 
 ## 9. Quality Engineering & Validation
 
-Model test: `memory_verify_allow_dirty_stamps_checkout_state_id` (`:9123`);
-fixture: `GitScratch` (`:5617`).
+Model test: `memory_verify_allow_dirty_stamps_checkout_state_id`; fixture:
+`GitScratch`.
 
-**Inherited matrix — not yet sufficient.** F-37 and F-36 are unpinned by
-construction (they falsify what the table asserts), so this matrix is a starting
-point that must grow, not a gate to satisfy.
+**The inherited matrix is rebuilt, not edited** — T26, T27, T31, T34, T36, T39
+pinned the ordered algorithm, the shape rule, the whole-component prefix, or
+E11/E13's refusals, none of which exist. Retired ids are listed rather than
+reused.
+
+### Retained
 
 | # | Test | Asserts |
 |---|---|---|
-| T7 | verify, unrelated `.doctrine/**` dirty, memory committed | succeeds, stamps **HEAD commit** (not `checkout_state_id`) |
-| T8 | verify, memory dir untracked (`record` → `verify`) | **refuses** (D9); message names both the cause and `git commit` |
-| T9 | verify, source tree dirty | still refuses; message names `--allow-dirty` |
-| T10 | `--allow-dirty`, source tree dirty | unchanged, stamps `checkout_state_id` |
-| T10b | `--allow-dirty`, **only the claim** dirty (source clean after exclusion) | stamps a real `checkout_state_id` from the unexcluded capture — **not** empty, not a bare commit (I4, F-13) |
-| T11 | `capture(root)` == `capture_with(root, &[])` | I1 — identical frames on clean, dirty, unborn, non-repo |
+| T7 | verify, unrelated `.doctrine/**` dirty, memory committed | succeeds, stamps **HEAD commit** |
+| T8 | verify, memory dir untracked (`record` → `verify`) | **refuses**; message names cause and remedy |
+| T9 | verify, anchor tree dirty | refuses; message names `--allow-dirty` |
+| T10 | `--allow-dirty`, anchor tree dirty | unchanged, stamps `checkout_state_id` |
+| T10b | `--allow-dirty`, **only the claim** dirty | stamps a real `checkout_state_id` from the unexcluded capture — I4 |
+| T11 | `capture(root)` == `capture_with(root, &[])` | I1 — clean, dirty, unborn, non-repo |
 | T14 | `memory/` absent | exclusion root not contributed; no error |
-| T17 | verify, **staged-only** corpus change | excluded; succeeds (index probe leg) |
-| T18 | verify, **unstaged/binary** corpus change | excluded; succeeds (worktree diff leg) |
-| T19 | verify, **untracked** corpus file outside the memory | excluded; succeeds (untracked leg) |
-| T23 | verify on the clean-after-exclusion path while `.git/index.lock` is held | completes — I2 canary; fails if `write-tree` creeps back in |
-| T24 | after a successful verify | `git show "$verified_sha:<dir>/memory.md"` equals the on-disk body **byte-for-byte** — I6. Existence (`cat-file -e`) would pass against any stale ancestor blob (F-14) |
-| T24b | body **tracked but modified** (not untracked), verify | **refuses** — the case where existence and equality disagree, and the untracked leg does not fire |
-| T25 | verify, memory scopes `.doctrine/adr/**`, an ADR under it modified | **refuses** — scoped corpus dirt is claim-relevant (F-6) |
-| T26 | claim pathspec construction: absolute-inside-repo, absolute-outside-repo, gitignored-but-tracked, resolves-but-unmatched | normalised / **refuses** / **kept** / reported, per the § 5.2 algorithm (F-6, F-16). The absolute-outside case must assert `verify` **does not abort** — an unfiltered entry makes git `fatal` |
-| T27 | verify with a **malformed** scope entry (absolute-outside from this checkout; empty string; tracked symlink whose target is outside) | **refuses**, naming the entry and the reason (D10 malformed, E11, E13). The symlink case is the F-26 collision: it must take the *malformed* branch, not the non-contributing one |
-| T27b | verify with `scope.commands` and no path scopes | **succeeds** — commands are exempt by kind, not a failed entry (E5) |
-| T27c | verify with a once-tracked-but-moved (`src/worktree.rs`) and a never-tracked (`.claude/skills/dispatch-agent/SKILL.md`) scope entry | **both succeed**, each named on stderr and each raised by `validate` (DEC-020, D10, E7). Retargeted: it previously required the first to refuse. Its job now is the inverse — proving the two are treated *alike* |
-| T28 | verify **by key** (not uid), tracked memory, `memory.md` modified | **refuses** — I7. Fails if the claim pathspec is built from the key symlink, where all three legs read clean (F-15). Must use the key form; the uid form passes either way |
-| T30 | memory whose `scope.paths` carries `:(exclude)<its own uid dir>`, body modified | **refuses** — I8. The hostile entry is inert under `:(literal)` and cannot subtract the uid directory (F-18). Fails loudly if any entry is interpolated raw |
-| T31 | `validate` staleness on a memory scoped **only by globs** | **still not flagged** — the raw seam's `!scope.paths.is_empty()` gate is retained deliberately (D11 narrowed). Pins the *known* gap so R7 cannot be silently closed or silently widened; retargeted by F-27 from an assertion that `validate` was repaired |
-| T32 | `validate`'s drift count over a memory scoped by a **tracked symlink that was retargeted in a commit** | counts the retarget — asserting `validate` does **not** canonicalise. Fails if `verify`'s surface leaks into the staleness seam, which would return 0 where the raw path returns 1 (F-27). Equality between the two verbs' surfaces is explicitly **not** asserted; round 5's T32 asserted it and was wrong |
-| T33 | memory scoping a **tracked symlink** whose target content changed | `verify` **refuses** — I9. Must probe the *claim* leg specifically, not the source leg, or a dirty tree passes it for the wrong reason. The symlink alone reads clean (F-20) |
-| T34 | memory with an **empty-string** scope entry | refuses per T27, and — the discriminating half — the constructed surface is asserted **not** to contain a bare `:(literal)`/`:(glob)`, which would match the whole index (F-23, E11) |
-| T35 | `validate` over a corpus containing non-contributing scopes | each is raised as a health finding, once per entry, `scope.commands` excluded (E7). Once-tracked entries **do** appear alongside never-tracked ones — under DEC-020 `validate` is the single sink for the whole of non-contribution, not a remainder after `verify` has refused some |
-| T36 | memory whose `scope.globs` pattern is rooted at a **slug symlink** (`.doctrine/adr/001-module-layering/**`), target content modified | **refuses** — I9 step 3. Fails if only concrete paths are resolved: `:(glob)<link>/**` matches 0 files and reads clean, `:(glob)<resolved>/**` matches and reads dirty (F-26) |
-| T37 | claim-surface construction over one non-resolving entry, under **three ref states**: never tracked; tracked on a live branch; that branch then `git branch -D`'d | **identical outcome all three times** — attests, with the entry reported. The DEC-020 regression test: it fails the moment any history- or ref-derived discriminator is reintroduced. Round 7's T37 asserted the opposite (once-tracked refuses) and encoded the premise F-31 falsified; the ref-deletion arm is included because varying history *content* alone cannot catch ref-set dependence (F-31) |
-| T38 | `scope.globs` entry with a wildcard **inside** a path component (`foo*/bar`, tracked `foobar/bar`) | **observable, and clean-or-refuse** — the whole-component prefix is empty, so the entry is emitted unchanged and matches (F-32). Fails if the prefix is split at the wildcard *character*: `foo` does not resolve, and the entry is misrouted to non-contributing. T36 covers a symlink-rooted *directory* prefix and cannot catch this |
-| T39 | scope entry that is **outside-shaped and does not resolve** (`../gone`, `/tmp/no-such`, `:(glob)/tmp/no-such-*/**`) | **refuses** as malformed (E13) — and the discriminating half: `verify` must **not abort**. Git exits 128 on these rather than returning a verdict, so an unguarded entry takes the process down (F-32's second limb). T27 covers *resolvable* outside targets only |
+| T17 / T18 / T19 | staged-only / unstaged-binary / untracked corpus change | excluded; succeeds (one per probe leg) |
+| T23 | verify on the clean-after-exclusion path while `.git/index.lock` is held | completes — I2 canary |
+| T24 | after a successful verify | `git show "$verified_sha:<dir>/memory.md"` equals the on-disk body **byte-for-byte** — I6 |
+| T24b | body **tracked but modified**, verify | **refuses** — where existence and equality disagree |
+| T25 | memory scopes `.doctrine/adr/**`, an ADR under it modified | **refuses** — scoped corpus dirt is claim-relevant |
+| T27b | `scope.commands` and no path scopes | **succeeds** — exempt by kind (E5) |
+| T27c | once-tracked-but-moved and never-tracked entries | **both succeed**, each reported and raised — treated alike (DEC-020) |
+| T28 | verify **by key**, tracked memory, `memory.md` modified | **refuses** — I7; must use the key form |
+| T30 | `scope.paths` carries `:(exclude)<own uid dir>`, body modified | **refuses** — I8 |
+| T32 | `validate` drift over a **retargeted tracked symlink** | counts the retarget — `validate` does **not** canonicalise (RV-307 F-27). Equality between the two verbs' surfaces is explicitly **not** asserted |
+| T33 | memory scoping a **tracked symlink** whose target content changed | `verify` **refuses** — must probe the *claim* leg specifically |
+| T35 | `validate` over non-contributing scopes | each raised once per entry, `scope.commands` excluded |
+| T37 | one non-resolving entry under **three ref states** (never tracked; tracked on a live branch; that branch `git branch -D`'d) | **identical outcome all three** — the DEC-020 regression test; fails the moment any ref-derived discriminator returns |
+| T38 | `scope.globs` wildcard **inside** a component (`foo*/bar`, tracked `foobar/bar`) | **observable, clean-or-refuse** — now by emission-as-declared rather than prefix splitting |
 
-Closure: **every test in § 9 green** (stated as a set, not a numeric range, so a
-test added by a later review cannot fall outside the gate by omission — RV-307
-F-9); `doctrine check gate` clean; **REV-034 applied** so SPEC-007, REQ-147 and
-the implementation agree.
+### Retired
 
-## 10. Inherited review record
+**T26, T27, T31, T34, T36, T39** — each pinned a mechanism DEC-053 deleted. Ids
+struck, never reused. Their surviving assertions are re-expressed below: T34's
+"no bare magic prefix" becomes T42; T39's "must not abort" becomes T43; T36's
+symlink-rooted glob is now E15/T45; T31's glob-only gate is **inverted** by
+objective 4 into T46.
 
-This slice has **no ledger of its own yet**. Open one when this design is ready
-for adversarial review, and seed it from the findings below.
+### New
 
-**Source ledger: RV-307** (`.doctrine/review/307/review-307.toml`), attached to
-SL-230. Eight rounds, 39 findings, 29 of them on this gate. `review show` prints
-the brief only — read the toml for charges and responses.
-
-Inherited **open** (disposed `descoped` against SL-230 by DEC-027 — unanswered
-work with a new owner, not resolved work):
-
-| Finding | Severity | What it says |
+| # | Test | Asserts |
 |---|---|---|
-| F-36 | blocker | DEC-020's `validate` sink has no implementation mechanism |
-| F-37 | blocker | non-resolution does not imply non-contribution; three reproduced routes bypass canonicalisation |
-| F-38 | major | NUL / newline scope entries escape E11/E13's total contract |
-| F-39 | major | code-only wording at D9; IMP-317's title names the rejected shared constructor |
+| T40 | expander over the **three RV-307 F-37 routes** (`missing/../link`, sparse `skip-worktree` entry, literal filename containing `*`) | each **contributes and reads DIRTY**. The regression test for DEC-053; each route reproduced pre-fix in `probes/route[123].sh` |
+| T41 | expander over a **symlink chain** (`chain → link → real/target.txt`) | surface contains all three; bounded and cycle-checked; a cycle terminates |
+| T42 | empty / whitespace-only entry | **malformed finding, not a refusal**; and the discriminating half — the constructed surface contains **no bare** `:(literal)`/`:(glob)`, which would match the whole index (I10, E11) |
+| T43 | outside-shaped entries (`../gone`, `/tmp/no-such`, `:(glob)/tmp/no-such-*/**`) | **malformed finding, not a refusal** (E13); and `verify` **does not abort** — git exits 128 on these, so an unguarded entry takes the process down |
+| T44 | control-char and NUL-bearing entries | rejected at the **write verbs** (MCP route, since argv cannot carry a NUL); a hand-edited `\u0000` entry is a **malformed finding**; every reported entry is `scrub_line`-framed so one entry never spans two report lines (E16, RV-307 F-38) |
+| T45 | entry traversing a **symlinked directory** (`linkdir/target.txt`, `:(glob)linkdir/**`) | **non-contributing and reported** — pins E15/R-H as a *known boundary* so it can be neither silently closed nor silently widened |
+| T46 | `validate` staleness on a memory scoped **only by globs** | **flagged** — inverts retired T31. Objective 4 limb (a) |
+| T47 | `retrieve::staleness` on the same glob-only attested memory | resolves in **commit mode**, not the time branch — I11. Fails if `git_facts` is widened without `staleness` |
+| T48 | `validate` where `verified_sha` is a **non-ancestor commit**, a **dangling object**, and a **`checkout_state_id`** | **one finding each, all three the same flat undeterminable state** (DEC-055) — and the discriminating half: no finding claims *no drift* |
+| T49 | `validate` behaviour-preservation | the 25 ancestor-resolvable rows emit **byte-identical** findings to today (R-G) |
+| T50 | `validate` over a corpus containing an **ADR-002 global master** whose scopes match nothing | **no contribution finding for it** (E14); an items memory with the same scope **does** get one |
+| T51 | `scope.unobservable` — entry declared and non-contributing / declared and matching / declared but absent from `paths ∪ globs` / declared over a *malformed* entry | silent / **V2 finding** / **V1 finding** / **V5: malformed finding still raised** |
+| T52 | `unobservable` edit via `memory edit` | does **not** clear the verification axis (§ 5.3) — contrast with a `--path-scope` edit, which does |
+| T53 | `validate` continuation: one memory whose entry errors the probe | that entry yields a finding and **the corpus run completes**, every later memory still checked (RV-307 F-29, B18) |
+| T54 | `verify` where the probe errors | **refuses** — the verify/validate asymmetry (§ 5.4) |
+| T55 | expander under `core.quotePath=true` with a non-ASCII entry (`ünï.txt`) | matches correctly — pins the `-z` requirement, which is not stylistic |
 
-Inherited **contested** — the raiser returned these and they concern text that
-moved here, so they are this slice's to answer: **F-25** (partial attestation),
-**F-26** (I9 totality and the class collision), **F-32** (prefix splitting and
-probe abort).
+**Closure:** every test in § 9 green (stated as a **set**, so a test added by a
+later review cannot fall outside the gate by omission — RV-307 F-9);
+`doctrine check gate` clean; **REV-034 applied** per the § 5.6 inventory so
+SPEC-007, REQ-146, REQ-147, REQ-155 and the implementation agree.
 
-Inherited **verified** — settled, do not re-litigate without new evidence: F-1,
-F-2, F-6, F-7, F-11, F-13, F-15, F-16, F-18, F-19, F-20, F-21, F-22, F-23, F-24,
-F-27, F-28, F-29, F-30, F-31, and the governance pair F-4 / F-5 (REV-034).
+## 10. Review record
 
-**Terrain that is settled and must not be reforked:**
+**No ledger of its own yet.** Open one before implementation and seed it from
+this section. RV-307 stays attached to SL-230 (append-only; it reviewed that
+document).
 
-- **DEC-020** — non-contribution is reported, never classified. Three refuted
-  instruments (F-21, F-25, F-31). A fourth *derived* instrument is not a finding;
-  a *declared* boundary is the open path (OQ-6).
-- **D11 narrowed** — the claim-surface constructor serves `verify` alone;
-  `validate` keeps the raw seam because it asks a historical question where
-  canonicalisation erases a committed symlink retarget (measured 1 → 0).
-- **The weak reading of `verified_sha`** is the only reading (F-33). Do not
-  reintroduce the strong one.
-- **R7 / IMP-317** — both historical consumers stay raw pending OQ-2. Adoption is
-  a dataflow change, not a call-site swap (F-28).
+### Inherited findings, by current state
+
+| Finding | Was | Now |
+|---|---|---|
+| RV-307 F-36 | blocker — `validate` sink has no mechanism | **answered** — § 5.4, D17, E14 |
+| RV-307 F-37 | blocker — non-resolution ≠ non-contribution | **answered at the root** — D12/DEC-053, § 5.2, T40 |
+| RV-307 F-38 | major — NUL/newline escape the taxonomy | **answered as two obligations** — E16, § 5.5 framing, T44 |
+| RV-307 F-39 limb 1 | major — code-only wording at D9 | **swept** — D9 reworded on substance, § 5.4 |
+| RV-307 F-25 | contested — partial attestation | **answered in part only.** R8 survives; objective 3 does not close it |
+| RV-307 F-26 | contested — I9 totality, class collision | **answered at the root** — the taxonomy is non-load-bearing (D12); I9 restated as an outcome property |
+| RV-307 F-32 | contested — prefix splitting, probe abort | **answered at the root** — no prefix is split; aborts prevented lexically (I10) |
+| RV-313 F-2 (ISS-257) | issue | **absorbed** — objective 7, D13 |
+| RV-313 F-6 | → REV-041 | **the normative anchor** for objective 7 |
+
+**Verified, do not re-litigate without new evidence:** RV-307 F-1, F-2, F-6, F-7,
+F-11, F-13, F-14, F-15, F-16, F-18, F-19, F-20, F-21, F-22, F-23, F-24, F-27,
+F-28, F-29, F-30, F-31, and the governance pair F-4/F-5.
+
+### Terrain that is settled and must not be reforked
+
+- **DEC-020** — non-contribution is reported, never classified by a derived
+  instrument. Three refuted (RV-307 F-21, F-25, F-31). A fourth *derived*
+  instrument is not a finding; a *declared* boundary is the answer.
+- **DEC-053** — index-first. No `realpath`, no character-based shape
+  classification, no whole-component-prefix rule.
+- **DEC-054** — ISS-257 and F-36 are one mechanism. The `commits_touching`
+  ancestry guard is correct; the defect is at the call sites.
+- **DEC-055** — the undeterminable state is flat. **Do not re-derive the
+  stamp-width discriminator** — it is falsified on sha256 repos.
+- **RV-307 F-27 survives DEC-053** — but the cut is *history vs now*, not *verify
+  vs validate*. The contribution probe is shared; the drift seam is not (D17).
+- **The weak reading of `verified_sha`** is the only reading (RV-307 F-33).
+- **I8 / RV-307 F-18** — nothing a memory declares can subtract from what it is
+  measured against.
+- **DEC-027's split boundary** — SL-230 owns body-write and invalidation.
+
+### Known-open on purpose
+
+R8 (survives this slice), R-E, R-F, R-H, R-I, OQ-3/QUE-173, OQ-5, IMP-317 limb
+(b), IMP-318, IMP-325, ISS-258.
