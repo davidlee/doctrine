@@ -65,9 +65,7 @@ fresh-as-of: 2026-07-27 · design (RV-315 terminal, awaiting lock) · 7de1f628
 - ASM-004 — incremental records improve prolonged-design continuity
 - ASM-005 — static activation remains during the experiment
 - ASM-006 — existing knowledge kinds fit semantic checkpoints
-- DEC-092 acceptance — user-owned (DEC-062, scope B4/R4); bench says
-  it merits acceptance, but an agent may not self-attest it
 - Explicit lock + `slice status SL-233 plan` — user's word; RV-315 is
-  no longer a blocker
+  no longer a blocker and DEC-092 is accepted
 - OQ-1 (retrieval of applicable existing records), OQ-2 / RSK-229
   (managed-instruction authority) — carried, non-blocking
