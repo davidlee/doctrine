@@ -2,11 +2,15 @@
 
 ## 0. How to read this document
 
-**Status: authored for SL-232, not yet reviewed.** This replaces the inherited
-SL-230 text wholesale. The previous version carried a ⚠ STALE banner because
-decisions had been taken that it did not carry; those decisions are now written
-here and the banner is gone. No ledger is attached yet — open one before
-implementation and seed it from § 10.
+**Status: reviewed on RV-314; one blocker open (F-2).** This replaces the
+inherited SL-230 text wholesale. Amended after RV-314's adversarial pass —
+**DEC-069/070/071** split measurement from reporting (§ 5.2), and **DEC-076**
+settled the Revision routing (§ 5.6). § 10 carries the finding-by-finding state.
+
+**Not implementable yet.** F-2 has no answer, and two verified findings are
+settled in shape but open in detail: F-8's byte-domain call and F-7's exhaustion
+classification. F-7's guard repair is a **prerequisite** to § 5.2's split, not a
+parallel task.
 
 ### Reference legend
 
@@ -158,26 +162,170 @@ command tier   memory.rs ─┬─ run_verify              composes pathspec set
                           └─ memory_health_findings  composes the same expander (policy)
 
 leaf tier      corpus_guard.rs  DOCTRINE_PATHSPEC              (existing constant, STD-001)
-               git.rs   dirty_under(root, pathspecs) -> bool         ← the dirtiness primitive
-                        capture_with(root, excludes) -> Frame        ← delegates to it
+               git.rs   observe_dirt(root, pathspecs) -> Dirt        ← the dirt primitive
+                        Dirt::is_dirty() -> bool                     ← the cheap projection
+                        capture_with(root, excludes) -> Frame        ← consumes a Dirt
                         capture(root) = capture_with(root, &[])      ← unchanged behaviour
                         expand_scope_entry(root, entry, magic)       ← the index-first expander
                memory.rs::scrub_line                                 ← existing report framing
 ```
 
-Three elements at their correct altitudes: one parameterised dirtiness
-primitive, one per-entry index expander, and policy composition at command tier.
-**There is exactly one dirtiness measurement** (`dirty_under`, used twice by
-`verify` with different pathspec sets) and **exactly one entry expander**
-(`expand_scope_entry`, composed differently by `verify` and `validate`).
+Three elements at their correct altitudes: one parameterised dirt observation,
+one per-entry index expander, and policy composition at command tier. **There is
+exactly one dirtiness measurement** (`observe_dirt`, used twice by `verify` with
+different pathspec sets, and once by `capture_with`) and **exactly one entry
+expander** (`expand_scope_entry`, composed differently by `verify` and
+`validate`).
 
 The third element is objective 7's answer to RV-307 F-36, which the inherited
 model left as an acknowledged hole.
 
-### 5.2 The claim-surface constructor — index-first
+#### The primitive returns an observation, not a bool (RV-314 F-11)
+
+*Revised. The inherited model specified `dirty_under(root, pathspecs) -> bool`
+with `capture_with` "delegating to it". That factoring cannot be built.*
+`capture()` computes **three** artefacts and consumes all of them
+(`src/git.rs:2230-2255`): `diff_bytes` → `worktree_fp`, `untracked_fp`, and
+`index_tree` from `write_tree_with_retry` — all feeding `checkout_state_id`. A
+`bool` discards every one, so `capture_with` would have to recompute them: the
+parallel implementation D3 itself rejects.
+
+```rust
+pub(crate) struct Dirt {
+    tracked:     Vec<u8>,        // `git diff HEAD --binary …` output, hashed by capture
+    untracked:   Vec<String>,    // matched paths; NOT fingerprinted here
+    index_dirty: bool,           // `diff-index --quiet --cached HEAD`
+}
+impl Dirt { pub(crate) fn is_dirty(&self) -> bool { … } }
+```
+
+**Untracked fingerprinting is deferred deliberately.** `capture_with` hashes the
+untracked set when it needs a `checkout_state_id`; `verify`'s claim question
+takes `is_dirty()` and never hashes anything. Without that split, closing F-11
+would make every verify pay to fingerprint the entire untracked working tree —
+closing the finding by making the verb expensive.
+
+**I2 is preserved and was probed, not assumed.** All three legs are read-only;
+each completes with `.git/index.lock` held. Only `capture_with`'s
+`CheckoutState` branch reaches `write_tree_with_retry`, exactly where it does
+today.
+
+### 5.2 Two surfaces — measurement and reporting (DEC-069)
+
+**Read this before § 5.2a's rule.** An earlier draft of this design built *one*
+surface from the index and used it for two different jobs. RV-314 F-1 and F-10
+proved that admits false attestation, and the repair is a split, not a patch.
+
+#### The reframing
+
+The inherited **I9** guaranteed *"every path in the claim surface is a real
+tracked index entry"* — a **soundness** property: nothing false gets in. But the
+hazard this slice exists to close is the opposite shape, **completeness**: real
+evidence *omitted* from the surface, so nothing ever probes it. Both RV-314
+blockers are completeness failures, and they survived eight adversarial rounds
+because the invariant was watching the wrong direction.
+
+The cause is a reuse. The index-first rule below was built to answer *"does this
+entry contribute?"* — a **reporting** question — and the inherited § 5.2 then used
+the same instrument to build the **measurement** surface. Two questions, one
+instrument: the fifth instance of the error § 5.7 names four times, unnoticed
+because both questions look like *"which paths?"*.
+
+#### The legs were never the problem — the domain was
+
+There are three predicates per path, not one: presence in **HEAD**, in the
+**index**, and on **disk**. The HEAD × index × worktree cube has 18 states, 16 of
+them dirty, and the three probe legs of § 5.1's `Dirt` detect **all sixteen**. The
+decisive case is `HEAD=A, index=B, worktree=A` — tracked diff `0`, untracked `0`,
+index diff `1` — which also proves the index leg is not redundant.
+
+So measurement was never deficient. The **pathspec domain** was: under
+index-only construction an index-detached path is absent from the surface, and no
+leg is ever *asked* about it. That is why F-1, F-10 and F-11 are **one repair**.
+
+#### The two surfaces
+
+| | built from | consumed by | question it answers |
+|---|---|---|---|
+| **measurement** | uid dir ∪ declared entries (magic-prefixed) ∪ symlink targets *not already covered by their originating selector* | `verify`'s claim leg | *is the claim's evidence committed?* |
+| **reporting** | the index expansion of § 5.2a's rule, unchanged | E7, the § 5.4 table, `validate` | *does this entry contribute?* |
+
+**Ordinary concrete index matches are not added to the measurement surface.** The
+raw selector already measures those paths; expanding them adds only argv. The
+`.doctrine/**` resolve alone is 7,670 matches — passing those back to git as
+pathspecs is an argument-size hazard on every verify. Expansion contributes to
+measurement **only** the symlink-target closure that git pathspec traversal
+cannot supply, which is the part I7 exists for.
+
+#### The replacement invariant
+
+> **I9′ — the measurement surface may over-approximate the claim, never
+> under-approximate it, within the declared evidence domain.**
+
+The polarity is the whole point: over-measuring yields a **refusal**, which is
+recoverable (`--allow-dirty`, or committing); under-measuring yields a **false
+attestation**, which is not. The two bounds on it are not optional —
+**DEC-070** names the domain and **DEC-071** names the temporal boundary; without
+either, I9′ asserts more than it can deliver.
+
+#### The evidence domain (DEC-070)
+
+`git ls-files --others` answers differently with and without `--exclude-standard`,
+so I9′ is undefined until the domain is named. **The domain is *tracked or
+non-ignored commit-eligible* evidence — `--exclude-standard` stays on.** An
+ignored-but-present file matching a declared entry is not claim evidence and does
+not block.
+
+Refuted on measurement, not preference: counting ignored files puts **19
+`.doctrine`-scoped memories against 2,983 files**, and **39 memories against
+15,319 corpus-wide**. Verification would be blocked near-universally by build
+output and derived state. The principle underneath: an attestation names a
+*commit*, so a file git is configured never to commit cannot be evidence for it —
+this is a definition of the domain, not a concession within it. It also agrees
+with the storage rule rather than working around it, since derived and runtime
+state are gitignored by construction. Where the boundary genuinely bites,
+`scope.unobservable` is the sanctioned declaration, which keeps it falsifiable
+(V2) rather than silent.
+
+**E8 is consistent, not in tension:** a gitignored but *tracked* path stays
+evidence, because ignore rules do not bind tracked files. Tracked-ness dominates
+ignore-ness.
+
+#### The temporal boundary (DEC-071)
+
+The three legs are **not an atomic snapshot** — measured: leg 1 clean, mutate,
+legs 2 and 3 clean, final state dirty. I9′ is therefore scoped to *a checkout
+stable for the duration of the probes*, stated rather than assumed.
+
+This window is **inherited, not introduced**: `capture()` already sequences the
+same three probes at `src/git.rs:2230-2239`, so every existing attestation
+carries it. DEC-069 widens the pathspec domain, not the temporal one. Locking or
+snapshotting was rejected — it would take `.git/index.lock` on the clean path and
+destroy I2.
+
+#### What DEC-053 keeps
+
+All of it, for **reporting**. No `realpath`, no character-based shape
+classification, no whole-component-prefix rule; RV-307 F-37's three routes stay
+closed. RV-307 F-27's *history-vs-now* cut is untouched — everything here is a
+*now* question and nothing widens `commits_touching`. **E15/R-H is unchanged**: a
+path reachable only through a symlinked directory matches nothing in HEAD or the
+index, and `ls-files --others` does not descend symlinked directories, so the
+known boundary neither closes nor widens.
+
+#### Sequencing: RV-314 F-7 is a prerequisite
+
+Step 4 manufactures pathspecs from index blob content. Unguarded, a derived
+target of `/etc/hostname` or `../../outside` returns **exit 128 on all three
+legs** — so this split *triples* the failing command surface until step 1's
+lexical guard applies recursively to every derived path. F-7's repair lands
+first, not alongside.
+
+### 5.2a The contribution constructor — index-first
 
 **This section replaces the inherited ordered algorithm wholesale** (DEC-053). It
-is not a fourth repair of it. The inherited rule classified an entry's shape from
+is not a fourth repair of it. *Its scope is now the **reporting** surface alone
+(DEC-069); measurement is built as § 5.2 specifies.* The inherited rule classified an entry's shape from
 its *characters*, canonicalised it with `realpath`, then asked git a question
 about the index. RV-307 F-37's three routes are all one defect: **a filesystem
 oracle answering an index question.**
@@ -276,7 +424,8 @@ modified. Agents address memories **by key** (the boot snapshot and
 
 ### 5.3 Data, State & Ownership
 
-`dirty_under` and `expand_scope_entry` return values and own no state.
+`observe_dirt` and `expand_scope_entry` return values and own no state; `Dirt` is
+a plain owned observation with no interior mutability and no handle to the repo.
 `MEMORY_SHIPPED_DIR` and `MEMORY_ITEMS_DIR` are both under `.doctrine`, so one
 exclusion root covers them; only `MEMORY_MASTERS_DIR` (repo-root `memory/`) sits
 outside, contributed only when it exists (E4).
@@ -305,7 +454,7 @@ unobservable = [".claude/skills/dispatch*/**"]
 - **V2** — an `unobservable` entry that git **does** match is a stale
   declaration. Finding. *This is the falsifiability property that earned the
   shape*: the boundary is self-policing rather than a permanent silence.
-- **V3** — empty/whitespace entries dropped and reported, exactly as § 5.2 step 1
+- **V3** — empty/whitespace entries dropped and reported, exactly as § 5.2a step 1
   treats them in `paths`/`globs`.
 - **V4** — duplicates deduped silently. Intra-field duplicates: 0 corpus-wide.
 - **V5** — an `unobservable` declaration **never** suppresses a *malformed*
@@ -329,7 +478,7 @@ it used a fixed root list that omitted `.agents/skills/**`, `.mcp.json`,
 `.worktrees/**`, `docs/claude/workflows.md` and `web/map/dist`.
 
 **Rejected shapes**, on the record: a sigil inside the entry string
-(character-sniffing, the exact error § 5.2 deletes, and it collides with real
+(character-sniffing, the exact error § 5.2a deletes, and it collides with real
 filenames); a per-memory flag (too coarse — the typical memory declares several
 paths and one unobservable); a separate `external` list (see naming above); an
 array-of-tables carrying a `reason` (documentation, not mechanism — and if wanted
@@ -344,8 +493,8 @@ if allow_dirty {
     let full = capture(root)?;      // UNEXCLUDED — the real state of the tree
     stamp(full);                    // Commit if genuinely clean, else CheckoutState
 } else {
-    let anchor = capture_with(root, corpus_excludes)?;      // 1. the ANCHOR question
-    let claim_dirty = dirty_under(root, claim_pathspecs)?;  // 2. the CLAIM question
+    let anchor = capture_with(root, corpus_excludes)?;               // 1. ANCHOR question
+    let claim_dirty = observe_dirt(root, claim_pathspecs)?.is_dirty(); // 2. CLAIM question
     match (anchor.anchor_kind, claim_dirty) {
         (Commit, false) => attest against anchor.commit,    // the only success
         _               => refuse, naming which question failed,
@@ -367,7 +516,7 @@ bakes in a host-project assumption that **POL-002** prohibits. The questions are
 | Set | Contents |
 |---|---|
 | `corpus_excludes` | `:(exclude)` + `DOCTRINE_PATHSPEC`; plus `:(exclude)memory` **only when that directory exists** |
-| `claim_pathspecs` | the memory's own **uid** directory, plus the expansion of its declared `scope.paths` and `scope.globs` per § 5.2 |
+| `claim_pathspecs` | the **measurement surface** of § 5.2 (DEC-069): the memory's own **uid** directory, plus every declared `scope.paths` / `scope.globs` entry emitted magic-prefixed by field of origin, plus only those resolved symlink targets not already covered by their originating selector. *Not* the full index expansion — see § 5.2 |
 
 **Why `--allow-dirty` re-captures unexcluded** (RV-307 F-13). Both `Commit`
 branches of `capture` leave `checkout_state_id` empty; only the dirty branch
@@ -495,9 +644,11 @@ stands there.
 - **I1** — the three existing `capture()` call sites see byte-for-byte identical
   frames. Guaranteed by construction (`capture` delegates with `&[]`).
 - **I2** — the clean-after-exclusion path never calls `write-tree`, so it takes no
-  index lock. `dirty_under` returns a bool and never computes
+  index lock. `observe_dirt`'s three legs are all read-only and none computes
   `checkout_state_id`, so the *claim* probe never reaches `write_tree_with_retry`
-  even when the claim surface is dirty.
+  even when the claim surface is dirty. **Probed, not assumed** (RV-314): each leg
+  completes with `.git/index.lock` held. Only `capture_with`'s `CheckoutState`
+  branch takes the lock, exactly where it does today.
 - **I3** — a genuinely dirty **anchor** tree still refuses without
   `--allow-dirty`. (See OQ-5: this invariant is what OQ-5 would delete.)
 - **I4** — `--allow-dirty` semantics unchanged: it bypasses **both** gate
@@ -505,24 +656,42 @@ stands there.
 - **I6** — a successful attestation's `verified_sha` **contains the attested
   body**, asserted as **byte equality**, not existence: any stale ancestor blob
   satisfies `cat-file -e` (RV-307 F-14).
-- **I7** — the claim surface names **real tracked files**, never a symlink
-  standing in for them: it is rooted at the canonicalised uid directory.
-- **I8** — nothing a memory *declares* can subtract from what it is *measured
-  against*. Entries are emitted magic-prefixed; `unobservable` suppresses
-  reporting only, never measurement.
-- **I9 — restated as an OUTCOME property.** The inherited I9 ("nothing bearing
-  evidence is uncanonicalised") was a *pre-emission* claim about a resolution step
-  that no longer exists, and RV-307 F-37 falsified it. The property that survives
-  is about the **result**: *every path in the claim surface is a real tracked
-  index entry, and every tracked symlink among them has had its target added.*
-  Total by construction — the surface is built **from** the index, so a non-index
-  path cannot enter it. Scoped to `verify` deliberately (RV-307 F-27).
-- **I10 — nothing lexically ineligible is ever emitted as a pathspec.** Empty or
-  whitespace-only, control-char-bearing, absolute-outside, or root-escaping
-  entries are dropped before git sees them. **Lexical, therefore total by
-  construction rather than by enumeration** — which is the property RV-307 F-26,
+- **I7 — restated for the two surfaces** (DEC-069). The inherited form ("the claim
+  surface names **real tracked files**, never a symlink standing in for them") is
+  false of the measurement surface, which deliberately carries *selectors* and
+  tracked symlink entries. The property that survives: *a matched symlink is
+  measured **itself**, and its eligible target closure is measured **in
+  addition**.* Rooted at the canonicalised uid directory, which is what stops a
+  key-form reference measuring the symlink instead of the body (RV-307 F-15).
+- **I8 — nothing a memory *declares* can subtract from what it is *measured
+  against*. Now binding on all three legs.** Entries are emitted magic-prefixed;
+  `unobservable` suppresses reporting only, never measurement. *Widened by
+  DEC-069:* declared entries now reach the measuring probes directly, so
+  magic-prefixing must be applied on the tracked, index **and untracked** legs
+  alike. Probed on all three: `:(literal):(exclude)<uid dir>` is neutralised
+  everywhere, and `ls-files --others` still returns the uid body. The inherited
+  demonstration exercised only `diff-index`; that was never sufficient.
+- ~~**I9**~~ — **struck and replaced by I9′.** The inherited I9 asserted
+  *soundness* ("every path in the claim surface is a real tracked index entry")
+  where the hazard is *completeness*. It was polarised backwards, which is why
+  RV-314 F-1 and F-10 passed under it. Struck id, never reused.
+- **I9′ — the measurement surface may over-approximate the claim, never
+  under-approximate it, within the declared evidence domain** (§ 5.2, DEC-069).
+  Bounded by **DEC-070** (tracked-or-non-ignored commit-eligible) and **DEC-071**
+  (a checkout stable for the duration of the probes). Over-measuring yields a
+  recoverable refusal; under-measuring yields an unrecoverable false attestation.
+  Scoped to `verify` deliberately (RV-307 F-27).
+- **I10 — nothing lexically ineligible is ever emitted as a pathspec, declared or
+  derived.** Empty or whitespace-only, control-char-bearing, absolute-outside, or
+  root-escaping entries are dropped before git sees them. **Lexical, therefore
+  total by construction rather than by enumeration** — the property RV-307 F-26,
   F-32 and F-37 each failed to achieve. This is what makes the `exit 128` abort
-  *unreachable* rather than *handled*.
+  *unreachable* rather than *handled*. **Under RV-314 F-7 this is a filter on
+  every path entering the emission set, not a check on the declared entry alone:**
+  step 4 manufactures candidates from index blob content — untrusted data — and
+  the inherited guard ran before the only step that creates them, so the totality
+  claim was false as written. I10 now carries a second load: declared entries
+  reach measuring probes, not merely reporting ones.
 - **I11 — the two historical-seam gates move together.** `retrieve::git_facts`
   and `retrieve::staleness` branch 1 gate on the same predicate and must continue
   to. Widening one alone is a silent no-op.
@@ -680,13 +849,18 @@ dispatch worktree, or a different object format legitimately disagrees about.
 
 ## 7. Decisions, Rationale & Alternatives
 
-- **D3 — extract one dirtiness primitive (`dirty_under`); `capture_with`
-  delegates to it; `capture()` delegates with `&[]`.** *Revised twice.* The
+- **D3 — extract one dirt primitive (`observe_dirt -> Dirt`); `capture_with`
+  consumes it; `capture()` delegates with `&[]`.** *Revised three times.* The
   original was a separate `source_clean` probe, which confused *behaviour* with
   *code* — the invariant worth protecting is I1, which delegation gives by
   construction. The second parameterised `capture()` alone, still short: `verify`
-  needs a narrow boolean for the claim question, and building a whole `Frame` to
-  answer it would take the index lock on precisely the path I2 protects.
+  needs a narrow answer for the claim question, and building a whole `Frame` to
+  answer it would take the index lock on precisely the path I2 protects. **The
+  third specified `-> bool`, which RV-314 F-11 falsified**: `capture()`'s dirty
+  branch needs `diff_bytes`, `untracked_fp` and `index_tree`, and a bool discards
+  all three, so `capture_with` would have to recompute them — the parallel
+  implementation this decision exists to prevent. The observation type with a
+  deferred-fingerprint `is_dirty()` projection serves both callers (§ 5.1).
   *Alternative:* bake the exclusion into `capture()` unconditionally. *Rejected:*
   two of its three callers would be damaged.
 - **D9 — the gate asks two questions: is the ANCHOR tree clean, and is the CLAIM
@@ -702,11 +876,14 @@ dispatch worktree, or a different object format legitimately disagrees about.
   (E13). `verify`'s only refusals are the two gate questions.
 - ~~**D11**~~ — **falsified** (DEC-054). "The constructor serves `verify` alone"
   cannot survive objective 7. Superseded by D13 and D17.
-- **D12 — the claim surface is built from the index, never the filesystem**
-  (DEC-053). See § 5.2. *Alternative:* a fourth repair of the ordered algorithm.
-  *Rejected:* three totality claims had already failed over the same domain; the
-  generalisable move was to make the failing taxonomy non-load-bearing, not to
-  enumerate harder.
+- **D12 — the *contribution* surface is built from the index, never the
+  filesystem** (DEC-053). See § 5.2a. *Alternative:* a fourth repair of the
+  ordered algorithm. *Rejected:* three totality claims had already failed over the
+  same domain; the generalisable move was to make the failing taxonomy
+  non-load-bearing, not to enumerate harder. **Narrowed by D18** (DEC-069): as
+  originally written this said *the claim surface*, full stop, and that scope is
+  what RV-314 F-1/F-10 falsified. The rule is correct and stays — for the question
+  it was built to answer.
 - **D13 — `validate`'s two unknowns are one mechanism** (DEC-054, objective 7).
   *Alternative:* build ISS-257 and RV-307 F-36 separately. *Rejected:* it
   implements the same epistemic honesty twice — the same parallel-implementation
@@ -727,6 +904,30 @@ dispatch worktree, or a different object format legitimately disagrees about.
   state. A lexical split reads no state. The split earns its keep through the
   *remedy*: E7's remedy is a `unobservable` declaration, which is the wrong answer
   for a broken entry (V5).
+- **D18 — measurement and reporting are two surfaces, not one** (DEC-069,
+  § 5.2). *Forced by RV-314 F-1/F-10.* I9 was polarised backwards — soundness
+  where the hazard is completeness — so an index-only surface silently omitted
+  real evidence. *Alternative:* union the expansion with `ls-tree HEAD`.
+  *Rejected:* it still needs raw selectors for untracked additions and the index
+  leg for staged state, and must resolve symlinks across a second tree — more
+  machinery for less coverage. *Alternative:* narrow to declared selectors with
+  expansion advisory-only. *Rejected:* loses I7, since git does not traverse
+  symlinks in pathspecs and agents address memories **by key**. *Alternative:*
+  union selectors with the **entire** index expansion. *Rejected on cost, not
+  correctness:* equally complete, but it passes thousands of concrete pathspecs
+  back to git — 7,670 for `.doctrine/**` alone — an argv-size hazard on every
+  verify, for paths the raw selector already measures.
+- **D19 — the evidence domain is tracked-or-non-ignored commit-eligible**
+  (DEC-070). *Alternative:* count every filesystem object matching a declaration.
+  *Refuted on measurement:* 39 memories against 15,319 ignored files corpus-wide.
+  An attestation names a commit, so a file git will never commit cannot be
+  evidence for it — a definition of the domain, not a concession within it.
+- **D20 — claim measurement inherits `capture()`'s stable-checkout boundary**
+  (DEC-071). *Alternative:* lock or snapshot for the duration. *Rejected:* it
+  takes `.git/index.lock` on the clean path and destroys I2. *Alternative:*
+  re-probe until two passes agree. *Rejected:* unbounded on an actively edited
+  tree, and it converts a stated assumption into a latency cliff without closing
+  the window. Named rather than assumed, the same treatment R-E and R-F get.
 - **D17 — the contribution probe is shared; the historical seam is not.**
   Contribution is a *now* question both verbs ask identically; drift is the
   historical question RV-307 F-27 protects. The cut is history-vs-now, not
@@ -737,8 +938,16 @@ dispatch worktree, or a different object format legitimately disagrees about.
 ## 8. Risks & Mitigations
 
 - **R6 — `verify` is harder to satisfy, not easier, for the freshly-recorded
-  memory.** Unrelated corpus dirt stops blocking; your own uncommitted claim still
-  does. Accepted as the honest reading.
+  memory. DEEPENED BY DEC-069.** Unrelated corpus dirt stops blocking; your own
+  uncommitted claim still does. *The second clause now bites harder than the
+  inherited text implied:* the measurement surface includes the declared entries
+  themselves, so an **untracked** file under a declared glob refuses, where the
+  index-only surface ignored it. Correct — untracked evidence is not in the commit
+  — but for the 29 `.doctrine`-scoped memories it means an uncommitted new ADR or
+  skill file under a claimed glob blocks verification. Say this plainly wherever
+  the relaxation is described; the slice both loosens and tightens, and only the
+  loosening is intuitive. The pressure this creates toward `--allow-dirty` is not
+  free: per R-G it feeds the permanent undeterminable-finding inflow.
 - **R7 — partially closing.** Limb (a) fixes the glob gate and magic
   neutralisation in both historical consumers. Limb (b) — own-directory drift
   needing item-directory provenance through `collect_all` — stays routed as
@@ -846,6 +1055,25 @@ objective 4 into T46.
 | T54 | `verify` where the probe errors | **refuses** — the verify/validate asymmetry (§ 5.4) |
 | T55 | expander under `core.quotePath=true` with a non-ASCII entry (`ünï.txt`) | matches correctly — pins the `-z` requirement, which is not stylistic |
 
+### New — the DEC-069 split (RV-314 F-1 / F-10 / F-11)
+
+Tests whose **meaning** changes rather than their text: T8 becomes specifically an
+*untracked-leg* test; T25 and T38 now prove that **raw declared selectors** measure
+claim dirt; T30 must exercise injection independently against all three legs; T40
+must split contribution success from measurement success, since one expander
+result can no longer stand for both questions.
+
+| # | Test | Asserts |
+|---|---|---|
+| T56 | the **HEAD × index × worktree cube** as a table test, all 18 states | the 16 dirty states each read dirty; **including `H=A, I=B, W=A`**, which fails if the index leg is dropped as redundant |
+| T57 | each of F-1a (untracked file under a declared glob), F-1b (`git rm --cached` on a claimed path, then modified), F-10 (untracked uid directory) | **refuses**, and each asserts **which leg** caught it — so a later refactor cannot silently move the coverage |
+| T58 | measurement surface built for a memory scoping `.doctrine/**` | contains the **selectors**, not the 7,670 concrete matches — pins D18's cost rejection so the expansion cannot creep back in |
+| T59 | `capture(root)` vs `observe_dirt` + projection | I1 byte-identity across clean / tracked-dirty / staged-only / untracked-only; and `is_dirty()` **never fingerprints** the untracked set (the deferred-hash contract) |
+| T60 | ignored-untracked file matching a declared entry (DEC-070) | **does not block** — pins the evidence domain, which is a normative property, not a flag choice. Discriminating half: the same path **force-added** (tracked) **does** block (E8) |
+| T61 | derived symlink targets `/etc/hostname` and `../../outside` (RV-314 F-7) | dropped by I10's recursive guard; `verify` **does not abort** — git exits 128 on all three legs, so an unguarded derived target takes the process down |
+| T62 | I8 injection `:(literal):(exclude)<uid dir>` | neutralised on **each of the three legs separately** — the tracked, index and untracked probes each measured independently. The inherited demonstration covered only `diff-index` |
+| T63 | DEC-071's temporal boundary | stated as an explicit stable-checkout assumption with a deterministic seam; **not** an atomicity claim |
+
 **Closure:** every test in § 9 green (stated as a **set**, so a test added by a
 later review cannot fall outside the gate by omission — RV-307 F-9);
 `doctrine check gate` clean; **REV-034 applied** per the § 5.6 inventory so
@@ -853,16 +1081,38 @@ SPEC-007, REQ-146, REQ-147, REQ-155 and the implementation agree.
 
 ## 10. Review record
 
-**No ledger of its own yet.** Open one before implementation and seed it from
-this section. RV-307 stays attached to SL-230 (append-only; it reviewed that
-document).
+**RV-314** is this document's ledger (facet `design`, raiser `inquisitor`) — an
+external adversarial pass plus a local one, 14 findings. RV-307 stays attached to
+SL-230 (append-only; it reviewed that document).
+
+### RV-314, by current state
+
+| Finding | Sev | State |
+|---|---|---|
+| F-1 · index-detached evidence never probed | blocker | **answered** — DEC-069, § 5.2, I9′, T56/T57 |
+| F-10 · untracked uid dir invisible to both legs | blocker | **answered** — same repair; T57 |
+| F-11 · `dirty_under -> bool` cannot serve `capture_with` | major | **answered** — § 5.1 `Dirt`, D3 revised, T59 |
+| F-3 · Revision routing deferred against the scope | blocker | **closed** — DEC-076, four rows on REV-034, § 5.6 |
+| F-2 · `scope.unobservable` has no producer | blocker | **OPEN** — no CLI flag, MCP field, or replace/append semantics yet |
+| F-4 · T49 demands byte-identity from rows T35 changes | major | verified — restate to the drift class; drop the live-corpus absolute |
+| F-5 · R-G's "one-time backlog" | major | verified — restate as stock-and-flow |
+| F-6 · I11 one-directional | major | verified — extract the shared predicate |
+| F-7 · step 4 bypasses the lexical guard | major | verified — **prerequisite** to DEC-069; I10 amended, T61 |
+| F-8 · non-UTF-8 index pathnames | major | verified — name the byte domain or narrow I9′ honestly |
+| F-9 · E8/E9/V3/V4 untested | minor | verified — tests or stated exemptions |
+| F-12 · `memory_health_findings_native` prefix contract | minor | verified — inventory it; assert attribution |
+| F-13 · R-E unpinned while R-H gets T45 | minor | verified — pin or state why not |
+| F-14 · "81 `.doctrine` items" does not reproduce | minor | verified — **29 at HEAD `743e7fe61`**; re-measure, stamp, move into a probe |
+
+**One blocker remains: F-2.** F-8's byte-domain call and F-7's exhaustion
+classification are still open in *detail* though settled in *shape*.
 
 ### Inherited findings, by current state
 
 | Finding | Was | Now |
 |---|---|---|
 | RV-307 F-36 | blocker — `validate` sink has no mechanism | **answered** — § 5.4, D17, E14 |
-| RV-307 F-37 | blocker — non-resolution ≠ non-contribution | **answered at the root** — D12/DEC-053, § 5.2, T40 |
+| RV-307 F-37 | blocker — non-resolution ≠ non-contribution | **answered at the root** — D12/DEC-053, § 5.2a, T40 |
 | RV-307 F-38 | major — NUL/newline escape the taxonomy | **answered as two obligations** — E16, § 5.5 framing, T44 |
 | RV-307 F-39 limb 1 | major — code-only wording at D9 | **swept** — D9 reworded on substance, § 5.4 |
 | RV-307 F-25 | contested — partial attestation | **answered in part only.** R8 survives; objective 3 does not close it |
