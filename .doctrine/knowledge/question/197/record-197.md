@@ -41,3 +41,7 @@ primary adherence mechanism, and the current entity engine already owns
 fresh-ID reservation. Exposing a recoverable reserved-materialisation seam
 removes the ambiguity at its source with less semantic expansion than adding
 design provenance to every knowledge record.
+
+## Answer
+
+Option 1 was accepted and is recorded by DEC-086.

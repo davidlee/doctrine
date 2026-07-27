@@ -4,10 +4,9 @@
      (SL-020, REQ-059, ADR-004); doc-local refs bare — OQ-1 (§6), D1 (§7),
      R1 (§10), Q1. -->
 
-> **Status: provisional reconstruction.** Sections 1–9 preserve the substance
-> aligned during the design interview and recovered from its durable knowledge
-> graph and compaction summary. QUE-195 remains open. This document has not yet
-> received the required integrated adversarial review.
+> **Status: adversarial review in progress.** Sections 1–9 preserve the
+> substance aligned during the design interview and were reconciled against the
+> original session transcript after compaction.
 
 ## 1. Design Problem
 
@@ -164,6 +163,10 @@ revisions are refused. Exact procedural resume depends on this file; after its
 loss Doctrine reconstructs only what authored slice prose and linked knowledge
 can support (DEC-057).
 
+Submission receipts are bounded, but eviction cannot remove the latest receipt
+or one referenced by an outstanding delegation. A submission ID outside the
+replay window is refused as expired rather than silently treated as new.
+
 Each inquiry node has a stable run-local `inq-*` ID, concise question, optional
 primary parent, provenance, lifecycle `open | resolved | deferred | pruned`,
 and sparse `needs` references. `blocked` is derived. Cursor and traversal
@@ -252,12 +255,21 @@ disposition without creating a duplicate. Reliably discovering an applicable
 pre-existing record is a retrieval concern outside v1; substituting a supplied
 ID is first-class and cheap.
 
-For `create`, the shell journals a narrow recovery intent keyed by submission
-ID, validates both candidates, calls the existing knowledge engine, captures
-the returned canonical ID, then completes the snapshot. Retrying resumes a
-known partial operation. Authored records are never rolled back. An ambiguous
-crash after creation but before identity capture blocks for explicit
-reconciliation rather than risking duplication (DEC-083).
+For `create`, the shell journals an intent keyed by submission ID, reserves a
+fresh canonical knowledge ID through the existing entity reservation backend,
+and journals that ID before materialising authored bytes. It then creates the
+record at the held reservation, applies status and legal relations, and commits
+the design snapshot. A crash before the ID journal may strand only a
+reservation; after it, recovery always has the exact canonical target and
+resumes the first incomplete effect. Authored records are never rolled back
+(DEC-083, DEC-086).
+
+`start --from-design` performs a one-time import. It does not establish ongoing
+two-way synchronisation with prose. Direct non-terminal shaping QUEs seed
+durable inquiry nodes. Conventional `OQ-*` entries are recognised only in the
+explicit Open Questions section and enter as unverified `imported-prose` nodes
+with source location/fingerprint. An explicit QUE citation merges the sources;
+text similarity never does (DEC-084, DEC-085).
 
 The active skill becomes a thin activation/recovery adapter. A sealed invariant
 hymn lives at `install/hymns/stage/design.md`; the closed prompt pack contains
@@ -279,6 +291,8 @@ Expected implementation homes are:
   prompt selection, and serialization contract;
 - `src/commands/design.rs` for persistence, entity effects, recovery, and CLI
   rendering;
+- `src/entity.rs`, `src/reserve.rs`, and `src/knowledge.rs` for the separable
+  reserved-materialisation seam used by checkpoint creation;
 - `src/main.rs` for command wiring;
 - `plugins/doctrine/skills/design/SKILL.md` and
   `plugins/doctrine/skills/handover/SKILL.md`;
@@ -346,8 +360,10 @@ graft.
 - **DEC-084:** existing authored designs enter only through explicit,
   conservative import; plain resume never infers missing procedural history.
 - **DEC-085:** import bootstraps direct non-terminal shaping QUEs as durable
-  inquiries and conventional Open Questions OQs as unverified prose proposals;
+  inquiries and conventional `OQ-*` entries as unverified prose proposals;
   only an explicit canonical citation merges them.
+- **DEC-086:** reserve and journal a checkpoint record's canonical ID before
+  materialising authored bytes.
 
 Rejected alternatives include a fully specified/hierarchical workflow machine,
 a general process DSL, a full arbitrary inquiry graph, separate record-creation
@@ -370,8 +386,8 @@ evaluation from an uninstalled dispatch worktree.
   bind evidence to fingerprints, refuse foreign materialisation overwrite, and
   label semantic reconstruction honestly.
 - **R5 — cross-tier failure duplicates authored knowledge.** Journal before
-  authored mutation, key work by submission ID, never roll back records, and
-  block an ambiguous recovery window.
+  authored mutation, reserve and journal the canonical ID before
+  materialisation, key work by submission ID, and never roll back records.
 - **R6 — agents still omit semantic checkpoints.** Make checkpoint disposition
   a managed gate and a single apply operation; measure timely unprompted
   creation/adoption after actual installation.
@@ -381,8 +397,9 @@ evaluation from an uninstalled dispatch worktree.
 - **R8 — embedded assets vanish from release builds.** Reuse the existing
   `install/` embed root and verify asset presence in cargo/install and host-side
   Nix builds.
-- **R9 — legacy import manufactures history.** If QUE-195 accepts import, make
-  it explicit and mark imported sections unreviewed.
+- **R9 — legacy import manufactures history.** Import is explicit and one-shot;
+  sections and prose OQs remain unreviewed proposals until the managed run
+  establishes current evidence.
 - **R10 — abstractions harden before evidence.** Keep public semantics
   design-specific and extract only independently useful pure seams.
 
@@ -419,7 +436,8 @@ Wire and end-to-end tests prove:
 - optional run assertion and changes-since-revision projection;
 - stale delegated proposals remain unapplied and inspectable;
 - checkpoint recovery resumes each known journal phase without duplication;
-- ambiguous record-creation recovery blocks explicitly;
+- a crash before ID journalling leaves no unidentified authored record;
+- every post-journal recovery resumes against the exact reserved canonical ID;
 - adopting an existing record creates no duplicate.
 
 Hostile inputs include malformed IDs, unsafe paths, unknown subjects, dangling
@@ -487,6 +505,8 @@ the `.doctrine/governance.md` authority-primer arm from RSK-229.
   durable SL-233 knowledge graph and the original assistant-authored section
   presentations recovered from the Codex JSONL session history.
 - QUE-195 and QUE-196 are answered by DEC-084 and DEC-085.
+- QUE-197 is answered by DEC-086 after adversarial review found that the
+  original ambiguous checkpoint condition had no public repair path.
 - The pre-existing-record adoption form was added after the user identified
   the duplicate-decision edge case. It extends DEC-083 without making
   comprehensive record discovery part of v1.

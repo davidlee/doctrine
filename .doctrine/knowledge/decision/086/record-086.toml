@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 197
-slug = "checkpoint-identity-across-the-authored-creation-crash-boundary"
-title = "Checkpoint identity across the authored creation crash boundary"
-record_kind = "question"
-status = "answered"
+id = 86
+slug = "journal-checkpoint-record-identity-before-materialisation"
+title = "Journal checkpoint record identity before materialisation"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []
@@ -29,3 +31,7 @@ superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
 [[relation]]
 label = "shapes"
 target = "SL-233"
+
+[[relation]]
+label = "shapes"
+target = "QUE-197"
