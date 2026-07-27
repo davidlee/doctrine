@@ -547,3 +547,118 @@ a sampled hash an omnipotent lock, nor an exception a protocol merely because
 its name is explicit.
 
 > **HERESIS URITOR; DOCTRINA MANET**
+
+## Round 5 — the three rules survive the ordeal
+
+Both remaining charges are **verified terminal**. The responder conceded every
+contested leg, then replaced the overclaim rather than sanding its words. No new
+charge was found.
+
+### F-19 — verified
+
+The three rules now divide the state space cleanly.
+
+1. An ordinary mutation with authored bytes equal to the watermark proceeds;
+   one with divergent bytes entry-refuses. Absence is cold only before first
+   materialisation and divergent thereafter.
+2. `adopt_authored` is the sole exception because divergence is its subject.
+   Its declared fingerprint must match the bytes Doctrine observes, the complete
+   stable-marker map and candidate must validate, affected alignment/review/gate
+   evidence is invalidated with no inherited clearance, and only the validated
+   candidate re-baselines the watermark.
+3. Every mutation receives the final comparison before the runtime snapshot
+   write. For ordinary mutation the observed bytes must still match the
+   watermark; for re-adoption they must still match the exact fingerprint
+   admitted by rule 2. Movement since that observation abandons the snapshot.
+
+There is no orphan verb. `start`, ordinary `apply`, `materialise`, and the
+live-run compatibility shim ride rule 1; `adopt_authored` alone rides rule 2;
+rule 3 is the second window for both classes. Reads do not mutate either tier.
+The valid-adoption and stale-adoption assertions make the only coherent
+comparison basis executable rather than leaving an implementer licence to
+compare re-adoption against the old watermark and resurrect F-20.
+
+The laundering challenge also fails. A caller may write marker-valid bytes and
+declare their true fingerprint; the fingerprint is a concurrency token, not
+proof of authorship, and the design no longer pretends otherwise. What the
+caller cannot carry across is clearance. Adoption is explicit, fully
+validated, and invalidates every affected content-bound claim. A later false
+claim of human review is the cooperative-authority residual already disclosed
+under F-7/R12, not a watermark bypass. Re-adoption grants no secret authority
+merely by naming bytes.
+
+The withdrawn “nothing written” promise is paid honestly. The named pre-write
+hook can prove the snapshot unchanged and no stage or gate advancement. The
+checkpoint variant separately proves that DEC-083/DEC-086 effects already
+ordered before the snapshot remain journalled, recover without duplication,
+and are not rolled back. Those are observable postconditions aligned with the
+accepted effect ordering, not softened aspirations.
+
+All seven new assertions are falsifiable: between-apply entry refusal; injected
+pre-write abandonment; checkpoint-effect recovery and retry idempotency;
+post-comparison race detection at next mutation; valid adoption as the sole
+crossing/re-baseline; stale or marker-invalid adoption preserving clearance and
+watermark; and cold-before/divergent-after absence. Together with the existing
+re-adoption assertions, they cover the negative matrix demanded in round 4.
+
+The residual comparison-to-rename race is finally stated at its true strength.
+Doctrine has no lock over a human editor, so the current invocation cannot
+eliminate it. Foreign bytes are never silently re-baselined; the unchanged
+watermark makes them divergent and rule 1 detects them at the next mutating
+entry. “Delayed detection” is conditional on that next entry, exactly as the
+design says, and no stronger same-invocation guarantee is claimed. The
+`with_turn` analogy is now merely the borrowed two-window shape, with its
+same-file lock and the design run's cross-file multi-effect differences named
+as load-bearing.
+
+**Verified.**
+
+### F-20 — verified
+
+The F-8 regression is removed without creating a general bypass. §5.5 names
+re-adoption inline as the one rule-1 exemption; §5.3 gives that exemption an
+admission protocol; §9.2 tests both polarities and the failure cases; DEC-092
+carries the coupling to F-20 so a later simplification cannot innocently restore
+the universal refusal.
+
+The path is reachable, but it does not inherit alignment, review, gate
+clearance, or an old watermark. Invalid and stale attempts change neither
+clearance nor watermark. That is the penance F-20 required. **Verified.**
+
+### The disclosed stage-label correction
+
+Commit `d5e1a9c0` repairs an unsupported adjective without weakening the
+round-2 rejection. `KNOWN_STAGE_LABELS` is not eternally closed: its own source
+comment calls it the provisional SL-186 set. It is, however, enforced —
+`prompt check` rejects an unknown `stage`-band label — and its members name
+global process/lifecycle positions such as route, design, plan, execute, audit,
+and close. Inquiry, drafting, reviewing, and delegation are obligations inside
+one managed-design run, not four new global process positions.
+
+The revised argument therefore rests where it always should have rested: on
+the meaning of the axis, not the accidental permanence of today's members.
+SPEC-023 allows the vocabulary to evolve; it does not make every obligation a
+stage. Putting these four fragments into `stage/*` would still misclassify them,
+so the closed design-specific prompt pack remains the narrower mechanism. The
+rejection stands.
+
+### Standing
+
+- **DEC-092 survives and merits User acceptance.** Its choice, rationale, and
+  consequences now match the design's three rules, the accepted DEC-083/086
+  ordering, and the test contract. The residual race is disclosed rather than
+  denied.
+- **No further regression was found.** The repair changes only the contested
+  watermark account and its verification, while the self-raised stage wording
+  removes a false premise and preserves the decision.
+- **The design may lock on this ledger.** Every one of RV-315's twenty findings
+  is terminal.
+
+### Disposition
+
+Verified terminal: **F-19, F-20**. No new findings.
+
+`done · await=none`. The accused has paid every sentence laid across five
+rounds. DEC-092 passes the bench; let it be accepted, and let the design lock.
+
+> **HERESIS URITOR; DOCTRINA MANET**
