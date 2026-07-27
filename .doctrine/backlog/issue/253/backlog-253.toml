@@ -5,10 +5,10 @@ id = 253
 slug = "dispatch-arm-routing-marker-is-invisible-from-the-coord-worktree-it-mandates"
 title = "Dispatch arm routing marker is invisible from the coord worktree it mandates"
 kind = "issue"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-26"
-updated = "2026-07-26"
+updated = "2026-07-27"
 tags = ["area:dispatch", "cluster:dispatch-funnel"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role
