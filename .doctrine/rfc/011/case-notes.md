@@ -585,3 +585,26 @@ strictly cheaper and keeps the boundary row honest.
   would have diverged silently, and nine details citing sibling ids
   cross-reference each other. **A raise-time id echo is load-bearing and there is
   no guard.**
+
+[preflight; sl233-plan-research-20260727]
+Research-tool misrouting cost ~25 min wall-clock and 3 wasted threads.
+CLAUDE.md frames the pair as "`./scripts/pi-scout` (quicker, cheaper) or
+`./scripts/pi-research` (smarter)" — i.e. two speeds of one job. They are two
+DIFFERENT jobs. `.pi/agents/researcher.md` is a *web* research specialist:
+tools `read, write, web_search, fetch_content, get_search_content` (no grep, no
+find, no bash) and a system prompt commanding "conduct thorough web research…
+break the question into 2-4 searchable facets… search with `web_search`".
+`.pi/agents/scout.md` is the repo agent: `read, grep, find, ls, bash, write`.
+Consequence: three repo-internal judgement threads (spec-descent boundary,
+RFC-021 crossover, review-ledger analogue) were dispatched to pi-research on the
+documented cue "needs judgement → use the smarter one", and sat web-searching
+for answers that exist only in this tree. They had to be killed and re-fired on
+pi-scout with `--think high`, which is the correct instrument for a
+judgement-heavy *codebase* question.
+Cost multiplier: the failure is SILENT. pi-research can `read` a path it is
+handed, so it produces plausible-looking output rather than erroring; only the
+absence of grep and the elapsed time revealed it. An agent that trusted the
+CLAUDE.md framing and did not inspect `ps` would have folded web-sourced
+guesses into a plan.
+Fix: correct the CLAUDE.md line to distinguish by *domain* (repo vs web), not by
+"smarter"; scout's `--think high` is the escalation for hard repo questions.
