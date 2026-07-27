@@ -6,10 +6,31 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-28 · PHASE-01..04 landed and reaped, RV-317 done, the two
-broken VT rows settled · ce148fb08
+fresh-as-of: 2026-07-28 · all five phases completed; verify-vt green on
+PHASE-01/02/03/05, PHASE-04 pending its derived registry row · b5428c47
 
 ### Produced
+
+- PHASE-05 — distribution and dogfood activation, run **inline in the
+  coordination tree by the orchestrator**, not dispatched (D1). Boundary row
+  `[ce148fb08, b5428c47]`. Four commits: `a82089b5` (the ignore rule + VT-1),
+  `b6ce22c7` (VT-2 e2e), `e89216e0` (the three prose surfaces),
+  `b5428c47` (the withhold-tier fix). All five phases now `completed`;
+  `slice verify-vt 231` exits 0 with PHASE-05 VT-1/2/3 PASS.
+- One distributed ignore rule — `.doctrine/observations/**/.tmp.*` — appended to
+  `install/manifest.toml` and this repo's `.gitignore`, riding the existing
+  `ensure_gitignored` leg. No new install machinery (D2). Records stay authored:
+  committed, diffable, visible in review.
+- `Tier::ObservationTemp` — a new withhold tier the `.gitignore`/WITHHELD parity
+  gate forced; see Learned.
+- Capability-aware capture activated on three surfaces telling one story:
+  `install/using-doctrine.md` (client-facing: verbs, authored durability,
+  review-noise cost, repo-wide vs local exclusion, the correlation/audit
+  forfeit), `.doctrine/governance.md`, and `.doctrine/rfc/011/rfc-011.md`.
+  `case-notes.md` retained in full and still cited as the historical evidence
+  base — closed to new entries, not migrated (EN-2).
+- IMP-331 — the `/dispatch-agent` skill's `arm-spawn` template omits the
+  mandatory `--phase` half.
 
 - PHASE-04 — confined-worker MCP capture delivered on the **claude/Opus** arm
   (first phase of this slice not on pi/deepseek), driven through the funnel:
@@ -134,6 +155,27 @@ broken VT rows settled · ce148fb08
 
 ### Learned
 
+- **Adding a `.doctrine/` line to `.gitignore` is never a one-file change.**
+  `every_runtime_gitignore_glob_is_classified` reds on any new runtime-tier glob
+  until it declares whether a worker fork is denied it or regenerates it
+  (`WITHHELD` / `DERIVED_RUNTIME`). Invisible from the design and from the §7
+  touch-set; only the gate surfaces it. PHASE-05's rule needed a new
+  `Tier::ObservationTemp`, since a leftover publication temporary is neither
+  fork-regenerated nor coordination scratch.
+- **A regression baseline captured after the delta is worse than none.**
+  `check regression capture --base <B>` runs the suite on the CURRENT tree and
+  labels it `B` — it does not check `B` out. Capturing at the phase tip recorded
+  a self-inflicted failure as pre-existing, and the diff then reported it
+  `persistent (pre-existing) — fix the trunk`, which reads as an inherited
+  defect and invites waving it through. The funnel captures pre-spawn for
+  exactly this reason. When a "persistent" failure's name is anywhere near the
+  change, run the test and read the panic rather than trusting the partition.
+- **UNATTRIBUTABLE VT rows on the claude arm mean a missing registry row, not a
+  missing test.** `slice conformance` names it directly ("completed phase
+  PHASE-NN has no recorded source-delta row"). The claude arm derives the
+  registry at `dispatch sync --prepare-review` from the committed boundaries
+  ledger and gates completeness there, so the rows resolve at the slice-level
+  conclude cadence. Check `conformance` before chasing the test.
 - **A phase has two memory surfaces — the CONTENT it changes and the MECHANICS
   that drive it — and `/retrieve-memory` scoped to only the first is a silent
   half-probe.** `mem_019f9effcf4a7922b31c1a1b37841d06` documents the half-arm
@@ -217,14 +259,27 @@ broken VT rows settled · ce148fb08
 
 ### Open
 
-- **PHASE-05 is not fully dispatchable.** Its selectors include
-  `.doctrine/governance.md` and `.doctrine/rfc/011/rfc-011.md`, which every
-  worker hard-refuses as `forbidden-zone`. The prose half must be
-  orchestrator-authored — same shape as PHASE-01's EX-5 pre-seed.
-- PHASE-04's three VT rows read UNATTRIBUTABLE, and that is expected, not a
-  gap: on the claude arm the conformance registry is DERIVED at
-  `dispatch sync --prepare-review`, so those rows resolve at the slice-level
-  conclude cadence once all five phases land.
+- **The conclude cadence is the next stage, and trunk has moved 63 commits past
+  the fork-point.** `dispatch status` prescribes
+  `dispatch refresh-base --slice 231` before `prepare-review`. Worth doing while
+  the two known authored divergences are still in context (see below) — each
+  conflict is then one phase's delta rather than a pile at candidate-create.
+- **Two authored files have forked coord↔edge, both with edge ahead.**
+  `notes.md` (edge canonical — the coord copy is the 40-line fork-time version)
+  and `.doctrine/governance.md` (edge carries a research-section addition the
+  coord copy lacks; different hunk from PHASE-05's, so it should merge clean).
+  The general rule is edit-the-canonical-copy
+  (`mem_019f738d55707ed1a1204bd6288bf7db`), but note this slice inverts that
+  memory's stated default: here the PRIMARY is canonical, not the coord tree.
+- PHASE-04's three VT rows read UNATTRIBUTABLE because PHASE-04 has no
+  conformance registry row yet — confirmed via `slice conformance`, not
+  inferred. The claude arm derives that row at
+  `dispatch sync --prepare-review`, which also gates completeness. `verify-vt`
+  exits 0.
+- PHASE-05's own selectors were declared mid-phase (`src/install.rs`); the
+  phase also touched `src/worktree/allowlist.rs`, which has no design-target
+  selector. Expect it as an undeclared conformance cell at audit — adjudicate
+  it there rather than pre-emptively widening the selector set.
 - PHASE-04 worker UNCERTAIN items, unadjudicated and due at audit: facet
   `schema_version` defaulting, and caller-supplied `*_origin` values riding
   through as sent.
