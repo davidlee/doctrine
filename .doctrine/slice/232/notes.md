@@ -6,8 +6,9 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · design (**RV-314 rounds 2–3; 20 findings, all
-disposed; six blockers answered-but-UNVERIFIED**) · eb1dc203
+fresh-as-of: 2026-07-27 · design (**RV-314 round 4; 32 findings; four new
+blockers; F-1/F-10 still formally OPEN, six more answered-but-UNVERIFIED**) ·
+7b6b66b4
 
 ### Produced — RV-314 rounds 2 & 3 (this sweep)
 
@@ -257,18 +258,49 @@ reviewer.
 
 ### Open
 
-**Next action: round 4 on the warm codex thread
-`019fa1a1-4834-7a60-981d-f85e9a7f572f`, then verify the six blockers if it
-holds.** Rounds 2 and 3 each refuted the previous round's amendment, so a fourth
-pass is the expected cost, not pessimism. **Instruct it to re-derive its own
-acquittals** — round 3's most serious finding was hiding inside one. Default
-reviewer **codex mcp** — not read-only, or it cannot write the ledger. Drive
-review verbs from the primary tree.
+**Round 4 is done and it refuted round 3 — the fourth consecutive refutation.**
+Twelve findings, F-21–F-32, four of them blockers. Nothing was verified; nothing
+advances. **Next action: dispose F-21–F-32, and dispose F-1/F-10, then round 5
+on the same warm thread `019fa1a1-4834-7a60-981d-f85e9a7f572f`.** Budget for a
+sixth. Default reviewer **codex mcp** — not read-only, or it cannot write the
+ledger. Drive review verbs from the primary tree.
 
-- **Six blockers ANSWERED, none VERIFIED** — F-1, F-10, F-15, F-16, F-18, F-19.
-  Every remedy has prose in `design.md`; none has survived a pass. `dispose ≠
-  verify`, and the close-gate is the only thing tracking the difference. **The
-  design must not go to `/plan` on this state.**
+- **CORRECTION to the previous Harvest, which was false in two ways.** It said
+  "20 findings, all disposed" and listed F-1 and F-10 among the *answered*
+  blockers. Both are `status = "open"` in `review-314.toml` with no
+  `disposition` — the remedy prose landed in `81e3e732c` but `review dispose`
+  was never run. `design.md` § 10 carries the same error, calling both
+  "answered". Three authored artefacts agreed with each other and disagreed with
+  the ledger, and the divergence is invisible through `review show`, which does
+  not print the finding roll (RFC-011 case note). **The ledger is the only
+  authority on finding state.**
+- **Eight blocker-severity findings are unresolved.** F-1 and F-10 are *open*;
+  F-2, F-15, F-16, F-18, F-19 are answered-but-UNVERIFIED; F-21–F-24 are new and
+  open. Only F-3 is verified. `dispose ≠ verify`, and the close-gate is the only
+  thing tracking the difference. **The design must not go to `/plan`.**
+- **Round 4's four blockers, all against round 3's newest work.** F-21:
+  `--attr-source` neutralises only the *tree* attribute source, so
+  `.git/info/attributes` and `core.attributesFile` still convert — and the
+  latter is *machine-local config*, the category `NORMATIVE_FLAGS` exists to
+  close. F-22: `core.fsmonitor` blinds all three legs on an unflagged tracked
+  path, so DEC-082's bound is an enumeration, not a principle. F-23: the global
+  flag turns SL-212's fail-*closed* custom-merge-driver guard fail-*open*
+  (`merge=ours` reads `unspecified`, which is in `BUILT_IN`) — a regression in a
+  subsystem this slice does not touch. F-24: `NORMATIVE_FLAGS` is a compile-time
+  `const` applied by the single chokepoint, so a per-repo derived oid cannot
+  join it and deriving one needs the flag it is deriving.
+- **F-29 is the one to read for the record.** F-20's disposition asserts the
+  "not already covered" wording was struck; it survives in § 5.4's *operational*
+  `claim_pathspecs` definition — the row an implementer builds from. The strike
+  was applied to the subsection that discusses the rule and not to the one that
+  states it. Same vestigial-wording defect as F-20 itself, second time, same
+  sentence.
+- **Probes re-authored (`26d068fc`)** — `closure.sh` (F-15/F-16/F-20, four
+  falsifiers) and `attributes.sh` (F-19/DEC-087/CON-002, five falsifiers), all
+  held on re-run. Rounds 2–3's *figures* were durable; their scripts were not.
+  **The quoted absolute byte counts (145/152/143/156/172) are fixture-dependent
+  and do not re-run** — the durable claim is the discrimination, zero versus
+  non-zero. `probes/README.md` says so.
 - ~~**RV-314 F-2**~~ — **CLOSED** (DEC-081, § 5.3). Producer is `memory edit`
   alone. Backfill declined → IMP-326; CLI/MCP clear asymmetry → IMP-327.
 - **DEC-087's two unpaid obligations** — (a) `capture()` byte-identity (I1/T59)
@@ -319,3 +351,33 @@ review verbs from the primary tree.
   the earlier "`/reconcile` call" note, which contradicted the scope.
 - ~~**OQ-2**~~ ~~**OQ-A**~~ ~~**OQ-6**~~ ~~**OQ-B**~~ ~~**E13's fate**~~
   ~~**F-38**~~ ~~**F-39 limb 1**~~ — all answered; see `design.md`.
+
+### Learned — RV-314 round 4
+
+- **The axis lesson has now claimed DEC-087, one round after it was written to
+  record the axis lesson.** F-21: the round verified "committed attributes are
+  neutralised" — true, measured, and not the load-bearing property, which is
+  "attributes are neutralised". `core.attributesFile` is machine-local config,
+  and § 5.1's own justification for DEC-087 is that `NORMATIVE_FLAGS` exists so
+  machine-local config cannot perturb the frame. The repair missed the category
+  its own argument names. Fifth instance.
+- **A global flag is a global blast radius.** F-23 is the first finding in this
+  slice that breaks something the slice does not touch: `--attr-source` on
+  `NORMATIVE_FLAGS` silently disarms SL-212's fail-closed merge-driver guard.
+  When a repair lands on a shared chokepoint, the behaviour-preservation gate is
+  every consumer of that chokepoint, not every consumer of the verb.
+- **Reproducing acquittals paid twice this round.** Told to re-derive its own,
+  the reviewer produced eleven explicit acquittals — and reproducing its
+  *findings* refuted one limb of one (F-22's stat-cache route did not reproduce:
+  the tracked leg reported 101 bytes under both default and weakened config).
+  The charge survived on its other limb. Both directions need re-running, not
+  just the one that embarrassed us last round.
+- **`review show` does not print finding state, and that produced a false record
+  rather than an inconvenience.** F-1/F-10 were carried as "answered" in
+  `design.md` § 10, § Harvest and the handover packet while the ledger held them
+  `open`. Three artefacts agreed with each other because each copied the last.
+  The sister toml is the only authority. Logged to RFC-011.
+- **A disposition that claims a completed edit is a claim needing a check.**
+  F-29: F-20's disposition says the coverage-filter wording was struck; one of
+  its two occurrences was. Dispositions are prose about work, and prose about
+  work is exactly what this slice keeps catching.
