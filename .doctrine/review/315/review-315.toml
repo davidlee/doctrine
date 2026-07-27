@@ -14,7 +14,7 @@ ref   = "SL-233"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected: review prime warms this ledger from SL-233's selectors. Observed: it fail-hards with 'Is a directory (os error 21)' for any slice whose selectors glob an entity root"
 detail = """
@@ -30,7 +30,7 @@ response = "Accepted. ISS-259 is now governed by SL-234, whose scoped design fil
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "Expected: a new public command family is reconciled against the existing verb surface. Observed: DEC-075 mints top-level 'doctrine design' beside the extant 'doctrine slice design', and neither the design nor the DEC acknowledges it exists"
 detail = """
@@ -48,7 +48,7 @@ response = "DEC-075 and design §5.2 now make top-level  canonical and retain  o
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected: 'inspect' means metadata-only, strictly less than 'show', as everywhere else in the CLI. Observed: design.md 5.2 inverts the pair — 'show' is the bounded projection and 'inspect' is the full detail"
 detail = """
@@ -67,7 +67,7 @@ response = "Removed the inverted design . Bounded  remains the default; explicit
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: scope 5's command to 'reuse the prompt cascade rather than creating a parallel composition mechanism' is discharged with an argument. Observed: install/design-prompts/ is a second content store, asserted without rationale and absent from the rejected-alternatives list"
 detail = """
@@ -85,7 +85,7 @@ response = "Design §5.5 now records exactly which cascade facilities the closed
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: every asset 5.5 asserts has a delivery path — a named implementation home and a design-target selector. Observed: the 'sealed invariant hymn' requires an edit to install/manifest.toml, which appears in neither"
 detail = """
@@ -111,7 +111,7 @@ response = "Added  as a design target and implementation home; §5.5 requires  i
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: scope's closure intent is met before close, or the scope is amended. Observed: the design moves adherence evaluation past the close gate to CHR-049 while 10 claims 'the slice scope ... is reconciled'"
 detail = """
@@ -129,7 +129,7 @@ response = "Amended SL-233 closure intent: the deterministic kit gates closure, 
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: scope R4 forbids agent-authored classification acquiring user authority. Observed: DEC-088's acceptance attestation is agent-written, carries authority='user', clears the accepted-decision and reviewing->locked gates, and has no entry on the risk register"
 detail = """
@@ -151,7 +151,7 @@ response = "The reviewing→locked predicate now states that v1 accepts an audit
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: a live run can recover from a user's hand edit to design.md. Observed: materialise refuses foreign edits (DEC-072) and import is admitted only for a NEW run after runtime loss (DEC-084) — leaving a permanent wedge with no verb"
 detail = """
@@ -172,7 +172,7 @@ response = "DEC-072, DEC-084, design sections 5.4 and 5.5, risk R4, and protocol
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: 'new/amended product and technical specs' has a landing path. Observed: it is listed as an implementation home while 10 explicitly withholds any spec design-target selector, and no phase sequencing is given"
 detail = """
@@ -193,7 +193,7 @@ response = "§5.5 now assigns governance descent to the first authored plan phas
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: 5.2 is the interface contract. Observed: load-bearing surface appears only in 5.5 and the DEC corpus — start --from-design, --format, --known-fragment are all absent from the command list"
 detail = """
@@ -212,7 +212,7 @@ response = "§5.2 now carries the public invocation forms for , , run/revision a
 
 [[finding]]
 id = "F-11"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: 5.5's implementation homes and the authored design-target selectors agree, as 10 claims. Observed: src/fsutil.rs and src/install.rs are selectors with no home; install/manifest.toml is a required edit with neither"
 detail = """
@@ -237,7 +237,7 @@ response = "Reconciled selectors and homes in both directions: fsutil, install, 
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "verified"
 severity = "minor"
 title = "Expected: a design-target file is not mutated before the design locks and a plan exists. Observed: plugins/doctrine/skills/design/SKILL.md carries an uncommitted edit while SL-233 sits at status 'design' with no plan"
 detail = """
@@ -259,7 +259,7 @@ response = "Committed the pre-existing document-local acronym qualification inde
 
 [[finding]]
 id = "F-13"
-status = "answered"
+status = "verified"
 severity = "nit"
 title = "Expected: an accepted DEC's body does not cite a question it no longer leaves open. Observed: DEC-072 closes with 'QUE-188 remains open', but QUE-188 is answered"
 detail = """
@@ -274,6 +274,31 @@ A trifle in isolation. Named because the slice's own premise makes corpus hygien
 Penance: `doctrine knowledge edit DEC-072` — replace the trailing sentence with the settlement ("the review-policy and evidence model is settled by DEC-073"). While there, sweep the other SL-233 DEC bodies for forward references to QUEs now answered — same one-line fix, same reasoning."""
 disposition = "fixed"
 response = "DEC-072 now records that DEC-073 settled QUE-188 and summarizes the accepted v1 policy. A sweep of SL-233 DEC bodies found no other stale  references. Committed in f779bd26."
+
+[[finding]]
+id = "F-14"
+status = "open"
+severity = "major"
+title = "Expected: the F-2 alias decision reaches every surface that names the incumbent. Observed: install/routing-process.md and the derived boot.md still teach 'slice design' as the core-process design verb, and neither is in any SL-233 selector"
+detail = """
+Raised alongside the F-2 contest; F-2's namespace decision is sound and I do not reopen it. This is the delivery leg.
+
+DEC-075 now reads: "The pre-existing `doctrine slice design <ID>` command is retained as a deprecated compatibility alias for `doctrine design materialise <ID>`." §5.2 agrees.
+
+But `install/routing-process.md:47` still reads:
+
+    **Core process:** `slice new` (scope) → `slice design` (author + adversarial
+    review until locked) → `slice plan` → ...
+
+and that text is projected verbatim into `.doctrine/state/boot.md:52`, which is `@`-imported into EVERY agent's context on EVERY session. It is, by construction, the most-read sentence in the corpus. After SL-233 it names a deprecated alias as the canonical design verb.
+
+Two consequences, both structural:
+1. **The deprecation cannot converge.** Every agent boots with the deprecated form in its highest-salience context and will keep reaching for it. §5.2's promise — "New documentation and generated guidance use only the canonical form" — is contradicted by the one document that is *always* delivered.
+2. **The word "compatibility" is doing work it has not earned.** Today `doctrine slice design <ID>` "Scaffold[s] a design-doc sibling into an existing slice" — it mints a template on a slice with no run. Under the alias it materialises runtime sections and enforces a foreign-edit guard. That is a semantic replacement, not a compatibility alias. §5.2 and DEC-075 should say which, and should state what `slice design` now does when invoked on a slice with no managed run.
+
+And the same disease F-5 and F-9 were raised for recurs: `install/routing-process.md` appears in **no** SL-233 selector, neither design-target nor scope-relevant. The edit lands undeclared at `doctrine slice conformance`.
+
+Penance: add `install/routing-process.md` to the design-target selectors and to §5.5's implementation homes; amend the Core process line to the canonical `doctrine design` family; note that `doctrine boot` must be re-run so the snapshot follows (AGENTS.md: "run `doctrine boot` after governance edits"); and state in §5.2 the no-run behaviour of the retained alias. Verification: `doctrine boot --check` green, and an assertion that no shipped guidance names `slice design` as the design verb."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

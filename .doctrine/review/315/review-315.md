@@ -211,3 +211,98 @@ statuses and dispositions are correct; the omitted literals are:
 The complete amendments are committed in `f779bd26`. This correction is in the
 prose companion because answered findings cannot be re-disposed and the
 append-only structured ledger has no responder-edit verb.
+
+## Round 2 — the raiser's verdict on the penance
+
+Thirteen charges were laid. Twelve are **verified terminal**. One is
+**contested** on a narrow leg, and one new charge is raised from the repair
+itself. The ledger stands at fourteen findings.
+
+### What the penance actually delivered
+
+I do not take a responder's word for a fix; I went and looked. The record:
+
+- **F-1 — proven by execution, not assertion.** `doctrine review prime RV-315`
+  now returns *"primed — 383 tracked path(s)"*, exit 0. The instrument the
+  Inquisition was denied has been restored to it. SL-234 took the *better* of
+  the two seams I offered — filtering non-blob index entries at
+  `resolve_selectors_to_fileset` rather than loosening `contentset::compute`,
+  leaving that leaf a hash-what-it-is-given function. It went further than the
+  charge required: `git ls-files --stage -z` so paths bearing spaces, tabs and
+  newlines survive intact, a named `GIT_REGULAR_BLOB_MODES` constant honouring
+  STD-001 rather than an inline literal, and a malformed-record error rather
+  than a silent skip. Regression coverage at `src/review.rs:4293`. **Better than
+  prescribed. Verified.**
+- **F-8** — the wedge is closed properly. Stable section-ID markers, exact
+  authored fingerprint, run UID and inquiry map and receipts preserved, evidence
+  invalidated only for changed sections per DEC-066, and refusal on missing /
+  duplicate / unknown markers, marker-free additions, and structural deletion
+  *rather than guessing*. That last clause is the one that matters: the design
+  chose refusal over inference at exactly the seam where inference is tempting.
+- **F-4** — the good argument is now written down. §7 records that
+  `src/install.rs::KNOWN_STAGE_LABELS` is a closed *lifecycle* vocabulary while
+  inquiry / drafting / reviewing / delegation are *intra-design obligations*.
+  The cascade was weighed and found inapplicable for a stated reason. That is
+  all I asked.
+- **F-7** — R12 now names false or mistaken attribution as a first-class risk
+  and, crucially, states the residual honestly: *"v1 trusts a cooperative agent
+  assertion rather than authenticating the human."* §5.4's `reviewing → locked`
+  predicate says the same in the gate itself. A tradeoff on the register is a
+  tradeoff someone will revisit.
+- **F-5, F-6, F-9, F-11** — the reconciliation sins are discharged. The scope's
+  closure-intent bullet is amended rather than contradicted; `install/manifest.toml`
+  and `publication/manifest.toml` are selectors *and* homes; the governance
+  descent is assigned to the first authored plan phase with a
+  selectors-before-bodies bootstrap and a conformance exit condition. §10 no
+  longer claims a reconciliation it had not performed.
+
+Full marks are rare from this bench. The corrections were prompt, evidenced by
+commit, and in three places exceeded the sentence handed down.
+
+### F-2 — contested, narrowly
+
+The namespace decision is **sound and I do not reopen it**. Top-level
+`doctrine design` canonical, `doctrine slice design` retained as a deprecated
+alias, one implementation, one foreign-edit guard, argued in both §5.2 and
+DEC-075 — that is the penance, and it was paid.
+
+But the sentence had three parts and the third is unpaid: *"the boot SPINE
+digest must agree with whatever is chosen."* It does not.
+`install/routing-process.md:47` — and therefore `.doctrine/state/boot.md:52`,
+`@`-imported into every agent's context on every session — still teaches:
+
+    **Core process:** `slice new` (scope) → `slice design` (author + adversarial
+    review until locked) → ...
+
+A blocker is not terminal while a named leg of its penance stands undone; to
+verify it anyway would be the very downgrade-to-clear-the-gate the guardrails
+forbid. Contested, and the delivery leg raised as **F-14** so it carries its own
+evidence and its own sentence rather than riding a re-disposition.
+
+Two things F-14 asks that F-2 did not: the most-read sentence in the corpus
+cannot advertise a deprecated verb, or the deprecation never converges; and
+"compatibility alias" is not yet earned — `slice design` *scaffolds a template*
+today and *materialises runtime sections* tomorrow, which is replacement, not
+compatibility. Say what it does on a slice with no run.
+
+### Standing
+
+- **F-13's lesson is discharged but the risk is not.** DEC-072 was corrected and
+  a sweep found no other stale forward references. Good. The standing risk from
+  round 1 remains as written: this slice ships the mechanism that makes corpus
+  hygiene load-bearing, and must keep its own house honest as the record grows.
+- **The re-adoption path (F-8) is new surface, and new surface is untried
+  surface.** §9.2's protocol tests are specified but not yet written. The
+  marker-mapping refusals are the part to test hostilely — a design that refuses
+  rather than guesses is only as good as the refusals it actually implements.
+
+### Disposition
+
+Verified terminal: F-1, F-3, F-4, F-5, F-6, F-7, F-8, F-9, F-10, F-11, F-12,
+F-13. Contested: F-2. Open: F-14.
+
+`await=responder`. One blocker (F-2) and one major (F-14) stand between this
+design and its lock, and they are the same hundred-odd words in two files. Pay
+them and the ledger goes terminal.
+
+> **HERESIS URITOR; DOCTRINA MANET**
