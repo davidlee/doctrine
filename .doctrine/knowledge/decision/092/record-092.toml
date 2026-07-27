@@ -12,17 +12,20 @@ tags = ["design-run", "state-model", "concurrency", "authored-tier"]
 
 [facet]                         # every field typed; seeded empty (captured later)
 context      = "DEC-059's revision is a counter inside the gitignored runtime snapshot; it cannot move when a user hand-edits authored design.md. DEC-072 guards only materialise. So an edit landing between two applies is invisible while the run keeps advancing stages and clearing gates against prose that no longer says what the snapshot believes."
-choice       = "Carry an authored watermark — the fingerprint of design.md as Doctrine last left it — in the runtime snapshot beside the revision. Every mutating verb checks it on entry and re-checks immediately before writing, refusing rather than proceeding. Only explicit re-adopt re-baselines it."
+choice       = "Carry an authored watermark — the fingerprint of design.md as Doctrine last left it — in the runtime snapshot beside the revision, under three distinct rules. (1) Ordinary mutation entry-refuses divergence. (2) adopt_authored is the sole lawful crossing and is a protocol, not a bypass: declared exact fingerprint, complete marker validation, DEC-066 evidence invalidation, no inherited clearance, re-baseline only after the candidate validates. (3) The pre-write re-check narrows the window but does not close it — Doctrine holds no lock against a human editor, so an edit landing between the final comparison and the atomic rename is caught at the next entry. Delayed detection, never silent acceptance."
 alternatives = [
   "Extend DEC-059's revision to cover authored bytes — rejected: it is a runtime-file counter a foreign editor never touches.",
   "Rely on DEC-066 per-section fingerprints — rejected: they answer which evidence died, not whether a write is permitted, and are evaluated only against sections the run already knows about.",
   "Guard at materialise only (status quo, DEC-072) — rejected: detection arrives after the run has already cleared gates against stale prose.",
 ]
-rationale    = "The review ledger already solved this shape: src/review.rs::with_turn takes an entry CAS against the stored hash and a pre-write CAS against a re-read, catching an edit landing before the invocation and one landing during it. Copying a tested two-window guard beats inventing a third state-model mechanism."
+rationale    = "The review ledger already runs this shape: src/review.rs::with_turn takes an entry CAS against the stored hash and a pre-write CAS against a re-read. Borrowing a tested comparison beats inventing a third state-model mechanism — but the borrowing is partial, and the two differences are load-bearing rather than incidental. with_turn holds a writer lock and hashes the very file it atomically replaces; a design run hashes design.md while writing a runtime snapshot, a checkpoint journal, and possibly an authored record. Those differences are why the crossing needs its own admission protocol (rule 2) and why the mid-invocation guarantee is bounded (rule 3) instead of inheriting with_turn's stronger same-file wording."
 consequences = [
   "The runtime snapshot gains one field; SL-233 phase 3 (persistence) owns it.",
-  "Every mutating design verb gains an entry and pre-write check — a refusal path to test, not a merge path.",
-  "An absent design.md before first materialisation must be treated as cold, not divergent.",
+  "Ordinary mutating verbs gain an entry and pre-write check — a refusal path to test, not a merge path.",
+  "adopt_authored must be specified as an explicit exception with its own validation protocol, or the F-8 live-run recovery path becomes self-refusing (RV-315 F-20).",
+  "The abandoned-write guarantee is 'the run does not advance', not 'nothing was written': DEC-083/086 order journal and record effects before the snapshot and forbid rollback of authored knowledge.",
+  "A residual comparison-to-rename race is accepted and stated, discharged by next-entry detection rather than eliminated.",
+  "An absent design.md before first materialisation must be treated as cold, not divergent; absent after it is divergent.",
 ]
 decided_by   = ""
 decided_on   = ""

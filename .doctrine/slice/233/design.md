@@ -178,18 +178,52 @@ flattens:
 Writes use atomic sibling replacement. Unknown schema versions and stale
 revisions are refused. The revision guards runtime writers against each other
 and structurally cannot see the authored tier, so the watermark guards that
-tier separately: every mutating verb fingerprints `design.md` on entry and
-refuses when it diverges from the watermark, then re-fingerprints immediately
-before writing and refuses rather than writes when the bytes moved during the
-invocation. The two windows catch an edit landing before the invocation and one
-landing during it — the shape `src/review.rs::with_turn` already runs for the
-review ledger. An absent `design.md` before first materialisation is cold, not
-divergent. Explicit re-adopt is the only path that re-baselines the watermark;
-no verb silently adopts a foreign edit, and DEC-066's per-section fingerprints
-do not substitute — they answer which evidence died, not whether a write is
-permitted. Exact procedural resume depends on this file; after its
-loss Doctrine reconstructs only what authored slice prose and linked knowledge
-can support (DEC-057).
+tier separately. Three rules, and they are not the same rule:
+
+1. **Ordinary mutation entry-refuses divergence.** Every mutating verb
+   fingerprints `design.md` on entry and refuses when it differs from the
+   watermark, rather than clearing another gate against prose the snapshot no
+   longer describes. An absent `design.md` before first materialisation is
+   *cold*, not divergent; absent after it is divergent.
+2. **Re-adopt is the sole lawful crossing, and it is a protocol, not a
+   bypass.** `adopt_authored` exists precisely because the bytes diverged, so
+   it is exempt from rule 1 — but only through the §5.5 admission path: the
+   caller declares the exact current fingerprint and it must match what
+   Doctrine reads; the complete stable-marker map must validate; affected
+   alignment, review, and gate evidence is invalidated under DEC-066 with no
+   clearance inherited across the crossing. The watermark re-baselines only
+   after the candidate validates in full. An invalid or stale adoption changes
+   neither runtime clearance nor the watermark. No other verb, and no informal
+   "re-adopt bypasses the guard", may admit foreign bytes.
+3. **The pre-write check narrows the window; it does not close it.**
+   Immediately before the runtime snapshot write, a mutating verb re-reads and
+   re-fingerprints `design.md` and abandons the write on divergence. Doctrine
+   holds no lock against a human editor, so an edit landing between that
+   comparison and the atomic rename is not caught by *this* invocation; it is
+   caught by rule 1 at the next one. The guarantee is delayed detection, never
+   silent acceptance.
+
+Rule 3's guarantee is bounded by effect ordering, and the bound is stated
+rather than papered over. For a checkpoint-bearing `apply`, DEC-083 and DEC-086
+order the journal, the reserved canonical ID, and the materialised record
+*before* the design snapshot, and authored knowledge is never rolled back to
+repair a runtime failure. So an abandoned write promises that the run does not
+advance — no snapshot, no stage or gate movement — not that nothing was
+written. Effects already journalled remain, and remain recoverable through the
+submission-keyed journal without duplication.
+
+The shape is borrowed from `src/review.rs::with_turn`, which runs the same
+entry-then-pre-write comparison for the review ledger, but the borrowing is
+partial and the differences are the reason rules 2 and 3 exist: `with_turn`
+holds a writer lock and hashes the very file it atomically replaces, whereas a
+design run hashes `design.md` while writing a runtime snapshot, a checkpoint
+journal, and possibly an authored record. DEC-066's per-section fingerprints do
+not substitute for any of this — they answer which evidence died, not whether a
+write is permitted.
+
+Exact procedural resume depends on this file; after its loss Doctrine
+reconstructs only what authored slice prose and linked knowledge can support
+(DEC-057).
 
 Submission receipts are bounded, but eviction cannot remove the latest receipt
 or one referenced by an outstanding delegation. A submission ID outside the
@@ -240,10 +274,12 @@ applicable cumulative gate must again hold against current content (DEC-067).
 
 Draft sections are runtime records with stable ID, order, title, body, and
 fingerprint. `materialise` records its output fingerprint as the §5.3 authored
-watermark and refuses to overwrite foreign edits; every other mutating verb
-checks that same watermark rather than proceeding blind. Its output carries unobtrusive stable-section-ID
-comments. After a human edit, an explicit re-adopt declaration through `apply`
-may import the exact current authored fingerprint into the same live run.
+watermark and refuses to overwrite foreign edits; ordinary mutating verbs
+entry-refuse against that same watermark rather than proceeding blind. Its
+output carries unobtrusive stable-section-ID comments. After a human edit, an
+explicit re-adopt declaration through `apply` — the one path exempt from that
+entry refusal, under §5.3's rule 2 — may import the exact current authored
+fingerprint into the same live run.
 Doctrine maps existing markers, re-fingerprints changed sections, preserves
 run UID, inquiry map, cursor, and prompt receipts, and invalidates affected
 alignment, review, and gate evidence under DEC-066. It refuses missing,
@@ -500,9 +536,11 @@ undeclared spec edits.
 - **DEC-088:** accepted checkpoints require a content-bound user-acceptance
   attestation; semantic payloads cannot self-declare accepted status.
 - **DEC-092** *(proposed — awaiting user acceptance)*: an authored watermark in
-  the runtime snapshot guards the authored tier, checked at entry and again
-  pre-write on every mutating verb. DEC-059's revision cannot see authored bytes
-  and DEC-066's section fingerprints answer a different question.
+  the runtime snapshot guards the authored tier. Ordinary mutation entry-refuses
+  divergence; `adopt_authored` is the sole lawful crossing and carries its own
+  admission protocol; the pre-write re-check narrows the residual window to
+  delayed detection rather than closing it. DEC-059's revision cannot see
+  authored bytes and DEC-066's section fingerprints answer a different question.
 
 Rejected alternatives include a fully specified/hierarchical workflow machine,
 a general process DSL, a full arbitrary inquiry graph, separate record-creation
@@ -528,11 +566,11 @@ mechanism.
   inquiry lifecycle, cursor/posture, review, delegation, and recovery as
   separate types with derived facts.
 - **R4 — runtime and authored truth diverge.** Store canonical references,
-  bind evidence to fingerprints, check the authored watermark on entry and
-  again pre-write on every mutating verb so a hand-edit cannot go unnoticed
-  between two applies, refuse foreign materialisation overwrite, provide
-  explicit marker-validated live-run re-adoption, and label semantic
-  reconstruction honestly.
+  bind evidence to fingerprints, entry-refuse an authored watermark divergence
+  on ordinary mutation so a hand-edit cannot go unnoticed between two applies,
+  re-check pre-write to narrow the residual window to delayed detection, refuse
+  foreign materialisation overwrite, admit marker-validated live-run re-adoption
+  as the sole lawful crossing, and label semantic reconstruction honestly.
 - **R5 — cross-tier failure duplicates authored knowledge.** Journal before
   authored mutation, reserve and journal the canonical ID before
   materialisation, key work by submission ID, and never roll back records.
@@ -585,12 +623,26 @@ Wire and end-to-end tests prove:
 - atomic rewrite and unchanged state after validation failure;
 - expected-revision conflict reporting;
 - an authored hand-edit landing between two applies is refused by the entry
-  watermark check on the next mutating verb, not discovered later at
+  watermark check on the next ordinary mutating verb, not discovered later at
   materialise;
-- an authored hand-edit landing mid-invocation is refused by the pre-write
-  check with nothing written and runtime state unmutated;
+- an edit injected into the named pre-write window through a deterministic hook
+  abandons the write: the snapshot is unchanged and the run advances no stage
+  and clears no gate;
+- for a checkpoint-bearing `apply` abandoned in that window, effects already
+  ordered before the snapshot under DEC-083/DEC-086 remain, are recoverable
+  through the submission-keyed journal, and produce no duplicate record on
+  retry — the assertion is that the run did not advance, never that nothing was
+  written;
+- an edit landing after the final comparison and before the atomic rename is
+  detected by the entry check on the next mutating verb rather than silently
+  accepted;
+- a valid `adopt_authored` crosses divergence where an ordinary `apply` is
+  refused, and it alone re-baselines the watermark;
+- an `adopt_authored` with a stale declared fingerprint, or one failing marker
+  validation, changes neither runtime clearance nor the watermark, and inherits
+  no gate clearance across the crossing;
 - an absent `design.md` before first materialisation is cold rather than
-  divergent, and only explicit re-adopt re-baselines the watermark;
+  divergent; absent after it is divergent;
 - submission retry idempotency and refusal of changed payload under a reused ID;
 - safe receipt-history eviction that preserves the latest and
   outstanding-delegation receipts;
