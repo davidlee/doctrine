@@ -6,10 +6,42 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-27 · design (**RV-314 run; F-1/F-10/F-11 + F-3 amended into
-design.md**; F-2 open) · 81e3e732
+fresh-as-of: 2026-07-27 · design (**RV-314 rounds 2–3; 20 findings, all
+disposed; six blockers answered-but-UNVERIFIED**) · eb1dc203
 
-### Produced — RV-314 round (this sweep)
+### Produced — RV-314 rounds 2 & 3 (this sweep)
+
+Two external adversarial rounds on the warm codex thread. **Each refuted the
+previous round's amendment.** Six findings raised, all reproduced by the
+responder before raising, all disposed `fix-now` with prose written.
+
+- **RV-314 → 20 findings.** Round 2 raised F-15/F-16 (blockers) + F-17 (major);
+  round 3 raised F-18/F-19 (blockers) + F-20 (major). F-2 closed.
+- **DEC-080** — the symlink closure splits **emission** from **discovery**.
+  Emit every lexically-eligible joined target as `:(literal)<target>`
+  unconditionally; index re-expansion only walks to deeper `120000` entries.
+  I8 restated to bind **derived** pathspecs, not only declared ones.
+- **DEC-081** — `scope.unobservable`'s producer: `memory edit` alone, replace
+  semantics, `num_args = 0..=1` so a bare flag clears, `record` and the embedded
+  template untouched, `ClaimSnapshot` unchanged by construction. No backfill.
+- **DEC-082** — the 18-state cube is a **content/existence projection**, showing
+  the legs jointly *necessary* not sufficient. R-E promoted to I9′'s **third
+  bound**.
+- **DEC-087** — `--attr-source=<empty tree>` joins `NORMATIVE_FLAGS`. Closes
+  attribute conversion as a *class*. I6 **kept, not narrowed**.
+- **CON-002** — doctrine-wide git **2.40** floor (new; none previously declared).
+  Unmet ⇒ **legible refusal via capability probe**, never silent degradation.
+- **IMP-326** — the ~33-entry `unobservable` corpus backfill, HEAD-stamped.
+- **IMP-327** — scope arrays are clearable via MCP but not the CLI (pre-existing).
+- **`design.md` amended** — § 5.1 the raw-byte legs subsection; § 5.2 the
+  emit/discover split, the constructed uid base + its **three** safety
+  conditions, the index-flag exclusion; § 5.2a step 4 and the derived-string
+  prefix rule; I6/I7/I8/I9′ restated; R-E promoted in § 8; **T64–T77**; § 10
+  carries 20 findings and the two round lessons.
+- **RFC-011 case notes** — two entries (the acquittal-asymmetry finding; the
+  self-probing-narrows-but-does-not-close note).
+
+### Produced — RV-314 round 1
 
 - **RV-314** — design-facet ledger, raiser `inquisitor`. **14 findings**: 4
   blockers (F-1, F-2, F-3, F-10), 6 major, 4 minor. External codex pass raised
@@ -90,7 +122,40 @@ Three figures **did not reproduce** from `slice-232.md` and are corrected in
 - **`verified_sha` carries two value kinds** — 24 of 59 attestations are
   `checkout_state_id`, never commit-anchored. New finding → DEC-055, IMP-325.
 
-### Measured — RV-314 round (HEAD `743e7fe61`)
+### Measured — RV-314 rounds 2 & 3 (git 2.54.0, HEAD `eb1dc203`)
+
+Every figure below was reproduced by the responder, not accepted from the
+reviewer.
+
+- **Detached symlink target** — surface `[:(literal)link]` reads
+  `tracked=0 / untracked=0 / index_rc=0`; the control emitting the target
+  literally reads `tracked=145 / index_rc=1`. F-15.
+- **Derived pathspec injection** — a tracked symlink whose blob is
+  `:(exclude)uid/**` gives `tracked=0 / index_rc=0` raw versus
+  `tracked=152 / index_rc=1` literal-prefixed. F-16.
+- **Unmatched literal pathspecs are inert** — `rc=0` on all three legs, and a
+  real signal beside them still reports (`tracked=143 / rc=1`). This is what
+  makes unconditional emission affordable and what killed F-20's optimisation.
+- **Index-flag blindness** — `assume-unchanged` and `skip-worktree` both read
+  `0/0/0` while tracked and modified on a stable checkout. F-17 → DEC-082.
+- **`.gitattributes` defeats all three legs** — `eol=crlf`: HEAD `…0a` vs
+  worktree `…0d0a`, `cmp` NOT identical, `0/0/0`, `git status` empty. **Clean
+  filter: `CANONICAL` vs arbitrary attacker content, `0/0/0` against the
+  `--cached` leg § 5.1 specifies.** F-19.
+- **The repair measured** — `--attr-source=<empty tree>` raises the tracked leg
+  `0 → 172` (filter) and `0 → 156` (eol).
+- **Empty-tree oid is hash-algorithm dependent** — `4b825dc6…` sha1,
+  `6ef19b41…` sha256. Must be derived (`git hash-object -t tree /dev/null`).
+- **Capability probe** — `git --attr-source=<oid> rev-parse --git-dir` exits 0
+  supported, 129 `unknown option` otherwise. Non-zero is the sufficient test.
+- **clap 4 `num_args = 0..=1`** — absent `None`, bare `Some([])`, valued
+  `Some([v])`, repeated appends; value count caps at 1 so the positional falls
+  through. Only misfire: bare flag immediately before the positional, which
+  always errors loudly (`<REFERENCE>` is the sole positional).
+- **This repo has no `.gitattributes`** — DEC-087's usability cost has live
+  population 0 here.
+
+### Measured — RV-314 round 1 (HEAD `743e7fe61`)
 
 - **"81 items declare `.doctrine/**` scopes" does NOT reproduce — it is 29**
   (35 entries). RV-314 F-14. The same parser reproduces every other figure
@@ -104,7 +169,38 @@ Three figures **did not reproduce** from `slice-232.md` and are corrected in
 - **I2 holds under the split** — all three legs read-only, each completes with
   `.git/index.lock` held.
 
-### Learned — RV-314 round
+### Learned — RV-314 rounds 2 & 3
+
+- **Check the AXIS, not just the property — the round-1 lesson generalised.**
+  Three findings across three rounds are one mistake: verifying something *true
+  that is not load-bearing*. I9 asserted soundness where the hazard was
+  completeness (F-1/F-10). The prefix rule was proved for *declared* strings
+  where the hazard was *derived* ones (F-16). The uid was validated for its
+  *alphabet* where the hazard was its *identity* (F-18) — **committed in the same
+  round that recorded the previous two**, in prose claiming to close that class.
+  A true property stated confidently is the most reliable way to stop looking.
+- **An external reviewer's ACQUITTALS need re-derivation more than its findings.**
+  Codex cleared the clean-filter limb after probing `diff-index --quiet HEAD`;
+  § 5.1 specifies `--cached`, and against that leg the miss is total and hides
+  *arbitrary* content. The finding it did raise was real but materially
+  understated. Convictions arrive with a probe attached and get re-run;
+  acquittals arrive as prose and get believed. Cost of catching it: one 12-line
+  probe. Cost of missing it: a blocker ships as a wording fix.
+- **A repair to a REUSE defect must be checked against every consumer of the
+  reused instrument.** DEC-069 moved declared entries off the index and left
+  derived ones behind, because the fix was written where the finding pointed
+  rather than where the *class* lived. That gap became two more blockers.
+- **Pre-empt the reviewer on your own new prose — it is much cheaper than a
+  round-trip, and it still will not save you.** Self-probing found the uid-base
+  gap before codex reported; it did not stop me getting the axis wrong.
+- **Neutralise at the instrument, not per artefact.** F-19's per-file raw-byte
+  check would have needed the concrete-path enumeration D18 already rejected;
+  one flag on `NORMATIVE_FLAGS` closed the whole class instead. When a hazard is
+  the *tool's* view, fix the tool invocation.
+- **Relations move via `doctrine link`, not hand-edited `[[relation]]` blocks.**
+  Hand-wrote an illegal `constrains` label into CON-002; `doctor` caught it.
+
+### Learned — RV-314 round 1
 
 - **Check an invariant's POLARITY, not just its truth.** I9 was true and useless:
   it asserted *soundness* (nothing false enters) where the hazard was
@@ -161,20 +257,29 @@ Three figures **did not reproduce** from `slice-232.md` and are corrected in
 
 ### Open
 
-**Next action: answer RV-314 F-2 (`scope.unobservable` has no producer), then run
-an adversarial pass on the § 5.2 amendment before verifying F-1/F-10.** Codex
-thread `019fa1a1-4834-7a60-981d-f85e9a7f572f` is warm with the full design,
-probes and its own F-1/F-10 analysis. Default reviewer **codex mcp** — not
-read-only, or it cannot write the ledger. Drive review verbs from the primary tree.
+**Next action: round 4 on the warm codex thread
+`019fa1a1-4834-7a60-981d-f85e9a7f572f`, then verify the six blockers if it
+holds.** Rounds 2 and 3 each refuted the previous round's amendment, so a fourth
+pass is the expected cost, not pessimism. **Instruct it to re-derive its own
+acquittals** — round 3's most serious finding was hiding inside one. Default
+reviewer **codex mcp** — not read-only, or it cannot write the ledger. Drive
+review verbs from the primary tree.
 
-- **RV-314 F-2 (blocker, OPEN)** — `scope.unobservable` is a *declared* boundary
-  with no write surface. Read path is safe by construction (`toml_edit` preserves
-  unknown keys; `scope_array` returns empty when absent). Open: CLI flag on
-  `memory edit`, MCP `EditParams` field, replace-vs-append, absent-field default,
-  whether `record` may author it, corpus backfill. `ClaimSnapshot` must **not**
-  gain it or T52 inverts.
-- **RV-314 F-1 / F-10 (blockers, OPEN)** — prose written (DEC-069/070/071), not
-  yet adversarially checked. Do not verify until it is.
+- **Six blockers ANSWERED, none VERIFIED** — F-1, F-10, F-15, F-16, F-18, F-19.
+  Every remedy has prose in `design.md`; none has survived a pass. `dispose ≠
+  verify`, and the close-gate is the only thing tracking the difference. **The
+  design must not go to `/plan` on this state.**
+- ~~**RV-314 F-2**~~ — **CLOSED** (DEC-081, § 5.3). Producer is `memory edit`
+  alone. Backfill declined → IMP-326; CLI/MCP clear asymmetry → IMP-327.
+- **DEC-087's two unpaid obligations** — (a) `capture()` byte-identity (I1/T59)
+  must be **re-run, not reasoned about**, in a no-`.gitattributes` fixture (T74);
+  (b) `checkout_state_id` inputs change in attribute-using repos, so persisted
+  values are not reproducible there. Population 0 here; both stated, neither
+  discharged.
+- **CON-002 is a new doctrine-wide constraint** — the git 2.40 floor did not
+  previously exist. It binds every invocation (`NORMATIVE_FLAGS`), not just
+  `verify`, because scoping the flag to verify's probes would split-brain
+  `capture()` against `verify`.
 - **RV-314 F-7 is a PREREQUISITE to § 5.2's split**, not a parallel task —
   unguarded derived targets return exit 128 on all three legs. Its exhaustion
   classification (non-contributing / malformed / probe error) is still unchosen,
@@ -191,9 +296,12 @@ read-only, or it cannot write the ledger. Drive review verbs from the primary tr
   entry's ancestry (`candidate.sh` FAL-4, **failed**). A capability the inherited
   design claimed and this one does not. Recovery measured (`residue.sh` (b)),
   deliberately not built. Live population 0.
-- **R-E** — index bits (`S`/`h`) suppress the measurement; no pathspec approach
-  closes it (`candidate.sh` FAL-5, **failed**). Live population **0**, and it
-  affects the anchor leg too, so it is wider than this slice.
+- ~~**R-E**~~ — **PROMOTED, no longer merely a risk** (DEC-082, RV-314 F-17).
+  Index bits (`S`/`h`) suppress the measurement on a stable checkout while
+  tracked — a counterexample *inside* I9′'s other two bounds, so I9′ was false
+  until R-E became its **third named bound**. Pinned by expected-blind T64, which
+  also discharges F-13's symmetry complaint. Live population **0**; still affects
+  the anchor leg, so still wider than this slice.
 - **R-F** — case-insensitive collision unmeasured, not cleared.
 - **R-I (new)** — the Rust TOML parser's handling of an escaped NUL is
   unmeasured; `control-chars.py` measured Python's `tomllib`.
