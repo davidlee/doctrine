@@ -865,3 +865,49 @@ But it does defeat the fork-time-snapshot property the design names, and the
 corpus does not bless it. Recording it as a deliberate, disclosed deviation, not
 a discovered best practice — and the memory needs updating either to admit a
 third option or to say explicitly why the repair is forbidden.
+[research on RFC-023 executable phase gates; 023-research-01]
+The `justfile`/`doctrine.toml`/`doctrine check` triad is already the POL-002-clean
+proxy pattern that RFC-023's Directions C+E need. The agent spent ~15 tool calls
+reading files that the boot snapshot and memories already described (justfile
+recipes, cadence resolution, VT shape). A `doctrine memory retrieve` query for
+"verification config" returned memories about stale binaries and spec anchors but
+not the cadence proxy pattern — the pattern is obvious from reading
+`src/verify.rs` directly once you know the file exists, but finding that file
+required running `grep` on `src/commands/check.rs` output, then reading the
+module to find the `resolve_check` → `run_suite` split. A memory
+`mem.pattern.doctrine.cadence-proxy` keyed to `[verification]` and `verify.rs`
+would have collapsed 5+ exploration calls into one retrieve.
+
+[dispatch/phase-plan/execute; SL-231-PHASE-05-orchestrator-inline]
+
+- **`arm-spawn`'s end-loaded failure cost a full worker turn.** Omitting
+  `--phase` produces a fork bound to nothing, but nothing detects that until
+  `worker_commit` refuses `unprovable-fork` at hand-back — ~265k tokens and
+  ~28min after the fact. The `/dispatch-agent` template still renders `--slice`
+  optional and omits `--phase` entirely. Filed IMP-331; the durable fix is
+  failing closed at arm time, which converts a worker-turn loss into a free
+  error.
+- **Retrieving memory against a phase's FILES but not its COMMANDS is a silent
+  half-probe.** A memory documenting the trap above — including a section on
+  why an orchestrator walks into it — existed and was missed, because it is
+  tagged on the command surface and `/phase-plan`'s retrieval step was scoped to
+  the phase's touch-set. Two surfaces per phase: content and mechanics.
+  Retrieving both at PHASE-05 paid immediately (three memories landed directly
+  on the work: the gitignore inline-comment trap, the stale-embed boot rollback,
+  and the client-surface placement rule).
+- **A handover recommendation is a hypothesis, not a finding.** The packet's
+  PHASE-03 VT-3 recommendation described a test that cannot pass, and
+  mislabelled the shape of the test already landed. Re-deriving it against the
+  code cost one grep; following it would have produced a vacuous test — the
+  exact defect class the review that generated the handover was raised about.
+- **`check regression capture --base <B>` does not check `B` out.** It runs the
+  suite on the current tree and labels the result `B`. Run after the delta, it
+  records the delta's own failure as pre-existing, and the subsequent diff
+  reports `persistent (pre-existing) — fix the trunk`. That phrasing actively
+  invites waving through a self-inflicted regression. The funnel captures
+  pre-spawn; an inline phase has no such beat and must remember it.
+- **Doc/DAG coupling that no artefact names.** Adding one `.doctrine/` line to
+  `.gitignore` red-ed a parity test requiring a new withhold-tier variant. Not
+  in the design, not in the §7 touch-set, not in the phase sheet's reading list
+  — only the gate knows. Cheap to fix, but it means a "one-line data change"
+  estimate is systematically wrong for this file.
