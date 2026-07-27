@@ -373,3 +373,24 @@ the token accounting:
   probe transcripts through shell quoting, and `review show` still will not print
   the finding roll. Both already noted; repeating only to mark that they recurred
   every round rather than once.
+
+[inquisition; SL-233 RV-315 / iq-233a]
+- `doctrine review prime RV-315` fail-hards on tracked slug symlinks
+  (ISS-259 / RV-315 F-1). Cost: ~4 tool calls to distinguish "my mistake" from
+  "engine bug" (compare-prime against RV-314, then read three source sites to
+  pin the cause). A named refusal — "selector fileset contains a symlink to a
+  directory: <path>" — would have cost zero.
+- `doctrine reports next` / `doctrine reports explain` are in the boot digest's
+  routing text but absent from the 0.33.1 binary's command list (`error:
+  unrecognized subcommand 'reports'`). One wasted call. The SPINE block in
+  boot.md lists `reports status next blockers survey explain findings`, so the
+  digest and the binary disagree.
+- `doctrine slice selector SL-233` — guessed shape; the verb takes a subcommand,
+  not a bare id. Recovered by falling back to `slice show --json` + a python
+  filter, which is the reliable read for selectors but costs a heredoc.
+- `doctrine backlog paths ISS-259` prints `backlog-259.{toml,md}` while the
+  entity is created as ISS-259 — the file stem does not follow the kind prefix,
+  so a `cat` composed from the id fails. Cost: one failed read.
+- Two zsh glob failures on unquoted `--include=*.rs` / `src/prompt*.rs` passed
+  to Bash; both returned "no matches found" that read like empty grep results.
+  The footgun hook fired correctly on the negative-grep risk.
