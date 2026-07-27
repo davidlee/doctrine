@@ -30,7 +30,7 @@ response = "Accepted. ISS-259 is now governed by SL-234, whose scoped design fil
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected: a new public command family is reconciled against the existing verb surface. Observed: DEC-075 mints top-level 'doctrine design' beside the extant 'doctrine slice design', and neither the design nor the DEC acknowledges it exists"
 detail = """
@@ -277,7 +277,7 @@ response = "DEC-072 now records that DEC-073 settled QUE-188 and summarizes the 
 
 [[finding]]
 id = "F-14"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "Expected: the F-2 alias decision reaches every surface that names the incumbent. Observed: install/routing-process.md and the derived boot.md still teach 'slice design' as the core-process design verb, and neither is in any SL-233 selector"
 detail = """
@@ -301,6 +301,38 @@ And the same disease F-5 and F-9 were raised for recurs: `install/routing-proces
 Penance: add `install/routing-process.md` to the design-target selectors and to §5.5's implementation homes; amend the Core process line to the canonical `doctrine design` family; note that `doctrine boot` must be re-run so the snapshot follows (AGENTS.md: "run `doctrine boot` after governance edits"); and state in §5.2 the no-run behaviour of the retained alias. Verification: `doctrine boot --check` green, and an assertion that no shipped guidance names `slice design` as the design verb."""
 disposition = "fixed"
 response = "Added install/routing-process.md as an exact design target and implementation home, changed its core-process line to the canonical managed design family, regenerated derived boot state, and verified doctrine boot --check. Design tests now require that shipped/generated core-process guidance never advertises slice design as canonical. The no-run compatibility behavior is explicit in DEC-075 and section 5.2. Committed in d8a4cf66."
+
+[[finding]]
+id = "F-15"
+status = "open"
+severity = "blocker"
+title = "Expected: shipped guidance describes commands that exist. Observed: d8a4cf66 landed a core-process line teaching 'design start' into the embedded boot source at design stage — the command does not exist, and SL-233 has no plan"
+detail = """
+This charge arises from the F-14 repair, not from a failure of it. F-14's prescribed legs are all delivered and verified; the defect is **when** the edit landed, not what it says.
+
+Observed, at HEAD:
+```
+$ doctrine design start SL-233
+error: unrecognized subcommand 'design'
+```
+`doctrine slice show SL-233` -> status `design`. There is no `plan.toml`. Yet `install/routing-process.md` (commit d8a4cf66) now reads:
+
+    **Core process:** `slice new` (scope) -> `design start` -> managed `design ...`
+    (author, materialise, adversarial review, lock) -> `slice plan` -> ...
+
+`install/routing-process.md` is not a design note. It is a **shipped, embedded asset** on the hottest path in the corpus:
+- `src/boot.rs:99-104` — `boot_sequence()` places `SourceKind::Static("routing-process.md")` **first**, ahead of the command map and governance;
+- `src/boot.rs:237` resolves it via `install::asset_text` -> `asset_source::read_text` — the **embed**, not the projected `.doctrine/` copy (see the test `produce_static_reads_the_embed_and_markers_a_missing_asset`, src/boot.rs:2437);
+- `publication/manifest.toml:246` publishes it at `reference/routing-process.md`;
+- `.doctrine/state/boot.md` is `@`-imported by both CLAUDE.md and AGENTS.md into **every agent's context in every session**, in this repo and in every doctrine-installed project.
+
+So the next `cargo build` that re-embeds `install/` puts an instruction to run a nonexistent subcommand into the first section of every boot snapshot. That it has not happened yet is luck, not design: `./target/debug/doctrine` was built 13:30, d8a4cf66 landed 20:33, and `cargo build` reported "Finished in 0.05s" without re-embedding. `.doctrine/state/boot.md:52` and the projected `.doctrine/routing-process.md:20` both still carry the incumbent line, and `doctrine boot --check` currently reports **stale** — so the F-14 response's claim that boot state was regenerated and the check verified green is not reproducible at this commit. The staleness is the only thing standing between this repo and the broken instruction.
+
+The design itself says this is implementation work. §5.5:371-374: "`install/routing-process.md` for the canonical managed-design core-process sentence projected into the boot snapshot; **implementation** regenerates `.doctrine/state/boot.md` with `doctrine boot`". The home is correctly authored as an implementation home — and then the edit was made before the implementation exists. This is the F-12 sin inverted: there, a stray edit had to be lifted out of the slice; here, slice work has been performed before the gate that authorises it. Boot's own guardrail, delivered by the very file in question, reads "No code without an approved plan."
+
+Second-order harm is the one that stings: an agent meeting `error: unrecognized subcommand` in the CORE PROCESS line will improvise or misroute — the precise adherence failure SL-233 exists to cure, caused by SL-233's own paperwork.
+
+Penance: restore the incumbent Core process sentence in `install/routing-process.md` on `edge` now, and move the canonical rewrite into the implementation phase that ships the `doctrine design` family — the design-target selector added in d8a4cf66 already makes that phase's edit conformant. Retain §5.5's home and §9's boot/guidance assertion as authored intent; they are correct and should stay. Add to that phase's exit criteria the full refresh ritual, since editing an `install/` asset is not self-delivering: `cargo build` to re-embed, `doctrine boot`, then `doctrine boot --check` green, and `doctrine install` to refresh the projected `.doctrine/routing-process.md` (currently stale from 02:54 and itself divergent from the embed — it omits `reconcile` from the close sequence). Verification: at every commit before that phase, `doctrine boot` output names only commands the built binary answers."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

@@ -306,3 +306,98 @@ design and its lock, and they are the same hundred-odd words in two files. Pay
 them and the ledger goes terminal.
 
 > **HERESIS URITOR; DOCTRINA MANET**
+
+## Round 3 — the contested legs paid, a new one opened
+
+Fourteen of fifteen charges are **verified terminal**. One blocker is raised,
+and it is the repair's own child.
+
+### F-2 and F-14 — verified
+
+Both contested legs were paid in full, and the shim question was answered better
+than I framed it. DEC-075 now defines two **mutually exclusive** paths rather
+than one alias: with a live run, `slice design` delegates through the same
+materialisation implementation and the same foreign-edit guard; with no run it
+preserves the incumbent scaffold-only contract — template only when `design.md`
+is absent, the existing no-clobber refusal otherwise, a deprecation warning
+directing new work to `doctrine design start`, and
+`doctrine design start --from-design` named as the migration path. It "never
+creates or reconstructs runtime state." That is the honest construction: the
+word *compatibility* is now earned, because the incumbent behaviour genuinely
+survives where it was the only behaviour.
+
+F-14's legs are likewise all present: `install/routing-process.md` added as an
+exact design target with a note, named as an implementation home at §5.5:371,
+the core-process sentence rewritten, and §9.4 now requires that no shipped or
+generated core-process guidance advertise `slice design` as canonical while
+permitting deprecation documentation to name the shim. Nothing was left for me
+to chase.
+
+### F-15 — and yet
+
+`doctrine design start SL-233` returns `error: unrecognized subcommand 'design'`.
+The slice is at status `design`. There is no `plan.toml`. And commit d8a4cf66
+has already rewritten the Core process sentence in `install/routing-process.md`
+to teach that command.
+
+That file is not a design note. `src/boot.rs:99-104` makes it the **first**
+section of every boot snapshot, ahead of the command map and governance;
+`src/boot.rs:237` resolves it from the **embed**, not the projected copy;
+`publication/manifest.toml:246` ships it; and `.doctrine/state/boot.md` is
+`@`-imported into every agent's context in every session, in this repo and every
+installed project. The next `cargo build` that re-embeds `install/` writes an
+instruction to run a nonexistent subcommand into the highest-salience paragraph
+in the corpus.
+
+That this has not yet happened is **luck, not design**. The binary predates the
+commit by seven hours; `cargo build` reported "Finished in 0.05s" and did not
+re-embed. `.doctrine/state/boot.md:52` and the projected
+`.doctrine/routing-process.md:20` both still carry the incumbent line, and
+`doctrine boot --check` reports **stale** — so the round-2 response's claim that
+boot state was regenerated and the check verified green is not reproducible at
+this commit. A stale artifact is the only thing standing between this repository
+and the broken instruction. I record that not to score a point but because a
+verification claim that cannot be reproduced is worth exactly nothing, and this
+bench will not treat it as evidence.
+
+The design agrees with me, which is the sharpest part. §5.5:371-374 files the
+edit as **implementation** work — "implementation regenerates
+`.doctrine/state/boot.md` with `doctrine boot`". The home was authored
+correctly and then the work was done before the gate that authorises it. This is
+F-12 inverted: there a stray edit had to be lifted *out* of the slice; here
+slice work was performed *ahead* of its plan. The guardrail breached is the one
+this very file delivers to every agent that boots: **no code without an approved
+plan.**
+
+The second-order harm is the one that stings. An agent meeting
+`error: unrecognized subcommand` in the *core process* line will improvise or
+misroute — the precise adherence failure SL-233 exists to cure, inflicted by
+SL-233's own paperwork. *Medice, cura te ipsum.*
+
+### Penance
+
+Restore the incumbent sentence on `edge` now; move the canonical rewrite into
+the phase that ships the `doctrine design` family, where the selector added in
+d8a4cf66 already makes it conformant. Keep §5.5's home and §9.4's assertion —
+they are right and they stay. Add the refresh ritual to that phase's exit
+criteria, because editing an `install/` asset is **not self-delivering**:
+`cargo build` to re-embed, `doctrine boot`, `doctrine boot --check` green, then
+`doctrine install` to refresh the projected `.doctrine/routing-process.md` —
+which is stale from 02:54 and independently divergent from the embed, omitting
+`reconcile` from its close sequence.
+
+### Standing
+
+- **The refresh ritual is the real lesson.** Three artifacts carry this one
+  sentence — the embed, the projection, the snapshot — and each needs a
+  different verb to move. Any phase touching `install/**` inherits that
+  three-step tail or it ships a lie. Worth a durable memory once this lands.
+
+### Disposition
+
+Verified terminal: F-1 through F-14 entire. Open: **F-15** (blocker).
+
+`await=responder`. One sentence in one file stands between this design and its
+lock — restore it, and the ledger goes terminal.
+
+> **HERESIS URITOR; DOCTRINA MANET**
