@@ -304,7 +304,7 @@ response = "Added install/routing-process.md as an exact design target and imple
 
 [[finding]]
 id = "F-15"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected: shipped guidance describes commands that exist. Observed: d8a4cf66 landed a core-process line teaching 'design start' into the embedded boot source at design stage — the command does not exist, and SL-233 has no plan"
 detail = """
@@ -333,6 +333,8 @@ The design itself says this is implementation work. §5.5:371-374: "`install/rou
 Second-order harm is the one that stings: an agent meeting `error: unrecognized subcommand` in the CORE PROCESS line will improvise or misroute — the precise adherence failure SL-233 exists to cure, caused by SL-233's own paperwork.
 
 Penance: restore the incumbent Core process sentence in `install/routing-process.md` on `edge` now, and move the canonical rewrite into the implementation phase that ships the `doctrine design` family — the design-target selector added in d8a4cf66 already makes that phase's edit conformant. Retain §5.5's home and §9's boot/guidance assertion as authored intent; they are correct and should stay. Add to that phase's exit criteria the full refresh ritual, since editing an `install/` asset is not self-delivering: `cargo build` to re-embed, `doctrine boot`, then `doctrine boot --check` green, and `doctrine install` to refresh the projected `.doctrine/routing-process.md` (currently stale from 02:54 and itself divergent from the embed — it omits `reconcile` from the close sequence). Verification: at every commit before that phase, `doctrine boot` output names only commands the built binary answers."""
+disposition = "fixed"
+response = "Restored the incumbent core-process sentence in shipped routing guidance. The design retains the exact target and home but now assigns its rewrite to the implementation phase that first makes the design command family executable, with cargo build, boot regeneration, boot check, install projection refresh, and built-command acceptance as exit criteria. The current binary and all three current guidance copies now agree; boot check and the quick gate pass. Committed in 18177655."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
