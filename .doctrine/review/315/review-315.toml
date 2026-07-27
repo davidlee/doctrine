@@ -151,7 +151,7 @@ response = "The reviewing→locked predicate now states that v1 accepts an audit
 
 [[finding]]
 id = "F-8"
-status = "open"
+status = "answered"
 severity = "major"
 title = "Expected: a live run can recover from a user's hand edit to design.md. Observed: materialise refuses foreign edits (DEC-072) and import is admitted only for a NEW run after runtime loss (DEC-084) — leaving a permanent wedge with no verb"
 detail = """
@@ -167,6 +167,8 @@ Now the state neither covers. A run is LIVE (snapshot intact). The user opens `d
 The user's choice is: revert their own edit by hand, or destroy the run. Neither is stated as the intended answer; 5.4, 5.5, 6, and 8 are all silent. R4 ("runtime and authored truth diverge") lists the mitigation as "refuse foreign materialisation overwrite" — it treats the refusal as the remedy and never asks what follows it. Note this is a self-inflicted wound: the design's own 3 declares "final design prose are committed truth", and DEC-072's refusal makes committed truth unreachable from the tool that owns it.
 
 Penance: name the exit. Cheapest defensible v1 — a re-adopt path on the LIVE run (`design apply` accepting the current authored section bodies as an explicit re-import that re-fingerprints and invalidates the affected content-bound evidence per DEC-066, keeping map/cursor/receipts intact). Alternative: `materialise --force` that clobbers with the divergence reported. Whichever is chosen, 5.4 must state it and 9.2 must test it: hand-edit design.md under a live run, exercise the recovery verb, assert the run survives and that alignment/review evidence bound to the changed sections is invalidated rather than silently retained."""
+disposition = "fixed"
+response = "DEC-072, DEC-084, design sections 5.4 and 5.5, risk R4, and protocol tests now define explicit live-run re-adoption through an apply declaration. It approves the exact authored fingerprint, maps stable section markers, preserves run identity and procedural state, invalidates evidence for changed sections, and refuses ambiguous structural edits. Committed in 5db8080c."
 
 [[finding]]
 id = "F-9"
