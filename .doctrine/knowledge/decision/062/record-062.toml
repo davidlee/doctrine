@@ -1,21 +1,23 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 180
-slug = "semantic-checkpoint-admission-and-acceptance"
-title = "Semantic checkpoint admission and acceptance"
-record_kind = "question"
-status = "answered"
+id = 62
+slug = "resolved-inquiries-require-explicit-semantic-disposition"
+title = "Resolved inquiries require explicit semantic disposition"
+record_kind = "decision"
+status = "accepted"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
 
 [facet]                         # every field typed; seeded empty (captured later)
-question    = ""
-why_matters = ""
-answer      = ""
-answered_by = ""
-answered_on = ""
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
 
 [evidence]                      # free-text citations (supports / contradicts / notes)
 supports    = []

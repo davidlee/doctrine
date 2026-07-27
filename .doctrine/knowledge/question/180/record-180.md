@@ -8,3 +8,8 @@ At which design-run transitions must the semantic result be dispositioned as a
 new or existing DEC/QUE/ASM, an explicitly retained unresolved result, or a
 non-durable exchange? How is user acceptance represented without approval
 ceremony after every inquiry-map edit?
+
+Answered by DEC-062: semantic closure is gated at `resolved`; ordinary map
+mutation is approval-free. Every resolution links or creates its durable
+outcome, links an existing outcome, or explicitly records a non-durable result.
+Only promotion into accepted design truth requires user acceptance.

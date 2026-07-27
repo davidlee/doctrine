@@ -1,11 +1,11 @@
 schema = "doctrine.knowledge"
 version = 1
 
-id = 180
-slug = "semantic-checkpoint-admission-and-acceptance"
-title = "Semantic checkpoint admission and acceptance"
+id = 183
+slug = "sparse-redeclaration-protocol-for-design-run-mutation"
+title = "Sparse redeclaration protocol for design-run mutation"
 record_kind = "question"
-status = "answered"
+status = "open"
 created = "2026-07-27"
 updated = "2026-07-27"
 tags = []
