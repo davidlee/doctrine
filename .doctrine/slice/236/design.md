@@ -142,9 +142,17 @@ Sub-dispatchers gaining one parameter: `adr`, `policy`, `standard`, `rfc`,
 
 Two `#[derive(Args)]` structs lose a field: `ServeArgs`, `MapServeArgs`.
 
-**Atomicity.** A `global = true` short flag collides with any surviving local
-`-p`, so the deletion cannot be staged across commits. Phase boundaries must
-respect this (§8, R1).
+**Atomicity — RETRACTED (F-8).** An earlier draft asserted that a `global = true`
+short flag collides with any surviving local `-p`, forcing one atomic commit.
+✗ **Measured false** (clap 4.6.1 spike, §10 F-8): global and local share an arg
+id, clap accepts the duplicate, and both fields receive the value. **The sweep
+can be staged** module by module; each intermediate state parses and behaves
+correctly. Phase boundaries are free.
+
+**D4 — the global's doc comment is `/// Explicit project root (default:
+auto-detect).`** — the 116-occurrence majority wording among the 204 sites. Help
+goldens print the *global's* text once the local is deleted, so matching the
+majority minimises churn to the ~40 minority-worded subcommands (§6, OQ-1).
 
 **Surfaces unified as a side effect.** ✓ `Boot` declares `path` documented as
 *"Used by the bare regenerate; `boot install` carries its own `-p`"*
@@ -174,11 +182,18 @@ accepts `--path` but not `-p`. The global collapses both inconsistencies.
   in each subcommand's help, so `-p` may appear identically, at a different
   position, or move to a global section. Churn could be near-zero or touch every
   help golden.
-  **Resolution: measure AFTER the sweep, not before** — see F-1 (§10). The
-  originally-proposed pre-sweep spike is unworkable: it would require the global
-  and the locals to coexist, which is the one thing §5.4 says cannot happen. The
-  compile-error property (§7) makes the sweep safe to perform un-measured, so
-  golden churn is absorbed as its own phase immediately after.
+  **Largely RESOLVED by the F-8 spike.** Measured on clap 4.6.1: a global `-p`
+  renders inside each subcommand's `Options:` block at effectively the same
+  position a local occupied. The line itself does not move. What changes is the
+  **description text**, because the help now prints the *global's* doc comment.
+  ✓ The 204 sites today carry ~4 wordings (116× "Explicit project root (default:
+  auto-detect).", 37× "…(default: auto-detect from CWD).", 9×, 4×).
+  **Mitigation → D4:** adopt the 116-occurrence majority as the global's doc
+  string, reducing churn to the ~40 minority-worded subcommands plus any ordering
+  shift where `-p` was not the last flag before `-h`.
+  *Residual:* exact golden count still unmeasured, but it is now a bounded
+  tidy-up rather than an unknown. Since F-8 also frees phase boundaries, goldens
+  can be absorbed per module as each is swept.
 - **Q1 — CLOSED, no code change.** "Is `under_worker_marker()` right for
   tempdir-rooted tests, given ✓ it checks `repo_root()`
   (`src/test_support.rs:85-87`)?" The sequencing dissolves it: the ✓ 19
@@ -206,12 +221,27 @@ scatter across every write path, converting REQ-192's compile-time exhaustivenes
 into a discipline concern and placing confinement policy in the leaf layer
 ADR-001 keeps thin.
 
-**Why the scale objection to D3 does not hold.** The `--color` fencepost (SL-079
-added a global flag, migrated handlers individually, missed one) does not
-transfer: adding a global flag does not force call sites to consume it, so
-omission is **silent**. D3 *removes* a field from 204 declarations, making every
-missed read a **compile error**. The work list is enumerated by `rustc`; the
-change is done when it compiles.
+**Why the scale objection to D3 does not hold — restated after F-8.** The
+original argument ("the compiler enumerates the work list") was **too strong**
+and is corrected here:
+
+- Deleting a `path` field makes every *read* of it a compile error, so a
+  half-finished deletion cannot ship broken code. The compiler prevents
+  **breakage**. ✓
+- But ✗ *not* deleting a declaration breaks nothing: F-8 shows a surviving local
+  coexists happily with the global. The compiler exerts **no pressure toward
+  completeness**.
+
+So the safety and the completeness guarantees come from different places:
+`rustc` guarantees the sites you touch are correct; **VT-s** (§9) is the only
+thing guaranteeing you touched them all. This makes VT-s load-bearing rather than
+a nicety — without it, a 60%-swept tree is green.
+
+The `--color` fencepost (SL-079) remains instructive but not analogous: there,
+omission produced a *wrong-behaving* handler; here, omission produces a
+*correct-behaving but undeleted* declaration. The failure mode is untidiness plus
+a still-blind guard for that verb — which VT-a catches only for the verbs it
+exercises, hence VT-s scanning all of them.
 
 **A3 — rejected: rename `--path` to `--root`.** Scope creep; user-visible
 breaking change across skills and docs. Separate slice if ever worthwhile.
@@ -220,11 +250,12 @@ breaking change across skills and docs. Separate slice if ever worthwhile.
 
 | id | Risk | Mitigation |
 |---|---|---|
-| R1 | Deletion cannot be staged — partial application does not compile | Treat the sweep as one phase; phase plan must not split it |
-| R2 | Golden churn volume unknown | OQ-1 spike as phase 1, before the sweep |
-| R3 | Implementer adds the global but leaves locals in place | **VT-s** source scan |
+| R1 | ~~Deletion cannot be staged~~ — **RETRACTED**, F-8 measured no collision | Phase boundaries are free; stage per module |
+| R2 | Golden churn volume | Largely resolved (OQ-1); D4 minimises it; absorb per module |
+| R3 | Implementer adds the global but leaves locals in place — **now the primary risk**, since a half-swept tree compiles *and* passes behavioural tests (F-8) | **VT-s** source scan — the sole completeness guarantee |
 | R4 | Implementer fixes only inline variants (= rejected A1) | **VT-a parameterised over a newtype verb** |
 | R5 | Confinement silently weakened while tests go green | VT-b/VT-c/VT-d; anti-cheat clauses §9 |
+| R6 | ~~Nested global propagation may not work~~ — **RESOLVED**, confirmed to 3 levels on the shipped binary (F-9) | none needed |
 
 ## 9. Quality Engineering & Validation
 
@@ -248,6 +279,12 @@ a hand-rolled tempdir. A bare-tempdir fixture makes VT-a and VT-b pass
 | VT-d | `DOCTRINE_WORKER` set, `-p <markerless tempdir>` | refuses with the **env-leg/dual-cause** message, not the marker-leg one |
 | VT-e | read verb, rootless CWD, no `-p` | exit 0 — laziness |
 | VT-s | source scan of `src/`, riding `tests/architecture_layering.rs` precedent | exactly **one** `short = 'p'` declaration (in `main.rs`); **zero** long-only `path` args |
+
+**VT-s is the sole completeness guarantee (F-8).** Because a global and a
+surviving local `-p` coexist without error, a tree where only half the 204
+declarations were deleted **compiles and passes every behavioural VT**. Nothing
+else in the suite notices. VT-s must therefore run on every phase, not only at
+the end, and its failure message should name the offending files.
 
 **VT-a's newtype clause is load-bearing.** Written against `link` alone (an
 inline variant), the rejected A1 passes it — silently re-admitting the option
@@ -284,19 +321,46 @@ unaided; sweep the ✓ 10 that genuinely run against a marked tree onto
 Internal adversarial pass, 2026-07-28. Findings integrated above; recorded here
 with disposition.
 
-**F-1 — the phase-1 spike was unworkable (critical, integrated §6).** OQ-1
-originally proposed measuring golden churn with a spike that adds the global and
-deletes ~3 declarations. That directly contradicts §5.4/R1: a `global = true`
-arg and a surviving local of the same id cannot coexist, so the spike's
-intermediate state is exactly the state the design says is impossible. Churn
-cannot be measured before the sweep.
-*Disposition:* sweep first, measure goldens after, as their own phase. The
-compile-error property makes an un-measured sweep safe.
-*Carries a verification obligation:* the claim that clap **rejects duplicate arg
-ids at command-build time** is asserted from knowledge, not from a run. Phase 1's
-first act must confirm it empirically — if clap instead silently shadows, the
-atomicity constraint R1 is wrong and the sweep could be staged, which would
-change the phase plan.
+**F-1 — SUPERSEDED BY F-8.** The finding claimed OQ-1's pre-sweep spike was
+unworkable because a global and a local `-p` cannot coexist. F-8 measured that
+premise false, so both F-1 and the R1 constraint it rested on are withdrawn.
+Retained here because F-1's *conclusion* (sweep, then measure) was reached from a
+false premise and must not be cited as standing reasoning.
+
+**F-8 — R1 (atomicity) is false; the compile-error argument was too strong
+(critical, integrated §5.4/§6/§7/§8).** Settled empirically with an isolated
+clap-4.6.1 spike rather than left as an obligation.
+
+Measured, on the pinned clap version:
+
+- `Cli::command().debug_assert()` **accepts** a `global = true` `-p` alongside a
+  subcommand's own `-p`. No panic, no error.
+- `spike collide -p LOCAL` parses, and the value lands in **both** the global and
+  the local field — they share an arg id, so clap treats them as one argument.
+
+Three consequences:
+
+1. **R1 is retracted.** The sweep can be staged module by module; every
+   intermediate state parses and behaves correctly. Phase boundaries are free —
+   materially better for a dispatched worker.
+2. **The §7 scale argument is corrected.** `rustc` guarantees the sites you
+   *touch* are correct, but exerts no pressure to touch them all: a
+   partially-swept tree compiles and passes behavioural tests. Completeness now
+   rests solely on **VT-s**, which is promoted from tidiness check to primary
+   guarantee (R3).
+3. **OQ-1 is largely answered** — see §6 and D4.
+
+*Method note:* run in an isolated scratch project, not by temporarily editing
+`src/main.rs`, because the primary worktree is shared with other agents
+(AGENTS.md) and a transient edit there could collide with concurrent work.
+
+**F-9 — R6 (nested propagation) resolved at zero cost.** ✓ `--color` is already
+`global = true` on `Cli`, so the shipped binary is the experiment:
+`doctrine adr list --color never` (2 levels) and
+`doctrine slice selector list 236 --color never` (3 levels) both parse. Globals
+propagate to at least the depth this design needs. No spike required — the
+question was answerable from existing behaviour and should have been asked
+before it was written down as a risk.
 
 **F-2 — VT-b's fixture would have tested nothing (major, integrated §9).** ✓
 `resolve_mode` requires `is_linked && marker_present`. A tempdir with a marker

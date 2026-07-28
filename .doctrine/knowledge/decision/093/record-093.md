@@ -31,14 +31,28 @@ concern, and puts confinement policy in the leaf layer ADR-001 keeps thin.
 The obvious counter is the `--color` fencepost: SL-079 added that global flag,
 required migrating every handler individually, and missed one.
 
-That precedent does not transfer, because the operations are opposite in kind.
-Adding a global flag does not force any call site to consume it, so an omission
-is **silent**. This change *removes* a field from ~202 variant declarations,
-which makes every existing destructure a **compile error**. The compiler
-enumerates the entire work list; a missed site cannot ship.
+An earlier version of this record argued the precedent does not transfer because
+removing a field makes every missed site a compile error, so "the compiler
+enumerates the work list". **That was too strong** — corrected 2026-07-28 after
+an empirical clap-4.6.1 spike (SL-236 design §10 F-8):
 
-So the change is large but mechanical and machine-checked, whereas the rejected
-push-down alternative is small but permanently unguarded.
+- Deleting a `path` field does make every *read* of it a compile error, so a
+  half-finished deletion cannot ship broken code. The compiler prevents
+  **breakage**. ✓
+- But a *surviving* declaration breaks nothing: clap accepts a `global = true`
+  `-p` alongside a subcommand's own `-p` — they share an arg id, and both fields
+  receive the value. The compiler exerts **no pressure toward completeness**, and
+  a partially-swept tree compiles and passes behavioural tests.
+
+So the guarantees come from two different places: `rustc` ensures the sites you
+touch are correct; a **source-scanning test (VT-s)** is the only thing ensuring
+you touched them all.
+
+This also retracts the atomicity constraint: because there is no collision, the
+sweep **can be staged** module by module rather than landing in one commit.
+
+The decision itself is unchanged — the change remains large but mechanical, and
+the rejected push-down alternative remains small but permanently unguarded.
 
 ## Consequences
 
@@ -48,10 +62,13 @@ push-down alternative is small but permanently unguarded.
   documented as *"Used by the bare regenerate; `boot install` carries its own
   `-p`"*, so `doctrine boot -p X install` and `doctrine boot install -p X` are
   currently two different flags.
-- Necessarily **atomic**: a `global = true` short flag collides with any
-  surviving local `-p`, so the removal cannot be staged across commits.
-- Churns byte-exact `--help` goldens, since `-p` relocates in every subcommand's
-  help output.
+- **Stageable**, not atomic (corrected — see above). Intermediate states parse
+  and behave correctly.
+- Churns byte-exact `--help` goldens — but less than feared: measured, the `-p`
+  line stays in place within each subcommand's `Options:` block; what changes is
+  the **description text**, since help then prints the global's doc comment.
+  Adopting the 116-occurrence majority wording confines churn to the ~40
+  minority-worded subcommands.
 - Preserves ADR-006 D2a's worker-mode formula, REQ-192 exhaustiveness, guard
   laziness, and the root-independence of the `DOCTRINE_WORKER` env leg.
 

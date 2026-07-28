@@ -115,23 +115,25 @@ The authoritative touch-set is recorded as `design-target` selectors
 
 ## Risks, assumptions, open questions
 
-- **R1 — atomicity.** Under option 1 the `-p` removal cannot be staged; a partial
-  application does not compile. Phase boundaries must respect that.
-- **R2 — golden churn.** `--help` output is byte-exact pinned; option 1 relocates
-  `-p` in every subcommand's help. Volume unmeasured at scoping time.
-- **R3 — fencepost.** The recorded `--color` precedent missed a handler at far
-  smaller scale.
+- **R1 — atomicity: RETRACTED.** Measured false (clap 4.6.1 spike, `design.md`
+  §10 F-8): a global `-p` and a surviving local share an arg id and coexist
+  without error. The sweep **can be staged** per module.
+- **R2 — golden churn: largely resolved.** The `-p` line keeps its position; only
+  the description text changes. Adopting the majority wording (D4) confines churn
+  to ~40 minority-worded subcommands.
+- **R3 — completeness, now the primary risk.** Because a half-swept tree compiles
+  *and* passes behavioural tests (F-8), the compiler does not force the sweep to
+  finish. **VT-s** (source scan) is the sole completeness guarantee and must run
+  every phase.
 - **R4 — state.** The rejected push-down option implied carrying the write-class
   decision into the leaf layer; shared mutable state would breach the
   pure/imperative split. Retained as the reason that option stays rejected.
-- **R5 — clap duplicate-arg behaviour is asserted, not run.** R1's atomicity
-  rests on a global `-p` colliding with any surviving local. If clap silently
-  shadows instead, the sweep could be staged and the phase plan changes. Confirm
-  empirically before sweeping (`design.md` §10 F-1).
-- **R6 — nested global propagation unconfirmed.** clap globals are expected to
-  reach two-level-nested subcommands (`Command::Adr` → `AdrCommand::New`).
-  Expected but unrun; failure invalidates the chosen approach outright
-  (`design.md` §10 F-7).
+- **R5 — SETTLED (F-8).** clap 4.6.1 accepts the duplicate; both fields receive
+  the value. No collision. R1 retracted; staging enabled.
+- **R6 — SETTLED (F-9), at zero cost.** `--color` is already `global = true`, so
+  the shipped binary answered it: `doctrine adr list --color never` and
+  `doctrine slice selector list 236 --color never` both parse. Globals propagate
+  to at least 3 levels.
 - **R7 — fixture linkage.** ✓ `resolve_mode` requires `is_linked &&
   marker_present`, so a marker file in a bare tempdir is never refused. VTs built
   on hand-rolled tempdirs would pass trivially before *and* after, proving
