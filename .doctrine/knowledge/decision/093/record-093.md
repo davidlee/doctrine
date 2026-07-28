@@ -76,3 +76,34 @@ the rejected push-down alternative remains small but permanently unguarded.
 
 `.doctrine/slice/236/research/research.md` (✓-marked rows). Related:
 [[ISS-028]], [[ISS-267]], [[ADR-006]], [[ADR-008]], [[SPEC-012]].
+
+## REJECTED 2026-07-29 — the premise, not just the option
+
+Status flipped `proposed` → `rejected`. Not because the alternatives argued
+below won, but because the axis this record chose *between* was itself invalid.
+
+**RV-319 F-2.** Every candidate here — the global flag, and the `ArgMatches`
+walker (A4) that later contested it — re-keys `worker_guard` to the tree named
+by `-p`. That inverts confinement: the worker marker identifies the **actor**,
+and every tree a worker must not write to (coordination tree, primary repo) is
+**markerless**, while the only marked tree is the worker's own fork. Reproduced:
+from a marked fork, `adr new -p <markerless coord tree>` succeeds where it is
+otherwise refused. Three `e2e_dispatch_sync` tests already encode the actor
+contract and go red.
+
+**RV-319 F-1**, separately fatal to the global flag specifically: a per-verb
+`-p` declaration is the machine-checkable record that the verb *consumes* a
+project root. Globalising makes acceptance universal while consumption stays
+per-verb, so four guarded pathless variants (`Command::Onboard`,
+`WorktreeCommand::{CreateFork, Nominate, Denominate}`) would accept a root
+nothing reads — `create-fork` derives its root from the stdin payload cwd, so
+the flag would steer its guard away from the tree it writes to.
+
+**Where the two halves went.** Guard behaviour returns to [[ISS-028]], rewritten
+around a topological fix (clear the marker around a worker's manual test run, as
+the commit gate already does). The CLI-surface cleanup — shared `#[derive(Args)]`
+bundle, one help wording, and the two real defects (`boot -p X install` silently
+discarding `X`; `serve` lacking a short `-p`) — carries forward as [[IMP-348]],
+which explicitly rejects the global shape. [[SL-236]] is abandoned.
+
+Durable lesson: [[mem.fact.dispatch.worker-confinement-is-actor-based]].

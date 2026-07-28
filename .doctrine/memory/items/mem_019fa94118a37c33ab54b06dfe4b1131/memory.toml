@@ -1,0 +1,50 @@
+memory_uid = "mem_019fa94118a37c33ab54b06dfe4b1131"
+memory_key = "mem.fact.dispatch.worker-confinement-is-actor-based"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "Worker confinement is actor-based and cooperative — every protected tree is markerless"
+summary = "The worker marker identifies the ACTOR, not the write target; re-keying the guard to an explicit -p target inverts confinement"
+created = "2026-07-28"
+updated = "2026-07-28"
+
+[scope]
+paths = ["src/commands/guard.rs", "src/worktree/marker.rs"]
+globs = []
+commands = []
+tags = ["dispatch", "worktree", "confinement"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "3f21d4ecbfd517712b39fb6750d8c91a170faeef"
+ref_name = "refs/heads/edge"
+checkout_state_id = "c256e31108d377d6e38eca7299330c5608d75169ff19444bd472cf46e4da2a46"
+base_commit = "589147b67ce853bf12122a57a3938c6fb3f12c63"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-319"
+
+[[source]]
+kind = "issue"
+ref = "ISS-028"
+
