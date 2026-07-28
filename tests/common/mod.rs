@@ -43,3 +43,88 @@ pub(crate) fn marker_free_base() -> std::path::PathBuf {
     }
     panic!("no marker-free temp base available to exercise the no-root path");
 }
+
+// ---------------------------------------------------------------------------
+// worker-fork fixtures (ISS-028 / SL-236 §9)
+//
+// The worker-mode marker leg is `is_linked_worktree(root) && marker_present(root)`
+// (src/worktree/marker.rs `resolve_mode`). A marker file dropped in a bare tempdir
+// is therefore NEVER refused — a fixture built that way passes identically before
+// and after a guard change and proves nothing. These helpers build a GENUINE linked
+// worktree and self-validate both legs, so a test cannot silently degrade into that
+// vacuous shape.
+// ---------------------------------------------------------------------------
+
+/// `git -C <dir> <args>`, asserting success; returns trimmed stdout.
+pub(crate) fn git(dir: &std::path::Path, args: &[&str]) -> String {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .expect("spawn git");
+    assert!(
+        out.status.success(),
+        "git {args:?} in {} failed: {}",
+        dir.display(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// A doctrine-rooted git repo with one commit — `.git` + `.doctrine` make it a
+/// project root `root::find` resolves.
+pub(crate) fn init_repo(dir: &std::path::Path) {
+    std::fs::create_dir_all(dir).expect("create repo dir");
+    git(dir, &["init", "-q", "-b", "main"]);
+    git(dir, &["config", "user.email", "t@example.com"]);
+    git(dir, &["config", "user.name", "Test"]);
+    std::fs::create_dir_all(dir.join(".doctrine")).expect("create .doctrine");
+    std::fs::write(dir.join("a.txt"), "hello").expect("seed file");
+    git(dir, &["add", "."]);
+    git(dir, &["commit", "-q", "-m", "base"]);
+}
+
+/// True iff `root` is a *linked* worktree — `--git-dir` differs from
+/// `--git-common-dir`, mirroring `src/worktree/shared.rs::is_linked_worktree`.
+pub(crate) fn is_linked_worktree(root: &std::path::Path) -> bool {
+    git(root, &["rev-parse", "--git-dir"]) != git(root, &["rev-parse", "--git-common-dir"])
+}
+
+/// Assert BOTH marker-leg conditions hold at `root` (anti-cheat: a fixture that
+/// only plants the marker file is never refused, so it would prove nothing).
+pub(crate) fn assert_marked_linked_fork(root: &std::path::Path) {
+    assert!(
+        is_linked_worktree(root),
+        "fixture at {} must be a GENUINE linked worktree, not a bare tempdir — \
+         `resolve_mode` requires is_linked && marker_present",
+        root.display()
+    );
+    assert!(
+        root.join(WORKER_MARKER_REL).exists(),
+        "fixture at {} must carry the worker marker at {WORKER_MARKER_REL}",
+        root.display()
+    );
+}
+
+/// Fork `src` into a real linked worktree at `dest` on a new `branch`, stamp the
+/// worker marker, and self-validate. `src` must already be an initialised repo.
+pub(crate) fn marked_linked_fork(src: &std::path::Path, dest: &std::path::Path, branch: &str) {
+    let base = git(src, &["rev-parse", "HEAD"]);
+    git(
+        src,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            branch,
+            dest.to_str().expect("utf8 fork path"),
+            &base,
+        ],
+    );
+    let marker = dest.join(WORKER_MARKER_REL);
+    std::fs::create_dir_all(marker.parent().expect("marker parent")).expect("create marker dir");
+    std::fs::write(&marker, b"").expect("stamp worker marker");
+    assert_marked_linked_fork(dest);
+}

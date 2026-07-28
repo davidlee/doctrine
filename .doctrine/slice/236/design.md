@@ -375,6 +375,17 @@ pass **inside a stamped worker fork**, not merely on the coordination tree.
 unaided; sweep the ✓ 10 that genuinely run against a marked tree onto
 `under_worker_marker()`. Re-measure — do not assume the split holds.
 
+> **STOP — the premise below is contested. See RV-319 F-2 (blocker, open).**
+> Both D3 and A4 re-key the guard to the tree named by `-p`. Measured during
+> implementation: **every tree a worker must not write to is markerless** (the
+> coordination tree, the primary repo), and the only marked tree in a dispatch
+> topology is the worker's own fork — so target-based resolution *inverts* the
+> guard rather than sharpening it. A worker in a marked fork was reproduced
+> writing an authored ADR into a markerless coordination tree by naming it with
+> `-p`; three existing `e2e_dispatch_sync` tests already encode the opposite
+> (actor-based) contract and go red. §1's framing, I-2, and both candidate fixes
+> are downstream of this and must not be implemented until it is settled.
+
 ## 10. Review Notes
 
 Internal adversarial pass, 2026-07-28. Findings integrated above; recorded here

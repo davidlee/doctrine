@@ -14,7 +14,7 @@ ref   = "SL-236"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Expected global -p to identify the operated-on tree; observed pathless Orchestrator verbs accept it only at the guard"
 detail = """D3 passes the top-level global path into worker_guard for every Write/Orchestrator/Hookmint command (SL-236 design.md:100-116), while §10 F-6 calls acceptance by formerly pathless variants harmless (design.md:428-430). It is not harmless: src/worktree/mod.rs:215-222 defines WorktreeCommand::CreateFork as a unit variant with no -p and says its root is the stdin payload cwd; src/worktree/create.rs:576-591 confirms the handler derives cwd from that payload; src/commands/guard.rs:255-261 classifies it Orchestrator. On the pinned clap 4.6.1 spike, the command I ran, cargo run --quiet --bin clapspike, printed 'pathless unit-like command accepts the global root' followed by 'PARSE OK: global=Some("UNMARKED")'. Therefore a marker-only worker can invoke the D3 surface as worktree create-fork -p <unmarked-root>: root::find uses the supplied unmarked tree for the guard, but the handler ignores it and operates from payload cwd. With DOCTRINE_WORKER unset (the Claude marker-only leg documented by ADR-006 D2a), this bypasses the marker refusal and weakens confinement. A4 does not expose this bypass: a pathless match tree yields None, so the guard remains CWD-rooted for this verb. D3 must not ship without proving that the passed explicit root is semantically consumed by the selected command, or otherwise preventing global -p from steering the guard on pathless verbs."""
@@ -27,6 +27,26 @@ SIZING: this is a class, not one verb. Four guarded arms are unit variants consu
 THE PRINCIPLE F-6 MISSED, which decides the slice: a per-verb -p declaration is not merely a CLI affordance, it is the machine-checkable record that THIS verb consumes a project root. D3 deletes 204 instances of that evidence while making acceptance universal, so 'accepted' and 'consumed' come apart and the guard is left keyed to the wrong one. Recovering the distinction requires knowing whether the selected command consumes the path, which is precisely the classifier capability that rejected A1. A4 reads the same declaration the verb consumes, so the two cannot diverge: a pathless match tree yields None and the guard stays CWD-rooted.
 
 CONSEQUENCE: D3's claimed structural invariant is real but is the wrong structure for the confinement axis, and this bypass is directly counter to I-2, which sells SL-236 partly on TIGHTENING confinement. D3 would close one hole and open four. Reconciliation: design.md F-6 disposition is retracted, DEC-093 re-settles to A4, and F-4's worktree-fork semantic shift is unaffected since that verb does declare and consume its -p. No VT covered this; the VT contract needs a case asserting a pathless guarded verb cannot have its guard steered by -p."""
+
+[[finding]]
+id = "F-2"
+status = "open"
+severity = "blocker"
+title = "Expected an explicit -p to identify the tree confinement is judged against; observed that every tree a worker must not write to is markerless, so target-based resolution inverts the guard"
+detail = """
+Surfaced during implementation of the A4 fix (ISS-028), and it indicts BOTH candidates: D3 and A4 differ only in HOW the explicit path reaches worker_guard, not in the semantics they give it. F-1 was a special case of this (a path the verb does not consume); this is the general case, and it bites even when the verb consumes the path exactly.
+
+THE INVERSION. The marker identifies the ACTOR, not the target. src/commands/guard.rs states it in the refusal itself: 'workers return a source delta; doctrine-mediated writes funnel through the orchestrator'. And in a dispatch topology the ONLY marked tree is the worker's own fork — the coordination tree and the primary repo, the trees a worker must never write to, are both markerless by construction (ADR-006, ADR-012). Re-keying the guard to the -p target therefore protects only trees that carry a marker, which are precisely the trees that do not need protecting, while every protected tree becomes reachable by naming it.
+
+REPRODUCED on the patched binary (patch archived, not committed). Given a markerless coord repo with a marked linked fork, from CWD inside the fork: 'doctrine adr new smuggled -p <coord>' exits 0 and creates <coord>/.doctrine/adr/001. On HEAD the same argv is refused with 'signal: marker'. A worker escapes by naming any tree it wants to write to.
+
+INDEPENDENTLY CORROBORATED by the existing suite, which already encodes the actor reading. tests/e2e_dispatch_sync.rs prepare_review_refused_under_worker_mode (:393), integrate_refused_under_worker_mode (:1101) and record_boundary_refused_under_worker_mode (:1271) each run an Orchestrator-classed verb from a marked fork with '-p <coord tree>' and REQUIRE refusal. All three go red under the fix. Per design.md 9 'a non-golden test needing an edit signals a design fault, not a chore' — three did, and they were not edited.
+
+CONSEQUENCE FOR I-2. The design sells the stricter direction as closing a live hole: a write aimed at a marked tree from an unmarked CWD. Under actor semantics that is the ORCHESTRATOR writing into a fork, which is its job (dispatch import, provisioning). So I-2 may be a regression rather than a fix, and the VT-b that pins it may pin the wrong behaviour. Not measured; flagged.
+
+ROOT. ISS-028's ORIGINAL note was closer than SL-228's 'sharper diagnosis' that superseded it: the marker 'cannot distinguish between a worker agent writing authored content and a test fixture scaffolding entities'. That is actor INTENT, and no path argument can express it. Every path-based fix leaks for this reason, which is why this is a premise defect rather than a fix-direction defect.
+
+STATE. No source landed; src/main.rs and src/commands/guard.rs restored to HEAD. Retained green: tests/e2e_worker_guard_explicit_root.rs (actor-contract invariants that hold under any resolution, with the two disputed skew cases deliberately absent) and tests/arg_path_convention.rs. check commit and check gate both exit 0."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
