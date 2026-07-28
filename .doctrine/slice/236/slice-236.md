@@ -39,9 +39,12 @@ this is structurally incapable:
 - So a `write_class`-level extraction cannot see the `-p` that
   `e2e_adr_cli_golden` passes — one of the two tests ISS-028 was filed about.
 
-`-p` is declared **202 times across 27 files** (20 in `commands/cli.rs`, 182
-nested), all `Option<PathBuf>`, none with `default_value`. `Cli` itself carries
-no `-p`; its only `global = true` arg is `--color`.
+`-p` is declared **204 times across 27 files** — 202 as `#[arg(short = 'p',
+long)]` (20 in `commands/cli.rs`, 182 nested) plus 2 declared long-only
+(`commands/serve.rs:17`, `commands/map.rs:13`), which a short-flag grep misses
+but which collide with a global `--path` all the same. All `Option<PathBuf>`,
+none with `default_value`, all meaning "project root". `Cli` itself carries no
+`-p`; its only `global = true` arg is `--color`.
 
 ## Scope & Objectives
 
@@ -74,32 +77,41 @@ against a marked tree and neutralise only the env leg.
   class, different call sites; candidates for a follow-up sweep, not this slice.
 - Broad CLI-surface redesign beyond what the fix requires.
 
-## Design fork (unresolved — for `/design`)
+## Design fork — RESOLVED ([[DEC-093]], `design.md` §7)
 
-Not settled at scoping time. Named here so `/design` load-bears on it:
+`-p/--path` becomes one `global = true` argument on `Cli`, mirroring `--color`;
+the 204 per-subcommand declarations are deleted; `worker_guard` receives the
+explicit path and evaluates the marker against the tree actually being written.
 
-1. **Global `-p` on `Cli`** (`global = true`, mirroring `--color`). Uniform and
-   complete; removes 202 declarations in one necessarily atomic commit (a global
-   short flag collides with any surviving local `-p`). Changes every subcommand's
-   `--help`, so byte-exact goldens churn. The `--color` migration (SL-079) is the
-   precedent — and recorded a fencepost miss at ~1/10th this scale.
-2. **Push the check down to `root::find`**, where the correct explicit path is
-   already threaded at ~150 call sites. Fixes every verb with no path-threading,
-   but must carry the write-class decision to that point without breaching
-   REQ-192 exhaustiveness or laziness.
+Rejected alternatives, with reasons, in `design.md` §7:
 
-Option 3 — extending `write_class` to yield class + path — is **rejected**: it
-fixes 9 of 33 Write-classed variants and cannot fix the originating test.
+- **Extend `write_class` to yield class + path** — rejected on *capability*: 35
+  of 54 `Command` variants carry no top-level path, so it cannot fix
+  `e2e_adr_cli_golden`, one of the two originating tests.
+- **Push the check down into the write functions** — rejected because there is no
+  single write chokepoint, so the check scatters and REQ-192's compile-time
+  exhaustiveness degrades to discipline.
+
+The scale objection to the chosen option does not hold: removing a field from 204
+declarations makes every missed site a **compile error**, unlike the `--color`
+precedent, where *adding* a global flag failed silently.
 
 ## Affected surface
 
-- `src/commands/guard.rs` — `worker_guard`, `write_class`
-- `src/main.rs` — `Cli`, the guard call site
-- `src/root.rs` — `find`
-- `src/commands/cli.rs` — `dispatch`, per-variant `-p`
-- `src/worktree/` — `resolve_mode`, marker legs
-- `src/test_support.rs` — `under_worker_marker`
-- `tests/e2e_*.rs` — exposed suites
+- `src/main.rs` — `Cli` gains the global `path`; guard + dispatch call sites
+- `src/commands/guard.rs` — `worker_guard` signature (`write_class` untouched, D2)
+- `src/commands/cli.rs` — `dispatch` signature; declarations deleted
+- 26 further modules — declarations deleted; sub-dispatcher signatures
+- `src/commands/serve.rs`, `src/commands/map.rs` — long-only `--path` deleted
+- `tests/e2e_worker_guard.rs` — the new VTs, riding its linked-worktree fixtures
+- `tests/e2e_*.rs` — help goldens (volume per OQ-1)
+
+Explicitly **unchanged**: `src/root.rs` (D1 — its signature stays, ~150 call
+sites), `src/worktree/marker.rs` (`resolve_mode` merely receives a correct root),
+`src/test_support.rs` (Q1 closed without code change).
+
+The authoritative touch-set is recorded as `design-target` selectors
+(`doctrine slice selector list 236`).
 
 ## Risks, assumptions, open questions
 
@@ -109,18 +121,38 @@ fixes 9 of 33 Write-classed variants and cannot fix the originating test.
   `-p` in every subcommand's help. Volume unmeasured at scoping time.
 - **R3 — fencepost.** The recorded `--color` precedent missed a handler at far
   smaller scale.
-- **R4 — state.** Option 2 implies carrying the write-class decision down to
-  `root::find`; shared mutable state would breach the pure/imperative split.
+- **R4 — state.** The rejected push-down option implied carrying the write-class
+  decision into the leaf layer; shared mutable state would breach the
+  pure/imperative split. Retained as the reason that option stays rejected.
+- **R5 — clap duplicate-arg behaviour is asserted, not run.** R1's atomicity
+  rests on a global `-p` colliding with any surviving local. If clap silently
+  shadows instead, the sweep could be staged and the phase plan changes. Confirm
+  empirically before sweeping (`design.md` §10 F-1).
+- **R6 — nested global propagation unconfirmed.** clap globals are expected to
+  reach two-level-nested subcommands (`Command::Adr` → `AdrCommand::New`).
+  Expected but unrun; failure invalidates the chosen approach outright
+  (`design.md` §10 F-7).
+- **R7 — fixture linkage.** ✓ `resolve_mode` requires `is_linked &&
+  marker_present`, so a marker file in a bare tempdir is never refused. VTs built
+  on hand-rolled tempdirs would pass trivially before *and* after, proving
+  nothing (`design.md` §10 F-2/F-3).
 - **A1** — marker semantics are correct; only tree selection is wrong.
   (ADR-006 D2a's SL-064 amendment retired location-pinning, supporting this.)
 - **A2** — `19` of ISS-267's 29 `env_remove("DOCTRINE_WORKER")` files pass `-p`
   and are dissolved by the guard fix; `10` (chiefly `e2e_worktree_*`) genuinely
   operate on a marked tree and need the both-legs helper. Measured, not assumed —
   but re-verify after the guard fix lands rather than trusting the count.
-- **Q1** — is `under_worker_marker()` correct for temp-root tests? It checks
-  `repo_root()`, the test binary's root, not the root under test.
-- **Q2** — does the `Boot` variant (inline `path` *and* a subcommand) need
-  special handling under option 1?
+- **Q1 — CLOSED, no code change.** The sequencing dissolves it: the 19
+  tempdir-rooted files stop needing `under_worker_marker()` once the guard is
+  fixed, and the 10 residual files run against the real tree, for which its
+  `repo_root()` basis is exactly right.
+- **Q2 — CLOSED.** ✓ `Boot` declares `path` documented as *"Used by the bare
+  regenerate; `boot install` carries its own `-p`"*, so `doctrine boot -p X
+  install` and `doctrine boot install -p X` are two different flags today. Both
+  are deleted; the global serves each, collapsing the split.
+- **OQ-1 — golden churn measured AFTER the sweep**, not before. A pre-sweep spike
+  would need the global and the locals to coexist — the one state R1 forbids
+  (`design.md` §10 F-1).
 
 ## Verification / closure intent
 

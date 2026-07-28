@@ -173,8 +173,12 @@ accepts `--path` but not `-p`. The global collapses both inconsistencies.
 - **OQ-1 — golden churn volume is unmeasured.** clap renders `global = true` args
   in each subcommand's help, so `-p` may appear identically, at a different
   position, or move to a global section. Churn could be near-zero or touch every
-  help golden. **Resolution: phase-1 spike** — add the global, delete ~3
-  declarations, diff one help golden. Measure before committing to the sweep.
+  help golden.
+  **Resolution: measure AFTER the sweep, not before** — see F-1 (§10). The
+  originally-proposed pre-sweep spike is unworkable: it would require the global
+  and the locals to coexist, which is the one thing §5.4 says cannot happen. The
+  compile-error property (§7) makes the sweep safe to perform un-measured, so
+  golden churn is absorbed as its own phase immediately after.
 - **Q1 — CLOSED, no code change.** "Is `under_worker_marker()` right for
   tempdir-rooted tests, given ✓ it checks `repo_root()`
   (`src/test_support.rs:85-87`)?" The sequencing dissolves it: the ✓ 19
@@ -227,10 +231,19 @@ breaking change across skills and docs. Separate slice if ever worthwhile.
 VTs are specified by **the wrong implementation they kill**, on the premise that
 any latitude left in a VT will be taken.
 
+**Fixture requirement (F-2/F-3, load-bearing).** ✓ `resolve_mode`
+(`src/worktree/marker.rs:161-166`) computes `marker = is_linked &&
+marker_present(root)`. A tempdir carrying a marker file is **not** refused — the
+root must be a genuine **linked git worktree**. Every "marked tree" below means a
+real linked worktree with a marker, built by reusing the existing machinery in
+`tests/e2e_worker_guard.rs` (`init_repo` + its VT-1 linked-worktree helper), not
+a hand-rolled tempdir. A bare-tempdir fixture makes VT-a and VT-b pass
+**trivially, both before and after the change**, proving nothing.
+
 | id | Setup | Must assert |
 |---|---|---|
-| VT-a | write verb, `-p <markerless tempdir>`, CWD inside a marked fork; parameterised over `adr new` (newtype) **and** `link` (inline) | exit 0; entity created **at the tempdir** |
-| VT-b | write verb, `-p <marked tree>`, CWD unmarked | non-zero; stderr has `signal: marker` **and** the verb. Red before, green after |
+| VT-a | write verb, `-p <markerless tempdir>`, CWD inside a **linked, marked** fork; parameterised over `adr new` (newtype) **and** `link` (inline) | exit 0; entity created **at the tempdir** |
+| VT-b | write verb, `-p <linked, marked tree>`, CWD unmarked | non-zero; stderr has `signal: marker` **and** the verb. Red before, green after |
 | VT-c | write verb, no `-p`, CWD inside marked fork | non-zero; `signal: marker` — regression guard |
 | VT-d | `DOCTRINE_WORKER` set, `-p <markerless tempdir>` | refuses with the **env-leg/dual-cause** message, not the marker-leg one |
 | VT-e | read verb, rootless CWD, no `-p` | exit 0 — laziness |
@@ -245,8 +258,9 @@ an implementation that made the env leg path-aware pass.
 
 **Anti-cheat clauses, binding on the tests:**
 
-1. Fixtures self-validate — VT-a/VT-c assert the fork marker *exists* before
-   invoking; VT-b asserts its target is marked.
+1. Fixtures self-validate — VT-a/VT-c assert the fork marker *exists* **and that
+   the tree is a linked worktree** before invoking; VT-b asserts the same of its
+   target. Asserting marker-file presence alone is insufficient (F-2).
 2. No `current_dir` in VT-a/b/c — CWD skew is the condition under test.
 3. No bare `assert!(status.success())`; every refusal asserts the specific signal,
    every success an observable effect.
@@ -266,3 +280,58 @@ unaided; sweep the ✓ 10 that genuinely run against a marked tree onto
 `under_worker_marker()`. Re-measure — do not assume the split holds.
 
 ## 10. Review Notes
+
+Internal adversarial pass, 2026-07-28. Findings integrated above; recorded here
+with disposition.
+
+**F-1 — the phase-1 spike was unworkable (critical, integrated §6).** OQ-1
+originally proposed measuring golden churn with a spike that adds the global and
+deletes ~3 declarations. That directly contradicts §5.4/R1: a `global = true`
+arg and a surviving local of the same id cannot coexist, so the spike's
+intermediate state is exactly the state the design says is impossible. Churn
+cannot be measured before the sweep.
+*Disposition:* sweep first, measure goldens after, as their own phase. The
+compile-error property makes an un-measured sweep safe.
+*Carries a verification obligation:* the claim that clap **rejects duplicate arg
+ids at command-build time** is asserted from knowledge, not from a run. Phase 1's
+first act must confirm it empirically — if clap instead silently shadows, the
+atomicity constraint R1 is wrong and the sweep could be staged, which would
+change the phase plan.
+
+**F-2 — VT-b's fixture would have tested nothing (major, integrated §9).** ✓
+`resolve_mode` requires `is_linked && marker_present`. A tempdir with a marker
+file is never refused, so VT-b as originally written would pass after the change
+for the wrong reason — the tree isn't linked — and the confinement tightening
+(I-2), the whole justification for calling this a hole worth closing, would go
+unverified.
+
+**F-3 — VT-a had the same latent defect (major, integrated §9).** Its "marked
+fork" CWD must likewise be a genuine linked worktree; otherwise VT-a passes both
+before and after and provides no signal. Anti-cheat clause 1 has been
+strengthened to assert linkage, not merely marker presence.
+
+**F-4 — `worktree fork`'s guard semantics shift, unexamined (moderate, accepted).**
+✓ Its `-p` is documented as the *source* project root
+(`src/worktree/mod.rs:144`). Post-globalisation the guard evaluates the marker of
+that source tree. This is probably correct — forking writes into the source
+tree's state — but it is a semantic change for one verb that no VT covers.
+*Disposition:* accepted as a conscious assumption; named here so it is not
+mistaken for an oversight. Worth a VT if the phase plan has room.
+
+**F-5 — VT-s wording (minor, noted).** "exactly one `short = 'p'`" must be
+specified as counting clap **attribute declarations** under `src/`, not raw
+string occurrences, or a doc comment or test fixture mentioning `-p` will break
+it.
+
+**F-6 — surface expansion (minor, accepted).** Unit variants that never had a
+path (e.g. `Onboard`) will accept `-p` after globalisation. Harmless; a global
+flag is accepted everywhere by construction.
+
+**F-7 — nested propagation unverified (minor, verification obligation).** clap
+globals are expected to propagate to *nested* subcommands (`Command::Adr` →
+`AdrCommand::New`, two levels deep). Expected to hold, unconfirmed by run. Phase
+1 should assert it on a real nested verb before the sweep proceeds — a failure
+here would invalidate D3 entirely.
+
+**Not found.** No governance conflict surfaced; Thread 1's applicability sweep
+holds. No ADR/policy/standard was misread or weakly applied on re-check.
