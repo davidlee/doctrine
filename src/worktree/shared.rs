@@ -57,6 +57,33 @@ pub(crate) fn is_linked_worktree(root: &Path) -> anyhow::Result<bool> {
     Ok(git_dir != common)
 }
 
+/// The coordination branch's SHORT-ref prefix (`dispatch/<NNN>`, as
+/// [`crate::git::current_branch`] returns it) — `DISPATCH_REF_PREFIX` sans the
+/// `refs/heads/` qualifier. Single-sourced (STD-001) for the role classifier.
+const COORD_BRANCH_SHORT_PREFIX: &str = "dispatch/";
+
+/// PURE classification of a worktree into the funnel's three roles from its branch +
+/// isolation (SL-228 design §8): the primary tree ⇒ `primary`; a linked worktree on a
+/// `dispatch/<NNN>` coordination branch (NUMERIC slice suffix) ⇒ `coord`; any other
+/// linked worktree — including a worker fork's `dispatch/<agent>` (non-numeric
+/// suffix), a `review/*`, or a detached HEAD ⇒ `fork`. The numeric-suffix test is
+/// load-bearing: coord and worker-fork branches SHARE the `dispatch/` prefix, so a
+/// bare prefix match would misread every worker fork as a coord. No git/disk — the
+/// shell gathers `branch`/`linked` and hands them in (pure/imperative split).
+///
+/// Lives here beside [`is_linked_worktree`] rather than in `dispatch` because two
+/// command-tier callers need it: `dispatch whereami` reports it, and `review`'s
+/// root guard admits `primary`/`coord` while refusing `fork` (ISS-275).
+pub(crate) fn classify_worktree_role(branch: Option<&str>, linked: bool) -> &'static str {
+    if !linked {
+        return "primary";
+    }
+    match branch.and_then(|b| b.strip_prefix(COORD_BRANCH_SHORT_PREFIX)) {
+        Some(suffix) if !suffix.is_empty() && suffix.bytes().all(|c| c.is_ascii_digit()) => "coord",
+        _ => "fork",
+    }
+}
+
 pub(super) fn resolve_commit(root: &Path, reference: &str) -> anyhow::Result<String> {
     Ok(git::git_text(
         root,
@@ -104,6 +131,31 @@ pub(crate) fn project_anchor() -> Option<PathBuf> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    // --- SL-228 PHASE-01: whereami role classifier (pure — design §8).
+    //     Relocated here from `dispatch` with the function (ISS-275). ---
+
+    #[test]
+    fn classify_worktree_role_maps_branch_and_isolation() {
+        // The primary tree is `primary` regardless of branch.
+        assert_eq!(classify_worktree_role(Some("main"), false), "primary");
+        assert_eq!(classify_worktree_role(None, false), "primary");
+        assert_eq!(
+            classify_worktree_role(Some("dispatch/228"), false),
+            "primary"
+        );
+        // A linked worktree on a NUMERIC-suffix coordination branch is `coord`.
+        assert_eq!(classify_worktree_role(Some("dispatch/228"), true), "coord");
+        // A worker fork shares the `dispatch/` prefix but has a NON-numeric agent
+        // suffix — it must classify as `fork`, not `coord` (the load-bearing case).
+        assert_eq!(
+            classify_worktree_role(Some("dispatch/agent-abc"), true),
+            "fork"
+        );
+        // Any other linked worktree is a `fork` — a `review/*` ref or a detached HEAD.
+        assert_eq!(classify_worktree_role(Some("review/064"), true), "fork");
+        assert_eq!(classify_worktree_role(None, true), "fork");
+    }
 
     // --- branch-point-check pure compare (SL-031 PHASE-02, VT-1) ---
 

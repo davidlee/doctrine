@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa925-c961-7a32-badb-2928ebe913ba"
+recorded_at = "2026-07-28T14:34:13.729410675Z"
+kind = "friction"
+summary = "/dispatch: reservation reach=local collided review ids across the coord and primary trees"
+detail = "review new in the coordination worktree allocated RV-319, which the primary tree had already allocated for a live SL-236 review (untracked, so invisible to the dispatch branch). reach = 'local' with allow-local-fallback = true means neither tree can see the other's allocation. Two different entities would have shared an id and collided at integrate. Predicted as SL-233 PHASE-01 R-1 and now actually bitten. Recovery is manual: keep the collided scaffold in place so the allocator skips it, re-allocate to RV-320, then delete the scaffold — there is no --id override."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

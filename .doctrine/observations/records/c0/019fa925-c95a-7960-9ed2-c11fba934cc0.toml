@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa925-c95a-7960-9ed2-c11fba934cc0"
+recorded_at = "2026-07-28T14:34:13.72301517Z"
+kind = "friction"
+summary = "/dispatch: review verbs refuse in the coordination worktree, blocking the design gates"
+detail = "src/review.rs::resolve_review_root guards on is_linked_worktree — a blanket check with no coord/fork distinction — so every review verb bails in the coordination tree (dispatch whereami reports role=coord, not fork). The rationale is the worker fork's WITHHELD state tier, which does not apply to the sole-writer coord tree. SL-233's plan makes an RV ledger the second half of all three design-gate entrance criteria (PHASE-02, 06, 08), and every one of them lands in the coord tree where the sketch lives. Only review list (no baton) works. Cost: gate work halted after the sketch, RV, and selectors were already committed on dispatch/233."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

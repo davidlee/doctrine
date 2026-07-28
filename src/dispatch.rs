@@ -1169,29 +1169,10 @@ struct WhereamiCore {
     role: &'static str,
 }
 
-/// The coordination branch's SHORT-ref prefix (`dispatch/<NNN>`, as
-/// [`git::current_branch`] returns it) — [`DISPATCH_REF_PREFIX`] sans the
-/// `refs/heads/` qualifier. Single-sourced here (STD-001) for the `whereami` role
-/// classifier.
-const COORD_BRANCH_SHORT_PREFIX: &str = "dispatch/";
-
-/// PURE classification of a worktree into the funnel's three roles from its branch +
-/// isolation (design §8): the primary tree ⇒ `primary`; a linked worktree on a
-/// `dispatch/<NNN>` coordination branch (NUMERIC slice suffix) ⇒ `coord`; any other
-/// linked worktree — including a worker fork's `dispatch/<agent>` (non-numeric
-/// suffix), a `review/*`, or a detached HEAD ⇒ `fork`. The numeric-suffix test is
-/// load-bearing: coord and worker-fork branches SHARE the `dispatch/` prefix, so a
-/// bare prefix match would misread every worker fork as a coord. No git/disk — the
-/// shell gathers `branch`/`linked` and hands them in (pure/imperative split).
-fn classify_worktree_role(branch: Option<&str>, linked: bool) -> &'static str {
-    if !linked {
-        return "primary";
-    }
-    match branch.and_then(|b| b.strip_prefix(COORD_BRANCH_SHORT_PREFIX)) {
-        Some(suffix) if !suffix.is_empty() && suffix.bytes().all(|c| c.is_ascii_digit()) => "coord",
-        _ => "fork",
-    }
-}
+// The role classifier lives beside `is_linked_worktree` in `crate::worktree`
+// (ISS-275) — `review` needs the same coord/fork distinction and already declares
+// a `worktree` edge, so a single home keeps it unduplicated (STD-001).
+use crate::worktree::classify_worktree_role;
 
 /// `dispatch whereami` — the invoking worktree's branch (via the relocated
 /// [`git::current_branch`]), isolation (via the wrapped
@@ -8253,29 +8234,8 @@ mod tests {
         );
     }
 
-    // --- SL-228 PHASE-01: whereami role classifier (pure — design §8) ---
-
-    #[test]
-    fn classify_worktree_role_maps_branch_and_isolation() {
-        // The primary tree is `primary` regardless of branch.
-        assert_eq!(classify_worktree_role(Some("main"), false), "primary");
-        assert_eq!(classify_worktree_role(None, false), "primary");
-        assert_eq!(
-            classify_worktree_role(Some("dispatch/228"), false),
-            "primary"
-        );
-        // A linked worktree on a NUMERIC-suffix coordination branch is `coord`.
-        assert_eq!(classify_worktree_role(Some("dispatch/228"), true), "coord");
-        // A worker fork shares the `dispatch/` prefix but has a NON-numeric agent
-        // suffix — it must classify as `fork`, not `coord` (the load-bearing case).
-        assert_eq!(
-            classify_worktree_role(Some("dispatch/agent-abc"), true),
-            "fork"
-        );
-        // Any other linked worktree is a `fork` — a `review/*` ref or a detached HEAD.
-        assert_eq!(classify_worktree_role(Some("review/064"), true), "fork");
-        assert_eq!(classify_worktree_role(None, true), "fork");
-    }
+    // The whereami role classifier's own unit tests moved with it to
+    // `crate::worktree::shared` (ISS-275).
 
     #[test]
     fn dispatch_setup_refuses_outside_root_under_claude() {

@@ -1864,8 +1864,11 @@ struct Baton {
     handoff: Vec<String>,
 }
 
-/// The runtime subtree for one review's baton + lock (design §6). Parent-tree
-/// locus, gitignored (`.gitignore` already covers `.doctrine/state/`).
+/// The runtime subtree for one review's baton + lock (design §6). Gitignored
+/// (`.gitignore` already covers `.doctrine/state/`) and **invoking-tree** locus:
+/// root-derived, so a review driven from a coordination worktree keeps its baton
+/// there (ISS-275). Safe because that tree is its branch's sole writer, and a
+/// baton is disposable — an absent one reads as cold and recomputes (D-C4a).
 fn state_dir(root: &Path, id: u32) -> PathBuf {
     root.join(".doctrine/state/review").join(format!("{id:03}"))
 }
@@ -1995,18 +1998,28 @@ fn authored_path(root: &Path, id: u32) -> PathBuf {
 }
 
 /// Resolve the project root for a review verb and ENFORCE the pilot invariant
-/// (design D4/D-C1): a verb whose resolved root is a *fork* (linked worktree)
-/// bails — fork-invoked review is IMP-024, not yet supported. The baton/lock live
-/// in the parent tree's gitignored state, which a fork's `WITHHELD` tier keeps it
-/// from seeing (`worktree.rs:71`). The guard lives here, in the shell, at root
-/// resolution — every verb routes through it.
+/// (design D4/D-C1): a verb whose resolved root is a *worker fork* bails —
+/// fork-invoked review is IMP-024, not yet supported. A fork's `WITHHELD` tier
+/// keeps it from seeing the parent's gitignored state (`worktree/mod.rs`), so it
+/// cannot co-write the baton it would need.
+///
+/// The test is the ROLE, not mere linkage (ISS-275). A dispatch *coordination*
+/// tree is a linked worktree too, but it is the sole writer of `dispatch/<NNN>`
+/// and carries its own state tier — and [`state_dir`] is root-derived, so its
+/// baton lands in its own tree with nothing to contend over. Refusing it stranded
+/// the design-gate reviews that ADR-012's topology puts there in the first place.
+///
+/// The guard lives here, in the shell, at root resolution — every verb routes
+/// through it.
 fn resolve_review_root(path: Option<PathBuf>) -> anyhow::Result<PathBuf> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
-    if crate::worktree::is_linked_worktree(&root).unwrap_or(false) {
+    let linked = crate::worktree::is_linked_worktree(&root).unwrap_or(false);
+    let branch = crate::git::current_branch(&root).unwrap_or(None);
+    if crate::worktree::classify_worktree_role(branch.as_deref(), linked) == "fork" {
         anyhow::bail!(
             "review verbs are not supported on a worktree fork (IMP-024): the turn \
              baton lives in the parent tree's gitignored state, which a fork cannot \
-             co-write. Run `review` from the parent tree."
+             co-write. Run `review` from the parent or coordination tree."
         );
     }
     Ok(root)
@@ -3943,6 +3956,77 @@ mod tests {
         assert!(
             !fork.join(".doctrine/state/review/001/baton.toml").exists(),
             "no baton in the fork"
+        );
+    }
+
+    /// ISS-275: the IMP-024 guard bails on *forks*, not on every linked worktree.
+    /// A dispatch COORDINATION tree (`dispatch/<NNN>`, numeric suffix) is the sole
+    /// writer of its branch, so it may drive a review, and its baton lands in its
+    /// OWN gitignored state tree — `state_dir` is root-derived, so admitting the
+    /// tree is the whole fix; nothing about the baton's locus needs to move.
+    /// Without this, the three SL-233 design gates cannot be driven where their
+    /// sketches live.
+    #[test]
+    fn vt10b_coord_worktree_admitted_and_baton_in_its_own_state() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let main = tmp.path().join("main");
+        std::fs::create_dir_all(&main).unwrap();
+        let git = |dir: &Path, args: &[&str]| {
+            let ok = Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args)
+                .env("GIT_AUTHOR_DATE", "2026-01-01T00:00:00 +0000")
+                .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00 +0000")
+                .output()
+                .unwrap();
+            assert!(
+                ok.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&ok.stderr)
+            );
+        };
+        git(&main, &["init", "-b", "main"]);
+        git(&main, &["config", "user.name", "T"]);
+        git(&main, &["config", "user.email", "t@t.invalid"]);
+        plant_slice_target(&main, 1);
+        run_new(Some(main.clone()), &new_args(Facet::Design, "SL-001")).unwrap();
+        std::fs::write(main.join("seed"), "x").unwrap();
+        git(&main, &["add", "."]);
+        git(&main, &["commit", "-m", "seed"]);
+        // The coordination worktree: a linked worktree on `dispatch/<NNN>`.
+        let coord = tmp.path().join("coord");
+        git(
+            &main,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "dispatch/001",
+                coord.to_str().unwrap(),
+            ],
+        );
+
+        // The verb is ADMITTED at the coord root (contrast VT-10's fork).
+        run_raise(
+            Some(coord.clone()),
+            &raise_args("RV-001", Severity::Major, "t"),
+            Role::Raiser,
+        )
+        .unwrap();
+
+        // ...and its baton sits in the COORD tree's own gitignored state, not the
+        // parent's — the coord tree is the sole writer of its branch.
+        assert!(
+            coord
+                .join(".doctrine/state/review/001/baton.toml")
+                .is_file(),
+            "baton in the coord tree's own state"
+        );
+        assert!(
+            !main.join(".doctrine/state/review/001/baton.toml").exists(),
+            "no baton in the parent tree"
         );
     }
 
