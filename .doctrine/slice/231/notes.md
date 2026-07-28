@@ -6,13 +6,21 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-28 · conclude cadence complete, RV-318 audit done · review
-surface `candidate/231/review-001` @ f1686831e (admitted) · dispatch/231
-988ead5bd · edge 13e90d654 · verify-vt 17/17 PASS and `check gate` exit 0 on the
-candidate · lifecycle at reconcile
+fresh-as-of: 2026-07-28 · **slice closed** · reconcile → done · trunk landed via
+admitted close_target `cand-231-close-001` @ 72dddf2bc, tree-identical to main
+before admit and journal trunk row == main · edge == main == 72dddf2bc ·
+`check gate` exit 0 (103 test binaries, 0 failures) and `slice verify-vt 231`
+20/20 PASS on the unified tip · RV-318 done, 9 findings terminal, no REV
 
 ### Produced
 
+- Close — a **split-lineage** landing
+  (`mem.pattern.dispatch.reconcile-truth-on-edge`): code + audit repairs on
+  `candidate/231/review-001`, reconciled truth on `edge`, main at neither.
+  United by merging the candidate into edge first (one conflict,
+  `slice-231.toml`, resolved *take-both* → 23 selectors exactly as RV-318's
+  Reconciliation Outcome prescribed), gated, then FF main + no-op `close_target`
+  so the journal earns its trunk row. Two residuals recorded below.
 - RV-318 — the reconciliation audit. 9 findings: 1 blocker / 4 major / 4 minor,
   all terminal. Reviewed the candidate interaction branch (29-file bundle,
   conflict-free merge onto main), not the raw evidence refs. Three repaired in
@@ -321,10 +329,24 @@ candidate · lifecycle at reconcile
   carries the PHASE-03 VT-1 keyword append (the criterion's `expects` names two
   clauses its keywords never checked) — a design/plan escalation, OFF
   reconcile's direct-edit surface, so it rides IMP-332 rather than the brief.
-- **RV-318 F-5 — declare the `src/worktree/allowlist.rs` selector** via
-  `doctrine slice selector add` (the registry is what `slice conformance` reads;
-  a design.md §7 prose edit alone leaves it red), plus the §7 mirror row.
-  Exactly one path; do not widen.
+- ~~**RV-318 F-5 — declare the `src/worktree/allowlist.rs` selector**~~ —
+  DISCHARGED at reconcile (`e7ba647c7`) plus the §7 mirror rows; the candidate's
+  `src/install.rs` selector joined it take-both at the close merge. 23 selectors.
+- **Installed agent definitions are stale w.r.t. the F-3 repair.**
+  `.claude/`, `.pi/` and `.doctrine/agents/dispatch-worker.md` (gitignored,
+  derived) do not yet carry the `observation_record` prose the audit added to
+  `install/agents/claude/dispatch-worker.md`, so workers in THIS repo are not yet
+  told the capability exists — the exact gap F-3 was raised against, one tier
+  down. Refreshing needs `doctrine install`, which also delegates to `npx` and
+  re-registers the claude marketplace; deliberately left for an explicit call
+  rather than run as a close side effect.
+- **`slice conformance` reports a *declared* `.doctrine/` entity selector as
+  undeclared.** `.doctrine/adr/001/layering.toml` has a well-formed
+  `design-target` selector, yet conformance lists it undeclared while
+  `.gitignore` and `.doctrine/governance.md` — same selector shape — come back
+  conformant. Distinct from the file-set skew already filed; found at close while
+  hand-deriving the honest 29-file cross-match (which is otherwise clean: every
+  bundle path accounted for, 0 undelivered).
 - **`w/SL-231-p01` is still un-reaped.** The landed-oracle cannot certify it, so
   removal needs `--force` — a knowing bypass, left for a deliberate decision
   rather than taken during the cadence.
