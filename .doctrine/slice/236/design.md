@@ -397,5 +397,51 @@ globals are expected to propagate to *nested* subcommands (`Command::Adr` →
 1 should assert it on a real nested verb before the sweep proceeds — a failure
 here would invalidate D3 entirely.
 
+**F-10 — a help-output scan cannot substitute for VT-s; D4 is what blinds it
+(major, integrated §9 by reaffirmation).** Proposed alternative: enumerate every
+command's `--help` and verify the `-p` migration from the rendered surface,
+standing in for the source scan. Settled empirically on the pinned clap 4.6.1
+spike (three unswept flavours vs. two swept).
+
+Measured — the `-p` help line, swept vs. unswept:
+
+| subcommand state | rendered `-p` line | detectable? |
+|---|---|---|
+| unswept, local doc **differs** from global's | `-p, --path <PATH>  Path to the source project root…` | yes |
+| unswept, local `-p` has **no** doc comment | `-p, --path <PATH>` (no description) | yes |
+| unswept, local doc **matches** global's | `-p, --path <PATH>  Explicit project root (default: auto-detect)` | **no — byte-identical** |
+| swept (inherits global), 1 level | `-p, --path <PATH>  Explicit project root (default: auto-detect)` | baseline |
+| swept (inherits global), 2 levels | identical to above | baseline |
+
+A surviving local arg **shadows** the propagated global rather than duplicating
+it, so help renders exactly one `-p` line either way; only its *description* can
+betray the leftover. That makes detection a function of doc-comment text — and
+**D4 sets the global's text to the 116× majority precisely to minimise golden
+churn**. Re-measured on `src/`: of the 202 `short = 'p'` declarations, **116
+already carry D4's exact text**. A help-based check is therefore structurally
+blind to ~57% of the sweep, and blind *by construction of D4* — the two ideas are
+in direct tension. Worse, its blind spot is silent: it reports green on a
+half-swept tree, the exact F-8 failure mode VT-s exists to catch.
+
+*Disposition:* rejected as a VT-s substitute. **VT-s stays the sole completeness
+guarantee.** The instrument is retained for a different job — see F-11.
+
+**F-11 — help enumeration is the right instrument for OQ-1, not for completeness
+(minor, opportunity).** The same enumeration that fails as a completeness check
+is well-suited to measuring **golden churn**: dump every command's `--help`
+before and after the sweep and diff. That answers OQ-1 (still unmeasured) with a
+number rather than an estimate, and gives the phase plan a churn budget. It rides
+existing machinery — ✓ `tests/e2e_help_families_golden.rs` and
+✓ `tests/e2e_subcommand_help.rs` already spawn the binary and assert on help
+output. Not a VT; a planning instrument.
+
+**F-12 — VT-s is cheaper than F-5 implied (minor, closes F-5's concern).** ✓ `syn`
+is already a dev-dependency (`Cargo.toml:88`, workspace `syn = { version = "2",
+features = ["full", "visit"] }`), and ✓ `tests/architecture_layering.rs` already
+parses `src/` with it (24 `syn::` uses). F-5's hazard — counting raw `-p` string
+occurrences and tripping over a doc comment or fixture — dissolves at an AST
+visitor over `#[arg(…)]` attributes, which is the precedent's existing shape.
+VT-s needs no new dependency and no new technique.
+
 **Not found.** No governance conflict surfaced; Thread 1's applicability sweep
 holds. No ADR/policy/standard was misread or weakly applied on re-check.
