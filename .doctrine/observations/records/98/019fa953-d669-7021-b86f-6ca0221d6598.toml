@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa953-d669-7021-b86f-6ca0221d6598"
+recorded_at = "2026-07-28T15:24:31.721539655Z"
+kind = "friction"
+summary = "/research: pi-scout|pi-research hang indefinitely on tool-using prompts (3/3 failed); trivial no-tool prompt returns instantly"
+detail = "SL-237 pre-design round: all three spawned research threads produced ZERO bytes to stdout and stderr. Two killed manually at 23 min; the third bounded with 'timeout 900' died at exit 124. A smoke test — timeout 120 ./scripts/pi-scout 'Reply with exactly the word: ALIVE' — returned ALIVE with exit 0 in seconds. So the model call and the script plumbing are fine; the hang is in the agentic TOOL-USE loop when the prompt asks for repo exploration. Whole round degraded to self-serve. Two consequences: (1) research threads cannot currently be relied on in this repo, and the CLAUDE.md 'Research agents' guidance points at them as the default; (2) pi --print buffers, so a hung thread is indistinguishable from a working one without 'ps -eo pid,etime,comm'. Mitigations used: hard 'timeout' wrapper, narrow prompts, ps polling."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
