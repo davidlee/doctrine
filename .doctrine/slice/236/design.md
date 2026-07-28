@@ -221,6 +221,44 @@ scatter across every write path, converting REQ-192's compile-time exhaustivenes
 into a discipline concern and placing confinement policy in the leaf layer
 ADR-001 keeps thin.
 
+**A4 — NOT rejected; CONTESTS D3. Read the explicit path from `ArgMatches` by arg
+id, sweeping nothing.** ✓ All 204 declarations share the clap arg id `path`, and
+`ArgMatches` is not depth-limited: walking to the deepest subcommand's matches
+and reading `try_get_one::<PathBuf>("path")` reaches every shape. Measured on the
+pinned clap 4.6.1 spike (§10 F-13) against doctrine's real forms — inline variant,
+newtype (`Adr` → `AdrCommand::New`, **the case that rejected A1**), 3-level
+nesting, and the flattened `ServeArgs` bundle — all four resolved; the derived
+`Cli` still parses from the same matches.
+
+A4 is **not** A2: the check stays at the single existing chokepoint in
+`worker_guard`, so REQ-192's compile-time exhaustiveness and ADR-001's thin leaf
+are both untouched. It is not blocked by what blocked A1, because it never routes
+through the typed enum. Footprint: one ~10-line helper plus `Cli::try_parse()` →
+`Cli::command().try_get_matches()` + `from_arg_matches` in `main.rs`.
+
+*Cost, stated against D3:*
+
+| | D3 (global flag) | A4 (matches walker) |
+|---|---|---|
+| the invariant | **structural** — one declaration, compiler-visible | **conventional** — every `-p` must stay named `path`, typed `Option<PathBuf>`; nothing enforces it |
+| footprint | 204 deletions / 27 files | ~10 lines, 1 call site |
+| R3 (half-swept tree) | primary risk; VT-s is the sole guard | dissolved — nothing to sweep |
+| OQ-1 golden churn | ~40+ goldens, bounded but real | zero — help output unchanged |
+| surface unification (`boot -p X install`, `serve` sans `-p`) | fixed | **not** fixed |
+| cohesion | one parse surface | two (string-keyed matches beside the derive) — precedent: ✓ `main.rs:217` `subcommand_help_path` already walks the clap tree by string (SL-208) |
+
+A4's residual failure mode is the *same class* as R3, relocated: a future
+subcommand naming its field `project_root` is silently unguarded. It is testable
+by a convention scan far smaller than VT-s. **VT-a…VT-d apply unchanged under
+either option** — they bind guard behaviour, not the sweep. Only VT-s is
+D3-specific.
+
+**Scope observation (raised with the decision).** This slice is *"Worker-guard
+honours explicit project root."* D3 bundles a CLI-surface refactor into a guard
+bug fix; the refactor is therefore never judged on its own merits. A4 fixes the
+defect proportionately and leaves surface unification to stand or fall as its own
+change. See §10 F-13 disposition.
+
 **Why the scale objection to D3 does not hold — restated after F-8.** The
 original argument ("the compiler enumerates the work list") was **too strong**
 and is corrected here:
@@ -442,6 +480,38 @@ parses `src/` with it (24 `syn::` uses). F-5's hazard — counting raw `-p` stri
 occurrences and tripping over a doc comment or fixture — dissolves at an AST
 visitor over `#[arg(…)]` attributes, which is the precedent's existing shape.
 VT-s needs no new dependency and no new technique.
+
+**F-13 — DEC-093's dilemma is not exhaustive; A4 is small AND centrally guarded
+(critical, integrated §7 as A4; DECISION RE-OPENED).** DEC-093 closes on the
+framing *"the change remains large but mechanical, and the rejected push-down
+alternative remains small but permanently unguarded"* — large-and-guarded vs.
+small-and-unguarded. That dichotomy holds only if A1 and A2 exhaust the space.
+They do not.
+
+A1's rejection is correct **as stated** — the guard cannot reach a newtype
+variant's path *through the typed enum*. But it is a rejection of one access
+route, not of early path access. Measured on the clap 4.6.1 spike:
+
+| probe | modelled on | walker resolved |
+|---|---|---|
+| `collide -p INLINE` | `Command::Link` | `INLINE` |
+| `adr new Title -p NEWTYPE` | `Command::Adr` → `AdrCommand::New` — A1's blocker | `NEWTYPE` |
+| `slice selector list 236 -p DEEP` | 3-level nesting | `DEEP` |
+| `serve --path FLATTENED` | `ServeArgs` flattened bundle | `FLATTENED` |
+| `swept --marker`, `collide` (no `-p`) | negative controls | `None` |
+
+`Cli::from_arg_matches` succeeded on every one, so the walker composes with the
+derive rather than replacing it.
+
+Compounding the finding: D3's original justification (*"the compiler enumerates
+the work list"*) was measured false at F-8 and retracted, and nothing replaced it
+but VT-s — a test needed **because** the compiler does not help. The decision now
+rests on weaker ground than when it was taken, and was not re-opened at F-8.
+
+*Disposition:* **not settled here.** A4 is recorded as a live contender, not a
+replacement; the structural-vs-conventional invariant trade (§7 table) is a real
+judgement call with a defensible answer either way. Routed to external
+adversarial review before any implementation.
 
 **Not found.** No governance conflict surfaced; Thread 1's applicability sweep
 holds. No ADR/policy/standard was misread or weakly applied on re-check.
