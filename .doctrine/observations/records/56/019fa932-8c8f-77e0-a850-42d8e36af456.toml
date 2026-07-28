@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa932-8c8f-77e0-a850-42d8e36af456"
+recorded_at = "2026-07-28T14:48:10.12724312Z"
+kind = "friction"
+summary = "/research: pi-scout|pi-research give zero progress signal — pi --print buffers all output, indistinguishable from a hang"
+detail = "SL-237 pre-design round: both threads ran 20+ min writing 0 bytes to their redirect targets and 0 bytes to stderr. Because scripts/pi-scout ends in 'exec pi --print', output is buffered until completion, so a working thread and a hung thread look identical from the orchestrator's side. Diagnosing cost several tool calls (ps -eo comm to find the exec'd 'pi' processes; an earlier 'ps aux | grep' missed them). Suggests: a --stream/progress flag, a heartbeat to stderr, or documenting 'expect silence, check with ps -eo comm' in the research agents section of CLAUDE.md."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
