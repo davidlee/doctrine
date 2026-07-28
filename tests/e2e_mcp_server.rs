@@ -1561,7 +1561,10 @@ fn observation_record_uses_registered_primary_root() {
     );
 
     // A smuggled caller path is refused, and writes NOTHING to the decoy.
-    for key in ["path", "root"] {
+    // `input` joins the two originals (IMP-332): the CLI grew `--input <PATH>`,
+    // so it is now a path-bearing key a caller might reach for on this surface
+    // too — and the server, not the caller, resolves every path here.
+    for key in ["path", "root", "input"] {
         let resp = record_observation(
             &mut stdin,
             &mut reader,

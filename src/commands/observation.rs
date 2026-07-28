@@ -7,11 +7,11 @@
 //! output. It does NOT re-implement any of those policies.
 
 use std::collections::BTreeMap;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Subcommand;
 
 use crate::listing::Format;
@@ -46,10 +46,16 @@ pub(crate) enum RecordKind {
 }
 
 /// Arguments specific to a friction record.
+///
+/// Two mutually exclusive ways in (IMP-332, design §3.1): the per-field flags,
+/// or `--input` carrying a complete §3.3 request. They are exclusive because two
+/// sources of truth for one field would re-open "explicit caller values win"
+/// (§3.1) at a layer with no origin field to record the answer in.
 #[derive(clap::Args, Debug)]
 pub(crate) struct FrictionRecordArgs {
     /// The friction summary (required, non-empty).
-    pub(crate) summary: String,
+    #[arg(required_unless_present = "input")]
+    pub(crate) summary: Option<String>,
 
     /// Optional detail.
     #[arg(long)]
@@ -59,9 +65,23 @@ pub(crate) struct FrictionRecordArgs {
     #[arg(long)]
     pub(crate) uid: Option<String>,
 
+    /// Explicit facet field, repeatable: `--facet <group>.<field>=<value>`.
+    /// Values are strings; send a non-string field via `--input`.
+    #[arg(long, value_name = "GROUP.FIELD=VALUE")]
+    pub(crate) facet: Vec<String>,
+
     /// Disable automatic enrichment.
     #[arg(long)]
     pub(crate) no_enrich: bool,
+
+    /// Read a complete friction request as JSON from a file, or from stdin
+    /// when the value is `-`. Cannot be combined with the per-field flags.
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with_all = ["summary", "detail", "uid", "facet", "no_enrich"]
+    )]
+    pub(crate) input: Option<String>,
 
     /// Explicit project root (default: auto-detect).
     #[arg(short = 'p', long)]
@@ -473,8 +493,13 @@ fn resolve_root(path: Option<PathBuf>) -> Result<PathBuf> {
 
 /// Build automatic enrichment facets for the CLI adapter.
 /// Only writes to the named allowlist fields.
-fn enrich_cli(no_enrich: bool, root: &std::path::Path) -> Facets {
-    if no_enrich {
+///
+/// Takes `enrich` positively, like its MCP counterpart `enrich_mcp` and the
+/// §3.3 request field — the CLI's opt-out `--no-enrich` spelling is inverted at
+/// the one place it is read, rather than carried as a double negative into a
+/// function both surfaces' requests now feed.
+fn enrich_cli(enrich: bool, root: &std::path::Path) -> Facets {
+    if !enrich {
         return Facets::default();
     }
 
@@ -519,20 +544,79 @@ pub(crate) fn dispatch(cmd: ObservationCommand, color: bool) -> Result<()> {
 
 // ── Record ────────────────────────────────────────────────────────────────
 
+/// Resolve the one [`FrictionRequest`] the record verb acts on, from whichever
+/// of the two mutually exclusive surfaces the caller used (design §3.1).
+///
+/// `--input` carries the complete §3.3 request — the same object the MCP tool
+/// receives — so the two adapters cannot drift in what a request may say. `-`
+/// reads it from stdin, following the sentinel already established for
+/// `memory record --body` (SL-230 D-P5-1). Otherwise the per-field flags build
+/// the identical shape, with `--facet` supplying explicit facets.
+///
+/// `stdin` is a `&mut impl Read` rather than `io::stdin()` directly so the
+/// sentinel path is testable without a subprocess.
+fn resolve_request(
+    args: FrictionRecordArgs,
+    stdin: &mut impl Read,
+) -> Result<crate::observation::request::FrictionRequest> {
+    use crate::observation::request::FrictionRequest;
+
+    if let Some(source) = args.input {
+        let raw = if source == STDIN_SENTINEL {
+            let mut buf = String::new();
+            stdin
+                .read_to_string(&mut buf)
+                .context("Failed to read --input from stdin")?;
+            buf
+        } else {
+            std::fs::read_to_string(&source)
+                .with_context(|| format!("Failed to read --input from {source}"))?
+        };
+        return FrictionRequest::from_json(&raw)
+            .map_err(|reason| anyhow::anyhow!("invalid --input request: {reason}"));
+    }
+
+    // clap's `required_unless_present = "input"` is what guarantees the summary
+    // is here on this branch.
+    let summary = args
+        .summary
+        .context("internal: summary is required unless --input is given")?;
+
+    let facets = crate::observation::request::facets_from_dotted(&args.facet)
+        .map_err(|reason| anyhow::anyhow!("invalid --facet: {reason}"))?;
+
+    Ok(FrictionRequest {
+        uid: args.uid,
+        summary,
+        detail: args.detail,
+        facets,
+        enrich: !args.no_enrich,
+    })
+}
+
+/// The value of `--input` that means "read the request from stdin".
+///
+/// The same sentinel `memory record --body` uses, and the one the MCP boundary
+/// already refuses by name (`MCP_BODY_STDIN_SENTINEL`) — one convention across
+/// the CLI rather than a second spelling invented here.
+const STDIN_SENTINEL: &str = "-";
+
 fn run_record(args: ObservationRecordArgs) -> Result<()> {
     let RecordKind::Friction(friction_args) = args.kind;
 
-    let root = resolve_root(friction_args.path)?;
+    let root = resolve_root(friction_args.path.clone())?;
+    let request = resolve_request(friction_args, &mut std::io::stdin())?;
+
     let service =
         crate::observation::Service::new(root.clone(), crate::observation::SourceRegistry::empty());
 
-    let uid = friction_args
+    let uid = request
         .uid
         .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
     let recorded_at = crate::clock::now_timestamp()?;
 
-    let auto_facets = enrich_cli(friction_args.no_enrich, &root);
-    let facets = merge_explicit_facets(auto_facets, None);
+    let auto_facets = enrich_cli(request.enrich, &root);
+    let facets = merge_explicit_facets(auto_facets, request.facets);
 
     let envelope = Envelope {
         schema: wire::SCHEMA.to_string(),
@@ -541,8 +625,8 @@ fn run_record(args: ObservationRecordArgs) -> Result<()> {
         recorded_at,
         facets: Some(facets),
         payload: Payload::Friction {
-            summary: friction_args.summary,
-            detail: friction_args.detail,
+            summary: request.summary,
+            detail: request.detail,
         },
     };
 

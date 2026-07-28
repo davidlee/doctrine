@@ -117,7 +117,13 @@ exit_criteria = [
   { id = "EX-5", text = "Hostile content is escaped at terminal boundaries and framed as untrusted data in any agent-facing rendering" },
 ]
 verification = [
-  { id = "VT-1", expects = "CLI e2e covers cheap record, explicit-over-automatic enrichment, replay/collision receipts, stdin/file input, strict failures, no staging/commit side effects, and raw JSON/table rendering", test_file = "tests/e2e_observation.rs", keywords = ["record_friction_returns_receipt", "record_replay_and_collision", "record_does_not_touch_git_index", "hostile_content_is_safely_rendered"], waived = false },
+  # RV-318 F-1 / IMP-332: this criterion's `expects` named "explicit-over-automatic
+  # enrichment" and "stdin/file input", and its four keywords covered NEITHER — so
+  # it reported PASS across five phases and a ledgered code review while both
+  # clauses were undelivered. That is the RV-317 F-4 class recurring in a criterion
+  # remediation never re-examined. `expects` is unchanged; the keywords are APPENDED
+  # (ids immutable, never renumbered) until they cover the text they claim.
+  { id = "VT-1", expects = "CLI e2e covers cheap record, explicit-over-automatic enrichment, replay/collision receipts, stdin/file input, strict failures, no staging/commit side effects, and raw JSON/table rendering", test_file = "tests/e2e_observation.rs", keywords = ["record_friction_returns_receipt", "record_replay_and_collision", "record_does_not_touch_git_index", "hostile_content_is_safely_rendered", "record_facet_explicit_value_wins_over_automatic_enrichment", "record_facet_flags_land_as_explicit_beside_automatic_enrichment", "record_input_reads_a_complete_request_from_a_file", "record_input_dash_reads_a_complete_request_from_stdin"], waived = false },
   { id = "VT-2", expects = "CLI e2e covers exact/resolved show, active/history list, lexical search, filters, keyset pages, supersession, retraction, invalid controls, and complete history", test_file = "tests/e2e_observation.rs", keywords = ["show_resolves_correction_chain", "list_and_search_use_resolved_projection", "corrections_preserve_complete_history"], waived = false },
   # RV-317 F-4(3) SPLIT. This criterion's two halves now live in two files, and a
   # VT mandate carries exactly one `test_file` — so the refusal half moves to

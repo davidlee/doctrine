@@ -17,6 +17,7 @@ use super::protocol::{
     Id, JsonRpcRequest, JsonRpcResponse, McpTool, McpToolResult, ToolsListResult,
 };
 use crate::memory;
+use crate::observation::request;
 use crate::observation::store::Receipt;
 use crate::observation::wire::{self, EscapeContext, Facets};
 use crate::retrieve;
@@ -45,14 +46,16 @@ const INTERFACE_MCP: &str = "mcp";
 ///   surface creates `friction` and nothing else;
 /// - the two correction controls (`old_uid`/`replacement_uid` for supersession,
 ///   `target_uid` for retraction) — capture may not rewrite the ledger;
-/// - a caller-supplied filesystem root (`path`, `root`) — the SERVER resolves
-///   the registered primary repository root.
+/// - a caller-supplied filesystem root or request file (`path`, `root`,
+///   `input`) — the SERVER resolves the registered primary repository root, and
+///   the request arrives in the arguments rather than from a path the caller
+///   names (`input` is the CLI's file/stdin surface, IMP-332).
 ///
 /// The schema's silence already makes them unrepresentable; a caller that sends
 /// one anyway is reaching past the contract, so it is refused with a diagnostic
 /// rather than silently dropped — a silent drop would leave the caller believing
 /// an authority it never had was exercised.
-const CAPTURE_REFUSED_KEYS: [&str; 9] = [
+const CAPTURE_REFUSED_KEYS: [&str; 10] = [
     "kind",
     "source",
     "counters",
@@ -62,6 +65,7 @@ const CAPTURE_REFUSED_KEYS: [&str; 9] = [
     "target_uid",
     "path",
     "root",
+    "input",
 ];
 
 // ── Tool definitions (function, not const — json!() is non-const) ─────────
@@ -1279,7 +1283,12 @@ fn run_observation_record(root: &Path, arguments: &Value) -> anyhow::Result<Stri
     let recorded_at = crate::clock::now_timestamp()?;
     let enrich = fields.opt_bool_field("enrich").unwrap_or(true);
 
-    let explicit = parse_explicit_facets(arguments.get("facets"))?;
+    // The parse lives in the observation leaf so the CLI's `--facet` / `--input`
+    // surfaces share it (ADR-001 severs `mcp_server → commands`, so below both is
+    // the only shared home). The `invalid arguments:` prefix stays here: it is
+    // what routes the refusal to `-32602`, and that is an MCP fact.
+    let explicit = request::parse_explicit_facets(arguments.get("facets"))
+        .map_err(|reason| anyhow::anyhow!("invalid arguments: `facets`: {reason}"))?;
     let facets = wire::merge_explicit_facets(enrich_mcp(enrich, root), explicit);
 
     // The wire builder validates BEFORE the store is touched, which is what lets
@@ -1330,48 +1339,6 @@ fn render_refusal(diags: &[wire::Diagnostic]) -> String {
         })
         .collect::<Vec<_>>()
         .join("; ")
-}
-
-/// Parse the optional explicit `facets` argument into typed [`Facets`].
-///
-/// Absent or `null` ⇒ `None` (pure automatic enrichment). A malformed group is
-/// an argument error, not a warning: silently dropping facets the caller asked
-/// for would record a lie about what was captured.
-fn parse_explicit_facets(raw: Option<&Value>) -> anyhow::Result<Option<Facets>> {
-    let Some(raw) = raw else {
-        return Ok(None);
-    };
-    if raw.is_null() {
-        return Ok(None);
-    }
-    let facets: Facets = serde_json::from_value(default_facet_schema_versions(raw.clone()))
-        .map_err(|e| {
-            // The serde message echoes caller-chosen field names — escape it.
-            anyhow::anyhow!(
-                "invalid arguments: `facets`: {}",
-                wire::escape_hostile(&e.to_string(), EscapeContext::Inline)
-            )
-        })?;
-    Ok(Some(facets))
-}
-
-/// Default each supplied facet group's `schema_version` to the current wire
-/// version, so a caller need not repeat it in every group.
-///
-/// MCP-local argument adaptation: the CLI has no explicit-facets surface, so
-/// this normalisation has no CLI counterpart to share with. It only ever fills
-/// an ABSENT key — an explicit `schema_version` (including a wrong one, which
-/// the wire then rejects) is left exactly as sent.
-fn default_facet_schema_versions(mut raw: Value) -> Value {
-    if let Some(groups) = raw.as_object_mut() {
-        for group in groups.values_mut() {
-            if let Some(obj) = group.as_object_mut() {
-                obj.entry("schema_version")
-                    .or_insert_with(|| json!(wire::SCHEMA_VERSION));
-            }
-        }
-    }
-    raw
 }
 
 /// Automatic enrichment for the MCP capture surface — the NAMED allowlist and

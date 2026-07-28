@@ -11,6 +11,7 @@
 //! | Module | Responsibility |
 //! |---|---|
 //! | `wire` | Pure typed envelopes, payloads, facets, origins, controls, schema dispatch, strict validation, explicit-over-automatic facet merge, safe rendering of untrusted content, canonical serialization |
+//! | `request` | Pure caller-request adaptation: the §3.3 friction request shape, explicit-facet parsing, and the CLI's dotted `--facet` grammar — the JSON/flag surfaces, kept out of `wire` so the domain types carry no wire-format dependency |
 //! | `resolve` | Pure active/history projection and deterministic per-control diagnostics |
 //! | `query` | Pure filtering, shared lexical matching, total ordering, and keyset cursors |
 //! | `store` | Imperative filesystem seam: UUID-sharded loading, atomic no-clobber publication, replay/collision |
@@ -24,6 +25,7 @@
 //! constant — is homed here in the leaf rather than duplicated per surface.
 
 pub(crate) mod query;
+pub(crate) mod request;
 pub(crate) mod resolve;
 pub(crate) mod store;
 pub(crate) mod wire;

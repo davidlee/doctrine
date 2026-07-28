@@ -1342,6 +1342,7 @@ pub fn scan() {
     fn observation_pure_modules_have_no_imperative_imports() {
         let pure_modules = [
             "src/observation/wire.rs",
+            "src/observation/request.rs",
             "src/observation/resolve.rs",
             "src/observation/query.rs",
         ];

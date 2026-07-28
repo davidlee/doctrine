@@ -82,6 +82,57 @@ fn run_as_env_worker(cwd: &Path, args: &[&str]) -> Output {
     spawn(cwd, args, true)
 }
 
+/// Run `doctrine <args...>` in `cwd` with `stdin_text` piped to standard input.
+///
+/// The `--input -` sentinel is only reachable through a real pipe, so this is a
+/// spawn-and-write rather than a variant of [`spawn`]: a test that merely passes
+/// `-` without writing would hang on an inherited terminal instead of failing.
+fn run_with_stdin(cwd: &Path, args: &[&str], stdin_text: &str) -> Output {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new(bin())
+        .args(args)
+        .current_dir(cwd)
+        .env_remove("DOCTRINE_WORKER")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn doctrine");
+    child
+        .stdin
+        .take()
+        .expect("piped stdin")
+        .write_all(stdin_text.as_bytes())
+        .expect("write stdin");
+    child.wait_with_output().expect("wait for doctrine")
+}
+
+/// Look up one stored facet field, `None` when the group or field is absent.
+///
+/// Total where TOML indexing panics, so a test can assert a field is ABSENT —
+/// which is the whole point of the `enrich: false` cases.
+fn facet<'a>(stored: &'a toml::Value, group: &str, field: &str) -> Option<&'a toml::Value> {
+    stored
+        .get("facets")
+        .and_then(|f| f.get(group))
+        .and_then(|g| g.get(field))
+}
+
+/// Read back the record a receipt points at, as parsed TOML.
+///
+/// Receipts carry `rel_path`, so a test asserting what was *stored* — facets and
+/// their origins especially — reads the authored file rather than trusting the
+/// receipt, which only reports the outcome.
+fn stored_record(dir: &Path, receipt: &serde_json::Value) -> toml::Value {
+    let rel = receipt["rel_path"]
+        .as_str()
+        .expect("receipt carries rel_path");
+    let raw = std::fs::read_to_string(dir.join(rel)).expect("stored record is readable");
+    raw.parse::<toml::Value>().expect("stored record is TOML")
+}
+
 /// Run with explicit path.
 #[expect(dead_code, reason = "available for future tests")]
 fn run_path(cwd: &Path, path: &Path, args: &[&str]) -> Output {
@@ -354,6 +405,358 @@ fn record_with_explicit_uid() {
     assert!(out.status.success());
     let receipt = json_stdout(&out);
     assert_eq!(receipt["uid"], uid);
+}
+
+// ── Explicit facet fields and complete requests (IMP-332, design §3.1) ────
+
+#[test]
+fn record_facet_flags_land_as_explicit_beside_automatic_enrichment() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    let out = run(
+        dir.path(),
+        &[
+            "observation",
+            "record",
+            "friction",
+            "explicit facets",
+            "--facet",
+            "execution.harness=claude",
+            "--facet",
+            "work_context.slice=SL-231",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "record must succeed: {}",
+        stderr(&out)
+    );
+
+    let stored = stored_record(dir.path(), &json_stdout(&out));
+    let execution = &stored["facets"]["execution"];
+    assert_eq!(execution["harness"].as_str(), Some("claude"));
+    assert_eq!(
+        execution["harness_origin"].as_str(),
+        Some("explicit"),
+        "a caller-supplied value is explicit by construction"
+    );
+    assert_eq!(
+        execution["interface_origin"].as_str(),
+        Some("automatic"),
+        "automatic enrichment must survive alongside explicit fields, not be replaced by them"
+    );
+    assert_eq!(
+        stored["facets"]["work_context"]["slice"].as_str(),
+        Some("SL-231"),
+        "a second --facet must reach a different group"
+    );
+}
+
+#[test]
+fn record_facet_explicit_value_wins_over_automatic_enrichment() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    // `execution.command` is one the CLI adapter enriches automatically, so
+    // shadowing it is what proves design §3.1's "explicit caller values win" is
+    // reachable from this surface at all — the gap IMP-332 was raised for.
+    let out = run(
+        dir.path(),
+        &[
+            "observation",
+            "record",
+            "friction",
+            "shadowed",
+            "--facet",
+            "execution.command=caller said so",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "record must succeed: {}",
+        stderr(&out)
+    );
+
+    let stored = stored_record(dir.path(), &json_stdout(&out));
+    assert_eq!(
+        stored["facets"]["execution"]["command"].as_str(),
+        Some("caller said so")
+    );
+    assert_eq!(
+        stored["facets"]["execution"]["command_origin"].as_str(),
+        Some("explicit")
+    );
+}
+
+#[test]
+fn record_facet_cannot_forge_the_origin_of_its_own_value() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    // Origin is the only provenance discriminator the corpus carries, so a
+    // caller able to stamp `automatic` on its own value would make every
+    // origin-partitioned statistic unsound (RV-318 F-2). Pinned at the CLI
+    // entry point, not just in the merge.
+    let out = run(
+        dir.path(),
+        &[
+            "observation",
+            "record",
+            "friction",
+            "forged",
+            "--facet",
+            "execution.harness=claude",
+            "--facet",
+            "execution.harness_origin=automatic",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "record must succeed: {}",
+        stderr(&out)
+    );
+
+    let stored = stored_record(dir.path(), &json_stdout(&out));
+    assert_eq!(
+        stored["facets"]["execution"]["harness_origin"].as_str(),
+        Some("explicit"),
+        "origin is derived from reaching the merge, never read from the caller"
+    );
+}
+
+#[test]
+fn record_facet_typed_field_names_the_argument_and_points_at_input() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    let out = run(
+        dir.path(),
+        &[
+            "observation",
+            "record",
+            "friction",
+            "typed",
+            "--facet",
+            "usage.total_tokens=500",
+        ],
+    );
+    assert!(!out.status.success(), "a u64 field takes no string value");
+
+    let err = stderr(&out);
+    assert!(
+        err.contains("usage.total_tokens=500"),
+        "serde reports no field path for a type mismatch, so the refusal must \
+         name the offending argument: {err}"
+    );
+    assert!(
+        err.contains("--input"),
+        "and must name the way through: {err}"
+    );
+}
+
+#[test]
+fn record_facet_unknown_field_is_refused_not_dropped() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    let out = run(
+        dir.path(),
+        &[
+            "observation",
+            "record",
+            "friction",
+            "unknown",
+            "--facet",
+            "execution.nonsuch=v",
+        ],
+    );
+    assert!(
+        !out.status.success(),
+        "silently dropping a facet the caller asked for would record a lie \
+         about what was captured"
+    );
+    assert!(stderr(&out).contains("nonsuch"), "{}", stderr(&out));
+}
+
+#[test]
+fn record_input_reads_a_complete_request_from_a_file() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    let req = dir.path().join("req.json");
+    std::fs::write(
+        &req,
+        r#"{"summary":"from a file","detail":"d",
+            "facets":{"execution":{"harness":"pi"}},"enrich":false}"#,
+    )
+    .unwrap();
+
+    let out = run(
+        dir.path(),
+        &[
+            "observation",
+            "record",
+            "friction",
+            "--input",
+            req.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "record must succeed: {}",
+        stderr(&out)
+    );
+
+    let stored = stored_record(dir.path(), &json_stdout(&out));
+    assert_eq!(stored["summary"].as_str(), Some("from a file"));
+    assert_eq!(stored["detail"].as_str(), Some("d"));
+    assert_eq!(
+        stored["facets"]["execution"]["harness"].as_str(),
+        Some("pi")
+    );
+    assert!(
+        facet(&stored, "execution", "interface").is_none(),
+        "`enrich: false` in the request must suppress automatic enrichment"
+    );
+}
+
+#[test]
+fn record_input_dash_reads_a_complete_request_from_stdin() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    let out = run_with_stdin(
+        dir.path(),
+        &["observation", "record", "friction", "--input", "-"],
+        r#"{"summary":"from stdin","facets":{"work_context":{"phase":"PHASE-03"}}}"#,
+    );
+    assert!(
+        out.status.success(),
+        "record must succeed: {}",
+        stderr(&out)
+    );
+
+    let stored = stored_record(dir.path(), &json_stdout(&out));
+    assert_eq!(stored["summary"].as_str(), Some("from stdin"));
+    assert_eq!(
+        stored["facets"]["work_context"]["phase"].as_str(),
+        Some("PHASE-03")
+    );
+    assert_eq!(
+        stored["facets"]["execution"]["interface_origin"].as_str(),
+        Some("automatic"),
+        "an absent `enrich` must still mean enrich"
+    );
+}
+
+#[test]
+fn record_input_carries_the_typed_fields_the_facet_flags_cannot() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    // The complement of `record_facet_typed_field_names_the_argument…`: the
+    // route that refusal points at must actually work, or the diagnostic is
+    // advice to a dead end.
+    let out = run_with_stdin(
+        dir.path(),
+        &["observation", "record", "friction", "--input", "-"],
+        r#"{"summary":"typed",
+            "facets":{"correlation":{"related_observations":["a","b"]}}}"#,
+    );
+    assert!(
+        out.status.success(),
+        "record must succeed: {}",
+        stderr(&out)
+    );
+
+    let stored = stored_record(dir.path(), &json_stdout(&out));
+    assert_eq!(
+        stored["facets"]["correlation"]["related_observations"]
+            .as_array()
+            .map(Vec::len),
+        Some(2),
+        "a Vec<String> field is reachable through the request but not the flags"
+    );
+}
+
+#[test]
+fn record_input_cannot_be_combined_with_the_per_field_flags() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    // Two sources of truth for one field would re-open "explicit caller values
+    // win" at a layer with no origin to record the answer in.
+    for extra in [
+        vec!["a summary"],
+        vec!["--detail", "d"],
+        vec!["--uid", "019faaaa-5678-7abc-8def-0123456789ab"],
+        vec!["--facet", "execution.harness=claude"],
+        vec!["--no-enrich"],
+    ] {
+        let mut args = vec!["observation", "record", "friction", "--input", "-"];
+        args.extend(extra.iter());
+        let out = run_with_stdin(dir.path(), &args, r#"{"summary":"s"}"#);
+        assert!(
+            !out.status.success(),
+            "--input must refuse {extra:?}: {}",
+            stdout(&out)
+        );
+    }
+}
+
+#[test]
+fn record_input_malformed_json_is_refused_on_one_line() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    let out = run_with_stdin(
+        dir.path(),
+        &["observation", "record", "friction", "--input", "-"],
+        "{not json",
+    );
+    assert!(!out.status.success(), "malformed input must be refused");
+    assert!(
+        stderr(&out).contains("invalid --input request"),
+        "{}",
+        stderr(&out)
+    );
+}
+
+#[test]
+fn record_input_unknown_key_is_refused_rather_than_ignored() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    let out = run_with_stdin(
+        dir.path(),
+        &["observation", "record", "friction", "--input", "-"],
+        r#"{"summary":"s","path":"/etc/passwd"}"#,
+    );
+    assert!(
+        !out.status.success(),
+        "a key past the request contract must not be silently dropped"
+    );
+    assert!(stderr(&out).contains("path"), "{}", stderr(&out));
+}
+
+#[test]
+fn record_input_missing_file_is_refused_with_the_path() {
+    let dir = tmp();
+    init_repo(dir.path());
+
+    let out = run(
+        dir.path(),
+        &[
+            "observation",
+            "record",
+            "friction",
+            "--input",
+            "nonsuch.json",
+        ],
+    );
+    assert!(!out.status.success(), "a missing request file must refuse");
+    assert!(stderr(&out).contains("nonsuch.json"), "{}", stderr(&out));
 }
 
 #[test]
