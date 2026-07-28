@@ -1,0 +1,50 @@
+memory_uid = "mem_019fa8f1ade17f31822539fa80d778f4"
+memory_key = "mem.fact.clap.global-and-local-arg-share-id"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "clap global arg and same-id subcommand arg coexist silently"
+summary = "A clap global=true arg does NOT collide with a same-id subcommand arg; both fields receive the value"
+created = "2026-07-28"
+updated = "2026-07-28"
+
+[scope]
+paths = ["src/main.rs", "src/commands/cli.rs"]
+globs = []
+commands = []
+tags = ["clap", "cli", "footgun"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "5b0f3d45410f00718473eeb403d563d8e4696d40"
+ref_name = "refs/heads/edge"
+checkout_state_id = "2470ec143529ea72660e3411edce59aaf851ad4b05edb114ba09afd75f224798"
+base_commit = "90028c84605b2836d012275f967650beeb131398"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-236"
+
+[[source]]
+kind = "decision"
+ref = "DEC-093"
+
