@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa95c-6964-7690-8469-8a61ace3d82e"
+recorded_at = "2026-07-28T15:33:53.636735016Z"
+kind = "friction"
+summary = "review verify round: raiser's contest rationale landed in ephemeral baton log"
+detail = "RV-320 verify round (codex, raiser). 'doctrine review contest' has no durable rationale field — only --note, which the help text itself labels 'ephemeral handoff chatter for the baton log — NOT durable rationale'. But contesting IS the act that needs durable justification: it says why a disposed fix is still inadequate. The raiser had nowhere else to put it, so three substantive contest arguments (incl. a 112-byte constant contradiction) live only in .doctrine/state/review/320/baton.toml, a gitignored runtime file. The committed ledger diff was 7 status flips and nothing else. Responder must manually copy the argument into the finding's durable response to preserve it. Asymmetry: raise and dispose both write durable prose; contest does not."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
