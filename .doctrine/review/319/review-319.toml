@@ -30,7 +30,7 @@ CONSEQUENCE: D3's claimed structural invariant is real but is the wrong structur
 
 [[finding]]
 id = "F-2"
-status = "open"
+status = "answered"
 severity = "blocker"
 title = "Expected an explicit -p to identify the tree confinement is judged against; observed that every tree a worker must not write to is markerless, so target-based resolution inverts the guard"
 detail = """
@@ -47,6 +47,15 @@ CONSEQUENCE FOR I-2. The design sells the stricter direction as closing a live h
 ROOT. ISS-028's ORIGINAL note was closer than SL-228's 'sharper diagnosis' that superseded it: the marker 'cannot distinguish between a worker agent writing authored content and a test fixture scaffolding entities'. That is actor INTENT, and no path argument can express it. Every path-based fix leaks for this reason, which is why this is a premise defect rather than a fix-direction defect.
 
 STATE. No source landed; src/main.rs and src/commands/guard.rs restored to HEAD. Retained green: tests/e2e_worker_guard_explicit_root.rs (actor-contract invariants that hold under any resolution, with the two disputed skew cases deliberately absent) and tests/arg_path_convention.rs. check commit and check gate both exit 0."""
+disposition = "design-wrong"
+response = """
+ACCEPTED — the design premise, not the fix direction, is the defect. SL-236 retired (status abandoned); no path-threading implementation lands.
+
+ONE QUALIFICATION, so the ledger does not overstate the charge. Worker confinement is COOPERATIVE, not adversarial, and the code says so: WriteClass::MarkerClear is deliberately unguarded ('locking the marker's only remover behind the marker is a self-brick we reject'), and run_marker_clear's linked-worktree fence (src/worktree/marker.rs:223-227) refuses without --operator with the message 'this is the accident-fence; pass --operator to confirm you are the trusted orchestrator'. A worker can therefore already stand itself down. So path-threading does not grant strictly novel capability — it makes the bypass SILENT AND UNDECLARED where the sanctioned route is explicit and auditable. That is still fatal: an accident-fence that no longer catches accidents is worthless, and the three red e2e_dispatch_sync tests are unaffected by the qualification. But 'removes the fence silently' is the accurate charge, not 'opens a hole that did not exist'.
+
+WHAT THIS RESOLVES TO. ISS-028 is rewritten around a TOPOLOGICAL fix: do for the worker's manual test run what the commit gate already does (SL-199 F2) — clear the marker around the run, restore after. It invents no signal, changes no semantics, and rides the mechanism the design already sanctions. Ranked below it: an explicit declared carve-out (adds a second env leg, which ADR-006 treats as the unreliable optimisation); target discrimination by non-marker heuristics (avoid); close-as-already-mitigated (legitimate — the gate preserves golden coverage, leaving only the worker's manual run and ISS-267's ~29-file residual).
+
+CARRIED FORWARD, not lost: the CLI-surface analysis that SL-236 bundled in is now IMP-348 (shared #[derive(Args)] project-root bundle, one help wording, plus two real defects — boot -p X install silently discarding X per src/boot.rs:2209-2214, and serve lacking a short -p). IMP-348 explicitly rejects the global-flag shape on this finding and F-1. Guard-contract invariants pinned green in tests/e2e_worker_guard_explicit_root.rs and tests/arg_path_convention.rs; fixtures in tests/common/mod.rs self-validate both marker legs."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
