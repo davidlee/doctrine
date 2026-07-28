@@ -6,7 +6,7 @@ status = "active"
 title = "Split-lineage close: reconciled truth on edge — unite via merge-into-edge before pre-FF+record"
 summary = "Dispatched-slice close where migration+reconcile landed on edge (not the candidate/review): unite edge⊕candidate via merge-into-edge, then pre-FF trunk + record-integration"
 created = "2026-07-17"
-updated = "2026-07-17"
+updated = "2026-07-28"
 
 [scope]
 paths = []

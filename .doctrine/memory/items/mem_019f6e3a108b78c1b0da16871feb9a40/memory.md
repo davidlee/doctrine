@@ -61,3 +61,45 @@ pre-close check diffing the admitted `close_target`'s tree against edge (flaggin
 migration/authored divergence) would surface the 3-way split in one command.
 Related dead-end if you skip the unite step: [[mem_019ee4bac0597bf0809caf56b0e59466]]
 (candidate verb can't ingest a hand-resolved merge). First applied: SL-220 close.
+
+## Second application — SL-231 close, 2026-07-28
+
+Recipe applied verbatim and worked. Same signature: code + audit repairs on the
+admitted candidate, `/audit` + `/reconcile` on edge, main at neither, and
+`slice-231.toml` forked three ways. Two refinements worth pinning.
+
+**Take-both, not always `--ours`.** Step 1 above says resolve the authored-file
+conflict to edge's version. That is the *default*, not the rule. Here the
+candidate carried a selector edge never had (`src/install.rs`, appended by
+PHASE-05 on the dispatch branch and never promoted), so `--ours` would have
+silently dropped it. The audit's `## Reconciliation Outcome` had named the
+resolution in advance — **read it before resolving**, and verify the count it
+predicts (23 selectors) rather than trusting either side wholesale.
+
+**The check that settles `--payload code` vs `impl_bundle`.** This memory says
+`code`; [[mem_019f9433d43d7bc186f5de9e2214f3b4]] says `impl_bundle`, "not code",
+because `code` re-strips the authored corpus. Both are right for their case, and
+the disagreement is not resolvable by reading either. The discriminator is a
+one-line check no skill states — run it after `candidate create`, **before**
+`candidate admit`:
+
+```bash
+[ "$(git rev-parse <cand>^{tree})" = "$(git rev-parse main^{tree})" ]
+```
+
+In the split-lineage shape the close_target is a **no-op by construction** (edge
+already absorbed the code, then main was FF'd to it), so a tree-identical
+candidate proves the projection cannot strip anything — whichever payload label
+was passed. If the trees differ, the candidate is NOT a no-op: stop, do not
+admit, and re-derive. `candidate create` writes no ref or row on failure and the
+admission is reversible, so this check is free. SL-231 used `impl_bundle` and
+verified identity; the label turned out not to matter once identity held.
+
+**Structural root cause, restated.** This is the fourth close to hit it
+(SL-198, SL-204, SL-220, SL-228, now SL-231). It is not bad luck: main is
+promoted from edge only *before* dispatch, so any `/audit` or `/reconcile` work
+— which is most of the lifecycle's authored output — is guaranteed to land on
+edge after the fork. Split lineage is the **normal** close shape for a
+dispatched slice, and the `/close` skill's step 3a happy path
+(`--source refs/heads/review/<N>`) describes the exception. Filed as an
+observation at the SL-231 close.
