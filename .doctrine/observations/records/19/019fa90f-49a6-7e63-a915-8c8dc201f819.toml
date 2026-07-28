@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa90f-49a6-7e63-a915-8c8dc201f819"
+recorded_at = "2026-07-28T14:09:39.238848983Z"
+kind = "friction"
+summary = "/dispatch: the funnel prescribes spawn for coordinator-only phases"
+detail = "SL-233 has three phases whose work is authored .doctrine/ state, which a worker never writes. 'dispatch next' has no representation for that, so it prescribes spawn and the orchestrator must knowingly not act on a prescription — against the funnel's own 'do the one thing it says' discipline. Cost: a full handover STOP, a user decision round, and proving from tests/architecture_layering.rs (Unclassified + StaleEntry) that PHASE-02 genuinely cannot be split worker/coordinator, before any phase work could start. Captured as IMP-346."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

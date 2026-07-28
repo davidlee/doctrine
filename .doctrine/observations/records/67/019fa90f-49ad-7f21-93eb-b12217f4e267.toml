@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa90f-49ad-7f21-93eb-b12217f4e267"
+recorded_at = "2026-07-28T14:09:39.245196119Z"
+kind = "friction"
+summary = "/dispatch: record-boundary leaves a staged deletion in the coord tree"
+detail = "'dispatch record-boundary' lands a working-tree-free commit but does not sync the coordination worktree's index, so 'git status' and 'dispatch tree-state' both report a staged deletion of the boundary row just written. Reads as a funnel-reversion signature produced by the funnel's own verb; cost a diagnosis round mid-task to establish the commit was fine and only the tree state was wrong. Captured as ISS-274."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
