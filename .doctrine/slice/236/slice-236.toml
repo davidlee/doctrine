@@ -12,7 +12,7 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/commands/guard.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/root.rs"
@@ -20,11 +20,11 @@ intent = "scope-relevant"
 
 [[selector]]
 selector = "src/main.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/commands/cli.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/worktree/**"
@@ -37,6 +37,122 @@ intent = "scope-relevant"
 [[selector]]
 selector = "tests/e2e_*.rs"
 intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/serve.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/map.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/facet.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/reservation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/observation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/tag.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/prompt.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/relation.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/check.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/coverage.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/commands/compare.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/adr.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/policy.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/standard.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/rfc.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/spec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/slice.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/memory.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/review.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/rec.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/revision.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/backlog.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/knowledge.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/worktree/mod.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/dispatch.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/concept_map.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/search.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "src/boot.rs"
+intent = "design-target"
+
+[[selector]]
+selector = "tests/e2e_worker_guard.rs"
+intent = "design-target"
 
 [[relation]]
 label = "governed_by"
