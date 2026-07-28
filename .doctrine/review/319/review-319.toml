@@ -12,5 +12,21 @@ responder = "claude-opus-5"
 [target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
 ref   = "SL-236"
 
+[[finding]]
+id = "F-1"
+status = "answered"
+severity = "blocker"
+title = "Expected global -p to identify the operated-on tree; observed pathless Orchestrator verbs accept it only at the guard"
+detail = """D3 passes the top-level global path into worker_guard for every Write/Orchestrator/Hookmint command (SL-236 design.md:100-116), while §10 F-6 calls acceptance by formerly pathless variants harmless (design.md:428-430). It is not harmless: src/worktree/mod.rs:215-222 defines WorktreeCommand::CreateFork as a unit variant with no -p and says its root is the stdin payload cwd; src/worktree/create.rs:576-591 confirms the handler derives cwd from that payload; src/commands/guard.rs:255-261 classifies it Orchestrator. On the pinned clap 4.6.1 spike, the command I ran, cargo run --quiet --bin clapspike, printed 'pathless unit-like command accepts the global root' followed by 'PARSE OK: global=Some("UNMARKED")'. Therefore a marker-only worker can invoke the D3 surface as worktree create-fork -p <unmarked-root>: root::find uses the supplied unmarked tree for the guard, but the handler ignores it and operates from payload cwd. With DOCTRINE_WORKER unset (the Claude marker-only leg documented by ADR-006 D2a), this bypasses the marker refusal and weakens confinement. A4 does not expose this bypass: a pathless match tree yields None, so the guard remains CWD-rooted for this verb. D3 must not ship without proving that the passed explicit root is semantically consumed by the selected command, or otherwise preventing global -p from steering the guard on pathless verbs."""
+disposition = "design-wrong"
+response = """
+ACCEPTED, and broader than raised. All three code claims verified independently: WorktreeCommand::CreateFork is a unit variant (src/worktree/mod.rs:222) whose doc states 'No -p: the root is ALWAYS the payload cwd --show-toplevel', run_create_fork() reads that payload and never the process cwd (src/worktree/create.rs:583-591, G2/I5), and guard.rs:261 classifies it Orchestrator. Under D3 main passes the global path to worker_guard unconditionally, so root::find(Some(unmarked)) yields mode.refused=false and the verb proceeds while operating on a tree the flag never named.
+
+SIZING: this is a class, not one verb. Four guarded arms are unit variants consuming no path: Command::Onboard (Write, cli.rs:145), WorktreeCommand::CreateFork (Orchestrator), WorktreeCommand::Nominate and ::Denominate (Hookmint, worktree/mod.rs:231,237). Onboard is the very example design.md F-6 cites when calling the expansion harmless, so F-6 is wrong on its own chosen case.
+
+THE PRINCIPLE F-6 MISSED, which decides the slice: a per-verb -p declaration is not merely a CLI affordance, it is the machine-checkable record that THIS verb consumes a project root. D3 deletes 204 instances of that evidence while making acceptance universal, so 'accepted' and 'consumed' come apart and the guard is left keyed to the wrong one. Recovering the distinction requires knowing whether the selected command consumes the path, which is precisely the classifier capability that rejected A1. A4 reads the same declaration the verb consumes, so the two cannot diverge: a pathless match tree yields None and the guard stays CWD-rooted.
+
+CONSEQUENCE: D3's claimed structural invariant is real but is the wrong structure for the confinement axis, and this bypass is directly counter to I-2, which sells SL-236 partly on TIGHTENING confinement. D3 would close one hole and open four. Reconciliation: design.md F-6 disposition is retracted, DEC-093 re-settles to A4, and F-4's worktree-fork semantic shift is unaffected since that verb does declare and consume its -p. No VT covered this; the VT contract needs a case asserting a pathless guarded verb cannot have its guard steered by -p."""
+
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
