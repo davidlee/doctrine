@@ -69,3 +69,69 @@ buys.
 
 Source: RV-318 F-1 (`.doctrine/review/318/review-318.md`, Synthesis and
 Reconciliation Brief).
+
+## Accepted sketch (2026-07-28)
+
+Settled with the user on the small-change route; implementation follows this.
+The four open questions above are answered here — do not re-open them.
+
+### 1. `--facet <group>.<field>=<value>`, repeatable — string values only
+
+Dotted keys assemble into a JSON object, then `default_facet_schema_versions` →
+`serde_json::from_value::<Facets>`. **No field table and no type table**: all six
+facet types carry `#[serde(deny_unknown_fields)]`, so unknown groups and unknown
+fields are refused by serde against the real struct definitions. Key validation
+is free and cannot drift.
+
+Answers open question 1. The field census is what settles the typing half: of 30
+caller-settable fields exactly **four** are not `Option<String>` —
+`usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, and
+`correlation.related_observations`. Those four are precisely the fields a harness
+emits programmatically; the 26 an agent types by hand are all strings. So typed
+fields are reached through `--input`, and a `--facet` attempt at one earns an
+accurate serde type error naming the field and the expected type.
+
+§3.1's "repeatable **typed** facet fields" is read as *addressed against the
+typed schema and validated* — as opposed to free-form tags — not "assorted scalar
+types from the flag". Recorded because it is a judgement call, not text. The
+other reading is a purely additive upgrade later (JSON-parse the RHS when it
+parses as a non-string scalar); nothing here forecloses it.
+
+### 2. `--input <PATH>`, `-` means stdin
+
+Carries the §3.3 request **verbatim** — `{uid?, summary, detail?, facets?,
+enrich?}` — so both adapters take one shape. Answers open question 2 as *yes*.
+The `-` sentinel follows the established precedent (`resolve_body`,
+`src/memory.rs`), already refused MCP-side as `MCP_BODY_STDIN_SENTINEL`
+(SL-230 D-P5-1) — open question 4.
+
+### 3. `--input` is exclusive
+
+Refused alongside the positional summary, `--detail`, `--uid`, `--no-enrich` and
+`--facet`; `summary` becomes `required_unless_present("input")`. Answers open
+question 3. Rationale: two sources of truth for one field re-opens "explicit
+caller values win" (§3.1:197) at a layer that has no origin field to record the
+answer in. `--path` stays compatible — it says where the repository is, not what
+the record says.
+
+### 4. `input` joins `CAPTURE_REFUSED_KEYS` (MCP side)
+
+Beyond the item as filed, but it follows: that denylist already refuses `path`
+and `root` because the confined capture surface must not let a caller name a
+filesystem path, and `input` is exactly such a key. One const entry plus a case
+in the existing refusal test loop keeps the two adapters' contracts coherent.
+
+### 5. `parse_explicit_facets` + `default_facet_schema_versions` move to the leaf
+
+Both are stranded in `src/mcp_server/tools.rs`; both adapters now need them and
+ADR-001 severs the `mcp_server → commands` back edge, so they belong in
+`src/observation/wire.rs` beside `merge_explicit_facets` for the same reason that
+policy does. The existing MCP tests are the behaviour-preservation gate.
+
+### Not a concern, verified
+
+`store::create` validates via `wire::validate`, so the CLI's hand-built envelope
+is not skipping validation — there is no second parity gap here. And RV-318 F-2's
+`adopt` derives origin and ignores any caller-supplied `_origin`, so exposing
+facets on the CLI opens no forgery surface. Pinned by a test at the new entry
+point rather than assumed.
