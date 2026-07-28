@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa7de-1b66-7701-a5f4-bca64d2e2b27"
+recorded_at = "2026-07-28T08:36:18.918531029Z"
+kind = "friction"
+summary = "[/close] split-lineage close is the norm, not the exception, and the skill's happy path does not describe it"
+detail = "SL-231 close. The /close skill step 3a prescribes candidate create --source refs/heads/review/<N> --payload code, but that was wrong on two counts here: (1) the audit repairs lived on the admitted candidate branch, not review/231, so review/231 as source would have silently dropped three fixes; (2) the reconciled truth (audit + reconcile commits) lived on edge, which neither review/231 nor the candidate carried. Getting this right needed three separate memories retrieved by hand (reconcile-truth-on-edge, integrate-needs-close-target-first, the canonical candidate sequence) and they disagree on --payload (code vs impl_bundle). The discriminator that actually settles it is a check no skill states: verify cand^{tree} == main^{tree} before admit. This is at least the fourth slice to hit split lineage (SL-198, SL-204, SL-220, SL-228 all cited). The root cause is structural: main is only promoted from edge before dispatch, so any audit/reconcile work after the fork guarantees a three-way split at close."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

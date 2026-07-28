@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa7dd-f9a0-77f1-a108-3ad9d1898e81"
+recorded_at = "2026-07-28T08:36:10.272175118Z"
+kind = "friction"
+summary = "[/close] slice conformance reports a declared .doctrine entity selector as undeclared"
+detail = "Closing SL-231. .doctrine/adr/001/layering.toml carries a well-formed [[selector]] with intent design-target in slice-231.toml, yet 'slice conformance 231' lists it under undeclared. Same selector shape for .gitignore and .doctrine/governance.md comes back conformant, so it is not a blanket .doctrine exclusion — it looks specific to entity-file paths (adr/NNN/*.toml). Cost: had to hand-derive the honest cross-match (git diff --name-only main...<bundle> vs the selector registry) to establish that all 29 bundle files were accounted for and nothing was actually undeclared. Distinct from the already-filed file-set skew (ISS-268)."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
