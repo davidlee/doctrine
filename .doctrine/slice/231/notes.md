@@ -322,13 +322,13 @@ before admit and journal trunk row == main · edge == main == 72dddf2bc ·
 
 ### Open
 
-- **RV-318 F-1 — SETTLED: deliver, not narrow** (user decision at audit
-  hand-back). Design §3.1 stands as written and needs no reconcile edit; the CLI
-  is what must catch up. Owner **IMP-332**, minted pre-close and linked
-  `originates_from SL-231`, sequenced AFTER close and executed INLINE. It also
-  carries the PHASE-03 VT-1 keyword append (the criterion's `expects` names two
-  clauses its keywords never checked) — a design/plan escalation, OFF
-  reconcile's direct-edit surface, so it rides IMP-332 rather than the brief.
+- ~~**RV-318 F-1 — SETTLED: deliver, not narrow**~~ — **DELIVERED** post-close
+  by **IMP-332** (`f96772977`, resolved · fixed), exactly as sequenced: after
+  close, inline. `--facet <group>.<field>=<value>` and `--input <PATH>` (`-` for
+  stdin) landed, so all five things design §3.1 says the verb "also accepts" are
+  now true and "explicit caller values win" is reachable from the CLI. The
+  PHASE-03 VT-1 keyword append rode it as planned — four keywords appended, ids
+  untouched, each proven load-bearing by mutation. Design §3.1 needed no edit.
 - ~~**RV-318 F-5 — declare the `src/worktree/allowlist.rs` selector**~~ —
   DISCHARGED at reconcile (`e7ba647c7`) plus the §7 mirror rows; the candidate's
   `src/install.rs` selector joined it take-both at the close merge. 23 selectors.

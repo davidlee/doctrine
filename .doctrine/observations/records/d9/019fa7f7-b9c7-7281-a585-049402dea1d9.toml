@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa7f7-b9c7-7281-a585-049402dea1d9"
+recorded_at = "2026-07-28T09:04:17.863367763Z"
+kind = "friction"
+summary = "[implement IMP-332] serde type errors carry no field path, so a validation-by-deserialization design needs a blame pass"
+detail = """Building the CLI --facet grammar. The design leaned on 'let serde be the validator' — deny_unknown_fields on the facet types rejects unknown groups/fields with the offending key NAMED, so no field table is needed and nothing can drift. That holds for unknown keys. It does NOT hold for type mismatches: serde_json::from_value reports 'invalid type: string "500", expected u64' with no field path at all. That is precisely the failure the design predicts callers will hit (the four non-String facet fields), so the sketch's claim that they would 'earn an accurate serde type error naming the field' was wrong — caught by the test written to assert it, not by review. Fix was a failure-path-only blame pass: re-parse each argument alone, whichever fails in isolation is the offender. Generalisable: when delegating validation to serde for good reasons, budget for a blame step, because the quality of the diagnostic is NOT uniform across error classes."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
+harness = "claude"
+harness_origin = "explicit"
+
+[facets.work_context]
+schema_version = 1
+backlog = "IMP-332"
+backlog_origin = "explicit"
