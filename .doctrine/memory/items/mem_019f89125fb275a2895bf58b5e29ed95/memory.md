@@ -34,3 +34,34 @@ missing keyword, uncommitted edit) — it is gate 4 working as designed.
   **raw** over host source (POL-002, [[mem.pattern.gate.host-source-no-language-syntax]]);
   a genuinely wrong pointer (plumbing landed in a different seam) is corrected by
   editing the VT row's `test_file`, NOT by inlining code to satisfy the grep.
+
+## On the dispatch arm the recorder is `record-boundary`, not the phase flip
+
+Verified SL-233 PHASE-02 (2026-07-29). In a **dispatch coordination worktree**
+the `slice phase --status completed` handler *self-skips* its boundary capture —
+the funnel beat records instead (the `/execute` skill says so explicitly: "It
+self-skips in a dispatch coordination context, where the funnel beat is the
+recorder instead"). So the registry is populated by
+
+```
+doctrine dispatch record-boundary --slice N --phase PHASE-NN \
+  --code-start <pre-code HEAD> --code-end <phase tip>
+```
+
+and **VT verdicts flip UNATTRIBUTABLE → PASS at that moment, before the phase is
+`completed`**. Observed: all three PHASE-02 VTs read UNATTRIBUTABLE immediately
+after the source commit, and PASS immediately after `record-boundary`, with the
+phase still `in_progress`.
+
+The body's rule is unchanged in substance — attribution comes from the recorded
+source-delta registry, never from the working tree — only the verb that writes it
+differs by arm. On the solo arm it is the completed flip; on the dispatch arm it
+is `record-boundary`.
+
+Corollary: if you amend the phase's code after recording (a refactor commit, say),
+re-run `record-boundary` with the new `--code-end`. It UPSERTs by phase. Two costs
+to know: it lands its own `dispatch-funnel:` commit and leaves the worktree copy
+stale (ISS-274 — `git restore --source=HEAD --staged --worktree -- <boundaries.toml>`),
+and the *previous* funnel commit now falls inside the widened range, which
+surfaces `.doctrine/dispatch/<N>/boundaries.toml` as conformance-undeclared noise
+([[mem.pattern.conformance.boundary-start-oid-pollution]]).

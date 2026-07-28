@@ -6,7 +6,7 @@ status = "active"
 title = "verify-vt reads UNATTRIBUTABLE for a file new to the current phase until it flips completed"
 summary = "A VT whose test_file is first-touched in the current phase reads UNATTRIBUTABLE until the phase flips completed (which records the source-delta); not a defect."
 created = "2026-07-22"
-updated = "2026-07-22"
+updated = "2026-07-28"
 
 [scope]
 paths = ["src/vtgate.rs", "src/slice.rs"]

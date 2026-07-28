@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faaf5-2adc-7933-9d13-a7435e737c62"
+recorded_at = "2026-07-28T23:00:21.852455785Z"
+kind = "friction"
+summary = "phase-plan: read-shaped `slice research` advisory mints a baseline as a side effect"
+detail = "Step 4 of /phase-plan says 'Check the research advisory — doctrine slice research <id>'. On SL-233 (design locked, no research round was ever run) the verb printed 'Minted research artefact + baseline' and wrote .doctrine/slice/233/research/baseline.toml stamped with today's date and hashes of the CURRENT design.md/plan.toml. The advisory read is therefore self-satisfying: an agent following the skill's read instruction silently creates a clean baseline, so the drift signal the step exists to surface can never fire afterwards. Gitignored, so it is not authored pollution, but a query verb should not mint the artefact it queries — or the skill should name the non-mutating form."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,42 @@
+memory_uid = "mem_019fab1f3de77403adfe1487790e6d53"
+memory_key = "mem.pattern.lint.dead-code-module-level-vs-cfg-attr"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Staging a whole module ahead of its consumer: measure what is dead under cfg(test), then gate at three scopes"
+summary = "A module blanket expect(dead_code) is coarser than the problem; measure the cfg(test)-dead set first — it is usually small enough to gate per-item, keeping the 'no test exercises this' alarm alive"
+created = "2026-07-28"
+updated = "2026-07-28"
+
+[scope]
+paths = []
+globs = ["src/**"]
+commands = []
+tags = ["lint", "dead_code", "phasing"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "66157b40d0a48c743bb2f2441592f573a5e8c513"
+ref_name = "refs/heads/edge"
+checkout_state_id = "ec537f066e2c72091dfe3ef71cbb0c36114b0d0ae7b1c1cd2c30637a963a7ef3"
+base_commit = "1733929850787d50e35add76cbd5f2d87f4a212a"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "none"
+weight = 0
+
