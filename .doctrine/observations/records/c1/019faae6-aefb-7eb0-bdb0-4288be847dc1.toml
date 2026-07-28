@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faae6-aefb-7eb0-bdb0-4288be847dc1"
+recorded_at = "2026-07-28T22:44:32.635346265Z"
+kind = "friction"
+summary = "review: responder cannot amend a stale response; turn discipline blocks correction"
+detail = "RV-320 F-7. The sketch moved to rev 8 out-of-band (the owner falsified an enforcement claim between rounds), so the finding's durable response — written against rev 7 — now misdescribes the design. 'review dispose' refuses: 'out of turn on F-7: current status answered != required open'. Turn discipline is right in general, but there is no amend path for the responder, so the ledger carries a knowingly-stale response until the raiser next acts, and the correction has to be smuggled into the next round's brief instead. Cost: the reviewer must be told in prose not to trust the durable record it is adjudicating. Related but distinct from the existing observation on 'review contest' having no durable rationale field."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
