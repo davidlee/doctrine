@@ -236,6 +236,27 @@ are both untouched. It is not blocked by what blocked A1, because it never route
 through the typed enum. Footprint: one ~10-line helper plus `Cli::try_parse()` →
 `Cli::command().try_get_matches()` + `from_arg_matches` in `main.rs`.
 
+**A4's walker rule is LEAF-ONLY, not deepest-non-`None` (RV-319 F-1).** Descend to
+the *selected* leaf's matches and read only that level's `path`. The first draft
+(keep the last `Some` seen along the chain) fails F-1's own principle: ✓
+`src/boot.rs:2209-2214` destructures `Install { path: install_path, .. }` and calls
+`run_install(install_path, …)`, **dropping the parent `Boot.path`** — so
+`doctrine boot -p X install` consumes nothing, yet the draft rule would hand `X`
+to the guard. Measured, clap 4.6.1:
+
+| argv | consumed by handler | deepest-non-`None` | leaf-only |
+|---|---|---|---|
+| `boot -p PARENT install` | *nothing* (CWD) | ✗ `PARENT` | ✓ `None` |
+| `boot install -p LEAF` | `LEAF` | ✓ | ✓ |
+| `boot -p BARE` | `BARE` | ✓ | ✓ |
+| `adr new T -p X`, `collide -p X`, `serve --path X` | `X` | ✓ | ✓ |
+
+**And the pathless class is refused at parse time.** ✓ `onboard -p UNMARKED`
+returns `UnknownArgument` under A4 — a guarded verb that declares no `path`
+cannot have `-p` *supplied*, let alone honoured. Under D3 the same argv parses
+and steers the guard (F-1). A4 is therefore not merely un-steerable here; the
+bypass is unrepresentable.
+
 *Cost, stated against D3:*
 
 | | D3 (global flag) | A4 (matches walker) |
