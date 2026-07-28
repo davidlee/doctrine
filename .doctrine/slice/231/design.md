@@ -498,7 +498,9 @@ refuse any new upward edge or tangle growth.
 | `src/mcp_server/tools.rs` | Register and dispatch `observation_record` through the shared service |
 | `src/doctor_checks.rs` | Extend confined-worker capability conformance |
 | `src/commands/doctor.rs` | Update conformance fixtures and diagnostics |
-| `install/agents/claude/dispatch-worker.md` | Grant the bounded capture tool to confined Claude workers |
+| `install/agents/claude/dispatch-worker.md` | Grant the bounded capture tool to confined Claude workers, and tell the worker the capability exists |
+| `src/install.rs` | Project the reserved-temporary ignore rule into a client and prove records stay authored |
+| `src/worktree/allowlist.rs` | Classify the reserved publication temporary as a withheld fork tier, records excluded |
 | `tests/e2e_observation.rs` | CLI/store/resolution/query end-to-end coverage |
 | `tests/e2e_mcp_server.rs` | MCP parity, root confinement, and control refusal |
 | `tests/architecture_layering.rs` | Gate the new leaf classification and dependency direction |

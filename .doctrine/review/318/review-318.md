@@ -209,3 +209,58 @@ itself is correct and unchanged.
   IMP-332 as in-scope for that unit. Left unrouted, the plan keeps asserting a
   contract nothing checks — which is how F-1 survived five phases and a ledgered
   code review.
+
+## Reconciliation Outcome
+
+All nine findings terminal before this pass (`done · await=none`). Governance/spec
+section of the brief was empty, so **no REV was authored** — nothing on this
+ledger reaches an ADR, policy, standard, or spec.
+
+### Direct edits applied
+
+- **`slice-231.toml` — selector added** (RV-318 F-5, the load-bearing change):
+  `src/worktree/allowlist.rs`, intent `design-target`, noted as forced by the
+  WITHHELD/`.gitignore` parity gate. Confirmed live: `slice conformance 231`
+  moved that path from undeclared to conformant (undeclared 46→45, conformant
+  24→25).
+- **`design.md` §7 — two mirror rows added** (RV-318 F-5). The touch-set now
+  carries `src/worktree/allowlist.rs` *and* `src/install.rs`. The second is a
+  judgement call beyond the brief's literal wording and is flagged here so it is
+  easy to reverse: `src/install.rs` was declared as a selector mid-PHASE-05 (T1)
+  but never mirrored into §7, so §7 was out of sync with the registry in two
+  places, not one. §7 describes the slice's intended touch-set, which does not
+  depend on which branch a registry copy currently lives on. No selector was
+  added for it — that one arrives via the close merge (below).
+- **`design.md` §7 — `install/agents/claude/dispatch-worker.md` row amended** to
+  say the worker is also *told* the capability exists, matching the F-3 repair.
+
+**No edit to `design.md` §3.1.** F-1 is settled as *deliver* (user decision at
+the audit hand-back); the design is correct as written and IMP-332 owns bringing
+the CLI to it. Recorded so a later pass does not re-open the fork.
+
+### Carried to close — one named merge resolution
+
+`slice-231.toml` has forked between the two copies and close must take **both**
+sides:
+
+- **edge** (canonical for slice metadata) carries the lifecycle progression, the
+  RV-318 `reviews` edge, and now the `src/worktree/allowlist.rs` selector.
+- **`candidate/231/review-001`** carries the `src/install.rs` selector, appended
+  by PHASE-05 T1 on the dispatch branch and never promoted.
+
+Both additions land at the end of the `[[selector]]` block, so the merge is
+likely to conflict on that hunk. The resolution is *take both*, giving 23
+selectors. This is expected, not drift — do not resolve it by dropping either
+side. Until it lands, `slice conformance` run from the primary tree will keep
+reporting `src/install.rs` as undeclared.
+
+### Not reconcile's surface — routed elsewhere
+
+- **PHASE-03 VT-1 keyword/`expects` mismatch** → IMP-332. `plan.toml` criteria
+  are immutable-append and off this surface (the skill's own guardrail).
+- **ISS-268 / ISS-269 / ISS-270 / ISS-271** → platform work with typed homes,
+  outside both reconcile write surfaces.
+- **F-2 / F-3 / F-4** → already landed at `f1686831e` on the candidate branch as
+  audit `fix-now` repairs; nothing for reconcile to write.
+
+Reconcile pass complete — handoff to `/close`.
