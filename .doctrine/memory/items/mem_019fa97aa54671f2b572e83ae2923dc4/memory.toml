@@ -1,0 +1,50 @@
+memory_uid = "mem_019fa97aa54671f2b572e83ae2923dc4"
+memory_key = "mem.pattern.projection.bound-must-not-bind-the-record"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Projection bounds must not propagate into the record projected from"
+summary = "A cap that exists to bound a rendering must never bind the stored record it renders; the constant's own prefix usually names the scope it belongs to"
+created = "2026-07-28"
+updated = "2026-07-28"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["projection", "bounds", "storage-model"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "18bb9f99c9223185a75b962ae215454e17ac26af"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d08b7af86823e073b3530cad14095ffcccd69e302a9fc586c17bd4862b7475ea"
+base_commit = "0226017d053d3bfa15fbc64db381547e96522d9f"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "none"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-320"
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
