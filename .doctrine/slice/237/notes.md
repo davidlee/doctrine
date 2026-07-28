@@ -19,6 +19,8 @@ fresh-as-of: 2026-07-29 · stage: research complete, pre-design · b57e0fb91
 - obs `019fa916-1a31` — `.doctrine/state/` flat-drawer survey cost.
 - obs `019fa932-8c8f` — `pi --print` buffering makes a working research thread
   indistinguishable from a hung one.
+- obs `019fa953-d669` + **ISS-276** — research agent scripts hang on tool-using
+  prompts (3/3 failed); trivial no-tool prompt returns instantly. Committed.
 
 ### Learned
 
@@ -44,9 +46,18 @@ Durable findings — candidates for `/record-memory` at close, not yet recorded:
   See `research.md` § Design-input deltas 3.
 - **DEC (open)** — what becomes of `slice status --across-trees`
   (`src/slice.rs:1121`): retire, or repurpose to render landed-vs-sheet?
-- **QUE (open)** — do SPEC-012 / SPEC-021 / PRD-015 carry any REQ mandating
-  per-tree phase state, or load-bearing on `--across-trees` / `reconcile-phases`?
-  Sweep was NOT done (thread failure); a narrow re-run was launched 2026-07-29.
+- **QUE (SETTLED 2026-07-29)** — spec sweep done self-serve. **No blocking REQ** in
+  SPEC-012 / SPEC-021 / PRD-015; nothing mandates per-tree phase state or load-bears
+  on `--across-trees` / `reconcile-phases`.
+- **DEC (open, governance)** — SPEC-012 § "Tier merge-safety by construction" claims
+  defence *by absence, not by trust*; SL-237 makes the runtime tier reachable from a
+  worker fork, shifting the defence to the CLI guard (`src/commands/guard.rs:78,80`).
+  **Likely a REV against SPEC-012** (ADR-013). Merge safety itself is NOT weakened
+  (no copy ⇒ nothing to diverge) and REQ-297's write ban stays enforced — the
+  *stated mechanism* is what drifts.
+- **QUE (open, new)** — worker **read** exposure: a fork could now read primary phase
+  sheets (reads open by design), contradicting ADR-006 D6 pre-distillation. Accept
+  explicitly or fence; not currently in the scope doc.
 - **QUE (open)** — migrate `boundaries_path` (`src/state.rs:716`) onto the same
   mechanism in this slice, or defer? Same layering smell, never bitten (not on a
   fan-out path).
