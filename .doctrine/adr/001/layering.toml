@@ -16,7 +16,7 @@
 [tiers]
 # tier = "leaf" | "engine" | "command"
 
-# ── leaf (33) ────────────────────────────────────────────────────────────
+# ── leaf (34) ────────────────────────────────────────────────────────────
 # Import only std + other leaves. Pure utilities, impure seams, no domain knowledge.
 asset_source = "leaf"       # out=0: neutral embedded-asset byte-read seam — owns install/ embed (SL-223 PHASE-01, D3/REQ-376)
 boundary = "leaf"           # out=0: recorded source-delta row type — pure serde (SL-147 PHASE-02)
@@ -45,6 +45,7 @@ lexical = "leaf"            # out=0: BM25/lexical engine — pure (no domain)
 lifecycle = "leaf"          # out=0: lifecycle FSM — pure
 links = "leaf"              # out=0: wikilink extraction — pure
 listing = "leaf"            # out=0: listing/render primitives — pure presentation
+observation = "leaf"        # → fsutil, root, lexical: friction-observation wire/resolve/query + store umbrella (SL-231 PHASE-01, design §5)
 plan = "leaf"               # out=0: plan phase types — pure
 projection = "leaf"         # out=0: priority projection enum — pure
 registry = "leaf"           # out=0: spec registry index — pure

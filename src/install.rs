@@ -2982,6 +2982,7 @@ mod tests_skills {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::observation;
     use std::fs;
 
     /// VT-2 (SL-223 PHASE-01): `asset_text` keeps its signature but now delegates
@@ -3443,6 +3444,95 @@ mod tests {
                 .any(|e| e == ".doctrine/memory/*" || e == ".doctrine/memory/"),
             "manifest must not blanket-ignore the memory tree"
         );
+    }
+
+    /// The observation corpus root: the parent of the records dir, so the two
+    /// cannot drift. `records/` and the reserved `by-month/` view are siblings
+    /// beneath it (design § 2.1).
+    fn observations_root() -> &'static str {
+        observation::store::RECORDS_DIR
+            .rsplit_once('/')
+            .expect("RECORDS_DIR is a nested path")
+            .0
+    }
+
+    /// SL-231 PHASE-05 (VT-1): the ONE observation ignore rule the manifest
+    /// distributes covers reserved publication temporaries and nothing else,
+    /// and it survives the round-trip into a client `.gitignore`.
+    ///
+    /// The pattern embeds the reserved prefix, so it is asserted against
+    /// `fsutil::PUBLICATION_TEMP_PREFIX` rather than a re-typed literal
+    /// (STD-001) — the same crossing `observation::store`'s loader test makes
+    /// against its skip predicate. A drift in either place would leave real
+    /// temporaries tracked or real records ignored.
+    #[test]
+    fn observation_publication_temps_are_ignored() {
+        let manifest = load_manifest().unwrap();
+
+        let observation_entries: Vec<&String> = manifest
+            .gitignore
+            .entries
+            .iter()
+            .filter(|e| e.starts_with(observations_root()))
+            .collect();
+
+        assert_eq!(
+            observation_entries.len(),
+            1,
+            "exactly one observation ignore rule is distributed, got {observation_entries:?}"
+        );
+        let entry = observation_entries[0];
+        assert!(
+            entry.contains(crate::fsutil::PUBLICATION_TEMP_PREFIX),
+            "the distributed rule must be keyed on the reserved publication \
+             prefix {:?}, got {entry:?}",
+            crate::fsutil::PUBLICATION_TEMP_PREFIX
+        );
+
+        // Surface 2: it actually reaches a client's `.gitignore`.
+        let dir = tempfile::tempdir().unwrap();
+        let plan = build_plan(&manifest, dir.path());
+        for step in &plan.steps {
+            if let Step::Gitignore { entry, .. } = step {
+                ensure_gitignored(dir.path(), entry).unwrap();
+            }
+        }
+        let projected = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        assert!(
+            projected.lines().any(|l| l == entry),
+            "the reserved-temp rule must land verbatim in a client .gitignore; got:\n{projected}"
+        );
+    }
+
+    /// SL-231 PHASE-05 (VT-1): authoritative observation records are authored
+    /// collection data — committed, diffable, visible in review by default
+    /// (design.md § 2.1). A project MAY opt into ignoring them, but shipping
+    /// that as the default would silently make every client's corpus local-only
+    /// and forfeit correlation and audit history.
+    ///
+    /// This is the guard on the failure mode with teeth: over-ignoring is
+    /// invisible — the suite stays green and records simply stop reaching
+    /// review. Reserved `by-month/` paths are likewise unignored; this slice
+    /// distributes no pattern for them (EX-4).
+    #[test]
+    fn observation_records_remain_authored_by_default() {
+        let manifest = load_manifest().unwrap();
+
+        for entry in &manifest.gitignore.entries {
+            if !entry.starts_with(observations_root()) {
+                continue;
+            }
+            assert!(
+                entry.contains(crate::fsutil::PUBLICATION_TEMP_PREFIX),
+                "{entry:?} ignores part of the observation tree without being \
+                 scoped to reserved publication temporaries — authored records \
+                 would stop reaching review"
+            );
+            assert!(
+                !entry.contains("by-month"),
+                "{entry:?} distributes a by-month pattern, excluded from this slice"
+            );
+        }
     }
 
     /// SL-030 PHASE-03: the policy tree is an authored governance kind, so the

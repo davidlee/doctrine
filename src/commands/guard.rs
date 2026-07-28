@@ -448,6 +448,20 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             crate::commands::compare::CompareAction::Record(_)
             | crate::commands::compare::CompareAction::Withdraw(_) => Write("compare"),
         },
+        Command::Observation { command } => match command {
+            crate::commands::observation::ObservationCommand::Record(_) => {
+                Write("observation record")
+            }
+            crate::commands::observation::ObservationCommand::Supersede(_) => {
+                Write("observation supersede")
+            }
+            crate::commands::observation::ObservationCommand::Retract(_) => {
+                Write("observation retract")
+            }
+            crate::commands::observation::ObservationCommand::Show(_)
+            | crate::commands::observation::ObservationCommand::List(_)
+            | crate::commands::observation::ObservationCommand::Search(_) => Read,
+        },
     }
 }
 
@@ -486,6 +500,15 @@ pub(crate) fn worker_guard(cmd: &Command) -> anyhow::Result<()> {
         anyhow::bail!(
             "{}: refusing authored write `{verb}`",
             crate::worktree::DUAL_CAUSE
+        );
+    }
+    // Observation writes carry capability-aware guidance directing confined
+    // Claude workers to the MCP capture broker and other workers to report
+    // the signal for primary-tree capture (SL-231 design §6).
+    if verb.starts_with("observation ") {
+        anyhow::bail!(
+            "worker fork (signal: {}): refusing `{verb}` — workers cannot capture observations locally. Confined Claude workers: use the `observation_record` MCP tool. Other workers: report the friction signal for primary-tree capture via your phase sheet or handoff.",
+            mode.cause_token()
         );
     }
     anyhow::bail!(

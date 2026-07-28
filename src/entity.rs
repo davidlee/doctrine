@@ -575,7 +575,7 @@ fn write_fileset_tracked(
     for art in fileset {
         let rel = artifact_rel(art);
         let abs = fsutil::safe_join(tree_root, rel)?;
-        ensure_parent_dirs(tree_root, rel, created_dirs)?;
+        fsutil::ensure_parent_dirs(tree_root, rel, created_dirs)?;
         match art {
             Artifact::File { body, .. } => {
                 // The atomic create-new IS the clobber refusal (one syscall,
@@ -591,41 +591,6 @@ fn write_fileset_tracked(
                 std::os::unix::fs::symlink(target, &abs)
                     .with_context(|| format!("Failed to symlink {}", abs.display()))?;
                 created_paths.push(abs.clone());
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Create each missing component of `rel`'s parent under `tree_root`, pushing
-/// only the ones *this call* creates onto `created_dirs`. `create_dir_all`
-/// cannot report which components it made, so the walk is component-wise
-/// `create_dir` (finding 2). An `AlreadyExists` that is a real dir is a
-/// pre-existing/concurrent parent (skip, do not track); anything else (a file
-/// or symlink squatting the path) is an error.
-fn ensure_parent_dirs(
-    tree_root: &Path,
-    rel: &Path,
-    created_dirs: &mut Vec<PathBuf>,
-) -> anyhow::Result<()> {
-    let Some(parent) = rel.parent() else {
-        return Ok(());
-    };
-    let mut cur = tree_root.to_path_buf();
-    for comp in parent.components() {
-        cur.push(comp);
-        match fs::create_dir(&cur) {
-            Ok(()) => created_dirs.push(cur.clone()),
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                if !fsutil::is_real_dir(&cur) {
-                    bail!(
-                        "Failed to create {}: a non-directory squats that path",
-                        cur.display()
-                    );
-                }
-            }
-            Err(e) => {
-                return Err(e).with_context(|| format!("Failed to create {}", cur.display()));
             }
         }
     }

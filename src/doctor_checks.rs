@@ -17,6 +17,7 @@ use crate::mcp_server::dispatch::{
     TOOL_DISPATCH_AUTHORED_DIVERGENCE, TOOL_DISPATCH_CONCLUDE_PHASE, TOOL_DISPATCH_IMPORT,
     TOOL_DISPATCH_NEXT_READY, TOOL_DISPATCH_PHASE_RECEIPT, TOOL_DISPATCH_REAP,
 };
+use crate::mcp_server::tools::TOOL_OBSERVATION_RECORD;
 
 // ---------------------------------------------------------------------------
 // RawLabel — #6 catalog-scan check
@@ -370,8 +371,9 @@ const ROLE_ORCHESTRATOR: &str = "orchestrator";
 /// The read-only funnel role (SL-206): a `probe` agent-def may hold EXACTLY the three
 /// read tokens ([`DISPATCH_READ_TOOLS`]) — no write token, no other `mcp__*` grant.
 const ROLE_PROBE: &str = "probe";
-/// The single MCP token a confined **worker** may hold — its only sanctioned
-/// jail-wall bypass (SL-198 keystone). Any other `mcp__*` token is an escape.
+/// The self-commit MCP token a confined **worker** may hold — its first
+/// sanctioned jail-wall bypass (SL-198 keystone). Since SL-231 the worker also
+/// holds [`WORKER_CAPTURE_TOOLS`]; any `mcp__*` token outside that pair is an escape.
 const TOOL_ALLOWED: &str = "mcp__doctrine__worker_commit";
 const MCP_TOKEN_PREFIX: &str = "mcp__";
 /// The `mcp__<server>__` prefix the funnel tokens carry once fully qualified.
@@ -385,6 +387,13 @@ const DISPATCH_WRITE_TOOLS: [&str; 3] = [
     TOOL_DISPATCH_CONCLUDE_PHASE,
     TOOL_DISPATCH_REAP,
 ];
+/// The bare-name capture token a confined **worker** gains ATOP [`TOOL_ALLOWED`]
+/// (SL-231): bounded, friction-only observation capture. Mirrors
+/// [`DISPATCH_WRITE_TOOLS`] — a bare name here, qualified with
+/// [`MCP_DOCTRINE_PREFIX`] at the conformance site, never re-typed. The name
+/// itself is single-sourced from the tool's own registration.
+const WORKER_CAPTURE_TOOLS: [&str; 1] = [TOOL_OBSERVATION_RECORD];
+
 /// The three SL-206 funnel READ bare-name tokens (phase-receipt / next-ready /
 /// authored-divergence) — the `probe` role's EXACT set, and the growth the
 /// `orchestrator` role gains ATOP its three write tokens.
@@ -395,7 +404,8 @@ const DISPATCH_READ_TOOLS: [&str; 3] = [
 ];
 
 /// The fully-qualified MCP tokens a confined agent of `role` may hold — the
-/// role-keyed allowlist. A `worker` holds only [`TOOL_ALLOWED`]; an
+/// role-keyed allowlist. A `worker` holds [`TOOL_ALLOWED`] PLUS
+/// [`WORKER_CAPTURE_TOOLS`] (SL-231); an
 /// `orchestrator` holds the three funnel WRITE tokens PLUS the three READ tokens
 /// (SL-206); a `probe` holds EXACTLY the three READ tokens. Every token is
 /// composed from [`MCP_DOCTRINE_PREFIX`] and the [`crate::mcp_server::dispatch`]
@@ -409,7 +419,11 @@ fn allowed_mcp_tokens(role: &str) -> Vec<String> {
             .collect()
     };
     match role {
-        ROLE_WORKER => vec![TOOL_ALLOWED.to_string()],
+        ROLE_WORKER => {
+            let mut allowed = vec![TOOL_ALLOWED.to_string()];
+            allowed.extend(qualify(&WORKER_CAPTURE_TOOLS));
+            allowed
+        }
         ROLE_ORCHESTRATOR => qualify(
             &DISPATCH_WRITE_TOOLS
                 .iter()
@@ -436,7 +450,7 @@ fn allowed_mcp_tokens(role: &str) -> Vec<String> {
 ///    writable MCP token would otherwise slip an allow-by-marker lint.
 /// 2. **Role-keyed tool allowlist.** A marked def's `tools:` may contain no
 ///    `mcp__*` token outside its role's sanctioned set ([`allowed_mcp_tokens`]):
-///    a `worker` may hold only [`TOOL_ALLOWED`]; an `orchestrator` the three
+///    a `worker` may hold [`TOOL_ALLOWED`] plus [`WORKER_CAPTURE_TOOLS`]; an `orchestrator` the three
 ///    funnel WRITE tokens plus the three SL-206 READ tokens; a `probe` EXACTLY
 ///    the three READ tokens. This also rejects a bare `mcp__doctrine` server
 ///    grant (it is `mcp__`-prefixed and in no role's set). Ceiling, not floor —
@@ -1756,6 +1770,127 @@ mod tests {
         assert!(
             findings.is_empty(),
             "orchestrator with only the three write tokens stays green: {findings:?}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // VT-2: SL-231 worker ceiling — the worker role grows by EXACTLY the
+    // bounded capture capability, and by nothing else.
+    // ------------------------------------------------------------------
+
+    /// The worker's ceiling is its self-commit PLUS bounded friction capture —
+    /// exactly two tokens, and a def holding both is conformant. The other two
+    /// roles do NOT gain the capture token: growth is scoped to `worker`.
+    #[test]
+    fn worker_observation_capture_is_allowlisted() {
+        let allowed = allowed_mcp_tokens(ROLE_WORKER);
+        assert!(
+            allowed.contains(&qualified(TOOL_OBSERVATION_RECORD)),
+            "a worker may hold the bounded capture token: {allowed:?}"
+        );
+        assert!(
+            allowed.contains(&TOOL_ALLOWED.to_string()),
+            "the self-commit token survives the growth: {allowed:?}"
+        );
+        assert_eq!(
+            allowed.len(),
+            2,
+            "EXACTLY the self-commit + capture pair: {allowed:?}"
+        );
+
+        // The other two role sets are UNCHANGED — capture is a worker capability.
+        let orchestrator = allowed_mcp_tokens(ROLE_ORCHESTRATOR);
+        assert!(
+            !orchestrator.contains(&qualified(TOOL_OBSERVATION_RECORD)),
+            "the orchestrator does not gain the worker's capture token: {orchestrator:?}"
+        );
+        assert_eq!(
+            orchestrator.len(),
+            6,
+            "orchestrator still holds exactly the six funnel tokens: {orchestrator:?}"
+        );
+        let probe = allowed_mcp_tokens(ROLE_PROBE);
+        assert!(
+            !probe.contains(&qualified(TOOL_OBSERVATION_RECORD)),
+            "the read-only probe does not gain a write token: {probe:?}"
+        );
+        assert_eq!(
+            probe,
+            DISPATCH_READ_TOOLS
+                .iter()
+                .map(|b| qualified(b))
+                .collect::<Vec<String>>(),
+            "probe still holds EXACTLY the three reads: {probe:?}"
+        );
+
+        // And the lint agrees: a def holding BOTH sanctioned tokens is clean.
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/dispatch-worker.md",
+            "---\nname: dispatch-worker\ndoctrine-role: worker\ntools: Read, Edit, Write, Bash, Grep, Glob, mcp__doctrine__worker_commit, mcp__doctrine__observation_record\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert!(
+            findings.is_empty(),
+            "the widened worker surface must pass the lint: {findings:?}"
+        );
+    }
+
+    /// The ceiling stayed a ceiling: widening it by ONE named capability did not
+    /// open it to any other `mcp__*` token, including another doctrine tool.
+    #[test]
+    fn worker_unrelated_mcp_tool_is_rejected() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/rogue-worker.md",
+            "---\nname: rogue-worker\ndoctrine-role: worker\ntools: Read, mcp__doctrine__observation_record, mcp__slack__post\n---\nbody\n",
+        );
+        write_def(
+            dir.path(),
+            "claude/overreaching-worker.md",
+            // A DOCTRINE write token the worker was never granted — the funnel's.
+            "---\nname: overreaching-worker\ndoctrine-role: worker\ntools: Read, mcp__doctrine__observation_record, mcp__doctrine__dispatch_import\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(
+            findings.len(),
+            2,
+            "each out-of-ceiling token is one finding: {findings:?}"
+        );
+        let joined: String = findings.iter().map(|f| f.message.clone()).collect();
+        assert!(
+            joined.contains("mcp__slack__post"),
+            "a foreign server's token is still rejected: {joined}"
+        );
+        assert!(
+            joined.contains("dispatch_import"),
+            "an unshared doctrine write token is still rejected: {joined}"
+        );
+    }
+
+    /// A bare `mcp__doctrine` server grant hands the worker EVERY tool on the
+    /// server, capture included. It is in no role's set and must stay rejected.
+    #[test]
+    fn worker_bare_doctrine_grant_is_rejected() {
+        let dir = tmp();
+        write_def(
+            dir.path(),
+            "claude/bare-worker.md",
+            "---\nname: bare-worker\ndoctrine-role: worker\ntools: Read, mcp__doctrine\n---\nbody\n",
+        );
+        let findings = agent_conformance_findings(dir.path());
+        assert_eq!(
+            findings.len(),
+            1,
+            "a whole-server grant must fail even after the ceiling grew: {findings:?}"
+        );
+        assert!(
+            findings[0]
+                .message
+                .contains("forbidden MCP token `mcp__doctrine`"),
+            "the finding names the bare grant: {findings:?}"
         );
     }
 

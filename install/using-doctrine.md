@@ -26,6 +26,8 @@ reach-for-it map):
 | transition a backlog item | `doctrine backlog edit <ID>` |
 | relate two entities (a slice to its spec/ADR, a backlog item to its slice) | `doctrine link` · `doctrine unlink` |
 | transition a phase (e.g. flip `in_progress` → `completed`) | `doctrine slice phase` |
+| capture friction as it happens | `doctrine observation record friction` |
+| read the friction corpus | `doctrine observation list` · `doctrine observation search` |
 | record a durable fact | `doctrine memory record` |
 | find / retrieve a memory | `doctrine memory find` · `doctrine memory retrieve` |
 | regenerate the boot snapshot | `doctrine boot` |
@@ -61,6 +63,74 @@ Four homes, told apart by what the record *is* — do not conflate them:
 
 When several seem to fit, the membership test arbitrates: the backlog is the home
 for unresolved *work intent*, never for every unresolved thing.
+
+## Capturing friction — observations
+
+An **observation** is not a fifth home for the records above. Those four ask
+"what should we do / believe / decide / remember"; an observation records *what
+happened while working* — the friction, the wrong turn, the thing that cost
+twenty minutes — at the moment it happens, before it is understood well enough
+to be triaged. Capture is deliberately cheap: no duplicate search, no
+classification, no triage. A summary is the only required field.
+
+    doctrine observation record friction "<summary>" [--detail ...]
+
+Read the corpus back with `doctrine observation list` / `search`; correct it
+with `supersede` / `retract` (records are never edited in place). Ask the CLI
+for flags.
+
+**Which interface — it depends on where you are running.** The corpus is one
+shared, authored tree, so capture must go through whatever seam can actually
+reach it:
+
+| where you are | how to capture |
+|---|---|
+| the primary worktree | the CLI, as above |
+| a confined worker with the doctrine MCP server | the `observation_record` MCP tool |
+| a worker fork with neither | **don't** — report the friction in your hand-back |
+
+That last row is the one that matters. A fork-local capture is written into a
+tree that is about to be discarded, so it reads as success and silently loses
+the record. Doctrine refuses it rather than accept it, and names the broker to
+use if one is available.
+
+### Records are authored by default
+
+Authoritative records are **authored collection data**: committed, diffable
+TOML under `.doctrine/observations/records/`, visible to git like any other
+authored entity. Capture itself never stages or commits — a new record sits
+untracked until you or a coordinator commits it.
+
+Only the reserved publication temporaries are gitignored. The writer publishes
+a record by writing a complete sibling temp file and hard-linking it into
+place, so an interrupted capture can leave a `.tmp.`-prefixed name behind; that
+one narrow pattern is installed for you, and nothing else in the tree is
+ignored.
+
+**This has a cost, and it is a real one.** Committed records show up in
+diffs and pull requests. A team capturing friction liberally will see review
+noise from records that have nothing to do with the change under review.
+
+There are two ways to opt out, and they are not equivalent:
+
+- **Repository-wide** — ignore `.doctrine/observations/records/` in the
+  project's `.gitignore`. A shared decision: it applies to everyone.
+- **Locally** — exclude the same path in `.git/info/exclude`, or via a global
+  ignore file. Your own choice; it does not affect collaborators, and it will
+  surprise them when your records never arrive.
+
+**Either way you are choosing local-only storage, and giving up three things:**
+the corpus stops being shared, so nobody can see friction but its author;
+records can no longer be correlated across people, machines, or worktrees; and
+there is no audit history — a local corpus has no durable record of what was
+observed when, and vanishes with the checkout. Git is the transport here. If
+you turn it off and still want those properties, something else has to provide
+them.
+
+The default is deliberate. Keep records authored unless the review noise is
+actually hurting, and prefer the repository-wide choice over the local one when
+you do opt out — a decision the whole team can see beats one that silently
+differs per developer.
 
 ## Reading entities — always via `show`
 

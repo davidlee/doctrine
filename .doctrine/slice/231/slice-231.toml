@@ -120,6 +120,11 @@ selector = "src/worktree/allowlist.rs"
 intent = "design-target"
 note = "RV-318 F-5: PHASE-05's Tier::ObservationTemp — forced by the WITHHELD/.gitignore parity gate, which reds on any new .doctrine/ runtime glob until it declares fork disposition."
 
+[[selector]]
+selector = "src/install.rs"
+intent = "design-target"
+note = "PHASE-05 VT-1: install-projection tests for the reserved observation publication-temp ignore rule."
+
 [[relation]]
 label = "governed_by"
 target = "POL-002"

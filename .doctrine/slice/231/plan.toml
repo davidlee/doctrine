@@ -81,7 +81,12 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "Shared parent creation refuses file/symlink squatters and entity materialisation behaviour remains green unchanged after delegation", test_file = "src/fsutil.rs", keywords = ["ensure_parent_dirs", "parent_creation_refuses_symlink_squatter", "parent_creation_refuses_file_squatter"], waived = false },
   { id = "VT-2", expects = "Publication accepts complete closed content, creates the destination only by no-clobber hard link, cleans collision temps, and leaves no partial authoritative file", test_file = "src/fsutil.rs", keywords = ["publish_complete_new", "publication_never_opens_destination_for_write", "publication_cleans_temp_after_collision"], waived = false },
-  { id = "VT-3", expects = "Store tests cover direct UUID sharding, distinct and same-UUID concurrency, month/kind-independent identity, replay, collision refusal, path mismatch, temp ignoring, and first-write metadata retention", test_file = "src/observation/store.rs", keywords = ["uuid_path_is_kind_and_time_blind", "same_intent_replays_without_rewrite", "different_intent_collides_without_overwrite", "concurrent_distinct_uuids_survive"], waived = false },
+  # RV-317 F-4(2): `uuid_path_is_kind_and_time_blind` asserted a tautology —
+  # `record_path` takes only a uid, so calling it three times with one argument
+  # could not vary kind or time. It never verified this criterion. Replaced by
+  # two keywords that do: identity collision across kinds, and a path shape with
+  # no time component. The criterion's `expects` is unchanged and now better met.
+  { id = "VT-3", expects = "Store tests cover direct UUID sharding, distinct and same-UUID concurrency, month/kind-independent identity, replay, collision refusal, path mismatch, temp ignoring, and first-write metadata retention", test_file = "src/observation/store.rs", keywords = ["different_kind_same_uuid_is_identity_collision", "uuid_path_contains_records_and_shard", "same_intent_replays_without_rewrite", "different_intent_collides_without_overwrite", "concurrent_distinct_uuids_survive"], waived = false },
   { id = "VT-4", expects = "The façade refuses public measurements while an injected registered source admits a valid machine measurement and caller-asserted source metadata cannot open the gate", test_file = "src/observation/mod.rs", keywords = ["public_capture_refuses_measurement", "registered_machine_source_admits_measurement", "asserted_source_cannot_open_measurement_gate"], waived = false },
   { id = "VT-5", expects = "The pre-existing entity rollback and nested-parent materialisation tests remain green unchanged after the parent-walk extraction", test_file = "src/entity.rs", keywords = ["create_in_existing_rolls_back_partial_fileset_leaving_parent_intact", "materialise_named_write_failure_cleans_up_the_won_dir"], waived = false },
   { id = "VT-6", expects = "The observation purity architecture test remains green after the imperative store and façade are embedded in the umbrella", test_file = "tests/architecture_layering.rs", keywords = ["observation_pure_modules_have_no_imperative_imports"], waived = false },
@@ -114,7 +119,23 @@ exit_criteria = [
 verification = [
   { id = "VT-1", expects = "CLI e2e covers cheap record, explicit-over-automatic enrichment, replay/collision receipts, stdin/file input, strict failures, no staging/commit side effects, and raw JSON/table rendering", test_file = "tests/e2e_observation.rs", keywords = ["record_friction_returns_receipt", "record_replay_and_collision", "record_does_not_touch_git_index", "hostile_content_is_safely_rendered"], waived = false },
   { id = "VT-2", expects = "CLI e2e covers exact/resolved show, active/history list, lexical search, filters, keyset pages, supersession, retraction, invalid controls, and complete history", test_file = "tests/e2e_observation.rs", keywords = ["show_resolves_correction_chain", "list_and_search_use_resolved_projection", "corrections_preserve_complete_history"], waived = false },
-  { id = "VT-3", expects = "Argv-driven guard tests pin all six observation verbs and the worker refusal diagnostic for dispatched and solo marked forks", test_file = "src/main.rs", keywords = ["observation_write_class_split", "observation_worker_refusal_points_to_broker"], waived = false },
+  # RV-317 F-4(3) SPLIT. This criterion's two halves now live in two files, and a
+  # VT mandate carries exactly one `test_file` — so the refusal half moves to
+  # VT-4 (ids are immutable; edits append). Nothing is narrowed: the six-verb
+  # clause stays here, the refusal clause is restated in full below.
+  #
+  # The old `observation_worker_refusal_points_to_broker` asserted only that
+  # `write_class` returned `Write("observation record")` — it never invoked the
+  # guard and never produced a refusal, so it did not verify the clause its name
+  # claimed. Its replacements are e2e, where each invocation is a subprocess with
+  # its own CWD (`worker_guard` resolves the root from process-global CWD).
+  { id = "VT-3", expects = "Argv-driven guard tests pin all six observation verbs across the Write/Read split", test_file = "src/main.rs", keywords = ["observation_write_class_split"], waived = false },
+  # The refusal half of the original VT-3, now fully covered. `describe_mode`
+  # trips the marker leg only in a LINKED worktree, so both dispatched and solo
+  # forks are linked; what separates them is the env leg (`Cause::Both` vs
+  # `Cause::Marker`). The third keyword is the fence: the non-linked leaked-env
+  # leg must NOT name the broker.
+  { id = "VT-4", expects = "The worker refusal diagnostic names the `observation_record` broker in both dispatched (marker+env) and solo (marker-only) marked forks, and withholds it on the non-linked leaked-env leg", test_file = "tests/e2e_observation.rs", keywords = ["solo_marked_fork_refusal_points_to_observation_record_broker", "dispatched_marked_fork_refusal_points_to_observation_record_broker", "leaked_env_on_nonlinked_tree_refuses_without_broker_advice"], waived = false },
 ]
 specs        = ["SPEC-028", "SPEC-013"]
 requirements = ["REQ-405", "REQ-407", "REQ-408", "REQ-409", "REQ-410", "REQ-411", "REQ-413"]
