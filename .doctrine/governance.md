@@ -44,16 +44,40 @@ doctrine <kind> paths <id> # list all files
 doctrine status            # what's going on?
 doctrine search            # BM25 entity search 
 
-## CASE NOTES: Instrumentation
+## Instrumentation: capture friction as an observation
 
-We are currently benchmarking token efficiency for RFC-011.
+We are benchmarking token efficiency for RFC-011. During use of any skill,
+capture any incidental complexity, confusion, or other source of
+token-inefficiency — whether it originates with the dispatch orchestrator, a
+worker, another agent, or the tooling. Capture at the moment it bites; do not
+save it up, and do not wait until you understand it.
 
-*Instrumentation*: during use of any skill, note (append using `cat >>`) any
-incidental complexity, confusion, or other source of token-inefficiency to: 
-`.doctrine/rfc/011/case-notes.md`, whether or they relate to the dispatch
-orchestrator, worker, or any other agent or root cause. Identify each entry
-with `[skill being used; a session-unique identifier]\n` **IMPORTANT:** append 
-to the primary working tree, not a linked worktree.
+**How you capture depends on what your context can reach:**
+
+| where you are | what to do |
+|---|---|
+| the primary worktree | `doctrine observation record friction "<summary>" --detail "<what happened>"` |
+| a confined worker with the doctrine MCP server | the `observation_record` MCP tool |
+| a worker fork with neither broker | **do not capture** — report the friction in your structured hand-back and let the orchestrator record it |
+
+That last row is not a formality. A fork-local record is written into a tree
+that is about to be discarded: it looks like success and loses the
+observation. Doctrine refuses that capture rather than accept it, and its
+refusal names the broker to use when one is available.
+
+Name the skill you were using in the summary, so entries stay attributable the
+way the old `[skill; id]` convention made them.
+
+Records are authored — committed and diffable under
+`.doctrine/observations/records/` — so they survive the worktree they were
+captured in. Capture never stages or commits; a record stays untracked until
+someone commits it. See `install/using-doctrine.md` for the review-noise and
+local-exclusion tradeoffs.
+
+**The historical corpus stays where it is.** `.doctrine/rfc/011/case-notes.md`
+remains the record of everything instrumented before this cutover — it is not
+migrated, not superseded, and still worth reading. It is simply no longer the
+place new entries go.
 
 # orchestration
 

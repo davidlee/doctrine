@@ -115,6 +115,11 @@ selector = "src/commands/guard.rs"
 intent = "design-target"
 note = "RV-311: enforce observation worker-mode Read/Write split and refusal diagnostics."
 
+[[selector]]
+selector = "src/install.rs"
+intent = "design-target"
+note = "PHASE-05 VT-1: install-projection tests for the reserved observation publication-temp ignore rule."
+
 [[relation]]
 label = "governed_by"
 target = "POL-002"

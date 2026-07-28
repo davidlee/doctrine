@@ -101,9 +101,17 @@ pub(crate) fn run_doctor(
 mod tests {
     //! VT-1 (SL-198 PHASE-04): the #9 conformance lint fails an unmarked worker
     //! def, a marked def with an extra writable MCP token, and a bare
-    //! `mcp__doctrine` grant; it passes the pinned dispatch-worker (marked, only
-    //! `mcp__doctrine__worker_commit`). Scan roots are the authored trees
-    //! `install/agents` + `.doctrine/agents`, never the installed `.claude` copy.
+    //! `mcp__doctrine` grant; it passes the pinned dispatch-worker.
+    //!
+    //! VT-3 (SL-231 PHASE-04): the pinned fixture below carries the SAME
+    //! capability set as the shipped `install/agents/claude/dispatch-worker.md`
+    //! — `mcp__doctrine__worker_commit` PLUS `mcp__doctrine__observation_record`.
+    //! The fixture and the shipped definition agreeing IS the assertion: a
+    //! ceiling widened in one and not the other shows up here as a finding on
+    //! `dispatch-worker.md`, which this test forbids.
+    //!
+    //! Scan roots are the authored trees `install/agents` + `.doctrine/agents`,
+    //! never the installed `.claude` copy.
     use crate::doctor_checks::agent_conformance_findings;
     use crate::finding::{Category, Severity};
 
@@ -118,11 +126,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
 
-        // PASS: the pinned dispatch-worker — marked, only the sanctioned token.
+        // PASS: the pinned dispatch-worker — marked, and holding EXACTLY the
+        // shipped def's two sanctioned tokens (self-commit + bounded capture).
         write_def(
             root,
             "claude/dispatch-worker.md",
-            "---\nname: dispatch-worker\ndoctrine-role: worker\ntools: Read, Edit, Write, Bash, Grep, Glob, mcp__doctrine__worker_commit\n---\nbody\n",
+            "---\nname: dispatch-worker\ndoctrine-role: worker\ntools: Read, Edit, Write, Bash, Grep, Glob, mcp__doctrine__worker_commit, mcp__doctrine__observation_record\n---\nbody\n",
         );
         // FAIL a: unmarked def (deny-by-default).
         write_def(

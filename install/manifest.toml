@@ -44,6 +44,17 @@ entries = [
   ".doctrine/memory/shipped/",
   ".doctrine/dispatch/",
   ".doctrine/skills/*",
+  # Observations (SL-231): authoritative records under
+  # `.doctrine/observations/records/` are AUTHORED collection data — committed,
+  # diffable, visible in review by default. Only the reserved publication
+  # temporaries are ignored: the writer publishes by writing a complete sibling
+  # temp then hard-linking it into place, so an interrupted capture can leave a
+  # `.tmp.`-prefixed name behind. The prefix is `fsutil::PUBLICATION_TEMP_PREFIX`,
+  # crossed against this entry by `observation_publication_temps_are_ignored`.
+  # Do NOT broaden this to the tree: that silently makes a client's corpus
+  # local-only and forfeits correlation and audit history. A project that wants
+  # that tradeoff opts in explicitly — see install/using-doctrine.md.
+  ".doctrine/observations/**/.tmp.*",
 ]
 
 [hymns]

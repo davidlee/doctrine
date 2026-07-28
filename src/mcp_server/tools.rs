@@ -6,7 +6,8 @@
 //! `worker_commit` (the gated dispatch-worker self-commit, SL-198), the SL-199
 //! dispatch funnel write surface (`dispatch_import`, `dispatch_conclude_phase`,
 //! `dispatch_reap`), and the SL-206 dispatch funnel read surface
-//! (`dispatch_phase_receipt`, `dispatch_next_ready`, `dispatch_authored_divergence`).
+//! (`dispatch_phase_receipt`, `dispatch_next_ready`, `dispatch_authored_divergence`),
+//! plus `observation_record` (the SL-231 bounded friction-capture adapter).
 //! Each review tool calls the matching `review::run_*` function,
 //! maps errors through `ReviewError` variant identity (design D8, §5), and
 //! returns JSON text.
@@ -16,6 +17,8 @@ use super::protocol::{
     Id, JsonRpcRequest, JsonRpcResponse, McpTool, McpToolResult, ToolsListResult,
 };
 use crate::memory;
+use crate::observation::store::Receipt;
+use crate::observation::wire::{self, EscapeContext, Facets};
 use crate::retrieve;
 use crate::review::{self, NewArgs, PrimeArgs, ReviewOutput};
 use anyhow::Context;
@@ -24,9 +27,46 @@ use serde_json::{Value, json};
 use std::path::Path;
 use std::str::FromStr;
 
+// ── SL-231 PHASE-04: observation capture names (STD-001) ─────────────────
+
+/// The capture tool's bare name — the SINGLE source for its registration
+/// below, its `call_tool` dispatch arm, and the `doctor_checks` worker
+/// allowlist (which qualifies it with the `mcp__doctrine__` prefix). Nobody
+/// re-types the string.
+pub(crate) const TOOL_OBSERVATION_RECORD: &str = "observation_record";
+
+/// The `execution.interface` value this surface enriches with.
+const INTERFACE_MCP: &str = "mcp";
+
+/// Argument keys [`TOOL_OBSERVATION_RECORD`] REFUSES outright (design §3.3).
+/// Three families, none of which appears in the input schema:
+///
+/// - measurement authority (`kind`, `source`, `counters`, `gauges`) — this
+///   surface creates `friction` and nothing else;
+/// - the two correction controls (`old_uid`/`replacement_uid` for supersession,
+///   `target_uid` for retraction) — capture may not rewrite the ledger;
+/// - a caller-supplied filesystem root (`path`, `root`) — the SERVER resolves
+///   the registered primary repository root.
+///
+/// The schema's silence already makes them unrepresentable; a caller that sends
+/// one anyway is reaching past the contract, so it is refused with a diagnostic
+/// rather than silently dropped — a silent drop would leave the caller believing
+/// an authority it never had was exercised.
+const CAPTURE_REFUSED_KEYS: [&str; 9] = [
+    "kind",
+    "source",
+    "counters",
+    "gauges",
+    "old_uid",
+    "replacement_uid",
+    "target_uid",
+    "path",
+    "root",
+];
+
 // ── Tool definitions (function, not const — json!() is non-const) ─────────
 
-/// Return all 25 tool definitions with JSON Schema parameter descriptions.
+/// Return all 29 tool definitions with JSON Schema parameter descriptions.
 fn tools() -> Vec<McpTool> {
     vec![
         McpTool {
@@ -356,6 +396,43 @@ fn tools() -> Vec<McpTool> {
                     }
                 },
                 "required": ["agent", "message"]
+            }),
+        },
+        McpTool {
+            name: TOOL_OBSERVATION_RECORD.to_owned(),
+            description: "Capture ONE friction observation into the observation ledger (SL-231). Same shared service, validation, enrichment, idempotency and receipt contract as `doctrine observation record friction` — this is an adapter, not a second implementation.\n\nDeliberately NARROWER than the trusted CLI, because it is reachable from a confined worker: it creates `friction` ONLY; the SERVER resolves the registered primary repository root (there is no path/root argument — its absence is the mechanism); and measurement authority (`kind`/`source`/`counters`/`gauges`) plus the supersession/retraction controls (`old_uid`/`replacement_uid`/`target_uid`) are REFUSED. It bypasses the worktree filesystem wall for bounded friction capture only — it is NOT a general write primitive.\n\nIdempotent by `uid`: re-sending the SAME `uid` with the SAME caller intent replays the existing record (`outcome: \"replayed\"`) instead of colliding. Automatic enrichment writes only `execution.{interface, product_surface, command, repository_context}`, each marked `automatic`; explicit `facets` values WIN over them, and no agent id is invented — one reaches the record only if you supply it.\n\nReturns: { uid: string, kind: \"friction\", recorded_at: string, rel_path: string, outcome: \"created\"|\"replayed\" }".to_owned(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "uid": {
+                        "type": "string",
+                        "description": "Caller-supplied UUID (UUIDv7 recommended) — the idempotency key. Default: server-generated."
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "The friction summary — one line, required, non-empty."
+                    },
+                    "detail": {
+                        "type": "string",
+                        "description": "Optional longer detail (what you expected, what happened, what it cost)."
+                    },
+                    "facets": {
+                        "type": "object",
+                        "description": "Optional explicit facets, keyed by group (`provenance`, `execution`, `work_context`, `correlation`, `usage`). Each group's `schema_version` defaults to 1. Explicit values win over automatic enrichment.",
+                        "properties": {
+                            "provenance":   { "type": "object" },
+                            "execution":    { "type": "object" },
+                            "work_context": { "type": "object" },
+                            "correlation":  { "type": "object" },
+                            "usage":        { "type": "object" }
+                        }
+                    },
+                    "enrich": {
+                        "type": "boolean",
+                        "description": "Apply automatic enrichment (default: true). `false` records exactly what you supplied."
+                    }
+                },
+                "required": ["summary"]
             }),
         },
         McpTool {
@@ -1088,6 +1165,7 @@ fn call_tool(
             let out = super::worker_commit::run_worker_commit(root, &agent, &message)?;
             Ok(serde_json::to_string(&out)?)
         }
+        TOOL_OBSERVATION_RECORD => run_observation_record(root, &arguments),
         super::dispatch::TOOL_DISPATCH_IMPORT => {
             // The coord tree is resolved SERVER-SIDE from `slice` (no caller path). `name`
             // names the committed worker fork branch to import.
@@ -1171,6 +1249,172 @@ fn call_tool(
             Ok(serde_json::to_string(&out)?)
         }
         _ => anyhow::bail!("Tool not found: {name}"),
+    }
+}
+
+// ── SL-231 PHASE-04: observation capture adapter (design §3.3) ───────────
+
+/// `observation_record` — capture ONE friction observation through the shared
+/// [`crate::observation::Service`].
+///
+/// A shell, exactly like the CLI adapter: it generates the `uid` and
+/// `recorded_at` the service requires as inputs, supplies allowlisted automatic
+/// enrichment, and renders the shared [`Receipt`]. Every rule about what may be
+/// stored lives in the service, so this surface cannot drift from the CLI.
+///
+/// `root` is the root the SERVER resolved at startup — the "no caller path"
+/// property is that fact plus a schema with no path field, not new machinery.
+fn run_observation_record(root: &Path, arguments: &Value) -> anyhow::Result<String> {
+    refuse_capture_overreach(arguments)?;
+
+    let fields = ExtractFields::from_value(arguments.clone(), &["summary"]);
+    let summary = fields.str_field("summary");
+    if summary.is_empty() {
+        anyhow::bail!("invalid arguments: `summary` is required and must be a non-empty string");
+    }
+    let detail = fields.opt_str_field("detail");
+    let uid = fields
+        .opt_str_field("uid")
+        .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+    let recorded_at = crate::clock::now_timestamp()?;
+    let enrich = fields.opt_bool_field("enrich").unwrap_or(true);
+
+    let explicit = parse_explicit_facets(arguments.get("facets"))?;
+    let facets = wire::merge_explicit_facets(enrich_mcp(enrich, root), explicit);
+
+    // The wire builder validates BEFORE the store is touched, which is what lets
+    // a refusal render its diagnostics through the escaper below.
+    let envelope = wire::build_friction(uid, recorded_at, summary, detail, Some(facets))
+        .map_err(|diags| anyhow::anyhow!("invalid arguments: {}", render_refusal(&diags)))?;
+
+    let service = crate::observation::Service::new(
+        root.to_path_buf(),
+        crate::observation::SourceRegistry::empty(),
+    );
+    let receipt: Receipt = service.record_friction(&envelope)?.into();
+    Ok(serde_json::to_string(&receipt)?)
+}
+
+/// Refuse an argument that reaches past the capture contract (see
+/// [`CAPTURE_REFUSED_KEYS`]). The load-bearing `invalid arguments:` prefix
+/// routes the refusal to `-32602` through [`map_review_error`].
+fn refuse_capture_overreach(arguments: &Value) -> anyhow::Result<()> {
+    for key in CAPTURE_REFUSED_KEYS {
+        if arguments.get(key).is_some_and(|v| !v.is_null()) {
+            anyhow::bail!(
+                "invalid arguments: `{key}` is not accepted by `{TOOL_OBSERVATION_RECORD}` — \
+                 this surface records friction only, and the server resolves the registered \
+                 primary repository root"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Render write-validation diagnostics as ONE refusal line, escaped.
+///
+/// A diagnostic echoes caller-supplied text (an unparseable `uid`, say), and
+/// this string travels back to an agent's terminal inside the JSON-RPC error.
+/// So it goes through the SAME escaper the CLI renderer uses (EX-5): `Inline`,
+/// because the refusal occupies exactly one logical line and content must not
+/// be able to forge a second.
+fn render_refusal(diags: &[wire::Diagnostic]) -> String {
+    diags
+        .iter()
+        .map(|d| {
+            format!(
+                "{}: {}",
+                wire::escape_hostile(&d.path, EscapeContext::Inline),
+                wire::escape_hostile(&d.reason, EscapeContext::Inline)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+/// Parse the optional explicit `facets` argument into typed [`Facets`].
+///
+/// Absent or `null` ⇒ `None` (pure automatic enrichment). A malformed group is
+/// an argument error, not a warning: silently dropping facets the caller asked
+/// for would record a lie about what was captured.
+fn parse_explicit_facets(raw: Option<&Value>) -> anyhow::Result<Option<Facets>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    if raw.is_null() {
+        return Ok(None);
+    }
+    let facets: Facets = serde_json::from_value(default_facet_schema_versions(raw.clone()))
+        .map_err(|e| {
+            // The serde message echoes caller-chosen field names — escape it.
+            anyhow::anyhow!(
+                "invalid arguments: `facets`: {}",
+                wire::escape_hostile(&e.to_string(), EscapeContext::Inline)
+            )
+        })?;
+    Ok(Some(facets))
+}
+
+/// Default each supplied facet group's `schema_version` to the current wire
+/// version, so a caller need not repeat it in every group.
+///
+/// MCP-local argument adaptation: the CLI has no explicit-facets surface, so
+/// this normalisation has no CLI counterpart to share with. It only ever fills
+/// an ABSENT key — an explicit `schema_version` (including a wrong one, which
+/// the wire then rejects) is left exactly as sent.
+fn default_facet_schema_versions(mut raw: Value) -> Value {
+    if let Some(groups) = raw.as_object_mut() {
+        for group in groups.values_mut() {
+            if let Some(obj) = group.as_object_mut() {
+                obj.entry("schema_version")
+                    .or_insert_with(|| json!(wire::SCHEMA_VERSION));
+            }
+        }
+    }
+    raw
+}
+
+/// Automatic enrichment for the MCP capture surface — the NAMED allowlist and
+/// nothing more (design §3.3).
+///
+/// Writes only `execution.{interface, product_surface, command,
+/// repository_context}`. The first three are constants naming THIS surface; the
+/// fourth is derived server-side from the root the server itself resolved, so it
+/// is a trusted observation about the repository rather than a caller claim.
+/// Nothing else is invented here — no session, model, harness, or agent id. An
+/// agent id reaches a record only when the caller already supplied one, and then
+/// it rides the explicit-facet merge as the opaque string it is.
+///
+/// Total by construction: three constants and one probe that returns a bool
+/// rather than failing. There is therefore no enrichment failure mode that could
+/// block a capture — the property is held by the shape of this function, not by
+/// a rescue path around it.
+fn enrich_mcp(enrich: bool, root: &Path) -> Facets {
+    if !enrich {
+        return Facets::default();
+    }
+
+    let repository_context =
+        if crate::worktree::env_worker_set() || crate::worktree::marker_present(root) {
+            "worker"
+        } else {
+            "primary"
+        };
+
+    Facets {
+        execution: Some(wire::ExecutionFacet {
+            schema_version: wire::SCHEMA_VERSION,
+            interface: Some(INTERFACE_MCP.to_owned()),
+            interface_origin: Some(wire::Origin::Automatic),
+            product_surface: Some(wire::PRODUCT_SURFACE.to_owned()),
+            product_surface_origin: Some(wire::Origin::Automatic),
+            command: Some(TOOL_OBSERVATION_RECORD.to_owned()),
+            command_origin: Some(wire::Origin::Automatic),
+            repository_context: Some(repository_context.to_owned()),
+            repository_context_origin: Some(wire::Origin::Automatic),
+            ..Default::default()
+        }),
+        ..Default::default()
     }
 }
 
@@ -1598,9 +1842,9 @@ mod tests {
     // VT-3: tool list response contains exactly 10 tools with correct names
 
     #[test]
-    fn tool_list_has_28_tools() {
+    fn tool_list_has_29_tools() {
         let list = tool_list();
-        assert_eq!(list.tools.len(), 28);
+        assert_eq!(list.tools.len(), 29);
         // The SL-199 funnel write surface is registered (named via the STD-001 consts).
         let names: Vec<&str> = list.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_IMPORT));
@@ -1617,6 +1861,8 @@ mod tests {
         // The SL-228 PHASE-06 funnel ORACLE — distinct from `dispatch_next_ready`.
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_NEXT));
         assert!(names.contains(&super::super::dispatch::TOOL_DISPATCH_NEXT_READY));
+        // The SL-231 bounded capture adapter, named from its own STD-001 const.
+        assert!(names.contains(&TOOL_OBSERVATION_RECORD));
     }
 
     #[test]
@@ -1989,7 +2235,7 @@ mod tests {
         let resp = dispatch(&req, &root, crate::commands::prompt::model_keys);
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 28);
+        assert_eq!(tools.len(), 29);
     }
 
     #[test]
