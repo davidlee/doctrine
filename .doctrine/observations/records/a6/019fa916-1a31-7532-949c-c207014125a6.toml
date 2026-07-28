@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fa916-1a31-7532-949c-c207014125a6"
+recorded_at = "2026-07-28T14:17:05.841506893Z"
+kind = "friction"
+summary = "/preflight: ls of .doctrine/state/ blows context — 150+ flat mem-surface-seen-<session>.txt at top level"
+detail = "Inventorying the runtime state tree during /preflight on ISS-269 cost ~8k tokens because .doctrine/state/ is a flat namespace where per-session scratch (mem-surface-seen-<session-uuid>.txt, one per agent session, 150+ accumulated since Jul 10), per-tree derived (boot.md), and repo-scoped slice state (slice/NNN/) all share one directory. Any survey of the tier is unaffordable. Adjacent to IMP-338. Suggests session-scoped runtime needs its own subdir + reaping."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
