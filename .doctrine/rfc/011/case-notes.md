@@ -961,3 +961,32 @@ would have collapsed 5+ exploration calls into one retrieve.
   path dead, and the next session's first tool call fails on a path it was
   handed by governance. Cured with `doctrine boot` from the primary binary —
   but nothing in the conclude cadence prompts it.
+
+[audit; sl231-rv318-audit]
+The mechanical drift signal was wrong in both directions and every number had to
+be re-derived by hand. `slice conformance 231` reported 46 undeclared / 1
+undelivered; the truth against the 29-file bundle was 3 / 0. Four independent
+defects compound at the same report: a boundary row spanning a mid-drive
+`refresh-base` (ISS-268), a row whose start commit carries its own deliverable
+and is excluded by `diff A..B` semantics (ISS-268, added at audit), and
+`slice conformance` resolving the registry from the primary worktree but phase
+status from cwd (ISS-269). Cost: reading `conformance_outcome`, five per-range
+diffs, a history walk over `boundaries.toml`, and finally a hand-written matcher
+over `git diff --name-only main...review/231` × the slice's selectors. The audit
+skill instructs the auditor to run conformance AND to review on the candidate
+branch — following both instructions produces a report the same skill says to
+treat as a finding. That combination is the expensive part, not any one defect.
+
+[audit; sl231-rv318-audit]
+A selector declared on the unlanded slice branch reads as undeclared from the
+primary tree, and the handover said the opposite. The packet stated
+"`src/install.rs` WAS declared mid-phase" — true on `dispatch/231`, where
+PHASE-05 T1 added it, and false on `edge`, where `slice-231.toml` still carries
+21 selectors. `slice conformance` run from the primary reads the primary's copy,
+so `src/install.rs` appeared as a phantom undeclared cell and was investigated
+as a possible scope violation before the two copies were compared. Pre-integration,
+NO conformance input is safe to read from the primary tree: the selector set,
+the phase status, and the boundary rows each resolve from a different place.
+Generalises the packet's own caveat — a handover claim is a hypothesis — to
+handover claims about STATE, not just about recommendations: the packet was
+describing a different tree than the reader is standing in.

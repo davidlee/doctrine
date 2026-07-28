@@ -34,6 +34,33 @@ conformance` reads the row, not the ref. So the residual is arm-independent —
 any `refresh-base` between `B` capture and conclude invalidates `B` as a delta
 start, whichever arm recorded it.
 
+## The mirror-image half: the start commit's own change is excluded
+
+Added at the SL-231 audit (RV-318 F-7). The same folding rule loses content as
+well as over-attributing it. `git diff A..B` is **exclusive of A**, so any
+change made *in* the row's start commit is not in the row.
+
+PHASE-01's row starts at `095fca404` — "chore(SL-231): pre-seed ADR-001
+observation=leaf for the PHASE-01 fork base" — a commit whose entire content is
+the one-line `.doctrine/adr/001/layering.toml` change. Verified:
+`git show --stat 095fca404` touches exactly that file, and
+`git diff 095fca404..02da8ebf4 -- .doctrine/adr/001/layering.toml` is empty.
+So conformance reports `.doctrine/adr/001/layering.toml` as an **undelivered**
+selector while the bundle plainly delivers it — PHASE-01 EX-5's whole
+deliverable.
+
+This is systematic rather than incidental. The orchestrator pre-seed is
+*required*: `architecture_layering_gate` raises `Unclassified` for any `src/`
+unit missing from `layering.toml`, and workers may not write `.doctrine/`. So
+the pattern reliably puts authored content in exactly the commit that becomes
+the fork base.
+
+Net on SL-231: against the true surface (`git diff --name-only
+main...review/231` = 29 files, matched by hand against review/231's 22
+selectors) the honest algebra is **3 undeclared, 0 undelivered**. Conformance
+reported **46 undeclared, 1 undelivered** — both cells wrong, in opposite
+directions.
+
 ## Candidate fixes
 
 - Re-base the open phases' recorded `code_start_oid` at `refresh-base` time (the
@@ -46,7 +73,9 @@ start, whichever arm recorded it.
   in the span.
 
 The first is cheapest and fixes the data; the second fixes every already-recorded
-row retroactively.
+row retroactively. **None of the three addresses the start-exclusion half** —
+that needs `[start^, end]` semantics for the fold, or a rule that the pre-seed
+lands outside the row it opens.
 
 ## Impact
 

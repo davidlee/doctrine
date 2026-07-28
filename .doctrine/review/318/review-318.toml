@@ -1,0 +1,276 @@
+id    = 318
+slug  = "sl-231-implementation-audit"
+title = "SL-231 implementation audit"
+# no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so
+# it is never stored (the storage rule forbids derived data in authored files).
+
+[review]
+facet     = "reconciliation"     # scope|design|plan|phase-plan|implementation|code-review|reconciliation
+raiser    = "raiser"
+responder = "responder"
+
+[target]                   # the outbound `reviews` edge (ADR-004): RV-NNN ──reviews──▶ <ref>
+ref   = "SL-231"
+
+[[finding]]
+id = "F-1"
+status = "verified"
+severity = "blocker"
+title = "Expected per design §3.1 and PHASE-03 EX-1: the CLI record verb accepts typed facet fields and a complete request from stdin/file. Observed: it accepts neither, and PHASE-03 VT-1 passed without covering either clause"
+detail = """
+design.md §3.1:169-175 lists five things `observation record friction` "also accepts", including "repeatable typed facet fields" and "a complete friction request from standard input or a file". PHASE-03 EX-1 restates both as "typed facets, structured input".
+
+Observed on review/231: `FrictionRecordArgs` (src/commands/observation.rs:50-69) carries exactly `summary`, `--detail`, `--uid`, `--no-enrich`, `--path`. There is no facets flag and no stdin/file flag. `run_record` (:535) calls `merge_explicit_facets(auto_facets, None)` — the explicit argument is a hard-coded `None`, so design §3.1:197 "explicit caller values win" is structurally unreachable from the CLI. Confirmed absent with a positive control: `grep -rn stdin src/commands/observation.rs src/observation/` is empty while the same grep hits 5 other files under src/.
+
+The MCP adapter DOES take explicit facets (tools.rs:1283 passes `explicit` through), so the two adapters are not at parity and only the MCP one satisfies EX-3's precedence rule end-to-end.
+
+Compounding: PHASE-03 VT-1's `expects` names "stdin/file input" and "explicit-over-automatic enrichment", but its four keywords are `record_friction_returns_receipt`, `record_replay_and_collision`, `record_does_not_touch_git_index`, `hostile_content_is_safely_rendered` — none of which touches either clause. The criterion reported PASS while two clauses of its own text were undelivered. This is the RV-317 F-4 defect class (a VT that passes while asserting less than its criterion) recurring in a criterion RV-317 did not re-examine.
+
+Raised as blocker because it is undelivered scope against a LOCKED design, masked by a green gate — it must be consciously settled (deliver, or narrow the design with rationale) rather than discovered post-close."""
+disposition = "verified"
+response = """
+Observation confirmed; remediation delegated to `/reconcile` — see the `## Reconciliation Brief` in this review, "Per-slice (direct edit)".
+
+Not dispositioned `fix-now`: adding two CLI input surfaces (repeatable typed facet flags, and a complete-request-from-stdin-or-file path) is phase-sized work with its own design questions — the flag grammar for repeatable typed facets across five facet groups is not a detail an audit should settle unilaterally. Not `tolerated` either: nothing about the omission was consciously accepted, and no rationale exists for it anywhere in the design, plan, phase sheet, or notes.
+
+The brief presents the fork rather than pre-empting it, because it is the user's to take:
+- **deliver** — a follow-on slice or phase brings the CLI to parity with the MCP adapter, which already accepts explicit facets; or
+- **narrow** — design.md §3.1:169-175 drops the two bullets with a recorded rationale, and the slice ships a deliberately smaller CLI.
+
+Either way one further thing must happen and is not optional: PHASE-03 VT-1's `expects` text names "stdin/file input" and "explicit-over-automatic enrichment" while its four keywords test neither. Under **deliver**, keywords must be appended (ids are immutable — append, never renumber) so the criterion covers its own text. Under **narrow**, the `expects` text must be corrected in the same pass, or the plan keeps asserting a contract nothing checks. Note the audit-skill guardrail: plan criteria are OFF-surface for reconcile's direct edit, so whichever way this goes it is a design/plan escalation, not a brief item reconcile can write.
+
+Marked terminal because the observation is confirmed and fully evidenced; the blocker severity records that it must be settled before close, not that it is unresolved here."""
+
+[[finding]]
+id = "F-2"
+status = "verified"
+severity = "major"
+title = "Expected per design §2.3: field origin records whether a value was explicit or auto-enriched. Observed: merge_explicit_facets copies caller-supplied *_origin verbatim, so a caller can stamp Automatic on a value it supplied"
+detail = """
+design.md §2.3:128-129 — "Field-level origin metadata records whether a value was explicit or automatically enriched." That makes `*_origin` a factual claim about how the value arrived, and it is the only discriminator the corpus carries.
+
+Observed in src/observation/wire.rs:423-... `merge_explicit_facets`: every explicit branch is `if e.<field>.is_some() { m.<field> = e.<field>.clone(); m.<field>_origin = e.<field>_origin; }`. The origin is taken from the caller, not derived. A caller sending `{"execution": {"interface": "pi", "interface_origin": "automatic"}}` through `observation_record` writes a record asserting that a caller-supplied value was automatically enriched. The function is inside the explicit branch by construction — it already knows the answer and needs no caller input; `Some(Origin::Explicit)` is the only correct value there.
+
+The existing test exercises only the honest direction: tests/e2e_mcp_server.rs:1458 sends `"interface_origin": "explicit"` with an explicit `interface`. The forging direction is unguarded, so the suite is green either way.
+
+This is PHASE-04's second unadjudicated UNCERTAIN ("caller-supplied *_origin values riding through as sent"), now resolved against the code: the behaviour is real and diverges from §2.3.
+
+Impact is corpus integrity, not security — the whole capture path is trusted. But the corpus is the measurement input for RFC-011, and any statistic that partitions on origin is unreliable while a caller can set it. Design §3.1:177-179 already establishes the principle for the adjacent case ("caller-asserted source metadata cannot open that gate" for measurement admission, pinned by PHASE-02 VT-4 `asserted_source_cannot_open_measurement_gate`); the same principle is unenforced here."""
+disposition = "fix-now"
+response = """
+Fixed on the candidate review surface, `candidate/231/review-001` @ f1686831e.
+
+Origin is now derived from the branch a value arrives through rather than read from the caller. One `adopt(value, origin, explicit)` helper replaces the 30 hand-repeated four-line blocks and stamps `Origin::Explicit` on every explicit field. Fixing the class rather than 30 instances was the smaller change: the function shrank, and the `#[expect(clippy::assigning_clones)]` the old shape required is gone.
+
+Two tests in `src/observation/wire.rs`, which previously had no unit coverage of this function at all (its only exercise was one e2e MCP case):
+- `caller_supplied_origin_cannot_forge_automatic` — proven red before the fix (`left: Some(Automatic), right: Some(Explicit)`).
+- `unshadowed_automatic_fields_keep_automatic_origin` — the fix narrows nothing; a field the caller does not shadow keeps its automatic value and origin.
+
+`doctrine check gate` green after the change: exit 0, 103 test binaries, 0 failures. The pre-existing e2e case that sends `interface_origin: "explicit"` still passes, since the honest direction is unchanged."""
+
+[[finding]]
+id = "F-3"
+status = "verified"
+severity = "major"
+title = "Expected per PHASE-05 VA-1: five surfaces describe one capability-aware contract. Observed: the shipped worker definition gained only the frontmatter token — its body never mentions observation capture, so a confined worker is never told it can capture"
+detail = '''
+Independent second read of VA-1, which had one author and no reviewer.
+
+Four of the five surfaces hold up and genuinely tell one story: `.doctrine/governance.md` (three-row routing table, with the fork-local refusal explained rather than asserted), `install/using-doctrine.md` (capture verbs, authored-by-default, review-noise cost, repo-wide vs local exclusion, and the three things local-only forfeits), `.doctrine/rfc/011/rfc-011.md` (re-aimed live instruction plus why the shared-file append was retired), and `install/manifest.toml` (the narrow reserved-temp entry with a do-not-broaden rationale). `case-notes.md` is retained in full — 913 lines on review/231, unchanged, still cited as the historical evidence base. EN-2 and STOP-3 hold.
+
+The fifth surface does not. `install/agents/claude/dispatch-worker.md` changed by exactly one line — `tools:` gained `mcp__doctrine__observation_record`. `git show review/231:install/agents/claude/dispatch-worker.md | grep -i 'observation\|friction'` matches ONLY that frontmatter line; the body is silent. So the shipped confined worker receives a capability with no instruction to use it and no pointer to the routing table.
+
+That matters because of who reads what. `.doctrine/governance.md` is doctrine's own project file and reaches no client. `install/using-doctrine.md` is shipped but is not what a worker subagent reads at spawn — its own definition is. Both documents route "a confined worker with the doctrine MCP server" to `observation_record`, and the worker's own definition is the one place that routing is missing.
+
+PHASE-04 EX-5's literal text is satisfied ("receives the bounded capture token without gaining a general `.doctrine/` write path") — this is not an EX-5 failure. What fails is VA-1's stronger claim, and with it the slice's dogfood outcome: the capability ships unreachable in practice. This is the PHASE-04 T6 concern ("minimal — gained the capability token but no body prose") confirmed with evidence rather than left as a suspicion.'''
+disposition = "fix-now"
+response = """
+Fixed on the candidate review surface, `candidate/231/review-001` @ f1686831e.
+
+`install/agents/claude/dispatch-worker.md` gains a contract bullet — the fifth surface now tells the same story as the other four. It names the tool, says a one-line summary is the only required field, and covers the two things a worker would otherwise get wrong:
+
+- why this is not a breach of the "do NOT write `.doctrine/`" bullet directly above it — the server writes into its own registered primary root, never into the fork, so nothing lands in the tree that is about to be discarded. Stated as the mechanism, not as an exemption, because a worker that reads it as "sometimes `.doctrine/` is fine" is worse off than before.
+- what to do with no broker: if the tool is absent from the tool list, do not hand-write a record, report the friction in the hand-back. That is the third row of the routing table in `.doctrine/governance.md` and `install/using-doctrine.md`, and it is the PHASE-03 refusal diagnostic's own advice, so all three now agree.
+
+`tools:` is untouched, so PHASE-04 VT-3's fixture/definition capability-set agreement is unaffected. Gate green (exit 0, 103 binaries). Note for whoever lands this: `install/` is a RustEmbed root, so `cargo build` must precede any `doctrine boot` / `doctrine install` or the regen silently uses the stale embed.
+
+VA-1's claim is now true as written rather than aspirational. The underlying process point stands and is recorded in the synthesis: VA-1 asserted agreement across five surfaces and was checked only by its author, and the one surface that did not hold was the one no reader would think to open."""
+
+[[finding]]
+id = "F-4"
+status = "verified"
+severity = "minor"
+title = "Expected per STD-001: one named constant for the facet schema version. Observed: six production sites hard-code schema_version: 1 while wire::SCHEMA_VERSION exists and is what read-validation compares against"
+detail = """
+`src/observation/wire.rs:16` defines `pub(crate) const SCHEMA_VERSION: u32 = 1`, and `:891` is the read gate: `if envelope.schema_version != SCHEMA_VERSION { ... "unsupported schema_version {}, expected {SCHEMA_VERSION}" }`.
+
+Six production sites (excluding all `mod tests`) write the literal instead:
+- src/observation/wire.rs:433, 451, 497, 519, 549 — every facet-group `get_or_insert_with` inside `merge_explicit_facets`
+- src/commands/observation.rs:491 — the CLI's `ExecutionFacet` in `enrich_cli`
+
+Note the same function four lines later at src/commands/observation.rs:539 correctly uses `wire::SCHEMA_VERSION` for the envelope, so the file already imports and uses the const — the literal is inconsistency, not an access problem.
+
+Concrete failure mode on the next version bump: `SCHEMA_VERSION` becomes 2, envelopes are stamped 2, and every facet created through CLI enrichment or explicit merge is still stamped 1. Records then carry a facet version the writer never intended, silently, with a green suite — the read gate at :891 checks the envelope version only.
+
+STD-001 is `required` status ("No magic strings — single-source named constants"). This is PHASE-04's first unadjudicated UNCERTAIN ("facet schema_version defaulting"), resolved: the facet structs correctly leave `schema_version` non-defaulting in serde (it is required on read), so the exposure is not a deserialization default — it is these six write-side literals."""
+disposition = "fix-now"
+response = """
+Fixed on the candidate review surface, `candidate/231/review-001` @ f1686831e.
+
+All six production sites now reference `wire::SCHEMA_VERSION`: the five facet-group creation sites inside `merge_explicit_facets` and the CLI's `enrich_cli` `ExecutionFacet`. Verified none remain — an awk pass bounded to each file's pre-`mod tests` region returns nothing; the 14 surviving literals are all test fixtures, where a literal is correct because the fixture is asserting a specific version.
+
+Guarded by `merge_created_facet_groups_carry_the_single_source_version`. First mutation proof was vacuous — I bumped only the const, after the fix, so the test tracked it and passed. Re-proved properly by bumping `SCHEMA_VERSION` to 2 *and* restoring the literal at the guarded creation site: red with `left: 1, right: 2`. Both mutations reverted; green.
+
+Raised as minor and it stays minor — there is no live defect at v1, only a version-bump trap. But it earned a fix rather than a follow-up because the fix is six words, the guard is real, and it rode the F-2 refactor that touched the same lines anyway."""
+
+[[finding]]
+id = "F-5"
+status = "verified"
+severity = "minor"
+title = "Expected: every path the slice touched is covered by a design-target selector. Observed: src/worktree/allowlist.rs is an undeclared conformance cell — the change is correct and forced, but the selector registry does not record it"
+detail = """
+Adjudicated, not auto-raised from the conformance report (which is unreliable here — see the two attribution findings on this ledger). Computed by hand against the true bundle: `git diff --name-only main...review/231` is 29 files; matched against the 22 selectors in review/231's `slice-231.toml`, exactly three are undeclared and zero selectors are undelivered.
+
+The three undeclared:
+- `src/worktree/allowlist.rs` — the real one, below.
+- `.doctrine/slice/231/slice-231.toml` — the selector registry itself. Self-referential; declaring a registry in its own registry is not meaningful.
+- `.doctrine/slice/231/plan.toml` — the RV-317 F-4 plan amendment (PHASE-02 VT-3 re-pointed, PHASE-03 VT-3 split into VT-3 + VT-4). An authored plan edit, not an implementation touch.
+
+`src/worktree/allowlist.rs` is a genuine source touch with no selector. The change is correct and was forced, not opportunistic: `every_runtime_gitignore_glob_is_classified` reds on any new `.doctrine/` runtime glob until it declares whether a worker fork is denied it or regenerates it, so PHASE-05's `.doctrine/observations/**/.tmp.*` entry could not land without a tier. Neither existing tier fitted (a leftover publication temp is neither fork-regenerated nor coordination scratch), hence `Tier::ObservationTemp`. The delta is the variant, its Display arm, one WITHHELD row, and a test whose negative half asserts authored records are NOT withheld — which is the load-bearing direction, since over-withholding would silently strip a fork's corpus.
+
+So the remedy is to record the touch, not to question it. Per the audit skill's brief guardrail, the load-bearing change is `doctrine slice selector add` — `slice conformance` reads the registry in `slice-231.toml`; a design.md §7 prose edit alone leaves conformance red. Do NOT widen the selector set beyond this one path."""
+disposition = "verified"
+response = """
+Observation confirmed; remediation delegated to `/reconcile` — see the `## Reconciliation Brief`, "Per-slice (direct edit)".
+
+Adjudicated as in-scope and correct, not as scope creep. `Tier::ObservationTemp` was forced: `every_runtime_gitignore_glob_is_classified` reds on any new `.doctrine/` runtime glob until it declares whether a worker fork is denied it or regenerates it, so PHASE-05's ignore entry could not land without a tier, and neither existing tier fitted. The delta is minimal — one variant, its Display arm, one WITHHELD row, one test — and the test's negative half (authored records are NOT withheld) is the load-bearing direction, since over-withholding would silently strip a fork's corpus.
+
+So the registry is wrong, not the code. Per the audit skill's brief guardrail the load-bearing change is `doctrine slice selector add` on `slice-231.toml` — that file is what `slice conformance` reads; a design.md §7 prose edit alone leaves conformance red. The §7 touch-set row is the human mirror and should be added in the same pass.
+
+Exactly one path. Do not widen further: the other two undeclared cells (`slice-231.toml` itself, `plan.toml`) are the registry and the plan amendment, neither of which is an implementation touch worth declaring.
+
+Worth recording for the next phase-plan: the phase sheet predicted the *shape* of this gap correctly ("Selector gap, real") and closed it for `src/install.rs` via T1, but the allowlist touch was itself unpredicted — it only surfaced when the parity gate red-ed mid-phase. The general lesson is already in notes.md Learned: adding a `.doctrine/` line to `.gitignore` is never a one-file change."""
+
+[[finding]]
+id = "F-6"
+status = "verified"
+severity = "major"
+title = "Expected: slice conformance reports the same algebra wherever it runs. Observed: it reads the boundaries registry from the primary worktree but phase status from cwd's worktree, so any run inside a linked worktree reports every phase incomplete"
+detail = """
+Platform defect, found while auditing SL-231. Reproduced, same binary, same slice, same instant:
+
+  $ cd /workspace/doctrine && ./target/debug/doctrine slice conformance 231
+  SL-231: conformance
+  undeclared (46): ...
+
+  $ cd .doctrine/state/dispatch/candidate/cand-231-review-001 && /workspace/doctrine/target/debug/doctrine slice conformance 231
+  SL-231: conformance incomplete — partial coverage
+    - recorded row for PHASE-01, which is not a completed phase
+    ... (all five phases)
+
+`boundaries_path()` (src/state.rs:716-722) deliberately resolves through `crate::git::primary_worktree(cwd)`, so the registry is found from anywhere. Phase status does not: it is read from cwd's own `.doctrine/state/slice/<NNN>/phases/`, which is gitignored runtime state and therefore absent from every linked worktree. The two halves of the completeness gate resolve to different roots, so the gate sees five rows and zero completed phases and reports the exact inverse of the truth (all five phase-NN.toml files in the primary read `status = "completed"`; `slice status 231` reports 5/5).
+
+The consequence is not cosmetic. `dispatch sync --prepare-review` gates on this completeness check, and the audit skill instructs the auditor to run `slice conformance` as the mechanical drift signal — but the audit skill ALSO tells a dispatched slice to review the candidate interaction branch, which is a linked worktree. Following both instructions produces "incomplete — partial coverage", which the skill says to treat as itself a finding ("the registry was not recorded as phases landed"). An auditor who trusts it will bootstrap rows that already exist.
+
+Same root-resolution class as `mem_019f025ee2027bf281f7d3a013bc9415` (stale PATH binary stripping BoundaryRow fields) but a different mechanism: here the binary is correct and the two lookups simply disagree about which tree they mean."""
+disposition = "follow-up"
+response = """
+Captured as **ISS-269** — "slice conformance reads boundaries from the primary tree but phase status from cwd".
+
+Follow-up is the correct route here and not an escape: this is a platform defect in `slice conformance`, not a defect in SL-231's delivered work, and it lies outside both surfaces `/reconcile` writes (per-slice artefacts, governance/spec REV). It is owned work with a typed home, not a deferral of something this unit should have fixed.
+
+ISS-269 carries the reproduction (both invocations, same binary, same instant, opposite answers), the mechanism (`boundaries_path()` resolves through `primary_worktree(cwd)` while phase status is read from cwd's own gitignored `.doctrine/state/`, absent from every linked worktree), and the candidate fix (resolve phase status through the primary too, or refuse the completeness gate in a linked worktree rather than deriving an answer from half-resolved inputs).
+
+The reason this rates major rather than minor is the instruction collision it creates: the `/audit` skill tells the auditor both to run `slice conformance` as the mechanical drift signal AND to review a dispatched slice on the candidate interaction branch — a linked worktree. Following both produces `incomplete — partial coverage`, which the same skill says to treat as a finding in its own right. An auditor who trusts it will `record-delta` rows that already exist. This audit had to work around it by computing the algebra by hand."""
+
+[[finding]]
+id = "F-7"
+status = "verified"
+severity = "major"
+title = "Expected: a boundary row's diff is the phase's delta. Observed: rows misattribute in both directions — the start commit's own change is excluded, and a spanned refresh-base merge is included — turning 3 undeclared / 0 undelivered into 46 / 1"
+detail = """
+Platform defect, found while auditing SL-231. `conformance_outcome` (src/slice.rs:2852-2887) folds `git diff --name-status <code_start_oid>..<code_end_oid>` for each row. Two independent failures follow, and SL-231 hit both.
+
+FALSE UNDELIVERED — the start commit's own change is invisible. `git diff A..B` is exclusive of A, so any change made IN the row's start commit is not in the row. PHASE-01's row is `[095fca404, 02da8ebf4]`, and `095fca404` is "chore(SL-231): pre-seed ADR-001 observation=leaf for the PHASE-01 fork base" — a commit whose entire content is the one-line `.doctrine/adr/001/layering.toml` change. Verified: `git show --stat 095fca404` touches exactly that file; `git diff 095fca404..02da8ebf4 -- .doctrine/adr/001/layering.toml` is empty. So conformance reports `.doctrine/adr/001/layering.toml` as an undelivered selector while the bundle plainly delivers it.
+
+This is systematic, not incidental: the orchestrator pre-seed pattern (notes.md records it as required — `architecture_layering_gate` raises `Unclassified` for any `src/` unit absent from layering.toml, and workers may not write `.doctrine/`) puts authored content in exactly the commit that becomes the fork base. PHASE-01 EX-5's whole deliverable landed there.
+
+FALSE UNDECLARED — a spanned refresh-base merge. Already filed as ISS-268: the same PHASE-01 row spans the mid-drive `refresh-base` merge `0d2cb5671` (20 trunk commits), so SL-232/233/234's files, Cargo.lock, the plugin manifests and src/review.rs all fold in as SL-231's delta.
+
+Net effect measured against the true surface: `git diff --name-only main...review/231` is 29 files; matched by hand against review/231's 22 selectors the honest algebra is 3 undeclared, 0 undelivered. Conformance reports 46 undeclared, 1 undelivered. Both cells are wrong, in opposite directions, and the report is unusable without a full manual re-derivation — which is what this audit had to do.
+
+ISS-268 should be extended with the start-exclusion half, or the two filed as one defect: its three candidate fixes (re-base open rows at refresh-base, `--first-parent`, or compute from the imported code commit) address the span half only. The start-exclusion half needs the row to be `[start^, end]` semantics, or the pre-seed to land outside the row."""
+disposition = "follow-up"
+response = """
+Captured by extending **ISS-268** rather than filing a second item — both halves are the same fold in `conformance_outcome`, and splitting them would let a fix land for one and read as complete.
+
+ISS-268 already carried the false-undeclared half (a row spanning the mid-drive `refresh-base` merge folds 20 trunk commits in). It now also carries the mirror image, with its own evidence: `git diff A..B` is exclusive of A, so a change made *in* the row's start commit is invisible to the row. PHASE-01's row starts at `095fca404`, whose entire content is the one-line `.doctrine/adr/001/layering.toml` pre-seed — PHASE-01 EX-5's whole deliverable — so conformance reports a delivered selector as undelivered.
+
+The extension records that this is systematic, not incidental: the orchestrator pre-seed is required (`architecture_layering_gate` raises `Unclassified` for any `src/` unit missing from `layering.toml`, and workers may not write `.doctrine/`), so the pattern reliably puts authored content in exactly the commit that becomes the fork base.
+
+It also records what the existing candidate fixes do NOT cover. All three previously listed (re-base open rows at refresh-base, `--first-parent`, compute from the imported code commit) address the span half only; the start-exclusion half needs `[start^, end]` fold semantics, or a rule that the pre-seed lands outside the row it opens.
+
+Net measured on this slice: honest algebra 3 undeclared / 0 undelivered against the 29-file bundle; conformance reported 46 / 1. Both cells wrong, in opposite directions."""
+
+[[finding]]
+id = "F-8"
+status = "verified"
+severity = "minor"
+title = "Expected: the conclude cadence reaches a terminal dispatch state. Observed: its own authored commits advance trunk and re-arm the refresh-base prescription after the cadence has removed the coordination tree that refresh-base requires"
+detail = """
+Platform defect, found while auditing SL-231. The documented conclude cadence is: refresh-base → verify-vt → `dispatch sync --prepare-review` → remove the coordination worktree directory (keep refs) → `slice status <id> audit` → `/audit`.
+
+Steps 4-6 write authored state to the primary tree — the lifecycle flip to `audit`, plus whatever the cadence harvests (this session: an ISS filing and a case-notes append). Those commits land on edge, edge is promoted to main, and main is trunk. So the cadence's own bookkeeping advances trunk past the fork-point:
+
+  $ doctrine dispatch status --slice 231
+  dispatch: refs/heads/dispatch/231  (988ead5)
+  coord:    (removed)
+  trunk:    moved (3 commit(s) ahead of fork-point)
+  next:     trunk advanced past the prepared base — run 'dispatch refresh-base --slice 231' then re-prepare
+
+`git log --oneline dispatch/231..main` is exactly the three conclude-session commits: the ISS-268 filing, the lifecycle flip, and the case-notes append. `refresh-base` merges trunk into `dispatch/<N>` "in the live coordination worktree" — which step 4 of the same cadence removed. The prescription is unfollowable, and the state is not terminal, so `dispatch status` will keep prescribing it.
+
+Low impact — the three commits carry zero code, so nothing about the review surface is stale, and `dispatch candidate create --base refs/heads/main` folds them in cleanly (verified: the candidate merged with no conflicts and its `main...HEAD` diff is the 29-file bundle). But the oracle is the documented authority for "do the ONE thing it prescribes", and here it prescribes an impossible action indefinitely. Either the freshness check should ignore trunk movement that is `.doctrine/`-authored-only, or `status` should recognise `coord: (removed)` and prescribe candidate-create instead."""
+disposition = "follow-up"
+response = """
+Captured as **ISS-270** — "conclude cadence re-arms an unfollowable refresh-base after removing the coord tree".
+
+Platform defect in the dispatch oracle, outside reconcile's two write surfaces, so follow-up with a typed home is the route.
+
+ISS-270 carries the observed `dispatch status` output, the proof that the three offending commits are the cadence's own bookkeeping (`git log --oneline dispatch/231..main` = the ISS filing, the lifecycle flip, the case-notes append — zero code), and the structural cause: steps 4-6 of the cadence write authored state to the primary tree, those commits reach trunk, and `refresh-base` runs only in the coordination worktree that step 4 removed.
+
+Kept at minor deliberately. The consequence is genuinely small — no code moved, and `dispatch candidate create --base refs/heads/main` folded the three commits in with zero conflicts, verified on this slice. What earns it a ticket rather than a shrug is that `dispatch status`/`next` is the documented authority for "do the ONE thing it prescribes", and a permanently unfollowable prescription either trains the operator to ignore the oracle or sends them to rebuild a coordination tree they just tore down. Both are worse than the drift itself.
+
+ISS-270 prefers the second candidate fix: have `status` recognise `coord: (removed)` and prescribe candidate-create. Once the coord tree is gone the slice has left the funnel's altitude, and base freshness becomes the candidate's concern — which is where this audit resolved it in practice."""
+
+[[finding]]
+id = "F-9"
+status = "verified"
+severity = "minor"
+title = "Expected: FAIL means a mandated VT criterion is unmet. Observed: slice verify-vt reports FAIL when the mandated test_file merely does not exist in the tree it is run from, so a wrong-tree run shows 16 halting failures"
+detail = """
+Platform defect, found while auditing SL-231. Run from the primary tree after the coordination worktree is removed and before integration, `slice verify-vt 231` reports 16 of 17 rows FAIL:
+
+    PHASE-01: ✗ FAIL VT-1 — mandated test_file `src/observation/wire.rs` not found
+    PHASE-03: ✗ FAIL VT-3 — keyword `observation_write_class_split` absent from `src/main.rs`
+    ... 16 rows
+
+Run from the candidate worktree, the same binary and the same plan report 17/17 PASS. Nothing is wrong with the slice: the implementation lives on `review/231` and is simply not in the primary tree yet.
+
+The taxonomy already has the right word for this. Per the boot glossary and the dispatch skill, FAIL is halting and "HALTS handover"; UNCHECKABLE is visible and non-halting. A mandated `test_file` that does not exist in the tree under inspection is definitionally uncheckable — the gate has no evidence either way — whereas FAIL asserts the criterion was checked and not met. The two are conflated, so the verb's most alarming output is also its most likely false one at exactly the moment an auditor reaches for it.
+
+The window is structural, not a mistake by the operator: the conclude cadence removes the coordination tree (the only tree that had both the plan and the code) before `/audit` runs, and `/close` is what integrates. So between conclude and close there is no tree where `verify-vt` is both runnable and meaningful except a freshly created candidate — which the audit skill does prescribe, but nothing warns that running it from the parent tree instead produces a wall of FAILs. Suggested: report `Uncheckable` with "not present in this tree" when the mandated file is absent, and keep FAIL for a present file whose keywords are missing."""
+disposition = "follow-up"
+response = """
+Captured as **ISS-271** — "verify-vt reports FAIL for a test_file absent from the tree, not UNCHECKABLE".
+
+Platform defect in the vtgate's severity mapping; outside reconcile's write surfaces, so follow-up with a typed home.
+
+ISS-271 carries both runs — 16 FAIL from the primary tree, 17/17 PASS from the candidate, same binary and same `plan.toml` — and the taxonomy argument: FAIL is defined as halting and "HALTS handover", while `Uncheckable` is visible and non-halting. A mandated `test_file` absent from the tree under inspection is definitionally uncheckable; the gate has no evidence either way. FAIL asserts the criterion *was* checked and failed, which is a different and much louder claim.
+
+The window is structural rather than operator error, which is why it is worth fixing rather than documenting: the conclude cadence removes the coordination tree — the only tree holding both the plan and the code — before `/audit` runs, and integration is `/close`'s job. Between those two points the only tree where `verify-vt` is both runnable and meaningful is a freshly created candidate. The `/audit` skill does prescribe the candidate, but nothing warns that reaching for the VT gate from the parent tree first produces a wall of FAILs. The verb's most alarming output is also its most likely false one at exactly the moment an auditor reaches for it.
+
+Proposed fix in the ticket keeps the halting semantics where they mean something: `Uncheckable` with "not present in this tree" when the file is absent, FAIL retained for a present file whose mandated keywords are missing."""
+
+# Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
+# Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

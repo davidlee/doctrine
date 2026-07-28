@@ -6,11 +6,28 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-28 · all five phases completed, pre-conclude · code tip
-b5428c47 · dispatch/231 20e1556fe · edge cf062dfae · verify-vt exit 0 (PASS on
-PHASE-01/02/03/05; PHASE-04's three rows pending their derived registry row)
+fresh-as-of: 2026-07-28 · conclude cadence complete, RV-318 audit done · review
+surface `candidate/231/review-001` @ f1686831e (admitted) · dispatch/231
+988ead5bd · edge 13e90d654 · verify-vt 17/17 PASS and `check gate` exit 0 on the
+candidate · lifecycle at reconcile
 
 ### Produced
+
+- RV-318 — the reconciliation audit. 9 findings: 1 blocker / 4 major / 4 minor,
+  all terminal. Reviewed the candidate interaction branch (29-file bundle,
+  conflict-free merge onto main), not the raw evidence refs. Three repaired in
+  audit (F-2/F-3/F-4 @ f1686831e), two routed to `/reconcile` (F-1, F-5), four
+  captured as platform work (ISS-268 extended; ISS-269/270/271 new).
+- Audit repairs @ f1686831e — facet origin is now DERIVED from the merge branch
+  rather than copied from the caller (one `adopt` helper replacing 30 repeated
+  blocks); all six production `schema_version` literals single-sourced onto
+  `wire::SCHEMA_VERSION`; the shipped worker definition gained the body prose
+  PHASE-04 T6 never wrote. `merge_explicit_facets` gained its first unit tests.
+- ISS-269, ISS-270, ISS-271 — three dispatch/verification platform defects found
+  while auditing; ISS-268 extended with its mirror-image half.
+- The conclude cadence itself — `refresh-base` merged 66 trunk commits with zero
+  conflicts (both authored forks were disjoint hunks), `prepare-review` derived
+  the registry and cut 6 refs, coord tree removed with all 7 refs preserved.
 
 - PHASE-05 — distribution and dogfood activation, run **inline in the
   coordination tree by the orchestrator**, not dispatched (D1). Boundary row
@@ -156,6 +173,43 @@ PHASE-01/02/03/05; PHASE-04's three rows pending their derived registry row)
 
 ### Learned
 
+- **A VT criterion's keyword list can be narrower than its own `expects` prose,
+  and nothing mechanical compares the two.** PHASE-03 VT-1's `expects` names
+  "stdin/file input" and "explicit-over-automatic enrichment"; its four keywords
+  touch neither, so it reported PASS while two clauses of design §3.1 went
+  undelivered (RV-318 F-1). This is the RV-317 F-4 class recurring in a
+  criterion that remediation did not re-examine — the sweep followed the
+  instances it was pointed at, not the class. When auditing, read `expects`
+  against the keyword list first; it is faster than reading either against the
+  code, and it is where this slice hid its only blocker.
+- **A function that repeats a rule 30 times will get the rule wrong somewhere,
+  and the repetition is visible before the bug is.** `merge_explicit_facets` was
+  160 lines of hand-written four-line blocks and carried BOTH unadjudicated
+  PHASE-04 UNCERTAIN items — a caller-forgeable origin marker and five magic
+  version literals. It also had no unit tests at all, only one e2e case. Fixing
+  the class made the code smaller and deleted the `#[expect(assigning_clones)]`
+  the old shape needed.
+- **A VA that asserts agreement ACROSS surfaces needs a second reader, and the
+  weak surface is the one where "I added the token" and "I documented the
+  capability" feel like the same act.** VA-1 claimed five surfaces tell one
+  capability-aware story; four did, beautifully. The fifth — the shipped worker
+  definition — had gained only a frontmatter `tools:` entry, so a confined
+  worker received a capability it was never told about, while the two documents
+  that DO carry the routing are not what a worker reads at spawn (RV-318 F-3).
+  Self-checked by its author in the same session, it read as coherent.
+- **Re-derive the conformance algebra by hand before believing either cell.** On
+  this slice the report said 46 undeclared / 1 undelivered; the truth against
+  the 29-file bundle was 3 / 0. Four independent defects compound there: a row
+  spanning a mid-drive `refresh-base` (ISS-268), a row whose start commit
+  carries its own deliverable and is excluded by `diff A..B` (ISS-268, added at
+  audit), and `slice conformance` resolving the registry from the primary but
+  phase status from cwd (ISS-269). `git diff --name-only main...<bundle>` cross
+  matched against the slice's selectors is the honest computation.
+- **`verify-vt` from the parent tree between conclude and close is meaningless,
+  and it says FAIL rather than UNCHECKABLE.** 16 halting failures from the
+  primary, 17/17 PASS from the candidate, same binary and plan (ISS-271). The
+  window is structural: the cadence removes the only tree holding both plan and
+  code before `/audit` runs. Create the candidate first, then verify there.
 - **Adding a `.doctrine/` line to `.gitignore` is never a one-file change.**
   `every_runtime_gitignore_glob_is_classified` reds on any new runtime-tier glob
   until it declares whether a worker fork is denied it or regenerates it
@@ -260,44 +314,30 @@ PHASE-01/02/03/05; PHASE-04's three rows pending their derived registry row)
 
 ### Open
 
-- **The conclude cadence is the next stage, and trunk has moved 63 commits past
-  the fork-point.** `dispatch status` prescribes
-  `dispatch refresh-base --slice 231` before `prepare-review`. Worth doing while
-  the two known authored divergences are still in context (see below) — each
-  conflict is then one phase's delta rather than a pile at candidate-create.
-- **Two authored files have forked coord↔edge, both with edge ahead.**
-  `notes.md` (edge canonical — the coord copy is the 40-line fork-time version)
-  and `.doctrine/governance.md` (edge carries a research-section addition the
-  coord copy lacks; different hunk from PHASE-05's, so it should merge clean).
-  The general rule is edit-the-canonical-copy
-  (`mem_019f738d55707ed1a1204bd6288bf7db`), but note this slice inverts that
-  memory's stated default: here the PRIMARY is canonical, not the coord tree.
-- PHASE-04's three VT rows read UNATTRIBUTABLE because PHASE-04 has no
-  conformance registry row yet — confirmed via `slice conformance`, not
-  inferred. The claude arm derives that row at
-  `dispatch sync --prepare-review`, which also gates completeness. `verify-vt`
-  exits 0.
-- PHASE-05's own selectors were declared mid-phase (`src/install.rs`); the
-  phase also touched `src/worktree/allowlist.rs`, which has no design-target
-  selector. Expect it as an undeclared conformance cell at audit — adjudicate
-  it there rather than pre-emptively widening the selector set.
-- PHASE-04 worker UNCERTAIN items, unadjudicated and due at audit: facet
-  `schema_version` defaulting, and caller-supplied `*_origin` values riding
-  through as sent.
-- PHASE-04 T6 was minimal — the shipped worker definition gained the capability
-  token but no body prose describing it. Likely PHASE-05's scope; confirm there
-  rather than leaving it to audit.
+- **RV-318 F-1 is the one thing that must not close unreconciled.** Design §3.1
+  says the record verb also accepts repeatable typed facet fields and a complete
+  request from stdin or a file; the CLI accepts neither, and `run_record` passes
+  a hard-coded `None` for explicit facets, so "explicit caller values win" is
+  unreachable there. Deliver-or-narrow is the user's fork — see the RV-318
+  reconciliation brief. Whichever way it goes, PHASE-03 VT-1's `expects` and its
+  keyword list must be brought into agreement in the same pass; that is a
+  design/plan escalation, OFF reconcile's direct-edit surface.
+- **RV-318 F-5 — declare the `src/worktree/allowlist.rs` selector** via
+  `doctrine slice selector add` (the registry is what `slice conformance` reads;
+  a design.md §7 prose edit alone leaves it red), plus the §7 mirror row.
+  Exactly one path; do not widen.
+- **`w/SL-231-p01` is still un-reaped.** The landed-oracle cannot certify it, so
+  removal needs `--force` — a knowing bypass, left for a deliberate decision
+  rather than taken during the cadence.
+- ISS-268 (both halves), ISS-269, ISS-270, ISS-271 — the dispatch/conformance
+  platform defects this slice surfaced. None blocks SL-231; all four make the
+  mechanical drift signal untrustworthy until they land.
 - QUE-176 — trustworthy per-harness token instrumentation boundaries
 - IMP-319 — subprocess-worker observation capture parity
 - IMP-320 — configurable observation guidance in boot context
 - IDE-005 — harness identification through bounded environment enrichment
 - IMP-328 — pi spawn fork unbound to slice/phase (blocks funnel import on the pi
   arm until the script derives branch/dir from `(slice, phase)`)
-- `slice verify-vt 231` is a SLICE-level conclude-cadence gate and remains
-  pending until all five phases land — not a PHASE-01 gap.
-- PHASE-01 conformance is substantively clean (6/6 declared source paths hit);
-  its one `--strict` failure is the ISS-264 machinery false positive, not a
-  worker scope violation.
 - No ledgered code review exists for the PHASE-01 delta. The informal deepseek
   pass produced one confidently-wrong finding and silently skipped the check
   flagged as most important, so it is not sufficient evidence on its own. VT-4
