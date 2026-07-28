@@ -314,14 +314,13 @@ candidate · lifecycle at reconcile
 
 ### Open
 
-- **RV-318 F-1 is the one thing that must not close unreconciled.** Design §3.1
-  says the record verb also accepts repeatable typed facet fields and a complete
-  request from stdin or a file; the CLI accepts neither, and `run_record` passes
-  a hard-coded `None` for explicit facets, so "explicit caller values win" is
-  unreachable there. Deliver-or-narrow is the user's fork — see the RV-318
-  reconciliation brief. Whichever way it goes, PHASE-03 VT-1's `expects` and its
-  keyword list must be brought into agreement in the same pass; that is a
-  design/plan escalation, OFF reconcile's direct-edit surface.
+- **RV-318 F-1 — SETTLED: deliver, not narrow** (user decision at audit
+  hand-back). Design §3.1 stands as written and needs no reconcile edit; the CLI
+  is what must catch up. Owner **IMP-332**, minted pre-close and linked
+  `originates_from SL-231`, sequenced AFTER close and executed INLINE. It also
+  carries the PHASE-03 VT-1 keyword append (the criterion's `expects` names two
+  clauses its keywords never checked) — a design/plan escalation, OFF
+  reconcile's direct-edit surface, so it rides IMP-332 rather than the brief.
 - **RV-318 F-5 — declare the `src/worktree/allowlist.rs` selector** via
   `doctrine slice selector add` (the registry is what `slice conformance` reads;
   a design.md §7 prose edit alone leaves it red), plus the §7 mirror row.

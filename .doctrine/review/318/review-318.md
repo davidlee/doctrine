@@ -172,16 +172,24 @@ here either: already landed at `f1686831e`.
   (`slice-231.toml` itself, `plan.toml`) are the registry and the RV-317 plan
   amendment, neither an implementation touch.
 
-- **F-1 — `design.md` §3.1:169-175: settle the two undelivered CLI bullets.**
-  A fork for the user, not a mechanical edit. Either:
-  - **deliver** — the two input surfaces (repeatable typed facet fields;
-    complete request from stdin or a file) become a follow-on phase or slice,
-    bringing the CLI to parity with the MCP adapter, which already accepts
-    explicit facets. `design.md` is then correct as written and needs no edit; or
-  - **narrow** — drop the two bullets from §3.1 with a recorded rationale, and
-    state that explicit facets are an MCP-only capability in V1.
+- **F-1 — `design.md` §3.1:169-175. SETTLED: deliver, do not narrow.** User
+  decision, taken at the audit hand-back. `design.md` §3.1 stands as written and
+  **needs no reconcile edit** — the artefact is correct; the implementation is
+  what must catch up. Recorded so `/reconcile` does not re-open the fork the
+  brief originally presented.
 
-  Whichever is chosen, `design.md` and the shipped CLI must agree at the end.
+  Owner: **IMP-332** (`references --role originates_from SL-231`), minted before
+  close so the slice does not close over an unowned gap. It carries what is
+  already decided (§3.3 fixes the request shape; `merge_explicit_facets` is the
+  shared policy both adapters reach), what is still open (facet flag grammar for
+  five groups of heterogeneous field types; whether stdin/file takes the §3.3
+  object verbatim; precedence when both are supplied; the existing `-` sentinel
+  precedent from SL-230 D-P5-1), and the route: small-change (sketch → accept →
+  implement) rather than a full slice, **sequenced after SL-231 closes and
+  executed inline**, not dispatched.
+
+  `/reconcile` action for this item: **none beyond confirming the above.** Do not
+  edit `design.md` §3.1.
 
 ### Governance/spec (REV)
 
@@ -195,8 +203,9 @@ itself is correct and unchanged.
   "stdin/file input" and "explicit-over-automatic enrichment"; its four keywords
   cover neither. `plan.toml` `EN-/EX-/VT-` ids are immutable-append and
   `plan.toml` is **off** reconcile's direct-edit surface, so this cannot be a
-  brief item. Route it deliberately: under **deliver**, append keywords (never
-  renumber) so the criterion covers its own text; under **narrow**, correct the
-  `expects` prose in the same amendment. Left unrouted, the plan keeps asserting
-  a contract nothing checks — which is how F-1 survived five phases and a
-  ledgered code review.
+  brief item. Now that F-1 is settled as **deliver**, the route is fixed:
+  **append** keywords to PHASE-03 VT-1 (ids immutable — append, never renumber)
+  when IMP-332's work lands, so the criterion covers its own text. Recorded in
+  IMP-332 as in-scope for that unit. Left unrouted, the plan keeps asserting a
+  contract nothing checks — which is how F-1 survived five phases and a ledgered
+  code review.
