@@ -1,0 +1,78 @@
+id = 236
+slug = "worker-guard-honours-explicit-project-root"
+title = "Worker-guard honours explicit project root"
+status = "proposed"
+created = "2026-07-28"
+updated = "2026-07-28"
+tags = []
+
+[relationships]
+needs = []                      # slice→work hard prerequisite
+after = []                      # slice→work soft sequence: { to, rank }
+
+[[selector]]
+selector = "src/commands/guard.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/root.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/main.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/commands/cli.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/worktree/**"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "src/test_support.rs"
+intent = "scope-relevant"
+
+[[selector]]
+selector = "tests/e2e_*.rs"
+intent = "scope-relevant"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-006"
+
+[[relation]]
+label = "governed_by"
+target = "ADR-008"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "ISS-028"
+
+[[relation]]
+label = "references"
+role = "originates_from"
+target = "ISS-267"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "must preserve REQ-192 write_class exhaustiveness and fail-closed marker guard"
+target = "SPEC-012"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "explicit project-root flag surface"
+target = "SPEC-013"
+
+# STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
+# `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
+# relation axes — the `[relationships]` table above holds only the dep/seq payload
+# (`needs`/`after`, SL-060). Author a structural edge with the `doctrine link` verb
+# — it validates the (source, label) pair and resolves the target:
+#   doctrine link SL-NNN specs SPEC-018
+#   doctrine link SL-NNN governed_by ADR-010
+# `doctrine inspect SL-NNN` renders the inbound + outbound edges.

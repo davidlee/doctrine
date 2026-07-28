@@ -32,6 +32,31 @@ tests pass inside a fork without weakening confinement at all — the guard woul
 simply check the marker of the tree it is actually writing to. Worth checking
 whether other CWD-rooted lookups in `guard.rs` share the skew.
 
+### Correction (2026-07-28, SL-236 pre-design research)
+
+The diagnosis above is correct; **the fix direction it proposes is not**. Read
+this before acting on the paragraph above.
+
+Threading `-p` "into the worker-marker lookup" is not reachable where the guard
+runs. `worker_guard` is called on the **outer** `Command` enum before dispatch,
+and only **9 of 33** Write-classed variants carry a top-level `path` field. The
+other 24 — including `Slice`, `Memory`, `Adr`, `Backlog`, `Review`, `Worktree`,
+`Dispatch` — are newtype-args variants (`Command::Adr { command: AdrCommand }`)
+whose `-p` lives one level down on the inner args struct.
+
+Consequence: a `write_class`-level path extraction **cannot fix
+`e2e_adr_cli_golden`**, one of the two tests this issue was filed about.
+
+Measured facts (2026-07-28): `-p` is declared **202 times across 27 files** (20
+in `commands/cli.rs`, 182 nested), all `Option<PathBuf>`. The `Cli` struct
+carries no `-p`; its only `global = true` arg is `--color`. `guard.rs` is the
+only *unintentional* `root::find(None, …)` — the sites in `commands/cli.rs` and
+`state.rs` are commented deliberate choices.
+
+The real fix is a design fork (global `-p` on `Cli`, or pushing the marker check
+down to `root::find`), now scoped and governed by **SL-236**. Do not pick one off
+this card.
+
 Observed again at SL-228 PHASE-03: ~8 targets red in the worker shell
 (`e2e_link_unlink`, `e2e_adr_cli_golden`, `e2e_dep_seq_verbs`, …) while the same
 targets passed inside the `worker_commit` gate's own run.

@@ -65,3 +65,29 @@ It is invisible in normal development (the primary tree passes) and appears only
 inside dispatch forks — which is precisely where workers run `cargo test` and
 where a red suite is most expensive to diagnose. It also erodes the signal: a
 worker seeing one pre-existing failure learns to discount failures.
+
+## Mostly subsumed by ISS-028 (2026-07-28, SL-236 pre-design research)
+
+The sweep proposed above is **largely a workaround for ISS-028**, not an
+independent fix — do not run it first.
+
+`new_issue` already passes `-p <tempdir>` at `tests/e2e_backlog_filter_alias.rs`.
+That is this card's own option 2, already in the code. It fails anyway because
+`worker_guard` **ignores the explicit `-p`** and resolves the root from CWD
+(ISS-028), so the fork's marker is found even though the write targets a
+markerless tempdir. Fixing the guard dissolves this instance outright.
+
+Measured across the 29 files calling `env_remove("DOCTRINE_WORKER")`:
+
+- **19 also pass `-p`** → subsumed by the ISS-028 guard fix; editing them now
+  would be wasted work reverted later.
+- **10 do not** (chiefly `e2e_worktree_*`, plus `e2e_worker_gate_skip`,
+  `e2e_value_claims`) → genuinely operate on the real marked tree and still need
+  the both-legs helper. **This is the true residual scope of ISS-267.**
+
+Sequencing: land the ISS-028 guard fix, re-measure, then sweep the residual.
+Both are scoped under **SL-236**.
+
+Open question carried into design: `test_support::under_worker_marker()` checks
+`repo_root()` — the test binary's root, not the root under test — so it may be
+the wrong helper for tempdir-rooted tests.
