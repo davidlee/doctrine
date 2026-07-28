@@ -406,9 +406,25 @@ impl Facets {
     }
 }
 
+/// Adopt one explicit facet field over its automatic counterpart.
+///
+/// The origin is **derived from reaching this function**, never read from the
+/// caller: a value supplied in the explicit facets is explicit by construction,
+/// whatever `<field>_origin` the caller sent alongside it. Design §2.3 makes
+/// origin a factual record of how a value arrived, and it is the only
+/// provenance discriminator the corpus carries — a caller able to stamp
+/// `Automatic` on its own value would make every origin-partitioned statistic
+/// unsound (RV-318 F-2).
+fn adopt<T: Clone>(value: &mut Option<T>, origin: &mut Option<Origin>, explicit: Option<&T>) {
+    if let Some(supplied) = explicit {
+        *value = Some(supplied.clone());
+        *origin = Some(Origin::Explicit);
+    }
+}
+
 /// Merge explicit (caller-supplied) facets over automatic enrichment, field by
-/// field. **Explicit values win**, and each winning field carries the caller's
-/// own origin marker.
+/// field. **Explicit values win** and are marked [`Origin::Explicit`]; fields
+/// the caller does not shadow keep their automatic value and origin.
 ///
 /// Pure `Facets → Facets` policy with no adapter in it, so it lives in the leaf
 /// beside the facet types themselves rather than in either adapter: the CLI
@@ -416,10 +432,6 @@ impl Facets {
 /// in the SAME tier and cannot import one another (ADR-001 — the
 /// `mcp_server → commands` back edge is severed), so a shared home below both is
 /// the only place one implementation can serve both.
-#[expect(
-    clippy::assigning_clones,
-    reason = "field-by-field Option merge: clone_from on Option is not clearer"
-)]
 pub(crate) fn merge_explicit_facets(auto: Facets, explicit: Option<Facets>) -> Facets {
     let Some(explicit) = explicit else {
         return auto;
@@ -430,153 +442,107 @@ pub(crate) fn merge_explicit_facets(auto: Facets, explicit: Option<Facets>) -> F
     // For each facet group, if explicit has the group, merge field by field
     if let Some(ref e) = explicit.provenance {
         let m = merged.provenance.get_or_insert_with(|| ProvenanceFacet {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             ..Default::default()
         });
-        if e.author.is_some() {
-            m.author = e.author.clone();
-            m.author_origin = e.author_origin;
-        }
-        if e.witness.is_some() {
-            m.witness = e.witness.clone();
-            m.witness_origin = e.witness_origin;
-        }
-        if e.ratifier.is_some() {
-            m.ratifier = e.ratifier.clone();
-            m.ratifier_origin = e.ratifier_origin;
-        }
+        adopt(&mut m.author, &mut m.author_origin, e.author.as_ref());
+        adopt(&mut m.witness, &mut m.witness_origin, e.witness.as_ref());
+        adopt(&mut m.ratifier, &mut m.ratifier_origin, e.ratifier.as_ref());
     }
     if let Some(ref e) = explicit.execution {
         let m = merged.execution.get_or_insert_with(|| ExecutionFacet {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             ..Default::default()
         });
-        if e.interface.is_some() {
-            m.interface = e.interface.clone();
-            m.interface_origin = e.interface_origin;
-        }
-        if e.product_surface.is_some() {
-            m.product_surface = e.product_surface.clone();
-            m.product_surface_origin = e.product_surface_origin;
-        }
-        if e.command.is_some() {
-            m.command = e.command.clone();
-            m.command_origin = e.command_origin;
-        }
-        if e.repository_context.is_some() {
-            m.repository_context = e.repository_context.clone();
-            m.repository_context_origin = e.repository_context_origin;
-        }
-        if e.harness.is_some() {
-            m.harness = e.harness.clone();
-            m.harness_origin = e.harness_origin;
-        }
-        if e.model.is_some() {
-            m.model = e.model.clone();
-            m.model_origin = e.model_origin;
-        }
-        if e.role.is_some() {
-            m.role = e.role.clone();
-            m.role_origin = e.role_origin;
-        }
-        if e.execution_mode.is_some() {
-            m.execution_mode = e.execution_mode.clone();
-            m.execution_mode_origin = e.execution_mode_origin;
-        }
-        if e.lifecycle_stage.is_some() {
-            m.lifecycle_stage = e.lifecycle_stage.clone();
-            m.lifecycle_stage_origin = e.lifecycle_stage_origin;
-        }
-        if e.skill.is_some() {
-            m.skill = e.skill.clone();
-            m.skill_origin = e.skill_origin;
-        }
+        adopt(
+            &mut m.interface,
+            &mut m.interface_origin,
+            e.interface.as_ref(),
+        );
+        adopt(
+            &mut m.product_surface,
+            &mut m.product_surface_origin,
+            e.product_surface.as_ref(),
+        );
+        adopt(&mut m.command, &mut m.command_origin, e.command.as_ref());
+        adopt(
+            &mut m.repository_context,
+            &mut m.repository_context_origin,
+            e.repository_context.as_ref(),
+        );
+        adopt(&mut m.harness, &mut m.harness_origin, e.harness.as_ref());
+        adopt(&mut m.model, &mut m.model_origin, e.model.as_ref());
+        adopt(&mut m.role, &mut m.role_origin, e.role.as_ref());
+        adopt(
+            &mut m.execution_mode,
+            &mut m.execution_mode_origin,
+            e.execution_mode.as_ref(),
+        );
+        adopt(
+            &mut m.lifecycle_stage,
+            &mut m.lifecycle_stage_origin,
+            e.lifecycle_stage.as_ref(),
+        );
+        adopt(&mut m.skill, &mut m.skill_origin, e.skill.as_ref());
     }
     if let Some(ref e) = explicit.work_context {
         let m = merged.work_context.get_or_insert_with(|| WorkContextFacet {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             ..Default::default()
         });
-        if e.slice.is_some() {
-            m.slice = e.slice.clone();
-            m.slice_origin = e.slice_origin;
-        }
-        if e.phase.is_some() {
-            m.phase = e.phase.clone();
-            m.phase_origin = e.phase_origin;
-        }
-        if e.backlog.is_some() {
-            m.backlog = e.backlog.clone();
-            m.backlog_origin = e.backlog_origin;
-        }
-        if e.change.is_some() {
-            m.change = e.change.clone();
-            m.change_origin = e.change_origin;
-        }
+        adopt(&mut m.slice, &mut m.slice_origin, e.slice.as_ref());
+        adopt(&mut m.phase, &mut m.phase_origin, e.phase.as_ref());
+        adopt(&mut m.backlog, &mut m.backlog_origin, e.backlog.as_ref());
+        adopt(&mut m.change, &mut m.change_origin, e.change.as_ref());
     }
     if let Some(ref e) = explicit.correlation {
         let m = merged.correlation.get_or_insert_with(|| CorrelationFacet {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             ..Default::default()
         });
-        if e.agent_id.is_some() {
-            m.agent_id = e.agent_id.clone();
-            m.agent_id_origin = e.agent_id_origin;
-        }
-        if e.session.is_some() {
-            m.session = e.session.clone();
-            m.session_origin = e.session_origin;
-        }
-        if e.run.is_some() {
-            m.run = e.run.clone();
-            m.run_origin = e.run_origin;
-        }
-        if e.request.is_some() {
-            m.request = e.request.clone();
-            m.request_origin = e.request_origin;
-        }
-        if e.parent_observation.is_some() {
-            m.parent_observation = e.parent_observation.clone();
-            m.parent_observation_origin = e.parent_observation_origin;
-        }
-        if e.related_observations.is_some() {
-            m.related_observations = e.related_observations.clone();
-            m.related_observations_origin = e.related_observations_origin;
-        }
+        adopt(&mut m.agent_id, &mut m.agent_id_origin, e.agent_id.as_ref());
+        adopt(&mut m.session, &mut m.session_origin, e.session.as_ref());
+        adopt(&mut m.run, &mut m.run_origin, e.run.as_ref());
+        adopt(&mut m.request, &mut m.request_origin, e.request.as_ref());
+        adopt(
+            &mut m.parent_observation,
+            &mut m.parent_observation_origin,
+            e.parent_observation.as_ref(),
+        );
+        adopt(
+            &mut m.related_observations,
+            &mut m.related_observations_origin,
+            e.related_observations.as_ref(),
+        );
     }
     if let Some(ref e) = explicit.usage {
         let m = merged.usage.get_or_insert_with(|| UsageFacet {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             ..Default::default()
         });
-        if e.source.is_some() {
-            m.source = e.source.clone();
-            m.source_origin = e.source_origin;
-        }
-        if e.scope.is_some() {
-            m.scope = e.scope.clone();
-            m.scope_origin = e.scope_origin;
-        }
-        if e.units.is_some() {
-            m.units = e.units.clone();
-            m.units_origin = e.units_origin;
-        }
-        if e.total_tokens.is_some() {
-            m.total_tokens = e.total_tokens;
-            m.total_tokens_origin = e.total_tokens_origin;
-        }
-        if e.prompt_tokens.is_some() {
-            m.prompt_tokens = e.prompt_tokens;
-            m.prompt_tokens_origin = e.prompt_tokens_origin;
-        }
-        if e.completion_tokens.is_some() {
-            m.completion_tokens = e.completion_tokens;
-            m.completion_tokens_origin = e.completion_tokens_origin;
-        }
-        if e.completeness.is_some() {
-            m.completeness = e.completeness.clone();
-            m.completeness_origin = e.completeness_origin;
-        }
+        adopt(&mut m.source, &mut m.source_origin, e.source.as_ref());
+        adopt(&mut m.scope, &mut m.scope_origin, e.scope.as_ref());
+        adopt(&mut m.units, &mut m.units_origin, e.units.as_ref());
+        adopt(
+            &mut m.total_tokens,
+            &mut m.total_tokens_origin,
+            e.total_tokens.as_ref(),
+        );
+        adopt(
+            &mut m.prompt_tokens,
+            &mut m.prompt_tokens_origin,
+            e.prompt_tokens.as_ref(),
+        );
+        adopt(
+            &mut m.completion_tokens,
+            &mut m.completion_tokens_origin,
+            e.completion_tokens.as_ref(),
+        );
+        adopt(
+            &mut m.completeness,
+            &mut m.completeness_origin,
+            e.completeness.as_ref(),
+        );
     }
 
     merged
@@ -2399,6 +2365,108 @@ summary = "ok"
         assert!(
             matches!(&rt.payload, Payload::Friction { detail: None, .. }),
             "omitted detail must remain None after round-trip"
+        );
+    }
+
+    // --- RV-318: explicit-facet merge ---
+
+    /// RV-318 F-2. `*_origin` records how a value ARRIVED (design §2.3), so it
+    /// is derived from the branch the value came through — never read from the
+    /// caller. A caller that could stamp `automatic` on a value it supplied
+    /// would forge the only provenance discriminator the corpus carries, and
+    /// every statistic that partitions on origin would be unsound.
+    #[test]
+    fn caller_supplied_origin_cannot_forge_automatic() {
+        let auto = Facets {
+            execution: Some(ExecutionFacet {
+                schema_version: SCHEMA_VERSION,
+                interface: Some("mcp".to_string()),
+                interface_origin: Some(Origin::Automatic),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        // The caller supplies a value AND claims it was auto-enriched.
+        let explicit = Facets {
+            execution: Some(ExecutionFacet {
+                schema_version: SCHEMA_VERSION,
+                interface: Some("pi".to_string()),
+                interface_origin: Some(Origin::Automatic),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let merged = merge_explicit_facets(auto, Some(explicit));
+        let execution = merged.execution.expect("execution facet");
+
+        assert_eq!(execution.interface.as_deref(), Some("pi"));
+        assert_eq!(
+            execution.interface_origin,
+            Some(Origin::Explicit),
+            "a caller-supplied value is explicit however the caller labelled it"
+        );
+    }
+
+    /// The honest direction still behaves: an unshadowed automatic field keeps
+    /// its automatic origin, so the fix above narrows nothing.
+    #[test]
+    fn unshadowed_automatic_fields_keep_automatic_origin() {
+        let auto = Facets {
+            execution: Some(ExecutionFacet {
+                schema_version: SCHEMA_VERSION,
+                interface: Some("mcp".to_string()),
+                interface_origin: Some(Origin::Automatic),
+                command: Some("observation_record".to_string()),
+                command_origin: Some(Origin::Automatic),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let explicit = Facets {
+            execution: Some(ExecutionFacet {
+                schema_version: SCHEMA_VERSION,
+                interface: Some("pi".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let execution = merge_explicit_facets(auto, Some(explicit))
+            .execution
+            .expect("execution facet");
+
+        assert_eq!(execution.interface_origin, Some(Origin::Explicit));
+        assert_eq!(
+            execution.command_origin,
+            Some(Origin::Automatic),
+            "a field the caller did not shadow keeps its automatic origin"
+        );
+    }
+
+    /// RV-318 F-4 (STD-001). A facet group created by the merge must carry the
+    /// single-source schema version, not a literal that silently stays at 1
+    /// when the const moves. Proven red by bumping `SCHEMA_VERSION`.
+    #[test]
+    fn merge_created_facet_groups_carry_the_single_source_version() {
+        let explicit = Facets {
+            work_context: Some(WorkContextFacet {
+                schema_version: SCHEMA_VERSION,
+                slice: Some("SL-231".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let merged = merge_explicit_facets(Facets::default(), Some(explicit));
+
+        assert_eq!(
+            merged
+                .work_context
+                .expect("work_context facet")
+                .schema_version,
+            SCHEMA_VERSION,
+            "a merge-created facet group must take the version from the const"
         );
     }
 }

@@ -488,7 +488,7 @@ fn enrich_cli(no_enrich: bool, root: &std::path::Path) -> Facets {
     };
 
     facets.execution = Some(wire::ExecutionFacet {
-        schema_version: 1,
+        schema_version: wire::SCHEMA_VERSION,
         interface: Some(INTERFACE_CLI.to_string()),
         interface_origin: Some(Origin::Automatic),
         product_surface: Some(PRODUCT_SURFACE.to_string()),
