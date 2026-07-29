@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac70-2fb7-7af3-a820-7dea7d761041"
+recorded_at = "2026-07-29T05:54:21.239119267Z"
+kind = "friction"
+summary = "external reviewer (codex, workspace-write) rewrote the slice notes.md Harvest section during /design RV-322 round 4"
+detail = "The reviewer's remit was ledger dispositions on RV-322. It also rewrote .doctrine/slice/237/notes.md, replacing 112 lines of accumulated single-copy Harvest content (durable findings, settled decisions, open items, follow-ups) with 14 lines describing round 4 only. The section is explicitly marked 'single-copy: updated in place each harvest; ids only, never restated content' — a reviewer reading that as 'replace with this round' is a plausible misread of the annotation. Restored from HEAD; the round's two genuine observation ids and one proposed memory were re-captured by hand. Cost: a full diff read to detect the loss, plus restore. A reviewer given workspace-write to record dispositions can silently damage authored artefacts outside the ledger; the responder must diff every touched path, not just the ledger."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

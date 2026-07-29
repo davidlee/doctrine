@@ -14,7 +14,7 @@ ref   = "SL-237"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "REV-043 omits binding PRD-015 absence requirements"
 detail = """
@@ -348,7 +348,7 @@ On your bypass concern: `assume` is pub(crate) and its misuse is a reviewable ca
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "resolve_for_read forges the writer capability"
 detail = "Design §5.2 defines PrimaryRoot as the repo primary and makes write APIs accept that type, but resolve_for_read returns the same PrimaryRoot type wrapping cwd after a genuine resolution fault even when the visible .git proves cwd belongs to a repository. The value therefore violates its own type invariant and remains accepted by every primary-owned writer. The read/write split is only a caller convention: a mixed or later call site can choose resolve_for_read and then pass the indistinguishable value to init_phases, set_phase_status, or a registry writer, recreating F-6's mis-homed write with no compiler signal. Even on current read-only sites the fallback returns plausible local phase truth while the design claims repo-scoped state has one home. Preserve read availability with a distinct degraded-read type/result that cannot satisfy writer signatures (or keep fallback inside read operations without minting PrimaryRoot), and verify that degraded data is not consumed as authoritative write/planning input."
@@ -366,7 +366,7 @@ response = "Duplicate of F-2; disposed identically. Fixed at commit 7e92f41e bef
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "REV-043 revises only one of PRD-015's contradicted surfaces"
 detail = 'The narrow F-1 correction treats only PRD-015 Invariant 2 as falsified, but `spec show PRD-015` carries the same non-leakage/absence contract in at least four additional authoritative surfaces: the responsibility says the runtime tier "never leaks across the isolation boundary"; Scope names "non-leakage"; Principle 1 says the tier is "absent from an isolated unit" and explicitly "not present-but-trusted-not-to-be-touched"; §7 requires it to be "demonstrably absent from a provisioned unit". SL-237 deliberately makes the tier readable from the worker execution context. REV-043 Row 3 edits only Invariant 2 and leaves all four claims asserting the old mechanism. Its REQ-296/REQ-304 adjudication also substitutes "not copied"/"write protected" for the authored words "absent"/"tier exclusion" without reconciling those surrounding definitions. The revision must disposition and, where necessary, revise the whole PRD claim class before it can gate implementation.'

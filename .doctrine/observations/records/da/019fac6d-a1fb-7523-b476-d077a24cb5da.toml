@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac6d-a1fb-7523-b476-d077a24cb5da"
+recorded_at = "2026-07-29T05:51:33.883462705Z"
+kind = "friction"
+summary = "harvest: read-only git index blocks required path-limited commit"
+detail = "After RV-322 round-4 ledger mutation and a green 'doctrine check commit', 'git add' failed creating /workspace/doctrine/.git/index.lock with 'Read-only file system'. No files were staged or committed; the authored ledger, SL-237 harvest note, and observations remain working-tree changes for an environment with writable .git to commit."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

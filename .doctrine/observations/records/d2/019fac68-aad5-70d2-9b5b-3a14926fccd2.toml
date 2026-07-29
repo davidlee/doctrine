@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac68-aad5-70d2-9b5b-3a14926fccd2"
+recorded_at = "2026-07-29T05:46:08.469900875Z"
+kind = "friction"
+summary = "design: spec req lacks an entity show surface"
+detail = "While verifying RV-322 through CLI-only entity reads, 'doctrine spec req show REQ-296' was rejected because spec req has no show subcommand. The reviewer must recover requirement text indirectly through 'spec show PRD-015', increasing output volume and making targeted requirement inspection awkward."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
