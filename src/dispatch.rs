@@ -238,13 +238,15 @@ pub(crate) enum DispatchCommand {
         /// half of the DURABLE FORK BINDING (SL-228 PHASE-04, D2) — with `--phase` it
         /// tells the fork which funnel row its commits belong to. The arming dir is
         /// still per-coord-tree, not per-slice (cross-slice partition is by coord tree).
+        /// REFUSED without `--phase` (IMP-331): a half arm binds nothing.
         #[arg(long, value_parser = parse_cli_id)]
         slice: Option<u32>,
 
         /// The phase being dispatched (`PHASE-NN`) — the other half of the durable fork
         /// binding. Persisted beside `slice`, consumed ONE-SHOT at the fork point
         /// exactly as `base` is, so a stale arm cannot mis-bind the next spawn. Both
-        /// halves are needed: a half-arm binds nothing.
+        /// halves are needed: a half-arm binds nothing, and is REFUSED at arm time
+        /// (IMP-331) rather than surfacing end-loaded as `unprovable-fork`.
         #[arg(long)]
         phase: Option<String>,
 
@@ -706,6 +708,10 @@ fn run_arm_spawn(
     extra_rw: Vec<PathBuf>,
     no_network: bool,
 ) -> anyhow::Result<()> {
+    // Arg-shape gate FIRST — pure, so a half arm refuses without needing a project root
+    // and, crucially, before ANY arming file is written (IMP-331).
+    let binding = classify_arming_binding(slice, phase).map_err(|e| anyhow::anyhow!(e))?;
+
     let root = root::find(path, &root::default_markers())?;
 
     // A1: an omitted `--base` defaults to the coord-root HEAD; an explicit base is
@@ -738,28 +744,92 @@ fn run_arm_spawn(
         format!("{b}\n").as_bytes(),
     )
     .with_context(|| format!("write arming base in {}", spawn.display()))?;
-    write_arming_binding(&spawn, slice, phase)?;
+    write_arming_binding(&spawn, &binding)?;
     write_arming_jail_policy(&spawn, extra_rw, no_network)?;
 
     let spawn_canon = std::fs::canonicalize(&spawn)
         .with_context(|| format!("canonicalize arming dir {}", spawn.display()))?;
-    if let Some(slice) = slice {
-        writeln!(io::stderr(), "armed SL-{slice:03} at base {b}")?;
+    match &binding {
+        ArmingBinding::Bound {
+            slice: bound_slice,
+            phase: bound_phase,
+        } => {
+            writeln!(
+                io::stderr(),
+                "armed SL-{bound_slice:03} {bound_phase} at base {b}"
+            )?;
+        }
+        // A no-binding arm is legitimate (jail-policy-only / pass-through), but it is
+        // also what a forgotten `--slice`/`--phase` looks like — and that mistake only
+        // surfaces at hand-back, a whole worker turn later. Advise, do not refuse.
+        ArmingBinding::Unbound => {
+            writeln!(
+                io::stderr(),
+                "armed at base {b} with NO fork binding — a fork from this arm cannot \
+                 prove which funnel row it belongs to (`worker_commit` refuses \
+                 `unprovable-fork` at hand-back). Pass `--slice <N> --phase PHASE-NN` \
+                 unless this arm is deliberately jail-policy-only."
+            )?;
+        }
     }
     writeln!(io::stdout(), "{}", spawn_canon.display())?;
     Ok(())
 }
 
-/// Write (or clear) the arming DURABLE FORK BINDING slots beside `base` in `spawn`
-/// (SL-228 PHASE-04, D2). Same pairing hygiene as the jail declaration: an arm that
-/// declares no `--slice`/`--phase` REMOVES any stale slot, so a leftover binding from
-/// an earlier arm can never ride a fresh `base` and mis-bind the next spawn. The fork
-/// point consumes both slots one-shot, exactly as it consumes `base`.
-fn write_arming_binding(
-    spawn: &Path,
+/// The arming DURABLE FORK BINDING as the fork point will read it back
+/// ([`crate::worktree`]'s `consume_arming_binding`): both halves, or neither. There is
+/// no third state — a half pair names no funnel row, so it is not a binding.
+#[derive(Debug, PartialEq, Eq)]
+enum ArmingBinding {
+    /// Both halves present — a fork from this arm binds to this `(slice, phase)` row.
+    Bound { slice: u32, phase: String },
+    /// Neither half — a deliberate no-binding arm (jail-policy-only / pass-through).
+    Unbound,
+}
+
+/// PURE — classify the `--slice`/`--phase` pair, failing closed on a HALF arm (IMP-331).
+///
+/// The fork point drops a half pair to `None` (it would otherwise forge provenance), so
+/// the fork is unbound and `worker_commit` refuses `unprovable-fork` — but only at
+/// hand-back, AFTER the entire worker turn has been spent (~265k tokens observed on
+/// SL-231 PHASE-04). Refusing here converts that end-loaded loss into a free error.
+///
+/// Normalises `phase` exactly as the fork-point reader does — a blank phase is no phase —
+/// so `--phase ""` is a half arm, not an accidental binding. That normalisation lives
+/// HERE only; [`write_arming_binding`] writes the classified value verbatim.
+fn classify_arming_binding(
     slice: Option<u32>,
     phase: Option<&str>,
-) -> anyhow::Result<()> {
+) -> Result<ArmingBinding, String> {
+    let half = |given: &str, missing: &str| {
+        Err(format!(
+            "half-arm: `{given}` given without `{missing}` — a half arm binds NOTHING \
+             (the fork point drops it, then `worker_commit` refuses `unprovable-fork` \
+             after the whole worker turn is spent). Arm both halves: \
+             `--slice <N> --phase PHASE-NN`."
+        ))
+    };
+    match (slice, phase.map(str::trim).filter(|p| !p.is_empty())) {
+        (Some(slice), Some(phase)) => Ok(ArmingBinding::Bound {
+            slice,
+            phase: phase.to_owned(),
+        }),
+        (None, None) => Ok(ArmingBinding::Unbound),
+        (Some(_), None) => half("--slice", "--phase"),
+        (None, Some(_)) => half("--phase", "--slice"),
+    }
+}
+
+/// Write (or clear) the arming DURABLE FORK BINDING slots beside `base` in `spawn`
+/// (SL-228 PHASE-04, D2). Same pairing hygiene as the jail declaration: an
+/// [`ArmingBinding::Unbound`] arm REMOVES any stale slot, so a leftover binding from
+/// an earlier arm can never ride a fresh `base` and mis-bind the next spawn. The fork
+/// point consumes both slots one-shot, exactly as it consumes `base`.
+fn write_arming_binding(spawn: &Path, binding: &ArmingBinding) -> anyhow::Result<()> {
+    let (slice, phase) = match binding {
+        ArmingBinding::Bound { slice, phase } => (Some(slice.to_string()), Some(phase.clone())),
+        ArmingBinding::Unbound => (None, None),
+    };
     let write_slot = |slot: &str, value: Option<String>| -> anyhow::Result<()> {
         let path = spawn.join(slot);
         match value {
@@ -773,17 +843,8 @@ fn write_arming_binding(
             },
         }
     };
-    write_slot(
-        crate::worktree::ARMING_SLICE_FILE,
-        slice.map(|s| s.to_string()),
-    )?;
-    write_slot(
-        crate::worktree::ARMING_PHASE_FILE,
-        phase
-            .map(str::trim)
-            .filter(|p| !p.is_empty())
-            .map(str::to_owned),
-    )
+    write_slot(crate::worktree::ARMING_SLICE_FILE, slice)?;
+    write_slot(crate::worktree::ARMING_PHASE_FILE, phase)
 }
 
 /// Write (or clear) the arming jail-policy DECLARATION beside `base` in `spawn`
@@ -8149,6 +8210,94 @@ mod tests {
             "abcd1234",
             "explicit base honored unchanged"
         );
+    }
+
+    // ---- IMP-331: a HALF arm fails closed at arm time, not end-loaded at hand-back ---
+
+    #[test]
+    fn classify_arming_binding_truth_table() {
+        // Both halves ⇒ a binding the fork point can consume.
+        assert_eq!(
+            classify_arming_binding(Some(42), Some("PHASE-03")),
+            Ok(ArmingBinding::Bound {
+                slice: 42,
+                phase: "PHASE-03".to_owned()
+            })
+        );
+        // Neither half ⇒ a deliberate no-binding arm (jail-policy-only / pass-through).
+        assert_eq!(
+            classify_arming_binding(None, None),
+            Ok(ArmingBinding::Unbound)
+        );
+        // A blank `--phase` is no phase at all — the SAME normalisation the fork-point
+        // reader applies — so it is a half arm, not an accidental binding.
+        for (slice, phase) in [
+            (Some(42), None),
+            (Some(42), Some("")),
+            (Some(42), Some("   ")),
+            (None, Some("PHASE-03")),
+        ] {
+            let err = classify_arming_binding(slice, phase)
+                .expect_err("a half arm must refuse: slice={slice:?} phase={phase:?}");
+            assert!(
+                err.starts_with("half-arm:"),
+                "refusal must lead with the half-arm token; got: {err}"
+            );
+            assert!(
+                err.contains("--slice") && err.contains("--phase"),
+                "refusal must name both halves; got: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn arm_spawn_refuses_a_half_arm_before_writing_anything() {
+        let repo = tempfile::tempdir().unwrap();
+        init_repo(repo.path());
+        let spawn = repo.path().join(crate::worktree::ARMING_SUBPATH);
+
+        let result = run_arm_spawn(
+            Some(repo.path().to_path_buf()),
+            Some("68250bcd"),
+            Some(42),
+            None, // half arm: slice without phase
+            vec![],
+            false,
+        );
+
+        let err = format!("{}", result.expect_err("half arm must refuse"));
+        assert!(err.starts_with("half-arm:"), "got: {err}");
+        // Fail closed BEFORE any write: a refused arm leaves no partial arming state
+        // that a later spawn could consume.
+        assert!(
+            !spawn.join(crate::worktree::ARMING_BASE_FILE).exists(),
+            "a refused arm must not write base"
+        );
+        assert!(
+            !spawn.join(crate::worktree::ARMING_SLICE_FILE).exists(),
+            "a refused arm must not write the slice slot"
+        );
+    }
+
+    #[test]
+    fn arm_spawn_writes_both_binding_slots_when_fully_armed() {
+        let repo = tempfile::tempdir().unwrap();
+        init_repo(repo.path());
+        let spawn = repo.path().join(crate::worktree::ARMING_SUBPATH);
+
+        run_arm_spawn(
+            Some(repo.path().to_path_buf()),
+            Some("68250bcd"),
+            Some(42),
+            Some("PHASE-03"),
+            vec![],
+            false,
+        )
+        .unwrap();
+
+        let slot = |name: &str| std::fs::read_to_string(spawn.join(name)).unwrap();
+        assert_eq!(slot(crate::worktree::ARMING_SLICE_FILE).trim(), "42");
+        assert_eq!(slot(crate::worktree::ARMING_PHASE_FILE).trim(), "PHASE-03");
     }
 
     #[test]

@@ -5,10 +5,10 @@ id = 333
 slug = "dispatch-import-undeclared-scope-refusal-returns-empty-detail-populate-with-offending-paths"
 title = "dispatch_import undeclared-scope refusal returns empty detail — populate with offending paths"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-07-28"
-updated = "2026-07-28"
+updated = "2026-07-29"
 tags = ["area:dispatch", "area:mcp", "cluster:dispatch-funnel", "token-efficiency"]
 
 # outbound-only (ADR-004). Cross-kind structural edges (e.g. references with a role

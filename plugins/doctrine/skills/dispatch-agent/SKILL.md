@@ -33,9 +33,13 @@ auto-fixed. This is the same pre-spawn beat the funnel documents; run it once pe
 batch.
 
 **Before every spawn (or parallel batch):**
-1. `doctrine dispatch arm-spawn --base <B> [--slice <N>]` — writes
-   `<coord>/.doctrine/state/dispatch/spawn/base = <B>` and prints the spawn dir's
-   absolute path. Idempotent: re-arming at B′ rewrites `base`.
+1. `doctrine dispatch arm-spawn --base <B> --slice <N> --phase PHASE-NN` — writes
+   `<coord>/.doctrine/state/dispatch/spawn/base = <B>` plus the two fork-binding
+   slots, and prints the spawn dir's absolute path. Idempotent: re-arming at B′
+   rewrites all three. **Both binding halves are mandatory** — a half arm binds
+   nothing and is refused at arm time (`half-arm:`); arming with NEITHER half is
+   accepted but warns, and yields a fork `worker_commit` refuses as
+   `unprovable-fork` at hand-back — a whole worker turn spent for nothing.
 2. `cd` **into** that spawn dir. This is the arming signal — the hook forks at B
    only when the payload cwd is the spawn dir.
 3. Issue the Agent spawn(s) (below). File-disjoint parallel batch: arm once, then
@@ -210,8 +214,9 @@ sibling (ISS-031); spawn with a `subagent_type` other than `dispatch-worker`;
 run `fork` or bwrap here (that's `/dispatch-subprocess`); claim parallel landing
 (v1 lands one per base); hand-sequence the landing verbs from memory or work the
 funnel state out of git by hand (ask `doctrine dispatch next --slice <N>`).
-**Always:** `arm-spawn --base B` then cd into the spawn dir before the spawn, cd
-back to the coord root after; pin `subagent_type` to `dispatch-worker`; embed
+**Always:** `arm-spawn --base B --slice N --phase PHASE-NN` (both binding halves,
+never one) then cd into the spawn dir before the spawn, cd back to the coord root
+after; pin `subagent_type` to `dispatch-worker`; embed
 the base-guard block AND the `worker_commit` self-commit instruction in the
 distilled worker prompt; derive `branch` from `worktreePath`; run `verify-worker`
 before landing; do the ONE thing `dispatch next` prescribes and ask again; return

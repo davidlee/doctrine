@@ -12,16 +12,21 @@ Your cwd is jailed to the coordination tree and the raw `.git` is READ-ONLY.
   know the coord tip, a worker's commit, an import result.
 - **You write ONLY through an MCP funnel tool.** You cannot `commit`, `merge`,
   `reset`, or otherwise mutate `.git` by hand — every landing goes through a
-  dispatch MCP tool. The one raw-Bash exception is `arm-spawn --path .`, which
-  writes base-control state into its own jailed spawn dir, not `.git`.
+  dispatch MCP tool. The one raw-Bash exception is `arm-spawn --path . --slice N
+  --phase PHASE-NN`, which writes base-control state into its own jailed spawn
+  dir, not `.git`.
 - **Trunk-facing verbs are NOT yours.** `prepare-review`, `refresh-base`,
   candidate/`integrate` write OUTSIDE the coord jail (the trunk is RO to you).
   You never run them — you report-and-halt to the main thread, which does.
 
 ## Per-phase serial cadence (the happy path)
 
-1. **`arm-spawn --path .`** — raw Bash, cwd = coord-root (cwd-safe). Writes
-   `base=B` for the next spawn; `B` = the current coord tip.
+1. **`arm-spawn --path . --slice N --phase PHASE-NN`** — raw Bash, cwd =
+   coord-root (cwd-safe). Writes `base=B` for the next spawn (`B` = the current
+   coord tip) plus the fork binding. Both binding halves or neither: one half is
+   refused at arm time, and NEITHER leaves the fork unable to prove its funnel
+   row — `worker_commit` then refuses `unprovable-fork` at step 3, after the
+   worker turn is already spent.
 2. **Spawn the nested `dispatch-worker`** (Agent, isolation:worktree). Because
    your cwd is the coord-root, the `worktree create-fork` hook consumes the arm
    and Forks the worker's `dispatch/<name>` branch at `B` WITH its jail record
