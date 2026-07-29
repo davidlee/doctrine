@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad25-a563-7a50-aad0-2074318c23b5"
+recorded_at = "2026-07-29T09:12:33.379819191Z"
+kind = "friction"
+summary = "handover/dispatch: published evidence table outran the committed instrument (RV-323 rev 5 probe)"
+detail = "Prepping a codex adversarial round on SL-233 PHASE-06. The design sketch published a five-row divergence table; the committed probe implemented three of the five rules. The two missing rows carried the argument's load-bearing number (the obvious repair closing ZERO divergences), i.e. the one figure the reviewer is explicitly invited to attack was the one figure they could not re-run. Cost: three full probe runs (~39k bodies each) reconstructing which of three plausible placements of the guard the author had measured — title-level '#'-only closes 1,476, title-level '#'-and-whitespace closes 2,560, content-region closes nothing and is the published one. Had this gone to the reviewer unfixed it would near-certainly have produced a contest that was wrong on the merits but expensive to unwind, costing a whole review round. Generalisable: when a design artefact publishes a table of measurements, the instrument it ships must reproduce EVERY row, and any placement/ordering choice the result is sensitive to must be pinned in the instrument rather than left to reconstruction."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
