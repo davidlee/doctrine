@@ -67,6 +67,29 @@ split on governance:
 keeping the invariant-relaxation half distinct — either resident here or folded
 into RFC-016.
 
+## Half B sliced into SL-239 (2026-07-29); half A stays resident here
+
+The preflight's split is now executed exactly as prescribed:
+
+- **Half B (reliable `edge → main` promotion)** → **SL-239** objective 1, paired
+  with IMP-267 (the post-integration direction of the same seam). SL-239 carries
+  the firing-window design call (OQ-1) as an explicit objective, since promoting
+  mid-flight moves `main` under a pinned base — the hazard SPEC-022's moved-trunk
+  refusal guards.
+- **Half A (relaxing the "no trunk until close" invariant)** remains **open on
+  this card**, unsliced. SL-239 names it as an explicit Non-Goal and touches
+  nothing pinned by SPEC-021 / SPEC-022 / ADR-012 D5. Still needs a REV, or
+  absorption into RFC-016. The trunk advisory lock is likewise out of SL-239's
+  scope, so the **interim operating rule above still stands** — at most one
+  audit-or-close at a time repo-wide.
+
+One fact established while scoping SL-239 that sharpens half B: `git::trunk_ladder`
+(`src/git.rs:1609`) resolves trunk from `["origin/HEAD", "main", "master"]` —
+**`edge` is not a ladder candidate**, so SL-127's ancestor-dominant selection can
+never pick it, and a fresher `edge` cannot reach `trunk_base_B` by itself. Adding
+`edge` to the ladder is *not* the fix (host-convention leakage, POL-002 / ADR-006
+D3); promoting the ref is.
+
 ## Related
 
 - `mem.pattern.dispatch.close-split-lineage-reconcile-on-edge` — the recovery

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fadde-5038-7202-968f-ea03ae8a82dd"
+recorded_at = "2026-07-29T12:34:15.736413529Z"
+kind = "friction"
+summary = "/slice: search --kind error message advertises groups, inviting a nonexistent --group flag"
+detail = """Ran 'doctrine search <q> --kind slice' (lowercase kind name). Error: "unknown kind prefix or group: 'slice'. Valid prefixes: ADR, ASM, ... Valid groups: all, backlog, governance, knowledge, specs". The message names two vocabularies for one flag, so the natural next attempt was 'doctrine search <q> --group backlog' — which fails with "unexpected argument '--group' found". Two wasted round-trips during slice scoping. Groups are values of --kind, not a separate flag; the error text should say so (e.g. '--kind accepts a prefix OR a group: ...') rather than listing 'Valid groups' as if a --group flag existed."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

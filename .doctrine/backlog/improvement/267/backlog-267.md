@@ -26,3 +26,33 @@ The `close` (or `done`) transition should verify that the primary worktree
 This is less urgent than the original F-1 framing suggested — the implementation
 landed correctly on `main`. The gap is an edge/main sync hygiene issue, not a
 missing-code emergency.
+
+## Sliced into SL-239 (2026-07-29) — with two corrections
+
+Scoped as objective 2 of **SL-239**, paired with IMP-308 half B (the opposite
+direction of the same seam). Two facts established at scope time that revise this
+card:
+
+1. **The mechanism already exists — the gap is a missing gate, not missing
+   machinery.** `dispatch sync --integrate --edge <ref>` already advances a
+   standing aggregate ref to the `review/<slice>` bundle. It is simply *optional
+   and unverified at close*. And the gate has a DRY seam: **SL-126** (done) added
+   the third close-gate in `slice::run_status` asking *"is this slice's journaled
+   **trunk**-row OID an ancestor of trunk?"* (three-state
+   integrated/not-integrated/not-dispatched). This card is the **edge-row
+   analogue** of that same question — generalise that gate over the row's target
+   ref rather than adding a parallel one.
+
+2. **Option 2 above ("auto-merge `main` → `edge` as part of close") is unsafe as
+   written and SL-239 does not do it.** Per
+   `mem.fact.dispatch.edge-advance-leg-not-ff-gated` (verified/high),
+   `plan_edge_row` is explicitly *"Not ff-gated"* and `advance_pure_ref`'s CAS
+   guards concurrency, not ancestry — so that leg can already move `edge` to a
+   non-descendant tree. A gate that refuses and instructs is safe; an
+   auto-advance is not. Also matches SL-126's own Non-Goal (no auto-integrate at
+   close) and ADR-006's orchestrator-sole-writer posture. Filed the underlying
+   asymmetry as **RSK-230**.
+
+Left open for SL-239's design-lock: **refuse or warn?** SL-126 refuses on the
+trunk row because unintegrated code is a correctness failure; an unsynced `edge`
+is hygiene (this card's own Notes say so), so refusing may be disproportionate.
