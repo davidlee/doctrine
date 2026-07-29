@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad72-2986-7b42-be19-1a68ce4c089b"
+recorded_at = "2026-07-29T10:36:07.942152726Z"
+kind = "friction"
+summary = "/dispatch worker brief's file/line map named 4 annotation fixtures but the same phase forced ~8 unlisted section-body migrations (SL-233 PHASE-06)"
+detail = """The PHASE-06 brief carefully enumerated the four `record`/`adopt_record` fixtures to migrate (e2e_design_state.rs:755, e2e_design_projection.rs:271-272 and :284, design.rs:1359) and even flagged that the criterion undercounted them. But EX-13(b) also makes every section body require an opening ATX heading, and NO section-body declaration was listed: `materialised()` (4 callers), `every_event_fixture`'s section closure, the cold-start body, the projection suite's 20 hostile-byte sections, plus a downstream `sha256(b"draft two")` digest assertion that silently depended on the old body bytes. Roughly twice the listed blast radius, discovered by running the suite rather than by reading the brief. A migration list derived from one criterion's grep is not the phase's blast radius."""
+
+[facets.execution]
+schema_version = 1
+interface = "dispatch-worker"
+interface_origin = "explicit"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-06"
+phase_origin = "explicit"

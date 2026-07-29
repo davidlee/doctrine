@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad72-1324-76a2-986c-5acb1e15b264"
+recorded_at = "2026-07-29T10:36:02.212612842Z"
+kind = "friction"
+summary = "/dispatch worker brief predicted a wrong-acceptance red that was actually a wrong-refusal-reason red (SL-233 PHASE-06 T1b)"
+detail = "The PHASE-06 worker brief mandated that every red be a WRONG ACCEPTANCE, and specified T1b as sending `record`/`adopt_record` alongside a valid `dispose`. But with `record` still on the wire, `record` + `dispose` hits the pre-existing `CheckpointDispositionConflict` arm (run.rs:560) and is REFUSED — so that payload cannot red as an acceptance, only as a wrong refusal reason. `adopt_record` + `dispose` IS a clean wrong acceptance (the bool was silently swallowed). Cost ~1 analysis round to detect the contradiction and design around it: the test now carries three payloads (adopt_record+dispose, record on a section, record+dispose) and the hand-back reports each red kind separately. A brief that prescribes both the payload shape AND the red kind should have the two checked against each other."
+
+[facets.execution]
+schema_version = 1
+interface = "dispatch-worker"
+interface_origin = "explicit"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-06"
+phase_origin = "explicit"
