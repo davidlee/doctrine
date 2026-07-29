@@ -39,3 +39,34 @@ The manual `record-delta` escape hatch already exists and is the current
 mitigation; conformance surfacing the pollution as `undeclared` is the safety
 net. This item is about making the **automatic** solo capture correct so an
 auditor is not the last line of defence.
+
+## Mitigated 2026-07-29 — multi-commit range advisory (candidate #2)
+
+Shipped the *detect-and-warn* candidate, not the re-derive one. After a boundary
+row records successfully, the binding walks `start..end` (bounded,
+`SPAN_ADVISORY_CAP = 12`) and, when the range holds more than one commit, prints
+the commit list plus the `slice record-delta` correction to stderr —
+`span_advisory` / `advise_boundary_span`, `src/state.rs`. A single-commit range
+stays silent (provably that commit's own patch, the SL-189
+`single_commit_boundary` shape); at the cap the count reads as a floor (`12+`)
+and the tail line is withheld because the range's base was never read.
+Read-only, silent on git fault, never blocks the transition.
+
+**Why not candidate #1.** Re-deriving the true base needs a way to tell which
+commits in the range are the phase's own. A phase is not always one commit, so
+`[S^, S]` does not generalise, and the only available ownership signal is the
+`feat(SL-NNN)` commit-scope convention — a **host-project** convention the engine
+must not depend on (POL-002). SL-189's `single_commit_boundary` already gives the
+sound single-commit derivation, and it is wired to the manual `--commit` path.
+
+**Why this stays open.** The advisory does not make the automatic capture
+correct — the recorded range is still stale by construction and the operator is
+still the correcting agent. What changed is *when* they are told: at the
+completion flip, with the range in front of them, instead of at audit via
+conformance noise. Tagged `mitigated`, following the ISS-053 precedent.
+
+**Residual for the real fix.** A commit-time stamp (narrow the start to the
+phase's first own commit rather than the flip) needs a harness hook — overlaps
+IDE-026. The funnel recorder (`src/dispatch.rs`) derives its boundary
+differently and was deliberately left unexamined; check whether it needs the
+same advisory.
