@@ -84,6 +84,8 @@ For another artifact:
 - [ ] author or replace `handover.md` in the most relevant artifact's folder
 - [ ] Print instructions (with path to `handover.md`) addressed to the next agent
 
+You must include a clear startup instruction (eg /route) with path to `handover.md`.
+
 Then: STOP
 
 ### Shape (sections to emit) for a phase packet
@@ -111,4 +113,7 @@ Then: STOP
   durable fact here.
 - Link to durable artifacts, don't repeat their contents.
 - Supersede stale notes explicitly; do not leave contradictory guidance.
+- Don't summarize commands or procedures from skills. 
+  The skill gets skipped. Accidents happen.
+  Do reference the skill; describe relevant state. 
 - Terse. Fragments fine. Reader is an agent, not human reviewer.
