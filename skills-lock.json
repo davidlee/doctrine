@@ -197,7 +197,7 @@
       "source": "davidlee/doctrine",
       "sourceType": "github",
       "skillPath": "plugins/doctrine/skills/spec-coverage-assessment/SKILL.md",
-      "computedHash": "225d8d0539e804131386bb08744e402f815586902261cc517100f7c1d907db27"
+      "computedHash": "b5d8596a832248153040e381975dc3b30dace46587957f5b241c02e8d5044bba"
     },
     "spec-product": {
       "source": "davidlee/doctrine",
