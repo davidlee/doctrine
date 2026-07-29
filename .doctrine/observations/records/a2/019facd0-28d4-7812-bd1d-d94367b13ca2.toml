@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019facd0-28d4-7812-bd1d-d94367b13ca2"
+recorded_at = "2026-07-29T07:39:10.932974494Z"
+kind = "friction"
+summary = "review: a contest's rationale is ephemeral — only --note, never durable on the finding"
+detail = "RV-323 round 5. 'review contest' takes only --note, documented as 'ephemeral handoff chatter for the baton log — NOT durable rationale'. But a contest IS the raiser's durable argument: the Expected/Observed/counterexample that the responder must answer. It landed in .doctrine/state/review/323/baton.toml, which is gitignored runtime state, while the finding's authored 'detail' still shows the ROUND-1 text and 'response' still shows the round-4 answer the contest rejects. Reading the ledger after a contest tells you a finding is contested but not why. Recovering the argument meant find-ing the baton log and tailing raw TOML — the second read-back gap on this ledger this slice (the first: no verb prints findings at all). Cost this round: the reviewer's summary was the only cheap path to its own reasoning, which makes adjudication depend on a subagent's prose rather than the record."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
