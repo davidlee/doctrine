@@ -1,0 +1,46 @@
+memory_uid = "mem_019fb0241ee378f3ab32be1035e03c49"
+memory_key = "mem.pattern.tdd.wire-before-guard"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Order TDD so the first red is a wrong admission, not a payload refusal"
+summary = "Land the mechanism and its happy path before the refusal that guards it, so the guarded test's first failure is the wrong behaviour rather than a schema error"
+created = "2026-07-29"
+updated = "2026-07-29"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["tdd", "negative-control", "verification"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "fea53e065996508edf5debf0ef4134506edb25e7"
+ref_name = "refs/heads/edge"
+checkout_state_id = "5071d4e96b90866a84587468e73a4260e7a1beaf98e32e394ca057d9e233e2ab"
+base_commit = "541569b82bb8d227fbb8825cea1539ea31b2e52e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
