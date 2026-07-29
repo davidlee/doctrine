@@ -73,21 +73,50 @@ That root is a live doctrine root with **no** `s9` seen-set, so a surviving env
 dependence would have reddened. The full `ambient_surface` module is also green
 (15 tests) with the env var pointed at the primary root.
 
-## Residuals — why this stays open
+## Residuals — both settled 2026-07-29
 
-1. **The env fallback has no test at all.** `ENV_PROJECT_DIR_SURFACE` has exactly
-   two sites in `src/memory.rs` — the const (`:10516`) and the fallback
-   (`:10636`). No test exercises or neutralizes it. vt9 no longer *reaches* it,
-   which is a fix to one test, not a guard on the seam: nothing stops the next
-   ambient sibling from regressing into the same ambient dependence. ISS-235's
-   ask — sibling ambient tests should pin an empty corpus or inject the env
-   lookup per the pure/imperative split — is unmet.
-2. **Stale seen-set artifacts.** ISS-220 asked for `mem-surface-seen-s9.txt` to
-   be cleaned from the primary tree's `.doctrine/state/`. It is still there
-   (2026-07-24), alongside ~170 sibling `mem-surface-seen-*.txt` files going
-   back to 2026-07-10 and a 242 KB `mem-surface.log`. Runtime tier, so
-   disposable by definition — but nothing prunes it, and its presence is what
-   masked this very defect. Sizing/retention is the actual open question.
+1. **The env fallback had no test at all** — *fixed*, `16661fa4`.
+   `ENV_PROJECT_DIR_SURFACE` had exactly two sites in `src/memory.rs`: the const
+   and the fallback itself. Nothing exercised or neutralized it. vt9 no longer
+   *reached* it, which fixed one test without guarding the seam.
+
+   The reason it was untestable is the interesting part: the arm read process
+   env *inside* the resolution, and edition-2024 `set_var` is `unsafe` while the
+   ambient suite runs parallel in one process — so no test could pin the arm
+   without poisoning its 14 siblings. The fix is the pure/imperative split
+   AGENTS.md already mandates: `discover_surface_root` now takes
+   `env_project_dir: Option<&OsStr>` and the single caller reads the env at its
+   shell boundary. `run_surface_to`'s signature is unchanged, so the 15 existing
+   ambient tests were untouched.
+
+   Four tests pin the seam — `resolvable_cwd_wins_over_the_env_anchor` (the arm
+   vt9 leans on, asserted directly rather than inferred),
+   `unresolvable_cwd_defers_to_the_env_anchor`,
+   `no_usable_anchor_on_either_arm_yields_none` (the INV-2 fail-open), and
+   `env_anchor_walks_up_to_its_marked_root`.
+
+   Confirmed to be guards rather than decoration by mutation: swapping the two
+   arms' precedence reds `resolvable_cwd_wins_over_the_env_anchor` while **all 15
+   pre-existing tests stay green** — a one-line measure of the gap that was here.
+   The suite is also immune to a hostile `CLAUDE_PROJECT_DIR`, which it can no
+   longer read.
+
+2. **Stale seen-set artifacts** — *done*. The operator deleted them
+   2026-07-29. What remains is current-session state (a live seen-set and a
+   289-byte `mem-surface.log`), regenerating as the runtime tier is meant to.
+   Retention/pruning was raised as the real question here and is **not** carried
+   forward: nothing observed suggests the accumulation causes harm beyond the
+   masking this issue already fixed at the test seam.
+
+## Found on the way out
+
+Pinning the arms surfaced a **third** instance of this issue's own failure class,
+filed as **ISS-281**: vt9's stated premise ("a resolvable cwd with no root marker
+above it") is built from a bare `tempdir`, but `find_from` walks *up* — and a
+stray `/tmp/.git` on this host makes `/tmp` resolve as a root. vt9 passes anyway,
+on `/tmp` having no memory corpus rather than on there being no root. Not urgent:
+the arms that matter are now pinned hermetically, so ISS-281 is a fidelity gap in
+one end-to-end test, not uncovered behaviour.
 
 ISS-235's third ask — that `worker_commit`'s gate run the funnel's B-vs-S
 differential rather than a bare pass/fail, so ambient and pre-existing reds
@@ -95,6 +124,16 @@ cancel — is **not** carried here. It is already homed at **IMP-194**
 (`cluster:worker-gate`), whose F-3/S1 analysis names this exact failure class:
 "a new test failure is indistinguishable from pre-existing/env". Folding it in
 again would be a third capture of one signal.
+
+## Closure
+
+Resolved `fixed` 2026-07-29 on `edge`. Commits:
+
+- `16661fa4` — `fix(ISS-220): pass CLAUDE_PROJECT_DIR into surface-root discovery`
+- `751c75ac` — the ISS-235 fold and the landed-fix record above
+
+`doctrine check gate` green at close (clippy zero warnings); the ambient module is
+19 green, 15 pre-existing plus the 4 new seam tests. Follow-on: [[ISS-281]].
 
 Related: `mem.pattern.dispatch.worker-commit-stale-path-false-red` (the other
 known `worker_commit` false-red trigger — a stale validation binary; this issue

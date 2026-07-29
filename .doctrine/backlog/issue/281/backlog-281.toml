@@ -1,13 +1,13 @@
 schema = "doctrine.backlog"
 version = 1
 
-id = 220
-slug = "vt9-memory-surface-test-env-sensitive-fails-when-claude-project-dir-resolves-an-unmasked-doctrine"
-title = "vt9 memory-surface test env-sensitive: fails when CLAUDE_PROJECT_DIR resolves an unmasked doctrine root"
+id = 281
+slug = "vt9-rootless-premise-is-environmental-a-marked-tmpdir-ancestor-makes-it-pass-for-the-wrong-reason"
+title = "vt9 rootless premise is environmental: a marked TMPDIR ancestor makes it pass for the wrong reason"
 kind = "issue"
-status = "resolved"
-resolution = "fixed"
-created = "2026-07-06"
+status = "open"
+resolution = ""                 # seeded empty so `backlog edit` sets it in place
+created = "2026-07-29"
 updated = "2026-07-29"
 tags = ["area:memory", "area:testing", "cluster:testing-goldens"]
 
@@ -20,3 +20,9 @@ tags = ["area:memory", "area:testing", "cluster:testing-goldens"]
 needs    = []                   # item→item hard prerequisite
 after    = []                   # item→item soft sequence: { to, rank? }
 triggers = []                   # watched source globs: { globs, note? }
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "found while closing ISS-220; same ambient-premise class one layer out"
+target = "ISS-220"
