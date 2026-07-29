@@ -13,11 +13,29 @@ this slice**, as its own phase so it stays separable if it turns awkward:
 // before
 fn boundaries_path(cwd: &Path, slice_id: u32) -> anyhow::Result<PathBuf>
 // after
-fn boundaries_path(primary: &PrimaryRoot, slice_id: u32) -> PathBuf
+fn boundaries_path(root: &ReadRoot, slice_id: u32) -> PathBuf
 ```
 
-It becomes **infallible**: the fallible half moves out to `PrimaryRoot::resolve`,
-which is total (no repo ⇒ the given root is its own primary).
+It becomes **infallible**: the fallible half moves out to the root constructors.
+
+## Amendment 1 (RV-322 F-16) — the fallible half moved to *two* constructors, and the param is `ReadRoot`
+
+This record originally said "the fallible half moves out to
+`PrimaryRoot::resolve`, which is total (no repo ⇒ the given root is its own
+primary)". Two later corrections supersede that sentence:
+
+- `resolve` is **not** total — DEC-095 amendment 2 (RV-322 F-6) made a genuine
+  resolution fault return `Err`; totality survives only for the no-repo
+  invariant.
+- There are now **two** constructors — DEC-095 amendments 4 and 5 with RV-322
+  F-10 split them into `PrimaryRoot::resolve` (fallible, mints the *write*
+  capability) and `ReadRoot::resolve_for_read` (total, falls back to `cwd`).
+
+`boundaries_path` is a pure path constructor, so it takes the weaker
+**`ReadRoot`**; a writer converts its `PrimaryRoot` on the way in. Nothing about
+DEC-098's own decision changes — dropping the `Result` still holds, and the
+double-resolution deletion at `dispatch.rs:3454,3471` still lands. Only the name
+of the type it takes, and the claim about which constructor is total, were stale.
 
 Surface: 3 production sites in `state.rs` (`:759`, `:790`, `:858`), reached via
 `read_source_deltas` / `record_source_delta`, which have ~7 external production

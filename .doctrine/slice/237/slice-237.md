@@ -45,16 +45,26 @@ doctrine-mediated state — all writes funnel through the orchestrator) means no
 worker-side phase-status writer exists, so primary-resolving raises no worker
 confinement problem.
 
-*Amended in `/design` (2026-07-29).* The exposure is **decision-level, not merely
-context drift**. Three statements are falsified — ADR-006 **D2**'s parenthetical
-that the coordination/runtime tier is *withheld* from workers, ADR-006 **D4**'s
-clause that *runtime state stays gitignored/per-worktree*, and **SPEC-012** §
-"Tier merge-safety by construction", which defends D4 *"not by trust but by
-absence"*. D2 and D4 are Decisions. One REV covers all three (ADR-013); see
-`design.md` § 7. It is a **restatement, not a relaxation**: merge safety is not
-weakened (no copy ⇒ nothing to diverge), REQ-297's write prohibition stays
-enforced at `src/commands/guard.rs:78,80`, and on the subprocess arm the
-prohibition additionally gains an OS floor.
+*Amended in `/design` (2026-07-29); re-amended after RV-322 (2026-07-29).* The
+exposure is **decision-level, not merely context drift**. Falsified statements —
+ADR-006 **D2**'s parenthetical that the coordination/runtime tier is *withheld*
+from workers, ADR-006 **D4**'s clause that *runtime state stays
+gitignored/per-worktree*, **SPEC-012** § "Tier merge-safety by construction"
+which defends D4 *"not by trust but by absence"*, and **PRD-015**'s non-crossing
+invariant with the surrounding responsibility/scope/principle prose that asserts
+the same absence (added after RV-322 F-1 / F-12 — the original sweep checked
+REQ-297 and stopped). D2 and D4 are Decisions. One REV covers them (ADR-013); see
+`design.md` § 7.
+
+**It is a restatement of mechanism PLUS one named relaxation.** *Corrected after
+RV-322 F-4 and F-17 — this paragraph previously read "a restatement, not a
+relaxation", which is the claim F-4 falsified; the correction had reached REV-043
+and `design.md` but not this document.* Merge safety is genuinely not weakened
+(no copy ⇒ nothing to diverge) and REQ-297's write prohibition stays enforced on
+both arms under an OS floor on each. But single-homing introduces a **new
+concurrent read-modify-write exposure** that two copies did not have: they could
+diverge, they could not race. No lock is designed; the exposure is bounded by
+contract (design § 5.5 I-5) and stated as a relaxation in REV-043.
 
 ## Scope & Objectives
 

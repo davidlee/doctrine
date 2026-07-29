@@ -283,9 +283,60 @@ on both arms (see above), so exclusion remains *by construction* — it did not
 degrade into a trusted check. Had only the CLI guard existed, this requirement
 would have needed revising; the per-arm evidence is what preserves it.
 
-**Net:** PRD-015 needs **one** prose edit (Invariant 2). Recording 3b and 3c as
-adjudicated-and-preserved is deliberate — a future reader must be able to see
-that they were swept and why they held, rather than assume they were missed.
+### 3d — § 2 In-scope bullet, § 3 Principles, § verification basis
+
+*Added after RV-322 F-12. The first pass of Row 3 swept PRD-015's **requirements
+and invariants** and stopped there — but the same claim is asserted three more
+times in prose that a reader will reach first.* All three say "absent", and after
+SL-237 the repo-scoped part of the tier is reachable-but-not-copied.
+
+**Before** (§2 In scope)
+
+> non-leakage of the coordination/runtime tier across the isolation boundary
+
+**After (proposed)**
+
+> non-duplication of the coordination/runtime tier across the isolation boundary
+> — no second mutable copy in an isolated unit, and no worker write to the tier
+
+**Before** (§3 Principles)
+
+> - **The isolation boundary is enforced by construction, not trust.** The
+>   coordination/ runtime tier is *absent* from an isolated unit, so there is
+>   nothing shared-mutable to corrupt — not present-but-trusted-not-to-be-touched.
+
+**After (proposed)**
+
+> - **The isolation boundary is enforced by construction, not trust.** No
+>   *copy* of the coordination/runtime tier exists in an isolated unit, so there
+>   is nothing shared-mutable to corrupt — not present-but-trusted-not-to-be-
+>   touched. Since SL-237 the repo-scoped part of that tier is single-homed and
+>   therefore *readable* from an isolated unit; its **write** exclusion is what
+>   the construction guarantees, at the OS layer on every arm.
+
+**Before** (§ verification basis)
+
+> Isolation non-leakage is verified by construction — the coordination/runtime
+> tier is demonstrably absent from a provisioned unit even under a
+> maximally-broad allowlist —
+
+**After (proposed)**
+
+> Isolation non-duplication is verified by construction — the coordination/
+> runtime tier is demonstrably *never provisioned into* a unit even under a
+> maximally-broad allowlist, so no second copy exists —
+
+**Why.** This is the finding's real substance: revising Invariant 2 alone would
+leave three earlier-read surfaces asserting the mechanism the invariant no longer
+claims, and a reader who stops at §3 gets the falsified version. Note that the
+allowlist sentence in the verification basis stays **true as written** — `WITHHELD`
+covers `.doctrine/state/**` and is untouched — so it is reworded for precision
+("never provisioned into"), not because it became false.
+
+**Net:** PRD-015 needs **four** prose edits (Invariant 2, the in-scope bullet, the
+principle, the verification basis) and **no** requirement change. Recording 3b and
+3c as adjudicated-and-preserved is deliberate — a future reader must be able to
+see that they were swept and why they held, rather than assume they were missed.
 
 ## Provenance
 

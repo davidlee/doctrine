@@ -112,22 +112,53 @@ design does not claim so.)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PrimaryRoot(PathBuf);
 
+/// A root for READING repo-scoped runtime state. Weaker than `PrimaryRoot`: it
+/// may have come from a verified resolution OR from the read fallback, and the
+/// type deliberately cannot tell you which — because no reader may act on the
+/// difference. There is NO conversion back to `PrimaryRoot` (RV-322 F-10).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ReadRoot(PathBuf);
+
 impl PrimaryRoot {
-    /// Impure: one `git worktree list --porcelain`. For any caller that will
-    /// WRITE primary-owned state.
+    /// Impure: one `git worktree list --porcelain`. The ONLY way to mint the
+    /// write capability.
     /// TOTAL for the designed invariant — no repo at all ⇒ the given root is
     /// its own primary. FALLIBLE for a genuine resolution fault (I-2).
     pub(crate) fn resolve(cwd: &Path) -> anyhow::Result<Self>;
-    /// The READ counterpart: TOTAL. A resolution fault falls back to `cwd` as
-    /// its own primary — which is byte-for-byte today's behaviour, since
-    /// `phases_dir` is a pure join off the invoked root (I-2b).
-    pub(crate) fn resolve_for_read(cwd: &Path) -> Self;
     /// TEST SEAM ONLY — the caller asserts `path` is already the primary.
-    /// No production consumer (RV-322-B F-C); `#[cfg(test)]`.
+    /// No production consumer (F-C); `#[cfg(test)]`.
     pub(crate) fn assume(path: PathBuf) -> Self;
     pub(crate) fn as_path(&self) -> &Path;
 }
+
+impl ReadRoot {
+    /// TOTAL. A resolution fault falls back to `cwd` as its own primary —
+    /// byte-for-byte today's behaviour, since `phases_dir` is a pure join off
+    /// the invoked root (I-2b).
+    pub(crate) fn resolve_for_read(cwd: &Path) -> Self;
+    pub(crate) fn as_path(&self) -> &Path;
+}
+
+/// One-way: a verified primary is always a sound read root. Never the inverse.
+impl From<&PrimaryRoot> for ReadRoot { /* … */ }
 ```
+
+**Why two types and not one — RV-322 F-10.** An earlier form of I-2b gave
+`resolve_for_read` the *same* `PrimaryRoot` return type. That silently forged the
+write capability: a value obtained by fallback could be passed to
+`set_phase_status` and it would compile. I-2's refusal would then hold only by
+caller discipline — which is precisely the thing this slice exists to stop relying
+on, so the patch quietly abandoned the design's own thesis. Splitting the types
+makes the unsound direction **unrepresentable** rather than merely discouraged:
+
+| Direction | Status |
+|---|---|
+| `PrimaryRoot` → `ReadRoot` | sound; provided as `From` |
+| `ReadRoot` → `PrimaryRoot` | **does not exist** — a fallback root can never reach a writer |
+
+This is the one place in the slice where a type buys *impossibility* rather than
+visibility (§10 R-3's distinction), because the hazard is a single conversion
+rather than a call-site pattern like a fan-out.
 
 **The repo/no-repo discriminator is `exists()`, never `is_dir()` — RV-322-B F-A.**
 `resolve` distinguishes I-1 (no repo ⇒ total) from I-2 (fault ⇒ `Err`) by looking
@@ -166,10 +197,10 @@ workflow.
 
 So the two consequences are split by intent, not by luck:
 
-| Caller intent | Constructor | Fault behaviour |
-|---|---|---|
-| will write primary-owned state | `resolve` | `Err` — no write occurs (I-2) |
-| read/projection only | `resolve_for_read` | falls back to `cwd` — **exactly today's pure-join result** |
+| Caller intent | Constructor | Yields | Fault behaviour |
+|---|---|---|---|
+| will write primary-owned state | `PrimaryRoot::resolve` | `PrimaryRoot` | `Err` — no write occurs (I-2) |
+| read/projection only | `ReadRoot::resolve_for_read` | `ReadRoot` | falls back to `cwd` — **exactly today's pure-join result** |
 
 `resolve_for_read` is not a re-run of the warn-and-continue mistake F-6 killed:
 that draft let a *write* proceed after a signal. This one degrades a **read** to
@@ -196,9 +227,10 @@ defect mirrored (two names where one meaning suffices).
 
 | Function | Change |
 |---|---|
-| `phases_dir` (`state.rs:135`) | `(&PrimaryRoot, u32) -> PathBuf` — pure, total |
-| `boundaries_path` (`state.rs:716`) | `(&PrimaryRoot, u32) -> PathBuf` — **loses its `Result`** (DEC-098) |
-| `init_phases`, `phase_rollup`, `completed_phase_ids`, `read_phase_statuses`, `read_source_deltas`, `forget_source_delta` (`state.rs:857`) | first param `&Path` → `&PrimaryRoot`. **Verified git-free** |
+| `phases_dir` (`state.rs:135`) | `(&ReadRoot, u32) -> PathBuf` — pure, total. Takes the **weaker** type so readers need no write capability; writers pass `(&primary).into()` (F-10) |
+| `boundaries_path` (`state.rs:716`) | `(&ReadRoot, u32) -> PathBuf` — **loses its `Result`** (DEC-098) |
+| `phase_rollup`, `completed_phase_ids`, `read_phase_statuses`, `read_source_deltas` | first param `&Path` → `&ReadRoot` — pure readers. **Verified git-free** |
+| `init_phases`, `forget_source_delta` (`state.rs:857`) | first param `&Path` → `&PrimaryRoot` — these **write** (`init_phases` materialises sheets; `forget_source_delta` evicts a row) |
 | `edit_phase_sheet` (`state.rs:367`), `reconcile_phase_status` (`state.rs:1296`) | `&PrimaryRoot` **only** — verified zero `git::` calls in either; an earlier draft gave them both roots for nothing |
 | `registry_completeness` (`state.rs:981`) | **collapses `(cwd, project_root)` → one `&PrimaryRoot`** — it already takes two roots that now mean the same tree (F-E) |
 | `set_phase_status` (`state.rs:399`), `capture_phase_boundary` (`state.rs:598`) | **both roots**: `(primary: &PrimaryRoot, git_cwd: &Path, …)` (F-3) |
@@ -206,7 +238,18 @@ defect mirrored (two names where one meaning suffices).
 | `single_commit_boundary` (`state.rs:825`) | **unchanged, `&Path` = git cwd** — it resolves a possibly-symbolic ref (`resolve_ref(root, commit)`, `:831`). Listed so its caller (`slice.rs:3004`) is not "tidied" onto the primary |
 | `resolve_phase_truth` (`state.rs:1114`) | drops `coord`; becomes `(landed, sheets)` (DEC-096) |
 | `refresh_symlink` (`state.rs:345`) | both roots — mint in the primary, **retire a stale link** in a linked worktree (DEC-097, F-8) |
-| `integrity.rs:322-323` (reseat guard) | hand-built `root.join(state_dir)` → resolve via `PrimaryRoot` (F-5) |
+| `integrity.rs:322-323` (reseat guard) | hand-built `root.join(state_dir)` → resolve via `ReadRoot` — but **kind-scoped**, see below (F-5, corrected by F-13) |
+
+**The reseat guard's migration must be kind-scoped, not generic — RV-322 F-13.**
+`integrity.rs:322` iterates `kind.state_dir`, and **two** kinds declare one:
+`SLICE` → `.doctrine/state/slice` (`kinds/mod.rs:358`) and `REVIEW` →
+`.doctrine/state/review` (`:410`). A generic "resolve every `state_dir` through
+the root type" edit would therefore silently primary-scope **review** runtime
+state too — which §6 OQ-2 explicitly defers to CHR-050. The slice would ship the
+deferred change while claiming not to. The guard resolves through `ReadRoot` for
+`SLICE` only; every other kind keeps today's invoked-root join until CHR-050
+classifies it. V-11 asserts the slice kind moves and V-17 asserts the review kind
+does **not**.
 
 **`registry_completeness` must collapse, not half-migrate (F-E).** Its two params
 are documented as coinciding "in the primary worktree" (`state.rs:979`); after this
@@ -371,6 +414,19 @@ drive races the drive's own writer on the **same** file.
   mints into the invoked root, so existing worktrees already carry one; not
   removing it would leave exactly the misleading runtime projection DEC-097
   exists to prevent.
+  - **Retirement is on-encounter, and that is a bound, not a sweep — RV-322
+    F-14.** `refresh_symlink` runs where it is invoked, so it can only retire the
+    link in *that* tree. Sibling worktrees that are never invoked in keep their
+    stale links indefinitely. Sweeping them was considered and **rejected**:
+    enumerating `git worktree list` and writing into other people's trees breaks
+    ADR-006's sole-writer posture, races a live drive, and can touch a worktree
+    whose owner never ran this slice's code. So the residual is accepted and made
+    *visible* instead of silently carried: `doctrine doctor` reports a `phases`
+    link in any non-primary worktree as a stale-projection finding, so the
+    operator retires it by visiting (or removing) the tree. **Fresh forks are not
+    affected at all** — `WITHHELD` carries `Tier::PhaseLink`
+    (`worktree/allowlist.rs:74`), so provisioning never creates one. The exposure
+    is finite and shrinking: only worktrees that predate this slice.
 - **I-5 — Shared-file concurrency is bounded by contract, not by a lock.**
   *Added after RV-322 F-4.* `edit_phase_sheet` is an unlocked read-modify-write
   and the registry is unlocked shared-mutable. Two copies could previously
@@ -563,7 +619,8 @@ change under D3.
 **PHASE-01 does not start until REV-043 is `approved`** (R4). The phases
 themselves:
 
-1. `PrimaryRoot` (`resolve` + `resolve_for_read` + the `#[cfg(test)]` `assume`),
+1. `PrimaryRoot` + `ReadRoot` (`resolve` / `resolve_for_read`, the one-way
+   `From`, and the `#[cfg(test)]` `assume`),
    `phases_dir` migration, and the two-root split for the git-asking functions
    (F-3) — decided per function against its actual `git::` calls, not by tier
    (F-D / F-E). The `exists()` discriminator (F-A) and the read/write
@@ -588,7 +645,7 @@ themselves:
 | V-6 | VT | Landed-but-`in_progress`, no coord tree → `Conflict(Rework)`; `--truth --assert` non-zero (DEC-096) |
 | V-7 | VT | Symlink: minted in the primary; **a pre-existing link in a linked worktree is retired** — the upgrade case, not a fresh tree (DEC-097 + F-8) |
 | V-8 | VT | **Solo linked worktree**: `set_phase_status` records the *invoked* tree's HEAD as the source-delta boundary, not the primary's (F-3 — the regression the two-root split exists to prevent) |
-| V-8b | VA | Worker write exclusion is argued per arm from the actual mechanism — env leg at `pi-spawn-confined.sh:110`, PreToolUse hooks at `dispatch-agent/SKILL.md:177-179` — **not** by testing an unreachable EROFS path (I-3, revised per F-2) |
+| V-8b | VA | Worker write exclusion is argued per arm from the actual mechanism — **not** by testing an unreachable EROFS path (I-3, revised per F-2, and again per F-15 which found this row still describing I-3 as it read *before* the F-G correction). All four legs must be argued: (i) the CLI refusal is the whole `WriteClass::Write` set, `commands/guard.rs`; (ii) `worker_mode` holds via the **env** leg on codex/pi (`pi-spawn-confined.sh:110`) and via the **marker** leg on claude (`worktree/marker.rs:158-166`) — the arms differ and the row must say so; (iii) each arm's OS floor; (iv) `worker_commit`'s unconfined-server exception writes no phase-state or registry file (`mcp_server/worker_commit.rs:313-338`) |
 | V-9 | VA | **Both** fan-out sites resolve once outside their loop — `list_rows` (`slice.rs:2161`) and `load_slices` (`lazyspec.rs:495`). Reviewed at the call site, **not** inferred from the type: R-2 showed the type makes a fan-out visible, not impossible |
 | V-10 | VT | `read_source_deltas` against a non-repo root yields an empty registry, and `conformance_outcome` reports `Unavailable` rather than erroring (OQ-1 / R-1) |
 | V-11 | VT | The reseat guard (`integrity.rs:322-323`) refuses when live phase state exists **in the primary**, invoked from a linked worktree (F-5) |
@@ -597,6 +654,9 @@ themselves:
 | V-14 | VT | `resolve` **from a linked worktree** (`.git` is a *file*) returns the primary, not the linked tree — the `exists()`-vs-`is_dir()` discriminator (I-1 / R10). Must be a linked worktree: an `is_dir()` bug passes every primary-rooted test |
 | V-15 | VA | `registry_completeness` takes ONE root, and both call sites (`slice.rs:2861`, `dispatch.rs:3477`) pass the primary (F-E) |
 | V-16 | VA | `PrimaryRoot::assume` has no non-test caller (F-C); `edit_phase_sheet` / `reconcile_phase_status` take the primary alone, and `record_source_delta`'s git guards take the invoked tree (F-D / F-E) |
+| V-17 | VT | The reseat guard still resolves the **review** kind's `state_dir` against the invoked root — the deferred-subtree boundary holds and OQ-2 was not silently implemented (F-13). Paired with V-11, which asserts the slice kind *did* move |
+| V-18 | VA | No `ReadRoot → PrimaryRoot` conversion exists anywhere in the tree — the write capability cannot be forged from a fallback root (F-10). A compile-fail test is preferable to a review assertion if one is cheap |
+| V-19 | VT | `doctor` reports a `phases` symlink present in a non-primary worktree as a stale-projection finding (F-14's named residual — the bound is only honest if it is visible) |
 
 ## 10. Review Notes
 
@@ -725,6 +785,30 @@ discriminator that cannot tell two things apart — committed *inside the fix fo
 the findings about committing it inside the design*. The external pass named this
 about F-3 and F-6; it recurred one layer down, in the integration. Concentrating
 that class into PHASE-01 as contract (§8a) is the structural answer.
+
+### External pass, round 2 — RV-322 raiser verification, 2026-07-29
+
+The raiser verified F-3, F-4, F-6, F-7, F-9; contested F-1, F-2, F-5, F-8; and
+raised F-10..F-17 against the RV-322-B integration. Seven land. One is a race.
+
+| # | Verdict | Where it landed |
+|---|---|---|
+| F-10 | **accepted — blocker** | `resolve_for_read` returned `PrimaryRoot`, forging the write capability. §5.2 splits `PrimaryRoot` / `ReadRoot` one-way; V-18 |
+| F-11 (=F-2) | **already fixed** | The stale claude-arm text was corrected in REV-043 rows 1a and 2 at commit `7e92f41e`, before this round returned. The raiser read the pre-fix artefact |
+| F-12 (=F-1) | **accepted** | PRD-015 asserts absence/non-leakage on more surfaces than Invariant 2. REV-043 row 3 widens rather than a second REV — one claim, one altitude, one approval gate |
+| F-13 (=F-5) | **accepted — the responder's census was under-read** | `integrity.rs:322` is generic over `kind.state_dir`, and REVIEW declares one (`kinds/mod.rs:410`). A generic migration would have shipped OQ-2's deferred change. §5.2 kind-scopes it; V-17 |
+| F-14 (=F-8) | **accepted with a bounded remedy** | Retirement is on-encounter and cannot reach sibling worktrees. Sweeping rejected (sole-writer, races); residual made visible via `doctor`. §5.5 I-4; V-19 |
+| F-15 | **accepted** | V-8b still described I-3 as it read before the F-G correction. Rewritten to argue all four legs |
+| F-16 | **accepted** | DEC-098's "the fallible half moves to `resolve`" predates the constructor split. Amended |
+| F-17 | **accepted** | `slice-237.md` still claimed "restatement, not a relaxation" — the claim F-4 falsified. Corrected |
+
+**The recurring failure this round names.** F-11, F-16 and F-17 are one defect
+three times: a correction was written where it was *argued* and not everywhere it
+was *asserted*. F-4's correction reached REV-043's rationale but not the scope
+doc; F-2's reached the rationale but not the rows; F-B's reached §5.2 but not
+DEC-098. The lesson is procedural, not analytical — **when a finding overturns a
+claim, grep the corpus for the claim, not for the finding.** Recorded in the
+harvest.
 
 ### Method note
 
