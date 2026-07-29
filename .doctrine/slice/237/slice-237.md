@@ -43,9 +43,18 @@ invisible across worktrees"* as a **hazard**, so this slice serves the ADR's
 problem statement rather than contesting a decision. ADR-006 D9 (workers write no
 doctrine-mediated state — all writes funnel through the orchestrator) means no
 worker-side phase-status writer exists, so primary-resolving raises no worker
-confinement problem. Force 2's incidental claim that gitignoring makes phase state
-*"per-worktree by construction"* becomes false and is ADR context drift to note at
-reconcile — not a blocker.
+confinement problem.
+
+*Amended in `/design` (2026-07-29).* The exposure is **decision-level, not merely
+context drift**. Three statements are falsified — ADR-006 **D2**'s parenthetical
+that the coordination/runtime tier is *withheld* from workers, ADR-006 **D4**'s
+clause that *runtime state stays gitignored/per-worktree*, and **SPEC-012** §
+"Tier merge-safety by construction", which defends D4 *"not by trust but by
+absence"*. D2 and D4 are Decisions. One REV covers all three (ADR-013); see
+`design.md` § 7. It is a **restatement, not a relaxation**: merge safety is not
+weakened (no copy ⇒ nothing to diverge), REQ-297's write prohibition stays
+enforced at `src/commands/guard.rs:78,80`, and on the subprocess arm the
+prohibition additionally gains an OS floor.
 
 ## Scope & Objectives
 
@@ -63,10 +72,19 @@ reconcile — not a blocker.
 4. **Dissolve the appended-phase refusal.** `slice phases` run from a coord tree
    reads that tree's `plan.toml` and writes the primary state dir, so a
    mid-drive-appended phase materialises where the completeness gate reads it.
-5. **Reconcile SL-190's composite.** `resolve_phase_truth` loses its coord-vs-local
-   divergence input and `slice reconcile-phases` becomes near-vacuous. Decide
-   deliberately in `/design` whether it is retired, narrowed to a cross-machine
-   recovery tool, or kept.
+5. **Narrow SL-190's composite** *(corrected in `/design`; this objective
+   previously read "retire the composite", which was wrong)*.
+   `resolve_phase_truth` **narrows, it does not die**: it loses the
+   coord-vs-local axis and **keeps landed-vs-sheet**, retaining the `Some`-branch
+   matrix so conflict detection survives. `slice reconcile-phases` keeps working —
+   its real job is rewriting sheets from the landed oracle, which this slice does
+   not touch. `slice status --across-trees` is renamed **`--truth`**. See DEC-096.
+6. **Migrate `boundaries_path` onto the same mechanism** (`src/state.rs:716`), so
+   the slice does not ship two primary-resolution mechanisms in one module. It
+   becomes infallible. See DEC-098.
+7. **Mint the `phases` convenience symlink in the primary only**
+   (`src/state.rs:345`), so a linked worktree has no link rather than a dangling
+   one. See DEC-097.
 
 Closure intent: ISS-269's reproduction inverts — `slice conformance <ID>` agrees
 from a linked worktree and the primary. IDE-028 and the RV-312 appended-phase case
@@ -83,10 +101,21 @@ green unchanged except where they encode the two-copy model.
 - **The completeness gate's diagnostics.** ISS-254 (no evidence-only-phase
   exemption; refusal cannot name which input disagreed) survives this change
   untouched.
-- **Amending ADR-006.** Note the context drift for reconcile; do not open a REV
-  unless `/design` finds a genuine decision-level conflict.
+- ~~**Amending ADR-006.**~~ *Retired in `/design`.* The condition this non-goal
+  set — *"unless `/design` finds a genuine decision-level conflict"* — was met:
+  ADR-006 D2 and D4 are Decisions, and both are falsified. A REV covering ADR-006
+  and SPEC-012 is opened **in this slice**, not deferred to reconcile; landing
+  code that knowingly falsifies an accepted Decision while the ADR still asserts
+  it would reproduce this slice's own defect in governance.
 - **Reworking the storage-tier vocabulary.** The repo/tree/session axis is design
   rationale here. Promoting it to governance is a later, separate call.
+- **Fencing worker *read* access to primary phase sheets.** Single-homing makes
+  the runtime tier readable from a fork. Accepted explicitly rather than fenced
+  (`design.md` § 7 D5): ADR-006 D2 already grants workers free read of the
+  authored tier, which includes the slice design — strictly more sensitive than a
+  phase sheet's status string, so this adds no new *class* of information. The
+  residual is prompt discipline, not an invariant breach, and it is named in the
+  REV.
 
 ## Summary
 

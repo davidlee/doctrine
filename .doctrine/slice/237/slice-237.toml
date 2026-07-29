@@ -12,23 +12,27 @@ after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
 selector = "src/state.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/slice.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/mcp_server/dispatch.rs"
-intent = "scope-relevant"
+intent = "design-target"
 
 [[selector]]
 selector = "src/git.rs"
-intent = "scope-relevant"
+intent = "design-target"
+
+[[selector]]
+selector = "src/lazyspec.rs"
+intent = "design-target"
 
 [[relation]]
 label = "fulfils"
@@ -46,6 +50,12 @@ target = "ADR-006"
 label = "references"
 role = "originates_from"
 target = "ISS-269"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "governance restatement required by primary-resolving the runtime tier"
+target = "REV-043"
 
 # STRUCTURAL relations are uniform `[[relation]]` rows, never a typed
 # `[relationships]` axis (SL-048 "the cut"). Slices carry no typed STRUCTURAL
