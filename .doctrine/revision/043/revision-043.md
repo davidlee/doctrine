@@ -119,8 +119,10 @@ is why the change is routed through a REV rather than noted as drift at reconcil
 > are in the fork, and since SL-237 the repo-scoped runtime tier is *reachable*
 > (single-homed in the primary, not copied into the fork) — but **write** none of
 > it. Withholding was always the *means*; the invariant is the write prohibition,
-> which is enforced by the CLI worker guard (D2a) and, on the codex/pi arm, by the
-> read-only mount (ADR-008 D-B3).
+> which is enforced by the CLI worker guard (D2a) on both arms, under an OS floor
+> on each — a read-only mount on the codex/pi arm, PreToolUse confinement on the
+> claude arm. (ADR-008 D-B3's "claude cannot be wrapped" prose predates that
+> confinement and is stale; it is corrected separately, ISS-278.)
 
 **Why.** The parenthetical asserts the runtime tier is *withheld*. After SL-237 a
 fork resolves phase-sheet paths to the primary, so the tier is no longer absent
@@ -197,13 +199,19 @@ bullet near the top of the spec, and § "Tier merge-safety by construction".
 > invisibly mutable across worktrees; a shared pointer to one gitignored file is
 > not.
 >
-> The **write** prohibition is enforced, not assumed absent: the CLI worker guard
-> refuses `slice phase` / `slice phases` under `worker_mode`
-> (`src/commands/guard.rs:78,80`, ADR-006 D2a), and on the codex/pi arm the nested
-> bwrap profile mounts the primary read-only (ADR-008 D-B3), so the refusal has an
-> OS floor as well as a CLI one. The claude arm has no OS floor — as is already
-> true of the authored tier in a fork — so there it remains guard- and
-> prompt-enforced.
+> The **write** prohibition is enforced, not assumed absent. The CLI worker guard
+> refuses every write-class slice verb under `worker_mode` — `slice phase`,
+> `slice phases`, `record-delta`, `reconcile-phases` (`src/commands/guard.rs`
+> `write_class`, ADR-006 D2a) — and `worker_mode` is satisfied on **both** arms,
+> by different legs: the codex/pi arm sets `DOCTRINE_WORKER` unconditionally at
+> spawn, and the claude arm by the worker **marker** in the fork
+> (`is_linked_worktree && marker_present`). Beneath the CLI refusal each arm has
+> an **OS floor**: the codex/pi arm ro-binds the filesystem and rw-binds only the
+> worker's worktree; the claude arm installs two PreToolUse hooks that put Bash
+> in a nested bwrap (rw worktree, ro everything else) and deny `Edit`/`Write`
+> outside it. The one deliberate opening is `worker_commit`, which commits on the
+> worker's behalf from an *unconfined* server and is bounded by its own gate
+> rather than by the wall — it writes no phase-state or registry file.
 >
 > The orchestrator's pre-distilled worker prompt (ADR-006 D6) still substitutes for
 > coordination state a worker should not need; provisioning still substitutes for
@@ -215,14 +223,19 @@ bullet near the top of the spec, and § "Tier merge-safety by construction".
 The responsibility bullet near the top of the spec is restated to match: *"defend
 the tier merge-safety invariant by non-duplication — the repo-scoped runtime tier
 is single-homed, never copied into a fork — with the write prohibition enforced by
-the CLI worker guard and, where a subprocess exists to wrap, a read-only mount."*
+the CLI worker guard on both arms, under an OS floor on each."*
 
 **Why.** This is spec prose rather than a REQ, but it is a load-bearing
-architectural claim, not incidental context. **No REQ requires change**: the
-SPEC-012 roster (REQ-189..196, REQ-248..252) governs fork/provision/marker/env
-contract, SPEC-021 governs orchestrator altitude, and PRD-015 FR-002 (REQ-297)
-prohibits worker *writes* — which stays enforced. Verified in SL-237's pre-design
-spec sweep.
+architectural claim, not incidental context.
+
+**No REQ in SPEC-012's OWN roster requires change** — REQ-189..196, REQ-248..252
+govern the fork/provision/marker/env contract, and SPEC-021 governs orchestrator
+altitude. This is deliberately narrower than the claim the first draft made.
+*That* claim — "no REQ requires change" full stop — was inherited from a
+pre-design sweep which checked REQ-297 and stopped, and RV-322 F-1 proved it
+false: PRD-015 carries an invariant and two requirements bearing directly on this
+change, which is why Row 3 exists. The sweep is no longer cited as evidence for
+anything; each roster is stated separately, on its own reading.
 
 ---
 
