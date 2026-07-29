@@ -4,6 +4,15 @@
      live in the sister `backlog-NNN.toml`; this prose is free-form and is never
      structurally parsed (the storage rule). -->
 
+> **Closed `duplicate` 2026-07-29 — folded into [[ISS-220]].** Same test
+> (`memory::ambient_surface_tests::vt9_no_discoverable_root_emits_nothing`), same
+> cause (`discover_surface_root`'s `CLAUDE_PROJECT_DIR` fallback), same
+> `worker_commit` false-red. ISS-220 (2026-07-06, SL-206 PHASE-11) is the earlier
+> capture and is now the single record: it carries both observations, the landed
+> fix verified against an unmasked root, and the residuals. This item's third ask
+> — the B-vs-S differential gate — was routed to **IMP-194**, which already holds
+> that signal, rather than folded. The original capture is preserved below.
+
 `memory::ambient_surface_tests::vt9_no_discoverable_root_emits_nothing` asserts
 "no discoverable root ⇒ emit nothing" by passing a fake, non-canonicalizable cwd.
 But `discover_surface_root` (memory.rs) falls back to the ambient
