@@ -63,3 +63,56 @@ this is a fidelity gap in one end-to-end test, not an uncovered behaviour.
 Related: [[ISS-220]] (the ambient-env false-red this was found while closing);
 [[IMP-196]] (`cluster:testing-goldens` — golden hermeticity lint; the same
 "test reads ambient state" family, at a different altitude).
+
+## Resolution
+
+Fixed 2026-07-29 on `edge`, `2217fc2d`. Three changes, and the largest was not
+in the fix directions above.
+
+**1. `root.rs` had no tests at all.** `find_from` — the walk this whole issue is
+about — was unasserted at its own altitude. That is where the miss path belongs,
+and it turns out to be *hermetically* assertable there for a reason neither fix
+direction spotted: `find_from(start, markers)` takes its **markers as a
+parameter**. A test can inject `.iss281-test-marker`, which no real ancestor
+carries, and own its entire tree — no `TMPDIR` ancestry assumption, no
+`marker_free_base` candidate scan, no flake surface. Six tests now cover
+start-inclusive, walks-up, nearest-wins, the miss path, any-of-many markers
+including a file marker (`.git` is a file in a linked worktree), and the empty
+marker set.
+
+**2. The env read moved up one more level.** `run_surface_to` now takes
+`env_project_dir`; `run_surface` — the impure boundary that already reads stdin —
+reads the env and passes it down. This mattered because ISS-220's fix stopped one
+level short: `run_surface_to` still read process env, so *any* test driving it
+with an unresolvable cwd fell through to the ambient anchor. The 12 test call
+sites route through a documented `surface` helper passing `None`, so the module is
+now **structurally** unable to read process env rather than incidentally not
+doing so.
+
+**3. vt9 asserts its premise** — unresolvable cwd, no ambient anchor, both arms
+failing at canonicalization before the walk is reached. This is fix direction 1,
+and it is the smallest of the three.
+
+Mutation-verified rather than assumed. Reintroducing an internal ambient env read
+in `discover_surface_root` reds vt9's premise assert and
+`no_usable_anchor_on_either_arm_yields_none`, naming the leaked root — the exact
+regression this closes. Skipping the start dir in `find_from` reds
+`start_dir_itself_is_a_candidate`; returning the outermost hit instead of the
+nearest reds `nearest_marked_ancestor_wins`.
+
+**Honest limit:** the reintroduced-env-read mutation is only observable when
+`CLAUDE_PROJECT_DIR` is actually set during the run. That is the worker-fork / CI
+condition where the bug bit, not a bare local run — so the guard holds where it
+matters but a purely local suite would not catch that specific regression.
+
+`doctrine check gate` green (clippy zero warnings); ambient module 19, root 6.
+
+`/tmp/.git` was **not** deleted — out of scope as recorded above, and still worth
+deleting as host hygiene.
+
+Durable capture: [[mem.pattern.testing.no-root-find-walk]] already recorded this
+hazard and the `marker_free_base` workaround; it now also carries the
+injected-marker technique, the canonicalize-fails option, when each applies, and
+the recurrence. It could not be re-attested — `memory verify` refuses on a dirty
+tree and this worktree carries other agents' uncommitted work (friction recorded;
+work homed at [[IMP-221]]).
