@@ -1,7 +1,7 @@
 id = 237
 slug = "primary-resolve-runtime-phase-state"
 title = "Primary-resolve runtime phase state"
-status = "plan"
+status = "ready"
 created = "2026-07-28"
 updated = "2026-07-29"
 tags = ["area:conformance", "area:dispatch", "area:worktree", "cluster:root-resolution"]
