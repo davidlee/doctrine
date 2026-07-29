@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fab78-3277-7c12-850b-7d2cf9713810"
+recorded_at = "2026-07-29T01:23:29.015556975Z"
+kind = "friction"
+summary = "/dispatch worker: anti-theatre criteria paid off — two mandated tests were green and meaningless until mutation testing exposed them"
+detail = "SL-233 PHASE-03's VA-NC required every mandated test be observed RED via a targeted mutation before being made green. Two tests passed their mutation — i.e. were theatre — and were only caught because the negative control was mandatory: (1) change_log_floor_is_recorded_not_inferred left the log with ZERO surviving rows, so an inferred floor degenerated to the correct value and the 'infer the floor' mutation still passed; rewritten as early-material -> 40 quiet revisions -> late-material so the recorded floor reaches strictly further back than the oldest surviving row. (2) distinct_ids_sharing_a_long_prefix_render_distinguishably exercised only the subject column, which never routes through render_value, so the 'truncate identity at emission' mutation passed; a second leg was added asserting a needs_added row renders both endpoint ids whole. Both would have shipped green and unfalsifiable. Evidence FOR the cost of mandatory negative controls on criteria that assert a bound holds — the pattern generalises: a containment/identity test that never reaches the bound cannot fail."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

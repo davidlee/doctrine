@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fab77-f744-7b92-b7d1-b595937b91ca"
+recorded_at = "2026-07-29T01:23:13.860105851Z"
+kind = "friction"
+summary = "/phase-plan: caught EX-11/EX-12's test-location conflict but missed the same fact's second consequence"
+detail = "PHASE-03 planning found that a binary-only crate cannot inject EX-11's pre-write hook from tests/, and the owner ruled EX-17 relocating two tests. The SAME fact — tests/ can only spawn the binary — also makes VT-6/VT-7/VT-8's five *rendering* assertions unreachable, because they assert on rendered output while PHASE-04 owns 'design show'. That second consequence was not caught at plan time; the worker hit it mid-phase and spent a long detour before settling on a deliberately partial 'design show' plus a #[path] include of design_run/mod.rs into the e2e file. Generalisable check for /phase-plan: having established a harness constraint, sweep EVERY mandated test against it — ask 'which of these assert on a surface a later phase owns?' — rather than fixing only the instance that surfaced first. Same defect shape as the slice's own layer/provenance rules: widen the check, do not patch the instance."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

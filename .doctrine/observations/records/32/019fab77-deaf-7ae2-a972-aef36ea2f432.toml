@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fab77-deaf-7ae2-a972-aef36ea2f432"
+recorded_at = "2026-07-29T01:23:07.568077324Z"
+kind = "friction"
+summary = "/dispatch-agent: arm-spawn --slice without --phase yields an unbound fork that only surfaces after the whole worker run"
+detail = "Ran 'dispatch arm-spawn --base B --slice 233' without --phase. Both halves are needed for the durable fork binding; a half-arm binds nothing, so the create-fork hook wrote a DispatchRecord with name/dir/branch/base/coord and NO slice/phase. Nothing warned at arm time, at cd time, or at spawn time. The worker ran to completion — 405k subagent tokens, ~52 minutes, full green implementation — and only then did worker_commit refuse 'unprovable-fork'. The delta survived (fallback live-worktree import landed it), but the failure is maximally late and maximally expensive. src/worktree/create.rs:381 already carries a comment acknowledging the shape ('forked UNBOUND, which surfaces only as unprovable-fork after a whole ...'), so this is known. Cheap fixes, in order of value: (a) arm-spawn warns or refuses on --slice without --phase (a half-arm is never intentional); (b) create-fork emits a visible notice when it writes an unbound record; (c) arm-spawn defaults --phase from 'dispatch next' when it prescribes spawn for exactly one phase. No rebind verb exists by design (zero-rescue), so the only recovery is fallback-A import, which loses worker author attribution."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

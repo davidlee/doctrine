@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fab78-18fb-7b33-b452-25a037ef466b"
+recorded_at = "2026-07-29T01:23:22.491229214Z"
+kind = "friction"
+summary = "/dispatch: 10 integration targets cannot pass inside a marked worker fork, so workers cannot self-verify"
+detail = """The SL-233 PHASE-03 worker reported 'doctrine check gate' red in its fork on 10 targets (e2e_backlog_filter_alias, e2e_dep_seq_verbs, e2e_dispatch_arm_spawn, e2e_dispatch_h1_integration, e2e_link_unlink, e2e_priority_cross_kind, e2e_relation_migration_storage, e2e_revision_dep_seq, e2e_spec_req_add_slug, e2e_supersede), all failing with 'worker fork (signal: marker): refusing authored write'. Cause: those tests spawn the binary WITHOUT .current_dir(), so the child inherits the marked worktree as cwd and hits the worker-mode guard. VERIFIED as environmental, not a delta defect: the same commit runs 'check gate' exit 0 / 106 targets / 0 failures on the markerless coord tree. Consequence: a worker cannot trust its own gate run and must either report a red it did not cause or guess which reds are environmental — this worker chose correctly but had to reason it out. worker_commit's gate clears the marker (commit 5a7228340), so the real gate is fine; it is the worker's SELF-check that is unreliable. Durable fix: .current_dir(tmp) + .env_remove("DOCTRINE_WORKER") in those 10 tests. Backlog candidate."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
