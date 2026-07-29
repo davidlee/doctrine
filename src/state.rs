@@ -485,20 +485,24 @@ pub(crate) fn set_phase_status(
     // completion that resolved a `(start, end)` pair, and its failure is reported
     // (named warning) but never returned — the status transition above already
     // succeeded and must stand.
-    if let Some(CaptureCompletion { start, end }) = capture_end
-        && let Err(e) = record_source_delta(
+    if let Some(CaptureCompletion { start, end }) = capture_end {
+        match record_source_delta(
             project_root,
             slice_id,
             BoundaryRow {
                 phase: phase_id.to_string(),
-                code_start_oid: start,
-                code_end_oid: end,
+                code_start_oid: start.clone(),
+                code_end_oid: end.clone(),
                 // Solo binding capture is the solo landing writer (design §5.3).
                 provenance: Provenance::Solo,
             },
-        )
-    {
-        warn_capture(phase_id, &format!("recording source delta failed: {e:#}"));
+        ) {
+            // The row landed — but its start was stamped back at the in_progress
+            // flip, so a multi-commit range may have swept in foreign history
+            // (IMP-175). Surface it for review; never block on it.
+            Ok(()) => advise_boundary_span(project_root, slice_id, phase_id, &start, &end),
+            Err(e) => warn_capture(phase_id, &format!("recording source delta failed: {e:#}")),
+        }
     }
 
     // Primary-completion mirror (ISS-212, generalising IMP-272): a phase driven to
@@ -668,6 +672,75 @@ fn capture_phase_boundary(
     };
 
     Some(CaptureCompletion { start, end: head })
+}
+
+/// The bound on the advisory's range walk — the CALLER owns the bound
+/// ([`crate::git::log_oneline`] never walks unbounded). A range that reaches the
+/// cap reads as "`CAP`+ commits": the exact count past it does not change the
+/// advice, and the walk is cheap because it stops here.
+const SPAN_ADVISORY_CAP: usize = 12;
+
+/// How many of the newest commits the advisory lists verbatim before eliding.
+const SPAN_ADVISORY_HEAD: usize = 3;
+
+/// Pure: the operator-facing advisory for a JUST-RECORDED boundary whose range
+/// holds more than one commit (IMP-175). The solo binding stamps `code_start_oid`
+/// at the `InProgress` flip, so any foreign commit landing on the branch before
+/// the phase itself lands falls inside `start..end` and `slice conformance`
+/// attributes it to the phase. Deciding WHICH commits are the phase's own would
+/// need the host project's commit-message convention, which the engine must not
+/// depend on (POL-002) — so the binding surfaces the range for review and names
+/// the correction (`slice record-delta`) instead of guessing.
+///
+/// `commits` is newest-first oneline output for the range. `None` — nothing to
+/// review — for a single-commit range (provably that commit's own patch, the
+/// [`single_commit_boundary`] shape) or an empty one (`start == end`).
+fn span_advisory(slice_id: u32, phase_id: &str, commits: &[String]) -> Option<String> {
+    if commits.len() < 2 {
+        return None;
+    }
+    // At the cap the walk was TRUNCATED: the count is a floor, and the range's
+    // oldest commit was never read — so the count carries a `+` and the tail line
+    // is withheld rather than implying the elision ends at the base.
+    let capped = commits.len() >= SPAN_ADVISORY_CAP;
+    let plus = if capped { "+" } else { "" };
+    let (head, tail) = match commits.len() {
+        _ if capped => (SPAN_ADVISORY_HEAD, 0),
+        n if n <= SPAN_ADVISORY_HEAD + 1 => (n, 0),
+        _ => (SPAN_ADVISORY_HEAD, 1),
+    };
+    let hidden = commits.len() - head - tail;
+
+    let mut lines = vec![format!(
+        "warning: {phase_id} boundary spans {}{plus} commits — any that are not this phase's \
+         are attributed to it; review before audit:",
+        commits.len()
+    )];
+    let indented = |c: &String| format!("  {c}");
+    lines.extend(commits.iter().take(head).map(indented));
+    if hidden > 0 {
+        lines.push(format!("  … ({hidden}{plus} more)"));
+    }
+    lines.extend(commits.iter().skip(commits.len() - tail).map(indented));
+    lines.push(format!(
+        "correct with: doctrine slice record-delta {slice_id} {phase_id} --commit <this phase's own code tip>"
+    ));
+    Some(lines.join("\n"))
+}
+
+/// Walk a just-recorded boundary's range and emit [`span_advisory`] when it
+/// warrants review (IMP-175). Read-only and DEGRADING like every other step of the
+/// capture (design D5) — but SILENT on fault, unlike [`warn_capture`]: the row is
+/// already recorded and the transition already succeeded, so a failed advisory walk
+/// has no correctness consequence to report.
+fn advise_boundary_span(root: &Path, slice_id: u32, phase_id: &str, start: &str, end: &str) {
+    let Ok(commits) = crate::git::log_oneline(root, &format!("{start}..{end}"), SPAN_ADVISORY_CAP)
+    else {
+        return;
+    };
+    if let Some(advisory) = span_advisory(slice_id, phase_id, &commits) {
+        let _ignored = writeln!(std::io::stderr(), "{advisory}");
+    }
 }
 
 /// Emit a single NAMED capture-degradation warning to stderr (the binding never
@@ -2184,6 +2257,105 @@ mod tests {
         assert!(
             single_commit_boundary(&repo, &root_oid, Provenance::Manual, "PHASE-01").is_err(),
             "root commit (0 parents) → rejected"
+        );
+    }
+
+    // IMP-175: a boundary whose range holds more than one commit is surfaced for
+    // review — the solo binding stamps `code_start_oid` at the in_progress flip, so
+    // foreign history landing before the phase does falls inside the recorded range.
+    // Composed against REAL `log_oneline` output so the `start..end` refish is
+    // exercised, not just the formatter.
+    #[test]
+    fn span_advisory_flags_a_multi_commit_range_and_stays_quiet_on_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo = init_repo(&tmp.path().join("repo"));
+        let base = git(&repo, &["rev-parse", "HEAD"]);
+
+        // Foreign history lands between the stamp and the phase's own commit.
+        for m in ["chore(SL-154): close", "feat(SL-156): other"] {
+            git(&repo, &["commit", "-q", "--allow-empty", "-m", m]);
+        }
+        git(
+            &repo,
+            &["commit", "-q", "--allow-empty", "-m", "feat(SL-138): own"],
+        );
+        let own = git(&repo, &["rev-parse", "HEAD"]);
+
+        let walk = |start: &str, end: &str| {
+            crate::git::log_oneline(&repo, &format!("{start}..{end}"), SPAN_ADVISORY_CAP).unwrap()
+        };
+
+        // The polluted range: three commits, only one of them the phase's.
+        let advisory = span_advisory(138, "PHASE-02", &walk(&base, &own))
+            .expect("a multi-commit range is advised");
+        assert!(
+            advisory.contains("spans 3 commits"),
+            "exact count below the cap: {advisory}"
+        );
+        assert!(
+            advisory.contains("chore(SL-154): close"),
+            "lists the foreign commits for review: {advisory}"
+        );
+        assert!(
+            advisory.contains("doctrine slice record-delta 138 PHASE-02"),
+            "names the correction with the phase's own coordinates: {advisory}"
+        );
+
+        // A single-commit range is provably that commit's own patch — nothing to review.
+        assert_eq!(
+            span_advisory(138, "PHASE-02", &walk(&format!("{own}^"), &own)),
+            None,
+            "one commit → silent"
+        );
+        // An empty phase (start == end) likewise.
+        assert_eq!(
+            span_advisory(138, "PHASE-02", &walk(&own, &own)),
+            None,
+            "empty range → silent"
+        );
+    }
+
+    // IMP-175: past the walk cap the count is a FLOOR (`12+`) and the oldest commit
+    // was never read, so the advisory withholds a tail line rather than implying the
+    // elision ends at the range's base.
+    #[test]
+    fn span_advisory_elides_and_marks_the_count_as_a_floor_at_the_cap() {
+        let commits: Vec<String> = (0..SPAN_ADVISORY_CAP)
+            .map(|i| format!("00000{i:03} commit {i}"))
+            .collect();
+
+        let capped = span_advisory(1, "PHASE-01", &commits).expect("advised");
+        assert!(
+            capped.contains(&format!("spans {SPAN_ADVISORY_CAP}+ commits")),
+            "count is a floor at the cap: {capped}"
+        );
+        assert!(capped.contains("commit 0"), "lists the newest: {capped}");
+        assert!(
+            !capped.contains(&format!("commit {}", SPAN_ADVISORY_CAP - 1)),
+            "withholds the oldest — the walk may not have reached the base: {capped}"
+        );
+        assert!(
+            capped.contains(&format!(
+                "({}+ more)",
+                SPAN_ADVISORY_CAP - SPAN_ADVISORY_HEAD
+            )),
+            "elides the middle, itself a floor at the cap: {capped}"
+        );
+
+        // Below the cap the oldest IS the range's base, so it is shown.
+        let under =
+            span_advisory(1, "PHASE-01", &commits[..SPAN_ADVISORY_HEAD + 2]).expect("advised");
+        assert!(
+            under.contains(&format!("commit {}", SPAN_ADVISORY_HEAD + 1)),
+            "shows the base commit below the cap: {under}"
+        );
+        assert!(under.contains("(1 more)"), "elides exactly one: {under}");
+
+        // A short range lists every commit — no elision line at all.
+        let short = span_advisory(1, "PHASE-01", &commits[..2]).expect("advised");
+        assert!(
+            !short.contains("more)"),
+            "no elision for a short range: {short}"
         );
     }
 
