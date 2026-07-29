@@ -8,6 +8,7 @@
 //! are inputs minted in the shell (PHASE-04); this layer only validates shapes.
 //!
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -10631,11 +10632,16 @@ fn relativize_probe_path(fp: &str, root: &Path) -> Option<PathBuf> {
 /// discovery, keyed on the hook's reported cwd rather than the process cwd
 /// (design §5.4). `None` ⇒ no discoverable root ⇒ the caller emits nothing
 /// (INV-2 fail-open).
-fn discover_surface_root(cwd: Option<&str>) -> Option<PathBuf> {
-    let anchor = cwd.and_then(|c| fs::canonicalize(c).ok()).or_else(|| {
-        std::env::var_os(ENV_PROJECT_DIR_SURFACE)
-            .and_then(|v| fs::canonicalize(PathBuf::from(v)).ok())
-    })?;
+///
+/// `env_project_dir` is the `CLAUDE_PROJECT_DIR` value, passed in rather than
+/// read here (ISS-220): reading process env inside this resolution made the
+/// fallback arm untestable — edition-2024 `set_var` is `unsafe` and the ambient
+/// suite runs parallel in one process, so no test could pin the arm without
+/// poisoning its siblings. The impure read lives at the caller's shell boundary.
+fn discover_surface_root(cwd: Option<&str>, env_project_dir: Option<&OsStr>) -> Option<PathBuf> {
+    let anchor = cwd
+        .and_then(|c| fs::canonicalize(c).ok())
+        .or_else(|| env_project_dir.and_then(|v| fs::canonicalize(PathBuf::from(v)).ok()))?;
     crate::root::find_from(&anchor, &crate::root::default_markers())
 }
 
@@ -10760,7 +10766,8 @@ fn run_surface_to(writer: &mut impl Write, raw: &str) -> Result<()> {
     // Root discovery from the stdin `cwd`; no discoverable root ⇒ nothing
     // (INV-2). Discovered BEFORE the probe: the path surface relativizes an
     // absolute `file_path` against this root (ISS-232).
-    let Some(root) = discover_surface_root(input.cwd.as_deref()) else {
+    let env_project_dir = std::env::var_os(ENV_PROJECT_DIR_SURFACE);
+    let Some(root) = discover_surface_root(input.cwd.as_deref(), env_project_dir.as_deref()) else {
         return Ok(());
     };
     // Discriminate the surface; an unregistered tool / missing key / an
@@ -11223,5 +11230,90 @@ mod ambient_surface_tests {
         let mut out: Vec<u8> = Vec::new();
         assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
         assert!(out.is_empty(), "no discoverable root ⇒ emit nothing");
+    }
+
+    /// A canonicalizable directory carrying a root marker, plus its canonical
+    /// path — `tempdir` may sit behind a symlinked `TMPDIR`, so the expectation
+    /// must be canonical too.
+    fn marked_root() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".git")).unwrap();
+        let canonical = fs::canonicalize(dir.path()).unwrap();
+        (dir, canonical)
+    }
+
+    /// ISS-220: a resolvable `cwd` settles discovery on its own — the ambient
+    /// `CLAUDE_PROJECT_DIR` arm is never consulted, even when it names a
+    /// different real root. This is the arm vt9 leans on for hermeticity; here
+    /// it is pinned directly rather than inferred from vt9 passing.
+    #[test]
+    fn resolvable_cwd_wins_over_the_env_anchor() {
+        let (_cwd_dir, cwd_root) = marked_root();
+        let (_env_dir, env_root) = marked_root();
+
+        let found =
+            discover_surface_root(Some(cwd_root.to_str().unwrap()), Some(env_root.as_os_str()));
+
+        assert_eq!(
+            found,
+            Some(cwd_root),
+            "a resolvable cwd must settle discovery; the env anchor is a fallback, not an override"
+        );
+    }
+
+    /// ISS-220: the fallback's reason for existing — an absent or
+    /// non-canonicalizable `cwd` defers to the `CLAUDE_PROJECT_DIR` anchor.
+    /// Both no-cwd and bogus-cwd take the same arm.
+    #[test]
+    fn unresolvable_cwd_defers_to_the_env_anchor() {
+        let (_env_dir, env_root) = marked_root();
+
+        for cwd in [None, Some("/nonexistent/iss220/bogus")] {
+            let found = discover_surface_root(cwd, Some(env_root.as_os_str()));
+            assert_eq!(
+                found,
+                Some(env_root.clone()),
+                "an unresolvable cwd ({cwd:?}) must fall back to the env anchor"
+            );
+        }
+    }
+
+    /// ISS-220: with no usable anchor on either arm, discovery yields `None` —
+    /// the INV-2 fail-open the caller turns into "emit nothing". Covers an
+    /// absent env var and one naming a path that cannot canonicalize.
+    #[test]
+    fn no_usable_anchor_on_either_arm_yields_none() {
+        let bogus = "/nonexistent/iss220/bogus";
+        for env in [None, Some(OsStr::new("/nonexistent/iss220/env"))] {
+            assert_eq!(
+                discover_surface_root(Some(bogus), env),
+                None,
+                "no resolvable cwd and no resolvable env anchor ({env:?}) ⇒ None"
+            );
+        }
+    }
+
+    /// ISS-220: the env anchor is subject to the same upward marker walk as the
+    /// cwd anchor — an unmarked directory inside a marked root discovers that
+    /// root, not the anchor itself.
+    ///
+    /// Deliberately NOT asserted as "an unmarked anchor ⇒ `None`": that would
+    /// depend on no ancestor of `TMPDIR` carrying a marker, which is not a
+    /// property a test can hold. This host proves the point — a stray
+    /// `/tmp/.git` makes `/tmp` itself resolve as a root, so any tempdir-based
+    /// "rootless" premise is environmental. The marker-free arm is pinned
+    /// hermetically by `no_usable_anchor_on_either_arm_yields_none`, which fails
+    /// canonicalization on both arms and never reaches the walk.
+    #[test]
+    fn env_anchor_walks_up_to_its_marked_root() {
+        let (_env_dir, env_root) = marked_root();
+        let nested = env_root.join("a/b");
+        fs::create_dir_all(&nested).unwrap();
+
+        assert_eq!(
+            discover_surface_root(Some("/nonexistent/iss220/bogus"), Some(nested.as_os_str())),
+            Some(env_root),
+            "the env anchor walks up to the nearest marked root, like the cwd arm"
+        );
     }
 }
