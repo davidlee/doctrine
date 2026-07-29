@@ -8,14 +8,21 @@ for prose-body section edits.
 ## Rationale
 
 SL-237 single-homes repo-scoped runtime state (phase sheets, the source-delta
-registry) in the primary worktree. Three authored statements assert the opposite
-mechanism. They are **one claim at two altitudes**, so they are restated together
-rather than in separate revisions — splitting them is what let them drift apart in
-the first place.
+registry) in the primary worktree. Authored statements at three altitudes —
+ADR-006, SPEC-012, PRD-015 — assert the opposite mechanism. They are **one claim
+at three altitudes**, so they are restated together rather than in separate
+revisions; splitting them is what let them drift apart in the first place.
 
-**This is a restatement of mechanism, not a relaxation of safety.** That
-distinction is the whole point of this REV, and every excerpt below is written to
-preserve it.
+**This is a restatement of mechanism, plus ONE named relaxation.** An earlier
+draft of this REV claimed pure restatement. That was overreach, caught by RV-320
+F-4 and corrected here: the *merge-safety* claim is genuinely preserved, but
+single-homing introduces a **new concurrent read-modify-write exposure** that
+per-worktree copies did not have. It is stated in § "The named relaxation" below,
+not folded into the restatement.
+
+*Scope widened after RV-320 F-1: the original draft asserted "no requirement
+changes", inheriting a pre-design sweep that checked REQ-297 and stopped. PRD-015
+carries an invariant and two requirements bearing directly on this change.*
 
 ### What does NOT change
 
@@ -23,13 +30,25 @@ preserve it.
   strengthened.** The named hazard was a *copied* phase sheet diverging across
   worktrees and merging back. Single-homing creates **no copy**. One file cannot
   diverge from itself.
-- **The worker write prohibition (REQ-297, ADR-006 D2) stays fully enforced.**
-  The CLI worker guard classifies `SliceCommand::Phases` → `Write("slice phases")`
-  and `Phase` → `Write("slice phase")` (`src/commands/guard.rs:78,80`), both
-  refused under `worker_mode`. On the codex/pi arm the prohibition additionally
-  gains an **OS floor**: `scripts/pi-spawn-confined.sh:104-107` ro-binds the whole
-  filesystem and rw-binds only the worker's own worktree, so the primary is
-  physically read-only inside a worker namespace.
+- **The worker write prohibition (REQ-297, ADR-006 D2) stays fully enforced, and
+  has an OS floor on BOTH arms.** *Corrected after RV-320 F-2 — an earlier draft
+  of this REV asserted the claude arm had no OS floor, on the strength of
+  ADR-008 D-B3's text that claude's `Agent` tool "cannot be wrapped". That text
+  is **stale** relative to the shipped skill, and this REV would have written the
+  staleness into SPEC-012.*
+  - CLI guard, both arms: `SliceCommand::Phases` → `Write("slice phases")` and
+    `Phase` → `Write("slice phase")` (`src/commands/guard.rs:78,80`), refused
+    under `worker_mode`.
+  - **codex/pi arm:** `scripts/pi-spawn-confined.sh:110` sets
+    `--setenv DOCTRINE_WORKER 1` *unconditionally*, so `worker_mode` holds via
+    the env leg regardless of the marker; `:104-107` ro-binds the filesystem and
+    rw-binds only the worker's worktree.
+  - **claude arm:** two installed PreToolUse hooks —
+    `.agents/skills/dispatch-agent/SKILL.md:177-179` — put Bash into a nested
+    bwrap (rw worktree, ro everything else) and deny `Edit`/`Write` outside the
+    worktree.
+  - **Follow-up, not silently fixed here:** ADR-008 D-B3's "claude-only concession"
+    prose is stale and needs its own correction. This REV does not amend ADR-008.
 - **ADR-006 D4 clause 3 — "the `phases` symlink is relative" — is unchanged.**
   SL-237 (DEC-097) mints the convenience symlink *only in the primary*; where it
   exists it stays relative.
@@ -37,11 +56,46 @@ preserve it.
   gitignored (`.gitignore:39`), per-slice, id-derived (nothing is minted or
   counted), and single-writer under D2/D9. Concurrent drives touch disjoint
   `<NNN>` directories. D4's warning that *"any future central index reintroduces
-  conflict"* was tested against this design and does not fire.
+  conflict"* was tested against this design and does not fire **for the
+  duplication hazard it names** — see the named relaxation for what it does not
+  cover.
+- **PRD-015 FR-001 (REQ-296) — "the coordination/runtime tier absent by
+  construction" — is PRESERVED, not revised.** The provisioning allowlist
+  `is_withheld` (`src/worktree/allowlist.rs:170`; `WITHHELD` covers
+  `.doctrine/state/slice/**`) is untouched by SL-237. **No copy is provisioned
+  into a fork.** The tier remains literally absent from the fork's own tree; what
+  changes is that a *path resolves outward*.
+- **PRD-015 NF-003 (REQ-304) — "tier exclusion guaranteed by construction rather
+  than a trusted check" — is PRESERVED**, with the construction relocated from
+  provisioning-absence to the OS floor, on **both** arms (see below).
 
 ### What DOES change
 
-The **stated defence mechanism**, and one new **read** exposure.
+The **stated defence mechanism**; PRD-015's non-crossing invariant; and one new
+**read** exposure. Plus the named relaxation.
+
+### The named relaxation — concurrent RMW on a now-shared file
+
+Per-worktree copies could **diverge** but could not **race**. One file can race.
+`edit_phase_sheet` is an unlocked read-modify-write, and the source-delta
+registry is likewise unlocked shared-mutable. `run_phases` carries no
+live-drive guard, where `run_reconcile_phases` does
+(`src/slice.rs:1236-1244`).
+
+**No locking mechanism is designed, and this REV does not pretend otherwise.**
+The exposure is bounded by contract, not by construction:
+
+- ADR-006 D2/D9 make the orchestrator the **sole** phase-state writer during a
+  drive, so the ordinary dispatch path has one writer by governance.
+- The **single-operator precondition** already documented on
+  `run_reconcile_phases` ("doctrine has no cross-machine lock, so two operators
+  reconciling one repo concurrently is out of contract") is promoted from a
+  verb-local note to a **tier-level assumption** covering the shared file.
+
+This is the honest trade: the previous arrangement avoided the race by keeping
+two copies, and paid for it with divergence that required a completion mirror and
+generated five patches. Recording the exposure is a precondition of accepting
+that trade knowingly.
 
 ---
 
@@ -172,11 +226,72 @@ spec sweep.
 
 ---
 
+---
+
+## Row 3 — PRD-015, `modify`
+
+*Added after RV-320 F-1.* Three statements were swept; only one needs revising.
+
+### 3a — Invariant 2 (the one that changes)
+
+**Before** (§4 Invariants)
+
+> - The coordination/runtime tier never crosses the isolation boundary into a
+>   worker.
+
+**After (proposed)**
+
+> - The coordination/runtime tier is never **copied** across the isolation
+>   boundary: a worker holds no second mutable copy, so nothing it can touch can
+>   diverge. Since SL-237 the repo-scoped part of that tier is single-homed and
+>   therefore **readable** from a worker; its **write** exclusion is enforced by
+>   the sole-writer guard and the per-arm OS floor, not by unreachability.
+
+**Why.** A *read* now crosses the boundary. The invariant as written is falsified
+by reach, even though nothing is copied and nothing may be written.
+
+### 3b — FR-001 (REQ-296): adjudicated, NOT revised
+
+> …with the coordination/runtime tier **absent by construction**, so nothing
+> shared-mutable can be corrupted.
+
+**Holds unchanged.** "Absent by construction" is implemented by the provisioning
+allowlist (`src/worktree/allowlist.rs:170`), which SL-237 does not touch. No copy
+enters the fork. The requirement's *statement* and its *mechanism* both survive;
+only the surrounding narrative needed correcting.
+
+### 3c — NF-003 (REQ-304): adjudicated, NOT revised
+
+> Isolation integrity: tier exclusion is guaranteed **by construction rather than
+> a trusted check**, and the sole-writer guard fails closed on ambiguity.
+
+**Holds unchanged, with the construction relocated.** Write exclusion is OS-level
+on both arms (see above), so exclusion remains *by construction* — it did not
+degrade into a trusted check. Had only the CLI guard existed, this requirement
+would have needed revising; the per-arm evidence is what preserves it.
+
+**Net:** PRD-015 needs **one** prose edit (Invariant 2). Recording 3b and 3c as
+adjudicated-and-preserved is deliberate — a future reader must be able to see
+that they were swept and why they held, rather than assume they were missed.
+
 ## Provenance
 
 Raised by **SL-237** during `/design`, 2026-07-29. Design rationale and the three
 attacks run against the governing content — the "central index" clause, whether
 withholding is load-bearing beyond merge safety, and whether primary resolution
 even works from a confined fork — are recorded in
-`.doctrine/slice/237/design.md` § 7. None of the three lands; that is why this is
-a restatement rather than a contested decision.
+`.doctrine/slice/237/design.md` § 7. None of the three lands.
+
+**Revised 2026-07-29 after external adversarial review RV-320** (raiser:
+codex/GPT-5.5), which raised nine findings against the design, all accepted.
+Three bear directly on this REV:
+
+- **F-1** — scope was incomplete; PRD-015 was never swept. Row 3 added.
+- **F-2** — the claude-arm "no OS floor" claim was **stale governance** that this
+  REV would have propagated into SPEC-012. Corrected, with the ADR-008 staleness
+  logged as a follow-up rather than silently amended.
+- **F-4** — "restatement, not relaxation" was overreach. The named relaxation
+  (concurrent RMW) is now stated in its own section.
+
+`SL-237 needs REV-043` is authored (RV-320 F-7): implementation is gated on this
+revision reaching `approved`, not merely on it having been raised.

@@ -11,10 +11,55 @@ in the impure shell** and threaded down, not through a git call inside the path
 constructor.
 
 - `PrimaryRoot::resolve(cwd)` performs the single `crate::git::primary_worktree`
-  call. It is **total**: no repo ⇒ the given root is its own primary (ASM, and
-  the reason ~20 `tempfile::tempdir()` tests keep passing).
+  call. **Total only for the designed invariant** — no repo at all ⇒ the given
+  root is its own primary (ASM, and the reason ~20 `tempfile::tempdir()` tests
+  keep passing) — and **fallible for a genuine resolution fault** (amendment 2).
+- `PrimaryRoot::assume(path)` — the caller asserts this path is already the
+  primary (amendment 3).
 - `phases_dir(primary: &PrimaryRoot, slice_id)` (`src/state.rs:135`) stays a
   **pure, total path join** — it merely takes an already-resolved value.
+
+## Amendment 1 (RV-320 F-3) — the parameter splits; the newtype survives
+
+**The original form of this decision was wrong in the same way SL-237 exists to
+fix.** `project_root` was one identifier serving **two meanings**:
+
+1. *where the state file lives* → the primary, and
+2. *which worktree's git am I asking* → the invoked tree.
+
+`capture_phase_boundary` uses it for both — `live_worktree_for_ref(project_root,
+…)` (`src/state.rs:617`) and `resolve_ref(project_root, "HEAD")` (`:629`),
+reached from `set_phase_status`. Replacing that single parameter with
+`&PrimaryRoot` would record the **primary's** HEAD as a solo linked worktree's
+source-delta boundary — wrong revision identity, silently.
+
+So the phase-mutation APIs carry **both roots, explicitly**:
+
+```rust
+set_phase_status(primary: &PrimaryRoot, git_cwd: &Path, slice_id: u32, …)
+```
+
+Pure path constructors (`phases_dir`, `boundaries_path`) take only
+`&PrimaryRoot`. Only the functions that genuinely ask git take the second root.
+Naming both is the point — the defect was one name for two jobs.
+
+## Amendment 2 (RV-320 F-6) — total for the invariant, fallible for a fault
+
+`resolve` must not be unconditionally total. A warning is not a safeguard;
+degrading to `cwd` on a genuine git fault would home state in the linked tree —
+exactly this slice's bug class at the new seam. The discriminator (a `.git` in
+`cwd.ancestors()`) is promoted from *emit a warning* to *return `Err`*. **A
+caller that cannot resolve a primary does not get to write primary-owned state.**
+
+## Amendment 3 (RV-320 F-9) — `assume` is a production seam, not a test hatch
+
+The tuple field is private to `git.rs`, so no `state.rs`/`slice.rs` test module
+can construct one directly, and routing ~50 unit tests through the impure
+`resolve` would turn pure path-join tests into git-dependent ones — changing what
+the existing suites prove. `PrimaryRoot::assume(path)` closes that, and has a
+real production consumer: `src/dispatch.rs:3449-3471` already resolves
+`primary_worktree` itself and passes `&primary`. DEC-098's stated win (deleting
+that double resolution) depends on this constructor existing.
 
 ## Why this shape and not the obvious one
 

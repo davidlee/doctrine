@@ -77,7 +77,8 @@ the result down — and neither is satisfied by putting `primary_worktree` insid
 2. **One resolution per invocation, minted in the impure shell.**
 3. **Delete compensation, don't extend it.** Machinery whose only purpose is
    reporting or patching the split goes when the split goes.
-4. **Degrade loudly where a silent degrade would recreate the bug class.**
+4. **Refuse where a degrade would recreate the bug class.** Not "warn loudly" —
+   a warning does not stop the write that follows it (RV-320 F-6).
 
 ## 5. Proposed Design
 
@@ -112,30 +113,48 @@ design does not claim so.)
 pub(crate) struct PrimaryRoot(PathBuf);
 
 impl PrimaryRoot {
-    /// Impure: one `git worktree list --porcelain`. TOTAL — no repo ⇒ the
-    /// given root is its own primary.
-    pub(crate) fn resolve(cwd: &Path) -> Self;
+    /// Impure: one `git worktree list --porcelain`.
+    /// TOTAL for the designed invariant — no repo at all ⇒ the given root is
+    /// its own primary. FALLIBLE for a genuine resolution fault (I-2).
+    pub(crate) fn resolve(cwd: &Path) -> anyhow::Result<Self>;
+    /// The caller asserts `path` is already the primary. Production consumer:
+    /// `dispatch.rs:3449-3471`, which resolves it itself; also the test seam.
+    pub(crate) fn assume(path: PathBuf) -> Self;
     pub(crate) fn as_path(&self) -> &Path;
 }
 ```
 
-**The fault-vs-no-repo distinction (§5.5 I-2).** A total constructor must not
-swallow a genuine git fault. "Not a repo" is the designed invariant; "git is
-broken" degrading to `cwd` would home phase sheets in the wrong tree — SL-237's
-own bug class reintroduced at the new seam. `resolve` therefore falls back **and
-emits one named warning** when `cwd.ancestors()` contains a `.git`: a filesystem
-check, no second subprocess. If there is a `.git` above you, git should have
-answered.
+**I-2, restated after RV-320 F-6.** An earlier draft made `resolve` total and
+emitted a warning on any failure. That was the slice's own confusion at the new
+seam: **observability is not prevention**. A warning does not stop the write that
+follows it, so a genuine git fault would still home state in the linked tree. The
+discriminator is unchanged — a `.git` in `cwd.ancestors()`, a filesystem check
+with no second subprocess — but its consequence is promoted from *warn* to
+*`Err`*. **A caller that cannot resolve a primary does not get to write
+primary-owned state.** Totality survives only where the invariant genuinely
+holds: no repo at all.
+
+**Two roots, not one — RV-320 F-3.** `project_root` is today one identifier
+serving **two meanings**: *where the state file lives* (the primary) and *which
+worktree's git am I asking* (the invoked tree). `capture_phase_boundary` uses it
+for both — `live_worktree_for_ref(project_root, …)` (`state.rs:617`) and
+`resolve_ref(project_root, "HEAD")` (`:629`). Collapsing it to `&PrimaryRoot`
+alone would record the **primary's** HEAD as a solo linked worktree's
+source-delta boundary: wrong revision identity, silently. That is this slice's
+own defect — one name for two jobs — reproduced in its design. So both roots are
+carried explicitly, and only the functions that genuinely ask git take the second.
 
 Signature ripple:
 
 | Function | Change |
 |---|---|
-| `phases_dir` (`state.rs:135`) | `(&PrimaryRoot, u32) -> PathBuf` — stays pure and total |
+| `phases_dir` (`state.rs:135`) | `(&PrimaryRoot, u32) -> PathBuf` — pure, total |
 | `boundaries_path` (`state.rs:716`) | `(&PrimaryRoot, u32) -> PathBuf` — **loses its `Result`** (DEC-098) |
-| `init_phases`, `phase_rollup`, `edit_phase_sheet`, `set_phase_status`, `completed_phase_ids`, `read_phase_statuses`, `reconcile_phase_status`, `registry_completeness`, `read_source_deltas`, `record_source_delta` | first param `&Path` → `&PrimaryRoot` |
+| `init_phases`, `phase_rollup`, `completed_phase_ids`, `read_phase_statuses`, `registry_completeness`, `read_source_deltas`, `record_source_delta`, `forget_source_delta` (`state.rs:857`) | first param `&Path` → `&PrimaryRoot` |
+| `set_phase_status`, `edit_phase_sheet`, `reconcile_phase_status`, `capture_phase_boundary` | **both roots**: `(primary: &PrimaryRoot, git_cwd: &Path, …)` |
 | `resolve_phase_truth` (`state.rs:1114`) | drops `coord`; becomes `(landed, sheets)` (DEC-096) |
-| `refresh_symlink` (`state.rs:345`) | gains the primary/not-primary test (DEC-097) |
+| `refresh_symlink` (`state.rs:345`) | both roots — mint in the primary, **retire a stale link** in a linked worktree (DEC-097, F-8) |
+| `integrity.rs:322-323` (reseat guard) | hand-built `root.join(state_dir)` → resolve via `PrimaryRoot` (F-5) |
 
 CLI surface: `slice status <ID> --across-trees [--assert]` becomes
 `slice status <ID> --truth [--assert]`. After this slice there are no trees to
@@ -210,21 +229,46 @@ drive races the drive's own writer on the **same** file.
 
 - **I-1 — Non-repo fallback.** No repo ⇒ the given root is its own primary.
   Load-bearing, not defensive polish; ~20 existing tests are its acceptance
-  evidence.
-- **I-2 — Loud degradation.** Fallback under a visible `.git` warns once, named.
-- **I-3 — Read-only primary (subprocess arm).** Under
-  `scripts/pi-spawn-confined.sh:104-107` (`--ro-bind / /` then `--bind "$D"`) the
-  primary is read-only inside a worker namespace. An **unstamped** worker
-  (`worker_mode = (is_linked_worktree && marker_present) OR env DOCTRINE_WORKER`
-  — the confessed ADR-011 D6/M2 false-clear) passes the CLI guard and will now
-  attempt a write that hits EROFS. This is a strict improvement — a silent
-  wrong-place write becomes a loud one — but it must surface as a **named error
-  naming the primary and the worker-mode suspicion**, not a raw permission
-  denial. Unlike boundary capture, a lost status flip is not recoverable, so
-  this one must **fail**, not degrade.
-- **I-4 — Symlink honesty.** The `phases` convenience symlink is minted only in
-  the primary (DEC-097). A linked worktree gets none, because a dangling link is
-  indistinguishable from a real empty one.
+  evidence. This is the **only** case in which `resolve` is total.
+- **I-2 — A fault refuses; it does not degrade.** See §5.2. Rewritten after
+  RV-320 F-6: the earlier "warn and continue" form mistook observability for
+  prevention.
+- **I-3 — Worker write exclusion is OS-enforced on BOTH arms.** *Rewritten after
+  RV-320 F-2; the earlier version was wrong in both directions.*
+  - **Subprocess arm.** `scripts/pi-spawn-confined.sh:110` sets
+    `--setenv DOCTRINE_WORKER 1` **unconditionally**, so `worker_mode` is true
+    via the env leg irrespective of the marker, and the CLI guard
+    (`src/commands/guard.rs:78,80`) refuses `slice phase` / `slice phases`
+    **before** any write is attempted. The `--ro-bind / /` mount (`:104-107`) is
+    a second, independent floor. **The EROFS path the earlier draft designed an
+    error message for is unreachable on this arm.**
+  - **Claude arm.** `.agents/skills/dispatch-agent/SKILL.md:177-179` installs two
+    PreToolUse hooks — a nested bwrap (rw worktree, ro everything else) and
+    `Edit|Write` denial outside the worktree. The earlier draft asserted this arm
+    had no OS floor, on the strength of ADR-008 D-B3's text that claude's `Agent`
+    tool "cannot be wrapped". **That governance is stale relative to the shipped
+    skill**; the staleness is recorded as a follow-up, not silently corrected
+    here.
+  - **Consequence for this design.** No new named EROFS error is required,
+    because no reachable state produces one. What the design *does* owe is that
+    phase-state writes **fail rather than degrade** if they ever do hit a
+    read-only primary — unlike boundary capture, a lost status flip is not
+    recoverable. Stated as a property, not as a message for an unreachable path.
+- **I-4 — Symlink honesty, including on upgrade.** The `phases` convenience
+  symlink is minted only in the primary, **and a stale link already present in a
+  linked worktree is retired** (DEC-097 + RV-320 F-8). Today's `refresh_symlink`
+  mints into the invoked root, so existing worktrees already carry one; not
+  removing it would leave exactly the misleading runtime projection DEC-097
+  exists to prevent.
+- **I-5 — Shared-file concurrency is bounded by contract, not by a lock.**
+  *Added after RV-320 F-4.* `edit_phase_sheet` is an unlocked read-modify-write
+  and the registry is unlocked shared-mutable. Two copies could previously
+  diverge but not race; one file can race. **No locking is designed.** The bound
+  is: ADR-006 D2/D9 make the orchestrator the sole phase-state writer during a
+  drive, and the single-operator precondition already documented on
+  `run_reconcile_phases` is promoted to a design-level assumption covering the
+  shared file. Named as a **relaxation with a governed risk**, not concealed
+  inside a "restatement".
 - **E-1 — Worker read exposure.** A fork can now *read* primary phase sheets.
   Accepted explicitly (§7 D5), not silently.
 
@@ -287,14 +331,38 @@ Three load-bearing statements are falsified; they are one claim at two
 altitudes, so they are restated together (ADR-013 routes governance dependency
 through a Revision).
 
-| Where | Text | What changes |
-|---|---|---|
-| **ADR-006 D2** | "*(the coordination/runtime tier is **withheld**, D9)*" | no longer withheld from a fork's **reach** |
-| **ADR-006 D4** | "runtime state stays gitignored/**per-worktree**" | falsified — one home |
-| **SPEC-012** § Tier merge-safety by construction, + the responsibility bullet | defends D4 "not by trust but by **absence**" | defence moves from absence to the CLI write guard |
+*Scope widened after RV-320 F-1. The claim "no REQ requires change" — inherited
+from the pre-design sweep, which checked REQ-297 and stopped — was **false**.*
 
-**This is a restatement, not a relaxation**, and the REV must say why. Three
-attacks were run against the governing content and none lands:
+| Where | Text | Status under SL-237 |
+|---|---|---|
+| **ADR-006 D2** | "*(the coordination/runtime tier is **withheld**, D9)*" | **falsified** — no longer withheld from a fork's **reach** |
+| **ADR-006 D4** | "runtime state stays gitignored/**per-worktree**" | **falsified** — one home |
+| **SPEC-012** § Tier merge-safety by construction, + the responsibility bullet | defends D4 "not by trust but by **absence**" | mechanism drifts |
+| **PRD-015 Invariant 2** | "The coordination/runtime tier **never crosses the isolation boundary** into a worker" | **falsified** — a *read* crosses it |
+| **PRD-015 FR-001 (REQ-296)** | "the coordination/runtime tier **absent by construction**" | **PRESERVED** — see below |
+| **PRD-015 NF-003 (REQ-304)** | "tier exclusion guaranteed **by construction rather than a trusted check**" | **PRESERVED**, construction relocated |
+
+**Why the two requirements are preserved rather than revised** — the finding that
+raised them assumed otherwise, and the narrower answer is the evidenced one:
+
+- **REQ-296.** The provisioning allowlist `is_withheld`
+  (`src/worktree/allowlist.rs:170`; `WITHHELD` covers `.doctrine/state/slice/**`)
+  is **untouched** by this slice. No copy is provisioned into a fork, so the tier
+  remains literally absent from the fork's own tree. Only a *path resolves
+  outward*.
+- **REQ-304.** Write exclusion remains by construction, at the OS layer, on
+  **both** arms (I-3). The construction moved from provisioning-absence to
+  mount-level read-only; it did not become a trusted check.
+
+So the REV **adjudicates** REQ-296 / REQ-304 (recording why they hold) and
+**revises** PRD-015 Invariant 2 alongside ADR-006 D2/D4 and SPEC-012.
+
+**This is a restatement of mechanism plus one named relaxation** — the earlier
+draft claimed pure restatement, which RV-320 F-4 correctly called overreach.
+Merge safety is preserved (no copy ⇒ nothing to diverge); a **new concurrent-RMW
+exposure** is introduced and governed by I-5 rather than concealed. Three attacks
+were run against the governing content and none lands:
 
 1. **D4's "any future central index reintroduces conflict."** The phases dir is
    gitignored (`.gitignore:39`) so git never merges it; it is per-slice and
@@ -319,15 +387,23 @@ change under D3.
 ## 8. Risks & Mitigations
 
 - **R1 — Test-churn dilutes the behaviour-preservation proof.** ~50 construction
-  sites change. *Mitigation:* one test helper `fn primary(p: &Path) ->
-  PrimaryRoot`, so each site gains a wrapper call and nothing else; assertions
-  are reviewed for unchanged-ness explicitly at audit.
-- **R2 — A silent fallback homes state in the wrong tree.** *Mitigation:* I-2's
-  named warning.
+  sites change. *Mitigation (revised, RV-320 F-9):* `PrimaryRoot::assume(path)`
+  — a real constructor, not a test-only hatch (`dispatch.rs:3449-3471` needs it
+  too). The earlier "one-line helper" mitigation was unimplementable: the tuple
+  field is private to `git.rs`, so no `state.rs` test module could write it, and
+  routing the tests through the impure `resolve` would have converted pure
+  path-join tests into git-dependent ones — changing what the suites prove.
+  Assertions are reviewed for unchanged-ness explicitly at audit (V-1b).
+- **R2 — A silent fallback homes state in the wrong tree.** *Mitigation
+  (revised, RV-320 F-6):* I-2 **refuses**. A warning was never a mitigation —
+  observability does not prevent the write that follows it.
 - **R3 — A later reader "fixes" the intentional `run_phases` split.**
   *Mitigation:* the comment required in §5.4, plus the RV-312 F-6 test.
-- **R4 — Landing code that falsifies an accepted Decision.** *Mitigation:* the
-  REV is opened in this slice, not deferred to reconcile.
+- **R4 — Landing code that falsifies accepted governance.** *Mitigation
+  (revised, RV-320 F-7):* the **gate**, not the raising. `SL-237 needs REV-043`
+  is authored, and REV-043 reaching `approved` is an **entry criterion for
+  PHASE-01** (§8a). Opening a REV is not a mitigation if implementation can
+  start alongside it.
 - **R5 — DEC-098's contract change hides a real misconfiguration.** *Retired* —
   closed with evidence in the adversarial pass (§10 R-1); both propagating sites
   fail closed for other reasons. Carried only as regression test V-10.
@@ -335,6 +411,28 @@ change under D3.
   not prevent it (§10 R-3). *Mitigation:* V-9 reviews **both** known sites at the
   call site; any new `phase_rollup` caller must be checked for loop context at
   review, not assumed safe because it takes a `&PrimaryRoot`.
+- **R7 — a hand-built runtime-state path is missed.** *Added, RV-320 F-5.* The
+  census enumerated `phases_dir` callers, which structurally cannot find a path
+  assembled by hand. One such site existed (`integrity.rs:322-323`, via
+  `kind.state_dir`) and would have silently stopped guarding. *Mitigation:* the
+  census axis is now `.doctrine/state` path construction, not `phases_dir`
+  call sites; V-11 covers the reseat guard.
+- **R8 — concurrent RMW on the now-shared file.** *Added, RV-320 F-4.* No lock
+  is designed. *Mitigation:* bounded by contract (I-5), and named as a
+  relaxation in REV-043 rather than absorbed into a "restatement".
+
+### 8a. Sequencing and the entry gate
+
+**PHASE-01 does not start until REV-043 is `approved`** (R4). The phases
+themselves:
+
+1. `PrimaryRoot` (`resolve` + `assume`), `phases_dir` migration, and the
+   two-root split for the git-asking functions (F-3).
+2. Retire the mirror; the `run_phases` plan/sheets split.
+3. `resolve_phase_truth` narrowing; `--across-trees` → `--truth`.
+4. `boundaries_path` + `forget_source_delta` migration (DEC-098) — kept
+   separable.
+5. Symlink mint-and-**retire** (DEC-097 + F-8); `integrity.rs` reseat guard (F-5).
 
 ## 9. Quality Engineering & Validation
 
@@ -343,14 +441,17 @@ change under D3.
 | V-1a | VT | Existing suites green (behaviour-preservation gate) |
 | V-1b | VA | Diff review confirms existing **assertions** are unchanged and only construction sites were adapted — a judgement, not a test, so it cannot ride V-1a's mode (R-4) |
 | V-2 | VT | Non-repo tempdir: `phases_dir` resolves to the given root (I-1) |
-| V-3 | VT | Fallback under a visible `.git` emits the named warning (I-2) |
+| V-3 | VT | Resolution failure under a visible `.git` returns `Err` and **no primary-owned write occurs** (I-2, revised per F-6 — the earlier form asserted a warning) |
 | V-4 | VT | e2e: `slice conformance <ID>` agrees from the primary and a linked worktree — **ISS-269's reproduction inverting** |
 | V-5 | VT | e2e: phase appended to a coord tree's `plan.toml`; `slice phases` there lands the sheet in the primary (RV-312 F-6) |
 | V-6 | VT | Landed-but-`in_progress`, no coord tree → `Conflict(Rework)`; `--truth --assert` non-zero (DEC-096) |
-| V-7 | VT | No `phases` symlink in a linked worktree; still minted in the primary (DEC-097) |
-| V-8 | VT | Phase-status write against a read-only primary fails with the named error, not a raw permission denial (I-3) |
+| V-7 | VT | Symlink: minted in the primary; **a pre-existing link in a linked worktree is retired** — the upgrade case, not a fresh tree (DEC-097 + F-8) |
+| V-8 | VT | **Solo linked worktree**: `set_phase_status` records the *invoked* tree's HEAD as the source-delta boundary, not the primary's (F-3 — the regression the two-root split exists to prevent) |
+| V-8b | VA | Worker write exclusion is argued per arm from the actual mechanism — env leg at `pi-spawn-confined.sh:110`, PreToolUse hooks at `dispatch-agent/SKILL.md:177-179` — **not** by testing an unreachable EROFS path (I-3, revised per F-2) |
 | V-9 | VA | **Both** fan-out sites resolve once outside their loop — `list_rows` (`slice.rs:2161`) and `load_slices` (`lazyspec.rs:495`). Reviewed at the call site, **not** inferred from the type: R-2 showed the type makes a fan-out visible, not impossible |
 | V-10 | VT | `read_source_deltas` against a non-repo root yields an empty registry, and `conformance_outcome` reports `Unavailable` rather than erroring (OQ-1 / R-1) |
+| V-11 | VT | The reseat guard (`integrity.rs:322-323`) refuses when live phase state exists **in the primary**, invoked from a linked worktree (F-5) |
+| V-12 | VA | Census re-run on the corrected axis — `.doctrine/state` path *construction*, not `phases_dir` call sites — with every production site dispositioned (F-5 / R7) |
 
 ## 10. Review Notes
 
@@ -399,6 +500,46 @@ Attacks that did **not** land, recorded so they are not re-run:
   (`slice.rs:2852`) says so in its own doc comment — *"`root` resolves both the
   shared registry (via the primary worktree) and the local phase-sheet state
   tree."* That sentence is the defect. V-4 is grounded.
+
+### External adversarial pass — RV-320 (raiser: codex/GPT-5.5), 2026-07-29
+
+Nine findings: six blockers, three majors. **All nine accepted**, two with
+corrections to the reviewer's mechanism. Full dispositions on the ledger
+(`doctrine review show 320`); the design changes they forced are integrated
+above and summarised here.
+
+| # | Sev | What it caught | Where it landed |
+|---|---|---|---|
+| F-1 | blocker | "No REQ requires change" was false — PRD-015 REQ-296/REQ-304 and Invariant 2 were never swept | §7 table; REV-043 gains a PRD-015 row |
+| F-2 | blocker | I-3 traced an **unreachable** EROFS path and asserted a nonexistent claude-arm gap | §5.5 I-3 rewritten; V-8b |
+| F-3 | blocker | `PrimaryRoot` erases the git cwd `capture_phase_boundary` needs | §5.2 two-root split; DEC-095 amendment 1; V-8 |
+| F-4 | blocker | Non-duplication ≠ conflict freedom; unlocked RMW on one shared file | §5.5 I-5; R8; REV-043 reframed |
+| F-5 | major | Census missed **hand-built** state paths (`integrity.rs:322-323`) | §5.2; R7; V-11, V-12 |
+| F-6 | blocker | A warning is not a mitigation | §5.2 I-2 fallible; principle 4; R2; V-3 |
+| F-7 | blocker | `concerns` edge where ADR-013/ADR-017 want gating `needs` | `needs` authored; §8a entry gate; R4 |
+| F-8 | major | Nothing retires symlinks already minted in existing worktrees | §5.5 I-4; V-7 |
+| F-9 | major | The proposed test helper was unimplementable (private tuple field) | `PrimaryRoot::assume`; DEC-095 amendment 3; R1 |
+
+**Two corrections to the reviewer**, both narrowing rather than dismissing:
+
+- **F-1's remedy is smaller than claimed.** REQ-296 ("absent by construction") is
+  **preserved** — the provisioning allowlist `is_withheld`
+  (`src/worktree/allowlist.rs:170`) is untouched, so no copy enters a fork.
+  REQ-304 is **preserved** with the construction relocated to the OS floor. Only
+  PRD-015 **Invariant 2** is falsified. The REV adjudicates the two requirements
+  and revises the invariant.
+- **F-5's mechanism is wrong; its conclusion is right and its scope is larger.**
+  `integrity.rs` never calls `phases_dir` (0 matches, positive control 25 `fn`).
+  It hand-builds the path from `kind.state_dir`. So the site breaks by a route
+  the census could not have found — which makes it a missed *class*, not an
+  instance. `src/mcp.rs` does not exist (mis-cite); `forget_source_delta` is a
+  genuine omission.
+
+**What the internal pass missed and this one caught.** F-3 and F-6 are both
+instances of *the slice's own defect committed inside its own design* — one
+identifier serving two meanings, and a signal mistaken for a safeguard. The
+internal pass found gaps in coverage; the external pass found errors in
+reasoning. That is the difference worth recording.
 
 ### Method note
 

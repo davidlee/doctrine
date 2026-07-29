@@ -34,3 +34,8 @@ primary = true
 target = "SPEC-012"
 action = "modify"
 primary = false
+
+[[change]]
+target = "PRD-015"
+action = "modify"
+primary = false

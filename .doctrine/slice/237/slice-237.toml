@@ -7,7 +7,7 @@ updated = "2026-07-28"
 tags = ["area:conformance", "area:dispatch", "area:worktree", "cluster:root-resolution"]
 
 [relationships]
-needs = []                      # slice→work hard prerequisite
+needs = ["REV-043"]                      # slice→work hard prerequisite
 after = []                      # slice→work soft sequence: { to, rank }
 
 [[selector]]
