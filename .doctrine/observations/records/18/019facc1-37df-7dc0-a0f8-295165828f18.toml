@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019facc1-37df-7dc0-a0f8-295165828f18"
+recorded_at = "2026-07-29T07:22:51.743984161Z"
+kind = "friction"
+summary = "design/plan: no read-back verb for a phase's criteria — 'slice plan' and 'slice phase' are writers with reader-shaped names"
+detail = "After authoring EX-14 / VT-6 / VA-NC3 into plan.toml I wanted to confirm the CLI reads them back. 'doctrine slice plan 233' looks like the reader and is the AUTHORING verb — it refused with 'Refusing to overwrite existing plan.toml', which is the right refusal but only after I had already run a mutating command against a slice mid-dispatch. 'doctrine slice phase 233 PHASE-06' looks like the per-phase reader and demands --status, i.e. it is the state-transition verb. Neither 'slice show' nor 'reports explain' prints the criteria. So the only way to verify authored criteria parse and are complete is to open plan.toml with a TOML parser directly — the same raw-file route the boot guardrail forbids, and the same gap as the review-findings one recorded earlier this session. Two writers wearing reader names is also a live footgun for an orchestrator: 'slice plan' one keystroke away from being run on a slice whose plan is already locked."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

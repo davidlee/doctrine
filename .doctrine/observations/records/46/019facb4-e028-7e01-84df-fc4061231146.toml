@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019facb4-e028-7e01-84df-fc4061231146"
+recorded_at = "2026-07-29T07:09:22.856642105Z"
+kind = "friction"
+summary = "review: no CLI verb prints a ledger's findings — the responder must read review-NNN.toml raw"
+detail = "Disposing RV-323 as responder needs each finding's id, severity, status, title, detail and prior response. 'review show RV-323' prints the derived status, the reviews edge and the prose brief, and then only a COUNT ('findings: 6'). 'review status' prints one line. There is no --findings flag (rejected as an unexpected argument) and no other verb in 'review --help' that emits them. So the only route is opening .doctrine/review/323/review-323.toml directly, which the boot guardrail explicitly tells agents not to do ('read entities via doctrine <kind> show, not raw files'). The guardrail and the tool disagree, and the agent pays for it twice: once discovering the flag does not exist, once reading a 70-line TOML to recover what show already had in hand."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
