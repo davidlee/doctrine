@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fada4-f957-7bb3-aea3-7c932fed8e71"
+recorded_at = "2026-07-29T11:31:37.943819326Z"
+kind = "friction"
+summary = "/dispatch SL-233 PHASE-13: a new integration test binary must duplicate a ~120-line fixture because the crate is binary-only"
+detail = """PHASE-13 creates `tests/e2e_design_materialise.rs`. Its two tests need the same design-run fixture `tests/e2e_design_state.rs` already carries (start the run, learn the uid and snapshot path, build an envelope carrying the live revision, apply, materialise, read the doc). Integration tests are separate compilation units and this crate has no `[lib]`, so a fixture cannot be imported from a sibling test binary; the only shared seam is `tests/common/`, and hoisting the design fixture there would force every one of the ~90 test binaries to compile the `design_run` leaf tree via its `#[path]` include. The result is ~120 lines of deliberately duplicated harness across two files, in a repo whose standards say "no parallel implementation". PHASE-14 will add six more tests to the duplicated copy. The structural fix (a `[lib]` target, or a `tests/common/design.rs` that includes the leaf tree only where used) is out of a phase's scope but the duplication is now load-bearing in two places."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "explicit"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "dispatch"
+command_origin = "explicit"
+repository_context = "primary"
+repository_context_origin = "automatic"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-13"
+phase_origin = "explicit"

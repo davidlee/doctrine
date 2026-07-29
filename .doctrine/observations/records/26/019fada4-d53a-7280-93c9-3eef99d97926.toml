@@ -1,0 +1,25 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fada4-d53a-7280-93c9-3eef99d97926"
+recorded_at = "2026-07-29T11:31:28.69863195Z"
+kind = "friction"
+summary = "/dispatch SL-233 PHASE-13: worker prompt's document-order fixture contradicted plan VA-3 and would have passed against the defect"
+detail = """The PHASE-13 worker prompt (T0c) instructed: "declare `sec-11` **first**, then `sec-2`" for `materialise_emits_document_order_not_id_order`. That fixture is inert: `SectionGroup` is id-ordered and "sec-11" < "sec-2" lexicographically ('1' < '2'), so declaring sec-11 first makes seq order and id order COINCIDE and the test passes against the exact defect EX-6 exists to close. The plan's own VA-3 says the opposite and is correct: "ids whose lexical order is not their seq order, e.g. declaring `sec-2` before `sec-11`". Cost: a re-derivation of the lexical ordering plus a check of the sketch's separate sec-1/sec-11 collision fixture (where "sec-11 declared first" IS right, for a different reason - prefix matching), to establish which instruction governed. Authority order (plan > sketch > prompt) resolved it, but the prompt had confidently inverted the one detail the anti-theatre criterion exists to pin. Suggests distilled worker prompts should quote a VA verbatim rather than paraphrase its fixture."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "explicit"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "dispatch"
+command_origin = "explicit"
+repository_context = "primary"
+repository_context_origin = "automatic"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-13"
+phase_origin = "explicit"
