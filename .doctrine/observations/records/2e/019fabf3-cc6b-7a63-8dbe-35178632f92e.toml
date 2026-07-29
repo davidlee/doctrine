@@ -1,0 +1,30 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fabf3-cc6b-7a63-8dbe-35178632f92e"
+recorded_at = "2026-07-29T03:38:29.355753689Z"
+kind = "friction"
+summary = "/dispatch: worker brief mandated `keep the private-field assertions` in a test while VA-7(3) forbade the read_to_string those assertions were built on"
+detail = '''
+SL-233 PHASE-04 T2 / EX-11(c). The brief said: "**Keep** the private-field assertions; they are the real structural guarantee." The plan's VA-7(3) said: "`rg -n 'read_to_string|\.matches\('` over the test returns nothing for that function." But the private-field assertions in the incumbent test WERE a source-text scan — they `read_to_string`'d `src/design_run/ids.rs` and matched on the struct body's first line. So "keep them" and "no read_to_string" cannot both be satisfied literally.
+
+I resolved it by reading the intent rather than the letter: the private field is a COMPILE-TIME guarantee that no runtime assertion can observe, so I kept the guarantee (documented at the test, naming it as the compiler's) and replaced the textual proxy with the strongest available structural checks — a type-system probe that `DesignId` implements neither `Default` nor `From<String>` (the two ways to mint one without naming the field), plus the deserialization route asserted to refuse exactly what `parse` refuses. Both bypass classes were demonstrated red.
+
+The friction is that a worker facing two mandates that contradict has no cheap way to tell whether the contradiction is (a) an authoring slip, (b) a deliberate "reconcile these" test, or (c) a signal that its own reading of one of them is wrong — and the boundary rules correctly forbid amending either. It cost a slow re-read of the review ledger's F-3 response to establish that the responder's phrase "the test's first two assertions ... are the actual structural guarantee" meant the GUARANTEE, not the assertions' implementation. A brief that had said "keep the private-field guarantee, expressed without a source scan" would have cost nothing.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "explicit"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-04"
+phase_origin = "explicit"

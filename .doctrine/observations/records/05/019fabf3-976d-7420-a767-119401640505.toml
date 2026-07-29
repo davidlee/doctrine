@@ -1,0 +1,30 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fabf3-976d-7420-a767-119401640505"
+recorded_at = "2026-07-29T03:38:15.789561668Z"
+kind = "friction"
+summary = "/dispatch: RV-321 F-4 mandated `crate::kinds::SLICE_DIR` in a test, but it was unreachable — kinds/mod.rs has a submodule depending on crate::fsutil"
+detail = """
+SL-233 PHASE-04 EX-11(d). The review finding, its accepted disposition, and the worker brief all stated flatly that "`crate::kinds::SLICE_DIR` is reachable and must be used" from `tests/e2e_design_state.rs`. It was not. The crate is binary-only, so an integration test reaches src via the CHR-014 `#[path]` idiom — and `src/kinds/mod.rs` declares `mod resolve;`, which uses `crate::fsutil` and `anyhow`, so `#[path]`-including `kinds/mod.rs` does not compile.
+
+The claim survived a reviewer, a responder, and a plan amendment without anyone compiling it. Cost was maybe 15 minutes of checking whether I was wrong before concluding the criterion was, plus the judgement call of whether to make it true (I extracted the entity-tree roots into a dependency-free `src/kinds/dirs.rs` and `#[path]`-included THAT, preserving visibility exactly) or to report it unreachable.
+
+The generalisable point: a finding that asserts "X is reachable from Y" is an executable claim, and neither the raiser nor the responder ran it. The responder's own note in the same finding was scrupulous about what was NOT reachable (DESIGN_DOC, MARKER_OPEN/CLOSE, and why) — so the care was there, it just stopped one module short. A review that names a specific import path should be expected to have compiled it, or to hedge it as "if reachable"."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "explicit"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-04"
+phase_origin = "explicit"

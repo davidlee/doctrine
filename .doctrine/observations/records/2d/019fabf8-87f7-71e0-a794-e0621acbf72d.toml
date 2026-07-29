@@ -1,0 +1,27 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fabf8-87f7-71e0-a794-e0621acbf72d"
+recorded_at = "2026-07-29T03:43:39.511613523Z"
+kind = "friction"
+summary = "/dispatch: orchestrator brief asked a worker for multiple commits, but worker_commit lands exactly one — the phase's main delta was stranded uncommitted"
+detail = """
+SL-233 PHASE-04, claude arm. My worker brief said "Commit T2-T5 as one coherent commit first, then the read-model work in further coherent commits". The `worker_commit` MCP gate lands EXACTLY ONE non-merge commit per fork; the second call refused `late-recommit` after the worker had completed all seventeen tasks. The worker spent its one commit on the smaller inherited-fix delta (T2-T5, ~443 lines) and the phase proper (T6-T17, +542/-79 plus two new files totalling ~2000 lines) was left uncommitted in the fork working tree.
+
+Cost: the worker stopped correctly rather than retrying, so nothing was lost, but the funnel's prescribed `dispatch_import` cannot land it — that verb requires the fork tree CLEAN and refuses `multi-commit`, and this build exposes no CLI `import --from-worktree` fallback. Recovery is an orchestrator amend of the worker's single commit to absorb the working-tree delta.
+
+Two things would have prevented it:
+1. Nothing in the dispatch skill's worker-brief guidance states the one-commit-per-fork constraint, so an orchestrator composing a multi-task brief naturally reaches for "further coherent commits". The constraint is discoverable only in the `worker_commit` tool description ("lands exactly ONE non-merge commit") and in `dispatch_import`'s `multi-commit` refusal reason.
+2. `worker_commit` could refuse the FIRST commit when the worker's declared task set is plainly unfinished, or the skill could name the constraint at brief-composition time. As it stands the failure surfaces only after all work is done.
+
+Note the mitigating design: `worker_commit`'s own description says "The commit message (worker-authored; the orchestrator may amend)" — so orchestrator amendment is a sanctioned shape, which is what makes the recovery clean rather than a history-rewrite improvisation. That sanction is what should be surfaced in the skill alongside the one-commit rule."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

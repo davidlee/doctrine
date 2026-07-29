@@ -1,0 +1,32 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fabf3-67b7-7523-9411-0a27b73f1925"
+recorded_at = "2026-07-29T03:38:03.575405385Z"
+kind = "friction"
+summary = "/dispatch: worker brief told me to make multiple commits but worker_commit lands exactly ONE at base, so the second commit was refused `late-recommit`"
+detail = """
+SL-233 PHASE-04 claude-arm worker. The task brief said: "Commit T2-T5 as one coherent commit first, then the read-model work in further coherent commits." I did exactly that: the first `worker_commit` succeeded (oid 11d76bf645e8, base b0e5e908). The second was refused with `late-recommit` listing all 13 changed paths, because the gate's belt is `HEAD == B` — it lands exactly ONE non-merge commit descended from the supplied base, by design ("One commit, descended from the supplied base: no multi-commit history").
+
+So the brief and the mechanism contradict each other, and the contradiction is only discoverable AFTER the first commit lands — at which point the worker has already spent the single credit on the smaller of the two deltas and the larger one is stranded in the working tree. Cost: the phase's main deliverable (the TurnEnvelope read model, the command surface, the seven EX-10 tests, ~2000 lines across 13 files) is uncommitted and has to be imported as a working-tree diff, which is the pi-arm's mechanism, not the claude arm's.
+
+Two fixes, either would do: (a) the orchestrator's per-worker brief template should say "you get exactly ONE commit — stage all of it and commit once at the end", never "commit X first, then Y"; or (b) `worker_commit` should refuse the FIRST commit with a warning when the worker's declared task enumerates multiple commits, or amend-in-place on subsequent calls so a worker that splits its work is not punished for following its own brief. (a) is cheaper and is a prompt fix, not a code fix.
+
+Related: the refusal reason `late-recommit` does not name the remedy. It lists the paths but does not say "this branch already carries its one commit; the orchestrator will import the remaining working-tree diff" — so a worker's first instinct is to wonder whether it did something wrong and retry."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "explicit"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "worker_commit"
+command_origin = "explicit"
+repository_context = "primary"
+repository_context_origin = "automatic"
+
+[facets.work_context]
+schema_version = 1
+slice = "SL-233"
+slice_origin = "explicit"
+phase = "PHASE-04"
+phase_origin = "explicit"
