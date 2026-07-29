@@ -1,0 +1,40 @@
+schema = "doctrine.rfc"
+version = 1
+
+id = 24
+slug = "product-altitude-taxonomy-and-the-scenario-entity"
+title = "Product altitude taxonomy and the Scenario entity"
+status = "open"
+created = "2026-07-29"
+updated = "2026-07-29"
+tags = ["altitude", "c4", "ontology", "product-spec", "requirements", "scenario", "spec", "taxonomy"]
+
+[relationships]
+# RFCs participate in the tier-1 `related` relation (AnyNumbered — links to any entity).
+# Author with `doctrine link RFC-NNN related <target>`. `doctrine inspect RFC-NNN` renders them.
+superseded_by = []   # reverse link is derived (REV→RFC originates_from)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the shared spec and requirement machinery this amendment moves, and the likely governance home for a Scenario kind (Q9)"
+target = "PRD-002"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "the C4 ladder and IMP-069 rank-adjacency the product altitude ladder mirrors and this RFC breaks symmetry with"
+target = "PRD-012"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "members.toml, where the requirement n:n the scenarios brief asserts already lives"
+target = "SPEC-006"
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "where a traverses / exercises / involves scenario relation vocabulary would have to register"
+target = "SPEC-018"
+
