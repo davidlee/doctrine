@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac94-746c-7390-9360-8cacc4ed092b"
+recorded_at = "2026-07-29T06:33:58.124186963Z"
+kind = "friction"
+summary = "backlog list/show prints a dangling-override block on every invocation"
+detail = "Every 'doctrine backlog list' and 'backlog show' during IMP-352 appended a ~14-line 'overrides: ISS-028 -> SL-182 dropped (dangling: SL-182 absent)' block, repeated verbatim per invocation and unrelated to the query. Five backlog queries in this session paid it five times. It is diagnostic output about corpus health riding on every read; a once-per-session warning, a --quiet, or routing it to doctor would remove the repeat cost."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

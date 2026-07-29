@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac8e-812d-77e2-842d-1236bfccc29c"
+recorded_at = "2026-07-29T06:27:28.173802219Z"
+kind = "friction"
+summary = "/design gate: Bash cwd resets to the primary tree between calls, silently running coord-tree commands in the wrong worktree"
+detail = "Driving SL-233 PHASE-06's design gate from the coord worktree (/workspace/doctrine/.dispatch/SL-233). The Bash tool's cwd does not persist across calls in this session — it resets to the primary tree /workspace/doctrine. Two commands ran in the primary tree without any signal: 'rg -n seq src/design_run/snapshot.rs' returned 'IO error ... No such file or directory', which reads exactly like a missing module or a bad path, not like a wrong worktree. Cost: one wasted round trip plus a moment of doubting whether design_run existed at all. The handover packet says 'Park Bash cwd here' — that instruction is not actionable under a harness that resets cwd per call. Every coord-tree command needs an explicit 'cd <coord> &&' prefix, and the packet should say so instead."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

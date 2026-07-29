@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac8e-813a-7663-a9c3-b561eb33eeb0"
+recorded_at = "2026-07-29T06:27:28.186992891Z"
+kind = "friction"
+summary = "/design gate: EN-2 specified a marker grammar without noting an incumbent implementation already existed at head"
+detail = "SL-233 PHASE-06 EN-2 asks for a sketch answering seven questions about the stable-section-ID marker grammar, and reads as greenfield specification. It is not: MARKER_OPEN/MARKER_CLOSE (src/commands/design.rs:66,68), authored_sections (:249), authored_section_digests (:272) and render_document (:1146) already write and read markers at head, landed by an earlier phase. Nothing in EN-2, EX-1..EX-10, or the handover packet mentions this. The first draft of the sketch was therefore written as a greenfield grammar and had to be revised to ratify the incumbent delimiters and enumerate nine defects in the incumbent instead. Cost: roughly a full draft's worth of authoring, and the near-miss is worse than the cost — a grammar specified without reading the incumbent could easily have chosen different delimiters and silently orphaned every already-materialised document. Generalises: a design-gate criterion should name the incumbent it is superseding, or state that there is none."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

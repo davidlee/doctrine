@@ -14,7 +14,7 @@ ref   = "SL-237"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "REV-043 omits binding PRD-015 absence requirements"
 detail = """
@@ -348,7 +348,7 @@ On your bypass concern: `assume` is pub(crate) and its misuse is a reviewable ca
 
 [[finding]]
 id = "F-10"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "resolve_for_read forges the writer capability"
 detail = "Design §5.2 defines PrimaryRoot as the repo primary and makes write APIs accept that type, but resolve_for_read returns the same PrimaryRoot type wrapping cwd after a genuine resolution fault even when the visible .git proves cwd belongs to a repository. The value therefore violates its own type invariant and remains accepted by every primary-owned writer. The read/write split is only a caller convention: a mixed or later call site can choose resolve_for_read and then pass the indistinguishable value to init_phases, set_phase_status, or a registry writer, recreating F-6's mis-homed write with no compiler signal. Even on current read-only sites the fallback returns plausible local phase truth while the design claims repo-scoped state has one home. Preserve read availability with a distinct degraded-read type/result that cannot satisfy writer signatures (or keep fallback inside read operations without minting PrimaryRoot), and verify that degraded data is not consumed as authoritative write/planning input."
@@ -366,7 +366,7 @@ response = "Duplicate of F-2; disposed identically. Fixed at commit 7e92f41e bef
 
 [[finding]]
 id = "F-12"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "REV-043 revises only one of PRD-015's contradicted surfaces"
 detail = 'The narrow F-1 correction treats only PRD-015 Invariant 2 as falsified, but `spec show PRD-015` carries the same non-leakage/absence contract in at least four additional authoritative surfaces: the responsibility says the runtime tier "never leaks across the isolation boundary"; Scope names "non-leakage"; Principle 1 says the tier is "absent from an isolated unit" and explicitly "not present-but-trusted-not-to-be-touched"; §7 requires it to be "demonstrably absent from a provisioned unit". SL-237 deliberately makes the tier readable from the worker execution context. REV-043 Row 3 edits only Invariant 2 and leaves all four claims asserting the old mechanism. Its REQ-296/REQ-304 adjudication also substitutes "not copied"/"write protected" for the authored words "absent"/"tier exclusion" without reconciling those surrounding definitions. The revision must disposition and, where necessary, revise the whole PRD claim class before it can gate implementation.'
@@ -417,6 +417,13 @@ title = "SL-237 scope still denies the named relaxation"
 detail = """`doctrine slice show 237` still says the governance change is "a restatement, not a relaxation" and describes an OS floor only on the subprocess arm. The integrated design and REV-043 now explicitly call concurrent shared-file RMW a named relaxation and establish an OS floor on both arms. Because the slice scope is authored lifecycle input upstream of plan/phase work, leaving these superseded claims there creates two competing design contracts even if design.md is corrected. Update the scope through the responder's normal integration path so the governing slice statement agrees with the reviewed design and revision."""
 disposition = "accepted"
 response = "Accepted, and this one is the clearest instance of the pattern. slice-237.md:54 still read 'It is a restatement, not a relaxation' — the claim your F-4 falsified. The correction had reached REV-043's rationale and design.md §7 but not the scope document. Rewritten to state the relaxation explicitly (two copies could diverge but not race; one file can race; no lock designed; bounded by contract per I-5). The scope doc's falsified-statements list also widened to include PRD-015 per F-1/F-12. Recorded in §10 as a procedural lesson: when a finding overturns a claim, grep the corpus for the CLAIM, not for the finding."
+
+[[finding]]
+id = "F-18"
+status = "open"
+severity = "blocker"
+title = "Mechanical sweep misses live ADR-006 and SPEC-012 claims"
+detail = "The claimed corpus-wide semantic sweep did not include every live authority expressing the accepted no-copy-does-not-prove-non-corruption correction. ADR-006 D9 still says the runtime tier absence in the fork is what makes worker-sole-writer free (.doctrine/adr/006/adr-006.md:220-223). SPEC-012 repeats the same load-bearing claim in its structured responsibilities (.doctrine/spec/tech/012/spec-012.toml:21), its rendered Responsibilities summary (spec-012.md:48-53), and its active hypothesis (spec-012.md:274-276). These are not Before blocks, review history, or mobile slugs. REV-043 Row 1 edits only ADR-006 D2/D4, and Row 2 claims only two SPEC-012 prose sites; it neither amends nor adjudicates these surviving surfaces. The result would leave accepted ADR and active tech-spec authority saying absence alone makes the write invariant free while the same REV now correctly says non-duplication proves only non-divergence and relies on a separate write-exclusion leg. Expand the revision sweep to disposition every active structured and prose assertion, including the SPEC-012 requirement roster where REQ-195 and REQ-192 encode adjacent absence and fail-closed claims."
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).
