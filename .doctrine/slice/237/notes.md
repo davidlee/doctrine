@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-29 · stage: design authored, internal adversarial pass integrated · 26ecb5f4
+fresh-as-of: 2026-07-29 · stage: design authored, RV-322 external pass integrated, NOT locked · e8e7ca735
 
 ### Produced
 
@@ -23,7 +23,13 @@ fresh-as-of: 2026-07-29 · stage: design authored, internal adversarial pass int
   prompts (3/3 failed); trivial no-tool prompt returns instantly. Committed.
 - obs `019faac3-3fe6` — a multi-file grep silently omitted matches from its
   FIRST file argument; would have falsified the fan-out finding.
-- `design.md` — authored, internal adversarial pass integrated (§10, 4 findings).
+- obs `019fac1d-4d73` + **ISS-277** — `doctrine reseat` cannot renumber ANY
+  review (strict `Meta` read requires the derived `status`). Committed.
+- `design.md` — authored; internal pass (§10, 4 findings) **and** external
+  RV-322 pass (9 findings) integrated.
+- **RV-322** — external design review, raiser codex/GPT-5.5. 6 blockers +
+  3 majors, **all 9 accepted**, all dispositioned. `active`, await=**raiser**.
+  (Renumbered by hand from RV-320 after an id collision — see ISS-277.)
 - **DEC-095..098** — the four locked design decisions.
 - **REV-043** — restates ADR-006 D2/D4 + SPEC-012 § tier merge-safety.
 - design-target selectors recorded (6 paths).
@@ -56,15 +62,44 @@ Durable findings — candidates for `/record-memory` at close, not yet recorded:
 - A newtype makes a fan-out **visible at review, not impossible**. The missed
   second fan-out is the proof; don't let a type stand in for a call-site check.
 
+From RV-322 (external), all verified at source:
+
+- **`project_root` is ONE name doing TWO jobs** — where state lives, *and* which
+  tree's git is asked. `capture_phase_boundary` uses it for
+  `resolve_ref(project_root, "HEAD")` (`state.rs:629`) and
+  `live_worktree_for_ref` (`:617`). Any migration that swaps it for a single
+  primary handle records the **primary's** HEAD as a solo worktree's boundary.
+- **A warning is not a mitigation.** Observability does not stop the write that
+  follows it. Fallback-on-fault must refuse, not warn.
+- **The census axis was wrong.** `phases_dir` callers cannot find *hand-built*
+  state paths. `integrity.rs:322-323` builds `root.join(kind.state_dir)` and
+  would have silently stopped guarding. Census `.doctrine/state` *construction*.
+- **`pi-spawn-confined.sh:110` sets `DOCTRINE_WORKER=1` unconditionally** — so
+  worker_mode holds via the env leg regardless of the marker, and the CLI guard
+  refuses before any EROFS is reachable.
+- **ADR-008 D-B3's "claude cannot be wrapped" is STALE.** The claude arm ships
+  PreToolUse confinement (`dispatch-agent/SKILL.md:177-179`: nested bwrap +
+  Edit/Write denial). Needs its own correction; NOT amended by REV-043.
+- **PRD-015 was never swept pre-design.** Invariant 2 is falsified; REQ-296 and
+  REQ-304 are **preserved** (allowlist `is_withheld` at
+  `src/worktree/allowlist.rs:170` untouched; OS floor both arms).
+- **Single-homing trades divergence for a race.** `edit_phase_sheet` is unlocked
+  RMW. Two copies could diverge but not race; one file can race. No lock is
+  designed — bounded by D2/D9 sole-writer + the single-operator precondition.
+
 ### Open
 
 All pre-design opens are settled. Remaining:
 
-- **Design lock** — internal adversarial pass is integrated; the design has **not**
-  yet had an external hostile pass, and the user has not yet granted explicit
-  approval. `/plan` is gated on that.
-- **REV-043 is `proposed`** — not approved, not applied. It must land before or
-  with the slice's close, or the code ships falsifying an accepted Decision.
+- **RV-322 is `active`, await=`raiser`.** All 9 findings dispositioned; the
+  raiser has not verified or contested the responses. Two dispositions carry
+  **corrections to the reviewer** (F-1's remedy is narrower; F-5's mechanism was
+  wrong) — those are the likeliest to be contested.
+- **Design lock NOT granted.** Both passes are integrated, but the user has not
+  approved. `/plan` is gated on that.
+- **REV-043 is `proposed`** — not approved, not applied. `SL-237 needs REV-043`
+  is now an authored gate (RV-322 F-7): **PHASE-01 does not start until REV-043
+  is `approved`**. Its `[[change]]` rows are ADR-006, SPEC-012, PRD-015.
 - **ASM (carried)** — no repo ⇒ the given root is its own primary. Load-bearing
   for ~20 existing tests on non-git tempdirs; a design invariant (§5.5 I-1), not
   error handling.
@@ -83,3 +118,12 @@ Settled this session:
   propagating sites fail closed for independent reasons (`design.md` §10 R-1).
 - **Correction landed** — `slice-237.md` objective 5 now reads "narrow", and
   objectives 6/7 were added.
+- **DEC-095 amended ×3** (RV-322 F-3/F-6/F-9) — two-root split; `resolve` is
+  fallible for a fault and total only for "no repo"; `PrimaryRoot::assume` added
+  as a production seam. The newtype survived; the *parameter* split.
+
+Follow-ups raised, not owned by this slice:
+
+- **ISS-277** — `reseat` cannot renumber a review.
+- **ADR-008 D-B3 staleness** — the claude-arm confinement concession. Named in
+  REV-043 as a follow-up; **no backlog item filed yet**.
