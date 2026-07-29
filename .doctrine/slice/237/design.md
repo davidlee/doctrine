@@ -113,16 +113,35 @@ design does not claim so.)
 pub(crate) struct PrimaryRoot(PathBuf);
 
 impl PrimaryRoot {
-    /// Impure: one `git worktree list --porcelain`.
+    /// Impure: one `git worktree list --porcelain`. For any caller that will
+    /// WRITE primary-owned state.
     /// TOTAL for the designed invariant — no repo at all ⇒ the given root is
     /// its own primary. FALLIBLE for a genuine resolution fault (I-2).
     pub(crate) fn resolve(cwd: &Path) -> anyhow::Result<Self>;
-    /// The caller asserts `path` is already the primary. Production consumer:
-    /// `dispatch.rs:3449-3471`, which resolves it itself; also the test seam.
+    /// The READ counterpart: TOTAL. A resolution fault falls back to `cwd` as
+    /// its own primary — which is byte-for-byte today's behaviour, since
+    /// `phases_dir` is a pure join off the invoked root (I-2b).
+    pub(crate) fn resolve_for_read(cwd: &Path) -> Self;
+    /// TEST SEAM ONLY — the caller asserts `path` is already the primary.
+    /// No production consumer (RV-322-B F-C); `#[cfg(test)]`.
     pub(crate) fn assume(path: PathBuf) -> Self;
     pub(crate) fn as_path(&self) -> &Path;
 }
 ```
+
+**The repo/no-repo discriminator is `exists()`, never `is_dir()` — RV-322-B F-A.**
+`resolve` distinguishes I-1 (no repo ⇒ total) from I-2 (fault ⇒ `Err`) by looking
+for `.git` in `cwd.ancestors()`. That check MUST accept a `.git` **file** as well
+as a directory: in a linked worktree `.git` is a *file*, and an `is_dir()` spelling
+would classify **every linked worktree** as "no repo", hand it I-1's fallback, and
+home phase state in the fork — the exact defect this slice exists to remove,
+reintroduced by its own fallback. Verified: in this repo every linked worktree's
+`.git` is a file; only the primary's is a directory.
+
+Ride `root::find_from` (`src/root.rs:43`), which already walks ancestors with
+`exists()` — but with `.git` **alone**, never `default_markers()`: those include
+`Cargo.toml` / `.project`, which would read a non-repo Cargo project as a repo and
+invert I-1.
 
 **I-2, restated after RV-322 F-6.** An earlier draft made `resolve` total and
 emitted a warning on any failure. That was the slice's own confusion at the new
@@ -133,6 +152,30 @@ with no second subprocess — but its consequence is promoted from *warn* to
 *`Err`*. **A caller that cannot resolve a primary does not get to write
 primary-owned state.** Totality survives only where the invariant genuinely
 holds: no repo at all.
+
+**I-2b — the refusal is scoped to writers. RV-322-B F-B.** I-2's argument is a
+*write* argument, and F-6 promoted it at a seam that pure reads also cross. Today
+`phases_dir` is a pure join (`state.rs:135`), so `slice list` (`slice.rs:2161`) and
+the map projection (`lazyspec.rs:535`) carry **no git dependency at all**. Routing
+them through a fallible `resolve` would newly hard-fail them on any git fault —
+verified reproduction: a linked worktree whose admin dir was pruned still has its
+`.git` file, but `git worktree list` there exits `fatal: not a git repository`.
+Today `doctrine slice list` works in such a tree; under a single fallible resolve it
+would not, and stale forks are ordinary residue of this repo's own dispatch
+workflow.
+
+So the two consequences are split by intent, not by luck:
+
+| Caller intent | Constructor | Fault behaviour |
+|---|---|---|
+| will write primary-owned state | `resolve` | `Err` — no write occurs (I-2) |
+| read/projection only | `resolve_for_read` | falls back to `cwd` — **exactly today's pure-join result** |
+
+`resolve_for_read` is not a re-run of the warn-and-continue mistake F-6 killed:
+that draft let a *write* proceed after a signal. This one degrades a **read** to
+the answer it already gives today, and writes nothing. The distinction F-6 drew —
+observability is not prevention — is preserved, because there is nothing to
+prevent on a read path.
 
 **Two roots, not one — RV-322 F-3.** `project_root` is today one identifier
 serving **two meanings**: *where the state file lives* (the primary) and *which
@@ -146,15 +189,39 @@ carried explicitly, and only the functions that genuinely ask git take the secon
 
 Signature ripple:
 
+The split is decided **per function by whether it actually asks git** — verified
+call-site by call-site, not inferred from the tier (RV-322-B F-E). A function that
+touches no git gets the primary alone; widening it to both roots would be F-3's
+defect mirrored (two names where one meaning suffices).
+
 | Function | Change |
 |---|---|
 | `phases_dir` (`state.rs:135`) | `(&PrimaryRoot, u32) -> PathBuf` — pure, total |
 | `boundaries_path` (`state.rs:716`) | `(&PrimaryRoot, u32) -> PathBuf` — **loses its `Result`** (DEC-098) |
-| `init_phases`, `phase_rollup`, `completed_phase_ids`, `read_phase_statuses`, `registry_completeness`, `read_source_deltas`, `record_source_delta`, `forget_source_delta` (`state.rs:857`) | first param `&Path` → `&PrimaryRoot` |
-| `set_phase_status`, `edit_phase_sheet`, `reconcile_phase_status`, `capture_phase_boundary` | **both roots**: `(primary: &PrimaryRoot, git_cwd: &Path, …)` |
+| `init_phases`, `phase_rollup`, `completed_phase_ids`, `read_phase_statuses`, `read_source_deltas`, `forget_source_delta` (`state.rs:857`) | first param `&Path` → `&PrimaryRoot`. **Verified git-free** |
+| `edit_phase_sheet` (`state.rs:367`), `reconcile_phase_status` (`state.rs:1296`) | `&PrimaryRoot` **only** — verified zero `git::` calls in either; an earlier draft gave them both roots for nothing |
+| `registry_completeness` (`state.rs:981`) | **collapses `(cwd, project_root)` → one `&PrimaryRoot`** — it already takes two roots that now mean the same tree (F-E) |
+| `set_phase_status` (`state.rs:399`), `capture_phase_boundary` (`state.rs:598`) | **both roots**: `(primary: &PrimaryRoot, git_cwd: &Path, …)` (F-3) |
+| `record_source_delta` (`state.rs:771`) | **both roots** — it is not a pure path consumer: `is_ancestor` (`:776`) and `parents` (`:783`) are git queries on the *invoked* tree (F-D) |
+| `single_commit_boundary` (`state.rs:825`) | **unchanged, `&Path` = git cwd** — it resolves a possibly-symbolic ref (`resolve_ref(root, commit)`, `:831`). Listed so its caller (`slice.rs:3004`) is not "tidied" onto the primary |
 | `resolve_phase_truth` (`state.rs:1114`) | drops `coord`; becomes `(landed, sheets)` (DEC-096) |
 | `refresh_symlink` (`state.rs:345`) | both roots — mint in the primary, **retire a stale link** in a linked worktree (DEC-097, F-8) |
 | `integrity.rs:322-323` (reseat guard) | hand-built `root.join(state_dir)` → resolve via `PrimaryRoot` (F-5) |
+
+**`registry_completeness` must collapse, not half-migrate (F-E).** Its two params
+are documented as coinciding "in the primary worktree" (`state.rs:979`); after this
+slice they *always* coincide, so keeping both preserves the very
+one-name-two-jobs hazard F-3 was raised about — inverted. A call site left passing
+`(&primary, &invoked_root)` would read the completed-set from a tree that no longer
+holds sheets: **spurious `Incomplete`** when rows exist, and **vacuous `Complete`**
+when they do not (`check_completeness` returns `Complete` for empty/empty,
+`state.rs:947`). Call sites: `slice.rs:2861`, `dispatch.rs:3477`.
+
+**`record_source_delta`'s param does three jobs, not two (F-D).** Migrating it to
+`&PrimaryRoot` alone would ask the *primary* whether `code_start` is an ancestor of
+`code_end`. That happens to agree today only because linked worktrees share one
+object database — an unrecorded, load-bearing assumption. It is recorded here, and
+the git guards take `git_cwd` so the agreement is not relied on.
 
 CLI surface: `slice status <ID> --across-trees [--assert]` becomes
 `slice status <ID> --truth [--assert]`. After this slice there are no trees to
@@ -169,8 +236,20 @@ file is, never *whose fact it is*. Within the runtime tier —
 | Scope | Meaning | Examples |
 |---|---|---|
 | **repo** | true of the *slice*, whichever tree you stand in | `boundaries.toml`, `phases/` |
-| **tree** | true of *this checkout* | `boot.md` |
+| **tree** | true of *this checkout* | `boot.md`, **`.doctrine/state/dispatch/worker`** |
 | **session** | true of *this agent run* | `handover.md`, `mem-surface-seen-<uuid>.txt` |
+
+**The worker marker is tree-scoped by necessity — RV-322-B F-H.** It is called out
+in the table rather than left to inference because it sits *inside* the subtree OQ-2
+defers, and the deferral is where the mistake would be made.
+`worker_mode(root) = (is_linked_worktree(root) && marker_present(root)) OR env`
+(`worktree/marker.rs:158-166`) asks a question about **this checkout**; resolving it
+through `PrimaryRoot` would look for the marker in the primary, where it is absent
+by construction, and `worker_mode` would go false in **every** fork. On the claude
+arm that is the CLI's only leg (see I-3), so the effect would be to silently disable
+worker write refusal. Verified live: the fork at
+`.dispatch/SL-233/.worktrees/agent-…` carries the marker, and `worktree status`
+there reports *"worker fork: yes — writes refused; signal: marker"*.
 
 "PHASE-03 is completed" and "PHASE-03 spans oids X..Y" are the same kind of fact.
 `PrimaryRoot` is the type that carries the repo-scoped rule. Promoting this
@@ -183,9 +262,18 @@ concurrent drives touch disjoint `<NNN>` directories.
 
 ### 5.4 Lifecycle, Operations & Dynamics
 
-**Resolution points.** One `PrimaryRoot::resolve` per invocation at the command
-tier: the `run_*` entry points in `slice.rs`, `dispatch.rs`,
-`mcp_server/dispatch.rs`, and `lazyspec.rs:535`.
+**Resolution points.** One resolution per invocation at the command tier: the
+`run_*` entry points in `slice.rs`, `dispatch.rs`, and `mcp_server/dispatch.rs`
+(including `phase_receipt`, `mcp_server/dispatch.rs:1085`, which is not a `run_*`
+but resolves `phases_dir` off `coord.root` today), plus `lazyspec::load_slices`
+(`lazyspec.rs:495`).
+
+**Corrected from `lazyspec.rs:535` — RV-322-B F-F.** An earlier draft named `:535`
+as the lazyspec resolution point while the fan-out table two paragraphs down said
+"resolve before the loop". Those contradict: `load_slices` loops `scan_ids` at
+`:498` and calls `load_plan` at `:507`, so `:535` is **inside** the loop.
+Resolving there *is* fan-out #2. The resolution point is `:495`, threaded through
+`load_plan`.
 
 **There are TWO fan-outs, not one** (R-2 of the adversarial pass). Both resolve
 once, outside their loop:
@@ -247,8 +335,31 @@ drive races the drive's own writer on the **same** file.
     `Edit|Write` denial outside the worktree. The earlier draft asserted this arm
     had no OS floor, on the strength of ADR-008 D-B3's text that claude's `Agent`
     tool "cannot be wrapped". **That governance is stale relative to the shipped
-    skill**; the staleness is recorded as a follow-up, not silently corrected
-    here.
+    skill**; the staleness is recorded as a follow-up (ISS-278), not silently
+    corrected here.
+  - **The claude arm's CLI refusal is the MARKER leg, not the env leg — RV-322-B
+    F-G.** The hooks are the OS floor; they are not what makes `doctrine slice
+    phase` refuse. That is `worker_mode`, and on this arm it is satisfied by
+    `is_linked_worktree && marker_present` (`worktree/marker.rs:158-166`), *not*
+    by `DOCTRINE_WORKER` — nothing in the claude spawn path sets that env var
+    (verified: no `--setenv` in `worktree/pretooluse.rs`). Verified live on the
+    fork at `.dispatch/SL-233/.worktrees/agent-…`: marker present, `worktree
+    status` reports *"writes refused; signal: marker"*. This matters because the
+    marker is the thing §5.3 now pins as tree-scoped.
+  - **The refusal set is the whole `WriteClass::Write` family**, not just `slice
+    phase` / `slice phases`: `record-delta`, `reconcile-phases` and `slice status`
+    are all classified `Write` (`commands/guard.rs:74-101`). The floor is broader
+    than the earlier draft claimed.
+  - **The one documented hole is `worker_commit`, and it is why the invariant
+    holds rather than a counterexample to it.** SKILL.md is explicit that the
+    *unconfined server* commits on the worker's behalf — "the tool's belts, not
+    the wall, are the security boundary there". An invariant asserted without its
+    known exception is the F-2 failure again, so the exception is named and
+    discharged on evidence: `worker_commit` lands funnel rows onto the coord ref
+    through the object db (`mcp_server/worker_commit.rs:313-338`) and writes **no
+    phase sheet and no registry row**. Any future change that gives it one would
+    breach I-3 through the only door left open — V-8b checks this, not just the
+    two arms.
   - **Consequence for this design.** No new named EROFS error is required,
     because no reachable state produces one. What the design *does* owe is that
     phase-state writes **fail rather than degrade** if they ever do hit a
@@ -289,7 +400,12 @@ drive races the drive's own writer on the **same** file.
   No action needed in the DEC-098 phase beyond a regression test.
 - **OQ-2** — `.doctrine/state/dispatch/` and `.doctrine/state/review/` are
   suspected of the same defect. Deliberately out of scope; audited under
-  CHR-050.
+  CHR-050. **Carries a warning, not just a deferral (RV-322-B F-H):**
+  `.doctrine/state/dispatch/worker` is inside that subtree and is **tree-scoped
+  by necessity** — see §5.3. Anyone applying this slice's repo-scoped reasoning
+  across `dispatch/` wholesale disables worker write refusal on the claude arm.
+  CHR-050 must classify each file in the subtree by *whose fact it is* before
+  moving any of them; "same tier" is not "same scope".
 
 ## 7. Decisions, Rationale & Alternatives
 
@@ -387,13 +503,22 @@ change under D3.
 ## 8. Risks & Mitigations
 
 - **R1 — Test-churn dilutes the behaviour-preservation proof.** ~50 construction
-  sites change. *Mitigation (revised, RV-322 F-9):* `PrimaryRoot::assume(path)`
-  — a real constructor, not a test-only hatch (`dispatch.rs:3449-3471` needs it
-  too). The earlier "one-line helper" mitigation was unimplementable: the tuple
+  sites change. *Mitigation (revised, RV-322 F-9):* `PrimaryRoot::assume(path)`.
+  The earlier "one-line helper" mitigation was unimplementable: the tuple
   field is private to `git.rs`, so no `state.rs` test module could write it, and
   routing the tests through the impure `resolve` would have converted pure
   path-join tests into git-dependent ones — changing what the suites prove.
   Assertions are reviewed for unchanged-ness explicitly at audit (V-1b).
+  **`assume` is a TEST SEAM and is spelled as one — RV-322-B F-C.** The draft
+  integrating F-9 claimed it was "a real constructor, not a test-only hatch"
+  because `dispatch.rs:3449-3471` needed it too. That claim does not survive
+  reading the site: `prepare_review` does `git::primary_worktree(root)?` — which
+  is exactly what `resolve(root)` does, at identical cost — so `resolve` fits
+  there and `assume` has **no** production consumer. Shipping an
+  invariant-bypassing public constructor on a production justification that does
+  not exist is worse than shipping an honest test hatch, so it is `#[cfg(test)]`.
+  This also re-grades §10 R-3: the visibility argument now rests on `resolve` /
+  `resolve_for_read` being the only production constructors.
 - **R2 — A silent fallback homes state in the wrong tree.** *Mitigation
   (revised, RV-322 F-6):* I-2 **refuses**. A warning was never a mitigation —
   observability does not prevent the write that follows it.
@@ -420,14 +545,30 @@ change under D3.
 - **R8 — concurrent RMW on the now-shared file.** *Added, RV-322 F-4.* No lock
   is designed. *Mitigation:* bounded by contract (I-5), and named as a
   relaxation in REV-043 rather than absorbed into a "restatement".
+- **R9 — a read-only verb gains a fatal git dependency.** *Added, RV-322-B F-B.*
+  `slice list` and the map projection have none today; a single fallible
+  `resolve` would hard-fail them in a repo whose git state is broken — verified
+  against a pruned linked worktree, where `.git` survives as a file but `git
+  worktree list` exits fatal. *Mitigation:* `resolve_for_read` (I-2b), and V-13
+  pins the degradation instead of leaving it to inference.
+- **R10 — the fallback discriminator reintroduces the defect.** *Added, RV-322-B
+  F-A.* An `is_dir()` spelling of the `.git` ancestors check reads **every**
+  linked worktree as "no repo" and homes state in the fork. *Mitigation:* the
+  `exists()` requirement is stated in §5.2 as a contract, and V-14 tests it from
+  a linked worktree specifically — the case an `is_dir()` bug passes every
+  primary-tree test unscathed.
 
 ### 8a. Sequencing and the entry gate
 
 **PHASE-01 does not start until REV-043 is `approved`** (R4). The phases
 themselves:
 
-1. `PrimaryRoot` (`resolve` + `assume`), `phases_dir` migration, and the
-   two-root split for the git-asking functions (F-3).
+1. `PrimaryRoot` (`resolve` + `resolve_for_read` + the `#[cfg(test)]` `assume`),
+   `phases_dir` migration, and the two-root split for the git-asking functions
+   (F-3) — decided per function against its actual `git::` calls, not by tier
+   (F-D / F-E). The `exists()` discriminator (F-A) and the read/write
+   constructor split (F-B) are both PHASE-01: they are contract, and every later
+   phase builds on the contract being right.
 2. Retire the mirror; the `run_phases` plan/sheets split.
 3. `resolve_phase_truth` narrowing; `--across-trees` → `--truth`.
 4. `boundaries_path` + `forget_source_delta` migration (DEC-098) — kept
@@ -451,7 +592,11 @@ themselves:
 | V-9 | VA | **Both** fan-out sites resolve once outside their loop — `list_rows` (`slice.rs:2161`) and `load_slices` (`lazyspec.rs:495`). Reviewed at the call site, **not** inferred from the type: R-2 showed the type makes a fan-out visible, not impossible |
 | V-10 | VT | `read_source_deltas` against a non-repo root yields an empty registry, and `conformance_outcome` reports `Unavailable` rather than erroring (OQ-1 / R-1) |
 | V-11 | VT | The reseat guard (`integrity.rs:322-323`) refuses when live phase state exists **in the primary**, invoked from a linked worktree (F-5) |
-| V-12 | VA | Census re-run on the corrected axis — `.doctrine/state` path *construction*, not `phases_dir` call sites — with every production site dispositioned (F-5 / R7) |
+| V-12 | VA | Census re-run on the corrected axis — `.doctrine/state` path *construction*, not `phases_dir` call sites — with every production site dispositioned (F-5 / R7). **Already run once in the RV-322-B pass: `integrity.rs:322` is the only production hand-built site** (`lazyspec.rs:1600`, `dispatch.rs:8300` are test helpers). Re-run at audit to catch sites the slice itself adds |
+| V-13 | VT | A read verb (`slice list`) in a repo whose `git worktree list` fails still renders, resolving to the invoked root — and no primary-owned write occurs on that path (I-2b / R9). Reproduce the fault with a linked worktree whose admin dir is pruned |
+| V-14 | VT | `resolve` **from a linked worktree** (`.git` is a *file*) returns the primary, not the linked tree — the `exists()`-vs-`is_dir()` discriminator (I-1 / R10). Must be a linked worktree: an `is_dir()` bug passes every primary-rooted test |
+| V-15 | VA | `registry_completeness` takes ONE root, and both call sites (`slice.rs:2861`, `dispatch.rs:3477`) pass the primary (F-E) |
+| V-16 | VA | `PrimaryRoot::assume` has no non-test caller (F-C); `edit_phase_sheet` / `reconcile_phase_status` take the primary alone, and `record_source_delta`'s git guards take the invoked tree (F-D / F-E) |
 
 ## 10. Review Notes
 
@@ -540,6 +685,46 @@ instances of *the slice's own defect committed inside its own design* — one
 identifier serving two meanings, and a signal mistaken for a safeguard. The
 internal pass found gaps in coverage; the external pass found errors in
 reasoning. That is the difference worth recording.
+
+### Rigour pass on the integration — RV-322-B, 2026-07-29
+
+The nine RV-322 findings were integrated in one sitting; this pass audited **the
+integration itself** against source before returning the ledger to the raiser.
+Every claim was verified at a call site. Eight findings land.
+
+| # | Sev | What it caught | Where it landed |
+|---|---|---|---|
+| F-A | blocker | The I-1/I-2 `.git` discriminator is unspecified between `exists()` and `is_dir()`; `is_dir()` reads **every** linked worktree as "no repo" and homes state in the fork | §5.2 contract; R10; V-14 |
+| F-B | blocker | I-2's `Err` is a *write* argument applied at a seam pure reads cross — `slice list` gains a fatal git dependency it has never had | §5.2 I-2b + `resolve_for_read`; R9; V-13 |
+| F-C | major | `assume`'s sole claimed production consumer (`dispatch.rs:3449`) is a plain `primary_worktree(root)` — i.e. `resolve`. The "not a test hatch" justification is empty | §5.2; R1 rewritten; V-16 |
+| F-D | major | `record_source_delta`'s one param does three jobs — two of them git queries (`:776`, `:783`) — so the table put it on F-3's wrong side | §5.2 table; V-16 |
+| F-E | major | `registry_completeness` already takes two roots that now mean one tree; half-migrating preserves the hazard inverted. `edit_phase_sheet` / `reconcile_phase_status` were widened to two roots despite zero `git::` calls | §5.2 table; V-15, V-16 |
+| F-F | major | §5.4 named `lazyspec.rs:535` a resolution point while its own table said "resolve before the loop" — `:535` is *inside* the loop, so the sentence reinstates fan-out #2 | §5.4 corrected |
+| F-G | major | I-3 credits the claude arm's refusal to the PreToolUse hooks; it is actually the **marker** leg. And the invariant is asserted without its one documented hole (`worker_commit`'s unconfined server) | §5.5 I-3 |
+| F-H | major | OQ-2 defers `.doctrine/state/dispatch/` without noting the worker **marker** inside it is tree-scoped by necessity — moving it would silently disable worker write refusal | §5.3 table + note; §6 OQ-2 |
+
+**Four attacks did not land** — recorded so they are not re-run:
+
+- *A third fan-out exists.* No. `dispatch.rs:4839`, `:5074`,
+  `mcp_server/dispatch.rs:1085` and `slice.rs:998` are all single-slice. Exactly
+  two.
+- *The corrected census misses a second hand-built site.* No.
+  `integrity.rs:322` is the only production one; the other two hits are test
+  helpers. F-5's scope is right.
+- *Fork provisioning re-mints the `phases` symlink, making F-8's retirement
+  futile.* No — `WITHHELD` already carries `Tier::PhaseLink`
+  (`worktree/allowlist.rs:74`), so a fresh fork never receives one. I-4's
+  upgrade-only scope is correct.
+- *`worker_commit` writes phase state from a fork, breaching I-3.* No — it lands
+  funnel rows on the coord ref via the object db and touches neither sheet nor
+  registry. (This is now recorded as I-3's evidence rather than left untested.)
+
+**The pattern this pass confirms.** Three of the eight (F-A, F-D, F-E) are the
+same defect the slice exists to remove — one name serving two meanings, or a
+discriminator that cannot tell two things apart — committed *inside the fix for
+the findings about committing it inside the design*. The external pass named this
+about F-3 and F-6; it recurred one layer down, in the integration. Concentrating
+that class into PHASE-01 as contract (§8a) is the structural answer.
 
 ### Method note
 

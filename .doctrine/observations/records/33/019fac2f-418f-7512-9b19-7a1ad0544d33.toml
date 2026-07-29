@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac2f-418f-7512-9b19-7a1ad0544d33"
+recorded_at = "2026-07-29T04:43:25.967570511Z"
+kind = "friction"
+summary = "/rigour: review ledger findings are not readable via `review show`"
+detail = "Reviewing RV-322's dispositions. `doctrine review show 322` renders the derived status + brief prose but NOT the findings; `review status` gives counts only. The findings are reachable only via `--json`, where each finding's `summary` is empty and `detail` carries a full inlined entity dump (the PRD-015 body, several KB, pasted into finding F-1's detail). Cost: a truncated head -c 3000 read, then a jq projection, to learn nine one-line dispositions. A `review show --findings` (id / severity / status / disposition / one-line summary) would have been ~200 tokens instead of several thousand."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
