@@ -21,7 +21,7 @@ When unsure, route to the stricter skill. No code without an approved plan.
 | Implementation done — evidence / reconciliation | `/audit` → `/reconcile` → `/close` |
 | Slice exists, audit RV resolved, reconciliation brief written | `/reconcile` |
 
-Unsure where the lifecycle stands: `doctrine status` / `doctrine reports next`.
+Unsure where the lifecycle stands: `doctrine status` / `doctrine next`.
 
 **Conduct postures** layer on the routed stage — orthogonal to it, composable
 with each other, never routed to *instead* of it:

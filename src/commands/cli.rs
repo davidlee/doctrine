@@ -983,14 +983,23 @@ pub(crate) fn render_top_level_help(color: bool, term_width: Option<u16>) -> Str
 ///
 /// Layout:
 /// - a spine legend line once at the top (the [`SPINE`] verbs);
-/// - per family (FAMILIES order), a header line `{key}  {member member …}` —
+/// - a grammar legend line naming both tiers and the bare-invocation rule;
+/// - per family (FAMILIES order), a header line `[{key}]  {member member …}` —
 ///   all members bare, member-array order (INV-4);
 /// - a sub-line for a command IFF its distinctive set (subcommand verbs − SPINE,
 ///   in clap derive order — INV-4) is non-empty AND its family's `suppress_verbs`
 ///   is false. Leaves (no subcommands) and infra families get a header only (D7).
 ///
-/// Names (family keys and sub-line command names) share one left-padded field
-/// width so the surface scans as a column.
+/// IMP-345: family keys are **bracketed**. A family is a help grouping, not an
+/// invocable parent — `doctrine reports next` does not parse; `doctrine next`
+/// does. Rendered bare at column 0, a key was read as a parent command by agents
+/// repeatedly (the highest-frequency friction in the RFC-011 corpus), aided by
+/// `knowledge` being both a family key and a real command. Brackets are inert in
+/// the unfenced markdown the snapshot embeds them in (unlike `#`, which would
+/// become a heading), and cost two characters per family.
+///
+/// Value fields align at one column: `[{key}]` is left-padded to `pad + 2` and a
+/// command's two-space indent plus `pad` lands its verbs in the same place.
 pub(crate) fn render_boot_map() -> String {
     use std::fmt::Write as _;
 
@@ -1013,14 +1022,21 @@ pub(crate) fn render_boot_map() -> String {
 
     // Shared name-field width: the longest family key, plus a two-space gutter.
     let pad = FAMILIES.iter().map(|f| f.key.len()).max().unwrap_or(0) + 2;
+    // A bracketed key is two characters wider; both tiers' value fields then align.
+    let key_pad = pad + 2;
 
     let mut out = String::new();
     out.push_str("SPINE: ");
     out.push_str(&SPINE.join(" "));
-    out.push_str(" (+status where lifecycle) \u{2014} entity kinds\n\n");
+    out.push_str(" (+status where lifecycle) \u{2014} entity kinds\n");
+    out.push_str(
+        "Grammar: [group] rows list that group's commands; indented rows list a command's \
+         verbs. Invoke bare \u{2014} `doctrine <command> [verb]`, never `doctrine <group> …`.\n\n",
+    );
 
     for fam in FAMILIES {
-        _ = writeln!(out, "{:<pad$}{}", fam.key, fam.members.join(" "));
+        let key = format!("[{}]", fam.key);
+        _ = writeln!(out, "{key:<key_pad$}{}", fam.members.join(" "));
         if fam.suppress_verbs {
             continue;
         }

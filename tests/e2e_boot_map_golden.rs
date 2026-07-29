@@ -7,11 +7,17 @@
 //! colour, no width: byte-stable regardless of tty.
 //!
 //! These pin the load-bearing RULES (design §5.4): a single spine legend line;
-//! one header line per family (all members, bare, FAMILIES order); a per-command
-//! sub-line IFF the command has distinctive verbs (verbs − SPINE) AND its family
-//! is not verb-suppressed; infra is header-only (D7); a leaf command never
-//! sub-lines. Verb copy itself tracks clap derive order (INV-4), not pinned byte
-//! for byte here. VT-1.
+//! a grammar legend line naming the two tiers; one header line per family
+//! (bracketed key, all members bare, FAMILIES order); a per-command sub-line IFF
+//! the command has distinctive verbs (verbs − SPINE) AND its family is not
+//! verb-suppressed; infra is header-only (D7); a leaf command never sub-lines.
+//! Verb copy itself tracks clap derive order (INV-4), not pinned byte for byte
+//! here. VT-1.
+//!
+//! IMP-345: family keys are bracketed (`[change]`) because they are help
+//! groupings, not invocable subcommands — an unbracketed column-0 key reads as
+//! `doctrine reports next`, which does not parse. The bracket plus the grammar
+//! legend are the whole remedy; both are pinned here.
 
 #![allow(
     clippy::expect_used,
@@ -68,18 +74,19 @@ fn boot_map_declares_the_spine_once_at_top() {
 }
 
 /// Family header lines appear in FAMILIES-declared order. A header line is one
-/// that starts at column 0 (not indented) and whose first token is a family key.
+/// whose first token is a BRACKETED family key (IMP-345).
 #[test]
 fn boot_map_headers_render_in_declared_order() {
     let out = boot_map_stdout();
-    let headers: Vec<&str> = out
+    let headers: Vec<String> = out
         .lines()
-        .filter(|l| !l.starts_with(' ') && !l.is_empty() && !l.starts_with("SPINE:"))
-        .map(|l| l.split_whitespace().next().unwrap_or(""))
+        .filter(|l| l.starts_with('['))
+        .map(|l| l.split_whitespace().next().unwrap_or("").to_string())
         .collect();
+    let want: Vec<String> = FAMILY_ORDER.iter().map(|k| format!("[{k}]")).collect();
     assert_eq!(
-        headers, FAMILY_ORDER,
-        "family headers must render in FAMILIES-declared order, one per family"
+        headers, want,
+        "family headers must render bracketed, in FAMILIES-declared order, one per family"
     );
 }
 
@@ -87,15 +94,52 @@ fn boot_map_headers_render_in_declared_order() {
 #[test]
 fn boot_map_header_names_all_members_bare() {
     let out = boot_map_stdout();
-    // `governance  adr policy standard spec` — the whole member set on one line.
+    // `[governance]  adr policy standard spec` — the whole member set on one line.
     let gov = out
         .lines()
-        .find(|l| l.starts_with("governance "))
+        .find(|l| l.starts_with("[governance]"))
         .expect("governance header present");
     for member in ["adr", "policy", "standard", "spec"] {
         assert!(
             gov.split_whitespace().any(|t| t == member),
             "governance header must name member `{member}` bare"
+        );
+    }
+}
+
+/// IMP-345 — the grammar legend is the second line and states BOTH tiers plus the
+/// bare-invocation rule. Without it the bracket is decoration; with it an agent can
+/// derive `doctrine next` instead of the unparseable `doctrine reports next`.
+#[test]
+fn boot_map_declares_its_grammar_on_the_second_line() {
+    let out = boot_map_stdout();
+    let second = out.lines().nth(1).expect("second line present");
+    assert!(
+        second.starts_with("Grammar:"),
+        "the grammar legend is the second line, got: {second}"
+    );
+    for fragment in ["[group]", "verbs", "doctrine <command>"] {
+        assert!(
+            second.contains(fragment),
+            "grammar legend must carry `{fragment}`, got: {second}"
+        );
+    }
+    assert_eq!(
+        out.matches("Grammar:").count(),
+        1,
+        "the grammar legend appears exactly once"
+    );
+}
+
+/// IMP-345 — no family key is ever rendered as a bare column-0 token, because that
+/// is exactly the shape an agent misreads as an invocable parent command.
+#[test]
+fn boot_map_never_renders_a_family_key_as_a_bare_command() {
+    let out = boot_map_stdout();
+    for key in FAMILY_ORDER {
+        assert!(
+            !out.lines().any(|l| l.starts_with(&format!("{key} "))),
+            "family key `{key}` must not head a line bare — it is not a subcommand (IMP-345)"
         );
     }
 }
@@ -139,7 +183,7 @@ fn boot_map_suppresses_infra_verbs() {
     }
     // infra is also the LAST header.
     assert!(
-        out.lines().any(|l| l.starts_with("infra ")),
+        out.lines().any(|l| l.starts_with("[infra]")),
         "infra header present"
     );
 }

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019face0-c7db-7b02-bdaa-f2033785c84f"
+recorded_at = "2026-07-29T07:57:20.219463663Z"
+kind = "friction"
+summary = "IMP-345 light-path: .agents/ skill mirror lag read as a failed install"
+detail = "Edited plugins/doctrine/skills/spec-coverage-assessment/SKILL.md, ran 'install -y --skill', and the installed mirror at .agents/skills/ still held the old text. Burned ~5 tool calls chasing a RustEmbed staleness hypothesis (touch src/install.rs + rebuild) before reading delegate_argv: non-Claude skill install is 'npx skills add <github-slug>', i.e. sourced from the PUBLISHED repo, so a working-tree skill edit is invisible to .agents/ by construction until landed. Nothing was broken. Cost was the absence of any signal that the mirror's source is remote — the install plan line says only 'delegates to npx'."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

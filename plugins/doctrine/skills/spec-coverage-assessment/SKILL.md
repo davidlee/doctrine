@@ -78,8 +78,8 @@ Enumerate what already claims to touch the surface:
   `doctrine standard list` (substring/tag filtered) for governance that
   touches the surface without being a spec — a policy or ADR can be the only
   governance a component has.
-- Optionally `doctrine explore relation census` / `doctrine explore
-  concept-map` to see how the candidate specs already relate to each other —
+- Optionally `doctrine relation census` / `doctrine concept-map` to see how
+  the candidate specs already relate to each other —
   useful for the descent/parent decision in step 5.
 
 ### 2. Surface inventory

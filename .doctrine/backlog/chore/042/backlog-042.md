@@ -26,7 +26,7 @@ Phase C (IMP-280) is needs-gated on it.
    propagation to matter (~20–40 rows across a connected subset, including
    some items with authored `value` facets so anchors participate).
 2. **Run inference.** The pre-pass runs inside the priority scan; observe via
-   `doctrine reports next` / `doctrine reports explain <ID>` (value-source
+   `doctrine next` / `doctrine explain <ID>` (value-source
    line: provenance, bounds, rater-kind counts, residual diagnostics) on
    compared items. Use the tree-local `./target/debug/doctrine` after
    `cargo build`.

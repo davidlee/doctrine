@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019face0-d267-7cd2-8925-4f93aea034b8"
+recorded_at = "2026-07-29T07:57:22.920011752Z"
+kind = "friction"
+summary = "IMP-345 light-path: ripgrep-backed grep silently skipped gitignored .agents/, yielding a false-clean sweep"
+detail = """'grep -rln "doctrine explore" .' returned only rfc case-notes, implying the stale skill copy was gone; an explicit 'grep .agents/...' still found it. grep resolves to a gitignore-respecting backend in this environment, so any corpus sweep that must cover derived/installed trees (.agents/, .doctrine/state/) reads clean when it is not. Positive control caught it."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
