@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-29 · stage: design authored, RV-322 round 5 integrated + REV-043 split, NOT locked · 73e94ecd
+fresh-as-of: 2026-07-29 · stage: design LOCKED (user, after round 5); plan authored, 5 phases materialised, status `ready` · da7e99d1
 
 ### Produced
 
@@ -48,7 +48,10 @@ fresh-as-of: 2026-07-29 · stage: design authored, RV-322 round 5 integrated + R
   confinement? Parked out of REV-043. Not caused by SL-237.
 - **IMP-354** — platform-agnostic seatbelt/bwrap worker confinement wrapper.
   Parked. Not a precondition for this slice.
-- design-target selectors recorded (6 paths).
+- design-target selectors recorded (6 paths); `src/integrity.rs` appended at
+  `/plan` — the design named it (F-5/F-13) but the design-time list missed it.
+- `plan.toml` + `plan.md` — five phases per design § 8a, 91 criteria/verification
+  rows. Sheets materialised; SL-237 `ready`.
 
 ### Learned
 
@@ -138,8 +141,16 @@ All pre-design opens are settled. Remaining:
   raiser. **Recommendation on record:** don't spend round 6 on the whole design —
   if another pass is wanted, target REV-043's proposed text alone, where the last
   three rounds' defects all lived.
-- **Design lock NOT granted.** All passes integrated and the design assessed
-  ready; the user has not approved. `/plan` is gated on that.
+- ~~**Design lock NOT granted.**~~ **GRANTED** by the user 2026-07-29 after the
+  round-5 assessment; `/plan` ran and SL-237 is `ready`. Round 5's three
+  dispositions (F-1, F-12, F-18) remain raiser-unverified — the lock was granted
+  with that stated, not in ignorance of it.
+- **§ 5.2 carries one internal tension, resolved at plan level, not by re-opening
+  the design.** It gives `init_phases` ONE root and `refresh_symlink` BOTH, and
+  `init_phases` is `refresh_symlink`'s sole caller (`state.rs:219`) — the rows
+  cannot both hold at once. PHASE-01 EX-6b / PHASE-05 EX-1b split it so neither
+  row is contradicted at the phase that owns it. Worth a design-side note at
+  reconcile if § 5.2 is ever re-read as self-consistent.
 - **Residual ripple risk (the live one for implementation).** F-5/F-13 proved the
   census axis was wrong — `integrity.rs` hand-builds `root.join(kind.state_dir)`
   and never calls `phases_dir`, so a call-site census cannot find such sites.
