@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad63-2454-7d93-8ca6-4c0939106a0e"
+recorded_at = "2026-07-29T10:19:43.572952761Z"
+kind = "friction"
+summary = "installed .doctrine/using-doctrine.md drifted from install/ source"
+detail = "Editing install/using-doctrine.md for IMP-263 surfaced that the repo's own installed copy at .doctrine/using-doctrine.md is stale by many paragraphs (missing the observation verbs table, the full knowledge_record kind list, the whole 'Capturing friction' section). Agents in this repo may read either path — boot cites both bare 'using-doctrine.md' and 'install/using-doctrine.md'. A doc edit to the embedded source silently does not reach the installed copy; nothing warns, and no gate leg compares them. Cost this turn: a diff plus a scope decision. Left unfixed (out of scope for a no-slice backlog item); refreshing via doctrine install would pull unrelated drift."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
