@@ -93,6 +93,25 @@ pub(crate) enum SpecReqCommand {
         path: Option<PathBuf>,
     },
 
+    /// Read one requirement in a single call: identity, memberships, statement,
+    /// acceptance criteria, and prose.
+    Show {
+        /// Canonical requirement ref: `REQ-NNN` (by id only — no slug derivation).
+        req_ref: String,
+
+        /// Output format (table | json).
+        #[arg(long, value_parser = Format::from_str, default_value_t = Format::Table)]
+        format: Format,
+
+        /// Shorthand for `--format json`.
+        #[arg(long)]
+        json: bool,
+
+        /// Explicit project root (default: auto-detect).
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+
     /// List a spec's requirement members — authored roster (id, label, kind,
     /// status).
     List {
@@ -279,6 +298,12 @@ pub(crate) fn dispatch(cmd: SpecCommand, color: bool) -> anyhow::Result<()> {
                 note,
                 path,
             } => run_req_status(path, &req_ref, to, note),
+            SpecReqCommand::Show {
+                req_ref,
+                format,
+                json,
+                path,
+            } => run_req_show(path, &req_ref, if json { Format::Json } else { format }),
             SpecReqCommand::List {
                 spec_ref,
                 list,
@@ -892,6 +917,44 @@ fn spec_scaffold(subtype: SpecSubtype, ctx: &ScaffoldCtx<'_>) -> anyhow::Result<
     Ok(fileset)
 }
 
+/// One requirement's detail block, below whatever heading its caller emitted —
+/// the authored facet line, tags, statement, acceptance criteria, and verbatim
+/// prose. Shared by `spec show`'s member loop and `spec req show` (IMP-263) so the
+/// two surfaces cannot drift; pure, and each piece carries its own newlines
+/// (house style — the caller `concat()`s).
+///
+/// "statement" is the structured `description` (D-P4-1): the storage rule forbids
+/// deriving it from the prose, so an absent field renders no line. The `.md` body
+/// (IMP-058) is emitted verbatim when authored and omitted when scaffold.
+fn req_detail_parts(req: &Requirement, body: Option<&str>) -> Vec<String> {
+    let mut parts = vec![format!(
+        "{} · {} · {}\n",
+        req.slug,
+        req.kind.as_str(),
+        req.status.as_str(),
+    )];
+    if !req.tags.is_empty() {
+        parts.push(format!("tags: {}\n", req.tags.join(", ")));
+    }
+    if let Some(statement) = &req.description {
+        parts.push(format!("\n{statement}\n"));
+    }
+    if !req.acceptance_criteria.is_empty() {
+        parts.push("\nacceptance criteria:\n".to_string());
+        for c in &req.acceptance_criteria {
+            parts.push(format!("  - {c}\n"));
+        }
+    }
+    if let Some(body) = body {
+        parts.push("\n".to_string());
+        parts.push(body.to_string());
+        if !body.ends_with('\n') {
+            parts.push("\n".to_string());
+        }
+    }
+    parts
+}
+
 /// Reassemble a spec into its readable whole (design §5.4) — the PURE compose half
 /// of `spec show`. Takes already-parsed inputs and returns the document `String`;
 /// touches no disk (the shell does all I/O — §8 purity thesis). Members are
@@ -1005,35 +1068,10 @@ pub(crate) fn render(
             "\n### {} ({req_ref}) — {}\n\n",
             member.label, req.title
         ));
-        parts.push(format!(
-            "{} · {} · {}\n",
-            req.slug,
-            req.kind.as_str(),
-            req.status.as_str(),
+        parts.extend(req_detail_parts(
+            req,
+            req_bodies.get(i).and_then(|b| b.as_deref()),
         ));
-        if !req.tags.is_empty() {
-            parts.push(format!("tags: {}\n", req.tags.join(", ")));
-        }
-        // "statement" is the structured `description` (D-P4-1): the storage rule
-        // forbids parsing the requirement's prose; absent → no line.
-        if let Some(statement) = &req.description {
-            parts.push(format!("\n{statement}\n"));
-        }
-        if !req.acceptance_criteria.is_empty() {
-            parts.push("\nacceptance criteria:\n".to_string());
-            for c in &req.acceptance_criteria {
-                parts.push(format!("  - {c}\n"));
-            }
-        }
-        // Prose body (IMP-058): render the requirement's `.md` body verbatim when
-        // authored; omit when scaffold (no noise).
-        if let Some(body) = req_bodies.get(i).and_then(|b| b.as_ref()) {
-            parts.push("\n".to_string());
-            parts.push(body.clone());
-            if !body.ends_with('\n') {
-                parts.push("\n".to_string());
-            }
-        }
     }
 
     // outbound interactions (tech only; omitted when empty — VT-3).
@@ -2215,6 +2253,118 @@ pub(crate) fn run_req_list(
 ) -> anyhow::Result<()> {
     let root = crate::root::find(path, &crate::root::default_markers())?;
     write!(io::stdout(), "{}", req_list_rows(&root, spec_ref, args)?)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// `spec req show` — one-call read of a requirement's statement (IMP-263)
+// ---------------------------------------------------------------------------
+
+/// One membership of a requirement: the spec that members it and the label it
+/// carries *there* (labels are mobile per spec — the durable id is the `REQ-NNN`).
+struct MemberOf {
+    spec: String,
+    label: String,
+}
+
+/// Every spec that members `canonical_req`. A requirement holds no back-edge to
+/// its spec (ADR-004 — relations are stored outbound-only, reciprocity derived),
+/// so the owning spec is reachable only by reading member rows. Scans both subtype
+/// trees through `member_reqs`, which reads `members.toml` **alone** — a much
+/// narrower sweep than `build_registry`, which parses every spec's own toml.
+fn memberships(root: &Path, canonical_req: &str) -> anyhow::Result<Vec<MemberOf>> {
+    let mut out = Vec::new();
+    for subtype in [SpecSubtype::Product, SpecSubtype::Tech] {
+        let mut ids = entity::scan_ids(&root.join(subtype.kind().dir))?;
+        ids.sort_unstable();
+        for id in ids {
+            let spec_ref = subtype.canonical_id(id);
+            for m in member_reqs(root, &spec_ref)? {
+                if m.requirement == canonical_req {
+                    out.push(MemberOf {
+                        spec: spec_ref.clone(),
+                        label: m.label,
+                    });
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// PURE compose half of `spec req show`: the structured identity, every membership,
+/// then the detail block shared with `spec show` (`req_detail_parts`). The identity
+/// is not an H1 — the prose body carries its own `# REQ-NNN: …` heading, so a
+/// synthetic one would double it (the `render` precedent). An unmembered
+/// requirement simply renders no membership line — orphanhood is `validate`'s
+/// finding, not a reason to refuse a read.
+fn render_req_show(req: &Requirement, body: Option<&str>, member_of: &[MemberOf]) -> String {
+    let mut parts = vec![format!(
+        "`{}` — {}\n",
+        requirement::canonical_id(req.id),
+        req.title
+    )];
+    for m in member_of {
+        parts.push(format!("member of: {} as {}\n", m.spec, m.label));
+    }
+    parts.push("\n".to_string());
+    parts.extend(req_detail_parts(req, body));
+    parts.concat()
+}
+
+/// The `Json` arm, under the shared `{kind, id, …}` envelope (the `show_json`
+/// precedent). The requirement is projected by hand — its struct stays
+/// Deserialize-only — and carries `description`/`acceptance_criteria`, which the
+/// spec-level projection omits: reading the statement as data is the whole point.
+fn req_show_json(
+    req: &Requirement,
+    body: Option<&str>,
+    member_of: &[MemberOf],
+) -> anyhow::Result<String> {
+    let canonical = requirement::canonical_id(req.id);
+    let value = serde_json::json!({
+        "kind": requirement::REQUIREMENT_KIND.stem,
+        "id": canonical,
+        "requirement": {
+            "id": canonical,
+            "slug": req.slug,
+            "title": req.title,
+            "kind": req.kind.as_str(),
+            "status": req.status.as_str(),
+            "description": req.description,
+            "tags": req.tags,
+            "acceptance_criteria": req.acceptance_criteria,
+        },
+        "body": body,
+        "member_of": member_of
+            .iter()
+            .map(|m| serde_json::json!({ "spec": m.spec, "label": m.label }))
+            .collect::<Vec<_>>(),
+    });
+    serde_json::to_string_pretty(&value).context("failed to serialize requirement show JSON")
+}
+
+/// Compute half of `spec req show <REQ-NNN>`: read both tiers of the requirement,
+/// derive its memberships, and render. READ-ONLY.
+fn req_show_doc(root: &Path, req_ref: &str, format: Format) -> anyhow::Result<String> {
+    let canonical = requirement::canonical_id(requirement::id_from_fk(req_ref)?);
+    let (req, prose) = requirement::load_with_prose(root, &canonical)?;
+    let member_of = memberships(root, &canonical)?;
+    match format {
+        Format::Table => Ok(render_req_show(&req, prose.as_deref(), &member_of)),
+        Format::Json => req_show_json(&req, prose.as_deref(), &member_of),
+    }
+}
+
+/// `doctrine spec req show <REQ-NNN>` — the thin shell: resolve the root, write the
+/// compute half to stdout. Ephemeral, no file written (the `run_show` D9 precedent).
+pub(crate) fn run_req_show(
+    path: Option<PathBuf>,
+    req_ref: &str,
+    format: Format,
+) -> anyhow::Result<()> {
+    let root = crate::root::find(path, &crate::root::default_markers())?;
+    write!(io::stdout(), "{}", req_show_doc(&root, req_ref, format)?)?;
     Ok(())
 }
 
@@ -4797,6 +4947,182 @@ parent = \"SPEC-002\"
             err.to_string().contains("bogus"),
             "names the bad value: {err}"
         );
+    }
+
+    // --- IMP-263: `spec req show` — one-call read of a requirement's statement ---
+
+    /// Author a requirement's structured statement (`description`) and prose body,
+    /// the two tiers `spec req show` renders. `member_a_requirement` mints the
+    /// entity; this fills in what a real author would write.
+    fn author_req_statement_and_prose(root: &Path, fk: &str, statement: &str, prose: &str) {
+        let name = format!("{:03}", requirement::id_from_fk(fk).unwrap());
+        let dir = root.join(".doctrine/requirement").join(&name);
+        let toml_path = dir.join(format!("requirement-{name}.toml"));
+        let text = fs::read_to_string(&toml_path).unwrap();
+        fs::write(
+            &toml_path,
+            format!("{text}\ndescription = {}\n", toml_string(statement)),
+        )
+        .unwrap();
+        fs::write(dir.join(format!("requirement-{name}.md")), prose).unwrap();
+    }
+
+    /// The whole point of the verb (IMP-263): one call yields the requirement's
+    /// identity, its membership label + owning spec, its structured statement, and
+    /// its prose — the read that previously cost a raw-file grep or a whole-spec
+    /// render.
+    #[test]
+    fn req_show_renders_identity_membership_statement_and_prose() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let fk = member_a_requirement(
+            root,
+            &root.join(".doctrine/spec/tech/001"),
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        author_req_statement_and_prose(
+            root,
+            &fk,
+            "Every command routes through one dispatcher.",
+            "# REQ-001: Route\n\n## Rationale\n\nOne seam, one place to change.\n",
+        );
+
+        let out = req_show_doc(root, &fk, Format::Table).unwrap();
+        assert!(
+            out.starts_with("`REQ-001` — Route\n"),
+            "identity line heads the render: {out}"
+        );
+        assert!(
+            out.contains("member of: SPEC-001 as FR-001"),
+            "owning spec + membership label: {out}"
+        );
+        assert!(
+            out.contains("route · functional · active"),
+            "authored facet line: {out}"
+        );
+        assert!(
+            out.contains("Every command routes through one dispatcher."),
+            "the structured statement: {out}"
+        );
+        assert!(
+            out.contains("One seam, one place to change."),
+            "the prose body, verbatim: {out}"
+        );
+    }
+
+    /// An unmembered (orphan) requirement still reads — the membership line is
+    /// simply absent. `spec validate` owns the orphan finding; `show` never refuses
+    /// a read over it.
+    #[test]
+    fn req_show_omits_the_member_line_for_an_unmembered_requirement() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let reserved = requirement::reserve(root, "orphan", "Orphan", "2026-06-05").unwrap();
+        let fk = requirement::canonical_id(reserved.eid.numeric_id().unwrap());
+
+        let out = req_show_doc(root, &fk, Format::Table).unwrap();
+        assert!(out.contains("`REQ-001` — Orphan"), "still reads: {out}");
+        assert!(!out.contains("member of:"), "no membership line: {out}");
+    }
+
+    /// A requirement membered by more than one spec reports every membership —
+    /// nothing in the model forbids it, so the render must not pick one silently.
+    #[test]
+    fn req_show_reports_every_membership() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        fresh(root, SpecSubtype::Product, "prod", "Prod"); // PRD-001
+        let fk = member_a_requirement(
+            root,
+            &root.join(".doctrine/spec/tech/001"),
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        append_raw_member(&root.join(".doctrine/spec/product/001"), &fk, "FR-007", 1);
+
+        let out = req_show_doc(root, &fk, Format::Table).unwrap();
+        assert!(
+            out.contains("member of: PRD-001 as FR-007"),
+            "product: {out}"
+        );
+        assert!(out.contains("member of: SPEC-001 as FR-001"), "tech: {out}");
+    }
+
+    /// The JSON arm carries the statement and membership as data (the `show_json`
+    /// envelope precedent) — an agent filter should not have to parse the table.
+    #[test]
+    fn req_show_json_carries_statement_and_membership() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let fk = member_a_requirement(
+            root,
+            &root.join(".doctrine/spec/tech/001"),
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        author_req_statement_and_prose(root, &fk, "One dispatcher.", "# REQ-001\n\nBecause.\n");
+
+        let out = req_show_doc(root, &fk, Format::Json).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["kind"], "requirement");
+        assert_eq!(v["id"], "REQ-001");
+        assert_eq!(v["requirement"]["description"], "One dispatcher.");
+        assert_eq!(v["requirement"]["status"], "active");
+        assert_eq!(v["member_of"][0]["spec"], "SPEC-001");
+        assert_eq!(v["member_of"][0]["label"], "FR-001");
+        assert!(
+            v["body"].as_str().unwrap().contains("Because."),
+            "prose body carried: {out}"
+        );
+    }
+
+    /// A non-requirement ref is refused by the FK parser, not silently read as
+    /// some other kind — the error names the expected shape.
+    #[test]
+    fn req_show_refuses_a_non_requirement_ref() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let err = req_show_doc(root, "SPEC-001", Format::Table).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("SPEC-001"), "names the offending ref: {msg}");
+        assert!(msg.contains("expected REQ"), "names the wanted kind: {msg}");
+    }
+
+    /// The thin shell resolves the root and writes the compute half (smoke, the
+    /// `run_req_list_writes_the_roster` precedent).
+    #[test]
+    fn run_req_show_writes_the_document() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fresh(root, SpecSubtype::Tech, "cli", "CLI"); // SPEC-001
+        let fk = member_a_requirement(
+            root,
+            &root.join(".doctrine/spec/tech/001"),
+            "route",
+            "Route",
+            ReqKind::Functional,
+            ReqStatus::Active,
+            "FR-001",
+            1,
+        );
+        run_req_show(Some(root.to_path_buf()), &fk, Format::Table).unwrap();
     }
 
     // --- PHASE-04 paths verb golden tests ---

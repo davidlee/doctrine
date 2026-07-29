@@ -140,6 +140,12 @@ file. An entity is stored across tiers: structured data in `*.toml`, prose in
 substance living in the sibling `*.toml` — so judging an entity "hollow" from its
 prose tier alone is a false reading. When in doubt, `show` it.
 
+A requirement is a peer entity reached through its spec's namespace, not a
+top-level `show`: `doctrine spec req show <REQ-NNN>` renders one requirement's
+statement, acceptance criteria, prose, and the spec(s) that member it — the
+one-call read to reach for instead of rendering a whole spec or grepping the
+requirement's raw TOML.
+
 ## Storage tiers — what goes where
 
 Three tiers; know which one you are writing:

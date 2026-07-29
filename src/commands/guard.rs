@@ -182,8 +182,9 @@ pub(crate) fn write_class(cmd: &Command) -> WriteClass {
             SpecCommand::Req { command } => match command {
                 SpecReqCommand::Add { .. } => Write("spec req add"),
                 SpecReqCommand::Status { .. } => Write("spec req status"),
-                // Read-only authored roster (design §5.3).
-                SpecReqCommand::List { .. } => Read,
+                // Read-only authored roster (design §5.3) and single-requirement
+                // read (IMP-263).
+                SpecReqCommand::List { .. } | SpecReqCommand::Show { .. } => Read,
             },
             SpecCommand::Interactions { .. } => Write("spec interactions"),
             SpecCommand::Edit { .. } => Write("spec edit"),
