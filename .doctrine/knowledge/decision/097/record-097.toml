@@ -1,0 +1,35 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 97
+slug = "mint-the-phases-convenience-symlink-in-the-primary-only"
+title = "Mint the phases convenience symlink in the primary only"
+record_kind = "decision"
+status = "proposed"
+created = "2026-07-29"
+updated = "2026-07-29"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "fate of the phases convenience symlink under primary resolution"
+target = "SL-237"

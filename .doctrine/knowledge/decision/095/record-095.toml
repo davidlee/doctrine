@@ -1,0 +1,35 @@
+schema = "doctrine.knowledge"
+version = 1
+
+id = 95
+slug = "primaryroot-newtype-resolves-repo-scoped-runtime-state"
+title = "PrimaryRoot newtype resolves repo-scoped runtime state"
+record_kind = "decision"
+status = "proposed"
+created = "2026-07-28"
+updated = "2026-07-28"
+tags = []
+
+[facet]                         # every field typed; seeded empty (captured later)
+context      = ""
+choice       = ""
+alternatives = []
+rationale    = ""
+consequences = []
+decided_by   = ""
+decided_on   = ""
+
+[evidence]                      # free-text citations (supports / contradicts / notes)
+supports    = []
+contradicts = []
+notes       = []
+
+[relationships]                 # verb-written edges (set by doctrine supersede)
+supersedes    = []   # record ids this one replaces (set by doctrine supersede)
+superseded_by = []   # set on superseded predecessor (verb-written, ADR-004 §5)
+
+[[relation]]
+label = "references"
+role = "concerns"
+descriptor = "resolution mechanism for repo-scoped runtime phase state"
+target = "SL-237"

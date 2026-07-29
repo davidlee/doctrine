@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faac3-3fe6-7f11-b2d0-43327c06723b"
+recorded_at = "2026-07-28T22:05:50.43823482Z"
+kind = "friction"
+summary = "/design (SL-237): multi-file grep silently omitted matches from the first file argument"
+detail = "Ran: grep -n 'phase_rollup' src/slice.rs src/lazyspec.rs src/state.rs | head — output showed lazyspec.rs and state.rs hits but ZERO from src/slice.rs, the FIRST argument. Positive control (grep -c 'phase_rollup' src/slice.rs) returned 2, at :998 and :2161. head(10) cannot explain it: slice.rs matches sort first. A bare negative would have led /design to conclude the slice list phase_rollup fan-out (the round's design-shaping finding, research.md Q3) did not exist. Cost: one wasted verification cycle; risk: a false negative load-bearing on a design decision. Suspect the rtk grep proxy rewrite. mem_019fa18161f47651af7687d8dccbbc67 (negative grep needs a positive control) fired on the preceding call and was what prompted the check — the memory paid for itself."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
