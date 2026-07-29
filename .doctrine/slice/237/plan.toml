@@ -1,0 +1,232 @@
+# Implementation plan for SL-237 — the authored, durable phase plan.
+#
+# This is the single source of each phase's objective, criteria, verification,
+# and links. Runtime status lives separately under .doctrine/state/ (phase
+# tracking) — never record progress here. Hand-edit freely: the tool reads this
+# file but does not rewrite it.
+schema  = "doctrine.plan.overview"
+version = 1
+slice   = "SL-237"
+
+[specs]                          # empty in v1 — no spec/requirement registry yet
+primary       = []
+collaborators = []
+
+[requirements]
+targets      = []
+dependencies = []
+
+# One [[phase]] per ordered phase. Ids are PHASE-NN (zero-padded), immutable and
+# never reused once authored — edits append, they never renumber. Criterion ids
+# are local to their phase, bare, and equally immutable (.doctrine/glossary.md §
+# reference forms): EN-1 entry, EX-1 exit, and verification by mode —
+# VT-1 test (automated), VA-1 agent check, VH-1 human acceptance.
+#
+# ARRAY ORDER IS EXECUTION ORDER (`src/plan.rs` reads the ordered array and never
+# sorts by id). Order here is 01 → 02 → 03 → 04 → 05, matching design.md § 8a.
+#
+# ── WHAT A VT MANDATE PROVES, AND WHAT IT DOES NOT ────────────────────────────
+# `src/vtgate.rs::check_vt` NEVER RUNS A TEST. It proves that a slice-modified
+# file contains each `keyword` as a raw substring — over unstripped source, so a
+# comment satisfies it — and that each `patterns` regex matches at least one
+# LINE. Nothing more. Three devices carry the real weight, per SL-233's plan:
+#   1. `patterns` anchored at line start on a DECLARATION shape — a comment line
+#      begins with `/`, so it cannot match.
+#   2. Exit criteria that ENUMERATE THE EXACT TEST FUNCTION NAMES. The names are
+#      the contract; omission is one grep away instead of hidden in a paraphrase.
+#   3. `VA-NC` per phase — every named test observed RED before green, failing
+#      output recorded in the phase sheet. A test never seen red is not evidence.
+# Plus `VA-ES` (escape sweep) and `VA-G` (`doctrine check gate`) uniformly.
+#
+# ── THE BEHAVIOUR-PRESERVATION GATE (design V-1a / V-1b) ─────────────────────
+# V-1a ("existing suites green") is an EXIT CRITERION on every phase and is
+# discharged by `VA-G`; it carries no VT row of its own because a mandate over
+# "the suites" has no single `test_file`. V-1b — the judgement that existing
+# ASSERTIONS are unchanged and only construction sites were adapted — is VA-1 on
+# PHASE-01, where the ~50-site churn actually lands.
+
+[[phase]]
+id        = "PHASE-01"
+name      = "Root capability types and the phase-state migration"
+objective = """
+Introduce `PrimaryRoot` and `ReadRoot` in `src/git.rs` — the fallible write \
+capability, the total read root, the one-way `From`, and the `#[cfg(test)]` \
+`assume` seam — then migrate `phases_dir` and every phase-state function to them \
+per design § 5.2's contract table, resolving ONCE per invocation at the \
+command tier including both fan-out sites. This is the phase that actually \
+single-homes repo-scoped phase state in the primary worktree; the remaining four \
+phases are consequences of it. Registry functions that only need the F-3 \
+two-root split (`capture_phase_boundary`, `record_source_delta`) migrate here; \
+`boundaries_path`'s own contract change is PHASE-04."""
+entrance_criteria = [
+  { id = "EN-1", text = "REV-043 is `approved` (design § 8a, R4). `SL-237 needs REV-043` is an authored gate raised by RV-322 F-7: this phase does not start while the REV is `proposed`, because landing code that falsifies accepted governance is the risk the gate exists to stop. Check with `doctrine revision show REV-043` — approval `none` means STOP" },
+  { id = "EN-2", text = "the working tree builds and `doctrine check gate` is green at the phase's branch point. The behaviour-preservation gate is a DELTA against a green baseline; a red baseline makes V-1a unfalsifiable. Note (2026-07-29): an unrelated `tests/common/mod.rs` `doctrine_cmd` signature refactor was in flight in the shared tree — confirm it has landed or is absent before starting" },
+  { id = "EN-3", text = "design § 5.2's contract table is read as the authority for each signature. NO function's root type is inferred from its tier or its name — RV-322-B F-E is the finding that a tier-inferred split gives two names where one meaning suffices, and F-D is the finding that a name-inferred one asks the wrong tree" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`PrimaryRoot` and `ReadRoot` are declared in `src/git.rs`, each wrapping a `PathBuf`, with `PrimaryRoot::resolve` (fallible), `PrimaryRoot::assume` (`#[cfg(test)]` only), `ReadRoot::resolve_for_read` (total), `as_path` on both, and `impl From<&PrimaryRoot> for ReadRoot`" },
+  { id = "EX-2", text = "NO conversion from `ReadRoot` to `PrimaryRoot` exists anywhere in the tree — no `From`, no `TryFrom`, no constructor, no `as_primary`. This is the single property that makes the unsound direction unrepresentable rather than merely discouraged (RV-322 F-10); it is the one place in the slice where a type buys impossibility instead of visibility" },
+  { id = "EX-3", text = "the repo/no-repo discriminator looks for `.git` in `cwd.ancestors()` using `exists()`, NEVER `is_dir()`, and rides `root::find_from` with `.git` ALONE — never `default_markers()`, which include `Cargo.toml`/`.project` and would read a non-repo Cargo project as a repo, inverting I-1. An `is_dir()` spelling classifies every linked worktree as `no repo`, hands it I-1's fallback, and homes state in the fork: the exact defect this slice removes, reintroduced by its own fallback (RV-322-B F-A)" },
+  { id = "EX-4", text = "`resolve` is TOTAL only for I-1 (no repo at all ⇒ the given root is its own primary) and returns `Err` for a genuine resolution fault under a visible `.git` (I-2). It does not warn-and-continue: a warning does not stop the write that follows it (RV-322 F-6)" },
+  { id = "EX-5", text = "`resolve_for_read` is TOTAL and falls back to the invoked `cwd` on a fault — byte-for-byte today's result, since `phases_dir` is a pure join off the invoked root (I-2b). This is not F-6's mistake repeated: F-6 killed a WRITE proceeding after a signal; this degrades a READ to the answer it already gives and writes nothing" },
+  { id = "EX-6", text = "the § 5.2 rows owned by this phase have all landed: `phases_dir` → `(&ReadRoot, u32) -> PathBuf`; `phase_rollup` / `completed_phase_ids` / `read_phase_statuses` first param → `&ReadRoot`; `init_phases` → `&PrimaryRoot`; `edit_phase_sheet` and `reconcile_phase_status` → `&PrimaryRoot` ALONE (verified zero `git::` calls in either); `registry_completeness` COLLAPSES `(cwd, project_root)` to one `&PrimaryRoot`; `set_phase_status` and `capture_phase_boundary` take BOTH roots as `(primary: &PrimaryRoot, git_cwd: &Path, …)`; `record_source_delta` takes both (its `is_ancestor` and `parents` guards are git queries on the INVOKED tree)" },
+  { id = "EX-7", text = "`single_commit_boundary` (`state.rs:825`) is UNCHANGED and still takes `&Path` as the git cwd — it resolves a possibly-symbolic ref. Its caller (`slice.rs:3004`) has not been `tidied` onto the primary. § 5.2 lists it precisely so this phase does not touch it" },
+  { id = "EX-8", text = "resolution happens ONCE per invocation at the command tier: the `run_*` entry points in `slice.rs`, `dispatch.rs`, `mcp_server/dispatch.rs`, plus `phase_receipt` (`mcp_server/dispatch.rs:1085`, which resolves `phases_dir` off `coord.root` today and is not a `run_*`), plus `lazyspec::load_slices` (`lazyspec.rs:495`)" },
+  { id = "EX-9", text = "BOTH fan-out sites resolve OUTSIDE their loop: `list_rows` (`slice.rs:2145`, the `.map()` at `:2161` over every surviving `Meta`) and `load_slices` (`lazyspec.rs:495` → `load_plan:518` → `phase_rollup:535`, where the root is threaded THROUGH `load_plan`). With 221 slice dirs a per-call resolution is ~221 `git worktree list` subprocesses per command, twice over. The pre-design round found only the first; missing the second leaves half the regression in place because lazyspec projects EVERY slice" },
+  { id = "EX-10", text = "the tests named in EX-11 exist and are green, and existing suites are green with their ASSERTIONS unchanged — only construction sites adapted, via `PrimaryRoot::assume` in test modules. Routing tests through the impure `resolve` would convert pure path-join tests into git-dependent ones, changing what the suites prove (R1)" },
+  { id = "EX-11", text = "the tests are EXACTLY these seven, and the names are the contract: in `src/git.rs` — `resolve_without_a_repo_yields_the_given_root`, `resolve_from_a_linked_worktree_yields_the_primary`, `resolve_refuses_when_resolution_faults_under_a_visible_git`, `resolve_for_read_falls_back_to_the_invoked_root_on_a_fault`; in `src/state.rs` — `phases_dir_resolves_against_the_primary_from_a_linked_worktree`, `set_phase_status_records_the_invoked_trees_head_as_the_boundary`; in `src/slice.rs` — `list_rows_renders_when_git_worktree_list_fails`. Plus the e2e in EX-12" },
+  { id = "EX-12", text = "`tests/e2e_conformance_single_home.rs` exists and contains `conformance_agrees_from_the_primary_and_a_linked_worktree` — ISS-269's reproduction INVERTING. This is the slice's headline outcome and the first point at which it is observable end to end" },
+]
+verification = [
+  { id = "VT-1", expects = "both capability types are real declarations with the one-way conversion — the patterns anchor at line start on `struct` and `impl`, which a comment cannot satisfy", test_file = "src/git.rs", keywords = ["PrimaryRoot", "ReadRoot", "resolve_for_read"], patterns = ['^\s*pub\(crate\) struct PrimaryRoot\b', '^\s*pub\(crate\) struct ReadRoot\b', '^\s*impl From<&PrimaryRoot> for ReadRoot\b'], waived = false },
+  { id = "VT-2", expects = "all four resolver-contract tests exist as functions (I-1, R10's linked-worktree discriminator, I-2's refusal, I-2b's read fallback)", test_file = "src/git.rs", keywords = ["assume"], patterns = ['^\s*fn resolve_without_a_repo_yields_the_given_root\(', '^\s*fn resolve_from_a_linked_worktree_yields_the_primary\(', '^\s*fn resolve_refuses_when_resolution_faults_under_a_visible_git\(', '^\s*fn resolve_for_read_falls_back_to_the_invoked_root_on_a_fault\('], waived = false },
+  { id = "VT-3", expects = "`phases_dir` takes the WEAKER type and its primary-resolution is pinned from a linked worktree — the migration's core assertion", test_file = "src/state.rs", keywords = ["ReadRoot", "PrimaryRoot"], patterns = ['^\s*pub\(crate\) fn phases_dir\(', '^\s*fn phases_dir_resolves_against_the_primary_from_a_linked_worktree\('], waived = false },
+  { id = "VT-4", expects = "the F-3 two-root split is real at the signature AND pinned by the regression it exists to prevent — a solo linked worktree recording the INVOKED tree's HEAD, not the primary's", test_file = "src/state.rs", keywords = ["git_cwd"], patterns = ['^\s*pub\(crate\) fn set_phase_status\(', '^\s*fn set_phase_status_records_the_invoked_trees_head_as_the_boundary\('], waived = false },
+  { id = "VT-5", expects = "a read verb keeps working in a repo whose `git worktree list` exits fatal (R9) — reproduce with a linked worktree whose admin dir is pruned, where `.git` survives as a file", test_file = "src/slice.rs", keywords = ["ReadRoot"], patterns = ['^\s*fn list_rows_renders_when_git_worktree_list_fails\('], waived = false },
+  { id = "VT-6", expects = "ISS-269's inversion is observable end to end: `slice conformance` agrees from the primary and from a linked worktree", test_file = "tests/e2e_conformance_single_home.rs", keywords = ["conformance"], patterns = ['^\s*fn conformance_agrees_from_the_primary_and_a_linked_worktree\('], waived = false },
+  { id = "VA-1", text = "V-1b — DIFF REVIEW: `git diff` over every touched test module shows only CONSTRUCTION sites adapted (a `&Path` becoming `PrimaryRoot::assume(p)` or `(&root).into()`). No assertion's expected value changed. An assertion edited to accommodate the new types is a behaviour-preservation FAILURE, not a fix — the ~20 tests that run on non-git tempdirs and rely on I-1 are this invariant's acceptance evidence and must stay green UNCHANGED" },
+  { id = "VA-2", text = "V-9 — RUN and READ, do not infer from the type: open `slice.rs:2145` (`list_rows`) and `lazyspec.rs:495` (`load_slices`) and confirm at the CALL SITE that the root is resolved before the loop and threaded in. R-2 is the proof that a type makes a fan-out VISIBLE, not impossible — a caller can still put `resolve` inside a loop, and one already did. Report both line numbers" },
+  { id = "VA-3", text = "V-15 — `registry_completeness` takes ONE root, and BOTH call sites (`slice.rs:2861`, `dispatch.rs:3477`) pass the primary. Keeping two params preserves the one-name-two-jobs hazard inverted: a site left passing `(&primary, &invoked_root)` reads the completed-set from a tree that no longer holds sheets — spurious `Incomplete` when rows exist, and VACUOUS `Complete` when they do not, because `check_completeness` returns `Complete` for empty/empty (`state.rs:947`)" },
+  { id = "VA-4", text = "V-16 — RUN `rg -n 'PrimaryRoot::assume' src/` and confirm every hit is inside a `#[cfg(test)]` module: `assume` has NO production consumer (F-C). `prepare_review` (`dispatch.rs:3449-3471`) does `git::primary_worktree(root)?`, which is exactly what `resolve` does at identical cost, so `resolve` fits there. Also confirm `edit_phase_sheet` / `reconcile_phase_status` take the primary ALONE, and `record_source_delta`'s `is_ancestor`/`parents` guards take `git_cwd`" },
+  { id = "VA-5", text = "V-18 — RUN `rg -n 'impl From<.*ReadRoot.*> for PrimaryRoot|fn as_primary|fn to_primary|TryFrom<ReadRoot>' src/` — zero hits, and confirm by reading that no other path forges the write capability from a fallback root. A compile-fail test (trybuild or equivalent) is PREFERABLE to a review assertion if one is cheap; if it is not, say so explicitly rather than silently downgrading to the grep" },
+  { id = "VA-6", text = "V-8b — argue worker write exclusion PER ARM from the actual mechanism, NOT by testing an unreachable EROFS path. All four legs: (i) the CLI refusal covers the whole `WriteClass::Write` set, not just `slice phase`/`slice phases` (`commands/guard.rs:74-101` — `record-delta`, `reconcile-phases`, `slice status` are all `Write`); (ii) `worker_mode` holds via the ENV leg on codex/pi (`scripts/pi-spawn-confined.sh:110` sets `DOCTRINE_WORKER 1` unconditionally) and via the MARKER leg on claude (`worktree/marker.rs:158-166`) — the arms DIFFER and the argument must say so; (iii) each arm's OS floor; (iv) `worker_commit`'s unconfined-server exception writes no phase sheet and no registry row (`mcp_server/worker_commit.rs:313-338`). An invariant asserted without its known exception is the F-2 failure again" },
+  { id = "VA-7", text = "ANTI-TIDY: `git diff src/state.rs` shows `single_commit_boundary` untouched and `slice.rs:3004` still passing the invoked tree (EX-7). This row exists because the surrounding functions all move and a tidying instinct will reach for this one" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: each of the eight EX-11/EX-12 tests was observed RED before being made green, with the failing output recorded per test in the phase sheet. This is the only check that catches an assertion-free test. `resolve_from_a_linked_worktree_yields_the_primary` matters most here: an `is_dir()` bug passes every primary-rooted test unscathed, so if that test was never red against an `is_dir()` spelling it has not been shown to discriminate" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true|unreachable!\\(' src/git.rs src/state.rs src/slice.rs src/lazyspec.rs tests/e2e_conformance_single_home.rs` returns nothing, and `cargo test -- --list | wc -l` is >= the pre-phase count. No test disabled, stubbed, or trivially satisfied to make the gate green" },
+  { id = "VA-G", text = "RUN `doctrine check gate` — exit 0 at the phase's final commit (clippy zero warnings across the workspace, full suite green). This is V-1a's discharge" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-02"
+name      = "Retire the completion mirror; split run_phases"
+objective = """
+Delete `mirror_completion_into_primary` and its guards — the patch whose \
+generator PHASE-01 removed — and make `run_phases` read `plan.toml` from the \
+INVOKED root while writing sheets to the PRIMARY. The asymmetry is deliberate \
+and is what dissolves SL-228 / RV-312 F-6, where `dispatch sync --prepare-review` \
+hard-refused two fully-landed phases because a mid-drive-appended phase had no \
+primary sheet and the mirror could not create one."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — phase sheets already home in the primary. The mirror cannot be retired before that: it is the thing standing in for single-homing, and deleting it first reintroduces ISS-212 verbatim" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`mirror_completion_into_primary` (`state.rs:535`), its call site (`:513`), and its distinct-primary and live-coord guards are DELETED — not deprecated, not left unused" },
+  { id = "EX-2", text = "`run_phases` (`slice.rs:796`) reads `plan.toml` from the INVOKED root and writes sheets to the PRIMARY. Today both are one tree; afterwards they diverge on purpose" },
+  { id = "EX-3", text = "the asymmetry carries a comment saying it is INTENTIONAL and naming SL-228 / RV-312 F-6 as the case it dissolves. Without it a later reader `fixes` the split back — R3, and the comment IS the mitigation" },
+  { id = "EX-4", text = "`tests/e2e_slice_phases_single_home.rs` exists and contains `phases_appended_in_a_coord_tree_materialise_in_the_primary` — a phase appended to a coord tree's `plan.toml`, `slice phases` run THERE, sheet asserted in the primary where `registry_completeness` reads it" },
+]
+verification = [
+  { id = "VT-1", expects = "the RV-312 F-6 case is pinned end to end: append in the coord tree, materialise in the primary", test_file = "tests/e2e_slice_phases_single_home.rs", keywords = ["plan.toml"], patterns = ['^\s*fn phases_appended_in_a_coord_tree_materialise_in_the_primary\('], waived = false },
+  { id = "VT-2", expects = "the intentional-asymmetry comment exists and cites its case — a keyword over a COMMENT is the correct mandate here, because the comment is the artifact R3 asks for", test_file = "src/slice.rs", keywords = ["RV-312 F-6", "intentional"], waived = false },
+  { id = "VA-1", text = "RUN `rg -n 'mirror_completion_into_primary' src/ tests/` — zero hits. A retired function with a surviving caller or doc reference is not retired" },
+  { id = "VA-2", text = "ANTI-VACUITY: confirm VT-1's test would FAIL against PHASE-01's tree — i.e. it asserts the sheet's location, not merely that `slice phases` exits zero. A test that only checks the exit code passes before and after the split" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: `phases_appended_in_a_coord_tree_materialise_in_the_primary` was observed RED before green, failing output recorded in the phase sheet" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/state.rs src/slice.rs tests/e2e_slice_phases_single_home.rs` returns nothing; test census has not shrunk" },
+  { id = "VA-G", text = "RUN `doctrine check gate` — exit 0 at the phase's final commit (V-1a)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-03"
+name      = "Narrow the truth resolver; rename --across-trees to --truth"
+objective = """
+Narrow `resolve_phase_truth` to `(landed, sheets)` and delete the coord-gathering \
+machinery the single-homed sheets made dead, then rename the CLI surface: after \
+this slice there are no trees to be across (DEC-096). Keep \
+`run_reconcile_phases`' refuse-when-live bail — with one file it matters MORE, \
+not less."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — the coord branch is dead only because sheets are single-homed. Narrowing before that removes a live code path" },
+  { id = "EN-2", text = "DEC-096 read as authored (`doctrine knowledge show DEC-096`), not summarised from recall — it is what makes the `Some` matrix the retained half" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`resolve_phase_truth` (`state.rs:1114`) is `(landed, sheets)`; its `None` branch is gone and the `Some` matrix is preserved intact (DEC-096)" },
+  { id = "EX-2", text = "these are DELETED: `note_disagreement` (`state.rs:1210`), `Divergence::disagreements` (`state.rs:1053`) and its use in the `--assert` predicate (`:1060-1062`), the coord-gathering arm of `gather_truth_inputs` (`slice.rs:1174`, the `live_worktree_for_ref` call at `:1198`), `TruthInputs::coord_rows` (`slice.rs:1167`) with its consumers at `:1125` and `:1253`, and the per-tree column of `render_across_trees` (`slice.rs:1333`)" },
+  { id = "EX-3", text = "the CLI reads `slice status <ID> --truth [--assert]`; `--across-trees` is no longer accepted anywhere. `tests/e2e_slice_phase_status.rs` is updated with it — that is the ONE existing test file the rename legitimately edits, and the edit is the flag name, not an assertion" },
+  { id = "EX-4", text = "`run_reconcile_phases`' refuse-when-live bail (`slice.rs:1236-1244`) is RETAINED. The pre-design round observed it makes the verb's coord branch permanently dead — true, and why this narrowing costs nothing — but with one shared file an operator reconciling during a live drive now races the drive's own writer on the SAME file, so the guard matters more than it did" },
+  { id = "EX-5", text = "the tests are: `resolve_phase_truth_covers_full_design_table` (`src/state.rs:1765`, NARROWED in place — the design table it covers loses its `None` rows and nothing else), and `truth_assert_exits_non_zero_on_a_rework_conflict` in `tests/e2e_slice_phase_status.rs` for the landed-but-`in_progress`, no-coord-tree case (V-6)" },
+]
+verification = [
+  { id = "VT-1", expects = "the resolver's table test survives the narrowing and still covers the `Conflict(Rework)` cell", test_file = "src/state.rs", keywords = ["Rework"], patterns = ['^\s*pub\(crate\) fn resolve_phase_truth\(', '^\s*fn resolve_phase_truth_covers_full_design_table\('], waived = false },
+  { id = "VT-2", expects = "the renamed gate flag exists and fires non-zero on a conflict — the rename is asserted over the built binary, not over the arg declaration", test_file = "tests/e2e_slice_phase_status.rs", keywords = ["--truth"], patterns = ['^\s*fn truth_assert_exits_non_zero_on_a_rework_conflict\('], waived = false },
+  { id = "VA-1", text = "RUN `rg -n 'across.trees|across_trees|note_disagreement|coord_rows|disagreements' src/ tests/ plugins/ install/` — zero hits in code and shipped assets. Hits under `.doctrine/slice/190/`, `.doctrine/review/234/` and `.doctrine/knowledge/decision/096/` are HISTORICAL RECORDS and must NOT be rewritten: DEC-096 is the decision that renamed the flag, so its text naming the old flag is correct" },
+  { id = "VA-2", text = "RUN and READ `slice.rs:1236-1244` — the refuse-when-live bail is present and still precedes its gather (`:1252`). EX-4 is a retention criterion, and a deletion phase is exactly where a retained guard gets swept up" },
+  { id = "VA-3", text = "ANTI-VACUITY: `git diff` on `resolve_phase_truth_covers_full_design_table` removes only `None`-branch rows. A test narrowed by DELETING cells that still apply hides a regression behind a smaller table — report the removed cell count and name each one" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: `truth_assert_exits_non_zero_on_a_rework_conflict` was observed RED before green, failing output in the phase sheet" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/state.rs src/slice.rs tests/e2e_slice_phase_status.rs` returns nothing; test census has not shrunk" },
+  { id = "VA-G", text = "RUN `doctrine check gate` — exit 0 at the phase's final commit (V-1a)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-04"
+name      = "boundaries_path becomes infallible; the registry takes the root types"
+objective = """
+Discharge DEC-098: `boundaries_path` stops resolving git internally and loses its \
+`Result`, becoming a pure join off a `ReadRoot`. `read_source_deltas` and \
+`forget_source_delta` follow, and the transitional double-resolution PHASE-01 \
+left behind — a primary handed in, then re-resolved inside the registry path — \
+disappears. Deliberately separable from the rest (DEC-098): nothing above it \
+depends on the contract change, only on the homing PHASE-01 already delivered."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — its callers already hold a resolved root to hand in. Until then `boundaries_path` cannot stop resolving, because nobody upstream has resolved" },
+  { id = "EN-2", text = "DEC-098 read as authored — it is what makes the lost `Result` a decision rather than a convenience" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`boundaries_path` (`state.rs:716`) is `(&ReadRoot, u32) -> PathBuf` — no `Result`, no internal `primary_worktree` call (DEC-098)" },
+  { id = "EX-2", text = "`read_source_deltas` (`state.rs:758`) takes `&ReadRoot` and `forget_source_delta` (`state.rs:857`) takes `&PrimaryRoot` — it evicts a row, so it writes. § 5.2 groups `read_source_deltas` with the pure readers, and that claim is only TRUE after this phase: today it inherits `boundaries_path`'s git fork, so it is git-free only once EX-1 lands. That coupling is why it is here and not in PHASE-01" },
+  { id = "EX-3", text = "no `primary_worktree` call remains anywhere under the registry path in `src/state.rs`, and no call site still writes `boundaries_path(..)?`" },
+  { id = "EX-4", text = "the transitional redundancy PHASE-01 accepted — `record_source_delta`/`capture_phase_boundary` handed a resolved primary that `boundaries_path` then re-resolved — is gone. It was correct but wasteful (one `git worktree list` fork per call, uncached: `git.rs:564`); leaving it is a silent per-invocation cost" },
+  { id = "EX-5", text = "the tests are: `read_source_deltas_on_a_non_repo_root_is_an_empty_registry` (`src/state.rs`) and `conformance_outcome_reports_unavailable_on_a_non_repo_root` (`src/slice.rs`) — V-10, carried as a regression test after R5 was retired with evidence in § 10 R-1" },
+]
+verification = [
+  { id = "VT-1", expects = "the registry path is a pure join and the non-repo case yields an empty registry rather than an error", test_file = "src/state.rs", keywords = ["ReadRoot"], patterns = ['^\s*pub\(crate\) fn boundaries_path\(', '^\s*fn read_source_deltas_on_a_non_repo_root_is_an_empty_registry\('], waived = false },
+  { id = "VT-2", expects = "DEC-098's contract change hides nothing: conformance still reports `Unavailable` rather than erroring on a non-repo root", test_file = "src/slice.rs", keywords = ["Unavailable"], patterns = ['^\s*fn conformance_outcome_reports_unavailable_on_a_non_repo_root\('], waived = false },
+  { id = "VA-1", text = "RUN `rg -n 'primary_worktree' src/state.rs` — zero hits. The registry no longer asks git; that IS DEC-098" },
+  { id = "VA-2", text = "RUN `rg -n 'boundaries_path\\(' src/ tests/` — no call site carries a trailing `?`. A surviving `?` means the `Result` was kept somewhere and EX-1 is only half done" },
+  { id = "VA-3", text = "V-10 / R-1 — confirm by READING that both sites propagating the old `Result` still fail closed for their own independent reasons, so removing the `Result` hides no real misconfiguration. This was closed with evidence in design § 10 R-1; re-confirm against the post-migration code rather than citing the design" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: both EX-5 tests observed RED before green, failing output in the phase sheet" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/state.rs src/slice.rs` returns nothing; test census has not shrunk" },
+  { id = "VA-G", text = "RUN `doctrine check gate` — exit 0 at the phase's final commit (V-1a)" },
+]
+specs        = []
+requirements = []
+
+[[phase]]
+id        = "PHASE-05"
+name      = "Symlink mint-and-retire; kind-scoped reseat guard; doctor visibility"
+objective = """
+Close the projection surfaces. Mint the `phases` convenience symlink in the \
+primary ONLY and retire a stale one on encounter in a linked worktree \
+(DEC-097 + F-8); migrate the reseat guard's hand-built state path — the site a \
+`phases_dir` call-site census structurally could not find — SCOPED TO THE SLICE \
+KIND ALONE; and make the accepted residual visible in `doctrine doctor` rather \
+than silently carried."""
+entrance_criteria = [
+  { id = "EN-1", text = "PHASE-01 complete — the guard and the symlink both resolve through the root types this phase consumes" },
+  { id = "EN-2", text = "CHR-050 exists and still owns `.doctrine/state/review` and `.doctrine/state/dispatch`. This phase must NOT ship that deferred work; EX-3 is the boundary and V-17 is its proof" },
+]
+exit_criteria = [
+  { id = "EX-1", text = "`refresh_symlink` (`state.rs:345`) mints the `phases` link in the PRIMARY only, and RETIRES a stale link already present in the invoked linked worktree. Today's version mints into the invoked root, so existing worktrees already carry one: not removing it leaves exactly the misleading runtime projection DEC-097 exists to prevent (I-4, F-8)" },
+  { id = "EX-2", text = "retirement is ON ENCOUNTER and that is an accepted BOUND, not a defect. Sweeping sibling worktrees was CONSIDERED AND REJECTED — enumerating `git worktree list` and writing into other people's trees breaks ADR-006's sole-writer posture, races a live drive, and can touch a worktree whose owner never ran this code. Do not implement a sweep (F-14)" },
+  { id = "EX-3", text = "the reseat guard (`integrity.rs:322-323`) resolves `kind.state_dir` through `ReadRoot` for the SLICE kind ONLY. Every other kind — notably REVIEW, `.doctrine/state/review` (`kinds/mod.rs:410`) — keeps today's invoked-root join. A generic `resolve every state_dir through the root type` edit silently primary-scopes review runtime state, shipping OQ-2/CHR-050's deferred change while claiming not to (F-13)" },
+  { id = "EX-4", text = "`doctrine doctor` reports a `phases` symlink present in a NON-PRIMARY worktree as a stale-projection finding. The bound in EX-2 is only honest if it is visible: the operator retires the link by visiting or removing the tree (F-14's named residual). Fresh forks are unaffected — `WITHHELD` carries `Tier::PhaseLink` (`worktree/allowlist.rs:74`), so provisioning never creates one" },
+  { id = "EX-5", text = "the tests are: `symlink_is_minted_in_the_primary_and_a_stale_link_is_retired` (`src/state.rs` — the UPGRADE case, a pre-existing link in a linked worktree, not a fresh tree); `reseat_refuses_when_primary_phase_state_is_live` and `reseat_keeps_the_review_kind_on_the_invoked_root` (`tests/e2e_integrity.rs`); `doctor_flags_a_phases_link_in_a_non_primary_worktree` (`tests/e2e_doctor_golden.rs`)" },
+]
+verification = [
+  { id = "VT-1", expects = "the symlink's upgrade path is pinned: minted in the primary, stale link retired where encountered", test_file = "src/state.rs", keywords = ["PrimaryRoot"], patterns = ['^\s*fn refresh_symlink\(', '^\s*fn symlink_is_minted_in_the_primary_and_a_stale_link_is_retired\('], waived = false },
+  { id = "VT-2", expects = "the reseat guard still guards from a linked worktree (V-11) AND the deferred-subtree boundary holds (V-17) — the pair is the point: one asserts the slice kind MOVED, the other that the review kind did NOT", test_file = "tests/e2e_integrity.rs", keywords = ["state_dir"], patterns = ['^\s*fn reseat_refuses_when_primary_phase_state_is_live\(', '^\s*fn reseat_keeps_the_review_kind_on_the_invoked_root\('], waived = false },
+  { id = "VT-3", expects = "the accepted residual is visible rather than silently carried (F-14)", test_file = "tests/e2e_doctor_golden.rs", keywords = ["phases"], patterns = ['^\s*fn doctor_flags_a_phases_link_in_a_non_primary_worktree\('], waived = false },
+  { id = "VA-1", text = "V-12 — RE-RUN THE CENSUS ON THE CORRECTED AXIS: search for `.doctrine/state` path CONSTRUCTION, not `phases_dir` call sites. `rg -n 'state_dir|STATE_SLICE_DIR|\\.doctrine/state' src/` and disposition EVERY production hit. The RV-322-B pass found `integrity.rs:322` to be the only production hand-built site (`lazyspec.rs:1600` and `dispatch.rs:8300` are test helpers); this re-run must also cover sites THIS SLICE added across PHASE-01..05. R7 is live: one such site already existed and would have silently stopped guarding, and there is no guarantee another does not" },
+  { id = "VA-2", text = "ANTI-OVERREACH: `git diff src/integrity.rs` shows the resolution branching on the SLICE kind. A diff that resolves every kind through the root type fails EX-3 regardless of what the tests say — V-17 is the falsifier, so confirm it would FAIL against a generic edit" },
+  { id = "VA-3", text = "CONFIRM NO SWEEP: `rg -n 'worktree list' src/state.rs` shows no enumeration added by `refresh_symlink`. EX-2 rejects the sweep on ADR-006 grounds; an implementer who reads `retire the stale link` without the bound will write one" },
+  { id = "VA-NC", text = "NEGATIVE CONTROL: all four EX-5 tests observed RED before green, failing output per test in the phase sheet. `reseat_keeps_the_review_kind_on_the_invoked_root` needs care — a test that passes because the guard was never migrated at all is not evidence of a scoped migration; it must be red against a GENERIC migration, so record what it was run against" },
+  { id = "VA-ES", text = "ESCAPE SWEEP: `rg -n '#\\[ignore\\]|todo!\\(|unimplemented!\\(|assert!\\(true' src/state.rs src/integrity.rs tests/e2e_integrity.rs tests/e2e_doctor_golden.rs` returns nothing; test census has not shrunk" },
+  { id = "VA-G", text = "RUN `doctrine check gate` — exit 0 at the phase's final commit (V-1a). This is also the slice's last code phase, so it is the last point the full behaviour-preservation gate is exercised before audit" },
+]
+specs        = []
+requirements = []

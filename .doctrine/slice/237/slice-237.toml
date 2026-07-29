@@ -1,9 +1,9 @@
 id = 237
 slug = "primary-resolve-runtime-phase-state"
 title = "Primary-resolve runtime phase state"
-status = "design"
+status = "plan"
 created = "2026-07-28"
-updated = "2026-07-28"
+updated = "2026-07-29"
 tags = ["area:conformance", "area:dispatch", "area:worktree", "cluster:root-resolution"]
 
 [relationships]
@@ -33,6 +33,11 @@ intent = "design-target"
 [[selector]]
 selector = "src/lazyspec.rs"
 intent = "design-target"
+
+[[selector]]
+selector = "src/integrity.rs"
+intent = "design-target"
+note = "reseat guard hand-built state path (F-5/F-13), PHASE-05"
 
 [[relation]]
 label = "fulfils"
