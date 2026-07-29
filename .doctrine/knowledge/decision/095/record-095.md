@@ -14,13 +14,14 @@ constructor.
   call. **Total only for the designed invariant** — no repo at all ⇒ the given
   root is its own primary (ASM, and the reason ~20 `tempfile::tempdir()` tests
   keep passing) — and **fallible for a genuine resolution fault** (amendment 2).
-- `PrimaryRoot::resolve_for_read(cwd)` — the **total** read counterpart
-  (amendment 4).
+- `ReadRoot::resolve_for_read(cwd)` — the **total** read counterpart, yielding a
+  *separate* `ReadRoot` type (amendments 4 and 6).
 - `PrimaryRoot::assume(path)` — the caller asserts this path is already the
   primary. **Test seam only** (amendment 5, which supersedes amendment 3's
   production claim).
-- `phases_dir(primary: &PrimaryRoot, slice_id)` (`src/state.rs:135`) stays a
-  **pure, total path join** — it merely takes an already-resolved value.
+- `phases_dir(root: &ReadRoot, slice_id)` (`src/state.rs:135`) stays a
+  **pure, total path join** — it merely takes an already-resolved value, and it
+  takes the *weaker* of the two root types (amendment 6).
 
 ## Amendment 1 (RV-322 F-3) — the parameter splits; the newtype survives
 
@@ -90,6 +91,37 @@ that will write; `resolve_for_read` (total, falls back to `cwd`) for reads. The
 fallback is not amendment 2's mistake returning: that mistake was letting a
 **write** proceed after a signal. A read degrading to the answer it already gives
 today writes nothing, so there is nothing for observability to have prevented.
+
+*Amendment 6 supersedes this amendment's API: the read constructor returns a
+distinct `ReadRoot`, not a `PrimaryRoot`. The intent split above stands; only the
+return type changed.*
+
+## Amendment 6 (RV-322 F-10) — the split is by TYPE, not merely by constructor
+
+Amendment 4 gave both constructors the same `PrimaryRoot` return type. That
+**forged the write capability**: a value obtained from the read fallback could be
+handed to `set_phase_status` and would compile, so amendment 2's refusal held
+only by caller discipline — the very thing this decision exists to stop relying
+on. The split is therefore at the type level:
+
+```rust
+struct PrimaryRoot(PathBuf);  // the WRITE capability; minted only by `resolve`
+struct ReadRoot(PathBuf);     // read-only; from `resolve_for_read` or a PrimaryRoot
+
+impl From<&PrimaryRoot> for ReadRoot { /* … */ }   // one way, deliberately
+```
+
+| Direction | Status |
+|---|---|
+| `PrimaryRoot` → `ReadRoot` | sound; provided |
+| `ReadRoot` → `PrimaryRoot` | **does not exist** — a fallback root can never reach a writer |
+
+Pure path constructors (`phases_dir`, `boundaries_path`) and the pure readers
+(`phase_rollup`, `completed_phase_ids`, `read_phase_statuses`,
+`read_source_deltas`) take `&ReadRoot`. Writers hold `&PrimaryRoot` and convert
+inward. This is the one place in the slice where a type buys **impossibility**
+rather than visibility — the hazard is a single conversion, not a call-site
+pattern like a fan-out, so it is closable by construction.
 
 ## Amendment 5 (RV-322-B F-C) — `assume` is a test seam; amendment 3's production consumer is not one
 

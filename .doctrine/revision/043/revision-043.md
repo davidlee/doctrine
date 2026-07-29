@@ -263,15 +263,36 @@ anything; each roster is stated separately, on its own reading.
 **Why.** A *read* now crosses the boundary. The invariant as written is falsified
 by reach, even though nothing is copied and nothing may be written.
 
-### 3b — FR-001 (REQ-296): adjudicated, NOT revised
+### 3b — FR-001 (REQ-296): REVISED, wording only
 
-> …with the coordination/runtime tier **absent by construction**, so nothing
-> shared-mutable can be corrupted.
+*Changed from "adjudicated, not revised" after RV-322 round 3 (F-1 re-contested).*
 
-**Holds unchanged.** "Absent by construction" is implemented by the provisioning
-allowlist (`src/worktree/allowlist.rs:170`), which SL-237 does not touch. No copy
-enters the fork. The requirement's *statement* and its *mechanism* both survive;
-only the surrounding narrative needed correcting.
+**Before**
+
+> Each dispatched unit of work runs in isolation — a private working tree
+> provisioned per run — with the coordination/runtime tier **absent by
+> construction**, so nothing shared-mutable can be corrupted.
+
+**After (proposed)**
+
+> Each dispatched unit of work runs in isolation — a private working tree
+> provisioned per run — with **no copy of the coordination/runtime tier
+> provisioned into it**, so nothing shared-mutable can be corrupted.
+
+**Why the earlier adjudication was wrong.** The first pass preserved this
+requirement on the reasoning that its *mechanism* (the provisioning allowlist,
+untouched) survives. That conflated mechanism with promise. The requirement's
+words are "absent by construction", and a reader takes *absent* to mean
+unreachable — which is now false: a path resolves outward and the tier is
+readable from an isolated unit. Keeping the sentence because its implementation
+still works would leave a product-level promise the product no longer keeps.
+
+**What is preserved.** The requirement's *force* is untouched, because the
+corruption it guards against comes from a second mutable copy, and there is
+none. This is a wording revision that makes the requirement say what it has
+always actually guaranteed — not a weakening. The allowlist evidence
+(`src/worktree/allowlist.rs:170`) is what makes the new wording true, exactly as
+it made the old wording's mechanism true.
 
 ### 3c — NF-003 (REQ-304): adjudicated, NOT revised
 
@@ -307,12 +328,13 @@ SL-237 the repo-scoped part of the tier is reachable-but-not-copied.
 
 **After (proposed)**
 
-> - **The isolation boundary is enforced by construction, not trust.** No
->   *copy* of the coordination/runtime tier exists in an isolated unit, so there
->   is nothing shared-mutable to corrupt — not present-but-trusted-not-to-be-
->   touched. Since SL-237 the repo-scoped part of that tier is single-homed and
->   therefore *readable* from an isolated unit; its **write** exclusion is what
->   the construction guarantees, at the OS layer on every arm.
+> - **The isolation boundary is enforced by construction, not trust.** No *copy*
+>   of the coordination/runtime tier exists in an isolated unit, so there is
+>   nothing shared-mutable to corrupt — not present-but-trusted-not-to-be-touched.
+>   Where that tier is repo-scoped it is single-homed rather than duplicated, so
+>   an isolated unit may *read* it; what the construction guarantees is that the
+>   unit cannot **write** it, enforced beneath the boundary rather than by the
+>   unit's cooperation.
 
 **Before** (§ verification basis)
 
@@ -333,10 +355,21 @@ allowlist sentence in the verification basis stays **true as written** — `WITH
 covers `.doctrine/state/**` and is untouched — so it is reworded for precision
 ("never provisioned into"), not because it became false.
 
+**Altitude.** *Corrected after RV-322 round 3.* A first draft of this row wrote
+"Since SL-237 …" into the principle and named the OS layer as the enforcement
+mechanism. Neither belongs in a PRD: a product spec states evergreen intent, and
+citing the slice that changed it dates the document the moment the slice closes,
+while naming the OS layer fixes an implementation choice that SPEC-012 owns and
+may revise. The proposed text now says *what is guaranteed* ("cannot write it,
+enforced beneath the boundary rather than by the unit's cooperation") and leaves
+*how* to the tech spec. Row 2 carries the mechanism detail, which is where it
+belongs.
+
 **Net:** PRD-015 needs **four** prose edits (Invariant 2, the in-scope bullet, the
-principle, the verification basis) and **no** requirement change. Recording 3b and
-3c as adjudicated-and-preserved is deliberate — a future reader must be able to
-see that they were swept and why they held, rather than assume they were missed.
+principle, the verification basis) and **one** requirement wording revision
+(REQ-296, row 3b). REQ-304 remains adjudicated-and-preserved; recording 3c that
+way is deliberate — a future reader must be able to see it was swept and why it
+held, rather than assume it was missed.
 
 ## Provenance
 

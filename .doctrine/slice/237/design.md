@@ -512,17 +512,25 @@ from the pre-design sweep, which checked REQ-297 and stopped — was **false**.*
 | **ADR-006 D4** | "runtime state stays gitignored/**per-worktree**" | **falsified** — one home |
 | **SPEC-012** § Tier merge-safety by construction, + the responsibility bullet | defends D4 "not by trust but by **absence**" | mechanism drifts |
 | **PRD-015 Invariant 2** | "The coordination/runtime tier **never crosses the isolation boundary** into a worker" | **falsified** — a *read* crosses it |
-| **PRD-015 FR-001 (REQ-296)** | "the coordination/runtime tier **absent by construction**" | **PRESERVED** — see below |
+| **PRD-015 FR-001 (REQ-296)** | "the coordination/runtime tier **absent by construction**" | **REVISED, wording only** — see below (changed from PRESERVED after RV-322 round 3) |
+| **PRD-015** §2 in-scope, §3 principle, verification basis | assert the same "absence" | **falsified** — three surfaces a reader reaches before the invariant (F-12) |
 | **PRD-015 NF-003 (REQ-304)** | "tier exclusion guaranteed **by construction rather than a trusted check**" | **PRESERVED**, construction relocated |
 
 **Why the two requirements are preserved rather than revised** — the finding that
 raised them assumed otherwise, and the narrower answer is the evidenced one:
 
-- **REQ-296.** The provisioning allowlist `is_withheld`
+- **REQ-296 — revised, wording only.** *This bullet previously read "PRESERVED";
+  RV-322 round 3 re-contested it and the contest lands.* The mechanism does
+  survive untouched — the provisioning allowlist `is_withheld`
   (`src/worktree/allowlist.rs:170`; `WITHHELD` covers `.doctrine/state/slice/**`)
-  is **untouched** by this slice. No copy is provisioned into a fork, so the tier
-  remains literally absent from the fork's own tree. Only a *path resolves
-  outward*.
+  is not modified, so no copy is provisioned into a fork. But the requirement's
+  **words** are "absent by construction", and *absent* reads as unreachable,
+  which is now false: a path resolves outward and the tier is readable. Keeping
+  the sentence because its implementation still works would conflate mechanism
+  with promise and leave a product-level guarantee the product no longer makes.
+  REV-043 row 3b revises the wording to "no copy … provisioned into it" — the
+  force is unchanged, because the corruption guarded against requires a second
+  mutable copy and there is none.
 - **REQ-304.** Write exclusion remains by construction, at the OS layer, on
   **both** arms (I-3). The construction moved from provisioning-absence to
   mount-level read-only; it did not become a trusted check.
@@ -809,6 +817,35 @@ doc; F-2's reached the rationale but not the rows; F-B's reached §5.2 but not
 DEC-098. The lesson is procedural, not analytical — **when a finding overturns a
 claim, grep the corpus for the claim, not for the finding.** Recorded in the
 harvest.
+
+### External pass, round 3 — RV-322 raiser verification, 2026-07-29
+
+Nine dispositions verified (F-2, F-5, F-8, F-11, F-13, F-14, F-15, F-16, F-17).
+**No new findings** — the raiser stated explicitly that new ids would duplicate
+the contested remedies, which is the right call and worth recording as evidence
+the design is converging rather than churning. Three contested, resolving to two
+defects, both accepted:
+
+| # | Contest | Resolution |
+|---|---|---|
+| F-10 | The two-type design closes the hole, but **DEC-095 still specified the obsolete one-type API** — `PrimaryRoot::resolve_for_read`, `phases_dir(&PrimaryRoot)`, no `ReadRoot` | DEC-095 amendment 6; amendment 4's API superseded in place |
+| F-1 / F-12 | REQ-296 still **promises absence** while the design concedes readability; and row 3d wrote slice history and OS detail into product-spec prose | REV-043 row 3b becomes a wording revision; row 3d's proposed text re-pitched to product altitude |
+
+**F-10's contest is the §10 lesson landing on its author.** The round-2 pass
+recorded, as a procedural finding, that *a correction gets written where it was
+argued and not everywhere it was asserted* — and then committed exactly that:
+the two-type split reached §5.2 and DEC-098 but not DEC-095, in the same commit
+that wrote the lesson down. That is worth keeping rather than quietly fixing,
+because it shows the failure is not inattention — it survives knowing about it.
+The countermeasure has to be mechanical (grep the corpus for the claim), not
+intentional.
+
+**On REQ-296.** The round-1 adjudication — "preserved, because the allowlist is
+untouched" — was a mechanism argument answering a wording question. A
+requirement is a promise, and *absent* promises unreachability. The revision
+changes only the words, so nothing about the isolation guarantee moves; but the
+distinction between "the implementation still holds" and "the sentence is still
+true" is the one that was missed, twice, before it was named.
 
 ### Method note
 
