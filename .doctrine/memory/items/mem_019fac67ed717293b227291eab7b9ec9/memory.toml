@@ -1,0 +1,42 @@
+memory_uid = "mem_019fac67ed717293b227291eab7b9ec9"
+memory_key = "mem.pattern.entity.slug-symlink-doubles-naive-walks"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Entity dirs carry a NNN-slug symlink — a naive recursive walk double-counts every record"
+summary = "Entity creation mints a NNN-slug -> NNN symlink beside each numbered dir; any test or tool that walks the tree recursively counts each entity twice unless it skips symlinks."
+created = "2026-07-29"
+updated = "2026-07-29"
+
+[scope]
+paths = ["src/knowledge.rs", "src/entity.rs", "tests/"]
+globs = []
+commands = []
+tags = ["entity-engine", "testing", "footgun", "symlinks"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "commit"
+commit = "3ec39bb07fcecef281f73b9f59b7ac55867b550f"
+tree = "a84e84013e494866b52574e8ce2c8f7b7f123c8a"
+ref_name = "refs/heads/edge"
+checkout_state_id = ""
+base_commit = "3ec39bb07fcecef281f73b9f59b7ac55867b550f"
+verified_sha = ""
+normalizer = ""
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "medium"
+weight = 0
+
