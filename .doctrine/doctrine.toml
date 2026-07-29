@@ -4,6 +4,7 @@
 
 [priority.tag_coefficients]
 next = 3.0
+"area:dispatch" = 2.0
 [dispatch]
 # claude-force-subprocess-dispatch = true
 # SL-166: buffered-trunk posture — arms g1 (refuse trunk-mutating verbs on a

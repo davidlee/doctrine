@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fabbd-7247-7512-9503-ad932a7c35f3"
+recorded_at = "2026-07-29T02:39:07.335291519Z"
+kind = "friction"
+summary = "/dispatch external review: codex could not find /route at the conventional agent-skill path"
+detail = "Running the owed adversarial review for SL-233 PHASE-03, the external reviewer (codex mcp, workspace-write, cwd = the SL-233 coord worktree) reported it had to hunt for the routing skill: '/route was not present at the conventional agent-skill path and had to be located under plugins/doctrine/skills/'. Cost is small but repeated — every externally-spawned reviewer pays the same search before it can orient. The orchestrator's brief named the ledger protocol doc (install/review-ledger.md) explicitly and that was found first time; the skills path was left implicit, which is the asymmetry. Cheap fix on the orchestrator side is to name the skills root in the spawn brief the way the protocol doc already is; the broader question is whether plugins/doctrine/skills/ should be discoverable from a conventional path for agents that are not Claude-harness-resident."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
