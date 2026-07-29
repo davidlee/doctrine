@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fadd3-698a-72c2-831f-ca6ff13a66e9"
+recorded_at = "2026-07-29T12:22:21.322316342Z"
+kind = "friction"
+summary = "/slice: slice show omits outbound fulfils edges that inspect renders"
+detail = "After 'doctrine link SL-238 fulfils IMP-099' and 'fulfils IDE-019', 'doctrine slice show SL-238' printed only 'governed_by: ADR-017' and 'references(implements): SPEC-015, PRD-011' — no fulfils line. 'doctrine inspect SL-238' shows all three axes, and slice-238.toml carries both [[relation]] fulfils rows. Cost: a re-read of the raw TOML plus an inspect call to confirm the link verb had not silently failed, against a boot rule that says read entities via show, not raw files. If show is the mandated read path it must not drop an authored outbound axis."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
