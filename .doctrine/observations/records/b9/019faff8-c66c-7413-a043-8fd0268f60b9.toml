@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faff8-c66c-7413-a043-8fd0268f60b9"
+recorded_at = "2026-07-29T22:22:24.364680421Z"
+kind = "friction"
+summary = "/phase-plan: no read-only way to view one phase's authored plan entry"
+detail = '''`doctrine slice phase <id> <PHASE>` requires --status and MUTATES, so there is no verb that prints a single phase's objective/EN/EX/VT. Fell back to reading .doctrine/slice/233/plan.toml with an offset+limit Read, which needs the line number found first (and plan.toml is column-aligned, so the obvious `rg 'id = "PHASE-'` matches nothing — it has to be `id\s*=`). Two extra tool calls per phase plan, plus the risk that an agent reaching for the read verb mutates status instead. A `slice phase show` or `--dry-run` would remove it.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

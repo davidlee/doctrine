@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faff8-c674-7783-af80-9a6a1226a79f"
+recorded_at = "2026-07-29T22:22:24.372894216Z"
+kind = "friction"
+summary = "/phase-plan: backlog list rejects --limit, and the error suggests a wrong fix"
+detail = "Ran `doctrine backlog list --limit 5` to check for an existing fixture-extraction item. clap refused with 'unexpected argument --limit found' and the tip 'to pass --limit as a value, use -- --limit' — which is a suggestion for passing it as the positional SUBSTR, i.e. it would search for the literal string '--limit'. Following the tip produces a silently empty result rather than an error. One wasted call plus a plausible wrong path."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fae2e-c17f-7c51-a267-efb0d9fe4c50"
+recorded_at = "2026-07-29T14:02:07.615123175Z"
+kind = "friction"
+summary = "phase-plan: materialised runtime phase sheet went stale against an amended plan.toml"
+detail = "SL-233 PHASE-11. The phase sheet was materialised by 'slice phases' before the 2026-07-29 phase split. The split moved the marker machinery from PHASE-06 to PHASE-13/14 and amended plan.toml's EN-1 to say so, but the already-materialised sheet still carried the pre-split objective citing PHASE-06. An agent opening the sheet first reads a wrong objective with no staleness signal; nothing marks the sheet as behind its authored source. Cost: re-derivation of the objective against plan.toml, plus the risk of planning the phase against superseded entrance criteria. The materialise-once/amend-later seam has no freshness check."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

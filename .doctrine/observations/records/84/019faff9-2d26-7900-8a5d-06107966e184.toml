@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019faff9-2d26-7900-8a5d-06107966e184"
+recorded_at = "2026-07-29T22:22:50.662063648Z"
+kind = "friction"
+summary = "/harvest: the backlog TOML template teaches a link form the CLI rejects, costing three round trips"
+detail = "The seeded comment in backlog-NNN.toml says: 'Cross-kind structural edges (e.g. references with a role — originates_from for backlog→slice provenance — governed_by, related, drift) are uniform [[relation]] rows … author them with doctrine link ITEM-NNN <label> <target>'. Read as instruction that is 'link IMP-361 originates_from SL-233', which fails ('IMP may not author originates_from'); its error lists legal labels including 'references' twice. 'link IMP-361 references SL-233' then fails asking for --role. The working form is 'link IMP-361 references SL-233 --role originates_from'. Three calls per item, ×4 items = 8 wasted calls. The template comment could just show the working invocation, and the legal-label list should not print 'references' twice."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
