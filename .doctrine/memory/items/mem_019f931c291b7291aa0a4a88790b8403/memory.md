@@ -28,3 +28,47 @@ distinct from a code/authored-file merge conflict — see
 the general un-landed-bundle audit posture, see
 [[mem.pattern.dispatch.stale-bundle-web-map-dist-seed]] /
 `mem_019f4c64…` (seed `web/map/dist` into the audit worktree first).
+
+## Extension (SL-233 PHASE-04, 2026-07-29): it is not only backlog ids, and for a review `reseat` cannot execute the fix above
+
+Two corrections from a second, differently-triggered instance:
+
+**1. The trigger generalises past an unintegrated bundle.** Here the two
+allocators were a **live coordination worktree** (`dispatch/233`) and the primary
+tree (`edge`), both running normally — no long-parked bundle required. Root cause
+is the same shared low-water mark with `reservation reach = "local"`, so treat any
+two trees of one repo as colliding allocators, not just bundle-vs-trunk.
+
+**2. For a REVIEW, `doctrine reseat` refuses — structurally, on every review.**
+It reads the alias slug via the strict meta reader (`meta::read_meta` →
+`dtoml::parse_entity_toml`), which requires a `status` field; a review's status is
+derived from its findings (ADR-007 D-C8) and is deliberately never stored. So:
+
+```
+$ doctrine reseat RV-320 --to 322
+Error: ... missing field `status`
+```
+
+Filed as **ISS-277**. Renumbering a review is therefore **hand-work** — move the
+dir, rewrite the id in the toml/md and the slug symlink, and fix inbound prose
+citations yourself. The "reseat the trunk-side item" instruction above still names
+the right *target*; it just has no verb behind it for this kind.
+
+**Detection point, and why the window is long.** It surfaced at
+`dispatch refresh-base`, as a merge conflict on
+`.doctrine/review/NNN/review-NNN.{toml,md}` — the earliest it *can* surface. Until
+then trunk was already misdirecting references: backlog, observation and memory
+records on `edge` cited `RV-320` meaning the *bundle-side* review while trunk's
+entity at that id was a different one. So a clean-looking trunk can already be
+inconsistent; the conflict exposes it rather than causing it.
+
+**Prevention (cheap, do it every time).** Before any `<kind> new` from a
+coordination tree, take the next id above the max across BOTH trees:
+
+```bash
+git ls-tree --name-only main .doctrine/<kind>/ | grep -oE '[0-9]{3}$' | sort -n | tail -3
+git ls-tree --name-only HEAD .doctrine/<kind>/ | grep -oE '[0-9]{3}$' | sort -n | tail -3
+```
+
+There is no `--id` override, so allocating from the tree whose counter is already
+ahead is the only lever. Prevention gap filed as **ISS-279**.

@@ -6,7 +6,7 @@ status = "active"
 title = "A long-unintegrated dispatch bundle collides backlog ids with trunk; reseat the trunk-side item, not the bundle"
 summary = "When a dispatch bundle sits unintegrated while trunk keeps allocating ids, the same id gets minted twice; reseat the mutable trunk item since review/* is immutable evidence."
 created = "2026-07-24"
-updated = "2026-07-24"
+updated = "2026-07-29"
 
 [scope]
 paths = []

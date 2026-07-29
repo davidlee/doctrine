@@ -6,7 +6,7 @@ status = "active"
 title = "Correct a claude-arm worker delta in place (orchestrator resets fork branch, commits worker's staged bytes) — no re-dispatch"
 summary = "When a claude-arm worker's already-committed delta needs a small fix, the orchestrator lands the worker's corrected working-tree bytes as a fresh single commit instead of rejecting+re-dispatching."
 created = "2026-07-05"
-updated = "2026-07-05"
+updated = "2026-07-29"
 
 [scope]
 paths = []

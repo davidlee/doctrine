@@ -56,3 +56,47 @@ only-source files (R-5), then import.
 
 Relates to [[mem.pattern.dispatch.unarmed-agent-worker-runs-in-coord-tree]] and
 the `worker_commit` / `dispatch_import` funnel (SL-198/199).
+
+## Extension (SL-233 PHASE-04, 2026-07-29): AMEND is the sanctioned recovery, and it preserves the author
+
+The one-commit rule above is right, but two things have moved.
+
+**The refusal is now `late-recommit`, not `stale-record`,** when the worker has
+already committed C1 and its worktree still holds uncommitted paths. The `detail`
+lists exactly those paths — read it, because it tells you what was stranded.
+
+**Prefer `git commit --amend` over `reset --soft B` + a fresh orchestrator commit.**
+`worker_commit`'s own contract sanctions it in as many words: *"The commit message
+(worker-authored; **the orchestrator may amend**)."* Amend is better on every axis
+that matters here:
+
+- it **preserves the worker as author** (`--amend` keeps author, moves committer),
+  which the reset+recommit path loses — and author attribution is the thing a
+  fallback import already costs you;
+- it leaves **exactly one commit at base**, which is what `dispatch_import`
+  requires (it refuses `multi-commit`, and refuses `tree-unclean` while the
+  stranded paths sit in the worktree);
+- it is not a history rewrite in any meaningful sense — the fork branch has never
+  been imported, so nothing downstream has consumed the commit being amended.
+
+```bash
+WT=.dispatch/SL-<n>/.worktrees/agent-<id>
+git -C "$WT" add -- <the stranded paths>      # path-limited, never -A
+git -C "$WT" commit --amend -F <message-file>
+# then: one commit at base, clean tree → dispatch_import
+```
+
+**Prevent it instead: never write a brief asking for more than one commit.** The
+cause here was an orchestrator brief saying "commit T2-T5 first, then the rest in
+further coherent commits". The worker spent its single commit on the smaller half
+and correctly stopped rather than retrying — leaving the phase's entire main
+delta (~2000 lines) uncommitted. The one-commit constraint is discoverable only in
+`worker_commit`'s tool description and in `dispatch_import`'s `multi-commit`
+refusal reason, so it is easy to write a brief that contradicts it.
+
+**Before amending, prove the delta yourself.** The commit gate ran only over C1;
+the stranded bytes never passed it. Run `doctrine check prove` (fmt + lint,
+asserts and never fixes) in the fork before amending — this is the same
+reject-and-halt posture the CLI's `--from-worktree` fallback applies, done by
+hand. Scope-check too: `dispatch_import` hard-refuses `undeclared-scope`, and a
+path the slice *writes* needs a `design-target` selector, not `scope-relevant`.
