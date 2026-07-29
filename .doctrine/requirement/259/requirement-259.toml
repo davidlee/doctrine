@@ -7,10 +7,11 @@ title = "Label a product spec with its product level"
 status = "active"
 kind = "functional"
 
-description = "A product spec can record a single product level from the closed set domain|capability|feature|story."
+description = "A product spec can record a single product level from the closed set domain|capability|feature. The ladder is deliberately shorter than the C4 ladder; the two are comparable forms of zoom and are not depth-matched."
 tags = []
 acceptance_criteria = [
-  "A product spec records a single product level from the closed set domain|capability|feature|story.",
+  "A product spec records a single product level from the closed set domain|capability|feature.",
   "The level is optional; an unlabelled product spec is valid.",
   "The level is shown in the spec's rendered identity.",
+  "An out-of-set level, including the retired `story`, is refused at parse.",
 ]

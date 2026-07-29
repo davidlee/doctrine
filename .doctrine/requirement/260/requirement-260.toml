@@ -14,4 +14,5 @@ acceptance_criteria = [
   "Containment is stored once, outbound on the child; the parent's children are derived, never stored.",
   "A product spec has at most one parent, and no chain of parents forms a cycle.",
   "A parent must be a product spec; a tech parent is invalid.",
+  "A parent and child may share the same product level: `feature` is the ladder floor and may parent a narrower feature, adding depth without adding altitude.",
 ]
