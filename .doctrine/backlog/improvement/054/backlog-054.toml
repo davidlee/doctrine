@@ -5,10 +5,10 @@ id = 54
 slug = "sl-056-gc-orchestrator-env-leg-test-asserts-dual-cause-token-not-the-named-verb-proxy"
 title = "SL-056 gc orchestrator env-leg test asserts dual-cause token not the named verb (proxy)"
 kind = "improvement"
-status = "open"
-resolution = ""                 # seeded empty so `backlog edit` sets it in place
+status = "resolved"
+resolution = "fixed"
 created = "2026-06-14"
-updated = "2026-07-03"
+updated = "2026-07-29"
 tags = ["area:dispatch", "area:testing"]
 
 # outbound-only (ADR-004). The cross-kind axes (slices/specs/drift) are uniform
