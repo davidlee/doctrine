@@ -1742,8 +1742,11 @@ When MCP tools are available, use these tools instead of CLI commands:
 const ONBOARD_MODEL_SECTION_HEADER: &str = "## Model-Band Self-Identification";
 /// CLI verb that lists the available `--model` key strings.
 const PROMPT_MODEL_KEYS_CMD: &str = "doctrine prompt model-keys";
-/// CLI verb the agent runs itself to resolve its own model band.
-const PROMPT_RESOLVE_MODEL_CMD: &str = "doctrine prompt resolve --band model --model <id>";
+/// CLI verb the agent runs itself to resolve its own model band. `--model` is
+/// repeatable (SL-192 — conjunctive trait-set targeting), so the taught form shows
+/// the compose shape, not a single-valued one (IMP-239).
+const PROMPT_RESOLVE_MODEL_CMD: &str =
+    "doctrine prompt resolve --band model --model <id> [--model <id> …]";
 
 /// Render the `doctrine_onboard` markdown: mapping table + model-band self-ID
 /// guidance (SL-187). The two-memory onboarding load now rides the cached boot
@@ -1772,6 +1775,9 @@ fn render_model_band_guidance(root: &Path, model_keys: ModelKeysFn) -> anyhow::R
          `doctrine_onboard` cannot read your model — identify yourself.\n\n\
          Available `--model` keys (`{PROMPT_MODEL_KEYS_CMD}`):\n{key_lines}\n\n\
          Then resolve your model band yourself:\n\n    {PROMPT_RESOLVE_MODEL_CMD}\n\n\
+         `--model` is repeatable — each occurrence adds a key to your context \
+         trait set, and a band selector matches only when its whole pinned set is \
+         present (a conjunction). Pass every key that describes you, not just one.\n\n\
          Re-run this whenever your model changes (e.g. after a `/model` swap); \
          the tool never resolves the band for you.\n"
     ))
@@ -1887,6 +1893,26 @@ mod tests {
         assert!(
             !out_empty.contains("- `opus-test-key`"),
             "empty producer must NOT render the injected key: {out_empty}"
+        );
+    }
+
+    // IMP-239 — SL-192 made `--model` repeatable (conjunctive trait-set targeting).
+    // The agent-facing onboard copy must teach the compose form; a single-valued
+    // `--model <id>` understates the contract and an agent pins one trait when it
+    // could pin its whole set.
+    #[test]
+    fn onboard_model_copy_teaches_repeatable_model() {
+        let (_dir, root) = temp_root();
+        let inject: ModelKeysFn = |_r, _h| Ok(vec!["opus-test-key".to_owned()]);
+        let out = render_model_band_guidance(&root, inject).unwrap();
+
+        assert!(
+            out.contains("[--model <id> …]"),
+            "resolve command must show the repeatable form: {out}"
+        );
+        assert!(
+            out.contains("trait set"),
+            "guidance must name what repeated `--model` composes: {out}"
         );
     }
 
