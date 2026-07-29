@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019facc9-7c45-7870-8b22-562dd1b6ecec"
+recorded_at = "2026-07-29T07:31:53.541773536Z"
+kind = "friction"
+summary = "/record-memory: memory verify's whole-tree dirty gate is unsatisfiable in a shared worktree"
+detail = "Updating mem.pattern.testing.no-root-find-walk during ISS-281, then verifying it, failed twice: 'working tree is dirty: refusing to verify'. The gate is whole-tree, but the tree carries other agents' uncommitted work (tests/*.rs, .doctrine/knowledge, .doctrine/slice/237). Committing my own memory item did not clear it. In a repo whose own AGENTS.md assumes multiple agents share one worktree, the gate can only be satisfied by committing someone else's work or waiting for them to finish — so a re-confirmed memory stays 'unverified' for reasons unrelated to its truth. Scoping the gate to the memory's own paths (or to scope.paths) would make it satisfiable. Already homed as work at IMP-221 ('relax dirty-tree gate'); recorded here as the token/flow cost datapoint, not a new item."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
