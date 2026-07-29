@@ -2,7 +2,7 @@ id      = 43
 slug    = "restate-runtime-tier-defence-absence-to-single-homed-plus-guard"
 title   = "Restate runtime-tier defence: absence to single-homed plus guard"
 status  = "proposed"   # work lifecycle: proposed | started | done | abandoned
-approval = "none"      # SEPARATE axis, orthogonal to status: none | requested | approved | rejected
+approval = "approved"
 updated = "2026-07-29"
 tags    = []
 
