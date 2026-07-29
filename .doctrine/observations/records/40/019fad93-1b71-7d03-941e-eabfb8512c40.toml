@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad93-1b71-7d03-941e-eabfb8512c40"
+recorded_at = "2026-07-29T11:12:07.025503433Z"
+kind = "friction"
+summary = "/retrieve-memory: `memory retrieve` takes only --tag, so free-text task retrieval needs `memory search`"
+detail = """Phase-planning SL-233 PHASE-13. The /retrieve-memory step is phrased as 'run /retrieve-memory against the concrete files and subsystems you expect to touch', which reads as a task-shaped query. 'doctrine memory retrieve --task "<prose>"' errors with 'unexpected argument --task found; a similar argument exists: --tag' — retrieve is tag-only. The free-text surface is 'memory search'. One wasted invocation, and the error's tip points at --tag, which would send an agent looking for a tag vocabulary rather than at the sibling verb that actually takes prose. Cheap fix: name the sibling in the error, or in the skill."""
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad92-f9ed-7a81-abe5-bcbccc08e5f4"
+recorded_at = "2026-07-29T11:11:58.44602014Z"
+kind = "friction"
+summary = '/phase-plan: column-aligned plan.toml defeats the natural `id = "PHASE-` grep'
+detail = '''Phase-planning SL-233 PHASE-13. Locating the phase blocks in .doctrine/slice/233/plan.toml with rg 'id = "PHASE-' returned ZERO hits — the file writes 'id        = "PHASE-13"' with column alignment, so the single-space form matches nothing. The empty result reads as 'this file has no phases', which is alarming rather than merely unhelpful, and cost a second round-trip with a positive control (wc -l plus a bare 'PHASE-13' grep) to disprove. Generalises: doctrine's own authored TOML is column-aligned, so any key-anchored grep over it must allow variable whitespace ('id\s*='). Reinforces mem_019fa18161f47651af7687d8dccbbc67 (a negative grep is untrustworthy without a positive control) with the concrete repo-local cause.'''
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
