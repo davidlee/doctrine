@@ -694,17 +694,20 @@ impl C4Level {
 }
 
 /// The product altitude of a product spec. Closed set, kebab serde; product-only,
-/// optional. Mirror of `C4Level` (domain≈context, capability≈container,
-/// feature≈component, story≈code). Formerly advisory-only (SL-065 D2); rank
-/// inversion/gap is enforced since IMP-069, same-level refinement stays legal
-/// (PRD-012 §6).
+/// optional. Three rungs, with `Feature` as a **recursive floor**: a feature may
+/// parent a narrower feature, adding depth without adding altitude (IMP-350,
+/// RFC-024). It is a loose analogue of `C4Level`, not a rank-for-rank mirror —
+/// the two ladders are comparable forms of zoom and are deliberately NOT
+/// depth-matched (three rungs against four). `Story` was retired: a story is a
+/// path *through* a product, not a part *of* one.
+/// Formerly advisory-only (SL-065 D2); rank inversion/gap is enforced since
+/// IMP-069, same-level refinement stays legal (PRD-012 §6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum ProductLevel {
     Domain,
     Capability,
     Feature,
-    Story,
 }
 
 impl ProductLevel {
@@ -714,18 +717,17 @@ impl ProductLevel {
             ProductLevel::Domain => "domain",
             ProductLevel::Capability => "capability",
             ProductLevel::Feature => "feature",
-            ProductLevel::Story => "story",
         }
     }
 
-    /// Coarse→fine rank on the ladder (0=domain .. 3=story) — mirrors
-    /// `C4Level::rank` (IMP-069). Pure.
+    /// Coarse→fine rank on the ladder (0=domain .. 2=feature) — the same
+    /// comparison `C4Level::rank` feeds, over a shorter ladder (IMP-069,
+    /// IMP-350). Pure.
     const fn rank(self) -> u8 {
         match self {
             ProductLevel::Domain => 0,
             ProductLevel::Capability => 1,
             ProductLevel::Feature => 2,
-            ProductLevel::Story => 3,
         }
     }
 }
@@ -746,10 +748,11 @@ pub(crate) struct Spec {
     pub(crate) category: Option<String>,
     #[serde(default)]
     pub(crate) c4_level: Option<C4Level>,
-    /// Product altitude (`domain|capability|feature|story`). Product-only,
-    /// optional; absent on a tech or unlabelled product spec. Formerly
-    /// advisory-only (SL-065 D5); rank-adjacency against `parent` is enforced
-    /// since IMP-069 (PRD-012 §6). Mirror of `c4_level`.
+    /// Product altitude (`domain|capability|feature`). Product-only, optional;
+    /// absent on a tech or unlabelled product spec. Formerly advisory-only
+    /// (SL-065 D5); rank-adjacency against `parent` is enforced since IMP-069
+    /// (PRD-012 §6). The product-axis counterpart of `c4_level`, not a
+    /// rank-for-rank mirror of it (IMP-350).
     #[serde(default)]
     pub(crate) product_level: Option<ProductLevel>,
     #[serde(default)]
@@ -3181,7 +3184,6 @@ module = \"doctrine::cli\"
             (ProductLevel::Domain, "domain"),
             (ProductLevel::Capability, "capability"),
             (ProductLevel::Feature, "feature"),
-            (ProductLevel::Story, "story"),
         ] {
             assert_eq!(variant.as_str(), kebab);
             let body = format!(
@@ -3197,6 +3199,20 @@ module = \"doctrine::cli\"
         // an out-of-set value is a parse error (closed enum, serde-enforced).
         let body = "id = 1\nslug = \"x\"\ntitle = \"X\"\nstatus = \"draft\"\nkind = \"product\"\nproduct_level = \"epic\"\n";
         assert!(toml::from_str::<Spec>(body).is_err());
+    }
+
+    #[test]
+    fn product_level_story_is_retired() {
+        // IMP-350: `story` is off the ladder — a story is a path *through* a product,
+        // not a part *of* one (RFC-024). Hard removal, no shim. Distinct from the
+        // `epic` case above: that pins the enum's closedness, this pins the retirement
+        // against a re-add.
+        let body = "id = 1\nslug = \"x\"\ntitle = \"X\"\nstatus = \"draft\"\nkind = \"product\"\nproduct_level = \"story\"\n";
+        let err = toml::from_str::<Spec>(body).unwrap_err().to_string();
+        assert!(
+            err.contains("feature"),
+            "error should name the ladder: {err}"
+        );
     }
 
     #[test]
@@ -4336,14 +4352,15 @@ parent = \"SPEC-002\"
 
     #[test]
     fn sweep_parent_rank_product_gap() {
-        // IMP-069: child (story) skips more than one level to its parent (domain).
+        // IMP-069: child (feature) skips more than one level to its parent (domain).
+        // Delta 2 is the widest gap the three-rung ladder admits (IMP-350).
         assert_validate_flags(
             |root| {
                 fresh(root, SpecSubtype::Product, "login", "Login"); // PRD-001
                 fresh(root, SpecSubtype::Product, "accounts", "Accounts"); // PRD-002
                 append_spec_fields(
                     &spec_toml(root, SpecSubtype::Product, 1),
-                    "parent = \"PRD-002\"\nproduct_level = \"story\"",
+                    "parent = \"PRD-002\"\nproduct_level = \"feature\"",
                 );
                 append_spec_fields(
                     &spec_toml(root, SpecSubtype::Product, 2),

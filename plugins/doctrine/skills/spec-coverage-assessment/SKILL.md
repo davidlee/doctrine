@@ -132,9 +132,11 @@ this is where the stopping condition bites.
 
 For each top-ranked gap, work out — don't just flag the gap, propose a shape:
 
-- **Product altitude** (domain | capability | feature | story) — does this
-  need new product intent (a PRD) at all, or does an existing PRD already
-  cover the *why* and only the tech spec is missing?
+- **Product altitude** (domain | capability | feature — `feature` is the floor
+  and may parent another feature) — does this need new product intent (a PRD)
+  at all, or does an existing PRD already cover the *why* and only the tech
+  spec is missing? The product ladder is shorter than C4's by design; don't
+  reach for a fourth rung to make the two line up.
 - **C4 level** (context | container | component | code) for any new tech
   spec — component/container is the normal stopping altitude; code-level is
   exceptional (`/spec-tech`'s own guidance) and should be justified, not

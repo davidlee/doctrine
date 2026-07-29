@@ -819,6 +819,23 @@ mod tests {
     }
 
     #[test]
+    fn parent_rank_product_recursive_feature_is_clean() {
+        // IMP-350: `feature` is the ladder floor and may parent itself — product
+        // decomposition that adds depth without adding altitude (RFC-024). Delta 0
+        // was already legal tech-side (parent_rank_same_level_is_clean); pinned
+        // product-side so the recursive floor is stated intent rather than an
+        // accident of a permissive check.
+        let mut r = clean();
+        r.product_specs = ids(&["PRD-001", "PRD-002"]);
+        r.parents.push(parent_edge("PRD-001", "PRD-002", true));
+        r.product_levels
+            .insert("PRD-001".to_string(), (2, "feature"));
+        r.product_levels
+            .insert("PRD-002".to_string(), (2, "feature"));
+        assert!(r.parent_rank_findings(None).is_empty());
+    }
+
+    #[test]
     fn parent_rank_finding_suppressed_when_scope_names_an_unrelated_spec() {
         let mut r = clean();
         r.tech_specs = ids(&["SPEC-001", "SPEC-002", "SPEC-003"]);

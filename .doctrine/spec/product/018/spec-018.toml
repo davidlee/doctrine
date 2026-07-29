@@ -18,7 +18,9 @@ responsibilities = [
   "Permit bounded capture from constrained execution environments without granting a general repository-write capability.",
 ]
 
-# product_level — closed product ladder: domain | capability | feature | story. Add as:
+# product_level — closed product ladder: domain | capability | feature. `feature` is
+#   the floor and may parent another feature — decomposition without a new altitude.
+#   Add as:
 #   product_level = "capability"
 # parent — single decomposition parent (PRD-NNN, product→product); the tree must
 #   stay acyclic. Add as:
