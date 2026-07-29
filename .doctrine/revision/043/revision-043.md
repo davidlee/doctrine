@@ -14,13 +14,13 @@ at three altitudes**, so they are restated together rather than in separate
 revisions; splitting them is what let them drift apart in the first place.
 
 **This is a restatement of mechanism, plus ONE named relaxation.** An earlier
-draft of this REV claimed pure restatement. That was overreach, caught by RV-320
+draft of this REV claimed pure restatement. That was overreach, caught by RV-322
 F-4 and corrected here: the *merge-safety* claim is genuinely preserved, but
 single-homing introduces a **new concurrent read-modify-write exposure** that
 per-worktree copies did not have. It is stated in § "The named relaxation" below,
 not folded into the restatement.
 
-*Scope widened after RV-320 F-1: the original draft asserted "no requirement
+*Scope widened after RV-322 F-1: the original draft asserted "no requirement
 changes", inheriting a pre-design sweep that checked REQ-297 and stopped. PRD-015
 carries an invariant and two requirements bearing directly on this change.*
 
@@ -31,7 +31,7 @@ carries an invariant and two requirements bearing directly on this change.*
   worktrees and merging back. Single-homing creates **no copy**. One file cannot
   diverge from itself.
 - **The worker write prohibition (REQ-297, ADR-006 D2) stays fully enforced, and
-  has an OS floor on BOTH arms.** *Corrected after RV-320 F-2 — an earlier draft
+  has an OS floor on BOTH arms.** *Corrected after RV-322 F-2 — an earlier draft
   of this REV asserted the claude arm had no OS floor, on the strength of
   ADR-008 D-B3's text that claude's `Agent` tool "cannot be wrapped". That text
   is **stale** relative to the shipped skill, and this REV would have written the
@@ -230,7 +230,7 @@ spec sweep.
 
 ## Row 3 — PRD-015, `modify`
 
-*Added after RV-320 F-1.* Three statements were swept; only one needs revising.
+*Added after RV-322 F-1.* Three statements were swept; only one needs revising.
 
 ### 3a — Invariant 2 (the one that changes)
 
@@ -282,7 +282,7 @@ withholding is load-bearing beyond merge safety, and whether primary resolution
 even works from a confined fork — are recorded in
 `.doctrine/slice/237/design.md` § 7. None of the three lands.
 
-**Revised 2026-07-29 after external adversarial review RV-320** (raiser:
+**Revised 2026-07-29 after external adversarial review RV-322** (raiser:
 codex/GPT-5.5), which raised nine findings against the design, all accepted.
 Three bear directly on this REV:
 
@@ -293,5 +293,5 @@ Three bear directly on this REV:
 - **F-4** — "restatement, not relaxation" was overreach. The named relaxation
   (concurrent RMW) is now stated in its own section.
 
-`SL-237 needs REV-043` is authored (RV-320 F-7): implementation is gated on this
+`SL-237 needs REV-043` is authored (RV-322 F-7): implementation is gated on this
 revision reaching `approved`, not merely on it having been raised.

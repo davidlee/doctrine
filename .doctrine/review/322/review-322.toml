@@ -1,4 +1,4 @@
-id    = 320
+id    = 322
 slug  = "design-review-of-sl-237"
 title = "design review of SL-237"
 # no status — a review's status is DERIVED from its findings (ADR-007 D-C8), so

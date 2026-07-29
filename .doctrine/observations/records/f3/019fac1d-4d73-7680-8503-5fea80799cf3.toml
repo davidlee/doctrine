@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac1d-4d73-7680-8503-5fea80799cf3"
+recorded_at = "2026-07-29T04:23:49.36365707Z"
+kind = "friction"
+summary = "/design (SL-237): doctrine reseat RV-NNN fails at parse — reviews store no status by design"
+detail = "Ran: doctrine reseat RV-320 --to 322. Hard error: 'RV-320: TOML parse failed / missing field status'. Root cause: reseat (src/integrity.rs:295) reads the slug via the STRICT meta::read_meta -> dtoml::parse_entity_toml, which requires status. A review's status is DERIVED from its findings (ADR-007 D-C8) and deliberately never stored — the file says so in a comment. So reseat can never renumber any review; this is structural, not a data fault. Note src/integrity.rs:132-133 already records that scan_kind was given an id-only reader precisely 'so review's intentionally status-less toml scans cleanly, while the strict Meta (status-bearing readers) is untouched' — SL-151 fixed validate and left reseat behind. Reseat only needs .slug, which reviews do have. Cost: renumbering RV-320 -> RV-322 is blocked mid-session; hand-renumbering risks the inbound-reference re-pointing reseat exists to do."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

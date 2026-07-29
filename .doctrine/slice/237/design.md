@@ -78,7 +78,7 @@ the result down — and neither is satisfied by putting `primary_worktree` insid
 3. **Delete compensation, don't extend it.** Machinery whose only purpose is
    reporting or patching the split goes when the split goes.
 4. **Refuse where a degrade would recreate the bug class.** Not "warn loudly" —
-   a warning does not stop the write that follows it (RV-320 F-6).
+   a warning does not stop the write that follows it (RV-322 F-6).
 
 ## 5. Proposed Design
 
@@ -124,7 +124,7 @@ impl PrimaryRoot {
 }
 ```
 
-**I-2, restated after RV-320 F-6.** An earlier draft made `resolve` total and
+**I-2, restated after RV-322 F-6.** An earlier draft made `resolve` total and
 emitted a warning on any failure. That was the slice's own confusion at the new
 seam: **observability is not prevention**. A warning does not stop the write that
 follows it, so a genuine git fault would still home state in the linked tree. The
@@ -134,7 +134,7 @@ with no second subprocess — but its consequence is promoted from *warn* to
 primary-owned state.** Totality survives only where the invariant genuinely
 holds: no repo at all.
 
-**Two roots, not one — RV-320 F-3.** `project_root` is today one identifier
+**Two roots, not one — RV-322 F-3.** `project_root` is today one identifier
 serving **two meanings**: *where the state file lives* (the primary) and *which
 worktree's git am I asking* (the invoked tree). `capture_phase_boundary` uses it
 for both — `live_worktree_for_ref(project_root, …)` (`state.rs:617`) and
@@ -231,10 +231,10 @@ drive races the drive's own writer on the **same** file.
   Load-bearing, not defensive polish; ~20 existing tests are its acceptance
   evidence. This is the **only** case in which `resolve` is total.
 - **I-2 — A fault refuses; it does not degrade.** See §5.2. Rewritten after
-  RV-320 F-6: the earlier "warn and continue" form mistook observability for
+  RV-322 F-6: the earlier "warn and continue" form mistook observability for
   prevention.
 - **I-3 — Worker write exclusion is OS-enforced on BOTH arms.** *Rewritten after
-  RV-320 F-2; the earlier version was wrong in both directions.*
+  RV-322 F-2; the earlier version was wrong in both directions.*
   - **Subprocess arm.** `scripts/pi-spawn-confined.sh:110` sets
     `--setenv DOCTRINE_WORKER 1` **unconditionally**, so `worker_mode` is true
     via the env leg irrespective of the marker, and the CLI guard
@@ -256,12 +256,12 @@ drive races the drive's own writer on the **same** file.
     recoverable. Stated as a property, not as a message for an unreachable path.
 - **I-4 — Symlink honesty, including on upgrade.** The `phases` convenience
   symlink is minted only in the primary, **and a stale link already present in a
-  linked worktree is retired** (DEC-097 + RV-320 F-8). Today's `refresh_symlink`
+  linked worktree is retired** (DEC-097 + RV-322 F-8). Today's `refresh_symlink`
   mints into the invoked root, so existing worktrees already carry one; not
   removing it would leave exactly the misleading runtime projection DEC-097
   exists to prevent.
 - **I-5 — Shared-file concurrency is bounded by contract, not by a lock.**
-  *Added after RV-320 F-4.* `edit_phase_sheet` is an unlocked read-modify-write
+  *Added after RV-322 F-4.* `edit_phase_sheet` is an unlocked read-modify-write
   and the registry is unlocked shared-mutable. Two copies could previously
   diverge but not race; one file can race. **No locking is designed.** The bound
   is: ADR-006 D2/D9 make the orchestrator the sole phase-state writer during a
@@ -331,7 +331,7 @@ Three load-bearing statements are falsified; they are one claim at two
 altitudes, so they are restated together (ADR-013 routes governance dependency
 through a Revision).
 
-*Scope widened after RV-320 F-1. The claim "no REQ requires change" — inherited
+*Scope widened after RV-322 F-1. The claim "no REQ requires change" — inherited
 from the pre-design sweep, which checked REQ-297 and stopped — was **false**.*
 
 | Where | Text | Status under SL-237 |
@@ -359,7 +359,7 @@ So the REV **adjudicates** REQ-296 / REQ-304 (recording why they hold) and
 **revises** PRD-015 Invariant 2 alongside ADR-006 D2/D4 and SPEC-012.
 
 **This is a restatement of mechanism plus one named relaxation** — the earlier
-draft claimed pure restatement, which RV-320 F-4 correctly called overreach.
+draft claimed pure restatement, which RV-322 F-4 correctly called overreach.
 Merge safety is preserved (no copy ⇒ nothing to diverge); a **new concurrent-RMW
 exposure** is introduced and governed by I-5 rather than concealed. Three attacks
 were run against the governing content and none lands:
@@ -387,7 +387,7 @@ change under D3.
 ## 8. Risks & Mitigations
 
 - **R1 — Test-churn dilutes the behaviour-preservation proof.** ~50 construction
-  sites change. *Mitigation (revised, RV-320 F-9):* `PrimaryRoot::assume(path)`
+  sites change. *Mitigation (revised, RV-322 F-9):* `PrimaryRoot::assume(path)`
   — a real constructor, not a test-only hatch (`dispatch.rs:3449-3471` needs it
   too). The earlier "one-line helper" mitigation was unimplementable: the tuple
   field is private to `git.rs`, so no `state.rs` test module could write it, and
@@ -395,12 +395,12 @@ change under D3.
   path-join tests into git-dependent ones — changing what the suites prove.
   Assertions are reviewed for unchanged-ness explicitly at audit (V-1b).
 - **R2 — A silent fallback homes state in the wrong tree.** *Mitigation
-  (revised, RV-320 F-6):* I-2 **refuses**. A warning was never a mitigation —
+  (revised, RV-322 F-6):* I-2 **refuses**. A warning was never a mitigation —
   observability does not prevent the write that follows it.
 - **R3 — A later reader "fixes" the intentional `run_phases` split.**
   *Mitigation:* the comment required in §5.4, plus the RV-312 F-6 test.
 - **R4 — Landing code that falsifies accepted governance.** *Mitigation
-  (revised, RV-320 F-7):* the **gate**, not the raising. `SL-237 needs REV-043`
+  (revised, RV-322 F-7):* the **gate**, not the raising. `SL-237 needs REV-043`
   is authored, and REV-043 reaching `approved` is an **entry criterion for
   PHASE-01** (§8a). Opening a REV is not a mitigation if implementation can
   start alongside it.
@@ -411,13 +411,13 @@ change under D3.
   not prevent it (§10 R-3). *Mitigation:* V-9 reviews **both** known sites at the
   call site; any new `phase_rollup` caller must be checked for loop context at
   review, not assumed safe because it takes a `&PrimaryRoot`.
-- **R7 — a hand-built runtime-state path is missed.** *Added, RV-320 F-5.* The
+- **R7 — a hand-built runtime-state path is missed.** *Added, RV-322 F-5.* The
   census enumerated `phases_dir` callers, which structurally cannot find a path
   assembled by hand. One such site existed (`integrity.rs:322-323`, via
   `kind.state_dir`) and would have silently stopped guarding. *Mitigation:* the
   census axis is now `.doctrine/state` path construction, not `phases_dir`
   call sites; V-11 covers the reseat guard.
-- **R8 — concurrent RMW on the now-shared file.** *Added, RV-320 F-4.* No lock
+- **R8 — concurrent RMW on the now-shared file.** *Added, RV-322 F-4.* No lock
   is designed. *Mitigation:* bounded by contract (I-5), and named as a
   relaxation in REV-043 rather than absorbed into a "restatement".
 
@@ -501,7 +501,7 @@ Attacks that did **not** land, recorded so they are not re-run:
   shared registry (via the primary worktree) and the local phase-sheet state
   tree."* That sentence is the defect. V-4 is grounded.
 
-### External adversarial pass — RV-320 (raiser: codex/GPT-5.5), 2026-07-29
+### External adversarial pass — RV-322 (raiser: codex/GPT-5.5), 2026-07-29
 
 Nine findings: six blockers, three majors. **All nine accepted**, two with
 corrections to the reviewer's mechanism. Full dispositions on the ledger

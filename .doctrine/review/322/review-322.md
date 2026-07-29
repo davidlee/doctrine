@@ -1,4 +1,4 @@
-# Review RV-320 — design of SL-237
+# Review RV-322 — design of SL-237
 
 Adversarial-review ledger (ADR-007). Structured findings live in the sister
 ledger toml; this prose companion carries the reviewer's framing.

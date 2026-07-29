@@ -19,7 +19,7 @@ constructor.
 - `phases_dir(primary: &PrimaryRoot, slice_id)` (`src/state.rs:135`) stays a
   **pure, total path join** — it merely takes an already-resolved value.
 
-## Amendment 1 (RV-320 F-3) — the parameter splits; the newtype survives
+## Amendment 1 (RV-322 F-3) — the parameter splits; the newtype survives
 
 **The original form of this decision was wrong in the same way SL-237 exists to
 fix.** `project_root` was one identifier serving **two meanings**:
@@ -43,7 +43,7 @@ Pure path constructors (`phases_dir`, `boundaries_path`) take only
 `&PrimaryRoot`. Only the functions that genuinely ask git take the second root.
 Naming both is the point — the defect was one name for two jobs.
 
-## Amendment 2 (RV-320 F-6) — total for the invariant, fallible for a fault
+## Amendment 2 (RV-322 F-6) — total for the invariant, fallible for a fault
 
 `resolve` must not be unconditionally total. A warning is not a safeguard;
 degrading to `cwd` on a genuine git fault would home state in the linked tree —
@@ -51,7 +51,7 @@ exactly this slice's bug class at the new seam. The discriminator (a `.git` in
 `cwd.ancestors()`) is promoted from *emit a warning* to *return `Err`*. **A
 caller that cannot resolve a primary does not get to write primary-owned state.**
 
-## Amendment 3 (RV-320 F-9) — `assume` is a production seam, not a test hatch
+## Amendment 3 (RV-322 F-9) — `assume` is a production seam, not a test hatch
 
 The tuple field is private to `git.rs`, so no `state.rs`/`slice.rs` test module
 can construct one directly, and routing ~50 unit tests through the impure
