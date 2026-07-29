@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac9a-876b-7123-ba7e-232a12723abd"
+recorded_at = "2026-07-29T06:40:36.2034941Z"
+kind = "friction"
+summary = "/design gate: review --as takes the fixed role vocabulary while review new --responder takes a free-text label, so the obvious value is refused"
+detail = "Opened RV-323 with 'review new --raiser codex --responder orchestrator', which sets free-text role LABELS. Later 'review dispose --as orchestrator' failed with 'unknown --as role orchestrator (known: raiser, responder)'. Four dispose calls in one batch all failed together, so the whole batch had to be re-sent. The two flags are adjacent in the same kind's surface and name the same concept, but one is a label and the other is a closed vocabulary, and nothing at the point of use says so — --as's help text reads 'Cooperative role assertion (default: raiser)' without naming the two legal values. Cost: one wasted multi-call batch with long --response bodies re-sent. Cheap fix: name the legal values in --as's help, or accept the configured label as an alias for the role it was configured as."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

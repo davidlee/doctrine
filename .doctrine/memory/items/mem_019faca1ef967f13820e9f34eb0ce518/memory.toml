@@ -1,0 +1,54 @@
+memory_uid = "mem_019faca1ef967f13820e9f34eb0ce518"
+memory_key = "mem.pattern.testing.assert-bytes-not-digests"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Assert bytes, not digests, when the defect is that content failed to move"
+summary = "A fingerprint assertion passes against a content-reversion defect — the digest matches precisely while the body is stale"
+created = "2026-07-29"
+updated = "2026-07-29"
+
+[scope]
+paths = []
+globs = []
+commands = []
+tags = ["testing", "test-oracle", "anti-theatre"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "245bdf538d6bb0618de163331c1601bfd92b16f3"
+ref_name = "refs/heads/edge"
+checkout_state_id = "a1edbc774c37a8d109da93bd7eab062afe0524808d66a5ee1005319532eb8db9"
+base_commit = "751c75acd4411ca3073cd01e6c402505cc9a180e"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "review"
+ref = "RV-323"
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
+[[relation]]
+label = "related"
+target = "mem.pattern.review.guard-test-asserts-property-not-proxy"
+
