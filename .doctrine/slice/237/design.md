@@ -518,7 +518,8 @@ from the pre-design sweep, which checked REQ-297 and stopped — was **false**.*
 | **PRD-015 Invariant 2** | "The coordination/runtime tier **never crosses the isolation boundary** into a worker" | **falsified** — a *read* crosses it |
 | **PRD-015 FR-001 (REQ-296)** | "the coordination/runtime tier **absent by construction**" | **REVISED, wording only** — see below (changed from PRESERVED after RV-322 round 3) |
 | **PRD-015** §2 in-scope, §3 principle, verification basis | assert the same "absence" | **falsified** — three surfaces a reader reaches before the invariant (F-12) |
-| **PRD-015 NF-003 (REQ-304)** | "tier exclusion guaranteed **by construction rather than a trusted check**" | **PRESERVED**, construction relocated |
+| **PRD-015 NF-003 (REQ-304)** | "tier exclusion guaranteed **by construction rather than a trusted check**" | **OUT OF SCOPE** — earlier adjudication withdrawn, see QUE-199 |
+| **ADR-006 D9**, **SPEC-012** ×3 | the tier's *absence* in the fork "is what makes worker-sole-writer free" | **falsified ground** — same claim, more altitudes (RV-322 F-18) |
 
 **How the two requirements are disposed** — one revised, one adjudicated:
 
@@ -540,12 +541,22 @@ from the pre-design sweep, which checked REQ-297 and stopped — was **false**.*
   provisioned into it *and* it cannot write the tier, so no unit can corrupt
   shared state. The operator-concurrency hazard is real but is not this
   requirement's to promise; it lives in the named relaxation.
-- **REQ-304.** Write exclusion remains by construction, at the OS layer, on
-  **both** arms (I-3). The construction moved from provisioning-absence to
-  mount-level read-only; it did not become a trusted check.
+- **REQ-304 — out of scope.** *Changed after RV-322 round 5.* Earlier passes
+  adjudicated it "preserved, construction relocated to the OS floor". That
+  evidence is withdrawn: the normative `dispatch-subprocess` skill spawns
+  `env -C "$D" DOCTRINE_WORKER=1 …` with no bwrap and never references
+  `scripts/pi-spawn-confined.sh`, so the cited floor is not on the shipped path —
+  and confinement here is a cooperative accident-fence by design
+  (`mem.fact.dispatch.worker-confinement-is-actor-based`). The requirement's
+  provisioning limb is untouched; its write-exclusion limb turns on the dispatch
+  confinement model, which **SL-237 does not change**. Recorded as **QUE-199**,
+  with the platform gap as **IMP-354**. Neither gates this slice.
 
-So the REV **revises** REQ-296 and PRD-015 Invariant 2 (alongside ADR-006 D2/D4
-and SPEC-012), and **adjudicates** REQ-304 — recording why it holds unrevised.
+So the REV **revises** REQ-296 and restates one claim — "the tier is absent from
+the fork" → "no copy of the tier is provisioned into the fork" — everywhere it is
+asserted: ADR-006 D2/D4/D9, four SPEC-012 surfaces, five PRD-015 surfaces. It
+takes **no position** on whether the surviving write-exclusion is by construction
+or cooperative.
 
 **This is a restatement of mechanism plus one named relaxation** — the earlier
 draft claimed pure restatement, which RV-322 F-4 correctly called overreach.
@@ -919,6 +930,62 @@ rewrote `notes.md`'s single-copy Harvest section, replacing 112 lines of
 accumulated findings with 14 about its own round. Restored from `HEAD`; its two
 genuine observations were re-recorded by hand. Diff every path a reviewer
 touched, not just the ledger.
+
+### External pass, round 5 — RV-322 raiser verification, 2026-07-29
+
+**F-10 verified — the mechanical sweep worked for the class it was aimed at.** The
+raiser re-ran it independently with its own positive controls and found no
+surviving live one-type contract.
+
+**And then found the method's actual blind spot.** F-18 (new, blocker): the round-4
+sweep enumerated sites *within a file list chosen by hand* — the documents already
+under revision. Four live sites sat outside it, all verified: `adr-006.md:222`
+(D9's "their *absence* in the fork is what makes worker-sole-writer free"),
+`spec-012.toml:21`, `spec-012.md:52`, `spec-012.md:274-276`. So round 4 fixed
+instance-blindness and left scope-blindness. The round-4 commit message claimed a
+grep "over the whole authored corpus"; that was true of the F-10 token class and
+not of the F-1 inference class, which never left REV-043. **The lesson generalises
+past this slice: an enumeration is only as complete as the frontier you point it
+at, and a hand-picked file list is not a corpus.**
+
+F-12 landed twice more. PRD-015's structured `responsibilities` entry
+(`spec-015.toml:13`) was unswept — **the two-tier defect this design had raised
+against DEC-098 one round earlier and then repeated.** And rounds 3a/3d were not
+"verbatim" as claimed; worse, duplicating the sentence was the wrong remedy on
+this design's own reasoning, since DEC-098 was fixed by *removing* a restatement.
+Both rows now say the minimum each surface needs and neither restates the other.
+
+**F-1's second limb is the one that changed the shape of the work.** The claimed
+"OS floor on both arms" does not hold on the shipped path: the normative
+`dispatch-subprocess` skill spawns `env -C "$D" DOCTRINE_WORKER=1 codex exec`
+with no bwrap, its "Confined (bwrap)" annotation is not implemented by the command
+it annotates, and nothing under `.agents/skills/` or `install/` references
+`scripts/pi-spawn-confined.sh`. `DOCTRINE_WORKER` gates doctrine CLI verbs, not
+raw writes. Corroborated independently by
+`mem.fact.dispatch.worker-confinement-is-actor-based`: confinement here is a
+cooperative accident-fence, not a security boundary. Citing a doctrine-repo script
+as *platform* evidence was also a POL-002 problem.
+
+That falsified the second leg of round 4's REQ-296 rescope, which had been sold as
+"two legs, both construction-backed". The rescope's shape survives; its warrant
+was half wrong. REQ-296 now states two guarantees — no copy provisioned
+(construction), no unit permitted to write (prohibition) — and **drops the
+consequent entirely** rather than repairing it a third time.
+
+**Scope decision (user, round 5).** The review had walked SL-237 into a governance
+question about the platform's confinement model. That question is real but is
+**not caused by single-homing phase state**, and holding this slice behind it was
+the wrong trade. The REV is split:
+
+- **REV-043 keeps** exactly what single-homing falsifies — one claim, *"the tier
+  is absent from the fork"*, restated as *"no copy is provisioned into the fork"*
+  at every altitude asserting it (ADR-006 D2/D4/D9; four SPEC-012 surfaces; five
+  PRD-015 surfaces; REQ-296).
+- **Parked:** REQ-304's "by construction" claim → **QUE-199**; the unconfined
+  subprocess spawn → **IMP-354**.
+
+REV-043 is now *wider in surface coverage and narrower in argument* — which is the
+right direction, because the surfaces are one claim and the argument was borrowed.
 
 ### Method note
 
