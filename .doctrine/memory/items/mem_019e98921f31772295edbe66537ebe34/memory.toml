@@ -6,7 +6,7 @@ status = "active"
 title = "root::find walks CWD to / — no-root tests need a marker-free temp base"
 summary = "A stray marker (e.g. /tmp/.git) above the system tempdir makes root::find resolve a root, defeating no-root e2e cases; pick a marker-free base."
 created = "2026-06-05"
-updated = "2026-06-05"
+updated = "2026-07-29"
 
 [scope]
 paths = ["src/root.rs", "tests"]
