@@ -6,7 +6,7 @@ disposable phase sheet (`.doctrine/state/.../phase-NN.md`) that must survive
 
 ## Harvest
 <!-- single-copy: updated in place each harvest; ids only, never restated content -->
-fresh-as-of: 2026-07-29 · stage: design authored, RV-322 external pass integrated, NOT locked · e8e7ca735
+fresh-as-of: 2026-07-29 · stage: design authored, RV-322 round 4 integrated, NOT locked · f5657f2b
 
 ### Produced
 
@@ -25,11 +25,19 @@ fresh-as-of: 2026-07-29 · stage: design authored, RV-322 external pass integrat
   FIRST file argument; would have falsified the fan-out finding.
 - obs `019fac1d-4d73` + **ISS-277** — `doctrine reseat` cannot renumber ANY
   review (strict `Meta` read requires the derived `status`). Committed.
+- obs `019fac68-aad5` — no `spec req show`: inspecting one requirement means
+  reading the whole spec.
+- obs `019fac6d-a1fb` — the review jail mounts `.git` read-only, so a reviewer
+  cannot commit its own ledger delta; the responder imports it.
+- obs `019fac70-2fb7` — a reviewer with workspace-write rewrote `notes.md`'s
+  single-copy Harvest section (112 lines → 14). Restored from HEAD.
 - `design.md` — authored; internal pass (§10, 4 findings) **and** external
   RV-322 pass (9 findings) integrated.
-- **RV-322** — external design review, raiser codex/GPT-5.5. 6 blockers +
-  3 majors, **all 9 accepted**, all dispositioned. `active`, await=**raiser**.
-  (Renumbered by hand from RV-320 after an id collision — see ISS-277.)
+- **RV-322** — external design review, raiser codex/GPT-5.5. **17 findings over
+  4 rounds, all accepted, all dispositioned.** `active`, await=**raiser**.
+  Rounds 3 and 4 raised **no new findings** — they contested the fixes to the
+  same two blockers (F-10 corpus sweep, F-1/F-12 REQ-296) and both contests
+  landed. (Renumbered by hand from RV-320 after an id collision — see ISS-277.)
 - **DEC-095..098** — the four locked design decisions.
 - **REV-043** — restates ADR-006 D2/D4 + SPEC-012 § tier merge-safety.
 - design-target selectors recorded (6 paths).
@@ -80,22 +88,32 @@ From RV-322 (external), all verified at source:
 - **ADR-008 D-B3's "claude cannot be wrapped" is STALE.** The claude arm ships
   PreToolUse confinement (`dispatch-agent/SKILL.md:177-179`: nested bwrap +
   Edit/Write denial). Needs its own correction; NOT amended by REV-043.
-- **PRD-015 was never swept pre-design.** Invariant 2 is falsified; REQ-296 and
-  REQ-304 are **preserved** (allowlist `is_withheld` at
+- **PRD-015 was never swept pre-design.** Invariant 2 is falsified; ~~REQ-296 and
+  REQ-304 are **preserved**~~ **REQ-296 is REVISED** (rounds 3+4) and REQ-304 is
+  preserved (allowlist `is_withheld` at
   `src/worktree/allowlist.rs:170` untouched; OS floor both arms).
 - **Single-homing trades divergence for a race.** `edit_phase_sheet` is unlocked
   RMW. Two copies could diverge but not race; one file can race. No lock is
   designed — bounded by D2/D9 sole-writer + the single-operator precondition.
+- **"No copy" proves non-DIVERGENCE, not non-CORRUPTION.** A lost update on a
+  single shared file needs no second copy. This inference was made three times
+  across rounds 1/3/4 in three different documents before it was named; it is the
+  most reusable defect this slice produced. Candidate memory at close.
+- **A correction is not complete until every sibling assertion is dispositioned.**
+  Read-and-patch failed three consecutive rounds. What worked: turn the accepted
+  claim into a corpus-wide grep **with a positive control**, then patch the list —
+  not the reviewer's citations. Round 4: 12 sites, 6 named. The unnamed half
+  included both `.toml` tiers, a diagram contradicting its own contract table, and
+  an instance no finding mentioned. Candidate memory at close.
 
 ### Open
 
 All pre-design opens are settled. Remaining:
 
-- **RV-322 is `active`, await=`raiser`.** All 9 findings dispositioned; the
-  raiser has not verified or contested the responses. Two dispositions carry
-  **corrections to the reviewer** (F-1's remedy is narrower; F-5's mechanism was
-  wrong) — those are the likeliest to be contested.
-- **Design lock NOT granted.** Both passes are integrated, but the user has not
+- **RV-322 is `active`, await=`raiser`.** All 17 findings dispositioned across 4
+  rounds. Round 4's three contests are answered and swept mechanically; the
+  raiser has not yet verified them. No new findings in rounds 3 or 4.
+- **Design lock NOT granted.** All passes are integrated, but the user has not
   approved. `/plan` is gated on that.
 - **REV-043 is `proposed`** — not approved, not applied. `SL-237 needs REV-043`
   is now an authored gate (RV-322 F-7): **PHASE-01 does not start until REV-043

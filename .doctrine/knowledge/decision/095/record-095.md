@@ -43,9 +43,11 @@ So the phase-mutation APIs carry **both roots, explicitly**:
 set_phase_status(primary: &PrimaryRoot, git_cwd: &Path, slice_id: u32, …)
 ```
 
-Pure path constructors (`phases_dir`, `boundaries_path`) take only
-`&PrimaryRoot`. Only the functions that genuinely ask git take the second root.
-Naming both is the point — the defect was one name for two jobs.
+~~Pure path constructors (`phases_dir`, `boundaries_path`) take only
+`&PrimaryRoot`.~~ *Superseded by amendment 6 (RV-322 F-10): both take the
+**weaker** `&ReadRoot`, so a reader needs no write capability; writers convert
+inward with `(&primary).into()`.* Only the functions that genuinely ask git take
+the second root. Naming both is the point — the defect was one name for two jobs.
 
 **Applied per function against its actual `git::` calls, not by tier (RV-322-B
 F-D / F-E).** The membership is a verified property, not an intuition:

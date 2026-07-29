@@ -1,4 +1,4 @@
-# DEC-098: Migrate boundaries_path onto PrimaryRoot in this slice
+# DEC-098: Migrate boundaries_path onto the root newtype in this slice
 
 <!-- Knowledge record body — context, detail, links. The structured, queried
      fields live in the sister `record-NNN.toml`; this prose is free-form and is
@@ -6,8 +6,9 @@
 
 ## Decision
 
-`boundaries_path` (`src/state.rs:716`) migrates onto `PrimaryRoot` (DEC-095) **in
-this slice**, as its own phase so it stays separable if it turns awkward:
+`boundaries_path` (`src/state.rs:716`) migrates onto the root newtype DEC-095
+mints — `&ReadRoot`, the weaker of the two — **in this slice**, as its own phase
+so it stays separable if it turns awkward:
 
 ```rust
 // before

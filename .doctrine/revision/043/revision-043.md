@@ -59,12 +59,13 @@ carries an invariant and two requirements bearing directly on this change.*
   conflict"* was tested against this design and does not fire **for the
   duplication hazard it names** — see the named relaxation for what it does not
   cover.
-- **PRD-015 FR-001 (REQ-296) — "the coordination/runtime tier absent by
-  construction" — is PRESERVED, not revised.** The provisioning allowlist
-  `is_withheld` (`src/worktree/allowlist.rs:170`; `WITHHELD` covers
-  `.doctrine/state/slice/**`) is untouched by SL-237. **No copy is provisioned
-  into a fork.** The tier remains literally absent from the fork's own tree; what
-  changes is that a *path resolves outward*.
+- **The provisioning mechanism is untouched.** The allowlist `is_withheld`
+  (`src/worktree/allowlist.rs:170`; `WITHHELD` covers `.doctrine/state/slice/**`)
+  is not modified by SL-237. **No copy is provisioned into a fork.** The tier
+  remains literally absent from the fork's own tree; what changes is that a *path
+  resolves outward*. (This is what makes row 3b's revised REQ-296 wording true.
+  It is **not** an argument that REQ-296 needed no revision — that was the round-1
+  error, corrected in row 3b: the mechanism survives, the *promise* did not.)
 - **PRD-015 NF-003 (REQ-304) — "tier exclusion guaranteed by construction rather
   than a trusted check" — is PRESERVED**, with the construction relocated from
   provisioning-absence to the OS floor, on **both** arms (see below).
@@ -255,13 +256,22 @@ anything; each roster is stated separately, on its own reading.
 **After (proposed)**
 
 > - The coordination/runtime tier is never **copied** across the isolation
->   boundary: a worker holds no second mutable copy, so nothing it can touch can
->   diverge. Since SL-237 the repo-scoped part of that tier is single-homed and
->   therefore **readable** from a worker; its **write** exclusion is enforced by
->   the sole-writer guard and the per-arm OS floor, not by unreachability.
+>   boundary: an isolated unit holds no second mutable copy, so nothing it can
+>   touch can diverge. Where the tier is repo-scoped it is single-homed rather
+>   than duplicated, so an isolated unit may *read* it; what the boundary
+>   guarantees is that the unit cannot **write** it, enforced beneath the
+>   boundary rather than by the unit's cooperation.
 
 **Why.** A *read* now crosses the boundary. The invariant as written is falsified
 by reach, even though nothing is copied and nothing may be written.
+
+**Altitude.** *Corrected after RV-322 round 4 (F-12).* The first draft of this
+row wrote "Since SL-237 …" and named the sole-writer guard and the per-arm OS
+floor — the same two defects row 3d had already been corrected for, left standing
+here. A PRD states evergreen intent: a slice citation dates the document the
+moment the slice closes, and the enforcement layer is SPEC-012's to own and
+revise. The wording now matches row 3d's deliberately, so the two surfaces cannot
+drift apart again.
 
 ### 3b — FR-001 (REQ-296): REVISED, wording only
 
@@ -277,7 +287,8 @@ by reach, even though nothing is copied and nothing may be written.
 
 > Each dispatched unit of work runs in isolation — a private working tree
 > provisioned per run — with **no copy of the coordination/runtime tier
-> provisioned into it**, so nothing shared-mutable can be corrupted.
+> provisioned into it and no ability to write that tier**, so no dispatched unit
+> can corrupt shared state.
 
 **Why the earlier adjudication was wrong.** The first pass preserved this
 requirement on the reasoning that its *mechanism* (the provisioning allowlist,
@@ -287,12 +298,31 @@ unreachable — which is now false: a path resolves outward and the tier is
 readable from an isolated unit. Keeping the sentence because its implementation
 still works would leave a product-level promise the product no longer keeps.
 
-**What is preserved.** The requirement's *force* is untouched, because the
+**What is preserved, and what is not.** *Sharpened after RV-322 round 4 (F-1).*
+An earlier draft of this row claimed the force was untouched "because the
 corruption it guards against comes from a second mutable copy, and there is
-none. This is a wording revision that makes the requirement say what it has
-always actually guaranteed — not a weakening. The allowlist evidence
-(`src/worktree/allowlist.rs:170`) is what makes the new wording true, exactly as
-it made the old wording's mechanism true.
+none". That inference does not hold: **no copy proves non-*divergence*, not
+non-*corruption*.** A lost update on a single shared file is corruption and needs
+no second copy — and this REV itself admits that exposure (see "The named
+relaxation": `edit_phase_sheet` is an unlocked read-modify-write on the
+now-shared file).
+
+The distinction the requirement needs is **whose** corruption it promises to
+prevent. REQ-296's subject is the *dispatched unit*. Against that subject the
+promise is unchanged and construction-backed on two independent legs:
+
+- **no copy is provisioned into the unit** — the allowlist `is_withheld`
+  (`src/worktree/allowlist.rs:170`), untouched by SL-237; and
+- **no unit can write the tier** — the CLI worker guard under an OS floor on
+  both arms (§ "What does NOT change" above, and row 2's SPEC-012 text).
+
+What the old wording additionally implied — that nothing shared-mutable can be
+corrupted *at all* — is **not** preserved, and was never this requirement's to
+promise. The residual hazard is between concurrent **operators**, not between a
+unit and the tier, and it is bounded by contract rather than by construction; it
+is recorded in "The named relaxation" and belongs there, not in a promise about
+worker isolation. Narrowing the consequent to the unit is what makes the
+requirement true again without inventing a lock nobody has designed.
 
 ### 3c — NF-003 (REQ-304): adjudicated, NOT revised
 
@@ -329,12 +359,13 @@ SL-237 the repo-scoped part of the tier is reachable-but-not-copied.
 **After (proposed)**
 
 > - **The isolation boundary is enforced by construction, not trust.** No *copy*
->   of the coordination/runtime tier exists in an isolated unit, so there is
->   nothing shared-mutable to corrupt — not present-but-trusted-not-to-be-touched.
->   Where that tier is repo-scoped it is single-homed rather than duplicated, so
->   an isolated unit may *read* it; what the construction guarantees is that the
->   unit cannot **write** it, enforced beneath the boundary rather than by the
->   unit's cooperation.
+>   of the coordination/runtime tier exists in an isolated unit, so nothing it
+>   holds can diverge — not present-but-trusted-not-to-be-touched. Where that
+>   tier is repo-scoped it is single-homed rather than duplicated, so an isolated
+>   unit may *read* it; what the construction guarantees is that the unit cannot
+>   **write** it, enforced beneath the boundary rather than by the unit's
+>   cooperation. Those two together are why no isolated unit can corrupt shared
+>   state.
 
 **Before** (§ verification basis)
 

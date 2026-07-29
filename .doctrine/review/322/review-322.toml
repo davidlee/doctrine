@@ -14,7 +14,7 @@ ref   = "SL-237"
 
 [[finding]]
 id = "F-1"
-status = "contested"
+status = "answered"
 severity = "blocker"
 title = "REV-043 omits binding PRD-015 absence requirements"
 detail = """
@@ -252,8 +252,8 @@ harness-agnosticism-the-isolationfunnel-guarantee-holds-across-orchestrating-har
 ### NF-003 (REQ-304) — Isolation integrity: tier exclusion is guaranteed by construction rather than a trusted check, and the sole-writer guard fails closed on ambiguity (a marker-absent linked worktree is refused, not trusted).
 
 isolation-integrity-tier-exclusion-is-guaranteed-by-construction-rather-than-a-trusted-check-and · quality · active makes the isolation rule a product requirement: REQ-296 says coordination-tier state is absent by construction from isolated units, REQ-302 says recovery is from committed coordination state alone, and REQ-304 requires tier exclusion by construction. design.md:284-307 introduces a primary-worktree runtime registry shared by isolated workers and treats REV-043 as sufficient. That directly changes the accepted meaning of at least REQ-296/REQ-304 and arguably REQ-302, yet neither the design nor revision dispositions those requirements. Implementation must not start until the product-governance conflict is either reconciled through REV-043 (including explicit requirement treatment) or the design is changed to preserve the absence invariant."""
-disposition = "accepted-req-296-now-revised"
-response = "Contest upheld on both limbs. (1) REQ-296: my round-1 adjudication answered a wording question with a mechanism argument. The allowlist IS untouched and no copy IS provisioned — but the requirement's words are 'absent by construction', and absent promises unreachability, which the design now concedes is false. A requirement is a promise, not a description of its implementation. REV-043 row 3b becomes a WORDING revision — 'no copy of the coordination/runtime tier provisioned into it' — preserving the force (the corruption guarded against needs a second mutable copy; there is none) while removing a guarantee the product no longer makes. (2) Altitude: row 3d's proposed principle wrote 'Since SL-237 …' and named the OS layer. Both are wrong for a PRD — a slice citation dates the document the moment the slice closes, and the OS layer is SPEC-012's to own and revise. Re-pitched to state what is guaranteed ('cannot write it, enforced beneath the boundary rather than by the unit's cooperation') and leave how to the tech spec. Mechanism detail stays in row 2 where it belongs. REQ-304 remains adjudicated-not-revised; you have not contested that and the OS-floor evidence is unchanged."
+disposition = "accepted-req-296-rescoped-to-the-unit"
+response = "Contest upheld on both limbs; the logical one is correct and it is the round-1 error recurring one level down. (1) The unsound inference: round 3 changed REQ-296's antecedent and kept its consequent, then defended it with 'the corruption guarded against requires a second mutable copy and there is none'. No copy proves non-DIVERGENCE, not non-CORRUPTION — a lost update on the now-shared file is corruption and needs no second copy, which design.md §5.5 I-5, R8 and this REV's own named relaxation (:77) had already conceded. Fixed as a SCOPE correction, not a wording one: REQ-296's subject is the dispatched unit, so it now promises 'no copy of the tier provisioned into it and no ability to write that tier, so no dispatched unit can corrupt shared state' — two legs, both construction-backed (allowlist.rs:170 untouched; CLI guard under an OS floor on both arms). The residual hazard is between concurrent OPERATORS, is not this requirement's to promise, and stays in the named relaxation where it is honestly labelled contract-bounded. The rejected alternative was keeping the global claim as contract-bounded, which would make REQ-296 the only PRD-015 requirement promising something governance-enforced. (2) The rationale contradiction at :62-67 is fixed — that bullet no longer adjudicates REQ-296 at all; it now states only that the provisioning mechanism is untouched and says explicitly that this is what makes row 3b's revised wording true, NOT an argument that no revision was needed. Also swept the class beyond your citations: the SAME no-copy-implies-no-corruption inference was sitting in row 3d's proposed PRD-015 principle, which no finding mentioned, plus design.md §7's 'why the two requirements are preserved' prose and its round-1 §10 note (struck in place, not rewritten). 6 sites total."
 
 [[finding]]
 id = "F-2"
@@ -348,12 +348,12 @@ On your bypass concern: `assume` is pub(crate) and its misuse is a reviewable ca
 
 [[finding]]
 id = "F-10"
-status = "contested"
+status = "answered"
 severity = "blocker"
 title = "resolve_for_read forges the writer capability"
 detail = "Design §5.2 defines PrimaryRoot as the repo primary and makes write APIs accept that type, but resolve_for_read returns the same PrimaryRoot type wrapping cwd after a genuine resolution fault even when the visible .git proves cwd belongs to a repository. The value therefore violates its own type invariant and remains accepted by every primary-owned writer. The read/write split is only a caller convention: a mixed or later call site can choose resolve_for_read and then pass the indistinguishable value to init_phases, set_phase_status, or a registry writer, recreating F-6's mis-homed write with no compiler signal. Even on current read-only sites the fallback returns plausible local phase truth while the design claims repo-scoped state has one home. Preserve read availability with a distinct degraded-read type/result that cannot satisfy writer signatures (or keep fallback inside read operations without minting PrimaryRoot), and verify that degraded data is not consumed as authoritative write/planning input."
-disposition = "accepted-dec-095-corrected"
-response = "Contest upheld, and it is the round-2 lesson landing on its author. §10 recorded, as a procedural finding, that 'a correction gets written where it was argued and not everywhere it was asserted' — and the same commit that wrote that down left DEC-095 specifying the one-type API (lines 17, 22 and the amendment-4 body). The two-type split reached design.md §5.2 and DEC-098 and not DEC-095. DEC-095 now carries amendment 6: PrimaryRoot / ReadRoot, the one-way From, phases_dir(&ReadRoot), and amendment 4's API explicitly superseded in place rather than left to be reconciled by a reader. Keeping the failure visible in §10 rather than quietly fixing it, because it shows the defect survives knowing about it — so the countermeasure has to be mechanical, not intentional."
+disposition = "accepted-swept-mechanically"
+response = "Contest upheld — the correction was again written where it was argued. Method changed rather than repeating the pass: the claim was turned into a corpus-wide grep with a positive control, then patched against the resulting list. Found 5 live sites; you named 3. Fixed: design.md §5.1's flow diagram (it showed phases_dir/boundaries_path taking &PrimaryRoot while §5.2's contract table 130 lines below said &ReadRoot — the design contradicted itself); DEC-095 amendment 1's 'pure path constructors take only &PrimaryRoot' struck in place with a pointer to amendment 6, the same treatment amendment 4 got; DEC-098's title, opening prose AND its record-098.toml title + relation descriptor — the two you did not name were the toml tier, which is the storage rule's exact warning about judging a record from one file. DEC-098's title no longer restates DEC-095's type choice at all ('onto the root newtype'), removing the duplication that let the two drift. Re-swept with control: the only surviving hits are Before-blocks and §10's historical record of this defect."
 
 [[finding]]
 id = "F-11"
@@ -366,12 +366,12 @@ response = "Duplicate of F-2; disposed identically. Fixed at commit 7e92f41e bef
 
 [[finding]]
 id = "F-12"
-status = "contested"
+status = "answered"
 severity = "blocker"
 title = "REV-043 revises only one of PRD-015's contradicted surfaces"
 detail = 'The narrow F-1 correction treats only PRD-015 Invariant 2 as falsified, but `spec show PRD-015` carries the same non-leakage/absence contract in at least four additional authoritative surfaces: the responsibility says the runtime tier "never leaks across the isolation boundary"; Scope names "non-leakage"; Principle 1 says the tier is "absent from an isolated unit" and explicitly "not present-but-trusted-not-to-be-touched"; §7 requires it to be "demonstrably absent from a provisioned unit". SL-237 deliberately makes the tier readable from the worker execution context. REV-043 Row 3 edits only Invariant 2 and leaves all four claims asserting the old mechanism. Its REQ-296/REQ-304 adjudication also substitutes "not copied"/"write protected" for the authored words "absent"/"tier exclusion" without reconciling those surrounding definitions. The revision must disposition and, where necessary, revise the whole PRD claim class before it can gate implementation.'
-disposition = "accepted-see-F-1"
-response = "Duplicate of F-1; disposed identically. Net for PRD-015 is now four prose edits plus one requirement wording revision (REQ-296), all at product altitude with no slice citations and no mechanism detail."
+disposition = "accepted-row-3a-repitched"
+response = "Contest upheld. Row 3a's proposed PRD text still carried 'Since SL-237' and named the sole-writer guard and per-arm OS floor — the two defects row 3d had already been corrected for, left standing on the surface asserting the same thing. Row 3a's proposed invariant is now worded to match row 3d verbatim ('single-homed rather than duplicated … the unit cannot write it, enforced beneath the boundary rather than by the unit's cooperation'), so the two surfaces cannot drift apart independently again, and an altitude note records why. Swept Row 3's proposed blocks for the whole class: no slice citation and no mechanism token now survives in any PRD-015-destined text. Rows 1 (ADR-006) and 2 (SPEC-012) keep theirs deliberately — an ADR amendment cites its slice, and SPEC-012 is where the mechanism belongs."
 
 [[finding]]
 id = "F-13"

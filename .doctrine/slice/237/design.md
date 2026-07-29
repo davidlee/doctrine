@@ -90,11 +90,15 @@ command tier          engine tier              leaf tier
 run_list      ─┐
 run_status    ─┤                               git::PrimaryRoot
 run_phases    ─┼─ PrimaryRoot::resolve(cwd) ──▶  ::resolve  ──▶ primary_worktree
-dispatch_*    ─┤        (once)                                  (1 subprocess)
+dispatch_*    ─┤   (writers, once — fallible)                   (1 subprocess)
 mcp dispatch  ─┘            │
+                            │  (&primary).into()   ← one-way
                             ▼
-                   phases_dir(&PrimaryRoot, id)   ← pure, total
-                   boundaries_path(&PrimaryRoot, id) ← pure, total
+                     git::ReadRoot ◀── ReadRoot::resolve_for_read
+                            │              (readers — total, falls back to cwd)
+                            ▼
+                   phases_dir(&ReadRoot, id)      ← pure, total
+                   boundaries_path(&ReadRoot, id) ← pure, total
 ```
 
 `PrimaryRoot` lives in `src/git.rs`, beside the resolver it wraps — the newtype
@@ -516,27 +520,32 @@ from the pre-design sweep, which checked REQ-297 and stopped — was **false**.*
 | **PRD-015** §2 in-scope, §3 principle, verification basis | assert the same "absence" | **falsified** — three surfaces a reader reaches before the invariant (F-12) |
 | **PRD-015 NF-003 (REQ-304)** | "tier exclusion guaranteed **by construction rather than a trusted check**" | **PRESERVED**, construction relocated |
 
-**Why the two requirements are preserved rather than revised** — the finding that
-raised them assumed otherwise, and the narrower answer is the evidenced one:
+**How the two requirements are disposed** — one revised, one adjudicated:
 
-- **REQ-296 — revised, wording only.** *This bullet previously read "PRESERVED";
-  RV-322 round 3 re-contested it and the contest lands.* The mechanism does
-  survive untouched — the provisioning allowlist `is_withheld`
-  (`src/worktree/allowlist.rs:170`; `WITHHELD` covers `.doctrine/state/slice/**`)
-  is not modified, so no copy is provisioned into a fork. But the requirement's
-  **words** are "absent by construction", and *absent* reads as unreachable,
-  which is now false: a path resolves outward and the tier is readable. Keeping
-  the sentence because its implementation still works would conflate mechanism
-  with promise and leave a product-level guarantee the product no longer makes.
-  REV-043 row 3b revises the wording to "no copy … provisioned into it" — the
-  force is unchanged, because the corruption guarded against requires a second
-  mutable copy and there is none.
+- **REQ-296 — revised, wording *and* scope.** *This bullet previously read
+  "PRESERVED"; RV-322 round 3 re-contested it and round 4 re-contested the fix.
+  Both land.* The mechanism does survive untouched — the provisioning allowlist
+  `is_withheld` (`src/worktree/allowlist.rs:170`; `WITHHELD` covers
+  `.doctrine/state/slice/**`) is not modified, so no copy is provisioned into a
+  fork. But the requirement's **words** are "absent by construction", and *absent*
+  reads as unreachable, which is now false: a path resolves outward and the tier
+  is readable. Keeping the sentence because its implementation still works would
+  conflate mechanism with promise.
+  **The round-3 fix was itself unsound** and round 4 caught it: it kept the
+  trailing "so nothing shared-mutable can be corrupted" while changing only the
+  antecedent. No copy proves non-*divergence*, not non-*corruption* — a lost
+  update on the now-shared file needs no second copy, and §5.5 I-5 / REV-043's
+  named relaxation concede exactly that. REV-043 row 3b therefore narrows both limbs to
+  the requirement's actual subject, the **dispatched unit**: no copy is
+  provisioned into it *and* it cannot write the tier, so no unit can corrupt
+  shared state. The operator-concurrency hazard is real but is not this
+  requirement's to promise; it lives in the named relaxation.
 - **REQ-304.** Write exclusion remains by construction, at the OS layer, on
   **both** arms (I-3). The construction moved from provisioning-absence to
   mount-level read-only; it did not become a trusted check.
 
-So the REV **adjudicates** REQ-296 / REQ-304 (recording why they hold) and
-**revises** PRD-015 Invariant 2 alongside ADR-006 D2/D4 and SPEC-012.
+So the REV **revises** REQ-296 and PRD-015 Invariant 2 (alongside ADR-006 D2/D4
+and SPEC-012), and **adjudicates** REQ-304 — recording why it holds unrevised.
 
 **This is a restatement of mechanism plus one named relaxation** — the earlier
 draft claimed pure restatement, which RV-322 F-4 correctly called overreach.
@@ -735,12 +744,19 @@ above and summarised here.
 
 **Two corrections to the reviewer**, both narrowing rather than dismissing:
 
-- **F-1's remedy is smaller than claimed.** REQ-296 ("absent by construction") is
-  **preserved** — the provisioning allowlist `is_withheld`
+- ~~**F-1's remedy is smaller than claimed.** REQ-296 ("absent by construction")
+  is **preserved** — the provisioning allowlist `is_withheld`
   (`src/worktree/allowlist.rs:170`) is untouched, so no copy enters a fork.
   REQ-304 is **preserved** with the construction relocated to the OS floor. Only
   PRD-015 **Invariant 2** is falsified. The REV adjudicates the two requirements
-  and revises the invariant.
+  and revises the invariant.~~
+  **Superseded — the correction was wrong, twice.** Rounds 3 and 4 both
+  re-contested it and both contests land; see §7 and the round-3/4 rows below.
+  REQ-296 is **revised**, not preserved: the allowlist is the requirement's
+  *mechanism*, and a mechanism argument cannot answer a question about the
+  *promise* its words make. Only REQ-304 is preserved. Left visible rather than
+  rewritten, because the shape of the error — answering the adjacent question —
+  is the reusable part.
 - **F-5's mechanism is wrong; its conclusion is right and its scope is larger.**
   `integrity.rs` never calls `phases_dir` (0 matches, positive control 25 `fn`).
   It hand-builds the path from `kind.state_dir`. So the site breaks by a route
@@ -846,6 +862,63 @@ requirement is a promise, and *absent* promises unreachability. The revision
 changes only the words, so nothing about the isolation guarantee moves; but the
 distinction between "the implementation still holds" and "the sentence is still
 true" is the one that was missed, twice, before it was named.
+
+### External pass, round 4 — RV-322 raiser verification, 2026-07-29
+
+**Confirmation round against round 3's two fixes. Nothing verified, nothing new
+raised, all three findings contested — and all three contests land.** The verdict
+"not ready to lock" was tied to the same two blockers for the second consecutive
+round, which is convergence on *substance* and failure on *completeness*.
+
+| # | Contest | Resolution |
+|---|---|---|
+| F-10 | The two-type correction was written where it was argued, not everywhere it was asserted — again | §5.1 diagram now shows the two-type flow; DEC-095 amendment 1 struck in place; DEC-098 title + prose + toml de-duplicated from DEC-095's type choice |
+| F-1 | Row 3b changed REQ-296's antecedent and kept its consequent: "no copy … so nothing shared-mutable can be corrupted" | REQ-296 narrowed to its actual subject — see below |
+| F-12 | Row 3d was re-pitched to product altitude; row 3a, saying the same thing, was not | Row 3a re-pitched to match row 3d verbatim, so the two cannot drift apart again |
+
+**The REQ-296 defect is the interesting one, because it is the round-1 error
+recurring one level down.** Round 1 answered a promise question with a mechanism
+argument. Round 3 accepted that, revised the wording — and then defended the
+revision with *"the force is unchanged, because the corruption guarded against
+requires a second mutable copy and there is none."* That is the same move: **no
+copy proves non-divergence, not non-corruption.** A lost update on the now-shared
+file is corruption and needs no second copy, and §5.5 I-5, R8 and REV-043's named
+relaxation had already conceded exactly that exposure. The design contradicted
+itself across two sections and neither pass noticed, because both were reading
+the sentence for whether it was *defensible* rather than for what it *claimed*.
+
+The fix is a **scope** correction, not a wording one. REQ-296's subject is the
+dispatched unit; the residual hazard is between concurrent **operators**. So the
+requirement now promises what it can back by construction on two legs — no copy
+is provisioned into a unit, and no unit can write the tier — and the
+operator-concurrency exposure stays in the named relaxation, where it is bounded
+by contract and honestly labelled as such. The alternative (keep the global
+claim, downgrade it to contract-bounded) would have made REQ-296 the only PRD-015
+requirement promising something governance-enforced, which is a worse trade than
+narrowing the subject.
+
+**Method changed this round, and it is the durable output.** Three rounds of
+read-and-patch produced three incomplete sweeps, including inside the fix for
+that exact diagnosis — so the countermeasure was made mechanical, as the round-3
+note said it would have to be. Each accepted contest was first turned into a
+**grep over the whole authored corpus with a positive control**, then patched
+against the resulting list rather than against the reviewer's citations. The
+control matters: an empty result from a wrong pattern is indistinguishable from a
+clean corpus.
+
+That found **12 sites; the review had named 6.** The unnamed half included two
+`.toml` tiers (a record is two files — judging it from the `.md` alone is the
+storage rule's exact warning), the design's own §5.1 diagram contradicting its
+§5.2 contract table 130 lines later, and — the one that matters most — a *second*
+instance of the no-copy⇒no-corruption inference sitting in row 3d's proposed
+PRD-015 principle, which no finding had mentioned. Patching only what the reviewer
+cited would have shipped that.
+
+**Standing correction to the review loop:** the raiser had workspace-write and
+rewrote `notes.md`'s single-copy Harvest section, replacing 112 lines of
+accumulated findings with 14 about its own round. Restored from `HEAD`; its two
+genuine observations were re-recorded by hand. Diff every path a reviewer
+touched, not just the ledger.
 
 ### Method note
 
