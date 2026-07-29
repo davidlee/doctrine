@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac64-b568-7391-8cdd-8fdc106df9f6"
+recorded_at = "2026-07-29T05:41:49.032210833Z"
+kind = "friction"
+summary = "/dispatch: ~10 integration targets are unconditionally red in every marked worker fork, so a worker cannot use check gate as a signal"
+detail = """Recurring per-phase tax, re-hit in SL-233 PHASE-05 and reported by the worker. In any marked worker fork, ~10 integration targets fail with the identical message: "worker fork (signal: marker): refusing authored write `slice new` — workers return a source delta; doctrine-mediated writes funnel through the orchestrator." Targets seen this round: e2e_backlog_filter_alias, e2e_dep_seq_verbs, e2e_dispatch_arm_spawn, e2e_dispatch_h1_integration, e2e_link_unlink, e2e_priority_cross_kind, e2e_relation_migration_storage, e2e_revision_dep_seq, e2e_spec_req_add_slug, e2e_supersede. Root cause is a fixture idiom: they spawn the built binary without .current_dir(), so the fork's worker marker is picked up. Consequence: the phase's own VA-G asks for `doctrine check gate` exit 0 while the environment guarantees it cannot happen in the fork, so the worker had to fall back to `cargo test --no-fail-fast` and hand-classify every failure to prove none was its own delta — and the orchestrator then had to re-verify on the coord tree (where the gate did come back Verified). Every dispatch worker pays this. Fixing the fixtures once (bind .current_dir() to the fixture root) removes it permanently; see the companion backlog item."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac64-72fd-7e11-98fb-6dba8ff6f407"
+recorded_at = "2026-07-29T05:41:32.029451386Z"
+kind = "friction"
+summary = "/dispatch worker: scratchpad dir vanished between Bash calls, destroying a mutate/restore backup mid-sequence"
+detail = "Reported by the SL-233 PHASE-05 dispatch worker; recorded by the orchestrator (the worker fork has no observation broker). The worker copied three source files into /tmp/claude-1000/<session>/scratchpad/orig/ in one Bash call — the cp succeeded and a following ls listed them. On the very next Bash call the whole path was missing, and /tmp/claude-1000/ did not exist at all. Because the worker was running a `set -e` mutate-test-restore script that mutated a file AFTER restoring from that backup, it was left with a mutated src/entity.rs and no backup, and had to reconstruct the original by hand from memory of its own edit. Live data-loss hazard for any multi-call mutate/restore workflow, and it contradicts the system-prompt guidance to use the scratchpad for ALL temporary file needs. Note the worker's Bash is opaquely rewritten into a nested bwrap jail by the confinement PreToolUse hook (SL-182), which is the likely reason the outer scratchpad path is not stable inside the fork — if so, the guidance a confined worker receives is wrong for its environment. Workaround the worker adopted: do mutate -> test -> restore inside a SINGLE Bash invocation with the inverse edit inlined."
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

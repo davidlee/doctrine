@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac64-9300-7a43-8506-437a1dd5b3d2"
+recorded_at = "2026-07-29T05:41:40.2240877Z"
+kind = "friction"
+summary = "/dispatch phase brief prescribed a seam shape that violated the phase's own VA-1; only discoverable after building it"
+detail = """SL-233 PHASE-05. The orchestrator's distilled brief (constraint C1, derived from the phase sheet) prescribed that both `claim_fresh_id` AND the private `allocate_fresh` take the new `on_reserved` parameter. Five existing entity unit tests call `allocate_fresh` directly (src/entity.rs:892, 926, 955, 1006, 1041), so following the brief immediately breached VA-1 ("no existing entity/knowledge test edited"). C1 did carry a "confirm empirically" clause and the worker correctly reported rather than silently choosing between criteria — but the confirmation is only available AFTER writing the change and running the suite, i.e. a full build cycle. The cheap signal existed and was not named: `rg -n 'allocate_fresh' src/entity.rs` shows the test call sites in one call. Lesson for brief authoring: when a constraint says "this may ripple into tests, confirm empirically", name the one-line grep that answers it, so the worker pays a grep rather than a build. Cost here: one wasted build/test cycle inside a ~32-minute worker run."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
