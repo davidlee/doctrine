@@ -1,0 +1,50 @@
+memory_uid = "mem_019fad4696c17352af2114b263f70569"
+memory_key = "mem.fact.git.oid-fidelity"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "git oid reads are algorithm- and filter-relative, never literal"
+summary = "hash-object applies clean/eol filters unless --no-filters; the empty-tree oid is per object-format, so no oid may be a source literal"
+created = "2026-07-29"
+updated = "2026-07-29"
+
+[scope]
+paths = ["src/git.rs"]
+globs = []
+commands = []
+tags = ["git", "correctness", "std-001"]
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "b733a4b3d905298673c770c3ad5fdb9385ffdce6"
+ref_name = "refs/heads/edge"
+checkout_state_id = "d83a14133ccdfe62d09b41ebeb70fb31038383d26da057598b80fd4432674452"
+base_commit = "faab307f9051726e08aa02cc8b1749c5e0ceee45"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "medium"
+
+[ranking]
+severity = "high"
+weight = 0
+
+[[source]]
+kind = "backlog"
+ref = "ISS-261"
+
+[[source]]
+kind = "backlog"
+ref = "ISS-262"
+

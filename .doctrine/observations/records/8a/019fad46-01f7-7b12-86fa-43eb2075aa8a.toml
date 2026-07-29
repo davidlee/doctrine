@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad46-01f7-7b12-86fa-43eb2075aa8a"
+recorded_at = "2026-07-29T09:47:54.231385746Z"
+kind = "friction"
+summary = "/doctrine:backlog + gate: check gate's verdict is unreachable from its own tail (~5.5k lines)"
+detail = "After the fix, ran 'doctrine check gate'. The command emits roughly 5,500 lines, ending in an unrelated 'Doc-tests cordage / 0 tests' block, so the tail carries no verdict — I could not tell from the output whether clippy was clean or whether any suite failed. Had to re-run the whole gate a second time redirecting to a file, then grep for exit status, 'test result: FAILED', and '--> src/' to establish green. That is one full duplicated gate run (build + 5146 tests) plus three greps, purely to read a pass/fail bit. Compounding it: the log carries ~20 domain 'warning:' lines emitted BY passing tests (dubious ownership, phase-binding skipped, spawn row not landed), which are indistinguishable by grep from real compiler warnings, so 'grep warning' is not a usable proxy either. A terminal one-line verdict (legs run, pass/fail each, warning count) would have made the first run sufficient."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

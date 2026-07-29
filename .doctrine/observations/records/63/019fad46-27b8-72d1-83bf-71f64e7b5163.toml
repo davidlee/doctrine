@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fad46-27b8-72d1-83bf-71f64e7b5163"
+recorded_at = "2026-07-29T09:48:03.896819362Z"
+kind = "friction"
+summary = "/doctrine:backlog: documented shell is nu, but the harness Bash tool runs a POSIX shell — nu-syntax loop parse-errored"
+detail = "CLAUDE.md's environment block states 'Shell: /run/current-system/sw/bin/nu', so I wrote a survey loop in nu syntax ('for id in A B C { ... }') to show several backlog items in one call. It failed with '(eval):1: parse error near }' — a zsh/POSIX error, not a nu one. Re-issued the identical work as a POSIX 'for ... ; do ... ; done' loop and it worked. One wasted round trip. Every subsequent Bash call in the session was POSIX and fine, so the declared shell appears to be the user's interactive shell rather than the one the tool executes in. Cheap to mis-trust once per session; the env block could name the tool's actual shell, or say explicitly that the two differ."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
