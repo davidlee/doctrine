@@ -10753,7 +10753,11 @@ fn emit_surface(writer: &mut impl Write, block: Option<&str>) -> bool {
     clippy::unnecessary_wraps,
     reason = "INV-2 fail-open: always Ok by contract — the wrap is the asserted invariant surface"
 )]
-fn run_surface_to(writer: &mut impl Write, raw: &str) -> Result<()> {
+fn run_surface_to(
+    writer: &mut impl Write,
+    raw: &str,
+    env_project_dir: Option<&OsStr>,
+) -> Result<()> {
     // Parse — unparseable stdin ⇒ emit nothing (INV-2).
     let Ok(input) = serde_json::from_str::<SurfaceInput>(raw) else {
         return Ok(());
@@ -10766,8 +10770,7 @@ fn run_surface_to(writer: &mut impl Write, raw: &str) -> Result<()> {
     // Root discovery from the stdin `cwd`; no discoverable root ⇒ nothing
     // (INV-2). Discovered BEFORE the probe: the path surface relativizes an
     // absolute `file_path` against this root (ISS-232).
-    let env_project_dir = std::env::var_os(ENV_PROJECT_DIR_SURFACE);
-    let Some(root) = discover_surface_root(input.cwd.as_deref(), env_project_dir.as_deref()) else {
+    let Some(root) = discover_surface_root(input.cwd.as_deref(), env_project_dir) else {
         return Ok(());
     };
     // Discriminate the surface; an unregistered tool / missing key / an
@@ -10813,16 +10816,31 @@ fn run_surface_to(writer: &mut impl Write, raw: &str) -> Result<()> {
 /// `doctrine memory surface` entry — read the hook envelope on stdin, emit the
 /// advisory line (or nothing) on stdout, exit 0 always (INV-2). A stdin read
 /// error folds to an empty payload ⇒ emit nothing.
+///
+/// This is the impure boundary: stdin and the `CLAUDE_PROJECT_DIR` anchor are
+/// both read here and passed down, so nothing below reads process state
+/// (ISS-220 / ISS-281). That is what lets the ambient VTs be hermetic.
 pub(crate) fn run_surface() -> Result<()> {
     let mut raw = String::new();
     let _read = io::stdin().read_to_string(&mut raw);
-    run_surface_to(&mut io::stdout(), &raw)
+    let env_project_dir = std::env::var_os(ENV_PROJECT_DIR_SURFACE);
+    run_surface_to(&mut io::stdout(), &raw, env_project_dir.as_deref())
 }
 
 #[cfg(test)]
 mod ambient_surface_tests {
     use super::*;
     use crate::retrieve::SurfaceRow;
+
+    /// Drive the surface with **no ambient anchor** — the `CLAUDE_PROJECT_DIR`
+    /// fallback is passed as `None` rather than read from the process (ISS-220 /
+    /// ISS-281). Every VT here supplies its own `cwd`, so none of them has any
+    /// business consulting the environment; routing them all through this helper
+    /// makes that structural instead of incidental. A test that wants the
+    /// fallback exercised calls `run_surface_to` directly with `Some(..)`.
+    fn surface(writer: &mut impl Write, raw: &str) -> Result<()> {
+        run_surface_to(writer, raw, None)
+    }
 
     /// A `SurfaceRow` literal builder for terse test setup.
     fn row(uid: &str, title: &str, severity: &str, stale: bool, trust: &str) -> SurfaceRow {
@@ -11036,7 +11054,7 @@ mod ambient_surface_tests {
         let root = temp_root_path_hit();
         let raw = stdin_read(root.path(), Some("s1"), None, "src/x.rs");
         let mut out: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(matches!(surface(&mut out, &raw), Ok(())));
         let v: serde_json::Value = serde_json::from_slice(&out).expect("emitted JSON parses");
         let ctx = v["hookSpecificOutput"]["additionalContext"]
             .as_str()
@@ -11057,7 +11075,7 @@ mod ambient_surface_tests {
         let root = temp_root_path_hit();
         let raw = stdin_read(root.path(), Some("s1"), Some("sub-1"), "src/x.rs");
         let mut out: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(matches!(surface(&mut out, &raw), Ok(())));
         assert!(out.is_empty(), "subagent surfaces nothing: {out:?}");
     }
 
@@ -11068,7 +11086,7 @@ mod ambient_surface_tests {
         let root = temp_root_path_hit();
         let raw = stdin_read(root.path(), Some("s1"), None, "src/x.rs");
         let mut out: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(matches!(surface(&mut out, &raw), Ok(())));
         let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
         let hso = &v["hookSpecificOutput"];
         assert!(
@@ -11096,7 +11114,7 @@ mod ambient_surface_tests {
         let abs = fs::canonicalize(root.path()).unwrap().join("src/x.rs");
         let raw = stdin_read(root.path(), Some("s1"), None, &abs.to_string_lossy());
         let mut out: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(matches!(surface(&mut out, &raw), Ok(())));
         let v: serde_json::Value = serde_json::from_slice(&out).expect("emitted JSON parses");
         let ctx = v["hookSpecificOutput"]["additionalContext"]
             .as_str()
@@ -11115,7 +11133,7 @@ mod ambient_surface_tests {
         let root = temp_root_path_hit();
         let raw = stdin_read(root.path(), Some("s1"), None, "/nowhere/else/src/x.rs");
         let mut out: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(matches!(surface(&mut out, &raw), Ok(())));
         assert!(
             out.is_empty(),
             "out-of-root absolute path surfaces nothing: {out:?}"
@@ -11127,7 +11145,7 @@ mod ambient_surface_tests {
     #[test]
     fn vt4_unparseable_and_subfloor_bash_emit_nothing() {
         let mut out: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut out, "not json {{{"), Ok(())));
+        assert!(matches!(surface(&mut out, "not json {{{"), Ok(())));
         assert!(out.is_empty(), "unparseable stdin ⇒ nothing");
 
         // A command memory at medium severity is below the `high` floor: the
@@ -11135,7 +11153,7 @@ mod ambient_surface_tests {
         let root = temp_root_seeded("Sub-floor", &[], &["deploy"], Some("medium"), Some("high"));
         let raw = stdin_bash(root.path(), Some("s4"), "deploy");
         let mut out2: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut out2, &raw), Ok(())));
+        assert!(matches!(surface(&mut out2, &raw), Ok(())));
         assert!(
             out2.is_empty(),
             "sub-floor command surfaces nothing: {out2:?}"
@@ -11157,7 +11175,7 @@ mod ambient_surface_tests {
         // A genuine hit, but the emit fails: no uid may be recorded (INV-6).
         let root = temp_root_path_hit();
         let raw = stdin_read(root.path(), Some("s5"), None, "src/x.rs");
-        assert!(matches!(run_surface_to(&mut FailWriter, &raw), Ok(())));
+        assert!(matches!(surface(&mut FailWriter, &raw), Ok(())));
         let seen = seen_path(&state_dir_of(root.path()), "s5");
         assert!(!seen.exists(), "a failed emit must not write the seen-set");
     }
@@ -11170,7 +11188,7 @@ mod ambient_surface_tests {
             let root = temp_root_path_hit();
             let raw = stdin_read(root.path(), session, None, "src/x.rs");
             let mut out: Vec<u8> = Vec::new();
-            assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+            assert!(matches!(surface(&mut out, &raw), Ok(())));
             let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
             assert!(
                 v["hookSpecificOutput"]["additionalContext"]
@@ -11201,14 +11219,14 @@ mod ambient_surface_tests {
         let raw = stdin_read(root.path(), Some("s7"), None, "src/x.rs");
 
         let mut first: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut first, &raw), Ok(())));
+        assert!(matches!(surface(&mut first, &raw), Ok(())));
         assert!(!first.is_empty(), "first fire surfaces the memory");
 
         let seen = seen_path(&state_dir_of(root.path()), "s7");
         let before = fs::read_to_string(&seen).expect("first fire recorded the uid");
 
         let mut second: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut second, &raw), Ok(())));
+        assert!(matches!(surface(&mut second, &raw), Ok(())));
         assert!(second.is_empty(), "all-deduped fire surfaces nothing");
         let after = fs::read_to_string(&seen).unwrap();
         assert_eq!(
@@ -11217,18 +11235,39 @@ mod ambient_surface_tests {
         );
     }
 
-    /// VT-9: no discoverable doctrine root (a resolvable cwd with no root marker
-    /// above it) ⇒ emit nothing + exit 0, no panic, no propagated `Err` — the
-    /// second EX-6 fail-open path (INV-2), distinct from VT-4's unparseable-stdin
-    /// path. Uses a rootless `tempdir` (not a fake path) so discovery resolves the
-    /// cwd and finds no root WITHOUT falling back to ambient `CLAUDE_PROJECT_DIR`
-    /// — hermetic regardless of the caller's environment (ISS-235).
+    /// VT-9: no discoverable doctrine root ⇒ emit nothing + exit 0, no panic, no
+    /// propagated `Err` — the second EX-6 fail-open path (INV-2), distinct from
+    /// VT-4's unparseable-stdin path.
+    ///
+    /// The premise is **asserted, not assumed** (ISS-281). It previously used a
+    /// bare `tempdir` on the reasoning that a tempdir has no root marker — but
+    /// `find_from` walks *up*, so that held only if no ancestor of `TMPDIR`
+    /// carried one. A stray `/tmp/.git` on the dev host made it false: discovery
+    /// returned `Some("/tmp")`, and this test passed on `/tmp` having no memory
+    /// corpus rather than on there being no root. Same shape as the ISS-220
+    /// false-red it was written to fix — green for an ambient reason.
+    ///
+    /// So: an unresolvable `cwd` and no ambient anchor. Both discovery arms fail
+    /// at canonicalization, before the marker walk is ever reached, which no
+    /// environment can perturb. The marker-walk miss path — a resolvable anchor
+    /// with nothing marked above it — is covered hermetically in
+    /// `root::tests::unmarked_ancestry_yields_none`, which injects its own marker
+    /// set and so owns its whole tree.
     #[test]
     fn vt9_no_discoverable_root_emits_nothing() {
-        let rootless = tempfile::tempdir().unwrap();
-        let raw = stdin_read(rootless.path(), Some("s9"), None, "src/x.rs");
+        let unresolvable = Path::new("/nonexistent/vt9/no-such-cwd");
+        // Assert the premise rather than trusting it: this is the condition the
+        // test claims to exercise, and the assertion below is only meaningful if
+        // it holds.
+        assert_eq!(
+            discover_surface_root(unresolvable.to_str(), None),
+            None,
+            "premise: neither arm yields an anchor ⇒ no discoverable root"
+        );
+
+        let raw = stdin_read(unresolvable, Some("s9"), None, "src/x.rs");
         let mut out: Vec<u8> = Vec::new();
-        assert!(matches!(run_surface_to(&mut out, &raw), Ok(())));
+        assert!(matches!(surface(&mut out, &raw), Ok(())));
         assert!(out.is_empty(), "no discoverable root ⇒ emit nothing");
     }
 
