@@ -72,3 +72,17 @@ diff. Landed on `edge` and flowed into the coordination tree through
 
 Related: [[IMP-024]] (the larger parallel-raiser funnel this guard was holding a
 place for — untouched; forks still refuse).
+
+## Closure
+
+Resolved `fixed` 2026-07-29. Landed on `edge`:
+
+- `1946d0b00` — `fix(ISS-275): admit the coordination worktree to review verbs`
+- `ac3f2a0a4` — `knowledge(ISS-275): DEC-094 — review's worktree guard tests role, not linkage`
+
+Verified at close on `edge`: `classify_worktree_role` +
+`COORD_BRANCH_SHORT_PREFIX` resident in `src/worktree/shared.rs`,
+`src/review.rs::resolve_review_root` bails only on `"fork"`, and both guard tests
+green (`vt10_fork_root_refused_and_baton_in_parent_state`,
+`vt10b_coord_worktree_admitted_and_baton_in_its_own_state`). The rationale is
+settled as [[DEC-094]]; nothing left open.
