@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac45-5a58-7f70-9d01-895a472740b0"
+recorded_at = "2026-07-29T05:07:34.104813654Z"
+kind = "friction"
+summary = "harvest skill references missing procedure"
+detail = "While closing RV-322 under /harvest, .agents/skills/harvest/SKILL.md required harvest.md, but no harvest.md exists anywhere under .agents/skills (rg --files found no match). The procedure cannot be completed without inventing its sink rules."
+
+[facets.execution]
+schema_version = 1
+interface = "cli"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"

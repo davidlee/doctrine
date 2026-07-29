@@ -14,7 +14,7 @@ ref   = "SL-237"
 
 [[finding]]
 id = "F-1"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "REV-043 omits binding PRD-015 absence requirements"
 detail = """
@@ -264,7 +264,7 @@ REV-043 gains a PRD-015 change row targeting Invariant 2, with REQ-296/REQ-304 a
 
 [[finding]]
 id = "F-2"
-status = "answered"
+status = "contested"
 severity = "blocker"
 title = "I-3 traces the impossible arm and misses the real confinement path"
 detail = "The read-only-primary analysis does not match either dispatch arm. scripts/pi-spawn-confined.sh:103-110 mounts the root read-only but also unconditionally sets DOCTRINE_WORKER=1; src/commands/guard.rs:473-517 therefore rejects a phase-state write at the worker guard before any attempted primary write can reach EROFS. Conversely REV-043:146-152 says the Claude arm has no OS confinement floor, but the current arm documents and installs one: .agents/skills/dispatch-agent/SKILL.md:176-184 invokes a PreToolUse Bash bwrap and denies Edit/Write outside the worker, plugins/doctrine/hooks/hooks.json:47-64 wires those hooks, and src/worktree/pretooluse.rs:1-13 describes the two confinement walls. design.md:191-202 names a dedicated read-only-primary error as required behavior, while V-8 at design.md:351-353 does not identify which arm, how worker stamping is absent despite the subprocess contract, or which confinement layer is expected to emit it. The premise and verification are therefore not executable as written; specify the actual reachable states for both arms and the layer/error contract for each."
@@ -276,7 +276,7 @@ I built I-3 on ADR-008 D-B3's text that claude's Agent tool 'cannot be wrapped'.
 
 [[finding]]
 id = "F-3"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "PrimaryRoot erases the git cwd needed for solo boundary capture"
 detail = "The proposed threading conflates storage ownership with revision identity. design.md:130-138 changes init_phases to take only &PrimaryRoot and design.md:157-174 threads that capability through phase mutation APIs. But src/state.rs:590-670 explicitly uses project_root for two independent purposes: locating the primary-owned boundary registry and resolving HEAD in the invoked worktree (). src/state.rs:399-517 passes that root into capture_phase_boundary. In solo linked-worktree execution, HEAD must come from the linked worktree while the registry must live in primary. Replacing the sole root with PrimaryRoot either records the primary branch's HEAD (wrong source-delta identity) or leaves the signature incapable of expressing the required two roots. The design must preserve a distinct invoked/git cwd alongside PrimaryRoot and verify boundary capture from a linked solo worktree."
@@ -290,7 +290,7 @@ DEC-095 is amended, not replaced: the newtype survives; the parameter splits. Ph
 
 [[finding]]
 id = "F-4"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Non-duplication does not preserve D4 against shared RMW races"
 detail = "REV-043 characterizes the change as a restatement, but its proposed exception weakens ADR-006 D4's mechanism-level prohibition. REV-043:68-105 replaces 'any future central index reintroduces conflict' with permission for a sole primary-owned runtime registry whenever linked worktrees do not duplicate it. Non-duplication is not conflict freedom: src/state.rs:367-389 implements phase-sheet edits as an unlocked read-modify-write, and the source-delta registry at src/state.rs:758-857 is likewise shared mutable state with no locking shown. src/slice.rs:944-956 drives phases without the live-drive guard used by reconcile at src/slice.rs:1235-1256, so primary and solo-linked invocations can target the same primary-owned files concurrently. design.md:279-307 asserts D4 is preserved solely because there is one copy, but D4's quoted warning is about shared coordination conflict, not only duplicate copies. Either provide a serialization/atomic-update mechanism and evidence, or state this as an explicit relaxation with its concurrency risk governed rather than calling it a restatement."
@@ -302,7 +302,7 @@ Taking the second of your two remedies. Calling it a pure restatement was overre
 
 [[finding]]
 id = "F-5"
-status = "answered"
+status = "contested"
 severity = "major"
 title = "Ripple census misses direct runtime-state consumers"
 detail = "The section 5.2 table is not a complete touch-set. src/integrity.rs:320-329 directly calls state::phases_dir(root) for reseat validation and will continue checking the invoked linked tree unless it is converted to PrimaryRoot. Additional direct registry/truth callers omitted from design.md:149-189 include state::forget_source_delta at src/state.rs:857, dispatch status at src/dispatch.rs:4814-4854, plan-next rows at src/dispatch.rs:5069-5079, and MCP receipt handling at src/mcp.rs:1066-1086. These are not all covered by the listed run_phases/run_status/gather_truth/lazyspec fan-out, and several must either receive the capability or be explicitly proven to remain command-tier resolution boundaries. Add a compiler-backed/direct-caller census and disposition each site; otherwise linked-tree behavior can remain split after the nominal migration."
@@ -319,7 +319,7 @@ NOT accepted: src/mcp.rs does not exist. The real file is src/mcp_server/dispatc
 
 [[finding]]
 id = "F-6"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "Warning-only fallback recreates the mis-homing invariant"
 detail = "The proposed total constructor cannot satisfy its own error-handling invariant. design.md:74-80 says a plausible-but-wrong runtime path is the bug class and failures must degrade loudly; design.md:122-128 then makes PrimaryRoot::resolve return Self and, on a genuine git failure, falls back to the supplied path with only a warning. The current primitive is explicitly fallible: src/git.rs:564-571 returns Result<PathBuf> from git worktree list --porcelain. Once resolve has erased that Result, every downstream writer proceeds against the fallback path, including exactly the linked-worktree path this slice is meant to prevent. design.md:325-326 repeats that a warning is the mitigation, but observability does not prevent corrupt placement. The API must preserve a failure/degraded state that prevents primary-owned writes, or explicitly justify and verify a safe non-writing degradation."
@@ -331,7 +331,7 @@ Fix: PrimaryRoot::resolve stops being unconditionally total. It is total ONLY fo
 
 [[finding]]
 id = "F-7"
-status = "answered"
+status = "verified"
 severity = "blocker"
 title = "REV-043 is referenced, not a gating dependency"
 detail = "Implementation is not actually ordered behind the governance change it says it needs. ./target/debug/doctrine slice show 237 reports concerns REV-043 but no needs REV-043; ./target/debug/doctrine revision show REV-043 reports status proposed and no approval. ADR-013 requires work that must wait for a revision to declare needs REV-NNN. Yet design.md:284-307 acknowledges accepted ADR-006/SPEC-012 wording conflicts with the proposed primary-owned registry, and design.md:329-330 treats merely opening REV-043 as mitigation. Without a gating relationship or entry criterion, implementation can begin while accepted governance still forbids its mechanism. Add the explicit dependency and make revision acceptance an implementation entry gate, or redesign to conform without REV-043."
@@ -343,7 +343,7 @@ Fixed: `doctrine needs SL-237 REV-043`. The design's risk R4 is restated — ope
 
 [[finding]]
 id = "F-8"
-status = "answered"
+status = "contested"
 severity = "major"
 title = "I-4 does not retire pre-existing linked-worktree symlinks"
 detail = "The migration claim is stronger than the mechanism. Current src/state.rs:342-350 refreshes the invoked-root phases link, so existing linked worktrees can already contain the symlink. design.md:130-138 changes init_phases to accept only PrimaryRoot and states refresh occurs only there; design.md:225-227 nevertheless claims a linked-worktree invocation gets no symlink, and V-7 at design.md:348-350 only verifies creation in primary plus direct primary paths. Nothing removes a stale symlink already present in the linked tree, and the narrowed API no longer has that invoked path available to clean it. This makes the claimed postcondition false for upgrades and existing worktrees and can leave a misleading runtime projection crossing the isolation boundary. Specify cleanup or migration semantics and verify the pre-existing-link case."
@@ -355,7 +355,7 @@ Fix rides F-3's remedy: once the phase APIs carry both the primary and the invok
 
 [[finding]]
 id = "F-9"
-status = "answered"
+status = "verified"
 severity = "major"
 title = "The proposed test helper cannot be the claimed mechanical adaptation"
 detail = "The behaviour-preservation gate is underspecified where roughly 50 tests change construction. design.md:111-118 defines pub(crate) struct PrimaryRoot(PathBuf), whose tuple field remains private to src/git.rs; state and slice test modules therefore cannot implement the design.md:321-324 helper fn primary(p: PathBuf) -> PrimaryRoot as a one-line wrapper. Their available constructor is the impure PrimaryRoot::resolve, which shells out to git and applies warning/fallback policy, while many existing unit tests use arbitrary temp roots. Satisfying V-1b at design.md:333-336, only construction adapted and assertions unchanged, consequently requires either exposing an unchecked or test-only constructor, converting unit tests into git-dependent tests, or broader fixture changes. Each choice changes what the existing suites prove. Choose and constrain the test construction seam, including how it prevents production bypass of the capability, before claiming unchanged suites preserve behaviour."
@@ -366,6 +366,62 @@ Accepted. The tuple field is private to src/git.rs, so no state.rs or slice.rs t
 Fix: an explicit second constructor, `PrimaryRoot::assume(path)`, documented as 'the caller asserts this path is already the primary'. This is NOT a test-only escape hatch — it has a real production consumer: src/dispatch.rs:3449-3471 already resolves primary_worktree itself and passes `&primary`, and without `assume` it would have to redundantly re-resolve. Naming the seam serves both, and DEC-098's stated win (deleting that double resolution) depends on it.
 
 On your bypass concern: `assume` is pub(crate) and its misuse is a reviewable call-site question, not a silent one — which is the honest limit of what a newtype buys, per the R-3 correction already integrated in section 10."""
+
+[[finding]]
+id = "F-10"
+status = "open"
+severity = "blocker"
+title = "resolve_for_read forges the writer capability"
+detail = "Design §5.2 defines PrimaryRoot as the repo primary and makes write APIs accept that type, but resolve_for_read returns the same PrimaryRoot type wrapping cwd after a genuine resolution fault even when the visible .git proves cwd belongs to a repository. The value therefore violates its own type invariant and remains accepted by every primary-owned writer. The read/write split is only a caller convention: a mixed or later call site can choose resolve_for_read and then pass the indistinguishable value to init_phases, set_phase_status, or a registry writer, recreating F-6's mis-homed write with no compiler signal. Even on current read-only sites the fallback returns plausible local phase truth while the design claims repo-scoped state has one home. Preserve read availability with a distinct degraded-read type/result that cannot satisfy writer signatures (or keep fallback inside read operations without minting PrimaryRoot), and verify that degraded data is not consumed as authoritative write/planning input."
+
+[[finding]]
+id = "F-11"
+status = "open"
+severity = "blocker"
+title = "REV-043 still proposes the stale Claude no-floor claim"
+detail = """REV-043's rationale says RV-322 F-2 corrected the Claude-arm OS-floor mistake, but Row 2's actual proposed SPEC-012 replacement still says: "The claude arm has no OS floor". Row 1a's proposed ADR-006 D2 text likewise names the read-only mount only for codex/pi. This directly contradicts the same REV's What does NOT change section and design §5.5 I-3, and means approving/applying the implementation gate can write the exact stale governance F-2 was supposed to stop. Correct every proposed after-text and responsibility replacement, not only the rationale, and verify the rendered revision is internally consistent before approval."""
+
+[[finding]]
+id = "F-12"
+status = "open"
+severity = "blocker"
+title = "REV-043 revises only one of PRD-015's contradicted surfaces"
+detail = 'The narrow F-1 correction treats only PRD-015 Invariant 2 as falsified, but `spec show PRD-015` carries the same non-leakage/absence contract in at least four additional authoritative surfaces: the responsibility says the runtime tier "never leaks across the isolation boundary"; Scope names "non-leakage"; Principle 1 says the tier is "absent from an isolated unit" and explicitly "not present-but-trusted-not-to-be-touched"; §7 requires it to be "demonstrably absent from a provisioned unit". SL-237 deliberately makes the tier readable from the worker execution context. REV-043 Row 3 edits only Invariant 2 and leaves all four claims asserting the old mechanism. Its REQ-296/REQ-304 adjudication also substitutes "not copied"/"write protected" for the authored words "absent"/"tier exclusion" without reconciling those surrounding definitions. The revision must disposition and, where necessary, revise the whole PRD claim class before it can gate implementation.'
+
+[[finding]]
+id = "F-13"
+status = "open"
+severity = "major"
+title = "Generic reseat migration silently primary-scopes review state"
+detail = "The F-5 remedy says the generic guard at integrity.rs:322-323 should resolve its hand-built `root.join(kind.state_dir)` path through PrimaryRoot. But `KindSpec::state_dir` is not slice-only: src/kinds/mod.rs:358 assigns `.doctrine/state/slice` to Slice and :410 assigns `.doctrine/state/review` to Review. Applying the proposed generic migration therefore changes review reseat's runtime-state home too, while design §6 OQ-2 explicitly defers `.doctrine/state/review/` to CHR-050. V-11 exercises only slice state and cannot catch the review regression. Narrow the primary resolution to the slice runtime class (or encode scope in kind metadata) and leave review semantics unchanged until CHR-050 adjudicates them."
+
+[[finding]]
+id = "F-14"
+status = "open"
+severity = "major"
+title = "Symlink retirement cannot clean existing sibling worktrees"
+detail = """The F-8 remedy gives refresh_symlink only `(primary, git_cwd)`. That can remove a stale `phases` link from the one linked worktree invoking `slice phases`, but a normal invocation from the primary cannot see or retire links already minted in other existing linked worktrees, and invoking one fork leaves every sibling untouched. Thus I-4's upgrade claim and the original "a linked worktree gets no convenience link" postcondition remain false repository-wide. DEC-097 still contains only the green-field minting decision and no migration amendment. Specify either a real worktree-list sweep with safe per-tree cleanup, or an explicitly lazy/local migration with the residual stale-link behaviour and verification stated honestly."""
+
+[[finding]]
+id = "F-15"
+status = "open"
+severity = "major"
+title = "V-8b omits the mechanisms I-3 says it verifies"
+detail = """Design §5.5 I-3 says V-8b checks the unconfined worker_commit exception "not just the two arms" and correctly distinguishes the Claude CLI refusal's marker leg from its PreToolUse OS floor. But the §9 V-8b row names only the pi env leg and Claude PreToolUse hooks; it neither verifies the Claude marker refusal nor checks that worker_commit writes no phase sheet or registry row. The verification can therefore pass with the marker leg broken or the unconfined exception widened—the two exact regressions F-G added the detail to prevent. Split/pin all four claims: pi CLI leg, pi OS floor, Claude marker leg, Claude OS wall, plus a source/call-surface check that the granted worker_commit tool cannot mutate phase state."""
+
+[[finding]]
+id = "F-16"
+status = "open"
+severity = "major"
+title = "Decision records retain superseded constructor and symlink contracts"
+detail = """The final design relies on amended decisions, but DEC-097 and DEC-098 were not brought forward. DEC-097 still decides only that a linked worktree gets no newly minted link and says nothing about F-8's required retirement of pre-existing links. DEC-098 still says the fallible half moves to `PrimaryRoot::resolve`, "which is total", contradicting DEC-095 amendments 2 and 4 (fallible for writer faults, separate total read path). These are not harmless history notes: both records remain `proposed` decisions the plan is meant to load-bear. Amend them so their current decision sections and accepted consequences match the final interfaces and migration semantics."""
+
+[[finding]]
+id = "F-17"
+status = "open"
+severity = "major"
+title = "SL-237 scope still denies the named relaxation"
+detail = """`doctrine slice show 237` still says the governance change is "a restatement, not a relaxation" and describes an OS floor only on the subprocess arm. The integrated design and REV-043 now explicitly call concurrent shared-file RMW a named relaxation and establish an OS floor on both arms. Because the slice scope is authored lifecycle input upstream of plan/phase work, leaving these superseded claims there creates two competing design contracts even if design.md is corrected. Update the scope through the responder's normal integration path so the governing slice statement agrees with the reviewed design and revision."""
 
 # Findings are append-only `[[finding]]` tables, added by `review raise` (PHASE-03).
 # Empty here at creation — a fresh review is Active, awaiting the raiser (D-C8).

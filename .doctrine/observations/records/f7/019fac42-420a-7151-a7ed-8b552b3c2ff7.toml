@@ -1,0 +1,18 @@
+schema = "doctrine.observation"
+schema_version = 1
+uid = "019fac42-420a-7151-a7ed-8b552b3c2ff7"
+recorded_at = "2026-07-29T05:04:11.274440505Z"
+kind = "friction"
+summary = "/handover: same-named handover.md in primary and coord trees; the stale one was read first"
+detail = """Resuming SL-233 as dispatch orchestrator. The handover pointed at `.doctrine/slice/233/handover.md`, which resolves in BOTH the primary tree and the coordination worktree `.dispatch/SL-233/`. The primary-tree copy was a design-stage packet from two days earlier (slice status `design`, RV-315 open); the live packet (PHASE-04 complete, PHASE-05 next) was the coord-tree copy. Nothing in either file signals which tree it belongs to or that another copy exists, and the stale one reads as perfectly coherent — it was only the mismatch against the user's own summary ("16 VTs PASS across PHASE-01..04") that exposed it. Cost: one wasted full read plus ~4 orientation calls (ls, git log, worktree list, second ls) to locate the real packet. handover.md is gitignored runtime state, so the two copies are independent and neither ages out. Cheap fix: have /handover stamp the writing tree's path and branch in the packet header, so a reader can tell at a glance whether they are holding the live one."""
+
+[facets.execution]
+schema_version = 1
+interface = "mcp"
+interface_origin = "automatic"
+product_surface = "doctrine"
+product_surface_origin = "automatic"
+command = "observation_record"
+command_origin = "automatic"
+repository_context = "primary"
+repository_context_origin = "automatic"
