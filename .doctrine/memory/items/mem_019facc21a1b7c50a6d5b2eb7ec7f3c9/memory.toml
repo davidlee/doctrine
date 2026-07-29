@@ -1,0 +1,50 @@
+memory_uid = "mem_019facc21a1b7c50a6d5b2eb7ec7f3c9"
+memory_key = "mem.pattern.design-run.adoption-is-the-parser-readout"
+schema_version = 1
+memory_type = "pattern"
+status = "active"
+title = "Probe the design-run parser through adoption, never by re-implementing it"
+summary = "adopt_authored accepts iff the caller's digests match what Doctrine parsed — so a successful adoption IS the statement of what the parser read"
+created = "2026-07-29"
+updated = "2026-07-29"
+
+[scope]
+paths = ["src/commands/design.rs", "src/design_run/run.rs"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "090ed8279e986a5dd90c9d12222371959267d5b5"
+ref_name = "refs/heads/edge"
+checkout_state_id = "551f72505c851837ca07c34bccd396970b474019bfbebd48ab136dec12b9e0f6"
+base_commit = "add4ae4da267e4707f9b60d50856744b35037b29"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
+[[source]]
+kind = "review"
+ref = "RV-323"
+

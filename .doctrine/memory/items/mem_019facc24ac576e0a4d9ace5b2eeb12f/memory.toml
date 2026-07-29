@@ -1,0 +1,46 @@
+memory_uid = "mem_019facc24ac576e0a4d9ace5b2eeb12f"
+memory_key = "mem.fact.doctrine.slice-plan-and-phase-are-writers"
+schema_version = 1
+memory_type = "fact"
+status = "active"
+title = "slice plan and slice phase are WRITERS — there is no read-back verb for a phase's criteria"
+summary = "Both look like readers; slice plan re-authors plan.toml, slice phase demands --status. Nothing prints EX/VT/VA criteria"
+created = "2026-07-29"
+updated = "2026-07-29"
+
+[scope]
+paths = [".doctrine/slice"]
+globs = []
+commands = []
+tags = []
+workspace = "default"
+repo = "github.com/davidlee/doctrine"
+repo_id_kind = "remote"
+repo_id_confidence = "high"
+
+[git]
+anchor_kind = "checkout_state"
+commit = ""
+tree = "090ed8279e986a5dd90c9d12222371959267d5b5"
+ref_name = "refs/heads/edge"
+checkout_state_id = "0c341cd1bb64eb98867f59ec17017b0268454eb2b25ea61277eee61bd50d7799"
+base_commit = "add4ae4da267e4707f9b60d50856744b35037b29"
+verified_sha = ""
+normalizer = "forget.checkout.v1"
+
+[review]
+verification_state = "unverified"
+reviewed = ""
+review_by = ""
+
+[trust]
+trust_level = "high"
+
+[ranking]
+severity = "medium"
+weight = 0
+
+[[source]]
+kind = "slice"
+ref = "SL-233"
+
