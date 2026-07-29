@@ -722,7 +722,10 @@ mod tests {
             &["rev-parse", &format!("{}^{{tree}}", rows[0].oid)],
         )
         .expect("rev-parse tree");
-        assert_eq!(tree, git::EMPTY_TREE_OID);
+        assert_eq!(
+            tree,
+            git::empty_tree_oid(&env.remote_path).expect("derive empty tree")
+        );
     }
 
     /// VT-2: reach selection. `local` never touches the remote; `shared` uses it and

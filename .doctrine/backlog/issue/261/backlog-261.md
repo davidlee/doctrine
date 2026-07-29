@@ -67,3 +67,26 @@ a client project using attributes a real case.
 - DEC-089 — fixes the sibling instance in `capture()`'s `untracked_fingerprint`,
   which *is* in SL-232's scope because that slice changes `capture()`.
 - ISS-262 — the other pre-existing git-layer defect found in the same sweep.
+
+## Resolved 2026-07-29 (light path, with ISS-262)
+
+`worktree_blob_oid` now runs `hash-object --no-filters`, and its doc comment
+states the raw-byte contract. One production caller (`forward_sync`'s per-path
+worktree leg in `src/dispatch.rs` — the item cites `:6122`, actually `:6164` by
+the time of the fix, cf. IMP-344).
+
+**The remedy above understated the tradeoff, and the correction is recorded here
+rather than smoothed.** `--no-filters` is not free in a repository that opted into
+conversion: the worktree side then reads raw bytes while the tree side holds the
+converted blob, so an *untouched* path reads as edited and the clobber guard
+refuses. Two tests pin both halves deliberately — the lossy-`clean` collapse
+(distinct contents → one oid `e96ee3ab…`, the silent-overwrite hazard) and the
+`eol=crlf` divergence (fail-closed noise, preferred), plus a call-site comment
+telling the next reader not to revert it.
+
+Measured on git **2.55.0** (the tickets say 2.54.0; the jail moved): conversion
+requires an explicit opt-in — committed `text`/`eol`/`filter` attributes *or*
+`core.autocrlf`. With neither set, filtered and `--no-filters` oids are
+byte-identical, so the flag is a no-op on the ordinary repository and the general
+case is unaffected. `core.autocrlf` is the likelier real-world route (machine-local
+config, not committed attributes). Windows support is a declared non-goal.

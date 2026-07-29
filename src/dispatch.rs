@@ -3790,7 +3790,10 @@ fn corpus_clobber_refusal(
     cur: &str,
     allow: &BTreeSet<String>,
 ) -> anyhow::Result<Option<String>> {
-    let base = git::merge_base(root, new, cur)?.unwrap_or_else(|| git::EMPTY_TREE_OID.to_owned());
+    let base = match git::merge_base(root, new, cur)? {
+        Some(base) => base,
+        None => git::empty_tree_oid(root)?,
+    };
     let changed = git::diff_doctrine_paths(root, &base, cur, corpus_guard::DOCTRINE_PATHSPEC)?;
     if changed.is_empty() {
         return Ok(None);
@@ -6159,6 +6162,11 @@ fn forward_sync(root: &Path, tip: &str) -> anyhow::Result<Option<String>> {
 
     // (4) The WORKTREE leg, per path: every p ∈ R must still carry the stale
     //     baseline's bytes. Absent on both sides is identical, not a mismatch.
+    //     The worktree side reads RAW bytes (ISS-261), so in a repository that opted
+    //     into eol/filter conversion an untouched path can read as edited here. That
+    //     fail-closed reading is DELIBERATE: the alternative loses bytes a lossy clean
+    //     filter hides from the comparison. Don't "fix" it back — see
+    //     `git::worktree_blob_oid`.
     let mut edited = Vec::new();
     for path in &reverse {
         if git::worktree_blob_oid(root, path)? != git::blob_oid_at(root, &stale, path)? {

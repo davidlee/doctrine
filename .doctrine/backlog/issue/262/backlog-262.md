@@ -55,3 +55,29 @@ derived fact.
   object-format width (`verified_sha`'s 64-hex commit ids), where a
   width-discriminating shortcut was falsified for the same reason.
 - ISS-261 — the other pre-existing git-layer defect found in the same sweep.
+
+## Resolved 2026-07-29 (light path, with ISS-261)
+
+`git::EMPTY_TREE_OID` is gone; `git::empty_tree_oid(root) -> Result<String>`
+replaces it, deriving per repository. Two production sites, both already holding
+`root` and both cheap (once per reservation; unrelated-histories-only for the
+`merge-base` fallback), so no memoisation: `commit_empty_tree_as` (`src/git.rs`)
+and `corpus_clobber_refusal` (`src/dispatch.rs`).
+
+Derivation is `hash-object -t tree --stdin` over empty stdin rather than DEC-089's
+`/dev/null` — same input, but it rides the existing `git_stdin` wrapper, so it
+stays on the one `NORMATIVE_FLAGS` chokepoint (EX-1) and adds no second runner or
+unix-only path. No `-w`.
+
+Four tests. The load-bearing one is the regression: a reservation `commit_empty_tree_as`
+on a `--object-format=sha256` `ScratchRepo`, which went red exactly as predicted —
+`commit-tree empty-tree: fatal: not a valid object name 4b825dc6…` — and green on
+the derivation. Its emptiness assertion counts `ls-tree` *entries* rather than
+comparing an oid literal, since the oid is per-format and the emptiness is not. The
+other three pin: the sha1 value (so swapping a literal for a git call moves nothing
+where the literal was right), the sha256 value (`6ef19b41…`, matching DEC-089's
+measurement), and `count-objects` unchanged across the call (read-only, I2).
+
+`ScratchRepo::new()` now delegates to `with_object_format(Option<&str>)`.
+
+Measured on git 2.55.0. STD-001 satisfied: the derived fact is no longer a literal.

@@ -1315,7 +1315,7 @@ pub(crate) fn changed_paths(
 /// [`diff_names_z`] seam, preserving git's output order and its fail-closed
 /// exit-code discipline; UTF-8 is required of these `.doctrine/**` paths (a
 /// non-UTF-8 path errors rather than being lossily mangled). An absent side is the
-/// caller's [`EMPTY_TREE_OID`] substitution (a None `merge-base`), a valid operand.
+/// caller's [`empty_tree_oid`] substitution (a None `merge-base`), a valid operand.
 pub(crate) fn diff_doctrine_paths(
     root: &Path,
     base: &str,
@@ -1413,7 +1413,7 @@ pub(crate) fn custom_merge_driver_paths(
 /// invalid tree from being silently read as an absent blob (which would compare
 /// equal to another absent read and FALSE-pass/false-clobber a corpus advance).
 /// Compares by oid, not content, so the catastrophe path stays cheap (R2). An
-/// empty `treeish` ([`EMPTY_TREE_OID`]) is a valid, content-free operand.
+/// empty `treeish` ([`empty_tree_oid`]) is a valid, content-free operand.
 pub(crate) fn blob_oid_at(
     root: &Path,
     treeish: &str,
@@ -1947,25 +1947,42 @@ pub(crate) fn index_matches(root: &Path, treeish: &str) -> Result<bool, CaptureE
     }
 }
 
-/// The blob oid the WORKING TREE file at `path` would hash to (`git hash-object`),
-/// or `None` when the file is absent — the worktree-side counterpart of the
-/// tree-side [`blob_oid_at`], so verify can compare worktree bytes against a
-/// baseline commit by oid (both `None` ⇒ absent on both sides ⇒ identical).
-/// A present-but-unhashable path errors rather than folding to `None`.
+/// The oid of the RAW bytes of the WORKING TREE file at `path`
+/// (`git hash-object --no-filters`), or `None` when the file is absent — the
+/// worktree-side counterpart of the tree-side [`blob_oid_at`], so verify can compare
+/// worktree bytes against a baseline commit by oid (both `None` ⇒ absent on both
+/// sides ⇒ identical). A present-but-unhashable path errors rather than folding to
+/// `None`.
+///
+/// `--no-filters` is load-bearing, not tidying (ISS-261). Without it git applies the
+/// `clean` filter and eol conversion, and a LOSSY clean filter maps distinct contents
+/// onto one oid — measured: two unrelated files both hash to
+/// `e96ee3ab528e21119bf96487a3cc4f4acd159834` under a collapsing filter. A caller
+/// comparing against a stored blob then reads `equal` where the bytes differ, and
+/// overwrites content held nowhere else.
+///
+/// The flag is a NO-OP unless the repository opted into conversion (committed
+/// `text`/`eol`/`filter` attributes, or `core.autocrlf` — measured identical oids with
+/// neither set), so this costs the ordinary repository nothing. Where a repository DID
+/// opt in, the raw read diverges from the stored blob for an untouched file and the
+/// caller reads `diverged`: fail-closed noise, deliberately preferred over the silent
+/// overwrite above, and pinned by test.
 pub(crate) fn worktree_blob_oid(root: &Path, path: &str) -> Result<Option<String>, CaptureError> {
     if !root.join(path).exists() {
         return Ok(None);
     }
-    let output = run_git(root, &["hash-object", "--", path])?;
+    let output = run_git(root, &["hash-object", "--no-filters", "--", path])?;
     match output.status.code() {
         Some(0) => {
             let text = String::from_utf8(output.stdout).map_err(|_ignored| {
-                CaptureError::Git(format!("hash-object -- {path}: non-utf8 output"))
+                CaptureError::Git(format!(
+                    "hash-object --no-filters -- {path}: non-utf8 output"
+                ))
             })?;
             Ok(Some(text.trim().to_owned()))
         }
         _ => Err(CaptureError::Git(format!(
-            "hash-object -- {path}: {}",
+            "hash-object --no-filters -- {path}: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         ))),
     }
@@ -2753,11 +2770,28 @@ fn parse_ref_row(line: &str) -> Option<RefRow> {
 // the backend captures at construction (design EX-1/§5.3, F-2/F-V4/F-V5).
 // ---------------------------------------------------------------------------
 
-/// The well-known empty-tree object id — present in every git repository's
-/// object store without an explicit write, so a `commit-tree` against it needs no
-/// `mktree` round-trip (design EX-1, F-V4). The reservation commit carries this
-/// tree so the claim holds NO entity content (REQ-024 / I2).
-pub(crate) const EMPTY_TREE_OID: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+/// `root`'s empty-tree object id — present in every git repository's object store
+/// without an explicit write, so a `commit-tree` against it needs no `mktree`
+/// round-trip (design EX-1, F-V4). The reservation commit carries this tree so the
+/// claim holds NO entity content (REQ-024 / I2), and it is the absent-side operand
+/// for [`diff_doctrine_paths`] and friends.
+///
+/// DERIVED per repository, never a literal (ISS-262, and STD-001 — a literal here is
+/// a magic string standing in for a derived fact). The value is a function of the
+/// repository's hash algorithm: `4b825dc6…` on sha1, `6ef19b41…` on sha256. Handing
+/// the sha1 oid to a `--object-format=sha256` repository is `fatal: not a valid object
+/// name`, which took reservations from working to impossible there.
+///
+/// Read-only by construction: NO `-w`, so nothing enters the object db (measured —
+/// `count-objects` unchanged across the call). It must run INSIDE the target
+/// repository; outside any repository git answers with the sha1 value unconditionally,
+/// regardless of the target's algorithm (DEC-089).
+pub(crate) fn empty_tree_oid(root: &Path) -> Result<String, CaptureError> {
+    let stdout = git_stdin(root, &["hash-object", "-t", "tree", "--stdin"], b"")?;
+    let text = String::from_utf8(stdout)
+        .map_err(|_ignored| CaptureError::Git("hash-object -t tree: non-utf8 oid".to_owned()))?;
+    Ok(text.trim().to_owned())
+}
 
 /// The reservation holder's declared git identity — `(name, email)` — set
 /// EXPLICITLY on the reservation commit so the claim never depends on ambient
@@ -2787,7 +2821,7 @@ pub(crate) fn resolve_holder(root: &Path) -> (String, String) {
     (name, email)
 }
 
-/// Build a DANGLING commit of the [`EMPTY_TREE_OID`] with `msg` and the holder's
+/// Build a DANGLING commit of this repository's [`empty_tree_oid`] with `msg` and the holder's
 /// identity set EXPLICITLY via `GIT_AUTHOR_*`/`GIT_COMMITTER_*` (design EX-1, F-2):
 /// no parent (the reservation history is a single content-free commit), no local
 /// ref written (the caller pushes the returned oid by value, so a failed push never
@@ -2807,7 +2841,8 @@ pub(crate) fn commit_empty_tree_as(
         ("GIT_COMMITTER_NAME", OsStr::new(holder_name)),
         ("GIT_COMMITTER_EMAIL", OsStr::new(holder_email)),
     ];
-    let output = run_git_env(root, &["commit-tree", EMPTY_TREE_OID, "-m", msg], &envs)?;
+    let empty_tree = empty_tree_oid(root)?;
+    let output = run_git_env(root, &["commit-tree", &empty_tree, "-m", msg], &envs)?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
     } else {
@@ -2849,13 +2884,13 @@ mod tests {
     use std::process::Command;
 
     use super::{
-        AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, DiffMode, EMPTY_TREE_OID, Frame,
+        AnchorKind, CHECKOUT_NORMALIZER, CaptureError, Confidence, DiffMode, Frame,
         REMOTE_NORMALIZER, RepoIdKind, RepoIdentity, WorktreeEntry, blob_oid_at, canonical_bytes,
         capture, check_ignore, checkout_state_id, commits_touching, current_branch,
-        diff_doctrine_paths, explicit_identity, index_matches, last_corpus_commit, list_worktrees,
-        live_worktree_for_ref, log_oneline, normalize_remote_url, parse_worktree_for_ref,
-        parse_worktree_records, restore_paths, sha256, three_dot_diff, tree_clean,
-        tree_clean_untracked, worktree_blob_oid, worktree_for_ref,
+        diff_doctrine_paths, empty_tree_oid, explicit_identity, index_matches, last_corpus_commit,
+        list_worktrees, live_worktree_for_ref, log_oneline, normalize_remote_url,
+        parse_worktree_for_ref, parse_worktree_records, restore_paths, sha256, three_dot_diff,
+        tree_clean, tree_clean_untracked, worktree_blob_oid, worktree_for_ref,
     };
 
     use crate::kinds::DISPATCH_REF_PREFIX;
@@ -3115,12 +3150,24 @@ mod tests {
     }
 
     impl ScratchRepo {
-        /// Create an unborn repo with `main` as the initial branch + pinned identity.
+        /// Create an unborn repo with `main` as the initial branch + pinned identity,
+        /// on git's default object format.
         fn new() -> Self {
+            Self::with_object_format(None)
+        }
+
+        /// As [`Self::new`], on an EXPLICIT `--object-format` (ISS-262: the hash
+        /// algorithm is per-repository, so an oid literal is not portable across one).
+        fn with_object_format(format: Option<&str>) -> Self {
             let dir = tempfile::tempdir().expect("tempdir");
             let path = dir.path().to_path_buf();
             let repo = Self { _dir: dir, path };
-            repo.git(&["init", "-b", "main"]);
+            let mut init = vec!["init", "-b", "main"];
+            let flag = format.map(|f| format!("--object-format={f}"));
+            if let Some(flag) = flag.as_deref() {
+                init.push(flag);
+            }
+            repo.git(&init);
             repo.git(&["config", "user.name", "Doctrine Test"]);
             repo.git(&["config", "user.email", "test@doctrine.invalid"]);
             repo
@@ -3284,6 +3331,50 @@ mod tests {
         assert_eq!(
             blob_oid_at(repo.path(), &base, "gone.txt").expect("absent"),
             None
+        );
+    }
+
+    /// ISS-261: the oid must be the RAW worktree bytes. A lossy `clean` filter maps
+    /// distinct contents onto ONE filtered oid, so a filter-applying read makes the
+    /// clobber guard see `equal` where the bytes differ — and a fast-forward then
+    /// overwrites content the operator has not saved anywhere.
+    #[test]
+    fn worktree_blob_oid_distinguishes_bytes_a_lossy_clean_filter_collapses() {
+        let repo = ScratchRepo::new();
+        repo.git(&["config", "filter.canon.clean", "sed 's/.*/CANON/'"]);
+        repo.write(".gitattributes", "*.dat filter=canon\n");
+
+        repo.write("a.dat", "CONTENT-ONE\n");
+        let one = worktree_blob_oid(repo.path(), "a.dat").expect("first content");
+        repo.write("a.dat", "DIFFERENT-TWO\n");
+        let two = worktree_blob_oid(repo.path(), "a.dat").expect("second content");
+
+        assert!(one.is_some() && two.is_some());
+        assert_ne!(
+            one, two,
+            "a lossy clean filter must not collapse distinct worktree bytes to one oid"
+        );
+    }
+
+    /// ISS-261, the other half of the tradeoff, pinned DELIBERATELY so it is not
+    /// "fixed" back. Under an eol-converting attribute the raw worktree bytes and the
+    /// stored blob legitimately differ (checkout writes CRLF, the tree holds LF), so
+    /// the guard reads `diverged` for an untouched file. That is fail-CLOSED noise in
+    /// a repo that opted into conversion, and it is preferred over the silent
+    /// overwrite the collapse case above produces. Windows support is a non-goal.
+    #[test]
+    fn worktree_blob_oid_diverges_from_the_stored_blob_under_eol_conversion() {
+        let repo = ScratchRepo::new();
+        repo.write(".gitattributes", "*.txt text eol=crlf\n");
+        let base = repo.commit("crlf.txt", "line one\nline two\n", "seed LF in the tree");
+        repo.write("crlf.txt", "line one\r\nline two\r\n");
+
+        let stored = blob_oid_at(repo.path(), &base, "crlf.txt").expect("tree side");
+        let worktree = worktree_blob_oid(repo.path(), "crlf.txt").expect("worktree side");
+        assert!(stored.is_some() && worktree.is_some());
+        assert_ne!(
+            worktree, stored,
+            "raw CRLF worktree bytes are not the LF blob the tree stores"
         );
     }
 
@@ -3488,8 +3579,9 @@ mod tests {
     #[test]
     fn diff_doctrine_paths_against_empty_tree_lists_all() {
         let (repo, _base, cur) = doctrine_fixture();
+        let empty = empty_tree_oid(repo.path()).expect("derive empty tree");
         let mut changed =
-            diff_doctrine_paths(repo.path(), EMPTY_TREE_OID, &cur, ".doctrine").expect("diff");
+            diff_doctrine_paths(repo.path(), &empty, &cur, ".doctrine").expect("diff");
         changed.sort();
         assert_eq!(changed, [".doctrine/a.toml", ".doctrine/b.toml"]);
     }
@@ -3625,8 +3717,9 @@ mod tests {
                 .is_none()
         );
         // The empty tree is a valid, content-free operand.
+        let empty = empty_tree_oid(repo.path()).expect("derive empty tree");
         assert!(
-            blob_oid_at(repo.path(), EMPTY_TREE_OID, ".doctrine/a.toml")
+            blob_oid_at(repo.path(), &empty, ".doctrine/a.toml")
                 .expect("read")
                 .is_none()
         );
@@ -4746,6 +4839,71 @@ mod tests {
         );
     }
 
+    /// The empty-tree oid on each object format, as git reports it. Not production
+    /// constants — expected values a test may name (the whole point of ISS-262 is that
+    /// production must not carry either of them).
+    const SHA1_EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+    const SHA256_EMPTY_TREE: &str =
+        "6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321";
+
+    /// ISS-262: the derivation reproduces the value that used to be hardcoded, so
+    /// swapping a literal for a git call moves nothing where the literal was right.
+    #[test]
+    fn empty_tree_oid_derives_the_well_known_value_on_a_sha1_repo() {
+        let repo = ScratchRepo::with_object_format(Some("sha1"));
+        assert_eq!(
+            empty_tree_oid(repo.path()).expect("derive"),
+            SHA1_EMPTY_TREE
+        );
+    }
+
+    /// ISS-262: and it tracks the REPOSITORY's algorithm rather than reporting one
+    /// answer everywhere — the property no constant can have.
+    #[test]
+    fn empty_tree_oid_tracks_the_repository_object_format() {
+        let sha256 = ScratchRepo::with_object_format(Some("sha256"));
+        let derived = empty_tree_oid(sha256.path()).expect("derive");
+        assert_eq!(derived, SHA256_EMPTY_TREE);
+        assert_ne!(
+            derived, SHA1_EMPTY_TREE,
+            "a sha256 repo's empty tree is not the sha1 one"
+        );
+    }
+
+    /// ISS-262 / I2: deriving the oid must not write an object — the reservation
+    /// subsystem's content-free claim depends on this call being a pure read.
+    #[test]
+    fn empty_tree_oid_derivation_writes_no_object() {
+        let repo = ScratchRepo::new();
+        let before = repo.git(&["count-objects", "-v"]);
+        empty_tree_oid(repo.path()).expect("derive");
+        assert_eq!(
+            repo.git(&["count-objects", "-v"]),
+            before,
+            "no object entered the db"
+        );
+    }
+
+    /// ISS-262: a reservation must be takeable on a repository whose object format is
+    /// not sha1. The hardcoded sha1 empty-tree literal is `fatal: not a valid object
+    /// name` there, so `commit-tree` fails and no claim can be made at all.
+    #[test]
+    fn commit_empty_tree_as_works_on_a_sha256_repository() {
+        let repo = ScratchRepo::with_object_format(Some("sha256"));
+        let oid =
+            super::commit_empty_tree_as(repo.path(), "ISS-262", "agent-7", "agent-7@doctrine")
+                .expect("reservation commit on a sha256 repo");
+
+        // Content-free on any algorithm (REQ-024 / I2), asserted by ENTRIES rather
+        // than by an oid literal — the oid is per-format, the emptiness is not.
+        let listing = super::git_text(repo.path(), &["ls-tree", &format!("{oid}^{{tree}}")])
+            .expect("ls-tree");
+        assert!(
+            listing.is_empty(),
+            "reservation tree carries no entries: {listing:?}"
+        );
+    }
+
     /// SL-148 EX-1/VT-4: the dangling reservation commit carries the empty tree
     /// (no blobs) and the holder identity set explicitly — independent of any
     /// ambient `git config user.*`. Pushed by oid under a zero-oid create CAS.
@@ -4759,7 +4917,11 @@ mod tests {
         // The commit's tree is THE empty tree (content-free claim, REQ-024/I2).
         let tree = super::git_text(work.path(), &["rev-parse", &format!("{oid}^{{tree}}")])
             .expect("rev-parse tree");
-        assert_eq!(tree, super::EMPTY_TREE_OID, "reservation tree is empty");
+        assert_eq!(
+            tree,
+            empty_tree_oid(work.path()).expect("derive empty tree"),
+            "reservation tree is empty"
+        );
         // No blobs reachable from the tree.
         let listing = super::git_text(work.path(), &["ls-tree", "-r", &oid]).expect("ls-tree");
         assert!(listing.is_empty(), "empty-tree commit lists no entries");
